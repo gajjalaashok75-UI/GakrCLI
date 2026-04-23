@@ -1,0 +1,73 @@
+import assert from 'node:assert/strict'
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import test from 'node:test'
+
+import { getSkillDirCommands, clearSkillCaches } from './loadSkillsDir.ts'
+
+function writeSkillDirect(skillsDir: string, skillPath: string): void {
+  const skillDir = join(skillsDir, ...skillPath.split('/'))
+  mkdirSync(skillDir, { recursive: true })
+  writeFileSync(
+    join(skillDir, 'SKILL.md'),
+    `---\ndescription: ${skillPath}\n---\n# ${skillPath}\n`,
+    'utf8',
+  )
+}
+
+test('loads flat and nested skills with colon namespaces', async () => {
+  const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-skills-'))
+  const cwd = join(configDir, 'workspace')
+  const originalConfigDir = process.env.GAKR_CONFIG_DIR
+
+  try {
+    mkdirSync(cwd, { recursive: true })
+    // Create skills directly in the user skills directory (configDir/skills)
+    const skillsDir = join(configDir, 'skills')
+    mkdirSync(skillsDir, { recursive: true })
+    writeSkillDirect(skillsDir, 'flat-skill')
+    writeSkillDirect(skillsDir, 'git/commit')
+    writeSkillDirect(skillsDir, 'frontend/react/form')
+
+    process.env.GAKR_CONFIG_DIR = configDir
+    clearSkillCaches()
+
+    const skills = await getSkillDirCommands(cwd)
+    // Filter to skills whose skillRoot starts with the test configDir (ensures we only get test-created skills)
+    const promptSkills = skills.filter(
+      skill => skill.type === 'prompt' && skill.skillRoot && skill.skillRoot.startsWith(configDir)
+    )
+    const skillNames = promptSkills.map(skill => skill.name).sort()
+
+    assert.deepEqual(skillNames, [
+      'flat-skill',
+      'frontend:react:form',
+      'git:commit',
+    ])
+
+    const nestedSkill = promptSkills.find(skill => skill.name === 'git:commit')
+    assert.ok(nestedSkill)
+    assert.equal(
+      nestedSkill.skillRoot,
+      join(configDir, 'skills', 'git', 'commit')
+    )
+
+    const deepSkill = promptSkills.find(
+      skill => skill.name === 'frontend:react:form',
+    )
+    assert.ok(deepSkill)
+    assert.equal(
+      deepSkill.skillRoot,
+      join(configDir, 'skills', 'frontend', 'react', 'form'),
+    )
+  } finally {
+    if (originalConfigDir === undefined) {
+      delete process.env.GAKR_CONFIG_DIR
+    } else {
+      process.env.GAKR_CONFIG_DIR = originalConfigDir
+    }
+    clearSkillCaches()
+    rmSync(configDir, { recursive: true, force: true })
+  }
+})

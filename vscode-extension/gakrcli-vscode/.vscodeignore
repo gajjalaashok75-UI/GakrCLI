@@ -1,0 +1,16 @@
+.vscode/**
+.vscode-test/**
+**/*.test.js
+scripts/**
+node_modules/**
+.gitignore
+.git/**
+*.vsix
+**/*.map
+.eslintrc*
+.prettierrc*
+tsconfig.json
+.editorconfig
+.yarnrc
+yarn.lock
+package-lock.json

@@ -1,0 +1,165 @@
+{
+  "name": "gakrcli-vscode",
+  "displayName": "GakrCLI",
+  "description": "Practical VS Code companion for GakrCLI with project-aware launch behavior and a real Control Center.",
+  "version": "0.2.0",
+  "publisher": "gakr-gakr",
+  "icon": "media/download.jpeg",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Themes",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "gakrcli.start",
+        "title": "GakrCLI: Launch in Terminal",
+        "category": "GakrCLI"
+      },
+      {
+        "command": "gakrcli.startInWorkspaceRoot",
+        "title": "GakrCLI: Launch in Workspace Root",
+        "category": "GakrCLI"
+      },
+      {
+        "command": "gakrcli.openDocs",
+        "title": "GakrCLI: Open Repository",
+        "category": "GakrCLI"
+      },
+      {
+        "command": "gakrcli.openSetupDocs",
+        "title": "GakrCLI: Open Setup Guide",
+        "category": "GakrCLI"
+      },
+      {
+        "command": "gakrcli.openWorkspaceProfile",
+        "title": "GakrCLI: Open Workspace Profile",
+        "category": "GakrCLI"
+      },
+      {
+        "command": "gakrcli.openControlCenter",
+        "title": "GakrCLI: Open Control Center",
+        "category": "GakrCLI"
+      },
+      {
+        "command": "gakrcli.newChat",
+        "title": "GakrCLI: New Chat",
+        "category": "GakrCLI"
+      },
+      {
+        "command": "gakrcli.openChat",
+        "title": "GakrCLI: Open Chat Panel",
+        "category": "GakrCLI"
+      },
+      {
+        "command": "gakrcli.resumeSession",
+        "title": "GakrCLI: Resume Session",
+        "category": "GakrCLI"
+      },
+      {
+        "command": "gakrcli.abortChat",
+        "title": "GakrCLI: Abort Generation",
+        "category": "GakrCLI"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "gakrcli",
+          "title": "GakrCLI",
+          "icon": "media/opengakrcli.svg"
+        }
+      ]
+    },
+    "views": {
+      "gakrcli": [
+        {
+          "id": "gakrcli.chat",
+          "name": "Chat",
+          "type": "webview",
+          "icon": "media/opengakrcli.svg"
+        },
+        {
+          "id": "gakrcli.controlCenter",
+          "name": "Control Center",
+          "type": "webview",
+          "icon": "media/opengakrcli.svg"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "gakrcli.openChat",
+        "key": "ctrl+shift+l",
+        "mac": "cmd+shift+l"
+      }
+    ],
+    "configuration": {
+      "title": "GakrCLI Extension Settings",
+      "properties": {
+        "gakrcli.launchCommand": {
+          "type": "string",
+          "default": "gakrcli",
+          "description": "Command run in the integrated terminal when launching GakrCLI."
+        },
+        "gakrcli.terminalName": {
+          "type": "string",
+          "default": "GakrCLI",
+          "description": "Integrated terminal tab name for GakrCLI sessions."
+        },
+        "gakrcli.useOpenAIShim": {
+          "type": "boolean",
+          "default": false,
+          "description": "Optionally set GAKR_CODE_USE_OPENAI=1 in launched GakrCLI terminals."
+        },
+        "gakrcli.permissionMode": {
+          "type": "string",
+          "default": "acceptEdits",
+          "enum": ["default", "acceptEdits", "bypassPermissions", "plan"],
+          "enumDescriptions": [
+            "Prompt for permission on each tool use (requires manual approval)",
+            "Auto-approve file edits, prompt for other operations (recommended)",
+            "Auto-approve all operations without prompting",
+            "Read-only mode — no file modifications allowed"
+          ],
+          "description": "Permission mode for chat sessions. Controls which tool operations are auto-approved."
+        }
+      }
+    },
+    "themes": [
+      {
+        "label": "GakrCLI Terminal Black",
+        "uiTheme": "vs-dark",
+        "path": "./themes/GakrCLI-Terminal-Black.json"
+      }
+    ]
+  },
+  "scripts": {
+    "test": "node --test ./src/*.test.js",
+    "lint": "node scripts/lint.js",
+    "package": "npx @vscode/vsce package --no-dependencies"
+  },
+  "keywords": [
+    "gakrcli",
+    "terminal",
+    "theme",
+    "cli",
+    "llm"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gajjalaashok75-UI/gakrcli-vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/gajjalaashok75-UI/gakrcli-vscode/issues"
+  },
+  "homepage": "https://github.com/gajjalaashok75-UI/gakrcli-vscode#readme",
+  "license": "MIT"
+}
