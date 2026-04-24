@@ -118,11 +118,15 @@ function isLocalBaseUrl(baseUrl: string): boolean {
 }
 
 const GEMINI_DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai'
+const MISTRAL_DEFAULT_BASE_URL = 'https://api.mistral.ai/v1'
 const GITHUB_MODELS_DEFAULT_BASE = 'https://models.github.ai/inference'
 
 function currentBaseUrl(): string {
   if (isTruthy(process.env.GAKR_CODE_USE_GEMINI)) {
     return process.env.GEMINI_BASE_URL ?? GEMINI_DEFAULT_BASE_URL
+  }
+  if (isTruthy(process.env.GAKR_CODE_USE_MISTRAL)) {
+    return process.env.MISTRAL_BASE_URL ?? MISTRAL_DEFAULT_BASE_URL
   }
   if (isTruthy(process.env.GAKR_CODE_USE_GITHUB)) {
     return process.env.OPENAI_BASE_URL ?? GITHUB_MODELS_DEFAULT_BASE
@@ -182,14 +186,44 @@ function checkGithubEnv(): CheckResult[] {
   return results
 }
 
+function checkMistralEnv(): CheckResult[] {
+  const results: CheckResult[] = []
+  const model = process.env.MISTRAL_MODEL
+  const key = process.env.MISTRAL_API_KEY
+  const baseUrl = process.env.MISTRAL_BASE_URL ?? MISTRAL_DEFAULT_BASE_URL
+
+  results.push(pass('Provider mode', 'Mistral provider enabled.'))
+
+  if (!model) {
+    results.push(pass('MISTRAL_MODEL', 'Not set. Default will be used at runtime.'))
+  } else {
+    results.push(pass('MISTRAL_MODEL', model))
+  }
+
+  results.push(pass('MISTRAL_BASE_URL', baseUrl))
+
+  if (!key) {
+    results.push(fail('MISTRAL_API_KEY', 'Missing. Set MISTRAL_API_KEY.'))
+  } else {
+    results.push(pass('MISTRAL_API_KEY', 'Configured.'))
+  }
+
+  return results
+}
+
 function checkOpenAIEnv(): CheckResult[] {
   const results: CheckResult[] = []
   const useGemini = isTruthy(process.env.GAKR_CODE_USE_GEMINI)
   const useGithub = isTruthy(process.env.GAKR_CODE_USE_GITHUB)
+  const useMistral = isTruthy(process.env.GAKR_CODE_USE_MISTRAL)
   const useOpenAI = isTruthy(process.env.GAKR_CODE_USE_OPENAI)
 
   if (useGemini) {
     return checkGeminiEnv()
+  }
+
+  if (useMistral) {
+    return checkMistralEnv()
   }
 
   if (useGithub && !useOpenAI) {
@@ -268,12 +302,13 @@ async function checkBaseUrlReachability(): Promise<CheckResult> {
   const useGemini = isTruthy(process.env.GAKR_CODE_USE_GEMINI)
   const useOpenAI = isTruthy(process.env.GAKR_CODE_USE_OPENAI)
   const useGithub = isTruthy(process.env.GAKR_CODE_USE_GITHUB)
+  const useMistral = isTruthy(process.env.GAKR_CODE_USE_MISTRAL)
 
-  if (!useGemini && !useOpenAI && !useGithub) {
+  if (!useGemini && !useOpenAI && !useGithub && !useMistral) {
     return pass('Provider reachability', 'Skipped (OpenAI-compatible mode disabled).')
   }
 
-  if (useGithub) {
+  if (useGithub && !useOpenAI) {
     return pass(
       'Provider reachability',
       'Skipped for GitHub Models (inference endpoint differs from OpenAI /models probe).',
@@ -326,6 +361,8 @@ async function checkBaseUrlReachability(): Promise<CheckResult> {
       })
     } else if (useGemini && (process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY)) {
       headers.Authorization = `Bearer ${process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY}`
+    } else if (useMistral && process.env.MISTRAL_API_KEY) {
+      headers.Authorization = `Bearer ${process.env.MISTRAL_API_KEY}`
     } else if (process.env.OPENAI_API_KEY) {
       headers.Authorization = `Bearer ${process.env.OPENAI_API_KEY}`
     }

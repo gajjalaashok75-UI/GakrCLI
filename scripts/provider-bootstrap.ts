@@ -11,6 +11,7 @@ import {
   buildAtomicChatProfileEnv,
   buildCodexProfileEnv,
   buildGeminiProfileEnv,
+  buildMistralProfileEnv,
   buildNvidiaProfileEnv,
   buildOllamaProfileEnv,
   buildOpenAIProfileEnv,
@@ -44,6 +45,7 @@ function parseProviderArg(): ProviderProfile | 'auto' {
     p === 'codex' ||
     p === 'gemini' ||
     p === 'nvidia' ||
+    p === 'mistral' ||
     p === 'atomic-chat'
   ) {
     return p
@@ -111,6 +113,20 @@ async function main(): Promise<void> {
 
     if (!builtEnv) {
       console.error('NVIDIA profile requires an API key. Use --api-key or set NVIDIA_API_KEY.')
+      process.exit(1)
+    }
+
+    env = builtEnv
+  } else if (selected === 'mistral') {
+    const builtEnv = buildMistralProfileEnv({
+      model: argModel || null,
+      baseUrl: argBaseUrl || null,
+      apiKey: argApiKey || null,
+      processEnv: process.env,
+    })
+
+    if (!builtEnv) {
+      console.error('Mistral profile requires an API key. Use --api-key or set MISTRAL_API_KEY.')
       process.exit(1)
     }
 
@@ -193,7 +209,7 @@ async function main(): Promise<void> {
 
   console.log(`Saved profile: ${selected}`)
   console.log(`Goal: ${goal}`)
-  console.log(`Model: ${profile.env.NVIDIA_MODEL || profile.env.GEMINI_MODEL || profile.env.OPENAI_MODEL || getGoalDefaultOpenAIModel(goal)}`)
+  console.log(`Model: ${profile.env.NVIDIA_MODEL || profile.env.MISTRAL_MODEL || profile.env.GEMINI_MODEL || profile.env.OPENAI_MODEL || getGoalDefaultOpenAIModel(goal)}`)
   console.log(`Path: ${outputPath}`)
   console.log('Next: bun run dev:profile')
 }

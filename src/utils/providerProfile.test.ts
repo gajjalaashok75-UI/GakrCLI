@@ -10,6 +10,7 @@ import {
   buildCodexProfileEnv,
   buildGeminiProfileEnv,
   buildLaunchEnv,
+  buildMistralProfileEnv,
   buildNvidiaProfileEnv,
   buildOllamaProfileEnv,
   buildOpenAIProfileEnv,
@@ -448,6 +449,60 @@ test('nvidia profiles require a key', () => {
   })
 
   assert.equal(env, null)
+})
+
+test('mistral profiles accept session defaults and explicit keys', () => {
+  const env = buildMistralProfileEnv({
+    apiKey: 'mistral-live',
+    processEnv: {},
+  })
+
+  assert.deepEqual(env, {
+    MISTRAL_API_KEY: 'mistral-live',
+    MISTRAL_MODEL: 'devstral-latest',
+  })
+})
+
+test('mistral profiles require a key', () => {
+  const env = buildMistralProfileEnv({
+    processEnv: {},
+  })
+
+  assert.equal(env, null)
+})
+
+test('matching persisted mistral env is reused for mistral launch', async () => {
+  const env = await buildLaunchEnv({
+    profile: 'mistral',
+    persisted: profile('mistral', {
+      MISTRAL_MODEL: 'codestral-latest',
+      MISTRAL_API_KEY: 'mistral-persisted',
+      MISTRAL_BASE_URL: 'https://mistral.example/v1',
+    }),
+    goal: 'balanced',
+    processEnv: {},
+  })
+
+  assert.equal(env.GAKR_CODE_USE_MISTRAL, '1')
+  assert.equal(env.GAKR_CODE_USE_OPENAI, undefined)
+  assert.equal(env.MISTRAL_MODEL, 'codestral-latest')
+  assert.equal(env.MISTRAL_API_KEY, 'mistral-persisted')
+  assert.equal(env.MISTRAL_BASE_URL, 'https://mistral.example/v1')
+})
+
+test('buildStartupEnvFromProfile applies persisted mistral settings when no provider is explicitly selected', async () => {
+  const env = await buildStartupEnvFromProfile({
+    persisted: profile('mistral', {
+      MISTRAL_API_KEY: 'mistral-test',
+      MISTRAL_MODEL: 'codestral-latest',
+    }),
+    processEnv: {},
+  })
+
+  assert.equal(env.GAKR_CODE_USE_MISTRAL, '1')
+  assert.equal(env.GAKR_CODE_USE_OPENAI, undefined)
+  assert.equal(env.MISTRAL_API_KEY, 'mistral-test')
+  assert.equal(env.MISTRAL_MODEL, 'codestral-latest')
 })
 
 test('saveProfileFile writes a profile that loadProfileFile can read back', () => {

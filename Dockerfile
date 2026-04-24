@@ -16,6 +16,7 @@ RUN bun install --frozen-lockfile
 COPY src/ src/
 COPY scripts/ scripts/
 COPY bin/ bin/
+COPY assets/ assets/
 COPY tsconfig.json ./
 
 # Build the CLI bundle
@@ -32,6 +33,7 @@ WORKDIR /app
 # Copy only what's needed to run
 COPY --from=build /app/dist/cli.mjs dist/cli.mjs
 COPY --from=build /app/bin/ bin/
+COPY --from=build /app/assets/ assets/
 COPY --from=build /app/node_modules/ node_modules/
 COPY --from=build /app/package.json package.json
 COPY README.md ./

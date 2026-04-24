@@ -3,19 +3,21 @@
  * distributable JS file using Bun's bundler.
  *
  * Handles:
- * - bun:bundle feature() flags → all false (disables internal-only features)
+ * - bun:bundle feature() flags for the open build
  * - MACRO.* globals → inlined version/build-time constants
  * - src/ path aliases
  */
 
-import { readFileSync } from 'fs'
+import { readFileSync, readdirSync, writeFileSync } from 'fs'
+import { join } from 'path'
 import { noTelemetryPlugin } from './no-telemetry-plugin'
 
 const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'))
 const version = pkg.version
 
-// Feature flags — all disabled for the open build.
-// These gate Anthropic-internal features (voice, proactive, kairos, etc.)
+// Feature flags for the open build.
+// Keep Anthropic-internal infrastructure off, but enable mirrored features that
+// are expected to work in this repo variant.
 const featureFlags: Record<string, boolean> = {
   VOICE_MODE: false,
   PROACTIVE: false,
@@ -23,24 +25,72 @@ const featureFlags: Record<string, boolean> = {
   BRIDGE_MODE: false,
   DAEMON: false,
   AGENT_TRIGGERS: false,
-  MONITOR_TOOL: false,
   ABLATION_BASELINE: false,
-  DUMP_SYSTEM_PROMPT: false,
-  CACHED_MICROCOMPACT: false,
-  COORDINATOR_MODE: false,
   CONTEXT_COLLAPSE: false,
   COMMIT_ATTRIBUTION: false,
-  TEAMMEM: false,
   UDS_INBOX: false,
   BG_SESSIONS: false,
-  AWAY_SUMMARY: false,
-  TRANSCRIPT_CLASSIFIER: false,
   WEB_BROWSER_TOOL: false,
-  MESSAGE_ACTIONS: false,
-  BUDDY: false,
   CHICAGO_MCP: false,
   COWORKER_TYPE_TELEMETRY: false,
+  COORDINATOR_MODE: true,
+  BUDDY: true,
+  MONITOR_TOOL: true,
+  DUMP_SYSTEM_PROMPT: true,
+  CACHED_MICROCOMPACT: true,
+  TEAMMEM: true,
+  AWAY_SUMMARY: true,
+  TRANSCRIPT_CLASSIFIER: true,
+  MESSAGE_ACTIONS: true,
 }
+
+const featureCallRe = /\bfeature\(\s*['"](\w+)['"][,\s]*\)/gs
+const featureImportRe = /import\s*\{[^}]*\bfeature\b[^}]*\}\s*from\s*['"]bun:bundle['"];?\s*\n?/g
+const modifiedFiles = new Map<string, string>()
+
+function preProcessFeatureFlags(dir: string) {
+  for (const ent of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, ent.name)
+    if (ent.isDirectory()) {
+      preProcessFeatureFlags(full)
+      continue
+    }
+    if (!/\.(ts|tsx)$/.test(ent.name)) continue
+
+    const raw = readFileSync(full, 'utf-8')
+    if (!raw.includes('feature(')) continue
+
+    let contents = raw
+    contents = contents.replace(featureImportRe, '')
+    contents = contents.replace(featureCallRe, (_match, name) =>
+      String(featureFlags[name] ?? false),
+    )
+
+    if (contents !== raw) {
+      modifiedFiles.set(full, raw)
+      writeFileSync(full, contents)
+    }
+  }
+}
+
+function restoreModifiedFiles() {
+  for (const [path, original] of modifiedFiles) {
+    writeFileSync(path, original)
+  }
+  modifiedFiles.clear()
+}
+
+preProcessFeatureFlags(join(import.meta.dir, '..', 'src'))
+const numModified = modifiedFiles.size
+
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(signal, () => {
+    restoreModifiedFiles()
+    process.exit(signal === 'SIGINT' ? 130 : 143)
+  })
+}
+
+try {
 
 const result = await Bun.build({
   entrypoints: ['./src/entrypoints/cli.tsx'],
@@ -102,18 +152,8 @@ export async function handleBgFlag() { throw new Error("Background sessions are 
           ],
         ] as const)
 
-        // Resolve `import { feature } from 'bun:bundle'` to a shim
-        build.onResolve({ filter: /^bun:bundle$/ }, () => ({
-          path: 'bun:bundle',
-          namespace: 'bun-bundle-shim',
-        }))
-        build.onLoad(
-          { filter: /.*/, namespace: 'bun-bundle-shim' },
-          () => ({
-            contents: `export function feature(name) { return name === 'BUDDY'; }`,
-            loader: 'js',
-          }),
-        )
+        // bun:bundle feature() replacement is handled by the source
+        // pre-processing step above so build-time feature flags stay in sync.
 
         build.onResolve(
           { filter: /^\.\.\/(daemon\/workerRegistry|daemon\/main|cli\/bg|cli\/handlers\/templateJobs|environment-runner\/main|self-hosted-runner\/main)\.js$/ },
@@ -291,7 +331,12 @@ if (!result.success) {
   for (const log of result.logs) {
     console.error(log)
   }
-  process.exit(1)
+  process.exitCode = 1
+} else {
+  console.log(`✓ Built gakrcli v${version} → dist/cli.mjs`)
 }
 
-console.log(`✓ Built gakrcli v${version} → dist/cli.mjs`)
+} finally {
+  restoreModifiedFiles()
+  console.log(`  feature-flags: pre-processed ${numModified} files (restored)`)
+}

@@ -1,7 +1,7 @@
 import { feature } from 'bun:bundle';
 import { existsSync } from 'fs'
-import { join } from 'path'
-import { fileURLToPath, pathToFileURL } from 'url'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
 import {
   isLocalProviderUrl,
   resolveCodexApiCredentials,
@@ -18,8 +18,9 @@ import { getProviderValidationError } from '../utils/providerValidation.js';
 // we manually load it). This must happen BEFORE any model selection or provider logic.
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
 {
-  const __dirname = join(pathToFileURL(fileURLToPath(import.meta.url)).pathname, '..', '..')
-  const envPath = join(__dirname, '..', '.env')
+  const entrypointDir = dirname(fileURLToPath(import.meta.url))
+  const packageRoot = join(entrypointDir, '..', '..')
+  const envPath = join(packageRoot, '.env')
 
   if (existsSync(envPath)) {
     try {
@@ -117,10 +118,35 @@ async function main(): Promise<void> {
   {
     const { enableConfigs } = await import('../utils/config.js')
     enableConfigs()
+  }
+
+  {
     const { applySafeConfigEnvironmentVariables } = await import('../utils/managedEnv.js')
     applySafeConfigEnvironmentVariables()
+  }
+
+  const startupEnv = await buildStartupEnvFromProfile({
+    processEnv: process.env,
+  })
+  if (startupEnv !== process.env) {
+    const startupProfileError = await getProviderValidationError(startupEnv)
+    if (startupProfileError) {
+      console.error(
+        `Warning: ignoring saved provider profile. ${startupProfileError}`,
+      )
+    } else {
+      applyProfileEnvToProcessEnv(process.env, startupEnv)
+    }
+  }
+
+  {
     const { hydrateGithubModelsTokenFromSecureStorage } = await import('../utils/githubModelsCredentials.js')
     hydrateGithubModelsTokenFromSecureStorage()
+  }
+
+  {
+    const { validateProviderEnvForStartupOrExit } = await import('../utils/providerValidation.js')
+    await validateProviderEnvForStartupOrExit()
   }
 
   // Initialize user directories on first run
@@ -130,20 +156,6 @@ async function main(): Promise<void> {
   } catch (initError) {
     // Non-fatal: if directory creation fails, continue anyway
     console.warn('Warning: could not initialize user directories:', initError)
-  }
-
-  const startupEnv = await buildStartupEnvFromProfile({
-    processEnv: process.env,
-  })
-  if (startupEnv !== process.env) {
-    const startupProfileError = getProviderValidationError(startupEnv)
-    if (startupProfileError) {
-      console.error(
-        `Warning: ignoring saved provider profile. ${startupProfileError}`,
-      )
-    } else {
-      applyProfileEnvToProcessEnv(process.env, startupEnv)
-    }
   }
 
   // Print the gradient startup screen before the Ink UI loads

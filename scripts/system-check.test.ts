@@ -39,4 +39,21 @@ describe('formatReachabilityFailureDetail', () => {
       'Try "codexplan" or another entitled Codex model.',
     )
   })
+
+  test('keeps generic failure detail for non-entitlement codex 400s', () => {
+    const detail = formatReachabilityFailureDetail(
+      'https://chatgpt.com/backend-api/codex/responses',
+      400,
+      '{"detail":"some other codex failure"}',
+      {
+        transport: 'codex_responses',
+        requestedModel: 'codexplan',
+        resolvedModel: 'gpt-5.4',
+      },
+    )
+
+    expect(detail).toBe(
+      'Unexpected status 400 from https://chatgpt.com/backend-api/codex/responses. Body: {"detail":"some other codex failure"}',
+    )
+  })
 })

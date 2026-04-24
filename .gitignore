@@ -16,10 +16,11 @@ dist/
 !.env.example
 
 # User/workspace-specific config
+.claude
 .gakrcli/
 .gakrcli-profile.json
 .opengakrcli/
-
+.openclaude-profile.json
 # IDE and editor files
 .vscode/
 .idea/
@@ -51,6 +52,7 @@ reports/
 .Zone.Identifier
 
 # Temporary files
+reference/
 temp/
 tmp/
 *.tmp
