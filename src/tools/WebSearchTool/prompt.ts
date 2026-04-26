@@ -23,6 +23,11 @@ CRITICAL REQUIREMENT - You MUST follow this:
     - [Source Title 1](https://example.com/1)
     - [Source Title 2](https://example.com/2)
 
+Fallback Strategy:
+  - If the web search tool or web-related tools are not working (e.g., API errors, rate limits, network issues), use the data-extraction skill as an alternative to search for or extract the required data
+  - The data-extraction skill can fetch and parse web content directly when the search API is unavailable
+  - Example: invoke skill: "data-extraction" with args: "{url: 'https://example.com', selectors: ['h1', 'p']}" to extract content manually
+
 Usage notes:
   - Domain filtering is supported to include or block specific websites
   - Web search is only available in the US

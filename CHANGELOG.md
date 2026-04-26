@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.1](https://github.com/gakr-gakr/gakrcli/compare/v0.4.0...v0.4.1) (2026-04-26)
+
+### Bug Fixes
+
+* fix lodash-es deprecation warning (update from 4.18.0 to 4.17.21)
+* fix async provider validation in interactiveHelpers.tsx
+* add fallback strategy to web search tool prompt (use data-extraction skill when web tools fail)
+
+### Features
+
+* verified all 18 providers configured and working
+* verified 170+ models available in /model command
+* enhanced prompts with tool failure fallback instructions
+
 ## [0.4.0](https://github.com/gakr-gakr/gakrcli/compare/v0.3.1...v0.4.0) (2026-04-26)
 
 ### Features
