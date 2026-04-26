@@ -1401,7 +1401,9 @@ class OpenAIShimMessages {
 
     const isGemini = isGeminiMode()
     const isMiniMax = !!process.env.MINIMAX_API_KEY
-    const apiKey = this.providerOverride?.apiKey ?? (isMiniMax ? process.env.MINIMAX_API_KEY : '') ?? (isNvidia ? process.env.NVIDIA_API_KEY : process.env.OPENAI_API_KEY) 
+    const apiKey = this.providerOverride?.apiKey ?? 
+      (isMiniMax ? process.env.MINIMAX_API_KEY : undefined) ?? 
+      (isNvidia ? process.env.NVIDIA_API_KEY : process.env.OPENAI_API_KEY) 
     // Detect Azure endpoints by hostname (not raw URL) to prevent bypass via
     // path segments like https://evil.com/cognitiveservices.azure.com/
     let isAzure = false

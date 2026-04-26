@@ -11,6 +11,7 @@ import {
   saveProfileFile,
   buildGeminiProfileEnv,
   buildMistralProfileEnv,
+  buildNvidiaNimProfileEnv,
   buildOpenAIProfileEnv,
   type ProviderProfile as ProviderProfileStartup,
 } from './providerProfile.js'
@@ -883,6 +884,15 @@ export function setActiveProviderProfile(
       case 'mistral':
         return (
           buildMistralProfileEnv({
+            model: activeProfile.model,
+            baseUrl: activeProfile.baseUrl,
+            apiKey: activeProfile.apiKey,
+            processEnv: process.env,
+          }) ?? null
+        )
+      case 'nvidia-nim':
+        return (
+          buildNvidiaNimProfileEnv({
             model: activeProfile.model,
             baseUrl: activeProfile.baseUrl,
             apiKey: activeProfile.apiKey,
