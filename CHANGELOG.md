@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.3] (2026-04-26)
+
+### Critical Bug Fixes
+
+* fix LSP reinitialization hang that caused /reload-plugins to block indefinitely
+* add 5-second timeout to reinitializeLspServerManager() using Promise.race()
+* fix child process shutdown on Windows not responding to graceful termination
+
 ## [0.4.2] (2026-04-26)
 
 ### Bug Fixes
