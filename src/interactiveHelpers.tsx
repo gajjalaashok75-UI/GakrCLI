@@ -195,7 +195,7 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
   applyConfigEnvironmentVariables();
 
   // Check if a provider is properly configured; if not, launch the provider wizard
-  if (getProviderValidationError()) {
+  if (await getProviderValidationError()) {
     const { ProviderWizard } = await import('./commands/provider/provider.js');
     const result = await showSetupDialog(root, done => <ProviderWizard onDone={done} />);
     if (result === undefined) {
@@ -206,7 +206,7 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
     const startupEnv = await buildStartupEnvFromProfile({ processEnv: process.env });
     applyProfileEnvToProcessEnv(process.env, startupEnv);
     // Re-validate to ensure the wizard produced a valid configuration
-    const errorAfter = getProviderValidationError();
+    const errorAfter = await getProviderValidationError();
     if (errorAfter) {
       await exitWithError(root, `Provider configuration error after wizard: ${errorAfter}`);
       return;
