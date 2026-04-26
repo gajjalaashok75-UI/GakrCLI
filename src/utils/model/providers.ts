@@ -1,4 +1,5 @@
 import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../../services/analytics/index.js'
+import { shouldUseCodexTransport } from '../../services/api/providerConfig.js'
 import { isEnvTruthy } from '../envUtils.js'
 
 export type APIProvider =
@@ -7,18 +8,27 @@ export type APIProvider =
   | 'vertex'
   | 'foundry'
   | 'openai'
-  | 'nvidia'
   | 'gemini'
   | 'github'
   | 'codex'
+  | 'nvidia-nim'
+  | 'minimax'
+  | 'mistral'
 
 export function getAPIProvider(): APIProvider {
+  if (isEnvTruthy(process.env.NVIDIA_NIM)) {
+    return 'nvidia-nim'
+  }
+  // MiniMax is signalled by a real API key, not a '1'/'true' flag.
+  if (typeof process.env.MINIMAX_API_KEY === 'string' && process.env.MINIMAX_API_KEY.trim() !== '') {
+    return 'minimax'
+  }
   return isEnvTruthy(process.env.GAKR_CODE_USE_GEMINI)
     ? 'gemini'
-    : isEnvTruthy(process.env.GAKR_CODE_USE_GITHUB)
-      ? 'github'
-      : isEnvTruthy(process.env.GAKR_CODE_USE_NVIDIA)
-        ? 'nvidia'
+    : isEnvTruthy(process.env.GAKR_CODE_USE_MISTRAL)
+      ? 'mistral'
+      : isEnvTruthy(process.env.GAKR_CODE_USE_GITHUB)
+        ? 'github'
         : isEnvTruthy(process.env.GAKR_CODE_USE_OPENAI)
           ? isCodexModel()
             ? 'codex'
@@ -35,17 +45,29 @@ export function getAPIProvider(): APIProvider {
 export function usesAnthropicAccountFlow(): boolean {
   return getAPIProvider() === 'firstParty'
 }
+
+/**
+ * Returns true when the GitHub provider should use Anthropic's native API
+ * format instead of the OpenAI-compatible shim.
+ *
+ * Enabled when GAKR_CODE_USE_GITHUB=1 and the model string contains "claude-"
+ * anywhere (handles bare names like "claude-sonnet-4" and compound formats like
+ * "github:copilot:claude-sonnet-4" or any future provider-prefixed variants).
+ *
+ * api.githubcopilot.com supports Anthropic native format for Claude models,
+ * enabling prompt caching via cache_control blocks which significantly reduces
+ * per-turn token costs by caching the system prompt and tool definitions.
+ */
+export function isGithubNativeAnthropicMode(resolvedModel?: string): boolean {
+  if (!isEnvTruthy(process.env.GAKR_CODE_USE_GITHUB)) return false
+  const model = resolvedModel?.trim() || process.env.OPENAI_MODEL?.trim() || ''
+  return model.toLowerCase().includes('claude-')
+}
+
 function isCodexModel(): boolean {
-  const model = (process.env.OPENAI_MODEL || '').toLowerCase()
-  return (
-    model === 'codexplan' ||
-    model === 'codexspark' ||
-    model === 'gpt-5.4' ||
-    model === 'gpt-5.3-codex' ||
-    model === 'gpt-5.3-codex-spark' ||
-    model === 'gpt-5.2-codex' ||
-    model === 'gpt-5.1-codex-max' ||
-    model === 'gpt-5.1-codex-mini'
+  return shouldUseCodexTransport(
+    process.env.OPENAI_MODEL || '',
+    process.env.OPENAI_BASE_URL ?? process.env.OPENAI_API_BASE,
   )
 }
 
