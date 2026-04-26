@@ -41,7 +41,7 @@ gakrcli
 $env:GAKR_CODE_USE_OPENAI="1"
 $env:OPENAI_API_KEY="sk-your-key-here"
 $env:OPENAI_BASE_URL="https://api.deepseek.com/v1"
-$env:OPENAI_MODEL="deepseek-chat"
+$env:OPENAI_MODEL="deepseek-v4-flash"
 
 gakrcli
 ```

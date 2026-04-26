@@ -216,7 +216,7 @@ const externalTips: Tip[] = [
   },
   {
     id: 'memory-command',
-    content: async () => 'Use /memory to view and manage Gakr memory',
+    content: async () => 'Use /memory to view and manage GakrCLI memory',
     cooldownSessions: 15,
     async isRelevant() {
       const config = getGlobalConfig()

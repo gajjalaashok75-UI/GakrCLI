@@ -703,3 +703,38 @@ test('streaming: thinking block closed before tool call', async () => {
   }
   expect(thinkingStart?.content_block?.type).toBe('thinking')
 })
+
+test('DeepSeek forwards an explicit thinking disable toggle for V4 models', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://api.deepseek.com/v1'
+  process.env.OPENAI_API_KEY = 'sk-deepseek'
+
+  let requestBody: Record<string, unknown> | undefined
+  globalThis.fetch = (async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body))
+    return new Response(
+      JSON.stringify({
+        id: 'chatcmpl-1',
+        model: 'deepseek-v4-flash',
+        choices: [
+          { message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
+        ],
+        usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
+      }),
+      { headers: { 'Content-Type': 'application/json' } },
+    )
+  }) as FetchType
+
+  const client = createOpenAIShimClient({}) as OpenAIShimClient
+  await client.beta.messages.create({
+    model: 'deepseek-v4-flash',
+    system: 'test',
+    messages: [{ role: 'user', content: 'hi' }],
+    max_tokens: 32,
+    stream: false,
+    thinking: { type: 'disabled' },
+  })
+
+  expect(requestBody?.thinking).toEqual({ type: 'disabled' })
+  expect(requestBody?.reasoning_effort).toBeUndefined()
+})

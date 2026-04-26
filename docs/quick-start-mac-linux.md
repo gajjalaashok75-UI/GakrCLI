@@ -41,7 +41,7 @@ gakrcli
 export GAKR_CODE_USE_OPENAI=1
 export OPENAI_API_KEY=sk-your-key-here
 export OPENAI_BASE_URL=https://api.deepseek.com/v1
-export OPENAI_MODEL=deepseek-chat
+export OPENAI_MODEL=deepseek-v4-flash
 
 gakrcli
 ```
