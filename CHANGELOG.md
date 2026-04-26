@@ -1,5 +1,76 @@
 # Changelog
 
+## [0.4.5] (2026-04-27)
+
+### Features
+
+* **Native Memory System (PR #894)**: Add multi-turn context and conversation arc memory
+  - Add `multiTurnContext.ts` with turn tracking and state preservation across tool use cycles
+  - Add `conversationArc.ts` with goal/decision/milestone tracking and conversation phase detection
+  - Add `knowledgeGraph.ts` with persistent entity-relation storage and BM25-based semantic search
+  - Wire memory integration into query.ts after tool execution
+  - Add feature flags: `MULTI_TURN_CONTEXT`, `CONVERSATION_ARC`
+  - Add comprehensive tests (66 passing tests across all memory modules)
+
+* **Knowledge Graph CLI Command**: Add `/knowledge` command to manage native memory
+  - Add `/knowledge enable <yes|no>` to toggle Knowledge Graph learning
+  - Add `/knowledge clear` to reset memory
+  - Add `/knowledge status` to show current state and statistics
+  - Add `/knowledge list` to display learned facts and conversation history
+  - Add persistent `knowledgeGraphEnabled` setting to global config
+  - Integrated user setting into the query execution loop
+
+### Memory Features
+
+* **Automatic Fact Extraction**: Passive learning from conversation content
+  - Detect environment variables (KEY=VALUE patterns)
+  - Detect absolute paths and file references
+  - Detect version numbers (v1.2.3 patterns)
+  - Detect URLs and hostnames
+  - Detect IPv4 addresses with contextual tagging
+  - Detect technical concepts (PascalCase, camelCase, hyphenated-terms)
+  - Detect project rules (always/must/should/never patterns)
+  - Detect technology stack mentions (React, Redux, etc.)
+  - Detect configuration files (*.json, *.yaml, *.xml, etc.)
+
+* **Conversation Arc Tracking**: High-level conversation progress monitoring
+  - Track conversation phases: init → exploring → implementing → reviewing → completed
+  - Track goals with status (pending/active/completed/abandoned)
+  - Track decisions with rationale
+  - Track milestones with timestamps
+  - Automatic phase progression based on message content
+
+* **Knowledge Graph Storage**: Persistent entity-relation graph with semantic search
+  - Entity deduplication and attribute merging
+  - Relation tracking between entities
+  - Semantic summaries with keyword extraction
+  - Project-level rules storage
+  - BM25-Lite scoring for relevance ranking
+  - Orchestrated memory retrieval (targeted RAG + full graph snapshot)
+
+### Integration
+
+* Wire multi-turn context initialization into query loop start
+* Wire conversation arc phase updates after message processing
+* Wire arc summary injection into system prompt for context-aware responses
+* Wire message and tool call tracking during assistant streaming
+* Wire arc turn finalization on query completion
+* Add `knowledgeGraphEnabled` config property to GlobalConfig type
+
+### Tests
+
+* Add 15 multiTurnContext tests covering turn management, state tracking, and history
+* Add 27 conversationArc tests covering goals, decisions, milestones, and fact extraction
+* Add 6 knowledge command tests covering enable/disable, clear, and status operations
+* All 66 tests passing with comprehensive coverage
+
+### Documentation
+
+* Add inline documentation for all memory system functions
+* Add JSDoc comments explaining BM25 scoring algorithm
+* Add comments explaining entity deduplication logic
+* Add comments explaining phase detection keywords
+
 ## [0.4.4] (2026-04-27)
 
 ### Features
