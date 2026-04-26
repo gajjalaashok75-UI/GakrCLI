@@ -90,7 +90,7 @@ export type ProviderProfile =
   | 'ollama'
   | 'codex'
   | 'gemini'
-  | 'nvidia'
+  | 'nvidia-nim'
   | 'atomic-chat'
   | 'minimax' 
   | 'mistral'
@@ -170,7 +170,7 @@ export function isProviderProfile(value: unknown): value is ProviderProfile {
     value === 'ollama' ||
     value === 'codex' ||
     value === 'gemini' ||
-    value === 'nvidia' ||
+    value === 'nvidia-nim' ||
     value === 'atomic-chat' ||
     value === 'minimax' ||
     value === 'mistral'
@@ -245,7 +245,7 @@ export function buildGeminiProfileEnv(options: {
   return env
 }
 
-export function buildNvidiaProfileEnv(options: {
+export function buildNvidiaNimProfileEnv(options: {
   model?: string | null
   baseUrl?: string | null
   apiKey?: string | null
@@ -796,7 +796,7 @@ export async function buildLaunchEnv(options: {
     return env
   }
 
-  if (options.profile === 'nvidia') {
+  if (options.profile === 'nvidia-nim') {
     const env: NodeJS.ProcessEnv = {
       ...processEnv,
       GAKR_CODE_USE_NVIDIA: '1',

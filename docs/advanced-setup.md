@@ -319,8 +319,8 @@ bun run profile:init -- --provider ollama --goal coding
 # gemini bootstrap
 bun run profile:init -- --provider gemini --api-key YOUR_GEMINI_KEY
 
-# nvidia bootstrap
-bun run profile:init -- --provider nvidia --api-key nvapi-...
+# nvidia-nim bootstrap
+bun run profile:init -- --provider nvidia-nim --api-key nvapi-...
 
 # atomic-chat bootstrap (auto-detects running model)
 bun run profile:init -- --provider atomic-chat
@@ -344,7 +344,7 @@ bun run dev:ollama
 bun run dev:gemini
 
 # NVIDIA profile
-bun run dev:nvidia
+bun run dev:nvidia-nim
 
 # Atomic Chat profile (Apple Silicon local LLMs at 127.0.0.1:1337)
 bun run dev:atomic-chat
@@ -360,11 +360,11 @@ Use `--provider atomic-chat` when you want Atomic Chat as the local Apple Silico
 
 Use `profile:codex` or `--provider codex` when you want the ChatGPT Codex backend.
 
-Use `--provider gemini` or `--provider nvidia` for those services.
+Use `--provider gemini` or `--provider nvidia-nim` for those services.
 
 **Note**: For GitHub Models, AWS Bedrock, Google Vertex AI, and Azure Foundry, configure the required environment variables directly (see the provider examples above) and run `gakrcli`. These providers are not yet supported by the automated profile bootstrap.
 
-`dev:openai`, `dev:ollama`, `dev:atomic-chat`, `dev:codex`, `dev:gemini`, and `dev:nvidia` run `doctor:runtime` first and only launch the app if checks pass.
+`dev:openai`, `dev:ollama`, `dev:atomic-chat`, `dev:codex`, `dev:gemini`, and `dev:nvidia-nim` run `doctor:runtime` first and only launch the app if checks pass.
 
 For `dev:ollama`, make sure Ollama is running locally before launch.
 

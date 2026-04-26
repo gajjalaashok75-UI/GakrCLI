@@ -124,7 +124,7 @@ export function getDefaultOpusModel(): ModelName {
     return process.env.OPENAI_MODEL || 'gpt-4o'
   }
   // NVIDIA provider: use configured NVIDIA model
-  if (getAPIProvider() === 'nvidia') {
+  if (getAPIProvider() === 'nvidia-nim') {
     return process.env.NVIDIA_MODEL || 'stepfun-ai/step-3.5-flash'
   }
   // Codex provider: use user-specified model or default to gpt-5.4
@@ -154,7 +154,7 @@ export function getDefaultSonnetModel(): ModelName {
     return process.env.OPENAI_MODEL || 'gpt-4o'
   }
   // NVIDIA provider
-  if (getAPIProvider() === 'nvidia') {
+  if (getAPIProvider() === 'nvidia-nim') {
     return process.env.NVIDIA_MODEL || 'stepfun-ai/step-3.5-flash'
   }
   // Codex provider
@@ -182,7 +182,7 @@ export function getDefaultHaikuModel(): ModelName {
     return process.env.OPENAI_MODEL || 'gpt-4o-mini'
   }
   // NVIDIA provider
-  if (getAPIProvider() === 'nvidia') {
+  if (getAPIProvider() === 'nvidia-nim') {
     return process.env.NVIDIA_MODEL || 'stepfun-ai/step-3.5-flash'
   }
   // Codex provider
@@ -242,7 +242,7 @@ export function getDefaultMainLoopModelSetting(): ModelName | ModelAlias {
     return process.env.OPENAI_MODEL || 'gpt-4o'
   }
   // NVIDIA provider: always use the configured NVIDIA model
-  if (getAPIProvider() === 'nvidia') {
+  if (getAPIProvider() === 'nvidia-nim') {
     return process.env.NVIDIA_MODEL || 'stepfun-ai/step-3.5-flash'
   }
   // Codex provider: always use the configured Codex model (default gpt-5.4)

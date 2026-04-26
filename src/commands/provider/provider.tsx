@@ -31,7 +31,7 @@ import {
   buildCodexProfileEnv,
   buildGeminiProfileEnv,
   buildMistralProfileEnv,
-  buildNvidiaProfileEnv,
+  buildNvidiaNimProfileEnv,
   buildOllamaProfileEnv,
   buildOpenAIProfileEnv,
   createProfileFile,
@@ -415,7 +415,7 @@ function buildSavedProfileSummary(
             ? 'configured'
             : undefined,
       }
-    case 'nvidia':
+    case 'nvidia-nim':
       return {
         providerLabel: 'NVIDIA NIMs',
         modelLabel: getSafeDisplayValue(
@@ -673,7 +673,7 @@ function ProviderChooser({
     },
     {
       label: 'NVIDIA NIMs',
-      value: 'nvidia',
+      value: 'nvidia-nim',
       description:
         'Use NVIDIA-hosted OpenAI-compatible models with an NVIDIA API key',
     },
@@ -1275,7 +1275,7 @@ export function ProviderWizard({
                 name: 'openai-key',
                 defaultModel: defaults.openAIModel,
               })
-            } else if (value === 'nvidia') {
+            } else if (value === 'nvidia-nim') {
               setStep({
                 name: 'nvidia-key',
                 defaultModel: defaults.nvidiaModel,
@@ -1407,14 +1407,14 @@ export function ProviderWizard({
           placeholder={step.defaultModel}
           allowEmpty
           onSubmit={value => {
-            const env = buildNvidiaProfileEnv({
+            const env = buildNvidiaNimProfileEnv({
               apiKey: step.apiKey,
               baseUrl: step.baseUrl,
               model: value.trim() || step.defaultModel,
               processEnv: {},
             })
             if (env) {
-              finishProfileSave(onDone, 'nvidia', env)
+              finishProfileSave(onDone, 'nvidia-nim', env)
             }
           }}
           onCancel={() =>
