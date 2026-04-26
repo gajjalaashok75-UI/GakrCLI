@@ -12,7 +12,7 @@ import {
   buildCodexProfileEnv,
   buildGeminiProfileEnv,
   buildMistralProfileEnv,
-  buildNvidiaProfileEnv,
+  buildNvidiaNimProfileEnv,
   buildOllamaProfileEnv,
   buildOpenAIProfileEnv,
   createProfileFile,
@@ -44,7 +44,7 @@ function parseProviderArg(): ProviderProfile | 'auto' {
     p === 'ollama' ||
     p === 'codex' ||
     p === 'gemini' ||
-    p === 'nvidia' ||
+    p === 'nvidia-nim' ||
     p === 'mistral' ||
     p === 'atomic-chat'
   ) {
@@ -103,8 +103,8 @@ async function main(): Promise<void> {
     }
 
     env = builtEnv
-  } else if (selected === 'nvidia') {
-    const builtEnv = buildNvidiaProfileEnv({
+  } else if (selected === 'nvidia-nim') {
+    const builtEnv = buildNvidiaNimProfileEnv({
       model: argModel || null,
       baseUrl: argBaseUrl || null,
       apiKey: argApiKey || null,

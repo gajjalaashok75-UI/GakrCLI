@@ -56,7 +56,7 @@ function parseLaunchOptions(argv: string[]): LaunchOptions {
       lower === 'ollama' ||
       lower === 'codex' ||
       lower === 'gemini' ||
-      lower === 'nvidia' ||
+      lower === 'nvidia-nim' ||
       lower === 'mistral' ||
       lower === 'atomic-chat'
     ) && requestedProfile === 'auto') {
@@ -129,7 +129,7 @@ function printSummary(profile: ProviderProfile): void {
   console.log(`Launching profile: ${profile}`)
   if (profile === 'gemini') {
     console.log('Using configured Gemini provider settings.')
-  } else if (profile === 'nvidia') {
+  } else if (profile === 'nvidia-nim') {
     console.log('Using configured NVIDIA provider settings.')
   } else if (profile === 'mistral') {
     console.log('Using configured Mistral provider settings.')
@@ -148,7 +148,7 @@ async function main(): Promise<void> {
   const options = parseLaunchOptions(process.argv.slice(2))
   const requestedProfile = options.requestedProfile
   if (!requestedProfile) {
-    console.error('Usage: bun run scripts/provider-launch.ts [openai|ollama|codex|gemini|nvidia|mistral|atomic-chat|auto] [--fast] [--goal <latency|balanced|coding>] [-- <cli args>]')
+    console.error('Usage: bun run scripts/provider-launch.ts [openai|ollama|codex|gemini|nvidia-nim|mistral|atomic-chat|auto] [--fast] [--goal <latency|balanced|coding>] [-- <cli args>]')
     process.exit(1)
   }
 
@@ -214,8 +214,8 @@ async function main(): Promise<void> {
     process.exit(1)
   }
 
-  if (profile === 'nvidia' && !env.NVIDIA_API_KEY) {
-    console.error('NVIDIA_API_KEY is required for nvidia profile. Run: bun run profile:init -- --provider nvidia --api-key <key>')
+  if (profile === 'nvidia-nim' && !env.NVIDIA_API_KEY) {
+    console.error('NVIDIA_API_KEY is required for nvidia-nim profile. Run: bun run profile:init -- --provider nvidia-nim --api-key <key>')
     process.exit(1)
   }
 

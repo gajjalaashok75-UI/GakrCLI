@@ -6,7 +6,7 @@ const SAVED_PROFILES = new Set([
   'ollama',
   'codex',
   'gemini',
-  'nvidia',
+  'nvidia-nim',
   'atomic-chat',
 ]);
 
@@ -344,7 +344,7 @@ function describeSavedProfile(profile) {
       return buildProviderState('Gemini', getDetail(profile.env, 'saved profile'), 'profile');
     case 'codex':
       return buildProviderState('Codex', getDetail(profile.env, 'saved profile'), 'profile');
-    case 'nvidia':
+    case 'nvidia-nim':
       return buildProviderState('NVIDIA NIMs', getDetail(profile.env, 'saved profile'), 'profile');
     case 'atomic-chat':
       return buildProviderState('Atomic Chat', getDetail(profile.env, 'saved profile'), 'profile');

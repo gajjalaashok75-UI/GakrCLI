@@ -284,7 +284,7 @@ test('buildProfileSaveMessage maps provider fields without echoing secrets', () 
 
 test('buildProfileSaveMessage supports nvidia profiles without echoing secrets', () => {
   const message = buildProfileSaveMessage(
-    'nvidia',
+    'nvidia-nim',
     {
       NVIDIA_API_KEY: 'nvapi-secret-12345678',
       NVIDIA_MODEL: 'meta/llama-3.1-405b-instruct',

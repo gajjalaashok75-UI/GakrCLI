@@ -247,11 +247,13 @@ export function buildAPIProviderProperties(): Property[] {
       bedrock: 'AWS Bedrock',
       vertex: 'Google Vertex AI',
       foundry: 'Microsoft Foundry',
-      nvidia: 'NVIDIA NIMs',
+      'nvidia-nim': 'NVIDIA NIMs',
       openai: 'OpenAI-compatible',
       github: 'GitHub Models',
       codex: 'Codex',
       gemini: 'Google Gemini',
+      minimax: 'MiniMax',
+      mistral: 'Mistral',
     }[apiProvider];
     properties.push({
       label: 'Provider',
@@ -327,7 +329,7 @@ export function buildAPIProviderProperties(): Property[] {
         value: 'Microsoft Foundry auth skipped'
       });
     }
-  } else if (apiProvider === 'nvidia') {
+  } else if (apiProvider === 'nvidia-nim') {
     const nvidiaBaseUrl = process.env.NVIDIA_BASE_URL;
     if (nvidiaBaseUrl) {
       properties.push({

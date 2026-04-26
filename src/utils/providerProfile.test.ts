@@ -11,7 +11,7 @@ import {
   buildGeminiProfileEnv,
   buildLaunchEnv,
   buildMistralProfileEnv,
-  buildNvidiaProfileEnv,
+  buildNvidiaNimProfileEnv,
   buildOllamaProfileEnv,
   buildOpenAIProfileEnv,
   clearPersistedCodexOAuthProfile,
@@ -167,8 +167,8 @@ test('matching persisted gemini env is reused for gemini launch', async () => {
 
 test('matching persisted nvidia env is reused for nvidia launch', async () => {
   const env = await buildLaunchEnv({
-    profile: 'nvidia',
-    persisted: profile('nvidia', {
+    profile: 'nvidia-nim',
+    persisted: profile('nvidia-nim', {
       NVIDIA_MODEL: 'meta/llama-3.1-405b-instruct',
       NVIDIA_API_KEY: 'nvapi-persisted',
       NVIDIA_BASE_URL: 'https://example.nvidia.test/v1',
@@ -187,7 +187,7 @@ test('matching persisted nvidia env is reused for nvidia launch', async () => {
 
 test('nvidia launch ignores mismatched persisted openai env and strips other provider secrets', async () => {
   const env = await buildLaunchEnv({
-    profile: 'nvidia',
+    profile: 'nvidia-nim',
     persisted: profile('openai', {
       OPENAI_BASE_URL: 'https://api.openai.com/v1',
       OPENAI_MODEL: 'gpt-4o',
@@ -432,7 +432,7 @@ test('gemini profiles require a key', () => {
 })
 
 test('nvidia profiles accept session defaults and explicit keys', () => {
-  const env = buildNvidiaProfileEnv({
+  const env = buildNvidiaNimProfileEnv({
     apiKey: 'nvapi-live',
     processEnv: {},
   })
@@ -444,7 +444,7 @@ test('nvidia profiles accept session defaults and explicit keys', () => {
 })
 
 test('nvidia profiles require a key', () => {
-  const env = buildNvidiaProfileEnv({
+  const env = buildNvidiaNimProfileEnv({
     processEnv: {},
   })
 
@@ -615,7 +615,7 @@ test('buildStartupEnvFromProfile applies persisted gemini settings when no provi
 
 test('buildStartupEnvFromProfile applies persisted nvidia settings when no provider is explicitly selected', async () => {
   const env = await buildStartupEnvFromProfile({
-    persisted: profile('nvidia', {
+    persisted: profile('nvidia-nim', {
       NVIDIA_API_KEY: 'nvapi-test',
       NVIDIA_MODEL: 'meta/llama-3.1-70b-instruct',
     }),
