@@ -43,6 +43,17 @@ export function hasNodeOption(flag: string): boolean {
   return nodeOptions.split(/\s+/).includes(flag)
 }
 
+/**
+ * Alias for getGakrcliConfigHomeDir for compatibility with CLAUDE-named env vars
+ * Used by files copied from reference that expect CLAUDE_ naming
+ */
+export const getClaudeConfigHomeDir = getGakrcliConfigHomeDir
+
+/**
+ * Alias for GAKR_CONFIG_DIR env var
+ */
+const CLAUDE_CONFIG_DIR = process.env.GAKR_CONFIG_DIR
+
 export function isEnvTruthy(envVar: string | boolean | undefined): boolean {
   if (!envVar) return false
   if (typeof envVar === 'boolean') return envVar
