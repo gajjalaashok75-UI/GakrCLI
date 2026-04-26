@@ -142,7 +142,10 @@ export function useManagePlugins({
         }),
       )
       const lsp_count = lspServerCounts.reduce((sum, n) => sum + n, 0)
-      reinitializeLspServerManager()
+      // Re-initialize LSP manager - fire-and-forget with timeout protection for Windows
+void reinitializeLspServerManager().catch(err => {
+  logForDebugging(`[useManagePlugins] LSP reinit failed: ${String(err)}`)
+})
 
       // Update AppState - merge errors to preserve LSP errors
       setAppState(prevState => {
