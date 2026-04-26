@@ -17,6 +17,7 @@ import {
 } from './providerRecommendation.ts'
 import { readGeminiAccessToken } from './geminiCredentials.ts'
 import { getOllamaChatBaseUrl } from './providerDiscovery.ts'
+import { getPrimaryModel } from './providerModels.ts'
 import { getGakrcliConfigHomeDir } from './envUtils.js'
 import { getProviderValidationError } from './providerValidation.ts'
 import {
@@ -142,6 +143,18 @@ type SecretValueSource = Partial<
 type ProfileFileLocation = {
   cwd?: string
   filePath?: string
+}
+
+function normalizeProfileModel(
+  value: string | undefined | null,
+): string | undefined {
+  const trimmed = value?.trim()
+  if (!trimmed) {
+    return undefined
+  }
+
+  const primary = getPrimaryModel(trimmed)
+  return primary.length > 0 ? primary : undefined
 }
 
 function resolveProfileFilePath(options?: ProfileFileLocation): string {
@@ -365,12 +378,16 @@ export function buildOpenAIProfileEnv(options: {
       (useShellOpenAIConfig ? shellOpenAIBaseUrl : undefined) ||
       DEFAULT_OPENAI_BASE_URL,
     OPENAI_MODEL:
-      sanitizeProviderConfigValue(
-        options.model,
-        { OPENAI_API_KEY: key },
-        processEnv,
+      normalizeProfileModel(
+        sanitizeProviderConfigValue(
+          options.model,
+          { OPENAI_API_KEY: key },
+          processEnv,
+        ),
       ) ||
-      (useShellOpenAIConfig ? shellOpenAIModel : undefined) ||
+      normalizeProfileModel(
+        useShellOpenAIConfig ? shellOpenAIModel : undefined,
+      ) ||
       defaultModel,
     OPENAI_API_KEY: key,
   }

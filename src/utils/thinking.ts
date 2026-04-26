@@ -105,6 +105,13 @@ export function modelSupportsThinking(model: string): boolean {
   if (provider === 'foundry' || provider === 'firstParty') {
     return !canonical.includes('gakrcli-3-')
   }
+  // DeepSeek V4 models support thinking
+  if (
+    canonical.startsWith('deepseek-v4-') ||
+    canonical === 'deepseek-reasoner'
+  ) {
+    return true
+  }
   // 3P (Bedrock/Vertex): only Opus 4+ and Sonnet 4+
   return canonical.includes('sonnet-4') || canonical.includes('opus-4')
 }

@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.4.4] (2026-04-27)
+
+### Features
+
+* **DeepSeek V4 Support**: Add comprehensive support for DeepSeek V4 models (deepseek-v4-flash, deepseek-v4-pro)
+  - Add 1M context window (1,048,576 tokens) for V4 models
+  - Add 262K max output tokens (262,144 tokens) for V4 models
+  - Add thinking support with reasoning_content preservation
+  - Add reasoning_effort normalization (low/medium/high/xhigh → high/max)
+  - Update provider preset to default to deepseek-v4-flash
+  - Add multi-model string support (deepseek-v4-flash, deepseek-v4-pro, deepseek-chat, deepseek-reasoner)
+
+### Documentation
+
+* Update .env.example with DeepSeek V4 model examples
+* Update README.md with DeepSeek V4 agent routing example
+* Update docs/advanced-setup.md with V4 model configuration
+* Update docs/quick-start-mac-linux.md to use deepseek-v4-flash
+* Update docs/quick-start-windows.md to use deepseek-v4-flash
+
+### Bug Fixes
+
+* Fix NVIDIA NIM profile saving issue - profile type now correctly saved as "nvidia-nim" instead of "openai"
+* Fix NVIDIA environment variables - now uses NVIDIA_* prefix instead of OPENAI_*
+* Fix API key retrieval logic in openaiShim.ts for NVIDIA provider
+* Add missing helper functions: looksLikeLeakedReasoningPrefix, shouldBufferPotentialReasoningPrefix, stripLeakedReasoningPreamble
+* Add normalizeProfileModel function to extract first model from multi-model strings
+
+### Tests
+
+* Add DeepSeek V4 context window tests
+* Add DeepSeek V4 preset tests
+* Add DeepSeek V4 multi-model string parsing tests
+* Add DeepSeek thinking toggle test
+
 ## [0.4.3] (2026-04-26)
 
 ### Critical Bug Fixes

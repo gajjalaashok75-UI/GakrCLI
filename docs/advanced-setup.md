@@ -68,8 +68,10 @@ gakrcli
 export GAKR_CODE_USE_OPENAI=1
 export OPENAI_API_KEY=sk-...
 export OPENAI_BASE_URL=https://api.deepseek.com/v1
-export OPENAI_MODEL=deepseek-chat  # or deepseek-reasoner
+export OPENAI_MODEL=deepseek-v4-flash
 ```
+
+Use `deepseek-v4-pro` when you want the stronger model. `deepseek-chat` and `deepseek-reasoner` remain available as DeepSeek's legacy API aliases.
 
 ### NVIDIA NIMs
 
@@ -217,7 +219,7 @@ export OPENAI_MODEL=gpt-4o
 |----------|----------|-------------|
 | `GAKR_CODE_USE_OPENAI` | Yes | Set to `1` to enable OpenAI-compatible providers (OpenAI, DeepSeek, Together AI, Groq, Mistral, Azure, LM Studio, etc.) |
 | `OPENAI_API_KEY` | Yes* | Your API key (`*` not needed for local models like Ollama or Atomic Chat) |
-| `OPENAI_MODEL` | Yes | Model name (e.g., `gpt-4o`, `deepseek-chat`, `llama3.2:3b`) |
+| `OPENAI_MODEL` | Yes | Model name such as `gpt-4o`, `deepseek-v4-flash`, or `llama3.3:70b` |
 | `OPENAI_BASE_URL` | No | API endpoint, defaults to `https://api.openai.com/v1` |
 
 ### Specialized Providers

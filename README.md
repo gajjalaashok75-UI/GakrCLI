@@ -169,6 +169,38 @@ For Gemini, GitHub Models, NVIDIA NIMs, Codex, DeepSeek, LM Studio, and more, se
 - **[Advanced Setup Guide](docs/advanced-setup.md)** — Full provider examples and configuration
 - **[Provider Configuration Reference](docs/advanced-setup.md#provider-examples)** — All supported backends
 
+### Agent Routing
+
+GakrCLI can route different agents to different models through settings-based routing. This is useful for cost optimization or splitting work by model strength.
+
+Add to `~/.gakrcli/settings.json`:
+
+```json
+{
+  "agentModels": {
+    "deepseek-v4-flash": {
+      "base_url": "https://api.deepseek.com/v1",
+      "api_key": "sk-your-key"
+    },
+    "gpt-4o": {
+      "base_url": "https://api.openai.com/v1",
+      "api_key": "sk-your-key"
+    }
+  },
+  "agentRouting": {
+    "Explore": "deepseek-v4-flash",
+    "Plan": "gpt-4o",
+    "general-purpose": "gpt-4o",
+    "frontend-dev": "deepseek-v4-flash",
+    "default": "gpt-4o"
+  }
+}
+```
+
+When no routing match is found, the global provider remains the fallback.
+
+> **Note:** `api_key` values in `settings.json` are stored in plaintext. Keep this file private and do not commit it to version control.
+
 ---
 
 ## Inside Gakr

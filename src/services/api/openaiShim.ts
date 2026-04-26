@@ -92,6 +92,9 @@ const GITHUB_429_MAX_RETRIES = 3
 const GITHUB_429_BASE_DELAY_SEC = 1
 const GITHUB_429_MAX_DELAY_SEC = 32
 const GEMINI_API_HOST = 'generativelanguage.googleapis.com'
+const DEEPSEEK_API_HOSTS = new Set([
+  'api.deepseek.com',
+])
 
 const COPILOT_HEADERS: Record<string, string> = {
   'User-Agent': 'GitHubCopilotChat/0.26.7',
@@ -111,6 +114,64 @@ function isMistralMode(): boolean {
 function isNvidiaMode(): boolean {
   return isEnvTruthy(process.env.GAKR_CODE_USE_NVIDIA)
 }
+
+/**
+ * Check if text looks like a leaked reasoning prefix that should be stripped.
+ * Some models leak reasoning preambles like "Let me think..." or "I'll analyze..."
+ */
+function looksLikeLeakedReasoningPrefix(text: string): boolean {
+  if (!text || text.length > 100) return false
+  const lower = text.toLowerCase().trim()
+  return (
+    lower.startsWith('let me think') ||
+    lower.startsWith('i\'ll think') ||
+    lower.startsWith('let me analyze') ||
+    lower.startsWith('i\'ll analyze') ||
+    lower.startsWith('thinking:') ||
+    lower.startsWith('analysis:')
+  )
+}
+
+/**
+ * Check if we should buffer text to detect potential reasoning prefix.
+ * Buffer short text that might be the start of a reasoning preamble.
+ */
+function shouldBufferPotentialReasoningPrefix(text: string): boolean {
+  if (!text || text.length > 50) return false
+  const lower = text.toLowerCase().trim()
+  return (
+    lower.startsWith('let') ||
+    lower.startsWith('i\'ll') ||
+    lower.startsWith('think') ||
+    lower.startsWith('analyz')
+  )
+}
+
+/**
+ * Strip leaked reasoning preamble from text.
+ * Returns the text with reasoning prefix removed, or original if no prefix found.
+ */
+function stripLeakedReasoningPreamble(text: string): string {
+  if (!text) return text
+  
+  // Remove common reasoning preambles
+  const patterns = [
+    /^let me think[^.!?]*[.!?]\s*/i,
+    /^i'll think[^.!?]*[.!?]\s*/i,
+    /^let me analyze[^.!?]*[.!?]\s*/i,
+    /^i'll analyze[^.!?]*[.!?]\s*/i,
+    /^thinking:\s*/i,
+    /^analysis:\s*/i,
+  ]
+  
+  let result = text
+  for (const pattern of patterns) {
+    result = result.replace(pattern, '')
+  }
+  
+  return result
+}
+
 
 function filterAnthropicHeaders(
   headers: Record<string, string> | undefined,
@@ -148,6 +209,21 @@ function hasGeminiApiHost(baseUrl: string | undefined): boolean {
   }
 }
 
+function isDeepSeekBaseUrl(baseUrl: string | undefined): boolean {
+  if (!baseUrl) return false
+  try {
+    return DEEPSEEK_API_HOSTS.has(new URL(baseUrl).hostname.toLowerCase())
+  } catch {
+    return false
+  }
+}
+
+function normalizeDeepSeekReasoningEffort(
+  effort: 'low' | 'medium' | 'high' | 'xhigh',
+): 'high' | 'max' {
+  return effort === 'xhigh' ? 'max' : 'high'
+}
+
 function formatRetryAfterHint(response: Response): string {
   const ra = response.headers.get('retry-after')
   return ra ? ` (Retry-After: ${ra})` : ''
@@ -176,6 +252,14 @@ interface OpenAIMessage {
   }>
   tool_call_id?: string
   name?: string
+  /**
+   * Per-assistant-message chain-of-thought, attached when echoing an
+   * assistant message back to providers that require it (notably DeepSeek:
+   * "thinking is enabled but reasoning_content is missing in assistant
+   * tool call message at index N" 400). Derived from the Anthropic thinking
+   * block captured when the original response was translated.
+   */
+  reasoning_content?: string
 }
 
 interface OpenAITool {
@@ -320,7 +404,9 @@ function isGeminiMode(): boolean {
 function convertMessages(
   messages: Array<{ role: string; message?: { role?: string; content?: unknown }; content?: unknown }>,
   system: unknown,
+  options?: { preserveReasoningContent?: boolean },
 ): OpenAIMessage[] {
+  const preserveReasoningContent = options?.preserveReasoningContent === true
   const result: OpenAIMessage[] = []
 
   // System message first
@@ -371,6 +457,7 @@ function convertMessages(
         const textContent = content.filter(
           (b: { type?: string }) => b.type !== 'tool_use' && b.type !== 'thinking',
         )
+        const thinkingBlock = content.find((b: { type?: string }) => b.type === 'thinking')
 
         const assistantMsg: OpenAIMessage = {
           role: 'assistant',
@@ -378,6 +465,21 @@ function convertMessages(
             const c = convertContentBlocks(textContent)
             return typeof c === 'string' ? c : Array.isArray(c) ? c.map((p: { text?: string }) => p.text ?? '').join('') : ''
           })(),
+        }
+
+        // Providers that validate reasoning continuity (DeepSeek: "thinking
+        // is enabled but reasoning_content is missing in assistant tool call
+        // message at index N" 400) need the original chain-of-thought echoed
+        // back on each assistant message that carries a tool_call. We kept
+        // the thinking block on the Anthropic side; re-attach it here as the
+        // `reasoning_content` field on the outgoing OpenAI-shaped message.
+        // Gated per-provider because other endpoints either ignore the field
+        // (harmless) or strict-reject unknown fields (harmful).
+        if (preserveReasoningContent) {
+          const thinkingText = (thinkingBlock as { thinking?: string } | undefined)?.thinking
+          if (typeof thinkingText === 'string' && thinkingText.trim().length > 0) {
+            assistantMsg.reasoning_content = thinkingText
+          }
         }
 
         if (toolUses.length > 0) {
@@ -1289,6 +1391,12 @@ class OpenAIShimMessages {
         content?: unknown
       }>,
       params.system,
+      {
+        // DeepSeek requires every assistant tool-call message to carry
+        // reasoning_content when its thinking feature is active. Echo it back
+        // from the thinking block we captured on the inbound response.
+        preserveReasoningContent: isDeepSeekBaseUrl(request.baseUrl),
+      },
     )
 
     const body: Record<string, unknown> = {
@@ -1364,6 +1472,29 @@ class OpenAIShimMessages {
 
     if (params.temperature !== undefined) body.temperature = params.temperature
     if (params.top_p !== undefined) body.top_p = params.top_p
+
+    // DeepSeek thinking support
+    const isDeepSeek = isDeepSeekBaseUrl(request.baseUrl)
+    if (isDeepSeek) {
+      const requestedThinkingType = (params.thinking as { type?: string } | undefined)?.type
+      const deepSeekThinkingType =
+        requestedThinkingType === 'disabled'
+          ? 'disabled'
+          : requestedThinkingType === 'enabled' || requestedThinkingType === 'adaptive'
+            ? 'enabled'
+            : undefined
+
+      if (deepSeekThinkingType) {
+        body.thinking = { type: deepSeekThinkingType }
+      }
+
+      if (deepSeekThinkingType === 'enabled') {
+        const effort = (request as any).reasoning?.effort
+        if (effort) {
+          body.reasoning_effort = normalizeDeepSeekReasoningEffort(effort)
+        }
+      }
+    }
 
     if (params.tools && params.tools.length > 0) {
       const converted = convertTools(

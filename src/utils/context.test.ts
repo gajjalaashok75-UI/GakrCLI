@@ -37,11 +37,32 @@ test('deepseek-chat uses provider-specific context and output caps', () => {
   expect(getMaxOutputTokensForModel('deepseek-chat')).toBe(8_192)
 })
 
+test('deepseek-v4-flash uses provider-specific context and output caps', () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  delete process.env.GAKR_CODE_MAX_OUTPUT_TOKENS
+  delete process.env.OPENAI_MODEL
+
+  expect(getContextWindowForModel('deepseek-v4-flash')).toBe(1_048_576)
+  expect(getModelMaxOutputTokens('deepseek-v4-flash')).toEqual({
+    default: 262_144,
+    upperLimit: 262_144,
+  })
+  expect(getMaxOutputTokensForModel('deepseek-v4-flash')).toBe(262_144)
+})
+
 test('deepseek-chat clamps oversized max output overrides to the provider limit', () => {
   process.env.GAKR_CODE_USE_OPENAI = '1'
   process.env.GAKR_CODE_MAX_OUTPUT_TOKENS = '32000'
 
   expect(getMaxOutputTokensForModel('deepseek-chat')).toBe(8_192)
+})
+
+test('deepseek-v4-flash clamps oversized max output overrides to the provider limit', () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.GAKR_CODE_MAX_OUTPUT_TOKENS = '500000'
+  delete process.env.OPENAI_MODEL
+
+  expect(getMaxOutputTokensForModel('deepseek-v4-flash')).toBe(262_144)
 })
 
 test('gpt-4o uses provider-specific context and output caps', () => {
