@@ -22,7 +22,7 @@ export type ApiKeyVerificationResult = {
 }
 
 function getInitialVerificationStatus(): VerificationStatus {
-  if (!isAnthropicAuthEnabled() || isGakrAISubscriber()) {
+  if (!isAnthropicAuthEnabled() || isgakrcliAISubscriber()) {
     return 'valid'
   }
   // Use skipRetrievingKeyFromApiKeyHelper to avoid executing apiKeyHelper
@@ -44,7 +44,7 @@ export function useApiKeyVerification(): ApiKeyVerificationResult {
   )
   const [error, setError] = useState<Error | null>(null)
   const anthropicVerificationEnabled =
-    isAnthropicAuthEnabled() && !isGakrAISubscriber()
+    isAnthropicAuthEnabled() && !isgakrcliAISubscriber()
 
   useEffect(() => {
     const nextStatus = anthropicVerificationEnabled
