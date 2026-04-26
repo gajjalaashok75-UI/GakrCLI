@@ -263,7 +263,9 @@ export function useTextInput({
     if (env.terminal === 'Apple_Terminal' && isModifierPressed('shift')) {
       return cursor.insert('\n')
     }
+    // Submit the input - return cursor unchanged
     onSubmit?.(originalValue)
+    return cursor
   }
 
   function upOrHistoryUp() {
