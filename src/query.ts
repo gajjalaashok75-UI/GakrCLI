@@ -262,6 +262,15 @@ async function* queryLoop(
   } = params
   const deps = params.deps ?? productionDeps()
 
+  // Initialize multi-turn context tracking if enabled
+  if (
+    feature('MULTI_TURN_CONTEXT') &&
+    (await import('./utils/config.js')).getGlobalConfig().knowledgeGraphEnabled
+  ) {
+    const { startNewTurn } = await import('./utils/multiTurnContext.js')
+    startNewTurn()
+  }
+
   // Mutable cross-iteration state. The loop body destructures this at the top
   // of each iteration so reads stay bare-name (`messages`, `toolUseContext`).
   // Continue sites write `state = { ... }` instead of 9 separate assignments.
@@ -365,6 +374,16 @@ async function* queryLoop(
     let messagesForQuery = [...getMessagesAfterCompactBoundary(messages)]
 
     let tracking = autoCompactTracking
+
+    // Update conversation arc phase if enabled
+    if (
+      feature('CONVERSATION_ARC') &&
+      (await import('./utils/config.js')).getGlobalConfig().knowledgeGraphEnabled &&
+      messagesForQuery.length > 0
+    ) {
+      const { updateArcPhase } = await import('./utils/conversationArc.js')
+      updateArcPhase([messagesForQuery[messagesForQuery.length - 1]])
+    }
 
     // Enforce per-message budget on aggregate tool result size. Runs BEFORE
     // microcompact — cached MC operates purely by tool_use_id (never inspects
@@ -653,6 +672,23 @@ async function* queryLoop(
       }
     }
 
+    // Add conversation arc summary to system prompt if enabled
+    let promptWithArc: readonly string[] = fullSystemPrompt
+    if (feature('CONVERSATION_ARC')) {
+      if ((await import('./utils/config.js')).getGlobalConfig().knowledgeGraphEnabled) {
+        const lastMessage = messagesForQuery[messagesForQuery.length - 1]
+        const userQueryText =
+          lastMessage && typeof lastMessage.message.content === 'string'
+            ? lastMessage.message.content
+            : ''
+        const { getArcSummary } = await import('./utils/conversationArc.js')
+        const arcSummary = getArcSummary(userQueryText)
+        if (arcSummary) {
+          promptWithArc = [...fullSystemPrompt, arcSummary]
+        }
+      }
+    }
+
     let attemptWithFallback = true
 
     queryCheckpoint('query_api_loop_start')
@@ -664,7 +700,7 @@ async function* queryLoop(
           queryCheckpoint('query_api_streaming_start')
           for await (const message of deps.callModel({
             messages: prependUserContext(messagesForQuery, userContext),
-            systemPrompt: fullSystemPrompt,
+            systemPrompt: promptWithArc,
             thinkingConfig: toolUseContext.options.thinkingConfig,
             tools: toolUseContext.options.tools,
             signal: toolUseContext.abortController.signal,
@@ -832,6 +868,26 @@ async function* queryLoop(
             }
             if (message.type === 'assistant') {
               assistantMessages.push(message)
+
+              // Track message in multi-turn context if enabled
+              if (
+                feature('MULTI_TURN_CONTEXT') &&
+                (await import('./utils/config.js')).getGlobalConfig().knowledgeGraphEnabled
+              ) {
+                const { addMessageToTurn, addToolCallToTurn } = await import(
+                  './utils/multiTurnContext.js'
+                )
+                addMessageToTurn(message)
+              }
+
+              // Update conversation arc phase if enabled
+              if (
+                feature('CONVERSATION_ARC') &&
+                (await import('./utils/config.js')).getGlobalConfig().knowledgeGraphEnabled
+              ) {
+                const { updateArcPhase } = await import('./utils/conversationArc.js')
+                updateArcPhase([message])
+              }
 
               const msgToolUseBlocks = message.message.content.filter(
                 content => content.type === 'tool_use',
@@ -1359,6 +1415,15 @@ async function* queryLoop(
             queryDepth: queryTracking.depth,
           })
         }
+      }
+
+      // Finalize conversation arc turn if enabled
+      if (
+        feature('CONVERSATION_ARC') &&
+        (await import('./utils/config.js')).getGlobalConfig().knowledgeGraphEnabled
+      ) {
+        const { finalizeArcTurn } = await import('./utils/conversationArc.js')
+        finalizeArcTurn()
       }
 
       return { reason: 'completed' }

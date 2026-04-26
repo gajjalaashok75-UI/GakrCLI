@@ -281,6 +281,9 @@ export type GlobalConfig = {
   // Memory usage tracking
   memoryUsageCount: number // Number of times user has added to memory
 
+  // Knowledge Graph feature toggle
+  knowledgeGraphEnabled?: boolean // Whether the Knowledge Graph memory feature is enabled
+
   // Sonnet-1M configs
   hasShownS1MWelcomeV2?: Record<string, boolean> // Whether the Sonnet-1M v2 welcome message has been shown per org
   // Cache of Sonnet-1M subscriber access per org - key is org ID
