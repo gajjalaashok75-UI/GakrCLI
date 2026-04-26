@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2] (2026-04-26)
+
+### Bug Fixes
+
+* fix Windows input handling by skipping early input capture on win32 platform
+* prevents REPL from getting stuck waiting for stdin on Windows terminals
+
 ## [0.4.1](https://github.com/gakr-gakr/gakrcli/compare/v0.4.0...v0.4.1) (2026-04-26)
 
 ### Bug Fixes
