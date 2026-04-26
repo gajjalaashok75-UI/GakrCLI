@@ -19,6 +19,10 @@ export function getAPIProvider(): APIProvider {
   if (isEnvTruthy(process.env.NVIDIA_NIM)) {
     return 'nvidia-nim'
   }
+  // Check for NVIDIA provider flag
+  if (isEnvTruthy(process.env.GAKR_CODE_USE_NVIDIA)) {
+    return 'nvidia-nim'
+  }
   // MiniMax is signalled by a real API key, not a '1'/'true' flag.
   if (typeof process.env.MINIMAX_API_KEY === 'string' && process.env.MINIMAX_API_KEY.trim() !== '') {
     return 'minimax'
