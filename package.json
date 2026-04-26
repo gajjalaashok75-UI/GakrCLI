@@ -1,6 +1,6 @@
 {
   "name": "@gakr-gakr/gakrcli",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Gakr opened to any LLM — OpenAI, Gemini, DeepSeek, Ollama, and 200+ models",
   "type": "module",
   "bin": {
