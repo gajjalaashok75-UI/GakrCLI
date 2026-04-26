@@ -223,7 +223,7 @@ export function initializeLspServerManager(): void {
  * parsing (servers are lazy-started on first use). Also safe during pending
  * init: the generation counter invalidates the in-flight promise.
  */
-export function reinitializeLspServerManager(): void {
+export async function reinitializeLspServerManager(): Promise<void> {
   if (initializationState === 'not-started') {
     // initializeLspServerManager() was never called (e.g. headless subcommand
     // path). Don't start it now.
@@ -232,15 +232,23 @@ export function reinitializeLspServerManager(): void {
 
   logForDebugging('[LSP MANAGER] reinitializeLspServerManager() called')
 
-  // Best-effort shutdown of any running servers on the old instance so
-  // /reload-plugins doesn't leak child processes. Fire-and-forget: the
-  // primary use case (issue #15521) has 0 servers so this is usually a no-op.
+  // Shutdown any running servers on the old instance so /reload-plugins
+  // doesn't leak child processes. On Windows, child process shutdown can hang
+  // if the server doesn't respond to graceful shutdown, so we use a timeout.
   if (lspManagerInstance) {
-    void lspManagerInstance.shutdown().catch(err => {
+    const SHUTDOWN_TIMEOUT_MS = 5000
+    try {
+      await Promise.race([
+        lspManagerInstance.shutdown(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('LSP shutdown timeout')), SHUTDOWN_TIMEOUT_MS)
+        )
+      ])
+    } catch (err) {
       logForDebugging(
-        `[LSP MANAGER] old instance shutdown during reinit failed: ${errorMessage(err)}`,
+        `[LSP MANAGER] old instance shutdown during reinit failed or timed out: ${errorMessage(err)}`,
       )
-    })
+    }
   }
 
   // Force the idempotence check in initializeLspServerManager() to fall

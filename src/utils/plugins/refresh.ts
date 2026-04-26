@@ -142,7 +142,7 @@ export async function refreshActivePlugins(
   // Unconditional so removing the last LSP plugin also clears stale config.
   // Fixes issue #15521: LSP manager previously read a stale memoized
   // loadAllPlugins() result from before marketplaces were reconciled.
-  reinitializeLspServerManager()
+  await reinitializeLspServerManager()
 
   // clearAllCaches() prunes removed-plugin hooks; this does the FULL swap
   // (adds hooks from newly-enabled plugins too). Catching here so
