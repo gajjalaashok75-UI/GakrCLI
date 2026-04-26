@@ -324,7 +324,7 @@ export function buildMiniMaxProfileEnv(options: {
 }
 
 export function buildOpenAIProfileEnv(options: {
-  goal: RecommendationGoal
+  goal?: RecommendationGoal
   model?: string | null
   baseUrl?: string | null
   apiKey?: string | null
@@ -336,7 +336,8 @@ export function buildOpenAIProfileEnv(options: {
     return null
   }
 
-  const defaultModel = getGoalDefaultOpenAIModel(options.goal)
+  const goal = options.goal ?? 'balanced'
+  const defaultModel = getGoalDefaultOpenAIModel(goal)
   const shellOpenAIModel = sanitizeProviderConfigValue(
     processEnv.OPENAI_MODEL,
     { OPENAI_API_KEY: key },
