@@ -4,6 +4,21 @@
 
 ### Features
 
+* **MiniMax Usage Support (PR #TBD)**: Add comprehensive MiniMax usage tracking with /usage API integration
+  - Create MiniMaxUsage.tsx component for displaying MiniMax quota and usage data
+  - Create UnsupportedUsage.tsx component for providers without usage API support
+  - Update Usage.tsx to route to provider-specific components (MiniMax, Codex, Anthropic, or Unsupported)
+  - Add MiniMax usage API services (fetch, parse, types) with comprehensive normalization
+  - Support multiple MiniMax API endpoints with automatic fallback
+  - Parse interval (5h), weekly, and daily quota windows from MiniMax API responses
+  - Display usage percentages, remaining counts, and reset countdowns
+  - Add test suite with 11 test cases covering various MiniMax payload formats
+  - Add fixture data for testing MiniMax model_remains API responses
+  - Support unsupported providers: OpenAI, Gemini, GitHub Models, Mistral, NVIDIA NIM, AWS Bedrock, Google Vertex AI, Microsoft Foundry
+  - Closes #TBD: MiniMax users can now view their usage limits and quotas via /usage command
+
+### Features
+
 * **OpenAI Fallback Context Window Configuration (PR #861)**: Make OpenAI fallback context window configurable and support external model lookup
   - Add `GAKR_CODE_OPENAI_FALLBACK_CONTEXT_WINDOW` env var to override the 128k default for unknown models
   - Add `GAKR_CODE_OPENAI_CONTEXT_WINDOWS` env var (JSON object) for per-model context window overrides
