@@ -4,6 +4,18 @@
 
 ### Features
 
+* **Provider Profile Persistence (PR #TBD)**: Persist active provider profile across restarts
+  - Add `clearStartupProviderOverrides()` utility to remove stale provider env from settings
+  - Store provider profiles in `~/.gakrcli/` instead of current working directory
+  - Fix provider profile restart fallback to respect profile-managed env flags
+  - Fix `buildStartupEnvFromProfile()` to preserve explicit provider selections
+  - Fix `buildLaunchEnv()` to omit empty `OPENAI_API_KEY` from startup env
+  - Update `resolveProfileFilePath()` to use config home directory by default
+  - Add `PROVIDERS` constant array to `configConstants.ts`
+  - Fix `maskSecretForDisplay()` to preserve correct prefix/suffix lengths
+  - Add comprehensive test coverage (97 passing tests)
+  - Integrate `clearStartupProviderOverrides()` into ProviderManager component
+
 * **Bankr Provider Support (PR #888)**: Add Bankr LLM Gateway as an OpenAI-compatible provider
   - Add 'bankr' to VALID_PROVIDERS with CLI flag support (`--provider bankr`)
   - Add Bankr preset in ProviderManager with default configuration
