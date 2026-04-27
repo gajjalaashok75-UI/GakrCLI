@@ -4,6 +4,53 @@
 
 ### Features
 
+* **GPT-5.5 Support for Codex Provider (PR #TBD)**: Add GPT-5.5 model support with complete Codex integration
+  - Bump Codex provider defaults from gpt-5.4 to gpt-5.5 across all ModelConfigs
+  - Update codexplan alias to resolve to gpt-5.5 model
+  - Add gpt-5.5 and gpt-5.5-mini to model picker with reasoning effort mappings
+  - Add context window and max output token specs for gpt-5.5 family (gpt-5.5, gpt-5.5-mini, gpt-5.5-nano)
+  - Add gpt-5.5 entries to COPILOT_MODELS registry
+  - Keep official OpenAI API preset at gpt-5.4 (API availability pending)
+  - Update codexShim tests to expect gpt-5.5 from codexplan alias
+  - Fix transport resolution logic to use `shouldUseCodexTransport` with `finalBaseUrl`
+  - Fix return statement to use `finalBaseUrl` instead of `rawBaseUrl` for correct Codex endpoint detection
+
+### Bug Fixes
+
+* **Schema Sanitizer Pattern Field Preservation (PR #TBD)**: Fix tool schema pattern field handling
+  - Update `stripSchemaKeywords` to preserve property field names like "pattern" in tool schemas
+  - Add special handling for `properties` key to prevent stripping field names that match keywords
+  - Fix 3 failing tests: "preserves Grep tool pattern field", "preserves Glob tool pattern field", "strips validator pattern keyword but keeps string field named pattern"
+  - Ensure validator keywords (like `pattern` regex validator) are stripped while preserving property names
+
+* **Think Tag Sanitizer Integration (PR #TBD)**: Add reasoning content leak prevention for Codex responses
+  - Import and integrate `stripThinkTags` function in `convertCodexResponseToAnthropicMessage`
+  - Add `createThinkTagFilter` for streaming response sanitization
+  - Strip `<think>`, `<thinking>`, `<reasoning>`, `<thought>`, `<reasoning_scratchpad>` tags from responses
+  - Handle closed pairs, unterminated tags, and orphan tags correctly
+  - Add flush logic to handle partial tags at stream boundaries
+  - Fix 3 failing tests: "strips <think> tag block from completed Codex text responses", "strips unterminated <think> tag", "strips <think> tag block from Codex SSE text stream"
+
+* **Codex Web Search Failure Handling (PR #TBD)**: Add comprehensive web search error handling
+  - Add `extractCodexWebSearchFailure` function to parse failure reasons from Codex responses
+  - Add `getCodexSources` helper to extract sources from multiple response locations
+  - Add `pushCodexTextResult` and `addCodexSource` helpers for result processing
+  - Update `makeOutputFromCodexWebSearchResponse` to handle web_search_call failures
+  - Support error messages from `error.message` and `action.error.message` fields
+  - Add fallback "Web search failed." message when no reason provided
+  - Handle partial failures with mixed error and success results
+  - Export `__test` object with `makeOutputFromCodexWebSearchResponse` for testing
+  - Add 6 new tests for web search failure scenarios
+
+### Tests
+
+* **Complete Test Coverage (31 tests, 49 expect() calls)**: All Codex provider tests passing
+  - 11 Codex provider config tests (transport resolution, alias handling, credentials)
+  - 8 Codex request translation tests (tool schemas, strict mode, format handling)
+  - 6 Codex web search tests (success, failure, partial results, source extraction)
+  - 3 think tag sanitization tests (completed responses, streaming, unterminated tags)
+  - 3 SSE streaming tests (event translation, text deltas, prose preservation)
+
 * **Provider Profile Persistence (PR #TBD)**: Persist active provider profile across restarts
   - Add `clearStartupProviderOverrides()` utility to remove stale provider env from settings
   - Store provider profiles in `~/.gakrcli/` instead of current working directory

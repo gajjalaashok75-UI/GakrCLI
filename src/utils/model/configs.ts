@@ -35,6 +35,7 @@ export const GAKR_3_7_SONNET_CONFIG = {
   foundry: 'gakrcli-3-7-sonnet',
   openai: 'gpt-4o-mini',
   gemini: 'gemini-2.0-flash',
+  codex: 'gpt-5.5',
 } as const satisfies ModelConfig
 
 export const GAKR_3_5_V2_SONNET_CONFIG = {
@@ -44,6 +45,7 @@ export const GAKR_3_5_V2_SONNET_CONFIG = {
   foundry: 'gakrcli-3-5-sonnet',
   openai: 'gpt-4o-mini',
   gemini: 'gemini-2.0-flash',
+  codex: 'gpt-5.5',
 } as const satisfies ModelConfig
 
 export const GAKR_3_5_HAIKU_CONFIG = {
@@ -53,6 +55,7 @@ export const GAKR_3_5_HAIKU_CONFIG = {
   foundry: 'gakrcli-3-5-haiku',
   openai: 'gpt-4o-mini',
   gemini: 'gemini-2.0-flash-lite',
+  codex: 'gpt-5.5',
 } as const satisfies ModelConfig
 
 export const GAKR_HAIKU_4_5_CONFIG = {
@@ -62,6 +65,7 @@ export const GAKR_HAIKU_4_5_CONFIG = {
   foundry: 'gakrcli-haiku-4-5',
   openai: 'gpt-4o-mini',
   gemini: 'gemini-2.0-flash-lite',
+  codex: 'gpt-5.5',
 } as const satisfies ModelConfig
 
 export const GAKR_SONNET_4_CONFIG = {
@@ -71,6 +75,7 @@ export const GAKR_SONNET_4_CONFIG = {
   foundry: 'gakrcli-sonnet-4',
   openai: 'gpt-4o-mini',
   gemini: 'gemini-2.0-flash',
+  codex: 'gpt-5.5',
 } as const satisfies ModelConfig
 
 export const GAKR_SONNET_4_5_CONFIG = {
@@ -80,6 +85,7 @@ export const GAKR_SONNET_4_5_CONFIG = {
   foundry: 'gakrcli-sonnet-4-5',
   openai: 'gpt-4o',
   gemini: 'gemini-2.0-flash',
+  codex: 'gpt-5.5',
 } as const satisfies ModelConfig
 
 export const GAKR_OPUS_4_CONFIG = {
@@ -89,6 +95,7 @@ export const GAKR_OPUS_4_CONFIG = {
   foundry: 'gakrcli-opus-4',
   openai: 'gpt-4o',
   gemini: 'gemini-2.5-pro-preview-03-25',
+  codex: 'gpt-5.5',
 } as const satisfies ModelConfig
 
 export const GAKR_OPUS_4_1_CONFIG = {
@@ -98,6 +105,7 @@ export const GAKR_OPUS_4_1_CONFIG = {
   foundry: 'gakrcli-opus-4-1',
   openai: 'gpt-4o',
   gemini: 'gemini-2.5-pro-preview-03-25',
+  codex: 'gpt-5.5',
 } as const satisfies ModelConfig
 
 export const GAKR_OPUS_4_5_CONFIG = {
@@ -107,6 +115,7 @@ export const GAKR_OPUS_4_5_CONFIG = {
   foundry: 'gakrcli-opus-4-5',
   openai: 'gpt-4o',
   gemini: 'gemini-2.5-pro-preview-03-25',
+  codex: 'gpt-5.5',
 } as const satisfies ModelConfig
 
 export const GAKR_OPUS_4_6_CONFIG = {
@@ -116,6 +125,7 @@ export const GAKR_OPUS_4_6_CONFIG = {
   foundry: 'gakrcli-opus-4-6',
   openai: 'gpt-4o',
   gemini: 'gemini-2.5-pro-preview-03-25',
+  codex: 'gpt-5.5',
 } as const satisfies ModelConfig
 
 export const GAKR_SONNET_4_6_CONFIG = {
@@ -125,6 +135,7 @@ export const GAKR_SONNET_4_6_CONFIG = {
   foundry: 'gakrcli-sonnet-4-6',
   openai: 'gpt-4o',
   gemini: 'gemini-2.0-flash',
+  codex: 'gpt-5.5',
 } as const satisfies ModelConfig
 
 // @[MODEL LAUNCH]: Register the new config here.

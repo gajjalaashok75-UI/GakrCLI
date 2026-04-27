@@ -5,6 +5,10 @@ import type {
   ResolvedProviderRequest,
 } from './providerConfig.js'
 import { sanitizeSchemaForOpenAICompat } from './openaiSchemaSanitizer.js'
+import {
+  createThinkTagFilter,
+  stripThinkTags,
+} from './thinkTagSanitizer.js'
 
 export interface AnthropicUsage {
   input_tokens: number
@@ -682,12 +686,24 @@ export async function* codexStreamToAnthropic(
     { index: number; toolUseId: string }
   >()
   let activeTextBlockIndex: number | null = null
+  const thinkFilter = createThinkTagFilter()
   let nextContentBlockIndex = 0
   let sawToolUse = false
   let finalResponse: Record<string, any> | undefined
 
   const closeActiveTextBlock = async function* () {
     if (activeTextBlockIndex === null) return
+    const tail = thinkFilter.flush()
+    if (tail) {
+      yield {
+        type: 'content_block_delta',
+        index: activeTextBlockIndex,
+        delta: {
+          type: 'text_delta',
+          text: tail,
+        },
+      }
+    }
     yield {
       type: 'content_block_stop',
       index: activeTextBlockIndex,
@@ -769,13 +785,16 @@ export async function* codexStreamToAnthropic(
     if (event.event === 'response.output_text.delta') {
       yield* startTextBlockIfNeeded()
       if (activeTextBlockIndex !== null) {
-        yield {
-          type: 'content_block_delta',
-          index: activeTextBlockIndex,
-          delta: {
-            type: 'text_delta',
-            text: payload.delta ?? '',
-          },
+        const visible = thinkFilter.feed(payload.delta ?? '')
+        if (visible) {
+          yield {
+            type: 'content_block_delta',
+            index: activeTextBlockIndex,
+            delta: {
+              type: 'text_delta',
+              text: visible,
+            },
+          }
         }
       }
       continue
@@ -863,7 +882,7 @@ export function convertCodexResponseToAnthropicMessage(
         if (part?.type === 'output_text') {
           content.push({
             type: 'text',
-            text: part.text ?? '',
+            text: stripThinkTags(part.text ?? ''),
           })
         }
       }
