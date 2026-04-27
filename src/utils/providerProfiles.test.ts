@@ -1,3 +1,7 @@
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
 import { afterEach, describe, expect, mock, test } from 'bun:test'
 
 import type { ProviderProfile } from './config.js'
@@ -7,6 +11,7 @@ async function importFreshProvidersModule() {
 }
 
 const originalEnv = { ...process.env }
+const originalCwd = process.cwd()
 
 const RESTORED_KEYS = [
   'GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED',
@@ -15,9 +20,12 @@ const RESTORED_KEYS = [
   'GAKR_CODE_USE_GEMINI',
   'GAKR_CODE_USE_MISTRAL',
   'GAKR_CODE_USE_GITHUB',
+  'GAKR_CODE_USE_NVIDIA',
   'GAKR_CODE_USE_BEDROCK',
   'GAKR_CODE_USE_VERTEX',
   'GAKR_CODE_USE_FOUNDRY',
+  'GAKR_CONFIG_DIR',
+  'NVIDIA_NIM',
   'OPENAI_BASE_URL',
   'OPENAI_API_BASE',
   'OPENAI_MODEL',
@@ -34,6 +42,10 @@ const RESTORED_KEYS = [
   'MISTRAL_BASE_URL',
   'MISTRAL_MODEL',
   'MISTRAL_API_KEY',
+  'NVIDIA_BASE_URL',
+  'NVIDIA_MODEL',
+  'NVIDIA_API_KEY',
+  'MINIMAX_API_KEY',
 ] as const
 
 type MockConfigState = {
@@ -75,6 +87,7 @@ afterEach(() => {
 
   mock.restore()
   mockConfigState = createMockConfigState()
+  process.chdir(originalCwd)
 })
 
 async function importFreshProviderProfileModules() {
@@ -582,6 +595,50 @@ describe('setActiveProviderProfile', () => {
     expect(process.env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID).toBe(
       'openai_prof',
     )
+  })
+
+  test('persists no-key openai-compatible profiles for restart fallback', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'openclaude-provider-'))
+    const originalConfigDir = process.env.GAKR_CONFIG_DIR
+    process.env.GAKR_CONFIG_DIR = tempDir
+    process.env.OPENAI_API_KEY = 'sk-shell-should-not-persist'
+
+    try {
+      const { setActiveProviderProfile } =
+        await importFreshProviderProfileModules()
+      const ollamaProfile = buildProfile({
+        id: 'ollama_prof',
+        name: 'Ollama',
+        provider: 'openai',
+        baseUrl: 'http://localhost:11434/v1',
+        model: 'llama3.1:8b, qwen2.5:7b',
+        apiKey: '',
+      })
+
+      saveMockGlobalConfig(current => ({
+        ...current,
+        providerProfiles: [ollamaProfile],
+      }))
+
+      const result = setActiveProviderProfile('ollama_prof')
+      const persisted = JSON.parse(
+        readFileSync(join(tempDir, '.gakrcli-profile.json'), 'utf8'),
+      )
+
+      expect(result?.id).toBe('ollama_prof')
+      expect(persisted.profile).toBe('openai')
+      expect(persisted.env).toEqual({
+        OPENAI_BASE_URL: 'http://localhost:11434/v1',
+        OPENAI_MODEL: 'llama3.1:8b',
+      })
+    } finally {
+      if (originalConfigDir) {
+        process.env.GAKR_CONFIG_DIR = originalConfigDir
+      } else {
+        delete process.env.GAKR_CONFIG_DIR
+      }
+      rmSync(tempDir, { recursive: true, force: true })
+    }
   })
 
   test('sets ANTHROPIC_MODEL env var when switching to an anthropic-type provider', async () => {

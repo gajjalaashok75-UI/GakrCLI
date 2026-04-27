@@ -1,4 +1,5 @@
 import { randomBytes } from 'crypto'
+import { isCodexBaseUrl } from '../services/api/providerConfig.js'
 import {
   getGlobalConfig,
   saveGlobalConfig,
@@ -14,6 +15,7 @@ import {
   buildBankrProfileEnv,
   buildNvidiaNimProfileEnv,
   buildOpenAIProfileEnv,
+  type ProfileEnv,
   type ProviderProfile as ProviderProfileStartup,
 } from './providerProfile.js'
 
@@ -518,6 +520,7 @@ export function clearProviderProfileEnvFromProcessEnv(
   delete processEnv.GAKR_CODE_USE_GEMINI
   delete processEnv.GAKR_CODE_USE_MISTRAL
   delete processEnv.GAKR_CODE_USE_GITHUB
+  delete processEnv.GAKR_CODE_USE_NVIDIA
   delete processEnv.GAKR_CODE_USE_BEDROCK
   delete processEnv.GAKR_CODE_USE_VERTEX
   delete processEnv.GAKR_CODE_USE_FOUNDRY
@@ -548,6 +551,8 @@ export function clearProviderProfileEnvFromProcessEnv(
   delete processEnv.MINIMAX_API_KEY
   delete processEnv.NVIDIA_API_KEY
   delete processEnv.NVIDIA_NIM
+  delete processEnv.NVIDIA_BASE_URL
+  delete processEnv.NVIDIA_MODEL
   delete processEnv.BANKR_BASE_URL
   delete processEnv.BNKR_API_KEY
   delete processEnv.BANKR_MODEL
@@ -854,6 +859,38 @@ export function getProfileModelOptions(profile: ProviderProfile): ModelOption[] 
   }))
 }
 
+function buildOpenAICompatibleStartupEnv(
+  activeProfile: ProviderProfile,
+): ProfileEnv | null {
+  if (isCodexBaseUrl(activeProfile.baseUrl)) {
+    return null
+  }
+
+  if (activeProfile.apiKey) {
+    const strictEnv = buildOpenAIProfileEnv({
+      goal: 'balanced',
+      model: activeProfile.model,
+      baseUrl: activeProfile.baseUrl,
+      apiKey: activeProfile.apiKey,
+      processEnv: {},
+    })
+    if (strictEnv) {
+      return strictEnv
+    }
+  }
+
+  const env: ProfileEnv = {
+    OPENAI_BASE_URL: activeProfile.baseUrl,
+    OPENAI_MODEL: getPrimaryModel(activeProfile.model),
+  }
+  if (activeProfile.apiKey) {
+    env.OPENAI_API_KEY = activeProfile.apiKey
+  } else {
+    delete env.OPENAI_API_KEY
+  }
+  return env
+}
+
 export function setActiveProviderProfile(
   profileId: string,
 ): ProviderProfile | null {
@@ -922,14 +959,17 @@ export function setActiveProviderProfile(
         )
       default:
         // anthropic and all openai-compatible providers
-        return (
-          buildOpenAIProfileEnv({
-            model: activeProfile.model,
-            baseUrl: activeProfile.baseUrl,
-            apiKey: activeProfile.apiKey,
-            processEnv: process.env,
-          }) ?? null
-        )
+        return activeProfile.provider === 'anthropic'
+          ? (
+              buildOpenAIProfileEnv({
+                goal: 'balanced',
+                model: activeProfile.model,
+                baseUrl: activeProfile.baseUrl,
+                apiKey: activeProfile.apiKey,
+                processEnv: process.env,
+              }) ?? null
+            )
+          : buildOpenAICompatibleStartupEnv(activeProfile)
     }
   })()
 
