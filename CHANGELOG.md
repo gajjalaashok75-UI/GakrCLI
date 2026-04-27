@@ -4,6 +4,15 @@
 
 ### Bug Fixes
 
+* **Update Command Version Display (PR #870)**: Fix `gakrcli update` showing wrong version and provide actionable guidance
+  - Use MACRO.DISPLAY_VERSION instead of MACRO.VERSION for all user-facing version strings and comparisons
+  - Root cause: MACRO.VERSION hardcoded to '99.0.0' as internal compatibility sentinel, real version in MACRO.DISPLAY_VERSION
+  - Fix version comparisons: 99.0.0 >= any real npm version caused "up to date" checks to never fire correctly
+  - Replace dead-end "Warning: Cannot update development build" with actionable instructions
+  - Show current version and provide both source rebuild (git pull && bun install && bun run build) and npm reinstall commands
+  - Extend third-party-provider branch to show current version and npm reinstall command for npm users
+  - Closes #852: Users now see real package version instead of 99.0.0
+
 * **MCP_SKILLS Feature Flag Disabled (PR #872)**: Fix MCP servers with resources failing to load tools
   - Disable MCP_SKILLS feature flag in build.ts (source file src/skills/mcpSkills.ts not mirrored)
   - Move MCP_SKILLS to "Disabled: missing source" group with detailed comment explaining #856
