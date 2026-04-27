@@ -32,8 +32,16 @@ const CODEX_ALIAS_MODELS: Record<
   }
 > = {
   codexplan: {
-    model: 'gpt-5.4',
+    model: 'gpt-5.5',
     reasoningEffort: 'high',
+  },
+  'gpt-5.5': {
+    model: 'gpt-5.5',
+    reasoningEffort: 'high',
+  },
+  'gpt-5.5-mini': {
+    model: 'gpt-5.5-mini',
+    reasoningEffort: 'medium',
   },
   'gpt-5.4': {
     model: 'gpt-5.4',
@@ -568,7 +576,8 @@ export function resolveProviderRequest(options?: {
     ? normalizeGithubModelsApiModel(requestedModel)
     : requestedModel
   const transport: ProviderTransport =
-    isCodexBaseUrl(rawBaseUrl) || (!rawBaseUrl && isCodexAlias(requestedModel))
+    shouldUseCodexTransport(requestedModel, finalBaseUrl) ||
+      (isGithubCopilot && shouldUseGithubResponsesApi(githubResolvedModel))
       ? 'codex_responses'
       : 'chat_completions'
   
@@ -588,7 +597,7 @@ export function resolveProviderRequest(options?: {
     ? { effort: options.reasoningEffortOverride }
     : descriptor.reasoning
 
-  /*return {
+  return {
     transport,
     requestedModel,
     resolvedModel,
@@ -598,23 +607,9 @@ export function resolveProviderRequest(options?: {
           ? GITHUB_COPILOT_BASE_URL
           : (isGithubMode
             ? GITHUB_COPILOT_BASE_URL
+            : isNvidiaMode
+            ? DEFAULT_NVIDIA_BASE_URL
             : DEFAULT_OPENAI_BASE_URL))
-      ).replace(/\/+$/, ''),
-    reasoning,
-  }
-}   */
-
-  return {
-    transport,
-    requestedModel,
-    resolvedModel,
-    baseUrl:
-      (rawBaseUrl ??
-        (transport === 'codex_responses'
-          ? DEFAULT_CODEX_BASE_URL
-          : isNvidiaMode
-          ? DEFAULT_NVIDIA_BASE_URL
-          : DEFAULT_OPENAI_BASE_URL)
       ).replace(/\/+$/, ''),
     reasoning,
   }
