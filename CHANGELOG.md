@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Features
+
+* **OpenAI Fallback Context Window Configuration (PR #861)**: Make OpenAI fallback context window configurable and support external model lookup
+  - Add `GAKR_CODE_OPENAI_FALLBACK_CONTEXT_WINDOW` env var to override the 128k default for unknown models
+  - Add `GAKR_CODE_OPENAI_CONTEXT_WINDOWS` env var (JSON object) for per-model context window overrides
+  - Add `GAKR_CODE_OPENAI_MAX_OUTPUT_TOKENS` env var (JSON object) for per-model output token limit overrides
+  - External lookup tables take precedence over built-in OPENAI_CONTEXT_WINDOWS table
+  - Support provider-qualified model lookups (e.g., "github:copilot:model-name")
+  - Add warning message when unknown model falls back to default context window
+  - Fix auto-compact firing prematurely on models with larger windows than 128k
+  - Operators can now deploy new or private models without patching openaiContextWindows.ts
+  - Update .env.example with documentation and usage examples for new env vars
+  - Closes #635: Unknown OpenAI-compatible models no longer cause premature auto-compact
+
 ### Bug Fixes
 
 * **Startup Banner Provider Detection (PR #864)**: Fix provider mislabeling when using aggregator URLs with vendor-prefixed models
