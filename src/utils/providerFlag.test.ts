@@ -19,6 +19,7 @@ afterEach(() => {
     'OPENAI_API_KEY',
     'OPENAI_MODEL',
     'GEMINI_MODEL',
+    'BNKR_API_KEY',
   ]) {
     if (originalEnv[key] === undefined) delete process.env[key]
     else process.env[key] = originalEnv[key]
@@ -132,6 +133,34 @@ describe('applyProviderFlag - ollama', () => {
     process.env.OPENAI_BASE_URL = 'http://my-ollama:11434/v1'
     applyProviderFlag('ollama', [])
     expect(process.env.OPENAI_BASE_URL).toBe('http://my-ollama:11434/v1')
+  })
+})
+
+describe('applyProviderFlag - bankr', () => {
+  test('sets GAKR_CODE_USE_OPENAI=1 with Bankr base URL', () => {
+    const result = applyProviderFlag('bankr', [])
+    expect(result.error).toBeUndefined()
+    expect(process.env.GAKR_CODE_USE_OPENAI).toBe('1')
+    expect(process.env.OPENAI_BASE_URL).toBe('https://llm.bankr.bot/v1')
+    expect(process.env.OPENAI_MODEL).toBe('claude-opus-4.6')
+  })
+
+  test('sets OPENAI_MODEL when --model is provided', () => {
+    applyProviderFlag('bankr', ['--model', 'claude-sonnet-4'])
+    expect(process.env.OPENAI_MODEL).toBe('claude-sonnet-4')
+  })
+
+  test('maps BNKR_API_KEY to OPENAI_API_KEY', () => {
+    process.env.BNKR_API_KEY = 'test-bankr-key'
+    applyProviderFlag('bankr', [])
+    expect(process.env.OPENAI_API_KEY).toBe('test-bankr-key')
+  })
+
+  test('does not override existing OPENAI_API_KEY', () => {
+    process.env.BNKR_API_KEY = 'test-bankr-key'
+    process.env.OPENAI_API_KEY = 'existing-key'
+    applyProviderFlag('bankr', [])
+    expect(process.env.OPENAI_API_KEY).toBe('existing-key')
   })
 })
 

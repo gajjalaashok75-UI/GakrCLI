@@ -1,5 +1,35 @@
 # Changelog
 
+## [Unreleased]
+
+### Features
+
+* **Bankr Provider Support (PR #888)**: Add Bankr LLM Gateway as an OpenAI-compatible provider
+  - Add 'bankr' to VALID_PROVIDERS with CLI flag support (`--provider bankr`)
+  - Add Bankr preset in ProviderManager with default configuration
+  - Add dedicated environment variables: `BNKR_API_KEY`, `BANKR_BASE_URL`, `BANKR_MODEL`
+  - Implement X-API-Key authentication header (instead of Authorization Bearer)
+  - Add buildBankrProfileEnv() function for profile management
+  - Add Bankr detection in StartupScreen and model discovery
+  - Default base URL: https://llm.bankr.bot/v1
+  - Default model: claude-opus-4.6
+  - Add comprehensive test coverage for Bankr provider
+  - Update providerSecrets.ts to handle BNKR_API_KEY as secret value
+
+### Provider Integration
+
+* **Environment Variable Mapping**: Automatic mapping of Bankr-specific env vars to OpenAI-compatible ones
+  - Map BNKR_API_KEY → OPENAI_API_KEY when present
+  - Map BANKR_BASE_URL → OPENAI_BASE_URL when present
+  - Map BANKR_MODEL → OPENAI_MODEL when present
+  - Preserve existing OPENAI_* values when already set
+
+* **Authentication**: Custom header support for Bankr endpoints
+  - Detect Bankr endpoints by URL pattern matching
+  - Use X-API-Key header for Bankr authentication
+  - Maintain Bearer token auth for other OpenAI-compatible providers
+  - Add isBankrBaseUrl() helper for endpoint detection
+
 ## [0.4.5] (2026-04-27)
 
 ### Features

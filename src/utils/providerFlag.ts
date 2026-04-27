@@ -13,6 +13,7 @@
 
 export const VALID_PROVIDERS = [
   'anthropic',
+  'bankr',
   'openai',
   'gemini',
   'github',
@@ -112,6 +113,16 @@ export function applyProviderFlag(
       process.env.OPENAI_BASE_URL ??= 'http://localhost:11434/v1'
       process.env.OPENAI_API_KEY ??= 'ollama'
       if (model) process.env.OPENAI_MODEL ??= model
+      break
+
+    case 'bankr':
+      process.env.GAKR_CODE_USE_OPENAI = '1'
+      process.env.OPENAI_BASE_URL ??= 'https://llm.bankr.bot/v1'
+      process.env.OPENAI_MODEL ??= 'claude-opus-4.6'
+      if (model) process.env.OPENAI_MODEL = model
+      if (process.env.BNKR_API_KEY && !process.env.OPENAI_API_KEY) {
+        process.env.OPENAI_API_KEY = process.env.BNKR_API_KEY
+      }
       break
   }
 

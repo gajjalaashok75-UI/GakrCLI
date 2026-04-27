@@ -1279,6 +1279,11 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
         label: 'Azure OpenAI',
         description: 'Azure OpenAI endpoint (model=deployment name)',
       },
+      {
+        value: 'bankr',
+        label: 'Bankr',
+        description: 'Bankr LLM Gateway (X-API-Key auth)',
+      },
       ...(canUseCodexOAuth
         ? [
             {
