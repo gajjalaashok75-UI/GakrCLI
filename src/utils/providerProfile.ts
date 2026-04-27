@@ -18,8 +18,9 @@ import {
 import { readGeminiAccessToken } from './geminiCredentials.ts'
 import { getOllamaChatBaseUrl } from './providerDiscovery.ts'
 import { getPrimaryModel } from './providerModels.ts'
-import { getGakrcliConfigHomeDir } from './envUtils.js'
+import { getGakrcliConfigHomeDir, isEnvTruthy } from './envUtils.js'
 import { getProviderValidationError } from './providerValidation.ts'
+import { PROVIDERS } from './configConstants.js'
 import {
   maskSecretForDisplay,
   redactSecretValueForDisplay,
@@ -170,7 +171,12 @@ function resolveProfileFilePath(options?: ProfileFileLocation): string {
     return options.filePath
   }
 
-  // Store in ~/.gakrcli/ instead of CWD
+  // If cwd is explicitly provided (e.g., for testing), use it
+  if (options?.cwd) {
+    return resolve(options.cwd, PROFILE_FILE_NAME)
+  }
+
+  // Otherwise, store in ~/.gakrcli/ instead of CWD
   const configHome = getGakrcliConfigHomeDir()
   return join(configHome, PROFILE_FILE_NAME)
 }
@@ -180,7 +186,12 @@ function resolveLegacyProfileFilePath(options?: ProfileFileLocation): string {
     return options.filePath
   }
 
-  // Legacy profile also stored in config home
+  // If cwd is explicitly provided (e.g., for testing), use it
+  if (options?.cwd) {
+    return resolve(options.cwd, LEGACY_PROFILE_FILE_NAME)
+  }
+
+  // Otherwise, store in ~/.gakrcli/ instead of CWD
   const configHome = getGakrcliConfigHomeDir()
   return join(configHome, LEGACY_PROFILE_FILE_NAME)
 }
@@ -713,7 +724,13 @@ export async function buildLaunchEnv(options: {
   )
   const persistedGeminiKey = sanitizeApiKey(persistedEnv.GEMINI_API_KEY)
   const persistedGeminiAuthMode = persistedEnv.GEMINI_AUTH_MODE
-  if (hasExplicitProviderSelection(processEnv)) {
+  
+  // Let env vars override the profile, but only if the profile is one that
+  // can be set by env vars (i.e., it's in the PROVIDERS array).
+  // Profiles not in PROVIDERS (like nvidia-nim, ollama, atomic-chat) are
+  // explicitly set and should not be overridden by env vars.
+  const canBeOverriddenByEnv = PROVIDERS.includes(options.profile as any)
+  if (hasExplicitProviderSelection(processEnv) && canBeOverriddenByEnv) {
     for (let provider of PROVIDERS) {
       if (provider === "anthropic") {
         continue;
@@ -726,6 +743,7 @@ export async function buildLaunchEnv(options: {
       }
     }
   }
+  
   const shellNvidiaModel = sanitizeProviderConfigValue(
     processEnv.NVIDIA_MODEL,
     processEnv,
@@ -1017,7 +1035,12 @@ export async function buildLaunchEnv(options: {
     (useShellOpenAIConfig ? shellOpenAIModel : undefined) ||
     (usePersistedOpenAIConfig ? persistedOpenAIModel : undefined) ||
     defaultOpenAIModel
-  env.OPENAI_API_KEY = processEnv.OPENAI_API_KEY || persistedEnv.OPENAI_API_KEY
+  const openAIKey = processEnv.OPENAI_API_KEY || persistedEnv.OPENAI_API_KEY
+  if (openAIKey) {
+    env.OPENAI_API_KEY = openAIKey
+  } else {
+    delete env.OPENAI_API_KEY
+  }
   delete env.CODEX_API_KEY
   delete env.CHATGPT_ACCOUNT_ID
   delete env.CODEX_ACCOUNT_ID
@@ -1033,16 +1056,11 @@ export async function buildStartupEnvFromProfile(options?: {
   readGeminiAccessToken?: () => string | undefined
 }): Promise<NodeJS.ProcessEnv> {
   const processEnv = options?.processEnv ?? process.env
-  if (hasExplicitProviderSelection(processEnv)) {
-    return processEnv
-  }
-
   const persisted = options?.persisted ?? loadProfileFile()
-  if (!persisted) {
-    return processEnv
-  }
+
   const profileManagedEnv = processEnv.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED === '1'
-  // The legacy single-profile file (~/.gakr-profile.json) is a
+
+  // The legacy single-profile file (~/.gakrcli-profile.json) is a
   // first-run / fallback mechanism. The newer plural provider-profile
   // system (`/provider` presets + activeProviderProfileId in config) is
   // applied earlier in the bootstrap via applyActiveProviderProfileFromConfig
@@ -1058,9 +1076,14 @@ export async function buildStartupEnvFromProfile(options?: {
     return processEnv
   }
 
+  if (isEnvTruthy(processEnv.GAKR_CODE_USE_GITHUB)) {
+    return processEnv
+  }
+
   if (!persisted) {
     return processEnv
   }
+
   return buildLaunchEnv({
     profile: persisted.profile,
     persisted,

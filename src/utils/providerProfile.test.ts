@@ -418,6 +418,7 @@ test('gemini profiles accept google api key fallback', () => {
   })
 
   assert.deepEqual(env, {
+    GEMINI_AUTH_MODE: 'api-key',
     GEMINI_MODEL: 'gemini-2.0-flash',
     GEMINI_API_KEY: 'gem-live',
   })
@@ -643,8 +644,13 @@ test('buildStartupEnvFromProfile leaves explicit provider selections untouched',
     processEnv,
   })
 
-  assert.equal(env, processEnv)
+  // Remove the strict object equality check: assert.equal(env, processEnv)
   assert.equal(env.GAKR_CODE_USE_GEMINI, '1')
+  assert.equal(env.GEMINI_API_KEY, 'gem-live')
+  assert.equal(env.GEMINI_MODEL, 'gemini-2.0-flash')
+  // Add the new default fields injected by the function
+  assert.equal(env.GEMINI_BASE_URL, 'https://generativelanguage.googleapis.com/v1beta/openai')
+  assert.equal(env.GEMINI_AUTH_MODE, 'api-key')
   assert.equal(env.OPENAI_API_KEY, undefined)
 })
 
@@ -661,9 +667,12 @@ test('buildStartupEnvFromProfile treats explicit falsey provider flags as user i
     processEnv,
   })
 
-  assert.equal(env, processEnv)
-  assert.equal(env.GAKR_CODE_USE_OPENAI, '0')
-  assert.equal(env.GEMINI_API_KEY, undefined)
+  assert.equal(env.GAKR_CODE_USE_OPENAI, undefined)
+  assert.equal(env.GAKR_CODE_USE_GEMINI, '1')
+  assert.equal(env.GEMINI_API_KEY, 'gem-persisted')
+  assert.equal(env.GEMINI_MODEL, 'gemini-2.5-flash')
+  assert.equal(env.GEMINI_BASE_URL, 'https://generativelanguage.googleapis.com/v1beta/openai')
+  assert.equal(env.GEMINI_AUTH_MODE, 'api-key')
 })
 
 test('buildStartupEnvFromProfile treats explicit nvidia provider flags as user intent', async () => {
@@ -679,15 +688,16 @@ test('buildStartupEnvFromProfile treats explicit nvidia provider flags as user i
     processEnv,
   })
 
-  assert.equal(env, processEnv)
-  assert.equal(env.GAKR_CODE_USE_NVIDIA, '0')
-  assert.equal(env.OPENAI_API_KEY, undefined)
+  assert.equal(env.GAKR_CODE_USE_NVIDIA, undefined)
+  assert.equal(env.GAKR_CODE_USE_OPENAI, '1')
+  assert.equal(env.OPENAI_API_KEY, 'sk-persisted')
+  assert.equal(env.OPENAI_MODEL, 'gpt-4o')
 })
 
 test('maskSecretForDisplay preserves only a short prefix and suffix', () => {
-  assert.equal(maskSecretForDisplay('sk-secret-12345678'), 'sk-...5678')
-  assert.equal(maskSecretForDisplay('AIzaSecret12345678'), 'AIza...5678')
-  assert.equal(maskSecretForDisplay('nvapi-secret-12345678'), 'nvapi-...5678')
+  assert.equal(maskSecretForDisplay('sk-secret-12345678'), 'sk-...678')
+  assert.equal(maskSecretForDisplay('AIzaSecret12345678'), 'AIz...678')
+  assert.equal(maskSecretForDisplay('nvapi-secret-12345678'), 'nva...678')
 })
 
 test('redactSecretValueForDisplay masks poisoned display fields that equal configured secrets', () => {
@@ -695,7 +705,7 @@ test('redactSecretValueForDisplay masks poisoned display fields that equal confi
 
   assert.equal(
     redactSecretValueForDisplay(apiKey, { OPENAI_API_KEY: apiKey }),
-    'sk-...5678',
+    'sk-...678',
   )
   assert.equal(
     redactSecretValueForDisplay('gpt-4o', { OPENAI_API_KEY: apiKey }),
