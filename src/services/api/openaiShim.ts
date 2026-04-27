@@ -1544,10 +1544,18 @@ class OpenAIShimMessages {
         (hostname.includes('cognitiveservices') || hostname.includes('openai') || hostname.includes('services.ai'))
     } catch { /* malformed URL — not Azure */ }
 
+    let isBankr = false
+    try {
+      isBankr = request.baseUrl.toLowerCase().includes('bankr')
+    } catch { /* malformed URL — not Bankr */ }
+
     if (apiKey) {
       if (isAzure) {
         // Azure uses api-key header instead of Bearer token
         headers['api-key'] = apiKey
+      } else if (isBankr) {
+        // Bankr uses X-API-Key header instead of Bearer token
+        headers['X-API-Key'] = apiKey
       } else {
         headers.Authorization = `Bearer ${apiKey}`
       }
@@ -1891,6 +1899,16 @@ export function createOpenAIShimClient(options: {
     }
   }
 
+  // Map Bankr env vars to OpenAI-compatible ones when present
+  if (process.env.BNKR_API_KEY && !process.env.OPENAI_API_KEY) {
+    process.env.OPENAI_API_KEY = process.env.BNKR_API_KEY
+  }
+  if (process.env.BANKR_BASE_URL && !process.env.OPENAI_BASE_URL) {
+    process.env.OPENAI_BASE_URL = process.env.BANKR_BASE_URL
+  }
+  if (process.env.BANKR_MODEL && !process.env.OPENAI_MODEL) {
+    process.env.OPENAI_MODEL = process.env.BANKR_MODEL
+  }
   const beta = new OpenAIShimBeta({
     ...(options.defaultHeaders ?? {}),
   }, options.reasoningEffort, options.providerOverride)

@@ -53,7 +53,19 @@ function getOpenAIAuthHeaders(baseUrl: string): Record<string, string> {
     headers['api-key'] = apiKey
   }
 
+  if (isBankrBaseUrl(baseUrl)) {
+    headers['X-API-Key'] = apiKey
+  }
+
   return headers
+}
+
+function isBankrBaseUrl(baseUrl: string): boolean {
+  try {
+    return new URL(baseUrl).hostname.toLowerCase().includes('bankr')
+  } catch {
+    return false
+  }
 }
 
 function getModelListUrls(baseUrl: string): string[] {
