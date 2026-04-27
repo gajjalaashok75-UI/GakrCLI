@@ -4,6 +4,15 @@
 
 ### Bug Fixes
 
+* **Startup Banner Provider Detection (PR #864)**: Fix provider mislabeling when using aggregator URLs with vendor-prefixed models
+  - Reorder provider detection: explicit env flags (NVIDIA_NIM, MINIMAX_API_KEY) and codex transport win first
+  - Base-URL host checks run before rawModel fallback to fix aggregator mislabeling
+  - rawModel fallback only fires when base URL is generic/custom
+  - Fix OpenRouter/Together/Groq with vendor-prefixed model IDs (e.g. deepseek/deepseek-chat, moonshotai/kimi-k2, deepseek-r1-distill-llama-70b)
+  - Add comprehensive unit tests covering aggregator × vendor-prefixed-model matrix plus direct-vendor regressions
+  - Create src/utils/zaiProvider.ts for Z.AI GLM model detection
+  - Closes #855: URL now authoritative over model name substring in banner provider detection
+
 * **Update Command Version Display (PR #870)**: Fix `gakrcli update` showing wrong version and provide actionable guidance
   - Use MACRO.DISPLAY_VERSION instead of MACRO.VERSION for all user-facing version strings and comparisons
   - Root cause: MACRO.VERSION hardcoded to '99.0.0' as internal compatibility sentinel, real version in MACRO.DISPLAY_VERSION
