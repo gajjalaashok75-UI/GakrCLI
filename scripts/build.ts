@@ -16,32 +16,38 @@ const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'))
 const version = pkg.version
 
 // Feature flags for the open build.
-// Keep Anthropic-internal infrastructure off, but enable mirrored features that
-// are expected to work in this repo variant.
+// Most Anthropic-internal features stay off; open-build features can be
+// selectively enabled here when their full source exists in the mirror.
 const featureFlags: Record<string, boolean> = {
-  VOICE_MODE: false,
-  PROACTIVE: false,
-  KAIROS: false,
-  BRIDGE_MODE: false,
-  DAEMON: false,
-  AGENT_TRIGGERS: false,
-  ABLATION_BASELINE: false,
-  CONTEXT_COLLAPSE: false,
-  COMMIT_ATTRIBUTION: false,
-  UDS_INBOX: false,
-  BG_SESSIONS: false,
-  WEB_BROWSER_TOOL: false,
-  CHICAGO_MCP: false,
-  COWORKER_TYPE_TELEMETRY: false,
-  COORDINATOR_MODE: true,
-  BUDDY: true,
-  MONITOR_TOOL: true,
-  DUMP_SYSTEM_PROMPT: true,
-  CACHED_MICROCOMPACT: true,
-  TEAMMEM: true,
-  AWAY_SUMMARY: true,
-  TRANSCRIPT_CLASSIFIER: true,
-  MESSAGE_ACTIONS: true,
+  // ── Disabled: require Anthropic infrastructure or missing source ─────
+  VOICE_MODE: false,              // Push-to-talk STT via claude.ai OAuth endpoint
+  PROACTIVE: false,               // Autonomous agent mode (missing proactive/ module)
+  KAIROS: false,                  // Persistent assistant/session mode (cloud backend)
+  BRIDGE_MODE: false,             // Remote desktop bridge via CCR infrastructure
+  DAEMON: false,                  // Background daemon process (stubbed in open build)
+  AGENT_TRIGGERS: false,          // Scheduled remote agent triggers
+  ABLATION_BASELINE: false,       // A/B testing harness for eval experiments
+  CONTEXT_COLLAPSE: false,        // Context collapsing optimization (stubbed)
+  COMMIT_ATTRIBUTION: false,      // Co-Authored-By metadata in git commits
+  UDS_INBOX: false,               // Unix Domain Socket inter-session messaging
+  BG_SESSIONS: false,             // Background sessions via tmux (stubbed)
+  WEB_BROWSER_TOOL: false,        // Built-in browser automation (source not mirrored)
+  CHICAGO_MCP: false,             // Computer-use MCP (native Swift modules stubbed)
+  COWORKER_TYPE_TELEMETRY: false, // Telemetry for agent/coworker type classification
+  MCP_SKILLS: false,              // Dynamic MCP skill discovery (src/skills/mcpSkills.ts not mirrored; enabling this causes "fetchMcpSkillsForClient is not a function" when MCP servers with resources connect — see #856)
+
+  // ── Enabled: upstream defaults ──────────────────────────────────────
+  COORDINATOR_MODE: true,         // Multi-agent coordinator with worker delegation
+  BUDDY: true,                    // Buddy mode for paired programming
+  MONITOR_TOOL: true,             // MCP server monitoring/streaming tool
+  TEAMMEM: true,                  // Team memory management
+  MESSAGE_ACTIONS: true,          // Message action buttons in the UI
+
+  // ── Enabled: new activations ────────────────────────────────────────
+  DUMP_SYSTEM_PROMPT: true,       // --dump-system-prompt CLI flag for debugging
+  CACHED_MICROCOMPACT: true,      // Cache-aware tool result truncation optimization
+  AWAY_SUMMARY: true,             // "While you were away" recap after 5min blur
+  TRANSCRIPT_CLASSIFIER: true,    // Auto-approval classifier for safe tool uses
 }
 
 const featureCallRe = /\bfeature\(\s*['"](\w+)['"][,\s]*\)/gs

@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Bug Fixes
+
+* **MCP_SKILLS Feature Flag Disabled (PR #872)**: Fix MCP servers with resources failing to load tools
+  - Disable MCP_SKILLS feature flag in build.ts (source file src/skills/mcpSkills.ts not mirrored)
+  - Move MCP_SKILLS to "Disabled: missing source" group with detailed comment explaining #856
+  - Add scripts/feature-flags-source-guard.test.ts to prevent re-enabling flags without source files
+  - Fix "fetchMcpSkillsForClient is not a function" runtime error when MCP servers expose resources
+  - Root cause: bundler fell back to missing-module stub that only exports default, not named exports
+  - Test fails fast if MCP_SKILLS (or similar flags) re-enabled without corresponding source file
+  - Verification: bun run build produces clean bundle, all tests pass (1222 pass / 12 fail baseline)
+
 ### Features
 
 * **GPT-5.5 Support for Codex Provider (PR #TBD)**: Add GPT-5.5 model support with complete Codex integration
