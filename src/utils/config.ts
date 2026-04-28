@@ -180,6 +180,23 @@ export type DiffTool = 'terminal' | 'auto'
 
 export type OutputStyle = string
 
+export type Providers = (typeof import('./configConstants.js').PROVIDERS)[number]
+export type OpenAICompatibleApiFormat = 'chat_completions' | 'responses'
+export type OpenAICompatibleAuthScheme = 'bearer' | 'raw'
+
+export type ProviderProfile = {
+  id: string
+  name: string
+  provider: Providers
+  baseUrl: string
+  model: string
+  apiKey?: string
+  apiFormat?: OpenAICompatibleApiFormat
+  authHeader?: string
+  authScheme?: OpenAICompatibleAuthScheme
+  authHeaderValue?: string
+}
+
 export const SHOW_CACHE_STATS_MODES = ['off', 'compact', 'full'] as const
 
 export type GlobalConfig = {
