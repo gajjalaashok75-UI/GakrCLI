@@ -4,6 +4,14 @@
 
 ### Bug Fixes
 
+* **fix(query): restore system prompt structure and add missing config import**: Fix critical query loop crash and system prompt corruption
+  - Import `getGlobalConfig` — six call sites referenced it without an import; five short-circuited via feature() gates, but src/query.ts:1896 always ran and crashed every queryLoop iteration with "getGlobalConfig is not defined" (e.g. Explore subagent: "Agent failed: getGlobalConfig is not defined")
+  - Stop coercing SystemPrompt (string[]) into a template-string before appendSystemContext — that made [...systemPrompt] spread the string character-by-character, replacing the structured prompt with thousands of one-char system blocks. Append arcSummary as its own array element instead
+  - Gate the finalizeArcTurn call behind feature('CONVERSATION_ARC') so it matches the rest of the memory-PR call sites and gets dead-code-eliminated for users without the flag
+  - Replace all dynamic `(await import('./utils/config.js')).getGlobalConfig()` calls with the static import
+  - Fix duplicate system prompt variable declarations that caused compilation errors
+  - Ensure proper system prompt structure with arcSummary as separate array element instead of character spreading
+
 * **Fix Provider Switch Persistence in Session (PR #TBD)**: Implement proper provider activation with session persistence
   - Add `buildProviderManagerCompletion` function to generate system reminders for mid-session provider switches
   - Update `ProviderManagerResult` type to include 'activated' action with provider name and model
