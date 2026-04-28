@@ -53,6 +53,20 @@ const OPENAI_CONTEXT_WINDOWS: Record<string, number> = {
   'moonshot-v1-32k':           32_768,
   'moonshot-v1-128k':         131_072,
 
+  // GLM models via DashScope (lowercase) and Z.AI Coding Plan (uppercase)
+  // Lowercase glm-5.1/glm-5-turbo/glm-4.5-air are Z.AI-specific aliases
+  'glm-5':                    202_752,
+  'glm-4.7':                  202_752,
+  'glm-5.1':                  202_752,
+  'glm-5-turbo':              202_752,
+  'glm-4.5-air':              128_000,
+  // Z.AI Coding Plan models (uppercase variants)
+  'GLM-5.1':                  202_752,
+  'GLM-5-Turbo':              202_752,
+  'GLM-5':                    202_752,
+  'GLM-4.7':                  202_752,
+  'GLM-4.5-Air':              128_000,
+
   // Groq (fast inference)
   'llama-3.3-70b-versatile':  128_000,
   'llama-3.1-8b-instant':     128_000,
@@ -144,6 +158,19 @@ const OPENAI_MAX_OUTPUT_TOKENS: Record<string, number> = {
   'moonshot-v1-8k':             4_096,
   'moonshot-v1-32k':           16_384,
   'moonshot-v1-128k':          32_768,
+
+  // GLM models — lowercase aliases stay on conservative DashScope-style
+  // limits; Z.AI Coding Plan's exact uppercase GLM-* IDs use higher limits.
+  'glm-5':                     16_384,
+  'glm-4.7':                   16_384,
+  'glm-5.1':                    16_384,
+  'glm-5-turbo':                16_384,
+  'glm-4.5-air':                16_384,
+  'GLM-5':                     131_072,
+  'GLM-5.1':                   131_072,
+  'GLM-5-Turbo':               131_072,
+  'GLM-4.7':                   131_072,
+  'GLM-4.5-Air':                65_536,
 
   // Groq
   'llama-3.3-70b-versatile':  32_768,

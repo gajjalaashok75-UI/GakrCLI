@@ -4,6 +4,20 @@
 
 ### Features
 
+* **Z.AI GLM Coding Plan Provider Preset (PR #TBD)**: Add dedicated Z.AI provider support for GLM models with thinking mode
+  - Add 'zai' provider preset for Z.AI GLM Coding Plan endpoint (https://api.z.ai/api/coding/paas/v4)
+  - Support GLM-5.1, GLM-5-Turbo, GLM-4.7, and GLM-4.5-Air models through OpenAI-compatible shim
+  - Enable thinking mode (reasoning_content) for GLM models on Z.AI
+  - Add GLM model context windows: 202K for GLM-5.x/4.7, 128K for GLM-4.5-Air
+  - Configure max output tokens: 131K for uppercase GLM-5.x/4.7, 65K for GLM-4.5-Air, 16K for lowercase variants
+  - Add `isZaiBaseUrl()` and `isZaiGlmModel()` helper functions in `zaiProvider.ts`
+  - Integrate GLM thinking support in `modelSupportsThinking()` function
+  - Add comprehensive test coverage in `providerProfiles.test.ts`
+  - Lowercase glm-* variants use conservative DashScope limits (16K max output)
+  - Uppercase GLM-* variants use Z.AI Coding Plan high limits (131K/65K max output)
+  - Users can now access Z.AI's GLM models with proper thinking mode and token limits
+  - Closes #TBD: Z.AI GLM Coding Plan is now available as a provider preset
+
 * **Persistent Project-Level Knowledge Graph and RAG (PR #TBD)**: Implement native JSON RAG with BM25-lite ranking and passive technical concept extraction
   - Shift memory from session-scope to persistent project-scope with `knowledge_graph.json` storage
   - Add native JSON RAG with BM25-lite ranking for semantic search across project history
