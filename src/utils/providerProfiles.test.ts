@@ -46,6 +46,7 @@ const RESTORED_KEYS = [
   'NVIDIA_MODEL',
   'NVIDIA_API_KEY',
   'MINIMAX_API_KEY',
+  'XAI_API_KEY',
 ] as const
 
 type MockConfigState = {
@@ -135,6 +136,16 @@ function buildGeminiProfile(overrides: Partial<ProviderProfile> = {}): ProviderP
     provider: 'gemini',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
     model: 'gemini-3-flash-preview',
+    ...overrides,
+  })
+}
+
+function buildXaiProfile(overrides: Partial<ProviderProfile> = {}): ProviderProfile {
+  return buildProfile({
+    provider: 'openai',
+    baseUrl: 'https://api.x.ai/v1',
+    model: 'grok-4',
+    apiKey: 'xai-test-key',
     ...overrides,
   })
 }
@@ -244,6 +255,18 @@ describe('applyProviderProfileToProcessEnv', () => {
     expect(process.env.ANTHROPIC_BASE_URL).toBe('https://api.anthropic.com')
   })
 })
+
+test('xai profile sets XAI_API_KEY and getAPIProvider returns xai', async () => {
+    const { applyProviderProfileToProcessEnv } =
+      await importFreshProviderProfileModules()
+
+    applyProviderProfileToProcessEnv(buildXaiProfile())
+    const { getAPIProvider: getFreshAPIProvider } =
+      await importFreshProvidersModule()
+
+    expect(process.env.XAI_API_KEY).toBe('xai-test-key')
+    expect(getFreshAPIProvider()).toBe('xai')
+  })
 
 describe('applyActiveProviderProfileFromConfig', () => {
   test('does not override explicit startup provider selection', async () => {
@@ -430,7 +453,43 @@ describe('applyActiveProviderProfileFromConfig', () => {
     expect(process.env.GAKR_CODE_USE_GITHUB).toBe('1')
     expect(process.env.OPENAI_MODEL).toBe('github:copilot')
   })
+  test('re-applies xai active profile when XAI_API_KEY is missing (env drift)', async () => {
+    const { applyActiveProviderProfileFromConfig, applyProviderProfileToProcessEnv } =
+      await importFreshProviderProfileModules()
+    const xaiProfile = buildXaiProfile({ id: 'saved_xai' })
+    applyProviderProfileToProcessEnv(xaiProfile)
 
+    // Simulate relaunch where the shell exported OPENAI vars but not XAI_API_KEY
+    delete process.env.XAI_API_KEY
+
+    const applied = applyActiveProviderProfileFromConfig({
+      providerProfiles: [xaiProfile],
+      activeProviderProfileId: 'saved_xai',
+    } as any)
+
+    expect(applied?.id).toBe('saved_xai')
+    expect(process.env.XAI_API_KEY).toBe('xai-test-key')
+  })
+
+  test('does not re-apply xai active profile when XAI_API_KEY is aligned', async () => {
+    const { applyActiveProviderProfileFromConfig, applyProviderProfileToProcessEnv } =
+      await importFreshProviderProfileModules()
+    const xaiProfile = buildXaiProfile({ id: 'saved_xai' })
+    applyProviderProfileToProcessEnv(xaiProfile)
+
+    // XAI_API_KEY is already set and aligned
+    expect(process.env.XAI_API_KEY).toBe('xai-test-key')
+    expect(process.env.OPENAI_API_KEY).toBe('xai-test-key')
+
+    const applied = applyActiveProviderProfileFromConfig({
+      providerProfiles: [xaiProfile],
+      activeProviderProfileId: 'saved_xai',
+    } as any)
+
+    // Returns profile without re-applying since env is aligned
+    expect(applied?.id).toBe('saved_xai')
+    expect(process.env.XAI_API_KEY).toBe('xai-test-key')
+  })
   test('applies active profile when no explicit provider is selected', async () => {
     const { applyActiveProviderProfileFromConfig } =
       await importFreshProviderProfileModules()

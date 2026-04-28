@@ -7,9 +7,13 @@ const originalEnv = {
   GAKR_CODE_USE_BEDROCK: process.env.GAKR_CODE_USE_BEDROCK,
   GAKR_CODE_USE_VERTEX: process.env.GAKR_CODE_USE_VERTEX,
   GAKR_CODE_USE_FOUNDRY: process.env.GAKR_CODE_USE_FOUNDRY,
+  GAKR_CODE_USE_NVIDIA: process.env.GAKR_CODE_USE_NVIDIA,
   OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
   OPENAI_API_BASE: process.env.OPENAI_API_BASE,
   OPENAI_MODEL: process.env.OPENAI_MODEL,
+  XAI_API_KEY: process.env.XAI_API_KEY,
+  NVIDIA_NIM: process.env.NVIDIA_NIM,
+  MINIMAX_API_KEY: process.env.MINIMAX_API_KEY,
 }
 
 afterEach(() => {
@@ -19,9 +23,13 @@ afterEach(() => {
   process.env.GAKR_CODE_USE_BEDROCK = originalEnv.GAKR_CODE_USE_BEDROCK
   process.env.GAKR_CODE_USE_VERTEX = originalEnv.GAKR_CODE_USE_VERTEX
   process.env.GAKR_CODE_USE_FOUNDRY = originalEnv.GAKR_CODE_USE_FOUNDRY
+  process.env.GAKR_CODE_USE_NVIDIA = originalEnv.GAKR_CODE_USE_NVIDIA
   process.env.OPENAI_BASE_URL = originalEnv.OPENAI_BASE_URL
   process.env.OPENAI_API_BASE = originalEnv.OPENAI_API_BASE
   process.env.OPENAI_MODEL = originalEnv.OPENAI_MODEL
+  process.env.XAI_API_KEY = originalEnv.XAI_API_KEY
+  process.env.NVIDIA_NIM = originalEnv.NVIDIA_NIM
+  process.env.MINIMAX_API_KEY = originalEnv.MINIMAX_API_KEY
 })
 
 async function importFreshProvidersModule() {
@@ -35,9 +43,13 @@ function clearProviderEnv(): void {
   delete process.env.GAKR_CODE_USE_BEDROCK
   delete process.env.GAKR_CODE_USE_VERTEX
   delete process.env.GAKR_CODE_USE_FOUNDRY
+  delete process.env.GAKR_CODE_USE_NVIDIA
   delete process.env.OPENAI_BASE_URL
   delete process.env.OPENAI_API_BASE
   delete process.env.OPENAI_MODEL
+  delete process.env.XAI_API_KEY
+  delete process.env.NVIDIA_NIM
+  delete process.env.MINIMAX_API_KEY
 }
 
 test('first-party provider keeps Anthropic account setup flow enabled', () => {
@@ -96,6 +108,17 @@ test('codex aliases still resolve to the codex provider without a non-codex base
 
   const { getAPIProvider } = await importFreshProvidersModule()
   expect(getAPIProvider()).toBe('codex')
+})
+
+test('XAI_API_KEY resolves to the xai provider', async () => {
+  clearProviderEnv()
+  process.env.CLAUDE_CODE_USE_OPENAI = '1'
+  process.env.XAI_API_KEY = 'xai-test-key'
+  process.env.OPENAI_BASE_URL = 'https://api.x.ai/v1'
+  process.env.OPENAI_MODEL = 'grok-4'
+
+  const { getAPIProvider } = await importFreshProvidersModule()
+  expect(getAPIProvider()).toBe('xai')
 })
 
 test('official OpenAI base URLs now keep provider detection on openai for aliases', async () => {

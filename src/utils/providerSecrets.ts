@@ -6,7 +6,8 @@ const SECRET_ENV_KEYS = [
   'GOOGLE_API_KEY',
   'MISTRAL_API_KEY',
   'NVIDIA_API_KEY',
-  'BNKR_API_KEY'
+  'BNKR_API_KEY',
+  'XAI_API_KEY',
 ] as const
 
 export type SecretValueSource = Partial<

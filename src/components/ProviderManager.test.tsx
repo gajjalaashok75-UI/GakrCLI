@@ -125,6 +125,8 @@ const PRESET_ORDER = [
   'OpenAI',
   'OpenRouter',
   'Together AI',
+  'xAI',
+  'Z.AI - GLM Coding Plan',
   'Custom',
 ] as const
 
