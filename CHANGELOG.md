@@ -4,6 +4,40 @@
 
 ### Bug Fixes
 
+* **fix: error output truncation (10KB→40KB) and MCP tool bugs**: Increase error truncation limit and fix MCP tool validation/null handling
+  - **toolErrors.ts**: Increase error truncation limit from 10KB to 40KB
+    - Shell output can be up to 30KB, so 10KB was silently cutting off error logs from systemctl, apt, python, etc.
+    - Update `maxErrorLength` from 10000 to 40000
+    - Update `halfLength` calculation to `Math.floor(maxErrorLength / 2)`
+  - **MCPTool.ts**: Cache compiled AJV validators to avoid recompiling on every call
+    - AJV compilation is expensive — schemas don't change between calls
+    - Use WeakMap for cache to allow garbage collection of schemas from disconnected/refreshed MCP tools
+    - Prevents memory leaks from accumulating strong references indefinitely
+  - **MCPTool.ts**: Fix validateInput error message showing `[object Object]`
+    - Error message now shows readable text: `ajv.errorsText(validate.errors)`
+    - Add proper error handling for schema compilation failures
+  - **MCPTool.ts**: Add null guards in `mapToolResultToToolResultBlockParam`
+    - Return descriptive indicator `'[No content returned from MCP tool]'` instead of undefined
+    - Prevents sending undefined content to API which would cause errors
+  - **MCPTool.ts**: Update outputSchema to support content block arrays
+    - MCP tools can return either plain string or array of content blocks (text, images, etc.)
+    - Add union type: `z.union([z.string(), z.array(...)])`
+  - **MCPTool.ts**: Fix `isResultTruncated` with explicit null checks
+    - Handle array content blocks with null/undefined entries safely
+    - Check if any text block exceeds display limit
+  - **ReadMcpResourceTool.ts**: Add null guard in `mapToolResultToToolResultBlockParam`
+    - Return `'[No content returned from MCP resource]'` for undefined/null content
+  - **client.ts**: Fix abort path in `callMCPTool`
+    - Previously returned `{ content: undefined }` on AbortError, which masked cancellation
+    - Now converts abort errors to `AbortError` class and re-throws
+    - Tool execution framework properly handles it (skips logging, creates `is_error: true` result)
+    - Add imports for `AbortError` and `isAbortError` from errors.js
+  - **Tests**: Add comprehensive test coverage (84 tests passing)
+    - `src/utils/toolErrors.test.ts`: 13 tests for error formatting and truncation
+    - `src/tools/MCPTool/MCPTool.test.ts`: 15 tests for validation, null guards, and truncation
+    - `src/tools/BashTool/commandSemantics.test.ts`: 24 tests for command exit code semantics
+    - `src/tools/BashTool/utils.test.ts`: 32 tests for output formatting and content summaries
+
 * **fix(startup): show --model flag override on startup screen**: Fix startup screen to display CLI model override
   - Startup screen was only reading model from env vars and settings, ignoring the --model CLI flag
   - CLI flag is parsed by Commander.js after the banner prints, so displayed model didn't match actual session model
