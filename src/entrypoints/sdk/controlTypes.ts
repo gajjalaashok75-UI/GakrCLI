@@ -1,16 +1,10 @@
-import { z } from 'zod/v4'
-import * as controlSchemas from './controlSchemas.js'
+/**
+ * Stub — control protocol types not included in source snapshot. See
+ * src/types/message.ts for the same scoping caveat (issue #473).
+ */
 
-export type SDKControlRequest = z.infer<typeof controlSchemas.SDKControlRequestSchema>
-export type SDKControlResponse = z.infer<typeof controlSchemas.SDKControlResponseSchema>
-export type SDKControlCancelRequest = z.infer<
-  typeof controlSchemas.SDKControlCancelRequestSchema
->
-export type StdoutMessage = z.infer<typeof controlSchemas.StdoutMessageSchema>
-export type StdinMessage = z.infer<typeof controlSchemas.StdinMessageSchema>
-export type SDKKeepAliveMessage = z.infer<
-  typeof controlSchemas.SDKKeepAliveMessageSchema
->
-export type SDKUpdateEnvironmentVariablesMessage = z.infer<
-  typeof controlSchemas.SDKUpdateEnvironmentVariablesMessageSchema
->
+/* eslint-disable @typescript-eslint/no-explicit-any */
+export type SDKControlRequest = any
+export type SDKControlResponse = any
+export type SDKControlPermissionRequest = any
+export type StdoutMessage = any
