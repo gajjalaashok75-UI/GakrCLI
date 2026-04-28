@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Bug Fixes
+
+* **fix(startup): show --model flag override on startup screen**: Fix startup screen to display CLI model override
+  - Startup screen was only reading model from env vars and settings, ignoring the --model CLI flag
+  - CLI flag is parsed by Commander.js after the banner prints, so displayed model didn't match actual session model
+  - Add early parsing of --model flag using `eagerParseCliFlag()` before rendering startup screen
+  - Pass `earlyModelFlag` to `printStartupScreen()` as `modelOverride` parameter
+  - `detectProvider()` now correctly prioritizes CLI flag over env vars and settings
+  - Displayed model on startup screen now matches what the session will actually use
+  - Files modified:
+    - `src/entrypoints/cli.tsx`: Import and call `eagerParseCliFlag('--model')` before `printStartupScreen()`
+    - `src/components/StartupScreen.ts`: Already supported `modelOverride` parameter (no changes needed)
+    - `src/components/StartupScreen.test.ts`: Existing tests verify modelOverride functionality
+    - `src/utils/cliArgs.ts`: Existing `eagerParseCliFlag()` utility used for early flag parsing
+
 ### Features
 
 * **Add OpenAI Responses API and Custom Auth Headers Support**: Implement OpenAI Responses API format and custom authentication headers for provider profiles
