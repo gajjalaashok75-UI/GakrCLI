@@ -1,4 +1,4 @@
-import { describe, expect, test, afterEach } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import {
   parseProviderFlag,
   applyProviderFlag,
@@ -6,23 +6,52 @@ import {
   VALID_PROVIDERS,
 } from './providerFlag.js'
 
-const originalEnv = { ...process.env }
+const ENV_KEYS = [
+  'GAKR_CODE_USE_OPENAI',
+  'GAKR_CODE_USE_GEMINI',
+  'GAKR_CODE_USE_GITHUB',
+  'GAKR_CODE_USE_BEDROCK',
+  'GAKR_CODE_USE_VERTEX',
+  'OPENAI_BASE_URL',
+  'OPENAI_API_KEY',
+  'OPENAI_MODEL',
+  'GEMINI_MODEL',
+]
+
+const originalEnv: Record<string, string | undefined> = {}
+
+beforeEach(() => {
+  for (const key of ENV_KEYS) {
+    originalEnv[key] = process.env[key]
+    delete process.env[key]
+  }
+})
+
+const RESET_KEYS = [
+  'GAKR_CODE_USE_OPENAI',
+  'GAKR_CODE_USE_GEMINI',
+  'GAKR_CODE_USE_GITHUB',
+  'GAKR_CODE_USE_BEDROCK',
+  'GAKR_CODE_USE_VERTEX',
+  'OPENAI_BASE_URL',
+  'OPENAI_API_KEY',
+  'OPENAI_MODEL',
+  'GEMINI_MODEL',
+] as const
+
+beforeEach(() => {
+  for (const key of RESET_KEYS) {
+    delete process.env[key]
+  }
+})
 
 afterEach(() => {
-  for (const key of [
-    'GAKR_CODE_USE_OPENAI',
-    'GAKR_CODE_USE_GEMINI',
-    'GAKR_CODE_USE_GITHUB',
-    'GAKR_CODE_USE_BEDROCK',
-    'GAKR_CODE_USE_VERTEX',
-    'OPENAI_BASE_URL',
-    'OPENAI_API_KEY',
-    'OPENAI_MODEL',
-    'GEMINI_MODEL',
-    'BNKR_API_KEY',
-  ]) {
-    if (originalEnv[key] === undefined) delete process.env[key]
-    else process.env[key] = originalEnv[key]
+  for (const key of ENV_KEYS) {
+    if (originalEnv[key] === undefined) {
+      delete process.env[key]
+    } else {
+      process.env[key] = originalEnv[key]
+    }
   }
 })
 
@@ -116,7 +145,10 @@ describe('applyProviderFlag - vertex', () => {
 })
 
 describe('applyProviderFlag - ollama', () => {
-  test('sets GAKR_CODE_USE_OPENAI=1 with Ollama base URL', () => {
+  test('sets GAKR_CODE_USE_OPENAI=1 with Ollama defaults when unset', () => {
+    delete process.env.OPENAI_BASE_URL
+    delete process.env.OPENAI_API_KEY
+
     const result = applyProviderFlag('ollama', [])
     expect(result.error).toBeUndefined()
     expect(process.env.GAKR_CODE_USE_OPENAI).toBe('1')
@@ -134,33 +166,51 @@ describe('applyProviderFlag - ollama', () => {
     applyProviderFlag('ollama', [])
     expect(process.env.OPENAI_BASE_URL).toBe('http://my-ollama:11434/v1')
   })
+
+  test('preserves explicit OPENAI_BASE_URL and OPENAI_API_KEY overrides', () => {
+    process.env.OPENAI_BASE_URL = 'http://remote-ollama.internal:11434/v1'
+    process.env.OPENAI_API_KEY = 'secret-token'
+
+    applyProviderFlag('ollama', [])
+
+    expect(process.env.OPENAI_BASE_URL).toBe('http://remote-ollama.internal:11434/v1')
+    expect(process.env.OPENAI_API_KEY).toBe('secret-token')
+  })
 })
 
-describe('applyProviderFlag - bankr', () => {
-  test('sets GAKR_CODE_USE_OPENAI=1 with Bankr base URL', () => {
-    const result = applyProviderFlag('bankr', [])
+describe('applyProviderFlag - xai', () => {
+  test('sets GAKR_CODE_USE_OPENAI=1 with xAI defaults when unset', () => {
+    delete process.env.OPENAI_BASE_URL
+    delete process.env.OPENAI_API_KEY
+
+    const result = applyProviderFlag('xai', [])
     expect(result.error).toBeUndefined()
     expect(process.env.GAKR_CODE_USE_OPENAI).toBe('1')
-    expect(process.env.OPENAI_BASE_URL).toBe('https://llm.bankr.bot/v1')
-    expect(process.env.OPENAI_MODEL).toBe('claude-opus-4.6')
+    expect(process.env.OPENAI_BASE_URL).toBe('https://api.x.ai/v1')
+    expect(process.env.OPENAI_MODEL).toBe('grok-4')
   })
 
   test('sets OPENAI_MODEL when --model is provided', () => {
-    applyProviderFlag('bankr', ['--model', 'claude-sonnet-4'])
-    expect(process.env.OPENAI_MODEL).toBe('claude-sonnet-4')
+    applyProviderFlag('xai', ['--model', 'grok-3'])
+    expect(process.env.OPENAI_MODEL).toBe('grok-3')
   })
 
-  test('maps BNKR_API_KEY to OPENAI_API_KEY', () => {
-    process.env.BNKR_API_KEY = 'test-bankr-key'
-    applyProviderFlag('bankr', [])
-    expect(process.env.OPENAI_API_KEY).toBe('test-bankr-key')
+  test('propagates XAI_API_KEY to OPENAI_API_KEY when only XAI_API_KEY is set', () => {
+    delete process.env.OPENAI_API_KEY
+    process.env.XAI_API_KEY = 'xai-secret-key'
+
+    applyProviderFlag('xai', [])
+
+    expect(process.env.OPENAI_API_KEY).toBe('xai-secret-key')
   })
 
-  test('does not override existing OPENAI_API_KEY', () => {
-    process.env.BNKR_API_KEY = 'test-bankr-key'
-    process.env.OPENAI_API_KEY = 'existing-key'
-    applyProviderFlag('bankr', [])
-    expect(process.env.OPENAI_API_KEY).toBe('existing-key')
+  test('does not override existing OPENAI_API_KEY when both keys are set', () => {
+    process.env.OPENAI_API_KEY = 'existing-openai-key'
+    process.env.XAI_API_KEY = 'xai-secret-key'
+
+    applyProviderFlag('xai', [])
+
+    expect(process.env.OPENAI_API_KEY).toBe('existing-openai-key')
   })
 })
 
@@ -174,6 +224,9 @@ describe('applyProviderFlag - invalid provider', () => {
 
 describe('applyProviderFlagFromArgs', () => {
   test('applies ollama provider and model from argv in one step', () => {
+    delete process.env.OPENAI_BASE_URL
+    delete process.env.OPENAI_API_KEY
+
     const result = applyProviderFlagFromArgs([
       '--provider',
       'ollama',
@@ -184,6 +237,7 @@ describe('applyProviderFlagFromArgs', () => {
     expect(result?.error).toBeUndefined()
     expect(process.env.GAKR_CODE_USE_OPENAI).toBe('1')
     expect(process.env.OPENAI_BASE_URL).toBe('http://localhost:11434/v1')
+    expect(process.env.OPENAI_API_KEY).toBe('ollama')
     expect(process.env.OPENAI_MODEL).toBe('qwen2.5:3b')
   })
 

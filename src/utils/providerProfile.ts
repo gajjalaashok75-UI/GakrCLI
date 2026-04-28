@@ -82,6 +82,7 @@ const PROFILE_ENV_KEYS = [
   'BANKR_BASE_URL',
   'BNKR_API_KEY',
   'BANKR_MODEL',
+  'XAI_API_KEY',
 ] as const
 
 const SECRET_ENV_KEYS = [
@@ -94,6 +95,7 @@ const SECRET_ENV_KEYS = [
   'MINIMAX_API_KEY',
   'MISTRAL_API_KEY',
   'BNKR_API_KEY',
+  'XAI_API_KEY',
 ] as const
 
 export type ProviderProfile =
@@ -105,6 +107,7 @@ export type ProviderProfile =
   | 'atomic-chat'
   | 'minimax' 
   | 'mistral'
+  | 'xai'
 
 export type ProfileEnv = {
   OPENAI_BASE_URL?: string
@@ -136,6 +139,7 @@ export type ProfileEnv = {
   BANKR_BASE_URL?: string
   BNKR_API_KEY?: string
   BANKR_MODEL?: string
+  XAI_API_KEY?: string
 }
 
 export type ProfileFile = {
@@ -154,7 +158,8 @@ type SecretValueSource = Partial<
     | 'NVIDIA_API_KEY'
     | 'MINIMAX_API_KEY'
     | 'MISTRAL_API_KEY'
-    | 'BNKR_API_KEY',
+    | 'BNKR_API_KEY'
+    | 'XAI_API_KEY',
     string | undefined
   >
 >
@@ -215,7 +220,8 @@ export function isProviderProfile(value: unknown): value is ProviderProfile {
     value === 'nvidia-nim' ||
     value === 'atomic-chat' ||
     value === 'minimax' ||
-    value === 'mistral'
+    value === 'mistral' ||
+    value === 'xai'
   )
 }
 

@@ -148,6 +148,7 @@ export function detectProvider(modelOverride?: string): { name: string; model: s
     else if (/llama/i.test(rawModel)) name = 'Meta Llama'
     else if (/bankr/i.test(baseUrl)) name = 'Bankr'
     else if (/bankr/i.test(rawModel)) name = 'Bankr'
+    else if (/x\.ai/i.test(baseUrl)) name = 'xAI'
     else if (isLocal) name = getLocalOpenAICompatibleProviderLabel(baseUrl)
     
     // Resolve model alias to actual model name + reasoning effort

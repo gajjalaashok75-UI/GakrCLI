@@ -43,6 +43,10 @@ export function getSmallFastModel(): ModelName {
   if (getAPIProvider() === 'openai') {
     return process.env.OPENAI_MODEL || 'gpt-4o-mini'
   }
+  // For xAI provider, use grok-3 as the fast model
+  if (getAPIProvider() === 'xai') {
+    return process.env.OPENAI_MODEL || 'grok-3'
+  }
   return getDefaultHaikuModel()
 }
 
@@ -75,7 +79,32 @@ export function getUserSpecifiedModelSetting(): ModelSetting | undefined {
     specifiedModel = modelOverride
   } else {
     const settings = getSettings_DEPRECATED() || {}
-    specifiedModel = process.env.ANTHROPIC_MODEL || process.env.GEMINI_MODEL || process.env.OPENAI_MODEL || process.env.NVIDIA_MODEL || settings.model || undefined
+    const setting = normalizeModelSetting(settings.model)
+    // Read the model env var that matches the active provider to prevent
+    // cross-provider leaks (e.g. ANTHROPIC_MODEL sent to the OpenAI API).
+    //
+    // All OpenAI-shim providers (openai, codex, github, nvidia-nim, minimax)
+    // set CLAUDE_CODE_USE_OPENAI=1 + OPENAI_MODEL via
+    // applyProviderProfileToProcessEnv. Earlier this check only included
+    // openai/github — codex/nvidia-nim/minimax fell through to the stale
+    // settings.model, so switching from (say) Moonshot to Codex kept firing
+    // `kimi-k2.6` at the Codex endpoint and getting 400s.
+    const provider = getAPIProvider()
+    const isOpenAIShimProvider =
+      provider === 'openai' ||
+      provider === 'codex' ||
+      provider === 'github' ||
+      provider === 'nvidia-nim' ||
+      provider === 'minimax'
+      provider === 'minimax' ||
+      provider === 'xai'
+    specifiedModel =
+      (provider === 'gemini' ? process.env.GEMINI_MODEL : undefined) ||
+      (provider === 'mistral' ? process.env.MISTRAL_MODEL : undefined) ||
+      (isOpenAIShimProvider ? process.env.OPENAI_MODEL : undefined) ||
+      (provider === 'firstParty' ? process.env.ANTHROPIC_MODEL : undefined) ||
+      setting ||
+      undefined
   }
 
   // Ignore the user-specified model if it's not in the availableModels allowlist.
@@ -131,6 +160,10 @@ export function getDefaultOpusModel(): ModelName {
   if (getAPIProvider() === 'codex') {
     return process.env.OPENAI_MODEL || 'gpt-5.4'
   }
+  // xAI provider: use grok-4 as the most capable model
+  if (getAPIProvider() === 'xai') {
+    return process.env.OPENAI_MODEL || 'grok-4'
+  }
   // 3P providers (Bedrock, Vertex, Foundry) — kept as a separate branch
   // even when values match, since 3P availability lags firstParty and
   // these will diverge again at the next model launch.
@@ -161,6 +194,10 @@ export function getDefaultSonnetModel(): ModelName {
   if (getAPIProvider() === 'codex') {
     return process.env.OPENAI_MODEL || 'gpt-5.4'
   }
+  // xAI provider: use grok-4 as the default model
+  if (getAPIProvider() === 'xai') {
+    return process.env.OPENAI_MODEL || 'grok-4'
+  }
   // Default to Sonnet 4.5 for 3P since they may not have 4.6 yet
   if (getAPIProvider() !== 'firstParty') {
     return getModelStrings().sonnet45
@@ -188,6 +225,10 @@ export function getDefaultHaikuModel(): ModelName {
   // Codex provider
   if (getAPIProvider() === 'codex') {
     return process.env.OPENAI_MODEL || 'gpt-5.4'
+  }
+  // xAI provider: use grok-3 as the fast/small model
+  if (getAPIProvider() === 'xai') {
+    return process.env.OPENAI_MODEL || 'grok-3'
   }
 
   // Haiku 4.5 is available on all platforms (first-party, Foundry, Bedrock, Vertex)
@@ -248,6 +289,10 @@ export function getDefaultMainLoopModelSetting(): ModelName | ModelAlias {
   // Codex provider: always use the configured Codex model (default gpt-5.4)
   if (getAPIProvider() === 'codex') {
     return process.env.OPENAI_MODEL || 'gpt-5.4'
+  }
+  // xAI provider: always use the configured xAI model (default grok-4)
+  if (getAPIProvider() === 'xai') {
+    return process.env.OPENAI_MODEL || 'grok-4'
   }
 
   // Ants default to defaultModel from flag config, or Opus 1M if not configured
@@ -429,10 +474,39 @@ export function renderModelSetting(setting: ModelName | ModelAlias): string {
  */
 export function getPublicModelDisplayName(model: ModelName): string | null {
   // For OpenAI/Gemini/Codex providers, show the actual model name not a Gakr alias
-  if (getAPIProvider() === 'openai' || getAPIProvider() === 'gemini' || getAPIProvider() === 'codex') {
+  if (getAPIProvider() === 'openai' || getAPIProvider() === 'gemini' || getAPIProvider() === 'codex' || getAPIProvider() === 'github' || getAPIProvider() === 'xai') {
+    // Return display names for known GitHub Copilot models
+    const copilotModelNames: Record<string, string> = {
+      'gpt-5.5': 'GPT-5.5',
+      'gpt-5.5-mini': 'GPT-5.5 mini',
+      'gpt-5.4': 'GPT-5.4',
+      'gpt-5.4-mini': 'GPT-5.4 mini',
+      'gpt-5.3-codex': 'GPT-5.3 Codex',
+      'gpt-5.2-codex': 'GPT-5.2 Codex',
+      'gpt-5.2': 'GPT-5.2',
+      'gpt-5.1-codex': 'GPT-5.1 Codex',
+      'gpt-5.1-codex-max': 'GPT-5.1 Codex max',
+      'gpt-5.1-codex-mini': 'GPT-5.1 Codex mini',
+      'gpt-4o': 'GPT-4o',
+      'gpt-4.1': 'GPT-4.1',
+      'claude-opus-4.6': 'Claude Opus 4.6',
+      'claude-opus-4.5': 'Claude Opus 4.5',
+      'claude-sonnet-4.6': 'Claude Sonnet 4.6',
+      'claude-sonnet-4.5': 'Claude Sonnet 4.5',
+      'claude-haiku-4.5': 'Claude Haiku 4.5',
+      'gemini-3.1-pro-preview': 'Gemini 3.1 Pro Preview',
+      'gemini-3-flash-preview': 'Gemini 3 Flash',
+      'gemini-2.5-pro': 'Gemini 2.5 Pro',
+      'grok-code-fast-1': 'Grok Code Fast 1',
+    }
+    if (copilotModelNames[model]) {
+      return copilotModelNames[model]
+    }
     return null
   }
   switch (model) {
+    case 'gpt-5.5':
+      return 'GPT-5.5'
     case 'gpt-5.4':
       return 'GPT-5.4'
     case 'gpt-5.3-codex-spark':

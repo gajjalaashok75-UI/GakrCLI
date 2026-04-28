@@ -1413,6 +1413,11 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
         description: 'Together chat/completions endpoint',
       },
       {
+        value: 'xai',
+        label: 'xAI',
+        description: 'xAI Grok OpenAI-compatible endpoint',
+      },
+      {
         value: 'custom',
         label: 'Custom',
         description: 'Any OpenAI-compatible provider',
