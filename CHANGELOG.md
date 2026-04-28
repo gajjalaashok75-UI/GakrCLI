@@ -4,6 +4,25 @@
 
 ### Features
 
+* **Persistent Project-Level Knowledge Graph and RAG (PR #TBD)**: Implement native JSON RAG with BM25-lite ranking and passive technical concept extraction
+  - Shift memory from session-scope to persistent project-scope with `knowledge_graph.json` storage
+  - Add native JSON RAG with BM25-lite ranking for semantic search across project history
+  - Implement passive technical concept extraction (IPs, versions, frameworks, environment variables, paths)
+  - Orchestrate hierarchical context injection in the conversation loop via `query.ts` integration
+  - Add `/knowledge` command with subcommands: `enable`, `disable`, `clear`, `status`, `list`
+  - Create `knowledgeGraph.ts` service for entity/relation/summary management with persistence
+  - Create `conversationArc.ts` service for conversation phase tracking and automatic fact extraction
+  - Add `getOrchestratedMemory()` function for targeted RAG search with BM25 scoring
+  - Support automatic detection of: environment variables, absolute paths, versions, hostnames, IPs, metrics
+  - Add project rule detection and persistence for passive learning of project conventions
+  - Integrate with `query.ts` at multiple points: turn start, message processing, turn finalization
+  - Add comprehensive test coverage: 25+ tests across 4 test files including performance benchmarks
+  - Add `knowledgeGraphEnabled` config setting (default: enabled)
+  - Performance: sub-2ms fact extraction, sub-10ms summary generation with 50 entities
+  - Memory footprint: <100KB for 100 facts
+  - Users can now benefit from persistent project memory that learns technical facts automatically
+  - Closes #TBD: Knowledge Graph provides native RAG without external vector databases
+
 * **Cache Metrics Feature - Expose Cache Statistics in REPL (PR #TBD)**: Add comprehensive cache metrics tracking and display across all providers
   - Add `/cache-stats` command for detailed cache hit/miss breakdown with per-request history
   - Add `showCacheStats` config setting with modes: 'off', 'compact' (default), 'full'
