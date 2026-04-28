@@ -180,6 +180,8 @@ export type DiffTool = 'terminal' | 'auto'
 
 export type OutputStyle = string
 
+export const SHOW_CACHE_STATS_MODES = ['off', 'compact', 'full'] as const
+
 export type GlobalConfig = {
   /**
    * @deprecated Use settings.apiKeyHelper instead.
@@ -564,6 +566,8 @@ export type GlobalConfig = {
   // Speculation configuration (ant-only)
   speculationEnabled?: boolean // Whether speculation is enabled (default: true)
 
+  // Cache stats display mode: 'off' | 'compact' | 'full'
+  showCacheStats?: 'off' | 'compact' | 'full' // How to display cache stats after each turn (default: 'compact')
 
   // Client data for server-side experiments (fetched during bootstrap).
   clientDataCache?: Record<string, unknown> | null
@@ -627,6 +631,7 @@ function createDefaultGlobalConfig(): GlobalConfig {
     cachedGrowthBookFeatures: {},
     respectGitignore: true,
     copyFullResponse: false,
+    showCacheStats: 'compact',
   }
 }
 
@@ -672,6 +677,7 @@ export const GLOBAL_CONFIG_KEYS = [
   'prStatusFooterEnabled',
   'remoteControlAtStartup',
   'remoteDialogSeen',
+  'showCacheStats',
 ] as const
 
 export type GlobalConfigKey = (typeof GLOBAL_CONFIG_KEYS)[number]

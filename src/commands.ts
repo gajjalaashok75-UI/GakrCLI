@@ -32,6 +32,7 @@ import login from './commands/login/index.js'
 import logout from './commands/logout/index.js'
 import installGitHubApp from './commands/install-github-app/index.js'
 import breakCache from './commands/break-cache/index.js'
+import cacheStats from './commands/cacheStats/index.js'
 import mcp from './commands/mcp/index.js'
 import mobile from './commands/mobile/index.js'
 import onboarding from './commands/onboarding/index.js'
@@ -271,6 +272,7 @@ const COMMANDS = memoize((): Command[] => [
   agents,
   branch,
   btw,
+  cacheStats,
   chrome,
   clear,
   color,
