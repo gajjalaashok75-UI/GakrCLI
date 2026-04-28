@@ -4,6 +4,16 @@
 
 ### Bug Fixes
 
+* **fix(agent): provider-aware fallback for haiku/sonnet aliases**: Fix Explore agent failures on custom providers
+  - Explore agent fails on custom providers (Z.AI GLM, Alibaba Anthropic-compatible, local OpenAI endpoints) because 'haiku' alias resolves to a non-existent model
+  - Add `isClaudeNativeProvider` check (Bedrock, Vertex, Foundry, official Anthropic)
+  - For non-Claude-native providers, haiku/sonnet aliases inherit parent model
+  - Add `checkIsClaudeNativeProvider()` function to identify Claude-native vs custom providers
+  - Add provider-aware fallback logic in `getAgentModel()` function
+  - Add 20 comprehensive tests for provider-aware fallback behavior using Bun mock.module()
+  - Fixes Explore agent "model not found" errors on custom Anthropic-compatible APIs
+  - Replace env manipulation with proper Bun mock.module() for reliable provider testing
+
 * **fix(query): restore system prompt structure and add missing config import**: Fix critical query loop crash and system prompt corruption
   - Import `getGlobalConfig` — six call sites referenced it without an import; five short-circuited via feature() gates, but src/query.ts:1896 always ran and crashed every queryLoop iteration with "getGlobalConfig is not defined" (e.g. Explore subagent: "Agent failed: getGlobalConfig is not defined")
   - Stop coercing SystemPrompt (string[]) into a template-string before appendSystemContext — that made [...systemPrompt] spread the string character-by-character, replacing the structured prompt with thousands of one-char system blocks. Append arcSummary as its own array element instead
