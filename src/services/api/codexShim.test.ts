@@ -619,8 +619,8 @@ describe('Codex request translation', () => {
             type: 'web_search_call',
             sources: [
               {
-                title: 'OpenClaude repo',
-                url: 'https://github.com/example/openclaude',
+                title: 'GakrCLI repo',
+                url: 'https://github.com/example/GakrCLI',
               },
             ],
           },
@@ -630,11 +630,11 @@ describe('Codex request translation', () => {
             content: [
               {
                 type: 'text',
-                text: 'OpenClaude is available on GitHub.',
+                text: 'GakrCLI is available on GitHub.',
                 sources: [
                   {
                     title: 'Docs',
-                    url: 'https://docs.example.com/openclaude',
+                    url: 'https://docs.example.com/GakrCLI',
                   },
                 ],
               },
@@ -642,22 +642,22 @@ describe('Codex request translation', () => {
           },
         ],
       },
-      'OpenClaude GitHub 2026',
+      'GakrCLI GitHub 2026',
       0.42,
     )
 
     expect(output.results).toEqual([
-      'OpenClaude is available on GitHub.',
+      'GakrCLI is available on GitHub.',
       {
         tool_use_id: 'codex-web-search',
         content: [
           {
-            title: 'OpenClaude repo',
-            url: 'https://github.com/example/openclaude',
+            title: 'GakrCLI repo',
+            url: 'https://github.com/example/GakrCLI',
           },
           {
             title: 'Docs',
-            url: 'https://docs.example.com/openclaude',
+            url: 'https://docs.example.com/GakrCLI',
           },
         ],
       },
@@ -667,7 +667,7 @@ describe('Codex request translation', () => {
   test('falls back to a non-empty Codex web search result message', () => {
     const output = webSearchToolTest.makeOutputFromCodexWebSearchResponse(
       { output: [] },
-      'OpenClaude GitHub 2026',
+      'GakrCLI GitHub 2026',
       0.11,
     )
 
@@ -685,7 +685,7 @@ describe('Codex request translation', () => {
           },
         ],
       },
-      'OpenClaude GitHub 2026',
+      'GakrCLI GitHub 2026',
       0.05,
     )
 
@@ -705,7 +705,7 @@ describe('Codex request translation', () => {
           },
         ],
       },
-      'OpenClaude GitHub 2026',
+      'GakrCLI GitHub 2026',
       0.05,
     )
 
@@ -722,7 +722,7 @@ describe('Codex request translation', () => {
           },
         ],
       },
-      'OpenClaude GitHub 2026',
+      'GakrCLI GitHub 2026',
       0.05,
     )
 
@@ -746,14 +746,14 @@ describe('Codex request translation', () => {
                 type: 'output_text',
                 text: 'Partial results below.',
                 sources: [
-                  { title: 'Docs', url: 'https://docs.example.com/openclaude' },
+                  { title: 'Docs', url: 'https://docs.example.com/GakrCLI' },
                 ],
               },
             ],
           },
         ],
       },
-      'OpenClaude GitHub 2026',
+      'GakrCLI GitHub 2026',
       0.05,
     )
 
@@ -763,7 +763,7 @@ describe('Codex request translation', () => {
       {
         tool_use_id: 'codex-web-search',
         content: [
-          { title: 'Docs', url: 'https://docs.example.com/openclaude' },
+          { title: 'Docs', url: 'https://docs.example.com/GakrCLI' },
         ],
       },
     ])

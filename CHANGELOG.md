@@ -2,6 +2,59 @@
 
 ## [Unreleased]
 
+## [0.4.8] (2026-04-29)
+
+### Bug Fixes
+
+* **fix(branding): update OpenClaude references to GakrCLI**: Consistent branding across provider management
+  - Update Codex OAuth error messages to reference "GakrCLI" instead of "OpenClaude"
+  - Update browser sign-in instructions to use "GakrCLI" branding
+  - Update secure storage references to "GakrCLI secure storage"
+  - Update provider profile removal messages to reference "GakrCLI"
+  - Files modified:
+    - `src/commands/provider/provider.tsx`: Updated all user-facing messages with correct branding
+
+* **fix(startup): improve provider profile detection and application**: Fix startup banner provider detection
+  - Apply active provider profile from config BEFORE building startup environment
+  - Ensures startup banner shows the correct active provider instead of default detection
+  - Add `applyActiveProviderProfileFromConfig()` call in CLI entry point
+  - Improves user experience by showing accurate provider information on startup
+  - Files modified:
+    - `src/entrypoints/cli.tsx`: Added provider profile application before startup env building
+
+* **fix(model): normalize model settings and remove duplicate provider entry**: Clean up model configuration handling
+  - Add `normalizeModelSetting()` function to properly handle model setting values
+  - Remove duplicate 'minimax' provider entry that was causing configuration issues
+  - Ensure model settings are properly trimmed and validated
+  - Files modified:
+    - `src/utils/model/model.ts`: Added normalization function and fixed duplicate provider entry
+
+* **fix(paths): correct gitignore reference path**: Update gitignore to match actual directory structure
+  - Change ignored path from `reference/` to `references/` to match actual directory name
+  - Ensures temporary reference files are properly ignored by git
+  - Files modified:
+    - `.gitignore`: Updated path reference
+
+* **fix(tests): update test files and improve error handling**: Various test improvements and bug fixes
+  - Update OSC terminal handling tests with improved error handling
+  - Fix conversation arc test expectations and edge cases
+  - Improve provider profile test coverage and validation
+  - Update codex API shim tests for better error scenarios
+  - Files modified:
+    - `src/ink/termio/osc.test.ts`: Updated test expectations
+    - `src/ink/termio/osc.ts`: Improved error handling
+    - `src/services/api/codexShim.test.ts`: Enhanced test coverage
+    - `src/utils/conversationArc.test.ts`: Fixed test edge cases
+    - `src/utils/model/benchmark.ts`: Performance improvements
+    - `src/utils/model/modelCache.ts`: Cache handling improvements
+    - `src/utils/providerProfiles.test.ts`: Enhanced provider validation tests
+
+* **fix(docs): update advanced setup documentation**: Improve documentation clarity
+  - Update advanced setup guide with clearer instructions
+  - Fix formatting and improve readability
+  - Files modified:
+    - `docs/advanced-setup.md`: Documentation improvements
+
 ### Features
 
 * **feat(api): deterministic request-body serialization via stableStringify**: Add deterministic JSON serialization for prefix caching

@@ -48,7 +48,7 @@ export OPENAI_MODEL=gpt-4o  # or gpt-4.1, o1, o3-mini
 `codexplan` maps to GPT-5.4 on the Codex backend with high reasoning.
 `codexspark` maps to GPT-5.3 Codex Spark for faster loops.
 
-If you use the in-app provider wizard, choose `Codex OAuth` to open ChatGPT sign-in in your browser and let OpenClaude store Codex credentials securely.
+If you use the in-app provider wizard, choose `Codex OAuth` to open ChatGPT sign-in in your browser and let GakrCLI store Codex credentials securely.
 
 If you already use the Codex CLI, Gakr reads `~/.codex/auth.json` automatically. You can also point it elsewhere with `CODEX_AUTH_JSON_PATH` or override the token directly with `CODEX_API_KEY`.
 

@@ -59,6 +59,12 @@ export function isNonCustomOpusModel(model: ModelName): boolean {
   )
 }
 
+function normalizeModelSetting(value: unknown): ModelName | ModelAlias | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
 /**
  * Helper to get the model from /model (including via /config), the --model flag, environment variable,
  * or the saved settings. The returned value can be a model alias if that's what the user specified.
@@ -95,7 +101,6 @@ export function getUserSpecifiedModelSetting(): ModelSetting | undefined {
       provider === 'codex' ||
       provider === 'github' ||
       provider === 'nvidia-nim' ||
-      provider === 'minimax'
       provider === 'minimax' ||
       provider === 'xai'
     specifiedModel =

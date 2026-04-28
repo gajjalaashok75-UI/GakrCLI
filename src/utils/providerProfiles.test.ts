@@ -679,7 +679,7 @@ describe('setActiveProviderProfile', () => {
   })
 
   test('persists no-key openai-compatible profiles for restart fallback', async () => {
-    const tempDir = mkdtempSync(join(tmpdir(), 'openclaude-provider-'))
+    const tempDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-'))
     const originalConfigDir = process.env.GAKR_CONFIG_DIR
     process.env.GAKR_CONFIG_DIR = tempDir
     process.env.OPENAI_API_KEY = 'sk-shell-should-not-persist'
