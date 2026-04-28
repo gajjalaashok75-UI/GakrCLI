@@ -2,6 +2,37 @@
 
 ## [Unreleased]
 
+### Features
+
+* **feat(api): deterministic request-body serialization via stableStringify**: Add deterministic JSON serialization for prefix caching
+  - **WHY**: OpenAI / Kimi / DeepSeek / Codex use implicit prefix caching keyed on exact request bytes. Spurious insertion-order differences in spread-merged body objects otherwise invalidate the cache on every turn. Also a pre-requisite for Anthropic `cache_control` breakpoint hits.
+  - **stableStringify.ts**: Add `stableStringify` helper that emits JSON with object keys sorted lexicographically at every depth (arrays preserved)
+    - Replicates native JSON.stringify pre-processing:
+      - Invoke toJSON(key) when present (Date, URL, user classes); pass '' at top-level, property name for nested values, index string for array elements
+      - Unbox Number/String/Boolean wrappers via valueOf() so new Boolean(false) doesn't get truthy-coerced
+      - Run cycle detection on the post-toJSON value so a toJSON returning an ancestor still throws TypeError; DAGs continue to not throw
+      - Drop properties whose toJSON returns undefined, matching native behavior
+    - Single-pass deepSort with WeakSet for cycle detection and DAG support
+    - Byte-equivalent to `JSON.stringify` when keys already happen to be in lexical insertion order, so strictly additive across providers
+  - **codexShim.ts**: Adopt stableStringify for outgoing Codex Responses API request body
+    - Replace `JSON.stringify(body)` with `stableStringify(body)` in `performCodexRequest`
+    - Ensures byte-stable serialization for Codex prefix caching
+  - **openaiShim.ts**: Adopt stableStringify for outgoing OpenAI-compatible request bodies
+    - Replace `JSON.stringify(body)` with `stableStringify(body)` in main chat completions path
+    - Replace `JSON.stringify(responsesBody)` with `stableStringify(responsesBody)` in GitHub Copilot /responses fallback
+    - Ensures byte-stable serialization across all OpenAI-compatible providers
+  - **Tests**: Comprehensive test coverage (41 tests passing)
+    - `src/utils/stableStringify.test.ts`: 21 tests covering toJSON semantics, wrapper unboxing, cycle detection, DAG support, and parity with JSON.stringify
+    - `src/utils/serializationStability.test.ts`: 14 tests for request body stability, prefix caching scenarios, and byte-level stability
+    - `src/services/api/stableStringify.integration.test.ts`: 6 integration tests verifying deterministic serialization for OpenAI/Codex API bodies
+  - Files modified:
+    - `src/utils/stableStringify.ts`: New file with stableStringify implementation
+    - `src/utils/stableStringify.test.ts`: New file with unit tests
+    - `src/utils/serializationStability.test.ts`: New file with integration tests
+    - `src/services/api/stableStringify.integration.test.ts`: New file with API integration tests
+    - `src/services/api/codexShim.ts`: Import and use stableStringify for request body
+    - `src/services/api/openaiShim.ts`: Import and use stableStringify for request bodies
+
 ### Bug Fixes
 
 * **fix: error output truncation (10KB→40KB) and MCP tool bugs**: Increase error truncation limit and fix MCP tool validation/null handling
