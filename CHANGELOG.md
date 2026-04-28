@@ -4,6 +4,15 @@
 
 ### Bug Fixes
 
+* **Fix Provider Switch Persistence in Session (PR #TBD)**: Implement proper provider activation with session persistence
+  - Add `buildProviderManagerCompletion` function to generate system reminders for mid-session provider switches
+  - Update `ProviderManagerResult` type to include 'activated' action with provider name and model
+  - Modify `activateSelectedProvider` to call `onDone` with activation details for all providers
+  - Add system-reminder meta message when provider is switched mid-session
+  - Provider switches now properly persist in the current session with model information
+  - Model context is maintained across provider switches within the same session
+  - Fixes issue where provider switches were not persisting in the active session
+
 * **Fix Provider Test Suite (PR #TBD)**: Fix broken tests in provider command and component test files
   - Fix secret masking test expectations to match actual implementation (3 chars instead of 4)
   - Update `buildCurrentProviderSummary redacts poisoned model and endpoint values` test to expect `sk-...678` instead of `sk-...5678`
