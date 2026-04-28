@@ -48,6 +48,10 @@ export type ProviderProfileInput = {
   baseUrl: string
   model: string
   apiKey?: string
+  apiFormat?: ProviderProfile['apiFormat']
+  authHeader?: ProviderProfile['authHeader']
+  authScheme?: ProviderProfile['authScheme']
+  authHeaderValue?: ProviderProfile['authHeaderValue']
 }
 
 export type ProviderPresetDefaults = Omit<ProviderProfileInput, 'provider'> & {
@@ -69,6 +73,20 @@ function trimOrUndefined(value: string | undefined): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined
 }
 
+function sanitizeAuthHeader(value: string | undefined): string | undefined {
+  const trimmed = trimOrUndefined(value)
+  if (!trimmed) {
+    return undefined
+  }
+  return /^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/.test(trimmed)
+    ? trimmed
+    : undefined
+}
+
+function sanitizeAuthScheme(value: string | undefined): ProviderProfile['authScheme'] | undefined {
+  return value === 'raw' || value === 'bearer' ? value : undefined
+}
+
 function normalizeBaseUrl(value: string): string {
   return trimValue(value).replace(/\/+$/, '')
 }
@@ -86,12 +104,18 @@ function sanitizeProfile(profile: ProviderProfile): ProviderProfile | null {
           : 'openai'
   const baseUrl = normalizeBaseUrl(profile.baseUrl)
   const model = trimValue(profile.model)
+  const apiFormat = profile.apiFormat === 'responses' || profile.apiFormat === 'chat_completions'
+    ? profile.apiFormat
+    : undefined
+  const authHeader = sanitizeAuthHeader(profile.authHeader)
+  const authScheme = sanitizeAuthScheme(profile.authScheme)
+  const authHeaderValue = trimOrUndefined(profile.authHeaderValue)
 
   if (!id || !name || !baseUrl || !model) {
     return null
   }
 
-  return {
+  const sanitized: ProviderProfile = {
     id,
     name,
     provider,
@@ -99,6 +123,17 @@ function sanitizeProfile(profile: ProviderProfile): ProviderProfile | null {
     model,
     apiKey: trimOrUndefined(profile.apiKey),
   }
+  if (provider === 'openai' && apiFormat) {
+    sanitized.apiFormat = apiFormat
+  }
+  if (provider === 'openai' && authHeader) {
+    sanitized.authHeader = authHeader
+    sanitized.authScheme = authScheme ?? (
+      authHeader.toLowerCase() === 'authorization' ? 'bearer' : 'raw'
+    )
+    sanitized.authHeaderValue = authHeaderValue
+  }
+  return sanitized
 }
 
 function sanitizeProfiles(profiles: ProviderProfile[] | undefined): ProviderProfile[] {

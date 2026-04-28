@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+### Features
+
+* **Add OpenAI Responses API and Custom Auth Headers Support**: Implement OpenAI Responses API format and custom authentication headers for provider profiles
+  - Add `OPENAI_API_FORMAT` environment variable to switch between 'chat_completions' (default) and 'responses' API formats
+  - Add custom authentication header support via `OPENAI_AUTH_HEADER`, `OPENAI_AUTH_SCHEME`, and `OPENAI_AUTH_HEADER_VALUE`
+  - Support 'bearer' and 'raw' authentication schemes for custom auth headers
+  - Add `OpenAICompatibleApiFormat` and `OpenAICompatibleAuthScheme` types to config
+  - Update `ProviderProfile` type with optional `apiFormat`, `authHeader`, `authScheme`, and `authHeaderValue` fields
+  - Add `parseOpenAICompatibleApiFormat()` function to parse API format from environment variables
+  - Update `resolveProviderRequest()` to handle `apiFormat` parameter and set appropriate transport mode
+  - Add `OPENAI_AUTH_HEADER_VALUE` to secret environment keys for proper masking
+  - Update Provider Manager UI with new form steps for API format selection and custom auth configuration
+  - Add Select component for API format choice (Chat Completions vs Responses)
+  - Filter auth-related form steps to only show for OpenAI-compatible providers
+  - Mask `authHeaderValue` input field like API keys for security
+  - Update `buildOpenAIProfileEnv()` to accept and preserve auth parameters
+  - Update `buildLaunchEnv()` to maintain auth header fields across sessions
+  - Add `sanitizeAuthHeader()` and `sanitizeAuthScheme()` validation functions
+  - Update profile summary display to show API format and custom auth info
+  - Add comprehensive documentation in `.env.example` for new configuration options
+  - Enable support for providers requiring non-standard authentication (e.g., api-key header, X-API-Key)
+  - Providers can now use OpenAI Responses API format for compatible endpoints
+
 ### Bug Fixes
 
 * **fix(agent): provider-aware fallback for haiku/sonnet aliases**: Fix Explore agent failures on custom providers

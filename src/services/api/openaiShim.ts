@@ -79,6 +79,7 @@ import {
 } from './toolArgumentNormalization.js'
 type SecretValueSource = Partial<{
   OPENAI_API_KEY: string
+  OPENAI_AUTH_HEADER_VALUE: string
   CODEX_API_KEY: string
   GEMINI_API_KEY: string
   GOOGLE_API_KEY: string
@@ -1560,7 +1561,16 @@ class OpenAIShimMessages {
     const isMiniMax = !!process.env.MINIMAX_API_KEY
     const apiKey = this.providerOverride?.apiKey ?? 
       (isMiniMax ? process.env.MINIMAX_API_KEY : undefined) ?? 
-      (isNvidia ? process.env.NVIDIA_API_KEY : process.env.OPENAI_API_KEY) 
+      (isNvidia ? process.env.NVIDIA_API_KEY : process.env.OPENAI_API_KEY)
+    const configuredAuthHeaderValue = process.env.OPENAI_AUTH_HEADER_VALUE?.trim()
+    const customAuthHeader = process.env.OPENAI_AUTH_HEADER?.trim()
+    const hasCustomAuthHeader = Boolean(
+      customAuthHeader &&
+      /^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/.test(customAuthHeader),
+    )
+    const authValue = hasCustomAuthHeader
+      ? configuredAuthHeaderValue || apiKey
+      : apiKey
     // Detect Azure endpoints by hostname (not raw URL) to prevent bypass via
     // path segments like https://evil.com/cognitiveservices.azure.com/
     let isAzure = false
@@ -1575,15 +1585,27 @@ class OpenAIShimMessages {
       isBankr = request.baseUrl.toLowerCase().includes('bankr')
     } catch { /* malformed URL — not Bankr */ }
 
-    if (apiKey) {
-      if (isAzure) {
+    if (authValue) {
+      if (hasCustomAuthHeader && customAuthHeader) {
+        const defaultCustomAuthScheme =
+          customAuthHeader.toLowerCase() === 'authorization' ? 'bearer' : 'raw'
+        const customAuthScheme =
+          process.env.OPENAI_AUTH_SCHEME === 'raw' ||
+          process.env.OPENAI_AUTH_SCHEME === 'bearer'
+            ? process.env.OPENAI_AUTH_SCHEME
+            : defaultCustomAuthScheme
+        headers[customAuthHeader] =
+          customAuthScheme === 'bearer'
+            ? `Bearer ${authValue}`
+            : authValue
+      } else if (isAzure) {
         // Azure uses api-key header instead of Bearer token
-        headers['api-key'] = apiKey
+        headers['api-key'] = authValue
       } else if (isBankr) {
         // Bankr uses X-API-Key header instead of Bearer token
-        headers['X-API-Key'] = apiKey
+        headers['X-API-Key'] = authValue
       } else {
-        headers.Authorization = `Bearer ${apiKey}`
+        headers.Authorization = `Bearer ${authValue}`
       }
     } else if (isGemini) {
       const geminiCredential = await resolveGeminiCredential(process.env)
@@ -1606,27 +1628,41 @@ class OpenAIShimMessages {
       headers['X-GitHub-Api-Version'] = GITHUB_API_VERSION
     }
 
+    const buildChatCompletionsUrl = (baseUrl: string): string => {
+      // Azure Cognitive Services / Azure OpenAI require a deployment-specific
+      // path and an api-version query parameter.
+      if (isAzure) {
+        const apiVersion = process.env.AZURE_OPENAI_API_VERSION ?? '2024-12-01-preview'
+        const deployment = request.resolvedModel ?? process.env.OPENAI_MODEL ?? 'gpt-4o'
+
+        // If base URL already contains /deployments/, use it as-is with api-version.
+        if (/\/deployments\//i.test(baseUrl)) {
+          const normalizedBase = baseUrl.replace(/\/+$/, '')
+          return `${normalizedBase}/chat/completions?api-version=${apiVersion}`
+        }
+
+        // Strip trailing /v1 or /openai/v1 if present, then build Azure path.
+        const normalizedBase = baseUrl
+          .replace(/\/(openai\/)?v1\/?$/, '')
+          .replace(/\/+$/, '')
+
+        return `${normalizedBase}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`
+      }
+
+      return `${baseUrl}/chat/completions`
+    }
+
+    const buildRequestUrl = (baseUrl: string): string =>
+      request.transport === 'responses'
+        ? `${baseUrl}/responses`
+        : buildChatCompletionsUrl(baseUrl)
+
     // Build the chat completions URL
     // Azure Cognitive Services / Azure OpenAI require a deployment-specific path
     // and an api-version query parameter.
     // Standard format: {base}/openai/deployments/{model}/chat/completions?api-version={version}
     // Non-Azure: {base}/chat/completions
-    let chatCompletionsUrl: string
-    if (isAzure) {
-      const apiVersion = process.env.AZURE_OPENAI_API_VERSION ?? '2024-12-01-preview'
-      const deployment = request.resolvedModel ?? process.env.OPENAI_MODEL ?? 'gpt-4o'
-      // If base URL already contains /deployments/, use it as-is with api-version
-      if (/\/deployments\//i.test(request.baseUrl)) {
-        const base = request.baseUrl.replace(/\/+$/, '')
-        chatCompletionsUrl = `${base}/chat/completions?api-version=${apiVersion}`
-      } else {
-        // Strip trailing /v1 or /openai/v1 if present, then build Azure path
-        const base = request.baseUrl.replace(/\/(openai\/)?v1\/?$/, '').replace(/\/+$/, '')
-        chatCompletionsUrl = `${base}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`
-      }
-    } else {
-      chatCompletionsUrl = `${request.baseUrl}/chat/completions`
-    }
+    let chatCompletionsUrl: string = buildRequestUrl(request.baseUrl)
 
     const fetchInit = {
       method: 'POST' as const,
