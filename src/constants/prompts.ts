@@ -497,7 +497,7 @@ ${CYBER_RISK_INSTRUCTION}`,
     systemPromptSection('ant_model_override', () =>
       getAntModelOverrideSection(),
     ),
-    systemPromptSection('env_info_simple', () =>
+    systemPromptSection(`env_info_simple:${model}`, () =>
       computeSimpleEnvInfo(model, additionalWorkingDirectories),
     ),
     systemPromptSection('language', () =>
@@ -520,7 +520,7 @@ ${CYBER_RISK_INSTRUCTION}`,
       'MCP servers connect/disconnect between turns',
     ),
     systemPromptSection('scratchpad', () => getScratchpadInstructions()),
-    systemPromptSection('frc', () => getFunctionResultClearingSection(model)),
+    systemPromptSection(`frc:${model}`, () => getFunctionResultClearingSection(model)),
     systemPromptSection(
       'summarize_tool_results',
       () => SUMMARIZE_TOOL_RESULTS_SECTION,
