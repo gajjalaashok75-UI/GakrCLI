@@ -101,6 +101,7 @@ import { applyToolResultBudget } from './utils/toolResultStorage.js'
 import { recordContentReplacement } from './utils/sessionStorage.js'
 import { handleStopHooks } from './query/stopHooks.js'
 import { buildQueryConfig } from './query/config.js'
+import { getGlobalConfig } from './utils/config.js'
 import { productionDeps, type QueryDeps } from './query/deps.js'
 import type { Terminal, Continue } from './query/transitions.js'
 import { feature } from 'bun:bundle'
@@ -266,7 +267,7 @@ async function* queryLoop(
   // Initialize multi-turn context tracking if enabled
   if (
     feature('MULTI_TURN_CONTEXT') &&
-    (await import('./utils/config.js')).getGlobalConfig().knowledgeGraphEnabled
+    getGlobalConfig().knowledgeGraphEnabled
   ) {
     const { startNewTurn } = await import('./utils/multiTurnContext.js')
     startNewTurn()
@@ -379,7 +380,7 @@ async function* queryLoop(
     // Update conversation arc phase if enabled
     if (
       feature('CONVERSATION_ARC') &&
-      (await import('./utils/config.js')).getGlobalConfig().knowledgeGraphEnabled &&
+      getGlobalConfig().knowledgeGraphEnabled &&
       messagesForQuery.length > 0
     ) {
       const { updateArcPhase } = await import('./utils/conversationArc.js')
@@ -472,8 +473,28 @@ async function* queryLoop(
       messagesForQuery = collapseResult.messages
     }
 
+    // Add conversation arc summary to system prompt if enabled
+    // arcSummary must be a separate array element; concatenating it into a
+    // template string makes [...systemPrompt] spread chars, shredding the prompt.
+    let promptWithArc: readonly string[] = systemPrompt
+    if (feature('CONVERSATION_ARC')) {
+      if (getGlobalConfig().knowledgeGraphEnabled) {
+        const lastMessage = messagesForQuery[messagesForQuery.length - 1]
+        const userQueryText =
+          lastMessage?.type === 'user' &&
+          typeof lastMessage.message.content === 'string'
+            ? lastMessage.message.content
+            : ''
+        const { getArcSummary } = await import('./utils/conversationArc.js')
+        const arcSummary = getArcSummary(userQueryText)
+        if (arcSummary) {
+          promptWithArc = [...systemPrompt, arcSummary]
+        }
+      }
+    }
+
     const fullSystemPrompt = asSystemPrompt(
-      appendSystemContext(systemPrompt, systemContext),
+      appendSystemContext(asSystemPrompt(promptWithArc), systemContext),
     )
 
     queryCheckpoint('query_autocompact_start')
@@ -677,23 +698,6 @@ async function* queryLoop(
       }
     }
 
-    // Add conversation arc summary to system prompt if enabled
-    let promptWithArc: readonly string[] = fullSystemPrompt
-    if (feature('CONVERSATION_ARC')) {
-      if ((await import('./utils/config.js')).getGlobalConfig().knowledgeGraphEnabled) {
-        const lastMessage = messagesForQuery[messagesForQuery.length - 1]
-        const userQueryText =
-          lastMessage && typeof lastMessage.message.content === 'string'
-            ? lastMessage.message.content
-            : ''
-        const { getArcSummary } = await import('./utils/conversationArc.js')
-        const arcSummary = getArcSummary(userQueryText)
-        if (arcSummary) {
-          promptWithArc = [...fullSystemPrompt, arcSummary]
-        }
-      }
-    }
-
     let attemptWithFallback = true
 
     queryCheckpoint('query_api_loop_start')
@@ -877,7 +881,7 @@ async function* queryLoop(
               // Track message in multi-turn context if enabled
               if (
                 feature('MULTI_TURN_CONTEXT') &&
-                (await import('./utils/config.js')).getGlobalConfig().knowledgeGraphEnabled
+                getGlobalConfig().knowledgeGraphEnabled
               ) {
                 const { addMessageToTurn, addToolCallToTurn } = await import(
                   './utils/multiTurnContext.js'
@@ -888,7 +892,7 @@ async function* queryLoop(
               // Update conversation arc phase if enabled
               if (
                 feature('CONVERSATION_ARC') &&
-                (await import('./utils/config.js')).getGlobalConfig().knowledgeGraphEnabled
+                getGlobalConfig().knowledgeGraphEnabled
               ) {
                 const { updateArcPhase } = await import('./utils/conversationArc.js')
                 updateArcPhase([message])
@@ -1425,7 +1429,7 @@ async function* queryLoop(
       // Finalize conversation arc turn if enabled
       if (
         feature('CONVERSATION_ARC') &&
-        (await import('./utils/config.js')).getGlobalConfig().knowledgeGraphEnabled
+        getGlobalConfig().knowledgeGraphEnabled
       ) {
         const { finalizeArcTurn } = await import('./utils/conversationArc.js')
         finalizeArcTurn()
