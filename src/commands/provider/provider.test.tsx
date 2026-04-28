@@ -312,8 +312,8 @@ test('buildCurrentProviderSummary redacts poisoned model and endpoint values', (
   })
 
   expect(summary.providerLabel).toBe('OpenAI-compatible')
-  expect(summary.modelLabel).toBe('sk-...5678')
-  expect(summary.endpointLabel).toBe('sk-...5678')
+  expect(summary.modelLabel).toBe('sk-...678')
+  expect(summary.endpointLabel).toBe('sk-...678')
 })
 
 test('buildCurrentProviderSummary detects nvidia mode and redacts poisoned values', () => {
@@ -328,8 +328,8 @@ test('buildCurrentProviderSummary detects nvidia mode and redacts poisoned value
   })
 
   expect(summary.providerLabel).toBe('NVIDIA NIMs')
-  expect(summary.modelLabel).toBe('nvapi-...5678')
-  expect(summary.endpointLabel).toBe('nvapi-...5678')
+  expect(summary.modelLabel).toBe('nva...678')
+  expect(summary.endpointLabel).toBe('nva...678')
 })
 
 test('getProviderWizardDefaults ignores poisoned current provider values', () => {
@@ -515,7 +515,7 @@ test('applySavedProfileToCurrentSession ignores stale Codex env overrides for OA
 })
 
 test('ProviderWizard hides Codex OAuth while running in bare mode', async () => {
-  process.env.CLAUDE_CODE_SIMPLE = '1'
+  process.env.GAKR_CODE_SIMPLE = '1'
 
   const output = await renderProviderWizardFrame()
 
