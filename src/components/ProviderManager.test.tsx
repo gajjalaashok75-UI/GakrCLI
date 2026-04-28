@@ -118,7 +118,8 @@ const PRESET_ORDER = [
   'LM Studio',
   'MiniMax',
   'Mistral',
-  'Moonshot AI',
+  'Moonshot AI - API',
+  'Moonshot AI - Kimi Code',
   'NVIDIA NIM',
   'Ollama',
   'OpenAI',
@@ -654,7 +655,7 @@ test('ProviderManager first-run Codex OAuth switches the current session after l
     expect.objectContaining({
       action: 'saved',
       message:
-        'Codex OAuth configured. OpenClaude switched to it for this session.',
+        'Codex OAuth configured. GakrCLI switched to it for this session.',
     }),
   )
 
@@ -943,8 +944,8 @@ test('ProviderManager resolves Codex OAuth state from async storage without sync
 })
 
 test('ProviderManager hides Codex OAuth setup in bare mode', async () => {
-  process.env.CLAUDE_CODE_SIMPLE = '1'
-  delete process.env.CLAUDE_CODE_USE_GITHUB
+  process.env.GAKR_CODE_SIMPLE = '1'
+  delete process.env.GAKR_CODE_USE_GITHUB
   delete process.env.GITHUB_TOKEN
   delete process.env.GH_TOKEN
 

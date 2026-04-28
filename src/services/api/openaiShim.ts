@@ -92,6 +92,11 @@ const GITHUB_429_MAX_RETRIES = 3
 const GITHUB_429_BASE_DELAY_SEC = 1
 const GITHUB_429_MAX_DELAY_SEC = 32
 const GEMINI_API_HOST = 'generativelanguage.googleapis.com'
+const MOONSHOT_API_HOSTS = new Set([
+  'api.moonshot.ai',
+  'api.moonshot.cn',
+])
+const KIMI_CODE_API_HOST = 'api.kimi.com'
 const DEEPSEEK_API_HOSTS = new Set([
   'api.deepseek.com',
 ])
@@ -204,6 +209,21 @@ function hasGeminiApiHost(baseUrl: string | undefined): boolean {
 
   try {
     return new URL(baseUrl).hostname.toLowerCase() === GEMINI_API_HOST
+  } catch {
+    return false
+  }
+}
+
+function isMoonshotCompatibleBaseUrl(baseUrl: string | undefined): boolean {
+  if (!baseUrl) return false
+  try {
+    const parsed = new URL(baseUrl)
+    const hostname = parsed.hostname.toLowerCase()
+    return (
+      MOONSHOT_API_HOSTS.has(hostname) ||
+      (hostname === KIMI_CODE_API_HOST &&
+        parsed.pathname.toLowerCase().startsWith('/coding'))
+    )
   } catch {
     return false
   }
@@ -1395,7 +1415,9 @@ class OpenAIShimMessages {
         // DeepSeek requires every assistant tool-call message to carry
         // reasoning_content when its thinking feature is active. Echo it back
         // from the thinking block we captured on the inbound response.
-        preserveReasoningContent: isDeepSeekBaseUrl(request.baseUrl),
+        preserveReasoningContent:
+          isMoonshotCompatibleBaseUrl(request.baseUrl) ||
+          isDeepSeekBaseUrl(request.baseUrl),
       },
     )
 
@@ -1433,6 +1455,9 @@ class OpenAIShimMessages {
     const isGithubCopilot = isGithub && githubEndpointType === 'copilot'
     const isGithubModels = isGithub && (githubEndpointType === 'models' || githubEndpointType === 'custom')
 
+    const isMoonshot = isMoonshotCompatibleBaseUrl(request.baseUrl)
+    const isDeepSeek = isDeepSeekBaseUrl(request.baseUrl)
+
     // Set token limit based on provider requirements
     if (isNvidia) {
       // NVIDIA uses max_tokens parameter
@@ -1456,13 +1481,17 @@ class OpenAIShimMessages {
         body.max_completion_tokens = maxCompletionTokensValue
       }
     }
-    if ((isMistral || isLocal) && body.max_completion_tokens !== undefined) {
+    if ((isMistral || isLocal || isMoonshot) && body.max_completion_tokens !== undefined) {
       body.max_tokens = body.max_completion_tokens
       delete body.max_completion_tokens
     }
     // mistral and gemini don't recognize body.store — Gemini returns 400
     // "Invalid JSON payload received. Unknown name 'store': Cannot find field."
-    if (isMistral || isGeminiMode()) {
+    // Moonshot direct API, Kimi Code's OpenAI-compatible coding endpoint,
+    // and DeepSeek have not published support for the parameter either;
+    // strip it preemptively to avoid the same class of error on strict-parse
+    // providers.
+    if (isMistral || isGeminiMode() || isMoonshot || isDeepSeek) {
       delete body.store
     }
 
@@ -1474,7 +1503,6 @@ class OpenAIShimMessages {
     if (params.top_p !== undefined) body.top_p = params.top_p
 
     // DeepSeek thinking support
-    const isDeepSeek = isDeepSeekBaseUrl(request.baseUrl)
     if (isDeepSeek) {
       const requestedThinkingType = (params.thinking as { type?: string } | undefined)?.type
       const deepSeekThinkingType =
@@ -1682,6 +1710,10 @@ class OpenAIShimMessages {
             if (convertedTools.length > 0) {
               responsesBody.tools = convertedTools
             }
+          }
+
+          if (isMistral || isGeminiMode() || isMoonshot || isDeepSeek) {
+            delete responsesBody.store
           }
 
           const responsesResponse = await fetchWithProxyRetry(responsesUrl, {

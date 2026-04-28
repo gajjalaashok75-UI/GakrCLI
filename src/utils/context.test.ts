@@ -9,6 +9,7 @@ import {
 const originalEnv = {
   GAKR_CODE_USE_OPENAI: process.env.GAKR_CODE_USE_OPENAI,
   GAKR_CODE_MAX_OUTPUT_TOKENS: process.env.GAKR_CODE_MAX_OUTPUT_TOKENS,
+  OPENAI_MODEL: process.env.OPENAI_MODEL,
 }
 
 afterEach(() => {
@@ -23,18 +24,11 @@ afterEach(() => {
     process.env.GAKR_CODE_MAX_OUTPUT_TOKENS =
       originalEnv.GAKR_CODE_MAX_OUTPUT_TOKENS
   }
-})
-
-test('deepseek-chat uses provider-specific context and output caps', () => {
-  process.env.GAKR_CODE_USE_OPENAI = '1'
-  delete process.env.GAKR_CODE_MAX_OUTPUT_TOKENS
-
-  expect(getContextWindowForModel('deepseek-chat')).toBe(128_000)
-  expect(getModelMaxOutputTokens('deepseek-chat')).toEqual({
-    default: 8_192,
-    upperLimit: 8_192,
-  })
-  expect(getMaxOutputTokensForModel('deepseek-chat')).toBe(8_192)
+  if (originalEnv.OPENAI_MODEL === undefined) {
+    delete process.env.OPENAI_MODEL
+  } else {
+    process.env.OPENAI_MODEL = originalEnv.OPENAI_MODEL
+  }
 })
 
 test('deepseek-v4-flash uses provider-specific context and output caps', () => {
@@ -50,11 +44,15 @@ test('deepseek-v4-flash uses provider-specific context and output caps', () => {
   expect(getMaxOutputTokensForModel('deepseek-v4-flash')).toBe(262_144)
 })
 
-test('deepseek-chat clamps oversized max output overrides to the provider limit', () => {
+test('deepseek legacy aliases keep their documented provider caps', () => {
   process.env.GAKR_CODE_USE_OPENAI = '1'
-  process.env.GAKR_CODE_MAX_OUTPUT_TOKENS = '32000'
+  delete process.env.GAKR_CODE_MAX_OUTPUT_TOKENS
+  delete process.env.OPENAI_MODEL
 
+  expect(getContextWindowForModel('deepseek-chat')).toBe(128_000)
+  expect(getContextWindowForModel('deepseek-reasoner')).toBe(128_000)
   expect(getMaxOutputTokensForModel('deepseek-chat')).toBe(8_192)
+  expect(getMaxOutputTokensForModel('deepseek-reasoner')).toBe(65_536)
 })
 
 test('deepseek-v4-flash clamps oversized max output overrides to the provider limit', () => {
@@ -68,6 +66,7 @@ test('deepseek-v4-flash clamps oversized max output overrides to the provider li
 test('gpt-4o uses provider-specific context and output caps', () => {
   process.env.GAKR_CODE_USE_OPENAI = '1'
   delete process.env.GAKR_CODE_MAX_OUTPUT_TOKENS
+  delete process.env.OPENAI_MODEL
 
   expect(getContextWindowForModel('gpt-4o')).toBe(128_000)
   expect(getModelMaxOutputTokens('gpt-4o')).toEqual({
@@ -80,6 +79,7 @@ test('gpt-4o uses provider-specific context and output caps', () => {
 test('gpt-4o clamps oversized max output overrides to the provider limit', () => {
   process.env.GAKR_CODE_USE_OPENAI = '1'
   process.env.GAKR_CODE_MAX_OUTPUT_TOKENS = '32000'
+  delete process.env.OPENAI_MODEL
 
   expect(getMaxOutputTokensForModel('gpt-4o')).toBe(16_384)
 })
@@ -87,6 +87,7 @@ test('gpt-4o clamps oversized max output overrides to the provider limit', () =>
 test('gpt-5.4 family uses provider-specific context and output caps', () => {
   process.env.GAKR_CODE_USE_OPENAI = '1'
   delete process.env.GAKR_CODE_MAX_OUTPUT_TOKENS
+  delete process.env.OPENAI_MODEL
 
   expect(getContextWindowForModel('gpt-5.4')).toBe(1_050_000)
   expect(getModelMaxOutputTokens('gpt-5.4')).toEqual({
@@ -114,4 +115,164 @@ test('gpt-5.4 family keeps large max output overrides within provider limits', (
   expect(getMaxOutputTokensForModel('gpt-5.4')).toBe(128_000)
   expect(getMaxOutputTokensForModel('gpt-5.4-mini')).toBe(128_000)
   expect(getMaxOutputTokensForModel('gpt-5.4-nano')).toBe(128_000)
+})
+
+test('MiniMax-M2.7 uses explicit provider-specific context and output caps', () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  delete process.env.GAKR_CODE_MAX_OUTPUT_TOKENS
+  delete process.env.OPENAI_MODEL
+
+  expect(getContextWindowForModel('MiniMax-M2.7')).toBe(204_800)
+  expect(getModelMaxOutputTokens('MiniMax-M2.7')).toEqual({
+    default: 131_072,
+    upperLimit: 131_072,
+  })
+  expect(getMaxOutputTokensForModel('MiniMax-M2.7')).toBe(131_072)
+})
+
+test('unknown openai-compatible models use the 128k fallback window (not 8k, see #635)', () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  delete process.env.GAKR_CODE_MAX_OUTPUT_TOKENS
+  delete process.env.OPENAI_MODEL
+
+  expect(getContextWindowForModel('some-unknown-3p-model')).toBe(128_000)
+})
+
+test('MiniMax-M2.5 and M2.1 use explicit provider-specific context and output caps', () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  delete process.env.GAKR_CODE_MAX_OUTPUT_TOKENS
+  delete process.env.OPENAI_MODEL
+
+  expect(getContextWindowForModel('MiniMax-M2.5')).toBe(204_800)
+  expect(getContextWindowForModel('MiniMax-M2.5-highspeed')).toBe(204_800)
+  expect(getContextWindowForModel('MiniMax-M2.1')).toBe(204_800)
+  expect(getContextWindowForModel('MiniMax-M2.1-highspeed')).toBe(204_800)
+  expect(getModelMaxOutputTokens('MiniMax-M2.5')).toEqual({
+    default: 131_072,
+    upperLimit: 131_072,
+  })
+})
+
+test('DashScope qwen3.6-plus uses provider-specific context and output caps', () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  delete process.env.GAKR_CODE_MAX_OUTPUT_TOKENS
+
+  expect(getContextWindowForModel('qwen3.6-plus')).toBe(1_000_000)
+  expect(getModelMaxOutputTokens('qwen3.6-plus')).toEqual({
+    default: 65_536,
+    upperLimit: 65_536,
+  })
+  expect(getMaxOutputTokensForModel('qwen3.6-plus')).toBe(65_536)
+})
+
+test('DashScope qwen3.5-plus uses provider-specific context and output caps', () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  delete process.env.GAKR_CODE_MAX_OUTPUT_TOKENS
+
+  expect(getContextWindowForModel('qwen3.5-plus')).toBe(1_000_000)
+  expect(getModelMaxOutputTokens('qwen3.5-plus')).toEqual({
+    default: 65_536,
+    upperLimit: 65_536,
+  })
+  expect(getMaxOutputTokensForModel('qwen3.5-plus')).toBe(65_536)
+})
+
+test('DashScope qwen3-coder-plus uses provider-specific context and output caps', () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  delete process.env.GAKR_CODE_MAX_OUTPUT_TOKENS
+
+  expect(getContextWindowForModel('qwen3-coder-plus')).toBe(1_000_000)
+  expect(getModelMaxOutputTokens('qwen3-coder-plus')).toEqual({
+    default: 65_536,
+    upperLimit: 65_536,
+  })
+})
+
+test('DashScope qwen3-coder-next uses provider-specific context and output caps', () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  delete process.env.GAKR_CODE_MAX_OUTPUT_TOKENS
+
+  expect(getContextWindowForModel('qwen3-coder-next')).toBe(262_144)
+  expect(getModelMaxOutputTokens('qwen3-coder-next')).toEqual({
+    default: 65_536,
+    upperLimit: 65_536,
+  })
+})
+
+test('DashScope qwen3-max uses provider-specific context and output caps', () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  delete process.env.GAKR_CODE_MAX_OUTPUT_TOKENS
+
+  expect(getContextWindowForModel('qwen3-max')).toBe(262_144)
+  expect(getModelMaxOutputTokens('qwen3-max')).toEqual({
+    default: 32_768,
+    upperLimit: 32_768,
+  })
+})
+
+test('DashScope qwen3-max dated variant resolves to base entry via prefix match', () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  delete process.env.GAKR_CODE_MAX_OUTPUT_TOKENS
+
+  expect(getContextWindowForModel('qwen3-max-2026-01-23')).toBe(262_144)
+  expect(getModelMaxOutputTokens('qwen3-max-2026-01-23')).toEqual({
+    default: 32_768,
+    upperLimit: 32_768,
+  })
+})
+
+test('DashScope kimi-k2.5 uses provider-specific context and output caps', () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  delete process.env.GAKR_CODE_MAX_OUTPUT_TOKENS
+
+  expect(getContextWindowForModel('kimi-k2.5')).toBe(262_144)
+  expect(getModelMaxOutputTokens('kimi-k2.5')).toEqual({
+    default: 32_768,
+    upperLimit: 32_768,
+  })
+})
+
+test('Kimi Code kimi-for-coding uses provider-specific context and output caps', () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  delete process.env.GAKR_CODE_MAX_OUTPUT_TOKENS
+
+  expect(getContextWindowForModel('kimi-for-coding')).toBe(262_144)
+  expect(getModelMaxOutputTokens('kimi-for-coding')).toEqual({
+    default: 32_768,
+    upperLimit: 32_768,
+  })
+})
+
+test('DashScope glm-5 uses provider-specific context and output caps', () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  delete process.env.GAKR_CODE_MAX_OUTPUT_TOKENS
+
+  expect(getContextWindowForModel('glm-5')).toBe(202_752)
+  expect(getModelMaxOutputTokens('glm-5')).toEqual({
+    default: 16_384,
+    upperLimit: 16_384,
+  })
+})
+
+test('DashScope glm-4.7 uses provider-specific context and output caps', () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  delete process.env.GAKR_CODE_MAX_OUTPUT_TOKENS
+
+  expect(getContextWindowForModel('glm-4.7')).toBe(202_752)
+  expect(getModelMaxOutputTokens('glm-4.7')).toEqual({
+    default: 16_384,
+    upperLimit: 16_384,
+  })
+})
+
+test('DashScope models clamp oversized max output overrides to the provider limit', () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.GAKR_CODE_MAX_OUTPUT_TOKENS = '100000'
+
+  expect(getMaxOutputTokensForModel('qwen3.6-plus')).toBe(65_536)
+  expect(getMaxOutputTokensForModel('qwen3.5-plus')).toBe(65_536)
+  expect(getMaxOutputTokensForModel('qwen3-coder-next')).toBe(65_536)
+  expect(getMaxOutputTokensForModel('qwen3-max')).toBe(32_768)
+  expect(getMaxOutputTokensForModel('kimi-k2.5')).toBe(32_768)
+  expect(getMaxOutputTokensForModel('glm-5')).toBe(16_384)
 })

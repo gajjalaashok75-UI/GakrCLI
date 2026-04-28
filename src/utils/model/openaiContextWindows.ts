@@ -40,6 +40,19 @@ const OPENAI_CONTEXT_WINDOWS: Record<string, number> = {
   'deepseek-chat':            128_000,
   'deepseek-reasoner':        128_000,
 
+  // Moonshot AI direct API (api.moonshot.ai/v1). Values from Moonshot's
+  // published model card — all K2 tier share 256K context. Prefix matching
+  // in lookupByKey catches variants like "kimi-k2.6-preview".
+  'kimi-for-coding':          262_144,
+  'kimi-k2.6':                262_144,
+  'kimi-k2':                  131_072,
+  'kimi-k2-instruct':         131_072,
+  'kimi-k2-thinking':         262_144,
+  'kimi-k2.5':                262_144,
+  'moonshot-v1-8k':             8_192,
+  'moonshot-v1-32k':           32_768,
+  'moonshot-v1-128k':         131_072,
+
   // Groq (fast inference)
   'llama-3.3-70b-versatile':  128_000,
   'llama-3.1-8b-instant':     128_000,
@@ -121,6 +134,17 @@ const OPENAI_MAX_OUTPUT_TOKENS: Record<string, number> = {
   'deepseek-chat':              8_192,
   'deepseek-reasoner':         32_768,
 
+  // Moonshot AI direct API
+  'kimi-for-coding':           32_768,
+  'kimi-k2.6':                 32_768,
+  'kimi-k2':                   32_768,
+  'kimi-k2-instruct':          32_768,
+  'kimi-k2-thinking':          32_768,
+  'kimi-k2.5':                 32_768,
+  'moonshot-v1-8k':             4_096,
+  'moonshot-v1-32k':           16_384,
+  'moonshot-v1-128k':          32_768,
+
   // Groq
   'llama-3.3-70b-versatile':  32_768,
   'llama-3.1-8b-instant':      8_192,
@@ -185,7 +209,6 @@ function lookupByModel<T>(table: Record<string, T>, externalTable: Record<string
   return lookupByKey(table, model)
 }
 
-function lookupByKey<T>(table: Record<string, T>, model: string): T | undefined {
 function lookupByKey<T>(table: Record<string, T>, model: string): T | undefined {
   if (table[model] !== undefined) return table[model]
   // Sort keys by length descending so the most specific prefix wins.
