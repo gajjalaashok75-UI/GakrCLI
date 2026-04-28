@@ -158,9 +158,13 @@ async function main(): Promise<void> {
     console.warn('Warning: could not initialize user directories:', initError)
   }
 
+  // Parse --model early so the startup screen can display the override
+  const { eagerParseCliFlag } = await import('../utils/cliArgs.js')
+  const earlyModelFlag = eagerParseCliFlag('--model')
+
   // Print the gradient startup screen before the Ink UI loads
   const { printStartupScreen } = await import('../components/StartupScreen.js')
-  printStartupScreen()
+  printStartupScreen(earlyModelFlag)
 
   // For all other paths, load the startup profiler
   const {
