@@ -1100,7 +1100,7 @@ function CodexOAuthStep({
     const env = buildCodexOAuthProfileEnv(tokens)
     if (!env) {
       throw new Error(
-        'Codex OAuth succeeded, but OpenClaude could not build a Codex profile from the stored credentials.',
+        'Codex OAuth succeeded, but GakrCLI could not build a Codex profile from the stored credentials.',
       )
     }
 
@@ -1140,7 +1140,7 @@ function CodexOAuthStep({
     <Dialog title="Codex OAuth" onCancel={onBack}>
       <Box flexDirection="column" gap={1}>
         <Text>
-          Finish signing in with ChatGPT in your browser. OpenClaude will store
+          Finish signing in with ChatGPT in your browser. GakrCLI will store
           the resulting Codex credentials securely for future sessions.
         </Text>
         {status.browserOpened === false ? (
@@ -1149,7 +1149,7 @@ function CodexOAuthStep({
           </Text>
         ) : status.browserOpened === true ? (
           <Text dimColor>
-            Browser opened. Complete the sign-in there, then OpenClaude will
+            Browser opened. Complete the sign-in there, then GakrCLI will
             finish setup automatically.
           </Text>
         ) : (
@@ -1271,7 +1271,7 @@ function resolveCodexCredentials(processEnv: NodeJS.ProcessEnv):
       credentials.source === 'env'
         ? 'the current shell environment'
         : credentials.source === 'secure-storage'
-          ? 'OpenClaude secure storage'
+          ? 'GakrCLI secure storage'
         : credentials.authPath ?? DEFAULT_CODEX_BASE_URL,
   }
 }
@@ -1314,7 +1314,7 @@ export function ProviderWizard({
               setStep({ name: 'codex-oauth' })
             } else if (value === 'clear') {
               const filePath = deleteProfileFile()
-              onDone(`Removed saved provider profile at ${filePath}. Restart OpenClaude to go back to normal startup.`, {
+              onDone(`Removed saved provider profile at ${filePath}. Restart GakrCLI to go back to normal startup.`, {
                 display: 'system',
               })
             } else {

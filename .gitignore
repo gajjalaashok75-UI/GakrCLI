@@ -52,7 +52,7 @@ reports/
 .Zone.Identifier
 
 # Temporary files
-reference/
+references/
 temp/
 tmp/
 *.tmp
