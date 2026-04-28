@@ -4,6 +4,24 @@
 
 ### Features
 
+* **Cache Metrics Feature - Expose Cache Statistics in REPL (PR #TBD)**: Add comprehensive cache metrics tracking and display across all providers
+  - Add `/cache-stats` command for detailed cache hit/miss breakdown with per-request history
+  - Add `showCacheStats` config setting with modes: 'off', 'compact' (default), 'full'
+  - Display cache stats in REPL after each turn (compact: inline summary, full: detailed breakdown)
+  - Normalize cache fields across providers (Anthropic, OpenAI, Kimi, DeepSeek, Gemini) through shim layer
+  - Create `cacheMetrics.ts` service for extracting and formatting cache data from raw API responses
+  - Create `cacheStatsTracker.ts` service with ring buffer for tracking per-turn and session-wide metrics
+  - Integrate cache tracking into `cost-tracker.ts` to record metrics on every API call
+  - Add `showCacheStats` setting to Config UI (Settings → Cache stats display)
+  - Add comprehensive test coverage: 147 tests across 5 test files
+  - Support cache classification for self-hosted/private OpenAI endpoints (data-driven detection)
+  - Add hit rate calculation with clamp to prevent pathological inputs
+  - Include timestamp and model label in `/cache-stats` breakdown rows
+  - Reset cache turn counter at start of each turn for accurate per-query metrics
+  - Add environment variable documentation in `.env.example` and `docs/advanced-setup.md`
+  - Users can now monitor cache performance and optimize prompt caching strategies
+  - Closes #TBD: Cache statistics are now visible in REPL and via `/cache-stats` command
+
 * **Kimi Code Provider Preset and Moonshot API Rename (PR #TBD)**: Add dedicated Kimi Code provider preset and rename Moonshot API preset for clarity
   - Add new 'kimi-code' provider preset for Moonshot AI's Kimi Code subscription endpoint
   - Configure Kimi Code preset with base URL 'https://api.kimi.com/coding/v1' and model 'kimi-for-coding'

@@ -22,7 +22,7 @@ import {
   getTotalWebSearchRequests,
   getUsageForModel,
   hasUnknownModelCost,
-  resetCostState,
+  resetCostState as resetCostStateBase,
   resetStateForTests,
   setCostStateForRestore,
   setHasUnknownModelCost,
@@ -32,6 +32,14 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from './services/analytics/index.js'
+import {
+  extractCacheMetrics,
+  resolveCacheProvider,
+} from './services/api/cacheMetrics.js'
+import {
+  recordRequest,
+  resetSessionCacheStats,
+} from './services/api/cacheStatsTracker.js'
 import { getAdvisorUsage } from './utils/advisor.js'
 import {
   getCurrentProjectConfig,
@@ -45,6 +53,7 @@ import { isFastModeEnabled } from './utils/fastMode.js'
 import { formatDuration, formatNumber } from './utils/format.js'
 import type { FpsMetrics } from './utils/fpsTracker.js'
 import { getCanonicalName } from './utils/model/model.js'
+import { getAPIProvider } from './utils/model/providers.js'
 import { calculateUSDCost } from './utils/modelCost.js'
 export {
   getTotalCostUSD as getTotalCost,
@@ -62,10 +71,18 @@ export {
   formatCost,
   hasUnknownModelCost,
   resetStateForTests,
-  resetCostState,
   setHasUnknownModelCost,
   getModelUsage,
   getUsageForModel,
+}
+
+/**
+ * Wrapped resetCostState that also clears cache stats tracker.
+ * Exported as resetCostState so all callers get the integrated behavior.
+ */
+export function resetCostState(): void {
+  resetCostStateBase()
+  resetSessionCacheStats()
 }
 
 type StoredCostState = {
@@ -299,6 +316,15 @@ export function addToTotalSessionCost(
     ...attrs,
     type: 'cacheCreation',
   })
+
+  // Record cache metrics for this request
+  const provider = getAPIProvider()
+  const cacheProvider = resolveCacheProvider(provider, {
+    githubNativeAnthropic: false, // TODO: wire up actual detection
+    openAiBaseUrl: process.env.OPENAI_BASE_URL,
+  })
+  const metrics = extractCacheMetrics(usage as unknown as Record<string, unknown>, cacheProvider)
+  recordRequest(metrics, model)
 
   let totalCost = cost
   for (const advisorUsage of getAdvisorUsage(usage)) {

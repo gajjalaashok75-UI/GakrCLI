@@ -492,6 +492,26 @@ export function Config({
       });
     }
   }, {
+    id: 'showCacheStats',
+    label: 'Cache stats display',
+    value: globalConfig.showCacheStats ?? 'compact',
+    options: ['off', 'compact', 'full'],
+    type: 'enum' as const,
+    onChange(mode: string) {
+      const showCacheStats = (mode === 'off' || mode === 'compact' || mode === 'full' ? mode : 'compact') as 'off' | 'compact' | 'full';
+      saveGlobalConfig(current_cs => ({
+        ...current_cs,
+        showCacheStats
+      }));
+      setGlobalConfig({
+        ...getGlobalConfig(),
+        showCacheStats
+      });
+      logEvent('tengu_show_cache_stats_setting_changed', {
+        mode: showCacheStats as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
+      });
+    }
+  }, {
     id: 'defaultPermissionMode',
     label: 'Default permission mode',
     value: settingsData?.permissions?.defaultMode || 'default',
@@ -1175,6 +1195,9 @@ export function Config({
     }
     if (globalConfig.showTurnDuration !== initialConfig.current.showTurnDuration) {
       formattedChanges.push(`${globalConfig.showTurnDuration ? 'Enabled' : 'Disabled'} turn duration`);
+    }
+    if (globalConfig.showCacheStats !== initialConfig.current.showCacheStats) {
+      formattedChanges.push(`Set cache stats display to ${chalk.bold(globalConfig.showCacheStats)}`);
     }
     if (globalConfig.remoteControlAtStartup !== initialConfig.current.remoteControlAtStartup) {
       const remoteLabel = globalConfig.remoteControlAtStartup === undefined ? 'Reset Remote Control to default' : `${globalConfig.remoteControlAtStartup ? 'Enabled' : 'Disabled'} Remote Control for all sessions`;

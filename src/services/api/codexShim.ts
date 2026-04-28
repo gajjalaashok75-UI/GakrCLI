@@ -1,4 +1,5 @@
 import { APIError } from '@anthropic-ai/sdk'
+import { buildAnthropicUsageFromRawUsage } from './cacheMetrics.js'
 import { fetchWithProxyRetry } from './fetchWithProxyRetry.js'
 import type {
   ResolvedCodexCredentials,
@@ -77,16 +78,12 @@ type CodexSseEvent = {
   data: Record<string, any>
 }
 
-function makeUsage(usage?: {
-  input_tokens?: number
-  output_tokens?: number
-}): AnthropicUsage {
-  return {
-    input_tokens: usage?.input_tokens ?? 0,
-    output_tokens: usage?.output_tokens ?? 0,
-    cache_creation_input_tokens: 0,
-    cache_read_input_tokens: 0,
-  }
+function makeUsage(usage?: Record<string, unknown>): AnthropicUsage {
+  // Single source of truth for raw → Anthropic shape. Lives in
+  // cacheMetrics.ts alongside the raw-shape extractor so any new
+  // provider quirk requires a one-file change and the integration test
+  // can call the exact same function instead of re-implementing it.
+  return buildAnthropicUsageFromRawUsage(usage)
 }
 
 function makeMessageId(): string {
@@ -861,10 +858,14 @@ export async function* codexStreamToAnthropic(
       stop_reason: determineStopReason(finalResponse, sawToolUse),
       stop_sequence: null,
     },
-    usage: {
-      input_tokens: finalResponse?.usage?.input_tokens ?? 0,
-      output_tokens: finalResponse?.usage?.output_tokens ?? 0,
-    },
+    // Delegate to the shared normalizer so the streaming message_delta
+    // path uses the same raw→Anthropic conversion as makeUsage() above
+    // and the non-streaming response converter below. Previously this
+    // block had its own inline subtraction that missed Kimi / DeepSeek
+    // / Gemini raw shapes that the shared helper handles.
+    usage: makeUsage(
+      finalResponse?.usage as Record<string, unknown> | undefined,
+    ),
   }
   yield { type: 'message_stop' }
 }
