@@ -4,6 +4,22 @@
 
 ### Features
 
+* **Kimi Code Provider Preset and Moonshot API Rename (PR #TBD)**: Add dedicated Kimi Code provider preset and rename Moonshot API preset for clarity
+  - Add new 'kimi-code' provider preset for Moonshot AI's Kimi Code subscription endpoint
+  - Configure Kimi Code preset with base URL 'https://api.kimi.com/coding/v1' and model 'kimi-for-coding'
+  - Rename 'moonshotai' preset display name from 'Moonshot AI' to 'Moonshot AI - API' for disambiguation
+  - Update ProviderManager.tsx to include both 'Moonshot AI - Kimi Code' and 'Moonshot AI - API' options
+  - Add comprehensive test coverage for both presets in providerProfiles.test.ts
+  - Update StartupScreen.ts provider detection to distinguish between Kimi Code and Moonshot API endpoints
+  - Add Moonshot-compatible base URL detection in openaiShim.ts for proper API handling
+  - Update context.test.ts with Kimi Code model context window and output token tests
+  - Fix duplicate function declaration in openaiContextWindows.ts (lookupByKey)
+  - Update ProviderManager.test.tsx to use correct environment variables (GAKR_CODE_SIMPLE instead of CLAUDE_CODE_SIMPLE)
+  - Update test expectations to match 'GakrCLI' branding instead of 'OpenClaude'
+  - Users can now easily select between Kimi Code subscription and Moonshot direct API endpoints
+
+### Features
+
 * **MiniMax Usage Support (PR #TBD)**: Add comprehensive MiniMax usage tracking with /usage API integration
   - Create MiniMaxUsage.tsx component for displaying MiniMax quota and usage data
   - Create UnsupportedUsage.tsx component for providers without usage API support

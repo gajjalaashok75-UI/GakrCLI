@@ -266,6 +266,9 @@ export function getLocalOpenAICompatibleProviderLabel(baseUrl: string): string {
   try {
     const url = new URL(baseUrl)
     const hostname = url.hostname.toLowerCase()
+    const host = url.host.toLowerCase()
+    const path = url.pathname.toLowerCase()
+    const haystack = `${hostname} ${path}`
     
     if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
       if (baseUrl.includes('1234')) {
@@ -278,6 +281,35 @@ export function getLocalOpenAICompatibleProviderLabel(baseUrl: string): string {
         return 'Atomic Chat'
       }
       return 'Local OpenAI-compatible'
+    }
+    
+    // Check for NVIDIA NIM
+    if (host.includes('nvidia') || haystack.includes('nvidia') || host.includes('integrate.api.nvidia')) {
+      return 'NVIDIA NIM'
+    }
+    // Check for MiniMax (both api.minimax.io and api.minimax.chat)
+    if (host.includes('minimax') || haystack.includes('minimax')) {
+      return 'MiniMax'
+    }
+    // Kimi Code subscription API
+    if (hostname === 'api.kimi.com' && path.includes('/coding')) {
+      return 'Moonshot AI - Kimi Code'
+    }
+    // Check for Bankr LLM gateway
+    if (host.includes('bankr') || haystack.includes('bankr')) {
+      return 'Bankr'
+    }
+    // xAI Grok endpoint
+    if (host.includes('x.ai') || haystack.includes('x.ai')) {
+      return 'xAI'
+    }
+    // Moonshot AI direct API
+    if (
+      host.includes('moonshot') ||
+      haystack.includes('moonshot') ||
+      haystack.includes('kimi')
+    ) {
+      return 'Moonshot AI - API'
     }
     
     return 'OpenAI-compatible'
