@@ -33,11 +33,6 @@ import {
   refreshCodexAccessTokenIfNeeded,
 } from '../../utils/codexCredentials.js'
 import { logForDebugging } from '../../utils/debug.js'
-import {
-  readCodexCredentialsAsync,
-  refreshCodexAccessTokenIfNeeded,
-} from '../../utils/codexCredentials.js'
-import { logForDebugging } from '../../utils/debug.js'
 import { isBareMode, isEnvTruthy } from '../../utils/envUtils.js'
 import { resolveGeminiCredential } from '../../utils/geminiAuth.js'
 import { hydrateGeminiAccessTokenFromSecureStorage } from '../../utils/geminiCredentials.js'
@@ -73,6 +68,7 @@ import {
 } from './openaiErrorClassification.js'
 import { sanitizeSchemaForOpenAICompat } from '../../utils/schemaSanitizer.js'
 import { redactSecretValueForDisplay } from '../../utils/providerProfile.js'
+import { stableStringify } from '../../utils/stableStringify.js'
 import {
   normalizeToolArguments,
   hasToolFieldMapping,
@@ -1667,7 +1663,7 @@ class OpenAIShimMessages {
     const fetchInit = {
       method: 'POST' as const,
       headers,
-      body: JSON.stringify(body),
+      body: stableStringify(body),
       signal: options?.signal,
     }
 
@@ -1753,7 +1749,7 @@ class OpenAIShimMessages {
           const responsesResponse = await fetchWithProxyRetry(responsesUrl, {
             method: 'POST',
             headers,
-            body: JSON.stringify(responsesBody),
+            body: stableStringify(responsesBody),
             signal: options?.signal,
           })
           if (responsesResponse.ok) {

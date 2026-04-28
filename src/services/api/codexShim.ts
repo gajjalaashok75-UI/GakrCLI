@@ -10,6 +10,7 @@ import {
   createThinkTagFilter,
   stripThinkTags,
 } from './thinkTagSanitizer.js'
+import { stableStringify } from '../../utils/stableStringify.js'
 
 export interface AnthropicUsage {
   input_tokens: number
@@ -556,7 +557,7 @@ export async function performCodexRequest(options: {
     {
       method: 'POST',
       headers,
-      body: JSON.stringify(body),
+      body: stableStringify(body),
       signal: options.signal,
     },
   )
