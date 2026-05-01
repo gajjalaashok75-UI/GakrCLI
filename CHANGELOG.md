@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+### Features
+
+* **WebSearchTool Provider System Integration**: Complete overhaul of WebSearchTool to use modular provider system
+  - **Replaced hardcoded DuckDuckGo/Firecrawl logic with provider system**: WebSearchTool now uses the comprehensive provider registry with 10 search providers (firecrawl, tavily, exa, you, jina, bing, mojeek, linkup, duckduckgo, custom)
+  - **Provider selection via WEB_SEARCH_PROVIDER environment variable**: Supports 'auto' (default fallback chain), specific providers ('tavily', 'ddg', etc.), or 'native' (Anthropic/Codex only)
+  - **Auto mode with intelligent fallback**: Tries providers in priority order (firecrawl → tavily → exa → you → jina → bing → mojeek → linkup → ddg), falls through on transient errors
+  - **Explicit provider modes fail fast**: No silent fallback when specific provider is configured but fails
+  - **Proper error handling and transient error detection**: Distinguishes between config errors (must surface) and network errors (safe to fall through in auto mode)
+  - **Domain filtering support**: All providers support allowed_domains and blocked_domains with consistent hostname matching
+  - **Unified output formatting**: Consistent result structure across all providers with snippets and search result objects
+  - **Native search integration**: Seamless fallback to Anthropic native web search and Codex web search when available
+  - **Security guardrails**: Custom provider includes HTTPS-only, private IP blocking, and header allowlist enforcement
+  - **Comprehensive test coverage**: 29 tests covering all providers, error scenarios, domain filtering, and tool integration
+  - **Updated branding**: All references changed from "Claude/OpenClaude" to "Gakr/GakrCLI" throughout the codebase
+  - **Increased search limits**: Max searches per query increased from 8 to 15 for better coverage
+  - **Provider availability detection**: Tool enablement based on configured providers and native search support
+  - Files modified:
+    - `src/tools/WebSearchTool/WebSearchTool.ts`: Complete rewrite to use provider system
+    - `src/tools/WebSearchTool/WebSearchTool.test.ts`: Comprehensive test suite with 29 tests
+    - `src/tools/WebSearchTool/providers/`: All provider implementations (10 providers)
+    - Updated imports and removed hardcoded search logic
+
 * Updated provider to OpenRouter (openai/gpt-oss-120b:free)
 
 ## [0.4.8] (2026-04-29)
