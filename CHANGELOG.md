@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+* Updated provider to OpenRouter (openai/gpt-oss-120b:free)
+
 ## [0.4.8] (2026-04-29)
 
 ### Bug Fixes
