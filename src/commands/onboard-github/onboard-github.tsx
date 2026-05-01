@@ -12,33 +12,146 @@ import {
 import type { LocalJSXCommandCall } from '../../types/command.js'
 import {
   hydrateGithubModelsTokenFromSecureStorage,
+  readGithubModelsToken,
   saveGithubModelsToken,
 } from '../../utils/githubModelsCredentials.js'
 import { updateSettingsForSource } from '../../utils/settings/settings.js'
 
 const DEFAULT_MODEL = 'github:copilot'
+const FORCE_RELOGIN_ARGS = new Set([
+  'force',
+  '--force',
+  'relogin',
+  '--relogin',
+  'reauth',
+  '--reauth',
+])
 
-type Step =
-  | 'menu'
-  | 'device-busy'
-  | 'pat'
-  | 'error'
+const PROVIDER_SPECIFIC_KEYS = new Set([
+  'GAKR_CODE_USE_OPENAI',
+  'GAKR_CODE_USE_GEMINI',
+  'GAKR_CODE_USE_BEDROCK',
+  'GAKR_CODE_USE_VERTEX',
+  'GAKR_CODE_USE_FOUNDRY',
+  'OPENAI_BASE_URL',
+  'OPENAI_API_BASE',
+  'OPENAI_API_KEY',
+  'OPENAI_MODEL',
+  'GEMINI_API_KEY',
+  'GOOGLE_API_KEY',
+  'GEMINI_BASE_URL',
+  'GEMINI_MODEL',
+  'GEMINI_ACCESS_TOKEN',
+  'GEMINI_AUTH_MODE',
+])
+
+const GITHUB_PAT_PREFIXES = ['ghp_', 'gho_', 'ghs_', 'ghr_', 'github_pat_']
+
+type Step = 'menu' | 'device-busy' | 'pat' | 'error'
+
+export function shouldForceGithubRelogin(args?: string): boolean {
+  const normalized = (args ?? '').trim().toLowerCase()
+  if (!normalized) {
+    return false
+  }
+  return normalized.split(/\s+/).some(arg => FORCE_RELOGIN_ARGS.has(arg))
+}
+
+function isGithubPat(token: string): boolean {
+  return GITHUB_PAT_PREFIXES.some(prefix => token.startsWith(prefix))
+}
+
+export function hasExistingGithubModelsLoginToken(
+  env: NodeJS.ProcessEnv = process.env,
+  storedToken?: string,
+): boolean {
+  const envToken = env.GITHUB_TOKEN?.trim() || env.GH_TOKEN?.trim()
+  if (envToken) {
+    return !isGithubPat(envToken)
+  }
+
+  const persisted = (storedToken ?? readGithubModelsToken())?.trim()
+  if (persisted && isGithubPat(persisted)) {
+    return false
+  }
+  return Boolean(persisted)
+}
+
+export function buildGithubOnboardingSettingsEnv(
+  model: string,
+): Record<string, string | undefined> {
+  return {
+    GAKR_CODE_USE_GITHUB: '1',
+    OPENAI_MODEL: model,
+    OPENAI_API_KEY: undefined,
+    OPENAI_ORG: undefined,
+    OPENAI_PROJECT: undefined,
+    OPENAI_ORGANIZATION: undefined,
+    OPENAI_BASE_URL: undefined,
+    OPENAI_API_BASE: undefined,
+    GAKR_CODE_USE_OPENAI: undefined,
+    GAKR_CODE_USE_GEMINI: undefined,
+    GAKR_CODE_USE_BEDROCK: undefined,
+    GAKR_CODE_USE_VERTEX: undefined,
+    GAKR_CODE_USE_FOUNDRY: undefined,
+  }
+}
+
+export function applyGithubOnboardingProcessEnv(
+  model: string,
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  env.GAKR_CODE_USE_GITHUB = '1'
+  env.OPENAI_MODEL = model
+
+  delete env.OPENAI_API_KEY
+  delete env.OPENAI_ORG
+  delete env.OPENAI_PROJECT
+  delete env.OPENAI_ORGANIZATION
+  delete env.OPENAI_BASE_URL
+  delete env.OPENAI_API_BASE
+
+  delete env.GAKR_CODE_USE_OPENAI
+  delete env.GAKR_CODE_USE_GEMINI
+  delete env.GAKR_CODE_USE_BEDROCK
+  delete env.GAKR_CODE_USE_VERTEX
+  delete env.GAKR_CODE_USE_FOUNDRY
+  delete env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED
+  delete env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID
+}
 
 function mergeUserSettingsEnv(model: string): { ok: boolean; detail?: string } {
   const { error } = updateSettingsForSource('userSettings', {
-    env: {
-      GAKR_CODE_USE_GITHUB: '1',
-      OPENAI_MODEL: model,
-      GAKR_CODE_USE_OPENAI: undefined as any,
-      GAKR_CODE_USE_GEMINI: undefined as any,
-      GAKR_CODE_USE_BEDROCK: undefined as any,
-      GAKR_CODE_USE_VERTEX: undefined as any,
-      GAKR_CODE_USE_FOUNDRY: undefined as any,
-    },
+    env: buildGithubOnboardingSettingsEnv(model),
   })
   if (error) {
     return { ok: false, detail: error.message }
   }
+  return { ok: true }
+}
+
+export function activateGithubOnboardingMode(
+  model: string = DEFAULT_MODEL,
+  options?: {
+    mergeSettingsEnv?: (model: string) => { ok: boolean; detail?: string }
+    applyProcessEnv?: (model: string) => void
+    hydrateToken?: () => void
+    onChangeAPIKey?: () => void
+  },
+): { ok: boolean; detail?: string } {
+  const normalizedModel = model.trim() || DEFAULT_MODEL
+  const mergeSettingsEnv = options?.mergeSettingsEnv ?? mergeUserSettingsEnv
+  const applyProcessEnv = options?.applyProcessEnv ?? applyGithubOnboardingProcessEnv
+  const hydrateToken = options?.hydrateToken ?? hydrateGithubModelsTokenFromSecureStorage
+
+  const merged = mergeSettingsEnv(normalizedModel)
+  if (!merged.ok) {
+    return merged
+  }
+
+  applyProcessEnv(normalizedModel)
+  hydrateToken()
+  options?.onChangeAPIKey?.()
   return { ok: true }
 }
 
@@ -64,14 +177,19 @@ function OnboardGithub(props: {
         setStep('error')
         return
       }
-      const merged = mergeUserSettingsEnv(model.trim() || DEFAULT_MODEL)
-      if (!merged.ok) {
+
+      const activated = activateGithubOnboardingMode(model, { onChangeAPIKey })
+      if (!activated.ok) {
         setErrorMsg(
-          `Token saved, but settings were not updated: ${merged.detail ?? 'unknown error'}. ` +
+          `Token saved, but settings were not updated: ${activated.detail ?? 'unknown error'}. ` +
             `Add env GAKR_CODE_USE_GITHUB=1 and OPENAI_MODEL to ~/.gakrcli/settings.json manually.`,
         )
         setStep('error')
         return
+      }
+
+      for (const key of PROVIDER_SPECIFIC_KEYS) {
+        delete process.env[key]
       }
       process.env.GAKR_CODE_USE_GITHUB = '1'
       process.env.OPENAI_MODEL = model.trim() || DEFAULT_MODEL
@@ -227,7 +345,28 @@ function OnboardGithub(props: {
   )
 }
 
-export const call: LocalJSXCommandCall = async (onDone, context) => {
+export const call: LocalJSXCommandCall = async (onDone, context, args) => {
+  const forceRelogin = shouldForceGithubRelogin(args)
+  if (hasExistingGithubModelsLoginToken() && !forceRelogin) {
+    const activated = activateGithubOnboardingMode(DEFAULT_MODEL, {
+      onChangeAPIKey: context.onChangeAPIKey,
+    })
+    if (!activated.ok) {
+      onDone(
+        `GitHub token detected, but settings activation failed: ${activated.detail ?? 'unknown error'}. ` +
+          'Set GAKR_CODE_USE_GITHUB=1 and OPENAI_MODEL=github:copilot in user settings manually.',
+        { display: 'system' },
+      )
+      return null
+    }
+
+    onDone(
+      'GitHub Models already authorized. Activated GitHub Models mode using your existing token. Use /onboard-github --force to re-authenticate.',
+      { display: 'user' },
+    )
+    return null
+  }
+
   return (
     <OnboardGithub
       onDone={onDone}
