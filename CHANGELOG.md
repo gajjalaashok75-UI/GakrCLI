@@ -4,6 +4,24 @@
 
 ### Features
 
+* **feat(commands): restore missing reference commands and wiring**: Bring over command implementations present in `references/src/commands` and register them in the current command registry
+  - Add `/auto-fix` prompt command for configuring post-edit lint/test repair settings
+  - Add `/benchmark` local command for OpenAI-compatible model throughput checks
+  - Add `/cache-probe` diagnostic command for prompt-cache verification
+  - Add `/wiki` command for initializing, inspecting, and ingesting local wiki sources
+  - Add `/install-slack-app` command with Gakr-branded command metadata
+  - Add model and GitHub onboarding tests adapted to this fork's `GAKR_CODE_*` environment variables
+  - Extend GitHub onboarding activation helpers to support existing-token reuse, force re-login flags, and provider env cleanup
+  - Files modified:
+    - `src/commands.ts`: Registered restored commands
+    - `src/commands/auto-fix.ts`: Added auto-fix prompt command
+    - `src/commands/benchmark.ts`: Added benchmark local command
+    - `src/commands/cache-probe/`: Added cache probe command
+    - `src/commands/wiki/`: Added wiki command
+    - `src/commands/install-slack-app/`: Added Slack app install command
+    - `src/commands/model/model.test.tsx`: Added model picker regression test
+    - `src/commands/onboard-github/`: Added onboarding tests and helper exports
+
 * **WebSearchTool Provider System Integration**: Complete overhaul of WebSearchTool to use modular provider system
   - **Replaced hardcoded DuckDuckGo/Firecrawl logic with provider system**: WebSearchTool now uses the comprehensive provider registry with 10 search providers (firecrawl, tavily, exa, you, jina, bing, mojeek, linkup, duckduckgo, custom)
   - **Provider selection via WEB_SEARCH_PROVIDER environment variable**: Supports 'auto' (default fallback chain), specific providers ('tavily', 'ddg', etc.), or 'native' (Anthropic/Codex only)
