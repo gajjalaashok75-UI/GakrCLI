@@ -4,6 +4,17 @@
 
 ### Bug Fixes
 
+* **fix(input): strip leading ! when entering bash mode**: The PromptInput onChange handler had two branches for entering bash mode - a single-char path that just toggled the mode and a multi-char paste path that also stripped the leading `!` from the buffer
+  - **Problem**: The single-char path returned without stripping, so typing a bare `!` into empty input switched modes but left the literal `!` visible in the buffer
+  - **Solution**: Consolidated both paths through a new pure helper `detectModeEntry` that returns the new mode plus the stripped buffer value
+  - **Result**: There is no longer a branch where the mode character can leak into the buffer
+  - **Test coverage**: Added comprehensive tests for `detectModeEntry` including the regression case (typing `!` into empty input)
+  - Files modified:
+    - `src/components/PromptInput/inputModes.ts`: Added `detectModeEntry()` function and `ModeEntryDecision` type
+    - `src/components/PromptInput/PromptInput.tsx`: Replaced dual-branch mode entry logic with single `detectModeEntry()` call
+  - Files created:
+    - `src/components/PromptInput/inputModes.test.ts`: Test suite for all inputModes functions including regression test
+
 * **fix: avoid legacy Windows PasswordVault reads by default**: Isolate model capability override cache and avoid legacy Windows PasswordVault reads by default to improve performance and security
   - **Model capability override cache isolation**: Fixed `modelSupportOverrides.ts` to properly invalidate memoized capability checks when environment variables change
     - Added `buildCapabilityOverrideCacheKey()` function that includes all relevant env vars (model tiers, capabilities, API provider) in the cache key
