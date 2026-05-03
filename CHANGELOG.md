@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Bug Fixes
+
+* **fix(wiki): restore wiki service MVP and harden ingest flow**: Implement the missing wiki service layer used by `/wiki` and align it with the reference MVP using GakrCLI branding
+  - Add `.gakrcli/wiki` scaffold creation with `schema.md`, `index.md`, `log.md`, and `pages/architecture.md`
+  - Add wiki status reporting with recursive markdown page/source counts and full initialization checks
+  - Add local source ingestion with markdown source notes, log updates, and automatic index rebuilding
+  - Harden ingest path handling with canonical project-root containment, symlink rejection, and regular-file validation
+  - Improve `/wiki` command parsing, user-facing error handling, and command metadata for `ingest <path>`
+  - Add focused wiki service tests for init, status, ingest, and outside-project rejection
+  - Files modified:
+    - `src/commands/wiki/index.ts`: Updated wiki command description and argument hint
+    - `src/commands/wiki/wiki.tsx`: Added exact subcommand parsing and safe error handling
+    - `src/services/wiki/`: Added wiki service implementation, support modules, and tests
+
 ### Features
 
 * **feat(commands): restore missing reference commands and wiring**: Bring over command implementations present in `references/src/commands` and register them in the current command registry
