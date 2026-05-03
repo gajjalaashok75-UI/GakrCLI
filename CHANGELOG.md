@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Chore
+
+* **chore(web): add web dependencies lockfile**: Add `web/bun.lock` to track installed web dependencies for reproducible builds
+  - Installed web dependencies: React 19.2.4, Vite 8.0.10, TypeScript 6.0.3, and related packages
+  - Ensures consistent dependency versions across development environments
+  - Files added:
+    - `web/bun.lock`: Bun lockfile with 24 packages for the web landing page
+
 ### Features
 
 * **feat(web): GakrCLI landing page — runs anywhere, uses anything**: A new marketing site for gakrcli under `web/`, plus the minimal root infrastructure to build, ignore, and gate it without affecting the published npm package
