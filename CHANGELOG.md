@@ -2,6 +2,43 @@
 
 ## [Unreleased]
 
+### Features
+
+* **feat(web): GakrCLI landing page — runs anywhere, uses anything**: A new marketing site for gakrcli under `web/`, plus the minimal root infrastructure to build, ignore, and gate it without affecting the published npm package
+  - **Landing page (`web/`)**: Vite + React 19 with monospace gitlawb typography (SF Mono / Fira Code)
+    - Hero: pill badge, two-line wordmark "runs anywhere. / uses anything.", copy-to-clipboard install command, GitHub CTA
+    - Six feature rows in hermes-style "title — sentence" format on hairline dividers (any model, real tools, profiles per repo, streaming, gateway routing, editor + server modes)
+    - Install block: same copyable command + three numbered steps (install, start, pick provider)
+    - One-line footer with brand, version, gitlawb link, and license
+    - Light theme is the default with a no-flash bootstrap script and a ☀ / ☾ toggle persisted to localStorage
+    - New orange terminal-face logo at 36px in the nav (placeholder added)
+    - Body wash: dual orange radial gradients for warmth on both themes
+  - **Root infrastructure**:
+    - `web/` excluded from npm publish via `.npmignore` (belt-and-suspenders alongside the existing files whitelist)
+    - `web/` excluded from docker context (`.dockerignore`)
+    - `web:dev` / `web:build` / `web:preview` / `web:typecheck` scripts in `package.json` that delegate via `--cwd web` (no root deps added)
+    - Web typecheck + build added to the `.github/workflows/pr-checks.yml` workflow
+    - `web/dist/` and `web/*.tsbuildinfo` ignored in `.gitignore`
+  - Files created:
+    - `web/package.json`: Web dependencies (React 19, Vite 8, TypeScript 6)
+    - `web/vite.config.ts`: Vite configuration with React plugin
+    - `web/tsconfig.json`: TypeScript configuration for web
+    - `web/.gitignore`: Excludes `.vercel`
+    - `web/index.html`: Main HTML with meta tags, Fira Code font, theme bootstrap script
+    - `web/src/main.tsx`: React entry point
+    - `web/src/App.tsx`: Main app component with theme toggle, navigation, hero, features, install, footer
+    - `web/src/content.ts`: Content configuration (install command, features, nav links)
+    - `web/src/styles.css`: Complete styling with light/dark themes, orange accents, responsive design
+    - `web/src/vite-env.d.ts`: Vite type definitions
+    - `web/public/gakrcli.png`: Placeholder for logo (needs actual 36px orange terminal-face icon)
+    - `.dockerignore`: Docker context exclusions including `web/`
+    - `.github/workflows/pr-checks.yml`: GitHub Actions workflow with web typecheck and build jobs
+    - `WEB_LANDING_SETUP.md`: Complete documentation of the web landing page setup
+  - Files modified:
+    - `.npmignore`: Added `web/` exclusion with safety net comment
+    - `.gitignore`: Added `web/dist/` and `web/*.tsbuildinfo` exclusions
+    - `package.json`: Added `web:dev`, `web:build`, `web:preview`, `web:typecheck` scripts
+
 ### Bug Fixes
 
 * **fix(wiki): restore wiki service MVP and harden ingest flow**: Implement the missing wiki service layer used by `/wiki` and align it with the reference MVP using GakrCLI branding
