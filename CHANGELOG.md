@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+### Bug Fixes
+
+* **fix: avoid legacy Windows PasswordVault reads by default**: Isolate model capability override cache and avoid legacy Windows PasswordVault reads by default to improve performance and security
+  - **Model capability override cache isolation**: Fixed `modelSupportOverrides.ts` to properly invalidate memoized capability checks when environment variables change
+    - Added `buildCapabilityOverrideCacheKey()` function that includes all relevant env vars (model tiers, capabilities, API provider) in the cache key
+    - Prevents stale capability overrides from being reused after env changes (e.g., switching base URLs or model configurations)
+    - Ensures `get3PModelCapabilityOverride()` respects dynamic environment changes during runtime
+  - **Windows PasswordVault legacy path gating**: Modified `windowsCredentialStorage.ts` to skip legacy PasswordVault operations by default
+    - Added `shouldUseLegacyPasswordVault()` function that checks `GAKR_ENABLE_LEGACY_WINDOWS_PASSWORDVAULT` env var
+    - `read()` now only attempts legacy PasswordVault fallback when explicitly enabled (avoids slow WinRT assembly loads)
+    - `delete()` now only attempts legacy PasswordVault cleanup when explicitly enabled
+    - DPAPI-based storage remains the default and primary path for all Windows credential operations
+    - Legacy PasswordVault support can be re-enabled by setting `GAKR_ENABLE_LEGACY_WINDOWS_PASSWORDVAULT=1`
+  - **Test coverage improvements**:
+    - Added tests for default behavior (legacy PasswordVault skipped)
+    - Added tests for explicit legacy mode (when env var is set)
+    - Added test for cache invalidation after environment variable changes
+    - Updated `thinking.test.ts` to use fresh module imports and proper mock/resetSettingsCache pattern
+    - Added missing env vars to test isolation (XAI_API_KEY, ANTHROPIC model tier overrides)
+  - Files modified:
+    - `src/utils/model/modelSupportOverrides.ts`: Added `buildCapabilityOverrideCacheKey()` for proper cache invalidation
+    - `src/utils/secureStorage/windowsCredentialStorage.ts`: Added `shouldUseLegacyPasswordVault()` and gated legacy operations
+    - `src/utils/secureStorage/platformStorage.test.ts`: Added tests for default and explicit legacy modes
+    - `src/utils/thinking.test.ts`: Added cache invalidation test and improved test isolation with mock/resetSettingsCache
+
 ### Chore
 
 * **chore(web): add web dependencies lockfile**: Add `web/bun.lock` to track installed web dependencies for reproducible builds

@@ -61,32 +61,32 @@ describe("Secure Storage Platform Implementations", () => {
     test("Windows storage uses scoped resource name", () => {
       process.env.GAKR_CONFIG_DIR = "/tmp/win-scoped";
       const expectedName = getSecureStorageServiceName(CREDENTIALS_SERVICE_SUFFIX);
-      
+
       windowsCredentialStorage.update(testData);
-      
+
       const script = mockExecaSync.mock.calls[0][1][1];
       const options = mockExecaSync.mock.calls[0][2];
       expect(script).toContain(expectedName);
-      expect(script).toContain("Add-Type -AssemblyName System.Runtime.WindowsRuntime");
-      expect(options.input).toContain(expectedName);
+      expect(script).toContain("ProtectedData");
+      expect(options.input).toContain("secret-token");
     });
   });
 
   describe("Windows PowerShell Escaping", () => {
     test("escapes single quotes and prevents $ expansion", () => {
-      const dataWithDollar = { 
-        mcpOAuth: { 
-          "server": { 
+      const dataWithDollar = {
+        mcpOAuth: {
+          "server": {
             accessToken: "token-with-$env:USERNAME",
             expiresAt: 123,
             serverName: "s",
             serverUrl: "u"
-          } 
-        } 
+          }
+        }
       };
-      
+
       windowsCredentialStorage.update(dataWithDollar);
-      
+
       const script = mockExecaSync.mock.calls[0][1][1];
       const options = mockExecaSync.mock.calls[0][2];
       expect(script).toContain("[Console]::In.ReadToEnd()");
@@ -98,20 +98,40 @@ describe("Secure Storage Platform Implementations", () => {
       expect(options2.input).toContain("token'quote");
     });
 
-    test("delete() includes assembly load", () => {
+    test("delete() skips legacy PasswordVault by default", () => {
+      windowsCredentialStorage.delete();
+      expect(mockExecaSync).toHaveBeenCalledTimes(1);
+      const script = mockExecaSync.mock.calls[0][1][1];
+      expect(script).not.toContain("System.Runtime.WindowsRuntime");
+    });
+
+    test("delete() includes legacy assembly load when explicitly enabled", () => {
+      process.env.GAKR_ENABLE_LEGACY_WINDOWS_PASSWORDVAULT = "1";
       windowsCredentialStorage.delete();
       const script = mockExecaSync.mock.calls[1][1][1];
       expect(script).toContain("Add-Type -AssemblyName System.Runtime.WindowsRuntime");
     });
 
     test("escapes double quotes in username", () => {
+      process.env.GAKR_ENABLE_LEGACY_WINDOWS_PASSWORDVAULT = "1";
       process.env.USER = 'user"name';
       windowsCredentialStorage.read();
       const script = mockExecaSync.mock.calls[1][1][1];
       expect(script).toContain('user`"name');
       expect(script).not.toContain('user"name');
     });
-    test("read() falls back to legacy PasswordVault when the DPAPI payload is invalid JSON", () => {
+
+    test("read() does not touch legacy PasswordVault by default", () => {
+      mockExecaSync.mockImplementationOnce(() => ({ exitCode: 1, stdout: "" }));
+
+      const result = windowsCredentialStorage.read();
+
+      expect(result).toBeNull();
+      expect(mockExecaSync).toHaveBeenCalledTimes(1);
+    });
+
+    test("read() falls back to legacy PasswordVault when explicitly enabled", () => {
+      process.env.GAKR_ENABLE_LEGACY_WINDOWS_PASSWORDVAULT = "1";
       mockExecaSync
         .mockImplementationOnce(() => ({ exitCode: 0, stdout: "{not-json" }))
         .mockImplementationOnce(() => ({
@@ -126,6 +146,7 @@ describe("Secure Storage Platform Implementations", () => {
     });
 
     test("read() fails closed when the legacy PasswordVault payload is invalid JSON", () => {
+      process.env.GAKR_ENABLE_LEGACY_WINDOWS_PASSWORDVAULT = "1";
       mockExecaSync
         .mockImplementationOnce(() => ({ exitCode: 1, stdout: "" }))
         .mockImplementationOnce(() => ({ exitCode: 0, stdout: "{not-json" }));
