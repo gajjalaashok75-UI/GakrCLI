@@ -8,6 +8,7 @@ import type {
   LocalJSXCommandOnDone,
 } from '../../types/command.js'
 import { getCwd } from '../../utils/cwd.js'
+import { logError } from '../../utils/log.js'
 
 function renderHelp(): string {
   return `Usage: /wiki [init|status|ingest <path>]
@@ -78,7 +79,9 @@ async function runWikiCommand(
   args: string,
 ): Promise<void> {
   const cwd = getCwd()
-  const normalized = args.trim().toLowerCase()
+  const trimmedArgs = args.trim()
+  const [rawSubcommand = '', ...rest] = trimmedArgs.split(/\s+/)
+  const normalized = rawSubcommand.toLowerCase()
 
   if (COMMON_HELP_ARGS.includes(normalized) || COMMON_INFO_ARGS.includes(normalized)) {
     onDone(renderHelp(), { display: 'system' })
@@ -95,8 +98,8 @@ async function runWikiCommand(
     return
   }
 
-  if (normalized.startsWith('ingest')) {
-    const pathArg = args.trim().slice('ingest'.length).trim()
+  if (normalized === 'ingest') {
+    const pathArg = rest.join(' ').trim()
     if (!pathArg) {
       onDone('Usage: /wiki ingest <local-file-path>', { display: 'system' })
       return
@@ -108,7 +111,7 @@ async function runWikiCommand(
     return
   }
 
-  onDone(`Unknown wiki subcommand: ${args.trim()}\n\n${renderHelp()}`, {
+  onDone(`Unknown wiki subcommand: ${trimmedArgs}\n\n${renderHelp()}`, {
     display: 'system',
   })
 }
@@ -118,6 +121,12 @@ export const call: LocalJSXCommandCall = async (
   _context,
   args,
 ): Promise<React.ReactNode> => {
-  await runWikiCommand(onDone, args ?? '')
+  try {
+    await runWikiCommand(onDone, args ?? '')
+  } catch (error: unknown) {
+    logError(error)
+    const message = error instanceof Error ? error.message : 'Unexpected wiki command error'
+    onDone(`Wiki command failed: ${message}`, { display: 'system' })
+  }
   return null
 }
