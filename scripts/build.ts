@@ -1,5 +1,5 @@
 /**
- * Gakr build script — bundles the TypeScript source into a single
+ * GakrCLI build script — bundles the TypeScript source into a single
  * distributable JS file using Bun's bundler.
  *
  * Handles:
@@ -38,6 +38,7 @@ const featureFlags: Record<string, boolean> = {
 
   // ── Enabled: upstream defaults ──────────────────────────────────────
   COORDINATOR_MODE: true,         // Multi-agent coordinator with worker delegation
+  BUILTIN_EXPLORE_PLAN_AGENTS: true,  // Built-in Explore/Plan specialized subagents
   BUDDY: true,                    // Buddy mode for paired programming
   MONITOR_TOOL: true,             // MCP server monitoring/streaming tool
   TEAMMEM: true,                  // Team memory management
@@ -48,8 +49,30 @@ const featureFlags: Record<string, boolean> = {
   CACHED_MICROCOMPACT: true,      // Cache-aware tool result truncation optimization
   AWAY_SUMMARY: true,             // "While you were away" recap after 5min blur
   TRANSCRIPT_CLASSIFIER: true,    // Auto-approval classifier for safe tool uses
+  ULTRATHINK: true,                   // Deep thinking mode — type "ultrathink" to boost reasoning
+  TOKEN_BUDGET: true,                 // Token budget tracking with usage warnings
+  HISTORY_PICKER: true,               // Enhanced interactive prompt history picker
+  QUICK_SEARCH: true,                 // Ctrl+G quick search across prompts
+  SHOT_STATS: true,                   // Shot distribution stats in session summary
+  EXTRACT_MEMORIES: true,             // Auto-extract durable memories from conversations
+  FORK_SUBAGENT: true,                // Implicit context-forking when omitting subagent_type
+  VERIFICATION_AGENT: true,           // Built-in read-only agent for test/verification
+  PROMPT_CACHE_BREAK_DETECTION: true, // Detect & log unexpected prompt cache invalidations
+  HOOK_PROMPTS: true,                 // Allow tools to request interactive user prompts
 }
 
+// ── Pre-process: replace feature() calls with boolean literals ──────
+// Bun v1.3.9+ resolves `import { feature } from 'bun:bundle'` natively
+// before plugins can intercept it via onResolve. The bun: namespace is
+// handled by Bun's C++ resolver which runs before the JS plugin phase,
+// so the previous onResolve/onLoad shim was silently ineffective — ALL
+// feature() calls evaluated to false regardless of the featureFlags map.
+//
+// Fix: pre-process source files to strip the bun:bundle import and
+// replace feature('FLAG') calls with their boolean literal. Files are
+// modified in-place before Bun.build() and restored in a finally block.
+
+// Match feature('FLAG') calls, including multi-line: feature(\n  'FLAG',\n)
 const featureCallRe = /\bfeature\(\s*['"](\w+)['"][,\s]*\)/gs
 const featureImportRe = /import\s*\{[^}]*\bfeature\b[^}]*\}\s*from\s*['"]bun:bundle['"];?\s*\n?/g
 const modifiedFiles = new Map<string, string>()
@@ -104,7 +127,7 @@ const result = await Bun.build({
   target: 'node',
   format: 'esm',
   splitting: false,
-  sourcemap: false,
+  sourcemap: 'external',
   minify: false,
   naming: 'cli.mjs',
   define: {
@@ -116,7 +139,7 @@ const result = await Bun.build({
     'MACRO.DISPLAY_VERSION': JSON.stringify(version),
     'MACRO.BUILD_TIME': JSON.stringify(new Date().toISOString()),
     'MACRO.ISSUES_EXPLAINER':
-      JSON.stringify('report the issue at https://github.com/anthropics/gakrcli-code/issues'),
+      JSON.stringify('report the issue at https://github.com/gakr-gakr/gakrcli-code/issues'),
     'MACRO.PACKAGE_URL': JSON.stringify('@gakr-gakr/gakrcli'),
     'MACRO.NATIVE_PACKAGE_URL': 'undefined',
   },
@@ -159,7 +182,10 @@ export async function handleBgFlag() { throw new Error("Background sessions are 
         ] as const)
 
         // bun:bundle feature() replacement is handled by the source
-        // pre-processing step above so build-time feature flags stay in sync.
+        // pre-processing step above (see preProcessFeatureFlags).
+        // The previous onResolve/onLoad shim was ineffective in Bun
+        // v1.3.9+ because the bun: namespace is resolved natively
+        // before the JS plugin phase runs.
 
         build.onResolve(
           { filter: /^\.\.\/(daemon\/workerRegistry|daemon\/main|cli\/bg|cli\/handlers\/templateJobs|environment-runner\/main|self-hosted-runner\/main)\.js$/ },
@@ -180,7 +206,6 @@ export async function handleBgFlag() { throw new Error("Background sessions are 
             loader: 'js',
           }),
         )
-
         // Resolve react/compiler-runtime to the standalone package
         build.onResolve({ filter: /^react\/compiler-runtime$/ }, () => ({
           path: 'react/compiler-runtime',
@@ -193,9 +218,7 @@ export async function handleBgFlag() { throw new Error("Background sessions are 
             loader: 'js',
           }),
         )
-
         // NOTE: @opentelemetry/* kept as external deps (too many named exports to stub)
-
         // Resolve native addon and missing snapshot imports to stubs
         for (const mod of [
           'audio-capture-napi',
@@ -296,6 +319,124 @@ export const SeverityNumber = {};
             loader: 'js',
           }),
         )
+        // Pre-scan: find all missing modules that need stubbing
+        // (Bun's onResolve corrupts module graph even when returning null,
+        //  so we use exact-match resolvers instead of catch-all patterns)
+        const fs = require('fs')
+        const pathMod = require('path')
+        const srcDir = pathMod.resolve(__dirname, '..', 'src')
+        const missingModules = new Set<string>()
+        const missingModuleExports = new Map<string, Set<string>>()
+
+        // Known missing external packages
+        for (const pkg of [
+          '@ant/computer-use-mcp',
+          '@ant/computer-use-mcp/sentinelApps',
+          '@ant/computer-use-mcp/types',
+          '@ant/computer-use-swift',
+          '@ant/computer-use-input',
+        ]) {
+          missingModules.add(pkg)
+        }
+
+        // Scan source to find imports that can't resolve
+        function scanForMissingImports() {
+          function checkAndRegister(specifier: string, fileDir: string, namedPart: string) {
+                const names = namedPart.split(',')
+                  .map((s: string) => s.trim().replace(/^type\s+/, ''))
+                  .filter((s: string) => s && !s.startsWith('type '))
+
+                // Check src/tasks/ non-relative imports
+                if (specifier.startsWith('src/tasks/')) {
+                  const resolved = pathMod.resolve(__dirname, '..', specifier)
+                  const candidates = [
+                    resolved,
+                    `${resolved}.ts`, `${resolved}.tsx`,
+                    resolved.replace(/\.js$/, '.ts'), resolved.replace(/\.js$/, '.tsx'),
+                    pathMod.join(resolved, 'index.ts'), pathMod.join(resolved, 'index.tsx'),
+                  ]
+                  if (!candidates.some((c: string) => fs.existsSync(c))) {
+                    missingModules.add(specifier)
+                  }
+                }
+                // Check relative .js imports
+                else if (specifier.endsWith('.js') && (specifier.startsWith('./') || specifier.startsWith('../'))) {
+                  const resolved = pathMod.resolve(fileDir, specifier)
+                  const tsVariant = resolved.replace(/\.js$/, '.ts')
+                  const tsxVariant = resolved.replace(/\.js$/, '.tsx')
+                  if (!fs.existsSync(resolved) && !fs.existsSync(tsVariant) && !fs.existsSync(tsxVariant)) {
+                    missingModules.add(specifier)
+                  }
+                }
+
+                // Track named exports for missing modules
+                if (names.length > 0) {
+                  if (!missingModuleExports.has(specifier)) missingModuleExports.set(specifier, new Set())
+                  for (const n of names) missingModuleExports.get(specifier)!.add(n)
+                }
+          }
+
+          function walk(dir: string) {
+            for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+              const full = pathMod.join(dir, ent.name)
+              if (ent.isDirectory()) { walk(full); continue }
+              if (!/\.(ts|tsx)$/.test(ent.name)) continue
+              const rawCode: string = fs.readFileSync(full, 'utf-8')
+              const fileDir = pathMod.dirname(full)
+
+              // Strip comments before scanning for imports/requires.
+              // The regex scanner matches require()/import() patterns
+              // inside JSDoc comments, causing false-positive missing
+              // module detection that breaks the build with noop stubs.
+              const code = rawCode
+                .replace(/\/\*[\s\S]*?\*\//g, '')  // block comments
+                .replace(/\/\/.*$/gm, '')           // line comments
+
+              // Collect static imports: import { X } from '...'
+              for (const m of code.matchAll(/import\s+(?:\{([^}]*)\}|(\w+))?\s*(?:,\s*\{([^}]*)\})?\s*from\s+['"](.*?)['"]/g)) {
+                checkAndRegister(m[4], fileDir, m[1] || m[3] || '')
+              }
+
+              // Collect dynamic requires: require('...') — these are used
+              // behind feature() gates and become live when flags are enabled.
+              for (const m of code.matchAll(/require\(\s*['"](\.\.?\/[^'"]+)['"]\s*\)/g)) {
+                checkAndRegister(m[1], fileDir, '')
+              }
+
+              // Collect dynamic imports: import('...')
+              for (const m of code.matchAll(/import\(\s*['"](\.\.?\/[^'"]+)['"]\s*\)/g)) {
+                checkAndRegister(m[1], fileDir, '')
+              }
+            }
+          }
+          walk(srcDir)
+        }
+        scanForMissingImports()
+
+        // Register exact-match resolvers for each missing module
+        for (const mod of missingModules) {
+          const escaped = mod.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          build.onResolve({ filter: new RegExp(`^${escaped}$`) }, () => ({
+            path: mod,
+            namespace: 'missing-module-stub',
+          }))
+        }
+
+        build.onLoad(
+          { filter: /.*/, namespace: 'missing-module-stub' },
+          (args) => {
+            const names = missingModuleExports.get(args.path) ?? new Set()
+            const exports = [...names].map(n => `export const ${n} = noop;`).join('\n')
+            return {
+              contents: `
+const noop = () => null;
+export default noop;
+${exports}
+`,
+              loader: 'js',
+            }
+          },
+        )
       },
     },
   ],
@@ -329,6 +470,11 @@ export const SeverityNumber = {};
     '@aws-sdk/credential-providers',
     '@azure/identity',
     'google-auth-library',
+    // @vscode/ripgrep ships a platform-specific binary alongside its
+    // index.js and resolves the path via __dirname at runtime. Bundling
+    // would freeze the build host's absolute path into dist/cli.mjs, so we
+    // keep it external and rely on the npm package being installed.
+    '@vscode/ripgrep',
   ],
 })
 
