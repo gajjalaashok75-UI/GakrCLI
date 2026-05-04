@@ -13,7 +13,7 @@ import { getAPIProvider } from './model/providers.js'
 import { logForDebugging } from './debug.js'
 import { env } from './env.js'
 import { getGakrcliConfigHomeDir } from './envUtils.js'
-import { gakrcliError, getErrnoCode, isENOENT } from './errors.js'
+import { GakrcliError, getErrnoCode, isENOENT } from './errors.js'
 import { execFileNoThrowWithCwd } from './execFileNoThrow.js'
 import { getFsImplementation } from './fsOperations.js'
 import { gracefulShutdownSync } from './gracefulShutdown.js'
@@ -31,7 +31,7 @@ import { jsonParse } from './slowOperations.js'
 const GCS_BUCKET_URL =
   'https://storage.googleapis.com/gakrcli-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/gakrcli-code-releases'
 
-class AutoUpdaterError extends gakrcliError {}
+class AutoUpdaterError extends GakrcliError {}
 
 export type InstallStatus =
   | 'success'
