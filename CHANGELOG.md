@@ -2,6 +2,56 @@
 
 ## [Unreleased]
 
+### Features
+
+* **feat(sdk): add SDK foundation — type declarations, errors, and utilities**: Adds standalone SDK building blocks with no SDK source dependencies
+  - **SDK type declarations**: Added `src/entrypoints/sdk.d.ts` with ambient type declarations for SDK bundle
+    - Manually maintained to stay in sync with `src/entrypoints/sdk/index.ts`
+    - Includes error classes, session types, query types, MCP tool types, and V2 API types
+    - Re-exports precise SDK message types from `coreTypes.generated.ts` for full IntelliSense
+    - Updated header to clarify manual maintenance (not generated)
+  - **Core schemas and generated types**: 
+    - `src/entrypoints/sdk/coreSchemas.ts`: Zod schemas as single source of truth for SDK data types
+    - `src/entrypoints/sdk/coreTypes.generated.ts`: TypeScript types generated from Zod schemas
+    - Includes schemas for permissions, hooks, MCP servers, thinking config, and all SDK message types
+  - **SDK error classes**: Enhanced `src/utils/errors.ts` with SDK-specific error hierarchy
+    - Added `SDKError` base class extending `GakrcliError`
+    - Added specific error classes: `SDKAuthenticationError`, `SDKBillingError`, `SDKRateLimitError`, `SDKInvalidRequestError`, `SDKServerError`, `SDKMaxOutputTokensError`
+    - Added `sdkErrorFromType()` function to convert error type strings to proper Error instances
+    - Added `SDKAssistantMessageError` type for error classification
+  - **Validation utilities**: Added `src/utils/validation.ts` with SDK input validation helpers
+    - `validateArrayOf()`: Validate arrays with per-item validators
+    - `assertNonEmptyString()`: Assert non-empty string values
+    - `assertObject()`: Assert non-null object values
+    - `assertFunction()`: Assert function values with proper callable signature (narrowed from broad `Function` type)
+  - **Message filters**: Extracted message filter logic to `src/utils/messageFilters.ts`
+    - `selectableUserMessagesFilter()`: Filter user messages for history selection
+    - `messagesAfterAreOnlySynthetic()`: Check if messages after index are synthetic
+    - Updated `src/utils/handlePromptSubmit.ts` to import from `messageFilters.ts`
+  - **Type alignment**: Aligned SDK public type contract with canonical `coreTypes.generated.ts`
+    - `PermissionResult`: Changed from `unknown[]` to precise 6-shape discriminated union
+    - `SDKSessionInfo`: Changed from snake_case to camelCase (sessionId, lastModified, etc.)
+    - `ForkSessionResult`: Changed `session_id` to `sessionId`
+    - `SDKPermissionRequestMessage`: Made `uuid` and `session_id` required
+    - `SDKPermissionTimeoutMessage`: Added `uuid` and `session_id` fields
+    - `SessionMessage`: Changed `parent_uuid` to `parentUuid`
+  - **Test coverage**: Added comprehensive test suite in `tests/sdk/generated-types.test.ts`
+    - 16 tests covering all SDK schemas and generated types
+    - Tests verify schema materialization, valid data parsing, discriminated fields, and message union acceptance
+    - All tests passing with proper validation of SDK type contracts
+  - Files modified:
+    - `src/entrypoints/sdk.d.ts`: Updated type declarations with aligned types and clarified header
+    - `src/utils/errors.ts`: Added SDK error classes and `sdkErrorFromType()` function
+    - `src/utils/handlePromptSubmit.ts`: Updated to import from `messageFilters.ts`
+    - `src/services/diagnosticTracking.ts`: Fixed import to use `GakrcliError` (capital G)
+  - Files created:
+    - `src/utils/validation.ts`: SDK input validation utilities
+    - `src/utils/messageFilters.ts`: Extracted message filter logic
+    - `tests/sdk/generated-types.test.ts`: Comprehensive SDK type tests
+  - Files already present (verified):
+    - `src/entrypoints/sdk/coreSchemas.ts`: Zod schemas (1749 lines)
+    - `src/entrypoints/sdk/coreTypes.generated.ts`: Generated types (2230 lines)
+
 ### Bug Fixes
 
 * **fix(input): strip leading ! when entering bash mode**: The PromptInput onChange handler had two branches for entering bash mode - a single-char path that just toggled the mode and a multi-char paste path that also stripped the leading `!` from the buffer
