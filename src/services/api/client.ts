@@ -13,7 +13,7 @@ import { getUserAgent } from 'src/utils/http.js'
 import { getSmallFastModel } from 'src/utils/model/model.js'
 import {
   getAPIProvider,
-  isFirstPartyAnthropicBaseUrl,
+  isGithubNativeAnthropicMode,
 } from 'src/utils/model/providers.js'
 import { getProxyFetchOptions } from 'src/utils/proxy.js'
 import {
@@ -27,6 +27,10 @@ import {
   getVertexRegionForModel,
   isEnvTruthy,
 } from '../../utils/envUtils.js'
+import {
+  type ProviderOverride,
+  shouldUseFirstPartyAnthropicAuth,
+} from './authRouting.js'
 
 const importRuntimeModule = new Function(
   'specifier',
@@ -102,7 +106,7 @@ export async function getAnthropicClient({
   model?: string
   fetchOverride?: ClientOptions['fetch']
   source?: string
-  providerOverride?: { model: string; baseURL: string; apiKey: string }
+  providerOverride?: ProviderOverride
 }): Promise<Anthropic> {
   const containerId = process.env.GAKR_CODE_CONTAINER_ID
   const remoteSessionId = process.env.GAKR_CODE_REMOTE_SESSION_ID
@@ -134,11 +138,19 @@ export async function getAnthropicClient({
     defaultHeaders['x-anthropic-additional-protection'] = 'true'
   }
 
-  logForDebugging('[API:auth] OAuth token check starting')
-  await checkAndRefreshOAuthTokenIfNeeded()
-  logForDebugging('[API:auth] OAuth token check complete')
+  const shouldUseFirstPartyAuth =
+    shouldUseFirstPartyAnthropicAuth(providerOverride)
 
-  if (!isgakrcliAISubscriber()) {
+  if (shouldUseFirstPartyAuth) {
+    logForDebugging('[API:auth] OAuth token check starting')
+    await checkAndRefreshOAuthTokenIfNeeded()
+    logForDebugging('[API:auth] OAuth token check complete')
+  }
+
+  const isGakrcliAiSubscriber =
+    shouldUseFirstPartyAuth && isGakrcliAISubscriber()
+
+  if (shouldUseFirstPartyAuth && !isGakrcliAiSubscriber) {
     await configureApiKeyHeaders(defaultHeaders, getIsNonInteractiveSession())
   }
 
@@ -342,8 +354,8 @@ export async function getAnthropicClient({
 
   // Determine authentication method based on available tokens
   const clientConfig: ConstructorParameters<typeof Anthropic>[0] = {
-    apiKey: isgakrcliAISubscriber() ? null : apiKey || getAnthropicApiKey(),
-    authToken: isgakrcliAISubscriber()
+    apiKey: isGakrcliAiSubscriber ? null : apiKey || getAnthropicApiKey(),
+    authToken: isGakrcliAiSubscriber
       ? getgakrcliAIOAuthTokens()?.accessToken
       : undefined,
     // Set baseURL from OAuth config when using staging OAuth
