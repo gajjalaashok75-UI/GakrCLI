@@ -1,3 +1,0 @@
-- plugin issues resolve  and also enhance the plugin skills and agents and all 
-
-- .....
