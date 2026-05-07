@@ -1,15 +1,26 @@
 {
   "name": "@gakr-gakr/gakrcli",
   "version": "0.4.9",
-  "description": "Gakr opened to any LLM — OpenAI, Gemini, DeepSeek, Ollama, and 200+ models",
+  "description": "GakrCLI opens coding-agent workflows to any LLM — OpenAI, Gemini, DeepSeek, Ollama, and 200+ models",
   "type": "module",
   "bin": {
     "gakrcli": "./bin/gakrcli.js"
   },
+  "exports": {
+    "./package.json": "./package.json",
+    "./dist/cli.mjs": "./dist/cli.mjs",
+    "./sdk": {
+      "types": "./src/entrypoints/sdk.d.ts",
+      "import": "./dist/sdk.mjs"
+    }
+  },
   "files": [
-    "bin/gakrcli.js",
+    "bin/",
     "dist/cli.mjs",
+    "dist/sdk.mjs",
     "assets/",
+    "src/entrypoints/sdk.d.ts",
+    "src/entrypoints/sdk/coreTypes.generated.ts",
     "README.md",
     "LICENSE"
   ],
@@ -151,9 +162,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/gakr-gakr/gakr"
+    "url": "https://github.com/gakr-gakr/gakrcli"
   },
   "keywords": [
+    "gakrcli",
+    "GakrCLI",
     "gakr",
     "gakr-cli",
     "openai",
@@ -167,5 +180,8 @@
   "license": "SEE LICENSE FILE",
   "publishConfig": {
     "access": "public"
+  },
+  "overrides": {
+    "lodash-es": "4.18.1"
   }
 }

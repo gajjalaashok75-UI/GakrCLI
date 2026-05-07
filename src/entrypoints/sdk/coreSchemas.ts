@@ -1850,6 +1850,7 @@ export const SDKSessionInfoSchema = lazySchema(() =>
     })
     .describe('Session metadata returned by listSessions and getSessionInfo.'),
 )
+
 export const SDKPermissionRequestMessageSchema = lazySchema(() =>
   z.object({
     type: z.literal('permission_request'),
@@ -1861,6 +1862,7 @@ export const SDKPermissionRequestMessageSchema = lazySchema(() =>
     session_id: z.string(),
   }),
 )
+
 export const SDKMessageSchema = lazySchema(() =>
   z.union([
     SDKAssistantMessageSchema(),
