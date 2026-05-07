@@ -1,61 +1,42 @@
 import { feature } from 'bun:bundle';
-import { existsSync } from 'fs'
-import { dirname, join } from 'path'
-import { fileURLToPath } from 'url'
-import {
-  isLocalProviderUrl,
-  resolveCodexApiCredentials,
-  resolveProviderRequest,
-} from '../services/api/providerConfig.js'
 import {
   applyProfileEnvToProcessEnv,
   buildStartupEnvFromProfile,
-  redactSecretValueForDisplay,
 } from '../utils/providerProfile.js'
-import { getProviderValidationError } from '../utils/providerValidation.js';
+import {
+  getProviderValidationError,
+  validateProviderEnvForStartupOrExit,
+} from '../utils/providerValidation.js'
 
-// Load .env file if it exists (Node.js 20.10+ has built-in loadEnvFile, but for compatibility
-// we manually load it). This must happen BEFORE any model selection or provider logic.
+// GakrCLI: polyfill globalThis.File for Node < 20.
+// undici v7 references `File` at module evaluation time (webidl type
+// assertions). Node 18 lacks the global, causing a ReferenceError inside
+// the bundled __commonJS require chain which deadlocks the process when a
+// proxy is configured (configureGlobalAgents → require_undici).
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
-{
-  const entrypointDir = dirname(fileURLToPath(import.meta.url))
-  const packageRoot = join(entrypointDir, '..', '..')
-  const envPath = join(packageRoot, '.env')
-
-  if (existsSync(envPath)) {
-    try {
-      // Use Node.js 20.10+ built-in loadEnvFile if available, otherwise manually load
-      if (typeof process.loadEnvFile === 'function') {
-        process.loadEnvFile(envPath)
-      } else {
-        // Fallback: manually parse .env file
-        const { readFileSync } = await import('fs')
-        const envContent = readFileSync(envPath, 'utf-8')
-        for (const line of envContent.split('\n')) {
-          const trimmed = line.trim()
-          if (!trimmed || trimmed.startsWith('#')) continue
-          const [key, ...valueParts] = trimmed.split('=')
-          if (key) {
-            const value = valueParts.join('=').trim()
-            // Remove quotes if present
-            const unquoted = value.startsWith('"') && value.endsWith('"')
-              ? value.slice(1, -1)
-              : value.startsWith("'") && value.endsWith("'")
-                ? value.slice(1, -1)
-                : value
-            process.env[key.trim()] ??= unquoted
-          }
-        }
+if (typeof globalThis.File === 'undefined') {
+  try {
+    // Node 18.13+ exposes File in node:buffer but not as a global.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { File: NodeFile } = require('node:buffer')
+    // @ts-expect-error -- polyfilling missing global
+    globalThis.File = NodeFile
+  } catch {
+    // Absolute fallback: stub so `MakeTypeAssertion(File)` doesn't throw.
+    // @ts-expect-error -- minimal polyfill
+    globalThis.File = class File extends Blob {
+      name: string
+      lastModified: number
+      constructor(parts: BlobPart[], name: string, opts?: FilePropertyBag) {
+        super(parts, opts)
+        this.name = name
+        this.lastModified = opts?.lastModified ?? Date.now()
       }
-    } catch (error) {
-      // Silently fail if .env loading fails - don't break the CLI
-      // User may have .env with invalid format, but that's their responsibility
-      void error
     }
   }
 }
 
-// Gakrcli: disable experimental API betas by default.
+// GakrCLI: disable experimental API betas by default.
 // Tool search (defer_loading), global cache scope, and context management
 // require internal API support not available to external accounts → 500.
 // Users can opt-in with GAKR_CODE_DISABLE_EXPERIMENTAL_BETAS=false.
@@ -99,7 +80,7 @@ async function main(): Promise<void> {
   if (args.length === 1 && (args[0] === '--version' || args[0] === '-v' || args[0] === '-V')) {
     // MACRO.VERSION is inlined at build time
     // biome-ignore lint/suspicious/noConsole:: intentional console output
-    console.log(`${MACRO.DISPLAY_VERSION ?? MACRO.VERSION} (Gakrcli)`);
+    console.log(`${MACRO.DISPLAY_VERSION ?? MACRO.VERSION} (GakrCLI)`);
     return;
   }
 
@@ -115,21 +96,16 @@ async function main(): Promise<void> {
     }
   }
 
+  // Enable configs first so we can read settings
   {
     const { enableConfigs } = await import('../utils/config.js')
     enableConfigs()
   }
 
+  // Apply settings.env from user settings (includes GitHub provider settings from /onboard-github)
   {
     const { applySafeConfigEnvironmentVariables } = await import('../utils/managedEnv.js')
     applySafeConfigEnvironmentVariables()
-  }
-
-  // Apply active provider profile from config BEFORE building startup env
-  // This ensures the startup banner shows the correct active provider
-  {
-    const { applyActiveProviderProfileFromConfig } = await import('../utils/providerProfiles.js')
-    applyActiveProviderProfileFromConfig()
   }
 
   const startupEnv = await buildStartupEnvFromProfile({
@@ -146,24 +122,17 @@ async function main(): Promise<void> {
     }
   }
 
+  // Hydrate GitHub credentials after profile is applied so GAKR_CODE_USE_GITHUB from profile is available
   {
-    const { hydrateGithubModelsTokenFromSecureStorage } = await import('../utils/githubModelsCredentials.js')
+    const {
+      hydrateGithubModelsTokenFromSecureStorage,
+      refreshGithubModelsTokenIfNeeded,
+    } = await import('../utils/githubModelsCredentials.js')
+    await refreshGithubModelsTokenIfNeeded()
     hydrateGithubModelsTokenFromSecureStorage()
   }
 
-  {
-    const { validateProviderEnvForStartupOrExit } = await import('../utils/providerValidation.js')
-    await validateProviderEnvForStartupOrExit()
-  }
-
-  // Initialize user directories on first run
-  try {
-    const { initUserDirs } = await import('../utils/initUserDirs.js')
-    initUserDirs()
-  } catch (initError) {
-    // Non-fatal: if directory creation fails, continue anyway
-    console.warn('Warning: could not initialize user directories:', initError)
-  }
+  await validateProviderEnvForStartupOrExit()
 
   // Parse --model early so the startup screen can display the override
   const { eagerParseCliFlag } = await import('../utils/cliArgs.js')
@@ -180,7 +149,7 @@ async function main(): Promise<void> {
   profileCheckpoint('cli_entry');
 
   // Fast-path for --dump-system-prompt: output the rendered system prompt and exit.
-  // Used for prompt sensitivity evals to extract the system prompt at a specific commit.
+  // Used by prompt sensitivity evals to extract the system prompt at a specific commit.
   // Ant-only: eliminated from external builds via feature flag.
   if (feature('DUMP_SYSTEM_PROMPT') && args[0] === '--dump-system-prompt') {
     profileCheckpoint('cli_dump_system_prompt_path');
@@ -228,7 +197,7 @@ async function main(): Promise<void> {
   // Must come before the daemon subcommand check: spawned per-worker, so
   // perf-sensitive. No enableConfigs(), no analytics sinks at this layer —
   // workers are lean. If a worker kind needs configs/auth (assistant will),
-  // it calls them inside their run() fn.
+  // it calls them inside its run() fn.
   if (feature('DAEMON') && args[0] === '--daemon-worker') {
     const {
       runDaemonWorker
@@ -417,10 +386,7 @@ async function main(): Promise<void> {
   }
 
   // No special flags detected, load and run the full CLI
-  if (
-    process.env.GAKR_DISABLE_EARLY_INPUT !== '1' &&
-    process.env.OPENGAKR_DISABLE_EARLY_INPUT !== '1'
-  ) {
+  if (process.env.GAKR_DISABLE_EARLY_INPUT !== '1') {
     const {
       startCapturingEarlyInput
     } = await import('../utils/earlyInput.js');
@@ -436,12 +402,4 @@ async function main(): Promise<void> {
 }
 
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
-main().catch((error) => {
-  console.error('Fatal error during CLI initialization:', error);
-  process.exit(1);
-});
-//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJmZWF0dXJlIiwicHJvY2VzcyIsImVudiIsIkNPUkVQQUNLX0VOQUJMRV9BVVRPX1BJTiIsIkNMQVVERV9DT0RFX1JFTU9URSIsImV4aXN0aW5nIiwiTk9ERV9PUFRJT05TIiwiQ0xBVURFX0NPREVfQUJMQVRJT05fQkFTRUxJTkUiLCJrIiwibWFpbiIsIlByb21pc2UiLCJhcmdzIiwiYXJndiIsInNsaWNlIiwibGVuZ3RoIiwiY29uc29sZSIsImxvZyIsIk1BQ1JPIiwiVkVSU0lPTiIsInByb2ZpbGVDaGVja3BvaW50IiwiZW5hYmxlQ29uZmlncyIsImdldE1haW5Mb29wTW9kZWwiLCJtb2RlbElkeCIsImluZGV4T2YiLCJtb2RlbCIsImdldFN5c3RlbVByb21wdCIsInByb21wdCIsImpvaW4iLCJydW5DbGF1ZGVJbkNocm9tZU1jcFNlcnZlciIsInJ1bkNocm9tZU5hdGl2ZUhvc3QiLCJydW5Db21wdXRlclVzZU1jcFNlcnZlciIsInJ1bkRhZW1vbldvcmtlciIsImdldEJyaWRnZURpc2FibGVkUmVhc29uIiwiY2hlY2tCcmlkZ2VNaW5WZXJzaW9uIiwiQlJJREdFX0xPR0lOX0VSUk9SIiwiYnJpZGdlTWFpbiIsImV4aXRXaXRoRXJyb3IiLCJnZXRDbGF1ZGVBSU9BdXRoVG9rZW5zIiwiYWNjZXNzVG9rZW4iLCJkaXNhYmxlZFJlYXNvbiIsInZlcnNpb25FcnJvciIsIndhaXRGb3JQb2xpY3lMaW1pdHNUb0xvYWQiLCJpc1BvbGljeUFsbG93ZWQiLCJpbml0U2lua3MiLCJkYWVtb25NYWluIiwiaW5jbHVkZXMiLCJiZyIsInBzSGFuZGxlciIsImxvZ3NIYW5kbGVyIiwiYXR0YWNoSGFuZGxlciIsImtpbGxIYW5kbGVyIiwiaGFuZGxlQmdGbGFnIiwidGVtcGxhdGVzTWFpbiIsImV4aXQiLCJlbnZpcm9ubWVudFJ1bm5lck1haW4iLCJzZWxmSG9zdGVkUnVubmVyTWFpbiIsImhhc1RtdXhGbGFnIiwic29tZSIsImEiLCJzdGFydHNXaXRoIiwiaXNXb3JrdHJlZU1vZGVFbmFibGVkIiwiZXhlY0ludG9UbXV4V29ya3RyZWUiLCJyZXN1bHQiLCJoYW5kbGVkIiwiZXJyb3IiLCJDTEFVREVfQ09ERV9TSU1QTEUiLCJzdGFydENhcHR1cmluZ0Vhcmx5SW5wdXQiLCJjbGlNYWluIl0sInNvdXJjZXMiOlsiY2xpLnRzeCJdLCJzb3VyY2VzQ29udGVudCI6WyJpbXBvcnQgeyBmZWF0dXJlIH0gZnJvbSAnYnVuOmJ1bmRsZSdcblxuLy8gQnVnZml4IGZvciBjb3JlcGFjayBhdXRvLXBpbm5pbmcsIHdoaWNoIGFkZHMgeWFybnBrZyB0byBwZW9wbGVzJyBwYWNrYWdlLmpzb25zXG4vLyBlc2xpbnQtZGlzYWJsZS1uZXh0LWxpbmUgY3VzdG9tLXJ1bGVzL25vLXRvcC1sZXZlbC1zaWRlLWVmZmVjdHNcbnByb2Nlc3MuZW52LkNPUkVQQUNLX0VOQUJMRV9BVVRPX1BJTiA9ICcwJ1xuXG4vLyBTZXQgbWF4IGhlYXAgc2l6ZSBmb3IgY2hpbGQgcHJvY2Vzc2VzIGluIENDUiBlbnZpcm9ubWVudHMgKGNvbnRhaW5lcnMgaGF2ZSAxNkdCKVxuLy8gZXNsaW50LWRpc2FibGUtbmV4dC1saW5lIGN1c3RvbS1ydWxlcy9uby10b3AtbGV2ZWwtc2lkZS1lZmZlY3RzLCBjdXN0b20tcnVsZXMvbm8tcHJvY2Vzcy1lbnYtdG9wLWxldmVsXG5pZiAocHJvY2Vzcy5lbnYuQ0xBVURFX0NPREVfUkVNT1RFIG09PSAndHJ1ZScpIHtcbiAgLy8gZXNsaW50LWRpc2FibGUtbmV4dC1saW5lIGN1c3RvbS1ydWxlcy9uby10b3AtbGV2ZWwtc2lkZS1lZmZlY3RzLCBjdXN0b20tcnVsZXMvbm8tcHJvY2Vzcy1lbnYtdG9wLWxldmVsXG4gIGNvbnN0IGV4aXN0aW5nID0gcHJvY2Vzcy5lbnYuTk9ERV9PUFRJT05TIHx8ICcnXG4gIC8vIGVzbGludC1kaXNhYmxlLW5leHQtbGluZSBjdXN0b20tcnVsZXMvbm8tdG9wLWxldmVsLXNpZGUtZWZmZWN0cywgY3VzdG9tLXJ1bGVzL25vLXByb2Nlc3MtZW52LXRvcC1sZXZlbFxuICBwcm9jZXNzLmVudi5OT0RFX09QVFJPTlMgPSBleGlzdGluZ1xuICAgID8gYCR7ZXhpc3RpbmdfIX0gLS1tYXgvb2xkLXNwYWNlLXNpemU+ODE5MmBcbiAgICA6ICctLWFyZ3MtJyArIGV4aXN0aW5nXG59XG5cbi8qKiBcbg==
-// Source map truncated - full map in dist/...
-// ...
-
-// Vist "./dist/cli.js" to run the compiled code.
+void main();

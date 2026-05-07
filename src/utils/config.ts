@@ -31,6 +31,7 @@ import { normalizePathForConfigKey } from './path.js'
 import { getEssentialTrafficOnlyReason } from './privacyLevel.js'
 import { getManagedFilePath } from './settings/managedPath.js'
 import type { ThemeSetting } from './theme.js'
+import { PRIMARY_PROJECT_INSTRUCTION_FILE } from './projectInstructions.js'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const teamMemPaths = feature('TEAMMEM')
@@ -178,9 +179,12 @@ export type EditorMode = 'emacs' | (typeof EDITOR_MODES)[number]
 
 export type DiffTool = 'terminal' | 'auto'
 
+export type ShowCacheStatsMode = 'off' | 'compact' | 'full'
+export const SHOW_CACHE_STATS_MODES = ['off', 'compact', 'full'] as const satisfies readonly ShowCacheStatsMode[]
+
 export type OutputStyle = string
 
-export type Providers = (typeof import('./configConstants.js').PROVIDERS)[number]
+export type Providers = string
 export type OpenAICompatibleApiFormat = 'chat_completions' | 'responses'
 export type OpenAICompatibleAuthScheme = 'bearer' | 'raw'
 
@@ -195,9 +199,8 @@ export type ProviderProfile = {
   authHeader?: string
   authScheme?: OpenAICompatibleAuthScheme
   authHeaderValue?: string
+  customHeaders?: Record<string, string>
 }
-
-export const SHOW_CACHE_STATS_MODES = ['off', 'compact', 'full'] as const
 
 export type GlobalConfig = {
   /**
@@ -251,7 +254,13 @@ export type GlobalConfig = {
   bypassPermissionsModeAccepted?: boolean
   hasUsedBackslashReturn?: boolean
   autoCompactEnabled: boolean // Controls whether auto-compact is enabled
+  toolHistoryCompressionEnabled: boolean // Compress old tool_result content for small-context providers
   showTurnDuration: boolean // Controls whether to show turn duration message (e.g., "Cooked for 1m 6s")
+  // Controls whether to show per-query cache hit/miss stats at the end of each turn.
+  // 'off'     — no display
+  // 'compact' — one-line summary (e.g. "[Cache: 1.2k read • hit 12%]")
+  // 'full'    — breakdown (read / created / hit-rate) per query
+  showCacheStats: ShowCacheStatsMode
   /**
    * @deprecated Use settings.env instead.
    */
@@ -299,9 +308,6 @@ export type GlobalConfig = {
 
   // Memory usage tracking
   memoryUsageCount: number // Number of times user has added to memory
-
-  // Knowledge Graph feature toggle
-  knowledgeGraphEnabled?: boolean // Whether the Knowledge Graph memory feature is enabled
 
   // Sonnet-1M configs
   hasShownS1MWelcomeV2?: Record<string, boolean> // Whether the Sonnet-1M v2 welcome message has been shown per org
@@ -583,14 +589,24 @@ export type GlobalConfig = {
   // Speculation configuration (ant-only)
   speculationEnabled?: boolean // Whether speculation is enabled (default: true)
 
-  // Cache stats display mode: 'off' | 'compact' | 'full'
-  showCacheStats?: 'off' | 'compact' | 'full' // How to display cache stats after each turn (default: 'compact')
-
   // Client data for server-side experiments (fetched during bootstrap).
   clientDataCache?: Record<string, unknown> | null
 
   // Additional model options for the model picker (fetched during bootstrap).
   additionalModelOptionsCache?: ModelOption[]
+  additionalModelOptionsCacheScope?: string
+
+  // Additional model options discovered from OpenAI-compatible endpoints.
+  openaiAdditionalModelOptionsCache?: ModelOption[]
+
+  // Provider profiles managed inside the TUI. The active profile determines
+  // which API provider env vars are applied for the current session.
+  providerProfiles?: ProviderProfile[]
+  activeProviderProfileId?: string
+
+  // Per-profile cache for models discovered from OpenAI-compatible endpoints.
+  // Keyed by provider profile id.
+  openaiAdditionalModelOptionsCacheByProfile?: Record<string, ModelOption[]>
 
   // Disk cache for /api/gakrcli_code/organizations/metrics_enabled.
   // Org-level settings change rarely; persisting across processes avoids a
@@ -604,6 +620,9 @@ export type GlobalConfig = {
   // CURRENT_MIGRATION_VERSION, runMigrations() skips all sync migrations
   // (avoiding 11× saveGlobalConfig lock+re-read on every startup).
   migrationVersion?: number
+
+  // Knowledge Graph configuration
+  knowledgeGraphEnabled: boolean
 }
 
 /**
@@ -621,7 +640,9 @@ function createDefaultGlobalConfig(): GlobalConfig {
     verbose: false,
     editorMode: 'normal',
     autoCompactEnabled: true,
+    toolHistoryCompressionEnabled: true,
     showTurnDuration: true,
+    showCacheStats: 'compact',
     hasSeenTasksHint: false,
     hasUsedStash: false,
     hasUsedBackgroundTask: false,
@@ -648,7 +669,9 @@ function createDefaultGlobalConfig(): GlobalConfig {
     cachedGrowthBookFeatures: {},
     respectGitignore: true,
     copyFullResponse: false,
-    showCacheStats: 'compact',
+    providerProfiles: [],
+    openaiAdditionalModelOptionsCacheByProfile: {},
+    knowledgeGraphEnabled: true,
   }
 }
 
@@ -666,7 +689,9 @@ export const GLOBAL_CONFIG_KEYS = [
   'editorMode',
   'hasUsedBackslashReturn',
   'autoCompactEnabled',
+  'toolHistoryCompressionEnabled',
   'showTurnDuration',
+  'showCacheStats',
   'diffTool',
   'env',
   'tipsHistory',
@@ -694,7 +719,7 @@ export const GLOBAL_CONFIG_KEYS = [
   'prStatusFooterEnabled',
   'remoteControlAtStartup',
   'remoteDialogSeen',
-  'showCacheStats',
+  'knowledgeGraphEnabled',
 ] as const
 
 export type GlobalConfigKey = (typeof GLOBAL_CONFIG_KEYS)[number]
@@ -796,6 +821,7 @@ export function isPathTrusted(dir: string): boolean {
 const TEST_GLOBAL_CONFIG_FOR_TESTING: GlobalConfig = {
   ...DEFAULT_GLOBAL_CONFIG,
   autoUpdates: false,
+  knowledgeGraphEnabled: true,
 }
 const TEST_PROJECT_CONFIG_FOR_TESTING: ProjectConfig = {
   ...DEFAULT_PROJECT_CONFIG,

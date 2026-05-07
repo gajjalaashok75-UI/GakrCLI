@@ -3,7 +3,6 @@
  * Extracted from TeammateTool to allow reuse by AgentTool.
  */
 
-import React from 'react'
 import {
   getChromeFlagOverride,
   getFlagSettingsPath,
@@ -43,7 +42,6 @@ import {
   TEAMMATE_COMMAND_ENV_VAR,
   TMUX_COMMAND,
 } from '../../utils/swarm/constants.js'
-import { It2SetupPrompt } from '../../utils/swarm/It2SetupPrompt.js'
 import { startInProcessTeammate } from '../../utils/swarm/inProcessRunner.js'
 import {
   type InProcessSpawnConfig,
@@ -373,7 +371,7 @@ async function ensureTeamFileExists(
 /**
  * Handle spawn operation using split-pane view (default).
  * When inside tmux: Creates teammates in a shared window with leader on left, teammates on right.
- * When outside tmux: Creates a gakrcli-swarm session with all teammates in a tiled layout.
+ * When outside tmux: Creates a gakr-swarm session with all teammates in a tiled layout.
  */
 async function handleSpawnSplitPane(
   input: SpawnInput,
@@ -416,6 +414,13 @@ async function handleSpawnSplitPane(
   if (detectionResult.needsIt2Setup && context.setToolJSX) {
     const tmuxAvailable = await isTmuxAvailable()
 
+    // Lazy-import React and It2SetupPrompt — only needed for TUI setup prompt.
+    // This keeps the SDK bundle free of React static imports.
+    const [{ default: React }, { It2SetupPrompt }] = await Promise.all([
+      import('react'),
+      import('../../utils/swarm/It2SetupPrompt.js'),
+    ])
+
     // Show the setup prompt and wait for user decision
     const setupResult = await new Promise<
       'installed' | 'use-tmux' | 'cancelled'
@@ -457,7 +462,7 @@ async function handleSpawnSplitPane(
   // Create a pane in the swarm view
   // - Inside tmux: splits current window (leader on left, teammates on right)
   // - In iTerm2 with it2: uses native iTerm2 split panes
-  // - Outside both: creates gakrcli-swarm session with tiled teammates
+  // - Outside both: creates gakr-swarm session with tiled teammates
   const { paneId, isFirstTeammate } = await createTeammatePaneInSwarmView(
     sanitizedName,
     teammateColor,
@@ -469,7 +474,7 @@ async function handleSpawnSplitPane(
     await enablePaneBorderStatus()
   }
 
-  // Build the command to spawn Gakr with teammate identity
+  // Build the command to spawn gakrcli with teammate identity
   // Note: We spawn without a prompt - initial instructions are sent via mailbox
   const binaryPath = getTeammateCommand()
 
@@ -508,7 +513,7 @@ async function handleSpawnSplitPane(
 
   const flagsStr = inheritedFlags ? ` ${inheritedFlags}` : ''
   // Propagate env vars that teammates need but may not inherit from tmux split-window shells.
-  // Includes gakrcliCODE, GAKR_CODE_EXPERIMENTAL_AGENT_TEAMS, and API provider vars.
+  // Includes gakrcli, GAKR_CODE_EXPERIMENTAL_AGENT_TEAMS, and API provider vars.
   const envStr = buildInheritedEnvVars()
   const spawnCommand = `cd ${quote([workingDir])} && env ${envStr} ${quote([binaryPath])} ${teammateArgs}${flagsStr}`
 
@@ -671,7 +676,7 @@ async function handleSpawnSeparateWindow(
 
   const paneId = createWindowResult.stdout.trim()
 
-  // Build the command to spawn Gakr with teammate identity
+  // Build the command to spawn GakrCLI with teammate identity
   // Note: We spawn without a prompt - initial instructions are sent via mailbox
   const binaryPath = getTeammateCommand()
 
@@ -710,7 +715,7 @@ async function handleSpawnSeparateWindow(
 
   const flagsStr = inheritedFlags ? ` ${inheritedFlags}` : ''
   // Propagate env vars that teammates need but may not inherit from tmux split-window shells.
-  // Includes gakrcliCODE, GAKR_CODE_EXPERIMENTAL_AGENT_TEAMS, and API provider vars.
+  // Includes GakrCLI, GAKR_CODE_EXPERIMENTAL_AGENT_TEAMS, and API provider vars.
   const envStr = buildInheritedEnvVars()
   const spawnCommand = `cd ${quote([workingDir])} && env ${envStr} ${quote([binaryPath])} ${teammateArgs}${flagsStr}`
 
@@ -1090,7 +1095,7 @@ async function handleSpawnInProcess(
 }
 
 /**
- * Handle spawn operation - creates a new Gakr instance.
+ * Handle spawn operation - creates a new GakrCLI instance.
  * Uses in-process mode when enabled, otherwise uses tmux/iTerm2 split-pane view.
  * Falls back to in-process if pane backend detection fails (e.g., iTerm2 without
  * it2 CLI or tmux installed).

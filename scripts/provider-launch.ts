@@ -50,16 +50,7 @@ function parseLaunchOptions(argv: string[]): LaunchOptions {
       continue
     }
 
-    if ((
-      lower === 'auto' ||
-      lower === 'openai' ||
-      lower === 'ollama' ||
-      lower === 'codex' ||
-      lower === 'gemini' ||
-      lower === 'nvidia-nim' ||
-      lower === 'mistral' ||
-      lower === 'atomic-chat'
-    ) && requestedProfile === 'auto') {
+    if ((lower === 'auto' || lower === 'openai' || lower === 'ollama' || lower === 'codex' || lower === 'gemini' || lower ==='mistral' || lower === 'atomic-chat') && requestedProfile === 'auto') {
       requestedProfile = lower as ProviderProfile | 'auto'
       continue
     }
@@ -102,6 +93,10 @@ async function resolveAtomicChatDefaultModel(): Promise<string | null> {
   return models[0] ?? null
 }
 
+function runCommand(command: string, env: NodeJS.ProcessEnv): Promise<number> {
+  return runProcess(command, [], env)
+}
+
 function runProcess(command: string, args: string[], env: NodeJS.ProcessEnv): Promise<number> {
   return new Promise(resolve => {
     const child = spawn(command, args, {
@@ -129,8 +124,6 @@ function printSummary(profile: ProviderProfile): void {
   console.log(`Launching profile: ${profile}`)
   if (profile === 'gemini') {
     console.log('Using configured Gemini provider settings.')
-  } else if (profile === 'nvidia-nim') {
-    console.log('Using configured NVIDIA provider settings.')
   } else if (profile === 'mistral') {
     console.log('Using configured Mistral provider settings.')
   } else if (profile === 'codex') {
@@ -144,11 +137,26 @@ function printSummary(profile: ProviderProfile): void {
   }
 }
 
+function hasUsableGeminiLaunchAuth(env: NodeJS.ProcessEnv): boolean {
+  const authMode = env.GEMINI_AUTH_MODE?.trim().toLowerCase()
+  if (authMode === 'adc') {
+    return true
+  }
+  if (authMode === 'access-token') {
+    return Boolean(env.GEMINI_ACCESS_TOKEN?.trim())
+  }
+  return Boolean(
+    env.GEMINI_API_KEY?.trim() ||
+      env.GOOGLE_API_KEY?.trim() ||
+      env.GEMINI_ACCESS_TOKEN?.trim(),
+  )
+}
+
 async function main(): Promise<void> {
   const options = parseLaunchOptions(process.argv.slice(2))
   const requestedProfile = options.requestedProfile
   if (!requestedProfile) {
-    console.error('Usage: bun run scripts/provider-launch.ts [openai|ollama|codex|gemini|nvidia-nim|mistral|atomic-chat|auto] [--fast] [--goal <latency|balanced|coding>] [-- <cli args>]')
+    console.error('Usage: bun run scripts/provider-launch.ts [openai|ollama|codex|gemini|mistral|atomic-chat|mistral|auto] [--fast] [--goal <latency|balanced|coding>] [-- <cli args>]')
     process.exit(1)
   }
 
@@ -209,13 +217,8 @@ async function main(): Promise<void> {
     applyFastFlags(env)
   }
 
-  if (profile === 'gemini' && !env.GEMINI_API_KEY) {
-    console.error('GEMINI_API_KEY is required for gemini profile. Run: bun run profile:init -- --provider gemini --api-key <key>')
-    process.exit(1)
-  }
-
-  if (profile === 'nvidia-nim' && !env.NVIDIA_API_KEY) {
-    console.error('NVIDIA_API_KEY is required for nvidia-nim profile. Run: bun run profile:init -- --provider nvidia-nim --api-key <key>')
+  if (profile === 'gemini' && !hasUsableGeminiLaunchAuth(env)) {
+    console.error('Gemini credentials are required for gemini profile. Use `bun run profile:init -- --provider gemini --api-key <key>`, save an access-token/ADC Gemini profile with `/provider`, or set GEMINI_API_KEY/GOOGLE_API_KEY/GEMINI_ACCESS_TOKEN.')
     process.exit(1)
   }
 
