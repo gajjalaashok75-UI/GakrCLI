@@ -1,9 +1,11 @@
 import { isBareMode, isEnvTruthy } from './envUtils.js'
 import { getSecureStorage } from './secureStorage/index.js'
+import { exchangeForCopilotToken } from '../services/github/deviceFlow.js'
 
-/** JSON key in the shared Gakrcli secure storage blob. */
+/** JSON key in the shared gAKRcli secure storage blob. */
 export const GITHUB_MODELS_STORAGE_KEY = 'githubModels' as const
-export const GITHUB_MODELS_HYDRATED_ENV_MARKER = 'GITHUB_MODELS_HYDRATED' as const
+export const GITHUB_MODELS_HYDRATED_ENV_MARKER =
+  'GAKR_CODE_GITHUB_TOKEN_HYDRATED' as const
 
 export type GithubModelsCredentialBlob = {
   accessToken: string
@@ -45,6 +47,19 @@ export function readGithubModelsToken(): string | undefined {
   if (isBareMode()) return undefined
   try {
     const data = getSecureStorage().read() as
+      | ({ githubModels?: GithubModelsCredentialBlob } & Record<string, unknown>)
+      | null
+    const t = data?.githubModels?.accessToken?.trim()
+    return t || undefined
+  } catch {
+    return undefined
+  }
+}
+
+export async function readGithubModelsTokenAsync(): Promise<string | undefined> {
+  if (isBareMode()) return undefined
+  try {
+    const data = (await getSecureStorage().readAsync()) as
       | ({ githubModels?: GithubModelsCredentialBlob } & Record<string, unknown>)
       | null
     const t = data?.githubModels?.accessToken?.trim()
@@ -123,8 +138,6 @@ export async function refreshGithubModelsTokenIfNeeded(): Promise<boolean> {
       return false
     }
 
-    // Dynamic import to avoid bundling GitHub device flow code when not needed
-    const { exchangeForCopilotToken } = await import('../services/github/deviceFlow.js')
     const refreshed = await exchangeForCopilotToken(oauthToken)
     const saved = saveGithubModelsToken(refreshed.token, oauthToken)
     if (!saved.success) {
@@ -182,9 +195,4 @@ export function clearGithubModelsToken(): { success: boolean; warning?: string }
   const next = { ...(prev as Record<string, unknown>) }
   delete next[GITHUB_MODELS_STORAGE_KEY]
   return secureStorage.update(next as typeof prev)
-}
-
-
-export async function readGithubModelsTokenAsync(): Promise<string | undefined> {
-  return readGithubModelsToken()
 }

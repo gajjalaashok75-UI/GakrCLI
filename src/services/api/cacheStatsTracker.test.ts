@@ -201,7 +201,7 @@ describe('cacheStatsTracker — unsupported mixing', () => {
     )
     recordRequest(
       makeMetrics({ read: 100, total: 500, hitRate: 0.2 }),
-      'claude',
+      'gakrcli',
     )
     const turn = getCurrentTurnCacheMetrics()
     expect(turn.supported).toBe(true)

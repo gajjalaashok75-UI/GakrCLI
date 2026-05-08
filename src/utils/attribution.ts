@@ -39,6 +39,64 @@ export type AttributionTexts = {
   pr: string
 }
 
+function sanitizeCoAuthorNamePart(value: string): string {
+  return value
+    .replace(/[\r\n<>]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\(\s+/g, '(')
+    .replace(/\s+\)/g, ')')
+    .trim()
+}
+
+function formatGakrcliCoAuthorName(model: string): string {
+  const publicName = getPublicModelDisplayName(model)
+  if (!publicName) {
+    return sanitizeCoAuthorNamePart(getPublicModelName(model))
+  }
+  const coAuthorName = publicName.startsWith('GakrCLI ')
+    ? publicName
+    : `GakrCLI ${publicName}`
+  return sanitizeCoAuthorNamePart(coAuthorName)
+}
+
+export function getDefaultCommitCoAuthorName({
+  model,
+  apiProvider,
+  isInternalRepo,
+}: {
+  model: string
+  apiProvider: string
+  isInternalRepo: boolean
+}): string {
+  const isKnownPublicModel = getPublicModelDisplayName(model) !== null
+  const normalizedModel = model.toLowerCase()
+  const isGakrcliProvider =
+    apiProvider === 'firstParty' ||
+    apiProvider === 'bedrock' ||
+    apiProvider === 'vertex' ||
+    apiProvider === 'foundry' ||
+    normalizedModel.includes('GakrCLI')
+
+  if (isGakrcliProvider && (isInternalRepo || isKnownPublicModel)) {
+    return formatGakrcliCoAuthorName(model)
+  }
+
+  // Unknown first-party models may be unreleased GakrCLI codenames, so keep the
+  // historical public fallback. OpenAI-compatible providers should identify the
+  // actual configured model instead of claiming GakrCLI Opus.
+  if (apiProvider === 'firstParty') {
+    // @[MODEL LAUNCH]: Update this fallback when the default public GakrCLI model changes.
+    return 'GakrCLI Opus 4.6'
+  }
+
+  const sanitizedModel = sanitizeCoAuthorNamePart(model)
+  return sanitizedModel ? `GakrCLI (${sanitizedModel})` : 'GakrCLI'
+}
+
+export function getDefaultCommitCoAuthorEmail(_apiProvider: string): string {
+  return 'GakrCLI@gakr.com'
+}
+
 /**
  * Returns attribution text for commits and PRs based on user settings.
  * Handles:
@@ -53,7 +111,7 @@ export function getAttributionTexts(): AttributionTexts {
   }
 
   if (getClientType() === 'remote') {
-    const remoteSessionId = process.env.GAKR_CODE_REMOTE_SESSION_ID
+    const remoteSessionId = process.env.GAKR _CODE_REMOTE_SESSION_ID
     if (remoteSessionId) {
       const ingressUrl = process.env.SESSION_INGRESS_URL
       // Skip for local dev - URLs won't persist
@@ -65,25 +123,23 @@ export function getAttributionTexts(): AttributionTexts {
     return { commit: '', pr: '' }
   }
 
-  // @[MODEL LAUNCH]: Update the hardcoded fallback model name below (guards against codename leaks).
-  // For internal repos, use the real model name. For external repos,
-  // fall back to "Gakr Opus 4.6" for unrecognized models to avoid leaking codenames.
+  // First-party unknown models may be unreleased GakrCLI codenames. Other
+  // providers can safely use the configured public model string.
   const model = getMainLoopModel()
-  const isKnownPublicModel = getPublicModelDisplayName(model) !== null
-  const modelName =
-    isInternalModelRepoCached() || isKnownPublicModel
-      ? getPublicModelName(model)
-      : 'Gakr Opus 4.6'
+  const apiProvider = getAPIProvider()
+  const modelName = getDefaultCommitCoAuthorName({
+    model,
+    apiProvider,
+    isInternalRepo: isInternalModelRepoCached(),
+  })
   const defaultAttribution =
-    '🤖 Generated with [Gakr](https://github.com/gakrcli-gakrcli/gakrcli)'
-  const coAuthorDomain =
-    getAPIProvider() === 'firstParty' ? 'anthropic.com' : 'gakrcli.dev'
+    '🤖 Generated with [GakrCLI](https://github.com/gakr-gakr/GakrCLI)'
+  const coAuthorEmail = getDefaultCommitCoAuthorEmail(apiProvider)
   const defaultCommit = isEnvTruthy(
-    process.env.GAKR_DISABLE_CO_AUTHORED_BY ??
-      process.env.OPENGAKR_DISABLE_CO_AUTHORED_BY,
+    process.env.GAKR_DISABLE_CO_AUTHORED_BY,
   )
     ? ''
-    : `Co-Authored-By: ${modelName} <noreply@${coAuthorDomain}>`
+    : `Co-Authored-By: ${modelName} <${coAuthorEmail}>`
 
   const settings = getInitialSettings()
 
@@ -288,14 +344,14 @@ async function getTranscriptStats(): Promise<{
 }
 
 /**
- * Get enhanced PR attribution text with Gakr contribution stats.
+ * Get enhanced PR attribution text with GakrCLI contribution stats.
  *
- * Format: "🤖 Generated with Gakr (93% 3-shotted by gakrcli-opus-4-5)"
+ * Format: "🤖 Generated with GakrCLI Code (93% 3-shotted by GakrCLI-opus-4-5)"
  *
  * Rules:
- * - Shows Gakr contribution percentage from commit attribution
+ * - Shows GakrCLI contribution percentage from commit attribution
  * - Shows N-shotted where N is the prompt count (1-shotted, 2-shotted, etc.)
- * - Shows short model name (e.g., gakrcli-opus-4-5)
+ * - Shows short model name (e.g., GakrCLI-opus-4-5)
  * - Returns default attribution if stats can't be computed
  *
  * @param getAppState Function to get the current AppState (from command context)
@@ -332,7 +388,7 @@ export async function getEnhancedPRAttribution(
   }
 
   const defaultAttribution =
-    '🤖 Generated with [Gakr](https://github.com/gakrcli-gakrcli/gakrcli)'
+    '🤖 Generated with [GakrCLI](https://github.com/gakr-gakr/GakrCLI)'
 
   // Get AppState first
   const appState = getAppState()
@@ -355,10 +411,10 @@ export async function getEnhancedPRAttribution(
       isInternalModelRepo(),
     ])
 
-  const gakrcliPercent = attributionData?.summary.gakrcliPercent ?? 0
+  const gakrPercent = attributionData?.summary.gakrPercent ?? 0
 
   logForDebugging(
-    `PR Attribution: gakrcliPercent: ${gakrcliPercent}, promptCount: ${promptCount}, memoryAccessCount: ${memoryAccessCount}`,
+    `PR Attribution: gakrPercent: ${gakrpercent}, promptCount: ${promptCount}, memoryAccessCount: ${memoryAccessCount}`,
   )
 
   // Get short model name, sanitized for non-internal repos
@@ -368,17 +424,17 @@ export async function getEnhancedPRAttribution(
     : sanitizeModelName(rawModelName)
 
   // If no attribution data, return default
-  if (gakrcliPercent === 0 && promptCount === 0 && memoryAccessCount === 0) {
+  if (gakrPercent === 0 && promptCount === 0 && memoryAccessCount === 0) {
     logForDebugging('PR Attribution: returning default (no data)')
     return defaultAttribution
   }
 
-  // Build the enhanced attribution: "🤖 Generated with Gakr (93% 3-shotted by gakrcli-opus-4-5, 2 memories recalled)"
+  // Build the enhanced attribution: "🤖 Generated with GakrCLI Code (93% 3-shotted by GakrCLI-opus-4-5, 2 memories recalled)"
   const memSuffix =
     memoryAccessCount > 0
       ? `, ${memoryAccessCount} ${memoryAccessCount === 1 ? 'memory' : 'memories'} recalled`
       : ''
-  const summary = `🤖 Generated with [Gakr](https://github.com/gakrcli-gakrcli/gakrcli) (${gakrcliPercent}% ${promptCount}-shotted by ${shortModelName}${memSuffix})`
+  const summary = `🤖 Generated with [GakrCLI](https://github.com/gakr-gakr/GakrCLI) (${gakrPercent}% ${promptCount}-shotted by ${shortModelName}${memSuffix})`
 
   // Append trailer lines for squash-merge survival. Only for allowlisted repos
   // (INTERNAL_MODEL_REPOS) and only in builds with COMMIT_ATTRIBUTION enabled —

@@ -41,7 +41,7 @@ export function modelSupportsEffort(model: string): boolean {
   if (modelUsesOpenAIEffort(model) && supportsCodexReasoningEffort(model)) {
     return true
   }
-  // Supported by a subset of gakr 4 models
+  // Supported by a subset of Gakr 4 models
   if (m.includes('opus-4-6') || m.includes('sonnet-4-6')) {
     return true
   }
@@ -56,7 +56,7 @@ export function modelSupportsEffort(model: string): boolean {
 
   // Default to true for unknown model strings on 1P.
   // Do not default to true for 3P as they have different formats for their
-  // model strings (ex. anthropics/claude-code#30795)
+  // model strings (ex. anthropics/gakrcli-code#30795)
   return getAPIProvider() === 'firstParty'
 }
 
@@ -144,6 +144,8 @@ export function parseEffortValue(value: unknown): EffortValue | undefined {
 /**
  * Numeric values are model-default only and not persisted.
  * 'max' can now be persisted by all users.
+ * OpenAI-shaped 'xhigh' is normalized to its EffortLevel equivalent ('max')
+ * so any code path that leaks the OpenAI label still persists correctly.
  * Write sites call this before saving to settings so the Zod schema
  * (which only accepts string levels) never rejects a write.
  */
@@ -155,6 +157,9 @@ export function toPersistableEffort(
   }
   if (value === 'max') {
     return value
+  }
+  if (value === 'xhigh') {
+    return 'max'
   }
   return undefined
 }
@@ -214,8 +219,14 @@ export function resolveAppliedEffort(
   }
   const resolved =
     envOverride ?? appStateEffortValue ?? getDefaultEffortForModel(model)
-  // API rejects 'max' on non-Opus-4.6 models — downgrade to 'high'.
-  if (resolved === 'max' && !modelSupportsMaxEffort(model)) {
+  // API rejects 'max' on non-Opus-4.6 Anthropic models — downgrade to 'high'.
+  // OpenAI/Codex models use 'max' as the standard form of 'xhigh'; the client
+  // shim converts it back to 'xhigh' on the wire, so don't clamp it here.
+  if (
+    resolved === 'max' &&
+    !modelSupportsMaxEffort(model) &&
+    !modelUsesOpenAIEffort(model)
+  ) {
     return 'high'
   }
   return resolved
@@ -318,7 +329,7 @@ const OPUS_DEFAULT_EFFORT_CONFIG_DEFAULT: OpusDefaultEffortConfig = {
   enabled: true,
   dialogTitle: 'We recommend medium effort for Opus',
   dialogDescription:
-    'Effort determines how long Gakr thinks for when completing your task. We recommend medium effort for most tasks to balance speed and intelligence and maximize rate limits. Use ultrathink to trigger high effort when needed.',
+    'Effort determines how long GakrCLI thinks for when completing your task. We recommend medium effort for most tasks to balance speed and intelligence and maximize rate limits. Use ultrathink to trigger high effort when needed.',
 }
 
 export function getOpusDefaultEffortConfig(): OpusDefaultEffortConfig {

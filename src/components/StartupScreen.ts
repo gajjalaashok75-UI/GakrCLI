@@ -3,6 +3,16 @@
  * Called once at CLI startup before the Ink UI renders.
  */
 
+import { isLocalProviderUrl, resolveProviderRequest } from '../services/api/providerConfig.js'
+import {
+  getRouteLabel,
+  resolveRouteIdFromBaseUrl,
+} from '../integrations/routeMetadata.js'
+import { getLocalOpenAICompatibleProviderLabel } from '../utils/providerDiscovery.js'
+import { getSettings_DEPRECATED } from '../utils/settings/settings.js'
+import { parseUserSpecifiedModel } from '../utils/model/model.js'
+import { DEFAULT_GEMINI_MODEL } from '../utils/providerProfile.js'
+
 declare const MACRO: { VERSION: string; DISPLAY_VERSION?: string }
 
 const ESC = '\x1b['
@@ -64,12 +74,6 @@ const LOGO_GAKR = [
 ]
 
 // ─── Provider detection ───────────────────────────────────────────────────────
-
-import { isLocalProviderUrl, resolveProviderRequest } from '../services/api/providerConfig.js'
-import { getLocalOpenAICompatibleProviderLabel } from '../utils/providerDiscovery.js'
-import { getSettings_DEPRECATED } from '../utils/settings/settings.js'
-import { parseUserSpecifiedModel } from '../utils/model/model.js'
-import { containsExactZaiGlmModelId, isZaiBaseUrl } from '../utils/zaiProvider.js'
 
 export function detectProvider(modelOverride?: string): { name: string; model: string; baseUrl: string; isLocal: boolean } {
   const useGemini = process.env.GAKR_CODE_USE_GEMINI === '1' || process.env.GAKR_CODE_USE_GEMINI === 'true'

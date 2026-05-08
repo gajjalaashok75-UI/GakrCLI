@@ -1,7 +1,7 @@
 /**
  * Plugin Loader Module
  *
- * This module is responsible for discovering, loading, and validating Gakr plugins
+ * This module is responsible for discovering, loading, and validating GakrCLI  plugins
  * from various sources including marketplaces and git repositories.
  *
  * NPM packages are also supported but must be referenced through marketplaces - the marketplace
@@ -87,6 +87,7 @@ import { getAddDirEnabledPlugins } from './addDirPluginSettings.js'
 import { verifyAndDemote } from './dependencyResolver.js'
 import { classifyFetchError, logPluginFetch } from './fetchTelemetry.js'
 import { checkGitAvailable } from './gitAvailability.js'
+import { buildGitChildEnv } from './gitEnv.js'
 import { getInMemoryInstalledPlugins } from './installedPluginsManager.js'
 import { getManagedPluginNames } from './managedPlugins.js'
 import {
@@ -560,7 +561,9 @@ export async function gitClone(
   args.push(gitUrl, targetPath)
 
   const cloneStarted = performance.now()
-  const cloneResult = await execFileNoThrow(gitExe(), args)
+  const cloneResult = await execFileNoThrow(gitExe(), args, {
+    env: buildGitChildEnv(),
+  })
 
   if (cloneResult.code !== 0) {
     logPluginFetch(
@@ -579,7 +582,7 @@ export async function gitClone(
     const shallowFetchResult = await execFileNoThrowWithCwd(
       gitExe(),
       ['fetch', '--depth', '1', 'origin', sha],
-      { cwd: targetPath },
+      { cwd: targetPath, env: buildGitChildEnv() },
     )
 
     if (shallowFetchResult.code !== 0) {
@@ -591,7 +594,7 @@ export async function gitClone(
       const unshallowResult = await execFileNoThrowWithCwd(
         gitExe(),
         ['fetch', '--unshallow'],
-        { cwd: targetPath },
+        { cwd: targetPath, env: buildGitChildEnv() },
       )
 
       if (unshallowResult.code !== 0) {
@@ -612,7 +615,7 @@ export async function gitClone(
     const checkoutResult = await execFileNoThrowWithCwd(
       gitExe(),
       ['checkout', sha],
-      { cwd: targetPath },
+      { cwd: targetPath, env: buildGitChildEnv() },
     )
 
     if (checkoutResult.code !== 0) {
@@ -745,7 +748,9 @@ export async function installFromGitSubdir(
   }
   cloneArgs.push(gitUrl, cloneDir)
 
-  const cloneResult = await execFileNoThrow(gitExe(), cloneArgs)
+  const cloneResult = await execFileNoThrow(gitExe(), cloneArgs, {
+    env: buildGitChildEnv(),
+  })
   if (cloneResult.code !== 0) {
     throw new Error(
       `Failed to clone repository for git-subdir source: ${cloneResult.stderr}`,
@@ -756,7 +761,7 @@ export async function installFromGitSubdir(
     const sparseResult = await execFileNoThrowWithCwd(
       gitExe(),
       ['sparse-checkout', 'set', '--cone', '--', subdirPath],
-      { cwd: cloneDir },
+      { cwd: cloneDir, env: buildGitChildEnv() },
     )
     if (sparseResult.code !== 0) {
       throw new Error(
@@ -775,7 +780,7 @@ export async function installFromGitSubdir(
       const fetchSha = await execFileNoThrowWithCwd(
         gitExe(),
         ['fetch', '--depth', '1', 'origin', sha],
-        { cwd: cloneDir },
+        { cwd: cloneDir, env: buildGitChildEnv() },
       )
       if (fetchSha.code !== 0) {
         logForDebugging(
@@ -784,7 +789,7 @@ export async function installFromGitSubdir(
         const unshallow = await execFileNoThrowWithCwd(
           gitExe(),
           ['fetch', '--unshallow'],
-          { cwd: cloneDir },
+          { cwd: cloneDir, env: buildGitChildEnv() },
         )
         if (unshallow.code !== 0) {
           throw new Error(`Failed to fetch commit ${sha}: ${unshallow.stderr}`)
@@ -793,7 +798,7 @@ export async function installFromGitSubdir(
       const checkout = await execFileNoThrowWithCwd(
         gitExe(),
         ['checkout', sha],
-        { cwd: cloneDir },
+        { cwd: cloneDir, env: buildGitChildEnv() },
       )
       if (checkout.code !== 0) {
         throw new Error(`Failed to checkout commit ${sha}: ${checkout.stderr}`)
@@ -808,9 +813,11 @@ export async function installFromGitSubdir(
       const [checkout, revParse] = await Promise.all([
         execFileNoThrowWithCwd(gitExe(), ['checkout', 'HEAD'], {
           cwd: cloneDir,
+          env: buildGitChildEnv(),
         }),
         execFileNoThrowWithCwd(gitExe(), ['rev-parse', 'HEAD'], {
           cwd: cloneDir,
+          env: buildGitChildEnv(),
         }),
       ])
       if (checkout.code !== 0) {
@@ -3045,22 +3052,61 @@ export function mergePluginSources(sources: {
   })
 
   const sessionNames = new Set(sessionPlugins.map(p => p.name))
-  const marketplacePlugins = sources.marketplace.filter(p => {
-    if (sessionNames.has(p.name)) {
+  // Different marketplaces can enable the same short plugin name, but
+  // downstream command/skill loading scopes by plugin.name.
+  const marketplacePluginsByName = new Map<string, LoadedPlugin>()
+  for (const plugin of sources.marketplace) {
+    if (sessionNames.has(plugin.name)) {
       logForDebugging(
-        `Plugin "${p.name}" from --plugin-dir overrides installed version`,
+        `Plugin "${plugin.name}" from --plugin-dir overrides installed version`,
       )
-      return false
+      continue
     }
-    return true
-  })
+    const existing = marketplacePluginsByName.get(plugin.name)
+    if (!existing) {
+      marketplacePluginsByName.set(plugin.name, plugin)
+      continue
+    }
+
+    const winner = selectMarketplacePlugin(existing, plugin)
+    const dropped = winner === existing ? plugin : existing
+    marketplacePluginsByName.set(plugin.name, winner)
+
+    logForDebugging(
+      `Ignoring duplicate marketplace plugin "${plugin.name}" from ${dropped.source}; using ${winner.source}`,
+      { level: 'warn' },
+    )
+    if (existing.enabled && plugin.enabled) {
+      errors.push({
+        type: 'generic-error',
+        source: dropped.source,
+        plugin: plugin.name,
+        error: `Duplicate marketplace plugin "${plugin.name}" ignored: using "${winner.source}" and skipping "${dropped.source}" to avoid short-name collisions`,
+      })
+    }
+  }
   // Session first, then non-overridden marketplace, then builtin.
   // Downstream first-match consumers see session plugins before
   // installed ones for any that slipped past the name filter.
   return {
-    plugins: [...sessionPlugins, ...marketplacePlugins, ...sources.builtin],
+    plugins: [
+      ...sessionPlugins,
+      ...marketplacePluginsByName.values(),
+      ...sources.builtin,
+    ],
     errors,
   }
+}
+
+function selectMarketplacePlugin(
+  current: LoadedPlugin,
+  candidate: LoadedPlugin,
+): LoadedPlugin {
+  if (current.enabled !== candidate.enabled) {
+    return candidate.enabled ? candidate : current
+  }
+
+  return candidate
 }
 
 /**
@@ -3122,7 +3168,7 @@ export const loadAllPlugins = memoize(async (): Promise<PluginLoadResult> => {
  *
  * GAKR_CODE_SYNC_PLUGIN_INSTALL=1 delegates to the full loader — that
  * mode explicitly opts into blocking install before first query, and
- * main.tsx's getgakrcliCodeMcpConfigs()/getInitialSettings().agent run
+ * main.tsx's getGakrcliCodeMcpConfigs()/getInitialSettings().agent run
  * BEFORE runHeadless() can warm this cache. First-run CCR/headless has
  * no installed_plugins.json, so cache-only would miss plugin MCP servers
  * and plugin settings (the agent key). The interactive startup win is

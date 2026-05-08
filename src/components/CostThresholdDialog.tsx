@@ -2,34 +2,21 @@ import React from 'react'
 import { Box, Link, Text } from '../ink.js'
 import { Select } from './CustomSelect/index.js'
 import { Dialog } from './design-system/Dialog.js'
-import { getAPIProvider } from '../utils/model/providers.js'
+import { getAPIProvider, type APIProvider } from '../utils/model/providers.js'
+import { getCostThresholdProviderLabelForProvider } from './CostThresholdProviderLabel.js'
 
 type Props = {
   onDone: () => void
 }
 
-function getProviderLabel(): string {
-  const provider = getAPIProvider()
-  switch (provider) {
-    case 'firstParty':
-      return 'gakrcli API'
-    case 'bedrock':
-      return 'AWS Bedrock'
-    case 'vertex':
-      return 'Google Vertex'
-    case 'foundry':
-      return 'Azure Foundry'
-    case 'openai':
-      return 'OpenAI-compatible API'
-    case 'gemini':
-      return 'Gemini API'
-    default:
-      return 'API'
-  }
+export function getCostThresholdProviderLabel(
+  provider: APIProvider = getAPIProvider(),
+): string {
+  return getCostThresholdProviderLabelForProvider(provider)
 }
 
 export function CostThresholdDialog({ onDone }: Props): React.ReactNode {
-  const providerLabel = getProviderLabel()
+  const providerLabel = getCostThresholdProviderLabel()
   return (
     <Dialog
       title={`You've spent $5 on the ${providerLabel} this session.`}
@@ -37,7 +24,7 @@ export function CostThresholdDialog({ onDone }: Props): React.ReactNode {
     >
       <Box flexDirection="column">
         <Text>Learn more about how to monitor your spending:</Text>
-        <Link url="https://github.com/gakr-gakr/gakr/docs/en/costs" />
+        <Link url="https://code.claude.com/docs/en/costs" />
       </Box>
       <Select
         options={[

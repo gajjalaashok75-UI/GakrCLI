@@ -1,6 +1,5 @@
 
 import { expect, test, mock, describe, beforeEach, afterEach } from "bun:test";
-import { getSecureStorage } from "./index.js";
 import { linuxSecretStorage } from "./linuxSecretStorage.js";
 import { windowsCredentialStorage } from "./windowsCredentialStorage.js";
 import { getSecureStorageServiceName, CREDENTIALS_SERVICE_SUFFIX } from "./macOsKeychainHelpers.js";
@@ -25,24 +24,24 @@ describe("Secure Storage Platform Implementations", () => {
     process.env = originalEnv;
   });
 
-  const testData = { 
-    mcpOAuth: { 
-      "test-server": { 
-        accessToken: "secret-token", 
-        expiresAt: 123456789, 
-        serverName: "test", 
-        serverUrl: "http://test" 
-      } 
-    } 
+  const testData = {
+    mcpOAuth: {
+      "test-server": {
+        accessToken: "secret-token",
+        expiresAt: 123456789,
+        serverName: "test",
+        serverUrl: "http://test"
+      }
+    }
   };
 
   describe("Config-Dir Isolation", () => {
     test("service name changes with GAKR_CONFIG_DIR", () => {
       const defaultName = getSecureStorageServiceName(CREDENTIALS_SERVICE_SUFFIX);
-      
+
       process.env.GAKR_CONFIG_DIR = "/tmp/other-config";
       const otherName = getSecureStorageServiceName(CREDENTIALS_SERVICE_SUFFIX);
-      
+
       expect(otherName).not.toBe(defaultName);
       expect(otherName).toContain("GakrCLI");
       expect(otherName).toContain(CREDENTIALS_SERVICE_SUFFIX);
@@ -51,9 +50,9 @@ describe("Secure Storage Platform Implementations", () => {
     test("Linux storage uses scoped service name", () => {
       process.env.GAKR_CONFIG_DIR = "/tmp/linux-scoped";
       const expectedName = getSecureStorageServiceName(CREDENTIALS_SERVICE_SUFFIX);
-      
+
       linuxSecretStorage.update(testData);
-      
+
       const args = mockExecaSync.mock.calls[0];
       expect(args[1]).toContain(expectedName);
     });

@@ -116,6 +116,32 @@ function formatProviderOutput(po: ProviderOutput, query: string): Output {
   }
 }
 
+function buildEmptyAdapterResultHint(provider: string, providerName: string): string {
+  return (
+    `No results from "${providerName}" search backend for provider "${provider}". ` +
+    `The default DuckDuckGo backend is rate-limited from many networks (datacenter IPs, VPNs, repeated requests) and returns 0 results when blocked. ` +
+    `For reliable web search on this provider, set one of: ` +
+    `FIRECRAWL_API_KEY, TAVILY_API_KEY, EXA_API_KEY, JINA_API_KEY, BING_API_KEY, MOJEEK_API_KEY, LINKUP_API_KEY, YOU_API_KEY — ` +
+    `or switch to an Anthropic / Vertex / Foundry provider that supports the native web_search tool.`
+  )
+}
+
+function formatProviderOutputWithEmptyHint(
+  po: ProviderOutput,
+  query: string,
+  provider: string,
+): Output {
+  const base = formatProviderOutput(po, query)
+  // Replace the "No results found." placeholder with a diagnostic hint when
+  // we know the next layer (native Anthropic web_search) will also produce
+  // 0 silently for this provider. Hits-present case is unchanged.
+  if (po.hits.length > 0) return base
+  return {
+    ...base,
+    results: [buildEmptyAdapterResultHint(provider, po.providerName)],
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Native Anthropic + Codex paths (unchanged, tightly coupled to SDK)
 // ---------------------------------------------------------------------------
@@ -133,7 +159,6 @@ function makeToolSchema(input: Input): BetaWebSearchTool20250305 {
 function isGakrModel(model: string): boolean {
   return /gakr/i.test(model)
 }
-
 
 function isCodexResponsesWebSearchEnabled(): boolean {
   if (getAPIProvider() !== 'openai') {
@@ -198,7 +223,7 @@ function buildCodexWebSearchInput(input: Input): Array<Record<string, unknown>> 
 
 function buildCodexWebSearchInstructions(): string {
   return [
-    'You are the Gakr web search tool.',
+    'You are the GakrCLI web search tool.',
     'Search the web for the user query and return a concise factual answer.',
     'Include source URLs in the response.',
   ].join(' ')
@@ -325,67 +350,10 @@ function makeOutputFromCodexWebSearchResponse(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Helper: should we use adapter-based providers?
-// ---------------------------------------------------------------------------
-
-/**
- * Returns true for transient errors that are safe to fall through on in auto mode
- * (network failures, timeouts, HTTP 5xx). Config and guardrail errors return false.
- */
-function isTransientError(err: unknown): boolean {
-  if (!(err instanceof Error)) return true
-  const msg = err.message.toLowerCase()
-  // Guardrail / config errors — must surface
-  if (msg.includes('must use https')) return false
-  if (msg.includes('private/reserved address')) return false
-  if (msg.includes('not in the safe allowlist')) return false
-  if (msg.includes('exceeds') && msg.includes('bytes')) return false
-  if (msg.includes('not a valid url')) return false
-  if (msg.includes('is not configured')) return false
-  // Transient errors — safe to fall through
-  if (err.name === 'AbortError') return true
-  if (msg.includes('timed out')) return true
-  if (msg.includes('fetch failed') || msg.includes('econnrefused') || msg.includes('enotfound')) return true
-  if (msg.includes('returned 5')) return true // HTTP 5xx
-  // Unknown — treat as transient to preserve auto-mode fallback semantics
-  return true
-}
-
-/**
- * Returns true when we should use the adapter-based provider system.
- *
- * In auto mode: native/first-party/Codex paths take precedence.
- *   → Only falls back to adapter if no native path is available.
- * In explicit adapter modes (tavily, ddg, custom, etc.): always true.
- * In native mode: never true.
- */
-function shouldUseAdapterProvider(): boolean {
-  const mode = getProviderMode()
-  if (mode === 'native') return false
-  if (mode !== 'auto') return true // explicit adapter mode (tavily, ddg, custom, etc.)
-
-  // Auto mode: native/first-party/Codex take precedence over adapter
-  if (isCodexResponsesWebSearchEnabled()) return false
-  const provider = getAPIProvider()
-  if (provider === 'firstParty' || provider === 'vertex' || provider === 'foundry') {
-    return false
-  }
-  // No native path available — fall back to adapter
-  return getAvailableProviders().length > 0
-}
-
-/**
- * Returns true when the current provider has a working native or Codex
- * web-search fallback after an adapter failure. OpenAI shim providers
- * (moonshot, minimax, nvidia-nim, openai, github, etc.) do NOT support
- * Anthropic's web_search_20250305 tool, so falling through to the native
- * path silently produces "Did 0 searches".
- */
-function hasNativeSearchFallback(): boolean {
-  if (isCodexResponsesWebSearchEnabled()) return true
-  const provider = getAPIProvider()
-  return provider === 'firstParty' || provider === 'vertex' || provider === 'foundry'
+export const __test = {
+  makeOutputFromCodexWebSearchResponse,
+  buildEmptyAdapterResultHint,
+  formatProviderOutputWithEmptyHint,
 }
 
 async function runCodexWebSearch(
@@ -515,6 +483,73 @@ function makeOutputFromSearchResponse(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Helper: should we use adapter-based providers?
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns true for transient errors that are safe to fall through on in auto mode
+ * (network failures, timeouts, HTTP 5xx). Config and guardrail errors return false.
+ */
+function isTransientError(err: unknown): boolean {
+  if (!(err instanceof Error)) return true
+  const msg = err.message.toLowerCase()
+  // Guardrail / config errors — must surface
+  if (msg.includes('must use https')) return false
+  if (msg.includes('private/reserved address')) return false
+  if (msg.includes('not in the safe allowlist')) return false
+  if (msg.includes('exceeds') && msg.includes('bytes')) return false
+  if (msg.includes('not a valid url')) return false
+  if (msg.includes('is not configured')) return false
+  // Transient errors — safe to fall through
+  if (err.name === 'AbortError') return true
+  if (msg.includes('timed out')) return true
+  if (msg.includes('fetch failed') || msg.includes('econnrefused') || msg.includes('enotfound')) return true
+  if (msg.includes('returned 5')) return true // HTTP 5xx
+  // Unknown — treat as transient to preserve auto-mode fallback semantics
+  return true
+}
+
+/**
+ * Returns true when we should use the adapter-based provider system.
+ *
+ * In auto mode: native/first-party/Codex paths take precedence.
+ *   → Only falls back to adapter if no native path is available.
+ * In explicit adapter modes (tavily, ddg, custom, etc.): always true.
+ * In native mode: never true.
+ */
+function shouldUseAdapterProvider(): boolean {
+  const mode = getProviderMode()
+  if (mode === 'native') return false
+  if (mode !== 'auto') return true // explicit adapter mode (tavily, ddg, custom, etc.)
+
+  // Auto mode: native/first-party/Codex take precedence over adapter
+  if (isCodexResponsesWebSearchEnabled()) return false
+  const provider = getAPIProvider()
+  if (provider === 'firstParty' || provider === 'vertex' || provider === 'foundry') {
+    return false
+  }
+  // No native path available — fall back to adapter
+  return getAvailableProviders().length > 0
+}
+
+/**
+ * Returns true when the current provider has a working native or Codex
+ * web-search fallback after an adapter failure. OpenAI shim providers
+ * (moonshot, minimax, nvidia-nim, openai, github, etc.) do NOT support
+ * Anthropic's web_search_20250305 tool, so falling through to the native
+ * path silently produces "Did 0 searches".
+ */
+function hasNativeSearchFallback(): boolean {
+  if (isCodexResponsesWebSearchEnabled()) return true
+  const provider = getAPIProvider()
+  return provider === 'firstParty' || provider === 'vertex' || provider === 'foundry'
+}
+
+// ---------------------------------------------------------------------------
+// Tool export
+// ---------------------------------------------------------------------------
+
 export const WebSearchTool = buildTool({
   name: WEB_SEARCH_TOOL_NAME,
   searchHint: 'search the web for current information',
@@ -551,12 +586,12 @@ export const WebSearchTool = buildTool({
       return true
     }
 
-    // Enable for Vertex AI with supported models (Gakr 4.0+)
+    // Enable for Vertex AI with supported models (Claude 4.0+)
     if (provider === 'vertex') {
       const supportsWebSearch =
-        model.includes('gakrcli-opus-4') ||
-        model.includes('gakrcli-sonnet-4') ||
-        model.includes('gakrcli-haiku-4')
+        model.includes('claude-opus-4') ||
+        model.includes('claude-sonnet-4') ||
+        model.includes('claude-haiku-4')
 
       return supportsWebSearch
     }
@@ -656,7 +691,24 @@ export const WebSearchTool = buildTool({
         if (isExplicitAdapter || providerOutput.hits.length > 0) {
           return { data: formatProviderOutput(providerOutput, input.query) }
         }
-        // Auto mode with 0 hits: fall through to native
+        // Auto mode with 0 hits: only fall through to native when a real
+        // native fallback exists. For openai-shim providers (minimax,
+        // moonshot, nvidia-nim, github copilot, etc.) the native path
+        // silently returns "Did 0 searches" because those providers do
+        // not support Anthropic's web_search_20250305 tool — same root
+        // cause as the catch branch below. Surface the empty result with
+        // an actionable note so users see why nothing came back.
+        if (!hasNativeSearchFallback()) {
+          return {
+            data: formatProviderOutputWithEmptyHint(
+              providerOutput,
+              input.query,
+              getAPIProvider(),
+            ),
+          }
+        }
+        // Auto mode + 0 hits + native fallback available: fall through to
+        // native (Anthropic/Vertex/Foundry/Codex) and let it try.
       } catch (err) {
         // Explicit adapter: throw the real error (no silent native fallback)
         if (isExplicitAdapter) throw err
@@ -671,7 +723,7 @@ export const WebSearchTool = buildTool({
           throw new Error(
             `Web search is unavailable for provider "${provider}". ` +
               `The search adapter failed (${errMsg}). ` +
-              `Try switching to a provider with built-in web search (e.g. Gakr, Codex) or try again later.`,
+              `Try switching to a provider with built-in web search (e.g. Anthropic, Codex) or try again later.`,
           )
         }
         console.error(
@@ -687,6 +739,7 @@ export const WebSearchTool = buildTool({
       }
     }
 
+    // --- Native Anthropic path (firstParty / vertex / foundry) ---
     const startTime = performance.now()
     const { query } = input
     const userMessage = createUserMessage({
@@ -746,8 +799,6 @@ export const WebSearchTool = buildTool({
         if (contentBlock && contentBlock.type === 'server_tool_use') {
           currentToolUseId = contentBlock.id
           currentToolUseJson = ''
-          // Note: The ServerToolUseBlock doesn't contain input.query
-          // The actual query comes through input_json_delta events
           continue
         }
       }
@@ -764,12 +815,10 @@ export const WebSearchTool = buildTool({
 
           // Try to extract query from partial JSON for progress updates
           try {
-            // Look for a complete query field
             const queryMatch = currentToolUseJson.match(
               /"query"\s*:\s*"((?:[^"\\]|\\.)*)"/,
             )
             if (queryMatch && queryMatch[1]) {
-              // The regex properly handles escaped characters
               const query = jsonParse('"' + queryMatch[1] + '"')
 
               if (
@@ -802,7 +851,6 @@ export const WebSearchTool = buildTool({
       ) {
         const contentBlock = event.event.content_block
         if (contentBlock && contentBlock.type === 'web_search_tool_result') {
-          // Get the actual query that was used for this search
           const toolUseId = contentBlock.tool_use_id
           const actualQuery = toolUseQueries.get(toolUseId) || query
           const content = contentBlock.content
@@ -868,7 +916,3 @@ export const WebSearchTool = buildTool({
     }
   },
 } satisfies ToolDef<InputSchema, Output, WebSearchProgress>)
-
-export const __test = {
-  makeOutputFromCodexWebSearchResponse,
-}

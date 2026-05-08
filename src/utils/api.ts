@@ -111,9 +111,58 @@ function filterSwarmFieldsFromSchema(
       delete filteredProps[field]
     }
     filtered.properties = filteredProps
+
+    // Keep `required` in sync after removing properties
+    if (Array.isArray(filtered.required)) {
+      filtered.required = filtered.required.filter(
+        (key: string) => key in filteredProps,
+      )
+    }
   }
 
   return filtered
+}
+
+/**
+ * Ensure `required` only lists keys present in `properties`.
+ * MCP servers may emit schemas where these are out of sync, causing
+ * API 400 errors ("Extra required key supplied").
+ * Recurses into nested object schemas.
+ */
+function sanitizeSchemaRequired(
+  schema: Anthropic.Tool.InputSchema,
+): Anthropic.Tool.InputSchema {
+  if (!schema || typeof schema !== 'object') {
+    return schema
+  }
+
+  const result = { ...schema }
+  const props = result.properties as Record<string, unknown> | undefined
+
+  if (props && Array.isArray(result.required)) {
+    result.required = result.required.filter(
+      (key: string) => key in props,
+    )
+  }
+
+  // Recurse into nested object properties
+  if (props) {
+    const sanitizedProps = { ...props }
+    for (const [key, value] of Object.entries(sanitizedProps)) {
+      if (
+        value &&
+        typeof value === 'object' &&
+        (value as Record<string, unknown>).type === 'object'
+      ) {
+        sanitizedProps[key] = sanitizeSchemaRequired(
+          value as Anthropic.Tool.InputSchema,
+        )
+      }
+    }
+    result.properties = sanitizedProps
+  }
+
+  return result
 }
 
 export async function toolToAPISchema(
@@ -156,7 +205,7 @@ export async function toolToAPISchema(
     // Use tool's JSON schema directly if provided, otherwise convert Zod schema
     let input_schema = (
       'inputJSONSchema' in tool && tool.inputJSONSchema
-        ? tool.inputJSONSchema
+        ? sanitizeSchemaRequired(tool.inputJSONSchema as Anthropic.Tool.InputSchema)
         : zodToJsonSchema(tool.inputSchema)
     ) as Anthropic.Tool.InputSchema
 
@@ -195,7 +244,7 @@ export async function toolToAPISchema(
     // Without FGTS, the API buffers entire tool input parameters before sending
     // input_json_delta events, causing multi-minute hangs on large tool inputs.
     // Gated to direct api.anthropic.com: proxies (LiteLLM etc.) and Bedrock/Vertex
-    // with Gakr 4.5 reject this field with 400. See GH#32742, PR #21729.
+    // with GakrCLI reject this field with 400. See GH#32742, PR #21729.
     if (
       getAPIProvider() === 'firstParty' &&
       isFirstPartyAnthropicBaseUrl() &&
@@ -239,7 +288,7 @@ export async function toolToAPISchema(
   // standard prompt caching (Bedrock/Vertex supported); the beta sub-fields
   // (scope, ttl) are already gated upstream by shouldIncludeFirstPartyOnlyBetas
   // which independently respects this kill switch.
-  // github.com/anthropics/gakrcli-code/issues/20031
+  // github.com/gakr-gakr/gakrcli/issues/20031
   if (isEnvTruthy(process.env.GAKR_CODE_DISABLE_EXPERIMENTAL_BETAS)) {
     const allowed = new Set([
       'name',
@@ -276,7 +325,7 @@ function logStripOnce(stripped: string[]): void {
 
 /**
  * Log stats about first block for analyzing prefix matching config
- * (see https://console.statsig.com/4aF3Ewatb6xPVpCwxb5nA3/dynamic_configs/gakrcli_cli_system_prompt_prefixes)
+ * (see https://console.statsig.com/4aF3Ewatb6xPVpCwxb5nA3/dynamic_configs/gakr_cli_system_prompt_prefixes)
  */
 export function logAPIPrefix(systemPrompt: SystemPrompt): void {
   const [firstSyspromptBlock] = splitSysPromptPrefix(systemPrompt)
@@ -295,7 +344,7 @@ export function logAPIPrefix(systemPrompt: SystemPrompt): void {
 
 /**
  * Split system prompt blocks by content type for API matching and cache control.
- * See https://console.statsig.com/4aF3Ewatb6xPVpCwxb5nA3/dynamic_configs/gakrcli_cli_system_prompt_prefixes
+ * See https://console.statsig.com/4aF3Ewatb6xPVpCwxb5nA3/dynamic_configs/gakr_cli_system_prompt_prefixes
  *
  * Behavior depends on feature flags and options:
  *
@@ -594,7 +643,7 @@ export function normalizeToolInput<T extends Tool>(
       // Replace \\; with \; (commonly needed for find -exec commands)
       normalizedCommand = normalizedCommand.replace(/\\\\;/g, '\\;')
 
-      // Logging for commands that are only echoing a string. This is to help us understand how often  Gakr talks via bash
+      // Logging for commands that are only echoing a string. This is to help us understand how often  gakrcli talks via bash
       if (/^echo\s+["']?[^|&;><]*["']?$/i.test(normalizedCommand.trim())) {
         logEvent('tengu_bash_tool_simple_echo', {})
       }
@@ -613,10 +662,6 @@ export function normalizeToolInput<T extends Tool>(
         ...(timeout !== undefined && { timeout }),
         ...(description !== undefined && { description }),
         ...(run_in_background !== undefined && { run_in_background }),
-        ...('dangerouslyDisableSandbox' in parsed &&
-          parsed.dangerouslyDisableSandbox !== undefined && {
-            dangerouslyDisableSandbox: parsed.dangerouslyDisableSandbox,
-          }),
       } as z.infer<T['inputSchema']>
     }
     case FileEditTool.name: {

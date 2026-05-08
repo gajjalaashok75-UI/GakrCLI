@@ -6,7 +6,7 @@ describe('getAgentModel provider-aware fallback', () => {
     mock.restore()
   })
 
-  describe('Claude-native providers', () => {
+  describe('Gakrcli-native providers', () => {
     test('haiku alias resolves to haiku model for official Anthropic API', async () => {
       // Mock providers to return firstParty with official URL
       mock.module('./providers.js', () => ({
@@ -63,7 +63,7 @@ describe('getAgentModel provider-aware fallback', () => {
     })
   })
 
-  describe('Non-Claude-native providers', () => {
+  describe('Non-Gakrcli-native providers', () => {
     test('haiku alias inherits parent model for OpenAI provider', async () => {
       mock.module('./providers.js', () => ({
         getAPIProvider: () => 'openai',
@@ -197,15 +197,15 @@ describe('getAgentModel provider-aware fallback', () => {
     })
   })
 
-  describe('checkIsClaudeNativeProvider helper', () => {
+  describe('checkIsGakrcliNativeProvider helper', () => {
     test('returns true for official Anthropic API', async () => {
       mock.module('./providers.js', () => ({
         getAPIProvider: () => 'firstParty',
         isFirstPartyAnthropicBaseUrl: () => true,
       }))
 
-      const { checkIsClaudeNativeProvider } = await import('./agent.js')
-      expect(checkIsClaudeNativeProvider()).toBe(true)
+      const { checkIsGakrcliNativeProvider } = await import('./agent.js')
+      expect(checkIsGakrcliNativeProvider()).toBe(true)
     })
 
     test('returns true for Bedrock provider', async () => {
@@ -214,8 +214,8 @@ describe('getAgentModel provider-aware fallback', () => {
         isFirstPartyAnthropicBaseUrl: () => false,
       }))
 
-      const { checkIsClaudeNativeProvider } = await import('./agent.js')
-      expect(checkIsClaudeNativeProvider()).toBe(true)
+      const { checkIsGakrcliNativeProvider } = await import('./agent.js')
+      expect(checkIsGakrcliNativeProvider()).toBe(true)
     })
 
     test('returns true for Vertex provider', async () => {
@@ -224,8 +224,8 @@ describe('getAgentModel provider-aware fallback', () => {
         isFirstPartyAnthropicBaseUrl: () => false,
       }))
 
-      const { checkIsClaudeNativeProvider } = await import('./agent.js')
-      expect(checkIsClaudeNativeProvider()).toBe(true)
+      const { checkIsGakrcliNativeProvider } = await import('./agent.js')
+      expect(checkIsGakrcliNativeProvider()).toBe(true)
     })
 
     test('returns true for Foundry provider', async () => {
@@ -234,8 +234,8 @@ describe('getAgentModel provider-aware fallback', () => {
         isFirstPartyAnthropicBaseUrl: () => false,
       }))
 
-      const { checkIsClaudeNativeProvider } = await import('./agent.js')
-      expect(checkIsClaudeNativeProvider()).toBe(true)
+      const { checkIsGakrcliNativeProvider } = await import('./agent.js')
+      expect(checkIsGakrcliNativeProvider()).toBe(true)
     })
 
     test('returns false for OpenAI provider', async () => {
@@ -244,8 +244,8 @@ describe('getAgentModel provider-aware fallback', () => {
         isFirstPartyAnthropicBaseUrl: () => false,
       }))
 
-      const { checkIsClaudeNativeProvider } = await import('./agent.js')
-      expect(checkIsClaudeNativeProvider()).toBe(false)
+      const { checkIsGakrcliNativeProvider } = await import('./agent.js')
+      expect(checkIsGakrcliNativeProvider()).toBe(false)
     })
 
     test('returns false for custom Anthropic URL', async () => {
@@ -254,8 +254,8 @@ describe('getAgentModel provider-aware fallback', () => {
         isFirstPartyAnthropicBaseUrl: () => false,
       }))
 
-      const { checkIsClaudeNativeProvider } = await import('./agent.js')
-      expect(checkIsClaudeNativeProvider()).toBe(false)
+      const { checkIsGakrcliNativeProvider } = await import('./agent.js')
+      expect(checkIsGakrcliNativeProvider()).toBe(false)
     })
   })
 })

@@ -81,14 +81,14 @@ export function getFastModeUnavailableReason(): string | null {
     return 'Fast mode is not available'
   }
 
-  const statigReason = getFeatureValue_CACHED_MAY_BE_STALE(
+  const statsigReason = getFeatureValue_CACHED_MAY_BE_STALE(
     'tengu_penguins_off',
     null,
   )
   // Statsig reason has priority over other reasons.
-  if (statigReason !== null) {
-    logForDebugging(`Fast mode unavailable: ${statigReason}`)
-    return statigReason
+  if (typeof statsigReason === 'string') {
+    logForDebugging(`Fast mode unavailable: ${statsigReason}`)
+    return statsigReason
   }
 
   // Previously, fast mode required the native binary (bun build). This is no
@@ -97,7 +97,7 @@ export function getFastModeUnavailableReason(): string | null {
     !isInBundledMode() &&
     getFeatureValue_CACHED_MAY_BE_STALE('tengu_marble_sandcastle', false)
   ) {
-    return 'Fast mode requires the native binary · Install from: https://gakrcli.com/product/gakrcli-code'
+    return 'Fast mode requires the native binary · Install from: https://gakr.com/product/gakrcli'
   }
 
   // Not available in the SDK unless explicitly opted in via --settings.
@@ -367,7 +367,7 @@ type FastModeResponse = {
 async function fetchFastModeStatus(
   auth: { accessToken: string } | { apiKey: string },
 ): Promise<FastModeResponse> {
-  const endpoint = `${getOauthConfig().BASE_API_URL}/api/gakrcli_code_penguin_mode`
+  const endpoint = `${getOauthConfig().BASE_API_URL}/api/gakrcli_penguin_mode`
   const headers: Record<string, string> =
     'accessToken' in auth
       ? {

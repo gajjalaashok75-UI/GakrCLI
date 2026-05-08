@@ -1,5 +1,6 @@
-// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
+// biome-ignore-all assist/source/organizeImports: internal-only import markers must not be reordered
 import { getInitialMainLoopModel } from '../../bootstrap/state.js'
+import { getAdditionalModelOptionsCacheScope } from '../../services/api/providerConfig.js'
 import {
   isgakrcliAISubscriber,
   isMaxSubscriber,
@@ -32,6 +33,15 @@ import {
 } from './model.js'
 import { has1mContext } from '../context.js'
 import { getGlobalConfig } from '../config.js'
+import {
+  getActiveOpenAIModelOptionsCache,
+  getActiveProviderProfile,
+  getProfileModelOptions,
+} from '../providerProfiles.js'
+import { getCachedOllamaModelOptions, isOllamaProvider } from './ollamaModels.js'
+import { getCachedNvidiaNimModelOptions, isNvidiaNimProvider } from './nvidiaNimModels.js'
+import { getCachedMiniMaxModelOptions, isMiniMaxProvider } from './minimaxModels.js'
+import { getAntModels } from './antModels.js'
 
 // @[MODEL LAUNCH]: Update all the available and default model option strings below.
 
@@ -42,7 +52,28 @@ export type ModelOption = {
   descriptionForModel?: string
 }
 
+function getScopedAdditionalModelOptions(): ModelOption[] {
+  const config = getGlobalConfig()
+  const activeScope = getAdditionalModelOptionsCacheScope()
+
+  if (!activeScope) {
+    return []
+  }
+
+  if (config.additionalModelOptionsCacheScope !== undefined) {
+    return config.additionalModelOptionsCacheScope === activeScope
+      ? (config.additionalModelOptionsCache ?? [])
+      : []
+  }
+
+  return activeScope === 'firstParty'
+    ? (config.additionalModelOptionsCache ?? [])
+    : []
+}
+
 export function getDefaultOptionForUser(fastMode = false): ModelOption {
+  const is3P = getAPIProvider() !== 'firstParty'
+
   if (process.env.USER_TYPE === 'ant') {
     const currentModel = renderDefaultModelSetting(
       getDefaultMainLoopModelSetting(),
@@ -52,6 +83,14 @@ export function getDefaultOptionForUser(fastMode = false): ModelOption {
       label: 'Default (recommended)',
       description: `Use the default model for Ants (currently ${currentModel})`,
       descriptionForModel: `Default model (currently ${currentModel})`,
+    }
+  }
+
+  if (is3P) {
+    return {
+      value: null,
+      label: 'Default (recommended)',
+      description: `Use the default model (currently ${renderDefaultModelSetting(getDefaultMainLoopModelSetting())})`,
     }
   }
 
@@ -65,7 +104,6 @@ export function getDefaultOptionForUser(fastMode = false): ModelOption {
   }
 
   // PAYG
-  const is3P = getAPIProvider() !== 'firstParty'
   return {
     value: null,
     label: 'Default (recommended)',
@@ -127,6 +165,16 @@ function getOpus41Option(): ModelOption {
     label: 'Opus 4.1',
     description: `Opus 4.1 · Legacy`,
     descriptionForModel: 'Opus 4.1 - legacy version',
+  }
+}
+
+function getOpus47Option(fastMode = false): ModelOption {
+  const is3P = getAPIProvider() !== 'firstParty'
+  return {
+    value: is3P ? getModelStrings().opus47 : 'opus',
+    label: 'Opus',
+    description: `Opus 4.7 · Most capable for complex work${getOpus46PricingSuffix(fastMode)}`,
+    descriptionForModel: 'Opus 4.7 - most capable for complex work',
   }
 }
 
@@ -212,7 +260,7 @@ function getMaxOpusOption(fastMode = false): ModelOption {
   return {
     value: 'opus',
     label: 'Opus',
-    description: `Opus 4.6 · Most capable for complex work${fastMode ? getOpus46PricingSuffix(true) : ''}`,
+    description: `Opus 4.7 · Most capable for complex work${fastMode ? getOpus46PricingSuffix(true) : ''}`,
   }
 }
 
@@ -240,9 +288,9 @@ function getMergedOpus1MOption(fastMode = false): ModelOption {
   return {
     value: is3P ? getModelStrings().opus46 + '[1m]' : 'opus[1m]',
     label: 'Opus (1M context)',
-    description: `Opus 4.6 with 1M context · Most capable for complex work${!is3P && fastMode ? getOpus46PricingSuffix(fastMode) : ''}`,
+    description: `${is3P ? 'Opus 4.6' : 'Opus 4.7'} with 1M context · Most capable for complex work${!is3P && fastMode ? getOpus46PricingSuffix(fastMode) : ''}`,
     descriptionForModel:
-      'Opus 4.6 with 1M context - most capable for complex work',
+      `${is3P ? 'Opus 4.6' : 'Opus 4.7'} with 1M context - most capable for complex work`,
   }
 }
 
@@ -262,7 +310,7 @@ function getOpusPlanOption(): ModelOption {
   return {
     value: 'opusplan',
     label: 'Opus Plan Mode',
-    description: 'Use Opus 4.6 in plan mode, Sonnet 4.6 otherwise',
+    description: 'Use Opus 4.7 in plan mode, Sonnet 4.6 otherwise',
   }
 }
 
@@ -288,11 +336,6 @@ function getCodexModelOptions(): ModelOption[] {
       value: 'gpt-5.5',
       label: 'gpt-5.5',
       description: 'GPT-5.5 with high reasoning',
-    },
-    {
-      value: 'gpt-5.5-mini',
-      label: 'gpt-5.5-mini',
-      description: 'GPT-5.5 Mini - faster, cheaper',
     },
     {
       value: 'gpt-5.4',
@@ -330,6 +373,11 @@ function getCodexModelOptions(): ModelOption[] {
       description: 'GPT-5.1 Codex Mini - faster, cheaper',
     },
     {
+      value: 'gpt-5.5-mini',
+      label: 'gpt-5.5-mini',
+      description: 'GPT-5.5 Mini - faster, cheaper',
+    },
+    {
       value: 'gpt-5.4-mini',
       label: 'gpt-5.4-mini',
       description: 'GPT-5.4 Mini - faster, cheaper',
@@ -339,13 +387,70 @@ function getCodexModelOptions(): ModelOption[] {
 
 // @[MODEL LAUNCH]: Update the model picker lists below to include/reorder options for the new model.
 // Each user tier (ant, Max/Team Premium, Pro/Team Standard/Enterprise, PAYG 1P, PAYG 3P) has its own list.
+
+import { getAllCopilotModels } from './copilotModels.js'
+
+function getCopilotModelOptions(): ModelOption[] {
+  return getAllCopilotModels().map(m => ({
+    value: m.id,
+    label: m.name,
+    description: `${m.family}${m.reasoning ? ' · Reasoning' : ''}${m.tool_call ? ' · Tool call' : ''} · ${Math.round(m.limit.context / 1000)}K context`,
+  }))
+}
+
 function getModelOptionsBase(fastMode = false): ModelOption[] {
+  if (getAPIProvider() === 'github') {
+    return [getDefaultOptionForUser(fastMode), ...getCopilotModelOptions()]
+  }
+
+  // When using Ollama, show models from the Ollama server instead of Gakr models
+  if (getAPIProvider() === 'openai' && isOllamaProvider()) {
+    const defaultOption = getDefaultOptionForUser(fastMode)
+    const ollamaModels = getCachedOllamaModelOptions()
+    if (ollamaModels.length > 0) {
+      return [defaultOption, ...ollamaModels]
+    }
+    // Fallback: if models not yet fetched, show current model instead of Gakr models
+    const currentModel = getUserSpecifiedModelSetting() ?? getInitialMainLoopModel()
+    if (currentModel != null) {
+      return [
+        defaultOption,
+        {
+          value: currentModel,
+          label: currentModel,
+          description: 'Currently configured Ollama model',
+        },
+      ]
+    }
+    return [defaultOption]
+  }
+
+  // When using NVIDIA NIM, show models from the NVIDIA catalog
+  if (isNvidiaNimProvider()) {
+    const defaultOption = getDefaultOptionForUser(fastMode)
+    const nvidiaModels = getCachedNvidiaNimModelOptions()
+    if (nvidiaModels.length > 0) {
+      return [defaultOption, ...nvidiaModels]
+    }
+    return [defaultOption]
+  }
+
+  // When using MiniMax, show models from the MiniMax catalog
+  if (isMiniMaxProvider()) {
+    const defaultOption = getDefaultOptionForUser(fastMode)
+    const minimaxModels = getCachedMiniMaxModelOptions()
+    if (minimaxModels.length > 0) {
+      return [defaultOption, ...minimaxModels]
+    }
+    return [defaultOption]
+  }
+
   if (process.env.USER_TYPE === 'ant') {
     // Build options from antModels config
     const antModelOptions: ModelOption[] = getAntModels().map(m => ({
       value: m.alias,
       label: m.label,
-      description: m.description ?? `[ANT-ONLY] ${m.label} (${m.model})`,
+      description: m.description ?? `[internal] ${m.label} (${m.model})`,
     }))
 
     return [
@@ -394,7 +499,31 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
     return standardOptions
   }
 
-  // PAYG 1P API: Default (Sonnet) + Sonnet 1M + Opus 4.6 + Opus 1M + Haiku
+  if (getAdditionalModelOptionsCacheScope()?.startsWith('openai:')) {
+    const activeOpenAIOptions = getActiveOpenAIModelOptionsCache()
+    return [
+      getDefaultOptionForUser(fastMode),
+      ...(activeOpenAIOptions.length > 0
+        ? activeOpenAIOptions
+        : getScopedAdditionalModelOptions()),
+    ]
+  }
+
+  // When a provider profile's env is applied, collect its models so they
+  // can be appended to the standard picker options below.
+  // We check PROFILE_ENV_APPLIED to avoid the ?? profiles[0] fallback in
+  // getActiveProviderProfile which would affect users with inactive profiles.
+  const profileEnvApplied = process.env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED === '1'
+  const profileModelOptions: ModelOption[] = []
+  if (profileEnvApplied) {
+    const activeProfile = getActiveProviderProfile()
+    if (activeProfile) {
+      const models = getProfileModelOptions(activeProfile)
+      profileModelOptions.push(...models)
+    }
+  }
+
+  // PAYG 1P API: Default (Sonnet) + Sonnet 1M + Opus 4.7 + Opus 4.6 + Opus 1M + Haiku
   if (getAPIProvider() === 'firstParty') {
     const payg1POptions = [getDefaultOptionForUser(fastMode)]
     if (checkSonnet1mAccess()) {
@@ -403,12 +532,14 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
     if (isOpus1mMergeEnabled()) {
       payg1POptions.push(getMergedOpus1MOption(fastMode))
     } else {
+      payg1POptions.push(getOpus47Option(fastMode))
       payg1POptions.push(getOpus46Option(fastMode))
       if (checkOpus1mAccess()) {
         payg1POptions.push(getOpus46_1MOption(fastMode))
       }
     }
     payg1POptions.push(getHaiku45Option())
+    payg1POptions.push(...profileModelOptions)
     return payg1POptions
   }
 
@@ -435,8 +566,9 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
   if (customOpus !== undefined) {
     payg3pOptions.push(customOpus)
   } else {
-    // Add Opus 4.1, Opus 4.6 and Opus 4.6 1M
+    // Add Opus 4.1, Opus 4.7, Opus 4.6 and Opus 4.6 1M
     payg3pOptions.push(getOpus41Option()) // This is the default opus
+    payg3pOptions.push(getOpus47Option(fastMode))
     payg3pOptions.push(getOpus46Option(fastMode))
     if (checkOpus1mAccess()) {
       payg3pOptions.push(getOpus46_1MOption(fastMode))
@@ -448,6 +580,7 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
   } else {
     payg3pOptions.push(getHaikuOption())
   }
+  payg3pOptions.push(...profileModelOptions)
   return payg3pOptions
 }
 
@@ -465,11 +598,11 @@ function getModelFamilyInfo(
 
   // Sonnet family
   if (
-    canonical.includes('gakrcli-sonnet-4-6') ||
-    canonical.includes('gakrcli-sonnet-4-5') ||
-    canonical.includes('gakrcli-sonnet-4-') ||
-    canonical.includes('gakrcli-3-7-sonnet') ||
-    canonical.includes('gakrcli-3-5-sonnet')
+    canonical.includes('claude-sonnet-4-6') ||
+    canonical.includes('claude-sonnet-4-5') ||
+    canonical.includes('claude-sonnet-4-') ||
+    canonical.includes('claude-3-7-sonnet') ||
+    canonical.includes('claude-3-5-sonnet')
   ) {
     const currentName = getMarketingNameForModel(getDefaultSonnetModel())
     if (currentName) {
@@ -478,7 +611,7 @@ function getModelFamilyInfo(
   }
 
   // Opus family
-  if (canonical.includes('gakrcli-opus-4')) {
+  if (canonical.includes('claude-opus-4')) {
     const currentName = getMarketingNameForModel(getDefaultOpusModel())
     if (currentName) {
       return { alias: 'Opus', currentVersionName: currentName }
@@ -487,8 +620,8 @@ function getModelFamilyInfo(
 
   // Haiku family
   if (
-    canonical.includes('gakrcli-haiku') ||
-    canonical.includes('gakrcli-3-5-haiku')
+    canonical.includes('claude-haiku') ||
+    canonical.includes('claude-3-5-haiku')
   ) {
     const currentName = getMarketingNameForModel(getDefaultHaikuModel())
     if (currentName) {
@@ -535,6 +668,10 @@ function getKnownModelOption(model: string): ModelOption | null {
 }
 
 export function getModelOptions(fastMode = false): ModelOption[] {
+  if (getAPIProvider() === 'github') {
+    return filterModelOptionsByAllowlist(getModelOptionsBase(fastMode))
+  }
+
   const options = getModelOptionsBase(fastMode)
 
   // Add the custom model from the ANTHROPIC_CUSTOM_MODEL_OPTION env var
@@ -553,7 +690,7 @@ export function getModelOptions(fastMode = false): ModelOption[] {
   }
 
   // Append additional model options fetched during bootstrap
-  for (const opt of getGlobalConfig().additionalModelOptionsCache ?? []) {
+  for (const opt of getScopedAdditionalModelOptions()) {
     if (!options.some(existing => existing.value === opt.value)) {
       options.push(opt)
     }
@@ -574,8 +711,6 @@ export function getModelOptions(fastMode = false): ModelOption[] {
   } else if (customModel === 'opusplan') {
     return filterModelOptionsByAllowlist([...options, getOpusPlanOption()])
   } else if (customModel === 'gpt-5.5') {
-    return filterModelOptionsByAllowlist([...options, getCodexPlanOption()])
-  } else if (customModel === 'gpt-5.4') {
     return filterModelOptionsByAllowlist([...options, getCodexPlanOption()])
   } else if (customModel === 'gpt-5.3-codex-spark') {
     return filterModelOptionsByAllowlist([...options, getCodexSparkOption()])

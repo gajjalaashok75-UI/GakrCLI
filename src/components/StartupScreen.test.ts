@@ -1,37 +1,79 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { detectProvider } from './StartupScreen.js'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test'
+
+const actualSettings = await import('../utils/settings/settings.js')
+
+beforeAll(() => {
+  mock.module('../utils/settings/settings.js', () => ({
+    ...actualSettings,
+    getSettings_DEPRECATED: () => ({}),
+  }))
+})
+
+afterAll(() => {
+  mock.restore()
+})
+
+import stripAnsi from 'strip-ansi'
+import { detectProvider, printStartupScreen } from './StartupScreen.js'
+import { saveGlobalConfig } from '../utils/config.js'
+import {
+  resetSettingsCache,
+  setSessionSettingsCache,
+} from '../utils/settings/settingsCache.js'
 
 const ENV_KEYS = [
+  'CI',
   'GAKR_CODE_USE_OPENAI',
   'GAKR_CODE_USE_GEMINI',
   'GAKR_CODE_USE_GITHUB',
   'GAKR_CODE_USE_BEDROCK',
   'GAKR_CODE_USE_VERTEX',
   'GAKR_CODE_USE_MISTRAL',
-  'GAKR_CODE_USE_NVIDIA',
   'OPENAI_BASE_URL',
   'OPENAI_API_KEY',
   'OPENAI_MODEL',
   'GEMINI_MODEL',
   'MISTRAL_MODEL',
-  'NVIDIA_MODEL',
-  'NVIDIA_BASE_URL',
   'ANTHROPIC_MODEL',
   'GAKR_MODEL',
   'NVIDIA_NIM',
   'MINIMAX_API_KEY',
+  'XAI_API_KEY',
+  'ANTHROPIC_DEFAULT_OPUS_MODEL',
+  'ANTHROPIC_DEFAULT_SONNET_MODEL',
+  'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+  'ANTHROPIC_BASE_URL',
 ]
 
 const originalEnv: Record<string, string | undefined> = {}
+const originalMacro = (globalThis as Record<string, unknown>).MACRO
+const originalIsTTY = process.stdout.isTTY
+const originalWrite = process.stdout.write
 
 beforeEach(() => {
   for (const key of ENV_KEYS) {
     originalEnv[key] = process.env[key]
     delete process.env[key]
   }
+  setSessionSettingsCache({ settings: {}, errors: [] })
+  saveGlobalConfig(current => ({
+    ...current,
+    model: undefined,
+  }))
 })
 
 afterEach(() => {
+  resetSettingsCache()
+  saveGlobalConfig(current => ({
+    ...current,
+    model: undefined,
+  }))
+  ;(globalThis as Record<string, unknown>).MACRO = originalMacro
+  Object.defineProperty(process.stdout, 'isTTY', {
+    configurable: true,
+    value: originalIsTTY,
+  })
+  process.stdout.write = originalWrite
   for (const key of ENV_KEYS) {
     if (originalEnv[key] === undefined) {
       delete process.env[key]
@@ -115,14 +157,14 @@ describe('detectProvider — direct vendor endpoints', () => {
     expect(detectProvider().name).toBe('Moonshot AI - API')
   })
 
-  test('api.mistral.ai labels as Mistral', () => {
+  test('api.mistral.ai labels from descriptor route metadata', () => {
     setupOpenAIMode('https://api.mistral.ai/v1', 'mistral-large-latest')
-    expect(detectProvider().name).toBe('Mistral')
+    expect(detectProvider().name).toBe('Mistral AI')
   })
 
-  test('api.z.ai labels as Z.AI GLM', () => {
+  test('api.z.ai labels from descriptor route metadata', () => {
     setupOpenAIMode('https://api.z.ai/api/coding/paas/v4', 'GLM-5.1')
-    expect(detectProvider().name).toBe('Z.AI - GLM')
+    expect(detectProvider().name).toBe('Z.AI')
   })
 
   test('default OpenAI URL + gpt-4o labels as OpenAI', () => {
@@ -159,9 +201,9 @@ describe('detectProvider — rawModel fallback when URL is generic', () => {
     expect(detectProvider().name).toBe('Mistral')
   })
 
-  test('custom proxy + exact uppercase GLM ID falls back to Z.AI GLM', () => {
+  test('custom proxy + exact uppercase GLM ID stays generic without route metadata', () => {
     setupOpenAIMode('https://my-proxy.internal/v1', 'GLM-5.1')
-    expect(detectProvider().name).toBe('Z.AI - GLM')
+    expect(detectProvider().name).toBe('OpenAI')
   })
 
   test('custom proxy + lowercase glm ID stays generic OpenAI', () => {
@@ -195,7 +237,7 @@ describe('detectProvider — explicit dedicated-provider env flags', () => {
 
 describe('detectProvider — modelOverride from --model flag', () => {
   test('modelOverride overrides default Anthropic model', () => {
-    const result = detectProvider('gakrcli-opus-4-6')
+    const result = detectProvider('claude-opus-4-6')
     expect(result.name).toBe('Anthropic')
     expect(result.model).toContain('opus')
   })
@@ -207,15 +249,15 @@ describe('detectProvider — modelOverride from --model flag', () => {
   })
 
   test('modelOverride takes priority over ANTHROPIC_MODEL env var', () => {
-    process.env.ANTHROPIC_MODEL = 'gakrcli-haiku-4-5-20251001'
-    const result = detectProvider('gakrcli-opus-4-6')
+    process.env.ANTHROPIC_MODEL = 'claude-haiku-4-5-20251001'
+    const result = detectProvider('claude-opus-4-6')
     expect(result.name).toBe('Anthropic')
     expect(result.model).toContain('opus')
   })
 
   test('modelOverride takes priority over GAKR_MODEL env var', () => {
-    process.env.GAKR_MODEL = 'gakrcli-haiku-4-5-20251001'
-    const result = detectProvider('gakrcli-opus-4-6')
+    process.env.GAKR_MODEL = 'claude-haiku-4-5-20251001'
+    const result = detectProvider('claude-opus-4-6')
     expect(result.name).toBe('Anthropic')
     expect(result.model).toContain('opus')
   })
@@ -247,18 +289,16 @@ describe('detectProvider — modelOverride from --model flag', () => {
   })
 
   test('undefined modelOverride preserves default behavior', () => {
+    process.env.ANTHROPIC_MODEL = 'claude-sonnet-4-6'
     const result = detectProvider(undefined)
     expect(result.name).toBe('Anthropic')
-    // Model can vary based on user settings, just check it's defined
-    expect(result.model).toBeDefined()
-    expect(result.model.length).toBeGreaterThan(0)
+    expect(result.model).toContain('sonnet')
   })
 
   test('no argument preserves default behavior', () => {
+    process.env.ANTHROPIC_MODEL = 'claude-sonnet-4-6'
     const result = detectProvider()
     expect(result.name).toBe('Anthropic')
-    // Model can vary based on user settings, just check it's defined
-    expect(result.model).toBeDefined()
-    expect(result.model.length).toBeGreaterThan(0)
+    expect(result.model).toContain('sonnet')
   })
 })

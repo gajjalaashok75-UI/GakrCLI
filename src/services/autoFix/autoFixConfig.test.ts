@@ -77,8 +77,7 @@ describe('getAutoFixConfig', () => {
 })
 
 describe('SettingsSchema autoFix integration', () => {
-  // TODO: Uncomment these tests once autoFix field is added to SettingsSchema
-  test.skip('SettingsSchema accepts autoFix field', async () => {
+  test('SettingsSchema accepts autoFix field', async () => {
     const { SettingsSchema } = await import('../../utils/settings/types.js')
     const settings = {
       autoFix: {
@@ -93,7 +92,7 @@ describe('SettingsSchema autoFix integration', () => {
     expect(result.success).toBe(true)
   })
 
-  test.skip('SettingsSchema rejects invalid autoFix', async () => {
+  test('SettingsSchema rejects invalid autoFix', async () => {
     const { SettingsSchema } = await import('../../utils/settings/types.js')
     const settings = {
       autoFix: {

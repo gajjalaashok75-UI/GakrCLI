@@ -124,6 +124,74 @@ function redactSensitiveUrlParams(url: string): string {
   }
 }
 
+type OAuthCallbackParamValue = string | string[] | null | undefined
+
+type OAuthCallbackValidationResult =
+  | { type: 'code'; code: string }
+  | {
+      type: 'error'
+      error: string
+      errorDescription: string
+      errorUri: string
+      message: string
+    }
+  | { type: 'missing_result' }
+  | { type: 'state_mismatch' }
+
+function getFirstOAuthCallbackParam(
+  value: OAuthCallbackParamValue,
+): string | undefined {
+  if (Array.isArray(value)) {
+    return value.find(item => item.length > 0)
+  }
+  return value && value.length > 0 ? value : undefined
+}
+
+export function validateOAuthCallbackParams(
+  params: {
+    code?: OAuthCallbackParamValue
+    state?: OAuthCallbackParamValue
+    error?: OAuthCallbackParamValue
+    error_description?: OAuthCallbackParamValue
+    error_uri?: OAuthCallbackParamValue
+  },
+  oauthState: string,
+): OAuthCallbackValidationResult {
+  const code = getFirstOAuthCallbackParam(params.code)
+  const state = getFirstOAuthCallbackParam(params.state)
+  const error = getFirstOAuthCallbackParam(params.error)
+  const errorDescription =
+    getFirstOAuthCallbackParam(params.error_description) ?? ''
+  const errorUri = getFirstOAuthCallbackParam(params.error_uri) ?? ''
+
+  if (state !== oauthState) {
+    return { type: 'state_mismatch' }
+  }
+
+  if (error) {
+    let message = `OAuth error: ${error}`
+    if (errorDescription) {
+      message += ` - ${errorDescription}`
+    }
+    if (errorUri) {
+      message += ` (See: ${errorUri})`
+    }
+    return {
+      type: 'error',
+      error,
+      errorDescription,
+      errorUri,
+      message,
+    }
+  }
+
+  if (code) {
+    return { type: 'code', code }
+  }
+
+  return { type: 'missing_result' }
+}
+
 /**
  * Some OAuth servers (notably Slack) return HTTP 200 for all responses,
  * signaling errors via the JSON body instead. The SDK's executeTokenRequest
@@ -192,7 +260,7 @@ export async function normalizeOAuthErrorBody(
 
 /**
  * Creates a fetch function with a fresh 30-second timeout for each OAuth request.
- * Used by gakrcliAuthProvider for metadata discovery and token refresh.
+ * Used by GakrAuthProvider for metadata discovery and token refresh.
  * Prevents stale timeout signals from affecting auth operations.
  */
 function createAuthFetch(): FetchLike {
@@ -365,7 +433,7 @@ export function hasMcpDiscoveryButNoToken(
 /**
  * Revokes a single token on the OAuth server.
  *
- * Per RFC 7009, public clients (like Gakr) should authenticate by including
+ * Per RFC 7009, public clients (like gakrcli) should authenticate by including
  * client_id in the request body, NOT via an Authorization header. The Bearer token
  * in an Authorization header is meant for resource owner authentication, not client
  * authentication.
@@ -792,7 +860,7 @@ async function performMCPXaaAuth(
     }
 
     // Save tokens via the same storage path as normal OAuth. We write directly
-    // (instead of gakrcliAuthProvider.saveTokens) to avoid instantiating the
+    // (instead of GakrcliAuthProvider.saveTokens) to avoid instantiating the
     // whole provider just to write the same keys.
     const storage = getSecureStorage()
     const existingData = storage.read() || {}
@@ -859,7 +927,7 @@ export async function performMCPOAuthFlow(
   // If the IdP id_token isn't cached, this pops the browser once at the IdP
   // (shared across all XAA servers for that issuer). Subsequent servers hit
   // the cache and are silent. Tokens land in the same keychain slot, so the
-  // rest of CC's transport wiring (gakrcliAuthProvider.tokens() in client.ts)
+  // rest of CC's transport wiring (GakrcliAuthProvider.tokens() in client.ts)
   // works unchanged.
   //
   // No silent fallback: if `oauth.xaa` is set, XAA is the only path. We
@@ -966,7 +1034,7 @@ export async function performMCPOAuthFlow(
       `Using redirect port: ${port}${configuredCallbackPort ? ' (from config)' : ''}`,
     )
 
-    const provider = new gakrcliAuthProvider(
+    const provider = new GakrcliAuthProvider(
       serverName,
       serverConfig,
       redirectUri,
@@ -1058,30 +1126,31 @@ export async function performMCPOAuthFlow(
         options.onWaitingForCallback((callbackUrl: string) => {
           try {
             const parsed = new URL(callbackUrl)
-            const code = parsed.searchParams.get('code')
-            const state = parsed.searchParams.get('state')
-            const error = parsed.searchParams.get('error')
+            const result = validateOAuthCallbackParams(
+              {
+                code: parsed.searchParams.get('code'),
+                state: parsed.searchParams.get('state'),
+                error: parsed.searchParams.get('error'),
+                error_description:
+                  parsed.searchParams.get('error_description'),
+                error_uri: parsed.searchParams.get('error_uri'),
+              },
+              oauthState,
+            )
 
-            if (error) {
-              const errorDescription =
-                parsed.searchParams.get('error_description') || ''
-              cleanup()
-              rejectOnce(
-                new Error(`OAuth error: ${error} - ${errorDescription}`),
-              )
+            if (result.type === 'state_mismatch') {
+              // Ignore so a stray or malicious URL cannot cancel an active flow.
               return
             }
 
-            if (!code) {
-              // Not a valid callback URL, ignore so the user can try again
+            if (result.type === 'missing_result') {
+              // Not a valid callback URL, ignore so the user can try again.
               return
             }
 
-            if (state !== oauthState) {
+            if (result.type === 'error') {
               cleanup()
-              rejectOnce(
-                new Error('OAuth state mismatch - possible CSRF attack'),
-              )
+              rejectOnce(new Error(result.message))
               return
             }
 
@@ -1090,7 +1159,7 @@ export async function performMCPOAuthFlow(
               `Received auth code via manual callback URL`,
             )
             cleanup()
-            resolveOnce(code)
+            resolveOnce(result.code)
           } catch {
             // Invalid URL, ignore so the user can try again
           }
@@ -1101,53 +1170,49 @@ export async function performMCPOAuthFlow(
         const parsedUrl = parse(req.url || '', true)
 
         if (parsedUrl.pathname === '/callback') {
-          const code = parsedUrl.query.code as string
-          const state = parsedUrl.query.state as string
-          const error = parsedUrl.query.error
-          const errorDescription = parsedUrl.query.error_description as string
-          const errorUri = parsedUrl.query.error_uri as string
+          const result = validateOAuthCallbackParams(
+            parsedUrl.query,
+            oauthState,
+          )
 
           // Validate OAuth state to prevent CSRF attacks
-          if (!error && state !== oauthState) {
+          if (result.type === 'state_mismatch') {
             res.writeHead(400, { 'Content-Type': 'text/html' })
             res.end(
               `<h1>Authentication Error</h1><p>Invalid state parameter. Please try again.</p><p>You can close this window.</p>`,
             )
-            cleanup()
-            rejectOnce(new Error('OAuth state mismatch - possible CSRF attack'))
             return
           }
 
-          if (error) {
+          if (result.type === 'missing_result') {
+            res.writeHead(400, { 'Content-Type': 'text/html' })
+            res.end(
+              `<h1>Authentication Error</h1><p>Missing OAuth result. Please try again.</p><p>You can close this window.</p>`,
+            )
+            return
+          }
+
+          if (result.type === 'error') {
             res.writeHead(200, { 'Content-Type': 'text/html' })
             // Sanitize error messages to prevent XSS
-            const sanitizedError = xss(String(error))
-            const sanitizedErrorDescription = errorDescription
-              ? xss(String(errorDescription))
+            const sanitizedError = xss(result.error)
+            const sanitizedErrorDescription = result.errorDescription
+              ? xss(result.errorDescription)
               : ''
             res.end(
               `<h1>Authentication Error</h1><p>${sanitizedError}: ${sanitizedErrorDescription}</p><p>You can close this window.</p>`,
             )
             cleanup()
-            let errorMessage = `OAuth error: ${error}`
-            if (errorDescription) {
-              errorMessage += ` - ${errorDescription}`
-            }
-            if (errorUri) {
-              errorMessage += ` (See: ${errorUri})`
-            }
-            rejectOnce(new Error(errorMessage))
+            rejectOnce(new Error(result.message))
             return
           }
 
-          if (code) {
-            res.writeHead(200, { 'Content-Type': 'text/html' })
-            res.end(
-              `<h1>Authentication Successful</h1><p>You can close this window. Return to Gakr.</p>`,
-            )
-            cleanup()
-            resolveOnce(code)
-          }
+          res.writeHead(200, { 'Content-Type': 'text/html' })
+          res.end(
+            `<h1>Authentication Successful</h1><p>You can close this window. Return to GakrCLI.</p>`,
+          )
+          cleanup()
+          resolveOnce(result.code)
         }
       })
 
@@ -1350,11 +1415,11 @@ export async function performMCPOAuthFlow(
  * retry → 403 again → aborts with "Server returned 403 after trying upscoping",
  * never reaching redirectToAuthorization where step-up scope is persisted.
  * With this flag set, tokens() omits refresh_token so the SDK falls through
- * to the PKCE flow. See github.com/anthropics/gakrcli-code/issues/28258.
+ * to the PKCE flow. See github.com/gakr-gakr/gakrcli/issues/28258.
  */
 export function wrapFetchWithStepUpDetection(
   baseFetch: FetchLike,
-  provider: gakrcliAuthProvider,
+  provider: GakrcliAuthProvider,
 ): FetchLike {
   return async (url, init) => {
     const response = await baseFetch(url, init)
@@ -1374,7 +1439,7 @@ export function wrapFetchWithStepUpDetection(
   }
 }
 
-export class gakrcliAuthProvider implements OAuthClientProvider {
+export class GakrcliAuthProvider implements OAuthClientProvider {
   private serverName: string
   private serverConfig: McpSSEServerConfig | McpHTTPServerConfig
   private redirectUri: string
@@ -1417,7 +1482,7 @@ export class gakrcliAuthProvider implements OAuthClientProvider {
 
   get clientMetadata(): OAuthClientMetadata {
     const metadata: OAuthClientMetadata = {
-      client_name: `Gakr (${this.serverName})`,
+      client_name: `GakrCLI (${this.serverName})`,
       redirect_uris: [this.redirectUri],
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
@@ -1746,7 +1811,7 @@ export class gakrcliAuthProvider implements OAuthClientProvider {
    * both fire the full 4-request XAA chain and race on storage.update().
    * Unlike inc-4829 the id_token is not single-use so both access_tokens
    * stay valid (wasted round-trips + keychain write race, not brickage),
-   * but this is the shape GAKR.md flags under "Token/auth caching across
+   * but this is the shape GAKRCLI.md flags under "Token/auth caching across
    * process boundaries". Mirror refreshAuthorization()'s lockfile pattern.
    */
   private async xaaRefresh(): Promise<OAuthTokens | undefined> {
