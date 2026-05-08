@@ -162,7 +162,12 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
 
     // Skip MCP approval dialogs for third-party providers (no interactive auth prompts)
     if (usesAnthropicSetup) {
-      // If settings are valid, check for any mcp.json servers that need approval
+      // If settings are valid, check for any mcp.json servers that need approval.
+      // This must run AFTER trust is established — otherwise third-party providers
+      // (which skip the trust dialog) would never reach this point, and any
+      // enableAllProjectMcpServers / enabledMcpjsonServers into
+      // settings.local.json, and the servers are silently dropped from
+      // /mcp and `mcp list` (issue #696).
       const {
         errors: allErrors
       } = getSettingsWithAllErrors();

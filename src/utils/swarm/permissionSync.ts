@@ -210,6 +210,10 @@ export function createPermissionRequest(params: {
  * Write a permission request to the pending directory with file locking
  * Called by worker agents when they need permission approval from the leader
  *
+ * @deprecated File-based polling has been removed for security reasons.
+ * Use mailbox-based permission requests via createPermissionRequestMessage instead.
+ * This function is kept for backward compatibility but should not be used.
+ *
  * @returns The written request
  */
 export async function writePermissionRequest(
@@ -252,6 +256,10 @@ export async function writePermissionRequest(
 /**
  * Read all pending permission requests for a team
  * Called by the team leader to see what requests need attention
+ *
+ * @deprecated File-based polling has been removed for security reasons.
+ * Use mailbox-based permission requests via inbox polling instead.
+ * This function is kept for backward compatibility but should not be used.
  */
 export async function readPendingPermissions(
   teamName?: string,
@@ -315,6 +323,10 @@ export async function readPendingPermissions(
  * Read a resolved permission request by ID
  * Called by workers to check if their request has been resolved
  *
+ * @deprecated File-based polling has been removed for security reasons.
+ * Use mailbox-based permission responses via processMailboxPermissionResponse instead.
+ * This function is kept for backward compatibility but should not be used.
+ *
  * @returns The resolved request, or null if not yet resolved
  */
 export async function readResolvedPermission(
@@ -352,6 +364,10 @@ export async function readResolvedPermission(
 }
 
 /**
+ * @deprecated Use sendPermissionResponseViaMailbox() instead. This file-based
+ * approach writes to an unauthenticated directory where any local process can
+ * forge approvals. Retained for backward compatibility but no longer called.
+ *
  * Resolve a permission request
  * Called by the team leader (or worker in self-resolution cases)
  *
@@ -539,6 +555,10 @@ export type PermissionResponse = {
  * Poll for a permission response (worker-side convenience function)
  * Converts the resolved request into a simpler response format
  *
+ * @deprecated File-based polling has been removed for security reasons.
+ * Use mailbox-based permission responses via processMailboxPermissionResponse instead.
+ * This function is kept for backward compatibility but should not be used.
+ *
  * @returns The permission response, or null if not yet resolved
  */
 export async function pollForResponse(
@@ -566,6 +586,10 @@ export async function pollForResponse(
 /**
  * Remove a worker's response after processing
  * This is an alias for deleteResolvedPermission for backward compatibility
+ *
+ * @deprecated File-based polling has been removed for security reasons.
+ * Use mailbox-based permission responses via processMailboxPermissionResponse instead.
+ * This function is kept for backward compatibility but should not be used.
  */
 export async function removeWorkerResponse(
   requestId: string,

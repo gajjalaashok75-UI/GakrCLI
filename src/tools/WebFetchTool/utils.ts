@@ -7,6 +7,7 @@ import {
 import { queryHaiku } from '../../services/api/gakrcli.js'
 import { AbortError } from '../../utils/errors.js'
 import { getWebFetchUserAgent } from '../../utils/http.js'
+import { ssrfGuardedLookup } from '../../utils/hooks/ssrfGuard.js'
 import { logError } from '../../utils/log.js'
 import { getAPIProvider } from '../../utils/model/providers.js'
 import {
@@ -281,6 +282,7 @@ export async function getWithPermittedRedirects(
       maxRedirects: 0,
       responseType: 'arraybuffer',
       maxContentLength: MAX_HTTP_CONTENT_LENGTH,
+      lookup: ssrfGuardedLookup,
       headers: {
         Accept: 'text/markdown, text/html, */*',
         'User-Agent': getWebFetchUserAgent(),

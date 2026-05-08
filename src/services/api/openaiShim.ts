@@ -37,6 +37,8 @@ import { isBareMode, isEnvTruthy } from '../../utils/envUtils.js'
 import { resolveGeminiCredential } from '../../utils/geminiAuth.js'
 import { hydrateGeminiAccessTokenFromSecureStorage } from '../../utils/geminiCredentials.js'
 import { hydrateGithubModelsTokenFromSecureStorage } from '../../utils/githubModelsCredentials.js'
+import { resolveOpenAIShimRuntimeContext } from '../../integrations/runtimeMetadata.js'
+import { isZaiBaseUrl } from '../../utils/zaiProvider.js'
 import {
   createThinkTagFilter,
   stripThinkTags,
@@ -1399,6 +1401,14 @@ class OpenAIShimMessages {
     params: ShimCreateParams,
     options?: { signal?: AbortSignal; headers?: Record<string, string> },
   ): Promise<Response> {
+    const runtimeShimContext = resolveOpenAIShimRuntimeContext({
+      processEnv: process.env,
+      baseUrl: request.baseUrl,
+      model: request.resolvedModel,
+      treatAsLocal: isLocalProviderUrl(request.baseUrl),
+    })
+    const shimConfig = runtimeShimContext.openaiShimConfig
+    const isDeepSeek = isDeepSeekBaseUrl(request.baseUrl)
     const openaiMessages = convertMessages(
       params.messages as Array<{
         role: string
@@ -1411,8 +1421,10 @@ class OpenAIShimMessages {
         // reasoning_content when its thinking feature is active. Echo it back
         // from the thinking block we captured on the inbound response.
         preserveReasoningContent:
-          isMoonshotCompatibleBaseUrl(request.baseUrl) ||
-          isDeepSeekBaseUrl(request.baseUrl),
+          shimConfig.preserveReasoningContent ??
+          (isMoonshotCompatibleBaseUrl(request.baseUrl) ||
+          isDeepSeekBaseUrl(request.baseUrl)),
+        reasoningContentFallback: shimConfig.reasoningContentFallback,
       },
     )
 
@@ -1442,60 +1454,30 @@ class OpenAIShimMessages {
     if (params.stream && !isLocalProviderUrl(request.baseUrl)) {
       body.stream_options = { include_usage: true }
     }
-    const isNvidia = isNvidiaMode()
     const isGithub = isGithubModelsMode()
-    const isMistral = isMistralMode()
     const isLocal = isLocalProviderUrl(request.baseUrl)
+
     const githubEndpointType = getGithubEndpointType(request.baseUrl)
     const isGithubCopilot = isGithub && githubEndpointType === 'copilot'
     const isGithubModels = isGithub && (githubEndpointType === 'models' || githubEndpointType === 'custom')
+    const shouldStripResponsesStore =
+      (shimConfig.removeBodyFields ?? []).includes('store') ||
+      isGeminiMode() ||
+      hasGeminiApiHost(request.baseUrl)
 
-    const isMoonshot = isMoonshotCompatibleBaseUrl(request.baseUrl)
-    const isDeepSeek = isDeepSeekBaseUrl(request.baseUrl)
-
-    // Set token limit based on provider requirements
-    if (isNvidia) {
-      // NVIDIA uses max_tokens parameter
-      if (maxTokensValue !== undefined) {
-        body.max_tokens = maxTokensValue
-      } else if (maxCompletionTokensValue !== undefined) {
-        body.max_tokens = maxCompletionTokensValue
-      }
-    } else if (isGithub) {
-      // GitHub Models also uses max_tokens
-      if (maxTokensValue !== undefined) {
-        body.max_tokens = maxTokensValue
-      } else if (maxCompletionTokensValue !== undefined) {
-        body.max_tokens = maxCompletionTokensValue
-      }
-    } else {
-      // OpenAI/Azure/others use max_completion_tokens
-      if (maxTokensValue !== undefined) {
-        body.max_completion_tokens = maxTokensValue
-      } else if (maxCompletionTokensValue !== undefined) {
-        body.max_completion_tokens = maxCompletionTokensValue
-      }
-    }
-    if ((isMistral || isLocal || isMoonshot) && body.max_completion_tokens !== undefined) {
+    if (
+      shimConfig.maxTokensField === 'max_tokens' &&
+      body.max_completion_tokens !== undefined
+    ) {
       body.max_tokens = body.max_completion_tokens
       delete body.max_completion_tokens
     }
-    // mistral and gemini don't recognize body.store — Gemini returns 400
-    // "Invalid JSON payload received. Unknown name 'store': Cannot find field."
-    // Moonshot direct API, Kimi Code's OpenAI-compatible coding endpoint,
-    // and DeepSeek have not published support for the parameter either;
-    // strip it preemptively to avoid the same class of error on strict-parse
-    // providers. Detect Gemini from request.baseUrl as well — providerOverride
-    // routes (e.g. ~/.claude.json primaryProvider: google) reach the Gemini
-    // host without setting OPENAI_BASE_URL / CLAUDE_CODE_USE_GEMINI.
-    if (
-      isMistral ||
-      isGeminiMode() ||
-      hasGeminiApiHost(request.baseUrl) ||
-      isMoonshot ||
-      isDeepSeek ||
-      isZai
-    ) {
+
+    for (const field of shimConfig.removeBodyFields ?? []) {
+      delete body[field]
+    }
+
+    if (shouldStripResponsesStore) {
       delete body.store
     }
 
@@ -1564,6 +1546,7 @@ class OpenAIShimMessages {
 
     const isGemini = isGeminiMode()
     const isMiniMax = !!process.env.MINIMAX_API_KEY
+    const isNvidia = isNvidiaMode()
     const apiKey = this.providerOverride?.apiKey ?? 
       (isMiniMax ? process.env.MINIMAX_API_KEY : undefined) ?? 
       (isNvidia ? process.env.NVIDIA_API_KEY : process.env.OPENAI_API_KEY)
