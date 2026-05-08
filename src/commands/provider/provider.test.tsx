@@ -11,6 +11,7 @@ import {
   buildCodexOAuthProfileEnv,
   buildCurrentProviderSummary,
   buildProfileSaveMessage,
+  buildProviderManagerCompletion,
   getProviderWizardDefaults,
   ProviderWizard,
   TextEntryDialog,
@@ -23,6 +24,14 @@ const ORIGINAL_SIMPLE_ENV = process.env.GAKR_CODE_SIMPLE
 const ORIGINAL_CODEX_API_KEY = process.env.CODEX_API_KEY
 const ORIGINAL_CHATGPT_ACCOUNT_ID = process.env.CHATGPT_ACCOUNT_ID
 const ORIGINAL_CODEX_ACCOUNT_ID = process.env.CODEX_ACCOUNT_ID
+
+async function importFreshProviderProfileModule(
+  suffix: string,
+): Promise<typeof import('../../utils/providerProfile.js')> {
+  return import(`../../utils/providerProfile.js?${suffix}`) as Promise<
+    typeof import('../../utils/providerProfile.js')
+  >
+}
 
 function extractLastFrame(output: string): string {
   let lastFrame: string | null = null
@@ -264,6 +273,32 @@ test('wizard step remount prevents a typed API key from leaking into the next fi
   expect(output).not.toContain('sk-secret-12345678')
 })
 
+test('buildProviderManagerCompletion records provider switch event and model-visible reminder', () => {
+  const completion = buildProviderManagerCompletion({
+    action: 'activated',
+    activeProviderName: 'Sadaf Provider',
+    activeProviderModel: 'sadaf-model',
+    message: 'Provider switched to Sadaf Provider (sadaf-model)',
+  })
+
+  expect(completion.message).toBe(
+    'Provider switched to Sadaf Provider (sadaf-model)',
+  )
+  expect(completion.metaMessages).toEqual([
+    '<system-reminder>Provider switched mid-session to Sadaf Provider using model sadaf-model. Use this provider/model for subsequent requests unless the user switches again.</system-reminder>',
+  ])
+})
+
+test('buildProviderManagerCompletion skips provider reminder when manager is cancelled', () => {
+  const completion = buildProviderManagerCompletion({
+    action: 'cancelled',
+    message: 'Provider manager closed',
+  })
+
+  expect(completion.message).toBe('Provider manager closed')
+  expect(completion.metaMessages).toBeUndefined()
+})
+
 test('buildProfileSaveMessage maps provider fields without echoing secrets', () => {
   const message = buildProfileSaveMessage(
     'openai',
@@ -275,82 +310,61 @@ test('buildProfileSaveMessage maps provider fields without echoing secrets', () 
     'D:/codings/Opensource/gakrcli/.gakrcli-profile.json',
   )
 
-  expect(message).toContain('Saved OpenAI-compatible profile.')
+  expect(message).toContain('Saved OpenAI profile.')
   expect(message).toContain('Model: gpt-4o')
   expect(message).toContain('Endpoint: https://api.openai.com/v1')
   expect(message).toContain('Credentials: configured')
   expect(message).not.toContain('sk-secret-12345678')
 })
 
-test('buildProfileSaveMessage supports nvidia profiles without echoing secrets', () => {
+test('buildProfileSaveMessage labels local openai-compatible profiles consistently', () => {
   const message = buildProfileSaveMessage(
-    'nvidia-nim',
+    'openai',
     {
-      NVIDIA_API_KEY: 'nvapi-secret-12345678',
-      NVIDIA_MODEL: 'meta/llama-3.1-405b-instruct',
-      NVIDIA_BASE_URL: 'https://integrate.api.nvidia.com/v1',
+      OPENAI_MODEL: 'gpt-5.4',
+      OPENAI_BASE_URL: 'http://127.0.0.1:8080/v1',
     },
     'D:/codings/Opensource/gakrcli/.gakrcli-profile.json',
   )
 
-  expect(message).toContain('Saved NVIDIA NIMs profile.')
-  expect(message).toContain('Model: meta/llama-3.1-405b-instruct')
-  expect(message).toContain('Endpoint: https://integrate.api.nvidia.com/v1')
-  expect(message).toContain('Credentials: configured')
-  expect(message).not.toContain('nvapi-secret-12345678')
+  expect(message).toContain('Saved Local OpenAI-compatible profile.')
+  expect(message).toContain('Model: gpt-5.4')
+  expect(message).toContain('Endpoint: http://127.0.0.1:8080/v1')
 })
 
-test('buildCurrentProviderSummary redacts poisoned model and endpoint values', () => {
-  const summary = buildCurrentProviderSummary({
-    processEnv: {
-      GAKR_CODE_USE_OPENAI: '1',
+test('buildProfileSaveMessage labels descriptor-backed gateway profiles consistently', () => {
+  const message = buildProfileSaveMessage(
+    'openai',
+    {
       OPENAI_API_KEY: 'sk-secret-12345678',
-      OPENAI_MODEL: 'sk-secret-12345678',
-      OPENAI_BASE_URL: 'sk-secret-12345678',
+      OPENAI_MODEL: 'openai/gpt-5-mini',
+      OPENAI_BASE_URL: 'https://openrouter.ai/api/v1',
     },
-    persisted: null,
-  })
-
-  expect(summary.providerLabel).toBe('OpenAI-compatible')
-  expect(summary.modelLabel).toBe('sk-...678')
-  expect(summary.endpointLabel).toBe('sk-...678')
-})
-
-test('buildCurrentProviderSummary detects nvidia mode and redacts poisoned values', () => {
-  const summary = buildCurrentProviderSummary({
-    processEnv: {
-      GAKR_CODE_USE_NVIDIA: '1',
-      NVIDIA_API_KEY: 'nvapi-secret-12345678',
-      NVIDIA_MODEL: 'nvapi-secret-12345678',
-      NVIDIA_BASE_URL: 'nvapi-secret-12345678',
-    },
-    persisted: null,
-  })
-
-  expect(summary.providerLabel).toBe('NVIDIA NIMs')
-  expect(summary.modelLabel).toBe('nva...678')
-  expect(summary.endpointLabel).toBe('nva...678')
-})
-
-test('getProviderWizardDefaults ignores poisoned current provider values', () => {
-  const defaults = getProviderWizardDefaults({
-    OPENAI_API_KEY: 'sk-secret-12345678',
-    OPENAI_MODEL: 'sk-secret-12345678',
-    OPENAI_BASE_URL: 'sk-secret-12345678',
-    NVIDIA_API_KEY: 'nvapi-secret-12345678',
-    NVIDIA_MODEL: 'nvapi-secret-12345678',
-    NVIDIA_BASE_URL: 'nvapi-secret-12345678',
-    GEMINI_API_KEY: 'AIzaSecret12345678',
-    GEMINI_MODEL: 'AIzaSecret12345678',
-  })
-
-  expect(defaults.openAIModel).toBe('gpt-4o')
-  expect(defaults.openAIBaseUrl).toBe('https://api.openai.com/v1')
-  expect(defaults.nvidiaModel).toBe('stepfun-ai/step-3.5-flash')
-  expect(defaults.nvidiaBaseUrl).toBe(
-    'https://integrate.api.nvidia.com/v1',
+    'D:/codings/Opensource/gakrcli/.gakrcli-profile.json',
   )
-  expect(defaults.geminiModel).toBe('gemini-2.0-flash')
+
+  expect(message).toContain('Saved OpenRouter profile.')
+  expect(message).toContain('Model: openai/gpt-5-mini')
+  expect(message).toContain('Endpoint: https://openrouter.ai/api/v1')
+  expect(message).toContain('Credentials: configured')
+  expect(message).not.toContain('sk-secret-12345678')
+})
+
+test('buildProfileSaveMessage describes Gemini access token / ADC mode clearly', () => {
+  const message = buildProfileSaveMessage(
+    'gemini',
+    {
+      GEMINI_AUTH_MODE: 'access-token',
+      GEMINI_MODEL: 'gemini-2.5-flash',
+      GEMINI_BASE_URL: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    },
+    'D:/codings/Opensource/gakrcli/.gakrcli-profile.json',
+  )
+
+  expect(message).toContain('Saved Google Gemini profile.')
+  expect(message).toContain('Model: gemini-2.5-flash')
+  expect(message).toContain('Credentials: access token (stored securely)')
+  expect(message).not.toContain('AIza')
 })
 
 test('buildProfileSaveMessage reflects immediate Codex activation for existing credentials', () => {
@@ -361,7 +375,7 @@ test('buildProfileSaveMessage reflects immediate Codex activation for existing c
       OPENAI_BASE_URL: 'https://chatgpt.com/backend-api/codex',
       CHATGPT_ACCOUNT_ID: 'acct_codex',
     },
-    '~/.gakrcli/.gakr-profile.json',
+    'D:/codings/Opensource/gakrcli/.gakrcli-profile.json',
     {
       activatedInSession: true,
     },
@@ -381,7 +395,7 @@ test('buildProfileSaveMessage reflects immediate Codex OAuth activation when the
       CHATGPT_ACCOUNT_ID: 'acct_codex',
       CODEX_CREDENTIAL_SOURCE: 'oauth',
     },
-    '~/.gakrcli/.gakr-profile.json',
+    'D:/codings/Opensource/gakrcli/.gakrcli-profile.json',
     {
       activatedInSession: true,
     },
@@ -422,9 +436,8 @@ test('buildCodexProfileEnv derives oauth source from secure storage when no expl
     }),
   }))
 
-  // @ts-expect-error cache-busting query string for Bun module mocks
-  const { buildCodexProfileEnv } = await import(
-    '../../utils/providerProfile.js?secure-storage-codex-source'
+  const { buildCodexProfileEnv } = await importFreshProviderProfileModule(
+    'secure-storage-codex-source',
   )
 
   const env = buildCodexProfileEnv({
@@ -440,11 +453,11 @@ test('buildCodexProfileEnv derives oauth source from secure storage when no expl
   })
 })
 
-test('applySavedProfileToCurrentSession switches the current env to the saved Codex profile', async () => {
-  // @ts-expect-error cache-busting query string for Bun module mocks
-  const { applySavedProfileToCurrentSession } = await import(
-    '../../utils/providerProfile.js?apply-saved-profile-codex'
-  )
+test('explicitly declared env takes precedence over applySavedProfileToCurrentSession', async () => {
+  const { applySavedProfileToCurrentSession } =
+    await importFreshProviderProfileModule(
+      'apply-saved-profile-codex',
+    )
   const processEnv: NodeJS.ProcessEnv = {
     GAKR_CODE_USE_OPENAI: '1',
     OPENAI_MODEL: 'gpt-4o',
@@ -469,22 +482,22 @@ test('applySavedProfileToCurrentSession switches the current env to the saved Co
 
   expect(warning).toBeNull()
   expect(processEnv.GAKR_CODE_USE_OPENAI).toBe('1')
-  expect(processEnv.OPENAI_MODEL).toBe('codexplan')
+  expect(processEnv.OPENAI_MODEL).toBe('gpt-4o')
   expect(processEnv.OPENAI_BASE_URL).toBe(
-    'https://chatgpt.com/backend-api/codex',
+    "https://api.openai.com/v1",
   )
-  expect(processEnv.CODEX_API_KEY).toBe('codex-live')
-  expect(processEnv.CHATGPT_ACCOUNT_ID).toBe('acct_codex')
-  expect(processEnv.OPENAI_API_KEY).toBeUndefined()
+  expect(processEnv.CODEX_API_KEY).toBeUndefined()
+  expect(processEnv.CHATGPT_ACCOUNT_ID).toBeUndefined()
+  expect(processEnv.OPENAI_API_KEY).toBe("sk-openai")
   expect(processEnv.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED).toBeUndefined()
   expect(processEnv.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID).toBeUndefined()
 })
 
-test('applySavedProfileToCurrentSession ignores stale Codex env overrides for OAuth-backed profiles', async () => {
-  // @ts-expect-error cache-busting query string for Bun module mocks
-  const { applySavedProfileToCurrentSession } = await import(
-    '../../utils/providerProfile.js?apply-saved-profile-codex-oauth'
-  )
+test('explicitly declared env takes precedence over applySavedProfileToCurrentSession for oauth codex profiles', async () => {
+  const { applySavedProfileToCurrentSession } =
+    await importFreshProviderProfileModule(
+      'apply-saved-profile-codex-oauth',
+    )
   const processEnv: NodeJS.ProcessEnv = {
     GAKR_CODE_USE_OPENAI: '1',
     OPENAI_MODEL: 'gpt-4o',
@@ -504,14 +517,137 @@ test('applySavedProfileToCurrentSession ignores stale Codex env overrides for OA
     processEnv,
   })
 
-  expect(warning).toBeNull()
-  expect(processEnv.OPENAI_MODEL).toBe('codexplan')
+  expect(warning).not.toBeUndefined()
+  expect(processEnv.OPENAI_MODEL).toBe('gpt-4o')
   expect(processEnv.OPENAI_BASE_URL).toBe(
-    'https://chatgpt.com/backend-api/codex',
+    "https://api.openai.com/v1",
   )
-  expect(processEnv.CODEX_API_KEY).toBeUndefined()
-  expect(processEnv.CHATGPT_ACCOUNT_ID).not.toBe('acct_stale')
+  expect(processEnv.CODEX_API_KEY).toBe("stale-codex-key")
+  expect(processEnv.CHATGPT_ACCOUNT_ID).toBe('acct_stale')
   expect(processEnv.CHATGPT_ACCOUNT_ID).toBeTruthy()
+})
+
+test('buildCurrentProviderSummary redacts poisoned model and endpoint values', () => {
+  const summary = buildCurrentProviderSummary({
+    processEnv: {
+      GAKR_CODE_USE_OPENAI: '1',
+      OPENAI_API_KEY: 'sk-secret-12345678',
+      OPENAI_MODEL: 'sk-secret-12345678',
+      OPENAI_BASE_URL: 'sk-secret-12345678',
+    },
+    persisted: null,
+  })
+
+  expect(summary.providerLabel).toBe('OpenAI-compatible')
+  expect(summary.modelLabel).toBe('sk-...678')
+  expect(summary.endpointLabel).toBe('sk-...678')
+})
+
+test('buildCurrentProviderSummary labels generic local openai-compatible providers', () => {
+  const summary = buildCurrentProviderSummary({
+    processEnv: {
+      GAKR_CODE_USE_OPENAI: '1',
+      OPENAI_MODEL: 'qwen2.5-coder-7b-instruct',
+      OPENAI_BASE_URL: 'http://127.0.0.1:8080/v1',
+    },
+    persisted: null,
+  })
+
+  expect(summary.providerLabel).toBe('Local OpenAI-compatible')
+  expect(summary.modelLabel).toBe('qwen2.5-coder-7b-instruct')
+  expect(summary.endpointLabel).toBe('http://127.0.0.1:8080/v1')
+})
+
+test('buildCurrentProviderSummary recognizes descriptor-backed openai-compatible routes', () => {
+  const summary = buildCurrentProviderSummary({
+    processEnv: {
+      GAKR_CODE_USE_OPENAI: '1',
+      OPENAI_MODEL: 'openai/gpt-5-mini',
+      OPENAI_BASE_URL: 'https://openrouter.ai/api/v1',
+    },
+    persisted: null,
+  })
+
+  expect(summary.providerLabel).toBe('OpenRouter')
+  expect(summary.modelLabel).toBe('openai/gpt-5-mini')
+  expect(summary.endpointLabel).toBe('https://openrouter.ai/api/v1')
+})
+
+test('buildCurrentProviderSummary does not relabel local gpt-5.4 providers as Codex when custom base URL is set', () => {
+  const summary = buildCurrentProviderSummary({
+    processEnv: {
+      GAKR_CODE_USE_OPENAI: '1',
+      OPENAI_MODEL: 'gpt-5.4',
+      OPENAI_BASE_URL: 'http://127.0.0.1:8080/v1',
+    },
+    persisted: null,
+  })
+
+  expect(summary.providerLabel).toBe('Local OpenAI-compatible')
+  expect(summary.modelLabel).toBe('gpt-5.4')
+  expect(summary.endpointLabel).toBe('http://127.0.0.1:8080/v1')
+})
+
+test('buildCurrentProviderSummary recognizes Gemini mode', () => {
+  const summary = buildCurrentProviderSummary({
+    processEnv: {
+      GAKR_CODE_USE_GEMINI: '1',
+      GEMINI_MODEL: 'gemini-2.5-pro',
+      GEMINI_BASE_URL:
+        'https://generativelanguage.googleapis.com/v1beta/openai',
+    },
+    persisted: null,
+  })
+
+  expect(summary.providerLabel).toBe('Google Gemini')
+  expect(summary.modelLabel).toBe('gemini-2.5-pro')
+  expect(summary.endpointLabel).toBe(
+    'https://generativelanguage.googleapis.com/v1beta/openai',
+  )
+})
+
+test('buildCurrentProviderSummary recognizes Mistral mode', () => {
+  const summary = buildCurrentProviderSummary({
+    processEnv: {
+      GAKR_CODE_USE_MISTRAL: '1',
+      MISTRAL_MODEL: 'mistral-medium-latest',
+      MISTRAL_BASE_URL: 'https://api.mistral.ai/v1',
+    },
+    persisted: null,
+  })
+
+  expect(summary.providerLabel).toBe('Mistral AI')
+  expect(summary.modelLabel).toBe('mistral-medium-latest')
+  expect(summary.endpointLabel).toBe('https://api.mistral.ai/v1')
+})
+
+test('buildCurrentProviderSummary recognizes GitHub Models mode', () => {
+  const summary = buildCurrentProviderSummary({
+    processEnv: {
+      GAKR_CODE_USE_GITHUB: '1',
+      OPENAI_MODEL: 'github:copilot',
+      OPENAI_BASE_URL: 'https://models.github.ai/inference',
+    },
+    persisted: null,
+  })
+
+  expect(summary.providerLabel).toBe('GitHub Models')
+  expect(summary.modelLabel).toBe('github:copilot')
+  expect(summary.endpointLabel).toBe('https://models.github.ai/inference')
+})
+
+test('getProviderWizardDefaults ignores poisoned current provider values', () => {
+  const defaults = getProviderWizardDefaults({
+    OPENAI_API_KEY: 'sk-secret-12345678',
+    OPENAI_MODEL: 'sk-secret-12345678',
+    OPENAI_BASE_URL: 'sk-secret-12345678',
+    GEMINI_API_KEY: 'AIzaSecret12345678',
+    GEMINI_MODEL: 'AIzaSecret12345678',
+  })
+
+  expect(defaults.openAIModel).toBe('gpt-4o')
+  expect(defaults.openAIBaseUrl).toBe('https://api.openai.com/v1')
+  expect(defaults.geminiModel).toBe('gemini-3-flash-preview')
 })
 
 test('ProviderWizard hides Codex OAuth while running in bare mode', async () => {

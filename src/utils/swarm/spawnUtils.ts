@@ -141,6 +141,9 @@ const TEAMMATE_ENV_VARS = [
   'NODE_EXTRA_CA_CERTS',
   'REQUESTS_CA_BUNDLE',
   'CURL_CA_BUNDLE',
+  // Source builds may rely on user shell PATH for rg/node/bun and other tools.
+  // Forward it so teammates resolve the same toolchain as the parent session.
+  'PATH',
 ] as const
 
 /**

@@ -21,10 +21,21 @@ export const getGlobalGakrcliFile = memoize((): string => {
     return join(getGakrcliConfigHomeDir(), '.config.json')
   }
 
-  const filename = `.gakrcli${fileSuffixForOauthConfig()}.json`
-  return join(process.env.GAKR_CONFIG_DIR || homedir(), filename)
+  const oauthSuffix = fileSuffixForOauthConfig()
+  const configDir = process.env.GAKR_CONFIG_DIR || homedir()
 
-  
+  // Default to .gakrcli.json. Fall back to .claude.json only if the new
+  // file doesn't exist yet and the legacy one does (same migration pattern
+  // as resolveGakrcliConfigHomeDir for the config directory).
+  const newFilename = `.gakrcli${oauthSuffix}.json`
+  const legacyFilename = `.claude${oauthSuffix}.json`
+  if (
+    !getFsImplementation().existsSync(join(configDir, newFilename)) &&
+    getFsImplementation().existsSync(join(configDir, legacyFilename))
+  ) {
+    return join(configDir, legacyFilename)
+  }
+  return join(configDir, newFilename)
 })
 
 const hasInternetAccess = memoize(async (): Promise<boolean> => {

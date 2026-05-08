@@ -6,8 +6,8 @@ import test from 'node:test'
 
 import { getSkillDirCommands, clearSkillCaches } from './loadSkillsDir.ts'
 
-function writeSkillDirect(skillsDir: string, skillPath: string): void {
-  const skillDir = join(skillsDir, ...skillPath.split('/'))
+function writeSkill(rootDir: string, skillPath: string): void {
+  const skillDir = join(rootDir, '.gakrcli', 'skills', ...skillPath.split('/'))
   mkdirSync(skillDir, { recursive: true })
   writeFileSync(
     join(skillDir, 'SKILL.md'),
@@ -23,21 +23,15 @@ test('loads flat and nested skills with colon namespaces', async () => {
 
   try {
     mkdirSync(cwd, { recursive: true })
-    // Create skills directly in the user skills directory (configDir/skills)
-    const skillsDir = join(configDir, 'skills')
-    mkdirSync(skillsDir, { recursive: true })
-    writeSkillDirect(skillsDir, 'flat-skill')
-    writeSkillDirect(skillsDir, 'git/commit')
-    writeSkillDirect(skillsDir, 'frontend/react/form')
+    writeSkill(configDir, 'flat-skill')
+    writeSkill(configDir, 'git/commit')
+    writeSkill(configDir, 'frontend/react/form')
 
     process.env.GAKR_CONFIG_DIR = configDir
     clearSkillCaches()
 
     const skills = await getSkillDirCommands(cwd)
-    // Filter to skills whose skillRoot starts with the test configDir (ensures we only get test-created skills)
-    const promptSkills = skills.filter(
-      skill => skill.type === 'prompt' && skill.skillRoot && skill.skillRoot.startsWith(configDir)
-    )
+    const promptSkills = skills.filter(skill => skill.type === 'prompt')
     const skillNames = promptSkills.map(skill => skill.name).sort()
 
     assert.deepEqual(skillNames, [
@@ -48,10 +42,7 @@ test('loads flat and nested skills with colon namespaces', async () => {
 
     const nestedSkill = promptSkills.find(skill => skill.name === 'git:commit')
     assert.ok(nestedSkill)
-    assert.equal(
-      nestedSkill.skillRoot,
-      join(configDir, 'skills', 'git', 'commit')
-    )
+    assert.equal(nestedSkill.skillRoot, join(configDir, '.clagakrcliude', 'skills', 'git', 'commit'))
 
     const deepSkill = promptSkills.find(
       skill => skill.name === 'frontend:react:form',
@@ -59,7 +50,7 @@ test('loads flat and nested skills with colon namespaces', async () => {
     assert.ok(deepSkill)
     assert.equal(
       deepSkill.skillRoot,
-      join(configDir, 'skills', 'frontend', 'react', 'form'),
+      join(configDir, '.gakrcli', 'skills', 'frontend', 'react', 'form'),
     )
   } finally {
     if (originalConfigDir === undefined) {

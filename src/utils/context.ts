@@ -1,10 +1,14 @@
-// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
+// biome-ignore-all assist/source/organizeImports: internal-only import markers must not be reordered
 import { CONTEXT_1M_BETA_HEADER } from '../constants/betas.js'
 import { getGlobalConfig } from './config.js'
 import { isEnvTruthy } from './envUtils.js'
+import { resolveModelRuntimeLimits } from '../integrations/runtimeMetadata.js'
+import {
+  getTransportKindForRoute,
+  resolveActiveRouteIdFromEnv,
+} from '../integrations/routeMetadata.js'
 import { getCanonicalName } from './model/model.js'
 import { getModelCapability } from './model/modelCapabilities.js'
-import { getOpenAIContextWindow, getOpenAIMaxOutputTokens } from './model/openaiContextWindows.js'
 
 // Model context window size (200k tokens for all models right now)
 export const MODEL_CONTEXT_WINDOW_DEFAULT = 200_000
@@ -13,7 +17,7 @@ export const MODEL_CONTEXT_WINDOW_DEFAULT = 200_000
 // the effective context (this minus output token reservation) stays positive,
 // otherwise auto-compact fires on every message (issue #635).
 // Override via GAKR_CODE_OPENAI_FALLBACK_CONTEXT_WINDOW env var to avoid
-// hardcoding when deploying models not yet in openaiContextWindows.ts.
+// hardcoding when deploying models not yet in integration model metadata.
 export const OPENAI_FALLBACK_CONTEXT_WINDOW = (() => {
   const v = parseInt(process.env.GAKR_CODE_OPENAI_FALLBACK_CONTEXT_WINDOW ?? '', 10)
   return !isNaN(v) && v > 0 ? v : 128_000
@@ -56,14 +60,27 @@ export function modelSupports1M(model: string): boolean {
     return false
   }
   const canonical = getCanonicalName(model)
-  return canonical.includes('gakrcli-sonnet-4') || canonical.includes('opus-4-6')
+  return canonical.includes('gakr-sonnet-4') || canonical.includes('opus-4-6')
+}
+
+function shouldUseIntegrationRuntimeLimits(
+  processEnv: NodeJS.ProcessEnv = process.env,
+): boolean {
+  const routeId = resolveActiveRouteIdFromEnv(processEnv)
+  const transportKind = routeId ? getTransportKindForRoute(routeId) : null
+
+  return (
+    transportKind === 'openai-compatible' ||
+    transportKind === 'local' ||
+    transportKind === 'gemini-native'
+  )
 }
 
 export function getContextWindowForModel(
   model: string,
   betas?: string[],
 ): number {
-  // Allow override via environment variable (ant-only)
+  // Allow override via environment variable (internal-only)
   // This takes precedence over all other context window resolution, including 1M detection,
   // so users can cap the effective context window for local decisions (auto-compact, etc.)
   // while still using a 1M-capable endpoint.
@@ -86,19 +103,14 @@ export function getContextWindowForModel(
   // Unknown models get a conservative 128k default. This was previously 8k,
   // but that caused auto-compact to fire on every turn because the effective
   // context (8k minus output reservation) became negative (issue #635).
-  const isOpenAIProvider =
-    isEnvTruthy(process.env.GAKR_CODE_USE_OPENAI) ||
-    isEnvTruthy(process.env.GAKR_CODE_USE_GEMINI) ||
-    isEnvTruthy(process.env.GAKR_CODE_USE_GITHUB) ||
-    isEnvTruthy(process.env.GAKR_CODE_USE_MISTRAL)
-  if (isOpenAIProvider) {
-    const openaiWindow = getOpenAIContextWindow(model)
-    if (openaiWindow !== undefined) {
-      return openaiWindow
+  if (shouldUseIntegrationRuntimeLimits()) {
+    const runtimeLimits = resolveModelRuntimeLimits({ model })
+    if (runtimeLimits.contextWindow !== undefined) {
+      return runtimeLimits.contextWindow
     }
     console.error(
-      `[context] Warning: model "${model}" not in context window table — using conservative 128k default. ` +
-      'Add it to src/utils/model/openaiContextWindows.ts for accurate compaction.',
+      `[context] Warning: model "${model}" not in integration model metadata — using conservative 128k default. ` +
+      'Add it to src/integrations/models for accurate compaction.',
     )
     return OPENAI_FALLBACK_CONTEXT_WINDOW
   }
@@ -195,14 +207,13 @@ export function getModelMaxOutputTokens(model: string): {
   }
 
   // OpenAI-compatible provider — use known output limits to avoid 400 errors
-  if (
-    isEnvTruthy(process.env.GAKR_CODE_USE_OPENAI) ||
-    isEnvTruthy(process.env.GAKR_CODE_USE_GEMINI) ||
-    isEnvTruthy(process.env.GAKR_CODE_USE_GITHUB)
-  ) {
-    const openaiMax = getOpenAIMaxOutputTokens(model)
-    if (openaiMax !== undefined) {
-      return { default: openaiMax, upperLimit: openaiMax }
+  if (shouldUseIntegrationRuntimeLimits()) {
+    const runtimeLimits = resolveModelRuntimeLimits({ model })
+    if (runtimeLimits.maxOutputTokens !== undefined) {
+      return {
+        default: runtimeLimits.maxOutputTokens,
+        upperLimit: runtimeLimits.maxOutputTokens,
+      }
     }
   }
 
@@ -224,13 +235,13 @@ export function getModelMaxOutputTokens(model: string): {
   } else if (m.includes('opus-4-1') || m.includes('opus-4')) {
     defaultTokens = 32_000
     upperLimit = 32_000
-  } else if (m.includes('gakrcli-3-opus')) {
+  } else if (m.includes('claude-3-opus')) {
     defaultTokens = 4_096
     upperLimit = 4_096
-  } else if (m.includes('gakrcli-3-sonnet')) {
+  } else if (m.includes('claude-3-sonnet')) {
     defaultTokens = 8_192
     upperLimit = 8_192
-  } else if (m.includes('gakrcli-3-haiku')) {
+  } else if (m.includes('claude-3-haiku')) {
     defaultTokens = 4_096
     upperLimit = 4_096
   } else if (m.includes('3-5-sonnet') || m.includes('3-5-haiku')) {

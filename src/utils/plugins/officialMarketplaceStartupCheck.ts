@@ -81,11 +81,6 @@ function shouldRetryInstallation(
     return true
   }
 
-  // If already installed successfully, don't retry
-  if (config.officialMarketplaceAutoInstalled) {
-    return false
-  }
-
   const failReason = config.officialMarketplaceAutoInstallFailReason
   const retryCount = config.officialMarketplaceAutoInstallRetryCount || 0
   const nextRetryTime = config.officialMarketplaceAutoInstallNextRetryTime
@@ -122,8 +117,6 @@ function shouldRetryInstallation(
 export type OfficialMarketplaceCheckResult = {
   /** Whether the marketplace was successfully installed */
   installed: boolean
-  /** Whether an installation attempt actually happened in this startup */
-  attemptedThisStartup: boolean
   /** Whether the installation was skipped (and why) */
   skipped: boolean
   /** Reason for skipping, if applicable */
@@ -149,20 +142,36 @@ export type OfficialMarketplaceCheckResult = {
 export async function checkAndInstallOfficialMarketplace(): Promise<OfficialMarketplaceCheckResult> {
   const config = getGlobalConfig()
 
-  // Check if we should retry installation
-  if (!shouldRetryInstallation(config)) {
-    const reason: OfficialMarketplaceSkipReason =
-      config.officialMarketplaceAutoInstallFailReason ?? 'already_attempted'
-    logForDebugging(`Official marketplace auto-install skipped: ${reason}`)
-    return {
-      installed: false,
-      attemptedThisStartup: false,
-      skipped: true,
-      reason,
-    }
-  }
-
   try {
+    // Check if marketplace is already installed before consulting retry state.
+    // Retry state lives in global config; known_marketplaces.json is the actual
+    // source of truth for whether recommendation/setup code can read it.
+    const knownMarketplaces = await loadKnownMarketplacesConfig()
+    if (knownMarketplaces[OFFICIAL_MARKETPLACE_NAME]) {
+      logForDebugging(
+        `Official marketplace '${OFFICIAL_MARKETPLACE_NAME}' already installed, skipping`,
+      )
+      // Mark as attempted so we don't check again
+      saveGlobalConfig(current => ({
+        ...current,
+        officialMarketplaceAutoInstallAttempted: true,
+        officialMarketplaceAutoInstalled: true,
+      }))
+      return { installed: false, skipped: true, reason: 'already_installed' }
+    }
+
+    // Check if we should retry installation
+    if (!shouldRetryInstallation(config)) {
+      const reason: OfficialMarketplaceSkipReason =
+        config.officialMarketplaceAutoInstallFailReason ?? 'already_attempted'
+      logForDebugging(`Official marketplace auto-install skipped: ${reason}`)
+      return {
+        installed: false,
+        skipped: true,
+        reason,
+      }
+    }
+
     // Check if auto-install is disabled via env var
     if (isOfficialMarketplaceAutoInstallDisabled()) {
       logForDebugging(
@@ -179,32 +188,7 @@ export async function checkAndInstallOfficialMarketplace(): Promise<OfficialMark
         skipped: true,
         policy_blocked: true,
       })
-      return {
-        installed: false,
-        attemptedThisStartup: false,
-        skipped: true,
-        reason: 'policy_blocked',
-      }
-    }
-
-    // Check if marketplace is already installed
-    const knownMarketplaces = await loadKnownMarketplacesConfig()
-    if (knownMarketplaces[OFFICIAL_MARKETPLACE_NAME]) {
-      logForDebugging(
-        `Official marketplace '${OFFICIAL_MARKETPLACE_NAME}' already installed, skipping`,
-      )
-      // Mark as attempted so we don't check again
-      saveGlobalConfig(current => ({
-        ...current,
-        officialMarketplaceAutoInstallAttempted: true,
-        officialMarketplaceAutoInstalled: true,
-      }))
-      return {
-        installed: false,
-        attemptedThisStartup: false,
-        skipped: true,
-        reason: 'already_installed',
-      }
+      return { installed: false, skipped: true, reason: 'policy_blocked' }
     }
 
     // Check enterprise policy restrictions
@@ -223,12 +207,7 @@ export async function checkAndInstallOfficialMarketplace(): Promise<OfficialMark
         skipped: true,
         policy_blocked: true,
       })
-      return {
-        installed: false,
-        attemptedThisStartup: false,
-        skipped: true,
-        reason: 'policy_blocked',
-      }
+      return { installed: false, skipped: true, reason: 'policy_blocked' }
     }
 
     // inc-5046: try GCS mirror first — doesn't need git, doesn't hit GitHub.
@@ -265,11 +244,7 @@ export async function checkAndInstallOfficialMarketplace(): Promise<OfficialMark
         skipped: false,
         via_gcs: true,
       })
-      return {
-        installed: true,
-        attemptedThisStartup: true,
-        skipped: false,
-      }
+      return { installed: true, skipped: false }
     }
     // GCS failed (404 until backend writes, or network). Fall through to git
     // ONLY if the kill-switch allows — same gate as refreshMarketplace().
@@ -303,12 +278,7 @@ export async function checkAndInstallOfficialMarketplace(): Promise<OfficialMark
         gcs_unavailable: true,
         retry_count: retryCount,
       })
-      return {
-        installed: false,
-        attemptedThisStartup: true,
-        skipped: true,
-        reason: 'gcs_unavailable',
-      }
+      return { installed: false, skipped: true, reason: 'gcs_unavailable' }
     }
 
     // Check git availability
@@ -353,7 +323,6 @@ export async function checkAndInstallOfficialMarketplace(): Promise<OfficialMark
       })
       return {
         installed: false,
-        attemptedThisStartup: true,
         skipped: true,
         reason: 'git_unavailable',
         configSaveFailed,
@@ -383,11 +352,7 @@ export async function checkAndInstallOfficialMarketplace(): Promise<OfficialMark
       skipped: false,
       retry_count: previousRetryCount,
     })
-    return {
-      installed: true,
-      attemptedThisStartup: true,
-      skipped: false,
-    }
+    return { installed: true, skipped: false }
   } catch (error) {
     // Handle installation failure
     const errorMessage = error instanceof Error ? error.message : String(error)
@@ -412,7 +377,6 @@ export async function checkAndInstallOfficialMarketplace(): Promise<OfficialMark
       })
       return {
         installed: false,
-        attemptedThisStartup: true,
         skipped: true,
         reason: 'git_unavailable',
       }
@@ -464,7 +428,6 @@ export async function checkAndInstallOfficialMarketplace(): Promise<OfficialMark
 
     return {
       installed: false,
-      attemptedThisStartup: true,
       skipped: true,
       reason: 'unknown',
       configSaveFailed,

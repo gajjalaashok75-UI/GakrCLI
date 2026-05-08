@@ -1,4 +1,4 @@
-// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
+// biome-ignore-all assist/source/organizeImports: internal-only import markers must not be reordered
 import {
   logEvent,
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -250,6 +250,7 @@ import { isInProcessTeammate } from './teammateContext.js'
 import { removeTeammateFromTeamFile } from './swarm/teamHelpers.js'
 import { unassignTeammateTasks } from './tasks.js'
 import { getCompanionIntroAttachment } from '../buddy/prompt.js'
+import { isBuddyEnabled } from '../buddy/feature.js'
 
 export const TODO_REMINDER_CONFIG = {
   TURNS_SINCE_WRITE: 10,
@@ -861,10 +862,10 @@ export async function getAttachments(
         ),
       ),
     ),
-    ...(feature('BUDDY')
-      ? [
-          maybe('companion_intro', () =>
-            Promise.resolve(getCompanionIntroAttachment(messages)),
+    ...(isBuddyEnabled()
+        ? [
+            maybe('companion_intro', () =>
+              Promise.resolve(getCompanionIntroAttachment(messages)),
           ),
         ]
       : []),
@@ -1646,7 +1647,7 @@ async function getSelectedLinesFromIDE(
 /**
  * Computes the directories to process for nested memory file loading.
  * Returns two lists:
- * - nestedDirs: Directories between CWD and targetPath (processed for GAKR.md + all rules)
+ * - nestedDirs: Directories between CWD and targetPath (processed for GAKRCLI.md + all rules)
  * - cwdLevelDirs: Directories from root to CWD (processed for conditional rules only)
  *
  * @param targetPath The target file path
@@ -1718,7 +1719,7 @@ export function memoryFilesToAttachments(
   for (const memoryFile of memoryFiles) {
     // Dedup: loadedNestedMemoryPaths is a non-evicting Set; readFileState
     // is a 100-entry LRU that drops entries in busy sessions, so relying
-    // on it alone re-injects the same GAKR.md on every eviction cycle.
+    // on it alone re-injects the same GAKRCLI.md on every eviction cycle.
     if (toolUseContext.loadedNestedMemoryPaths?.has(memoryFile.path)) {
       continue
     }
@@ -1776,12 +1777,12 @@ export function memoryFilesToAttachments(
 
 /**
  * Loads nested memory files for a given file path and returns them as attachments.
- * This function performs directory traversal to find GAKR.md files and conditional rules
+ * This function performs directory traversal to find GAKRCLI.md files and conditional rules
  * that apply to the target file path.
  *
  * Processing order (must be preserved):
  * 1. Managed/User conditional rules matching targetPath
- * 2. Nested directories (CWD → target): GAKR.md + unconditional + conditional rules
+ * 2. Nested directories (CWD → target): GAKRCLI.md + unconditional + conditional rules
  * 3. CWD-level directories (root → CWD): conditional rules only
  *
  * @param filePath The file path to get nested memory files for
@@ -1826,7 +1827,7 @@ async function getNestedMemoryAttachmentsForFile(
     )
 
     // Phase 3: Process nested directories (CWD → target)
-    // Each directory gets: GAKR.md + unconditional rules + conditional rules
+    // Each directory gets: GAKRCLI.md + unconditional rules + conditional rules
     for (const dir of nestedDirs) {
       const memoryFiles = (
         await getMemoryFilesForNestedDirectory(dir, filePath, processedPaths)
@@ -2161,7 +2162,7 @@ export async function getChangedFiles(
 }
 
 /**
- * Processes paths that need nested memory attachments and checks for nested GAKR.md files
+ * Processes paths that need nested memory attachments and checks for nested GAKRCLI.md files
  * Uses nestedMemoryAttachmentTriggers field from ToolUseContext
  */
 async function getNestedMemoryAttachments(
@@ -2641,7 +2642,7 @@ let suppressNext = false
 const FILTERED_LISTING_MAX = 30
 
 /**
- * Filter skills to bundled (Anthropic-curated) + MCP (user-connected) only.
+ * Filter skills to bundled + MCP (user-connected) only.
  * Used when skill-search is enabled to resolve the turn-0 gap for subagents:
  * these sources are small, intent-signaled, and won't hit the truncation budget.
  * User/project/plugin skills (the long tail — 200+) go through discovery instead.
@@ -2792,11 +2793,30 @@ export function extractAtMentionedFiles(content: string): string[] {
 export function extractMcpResourceMentions(content: string): string[] {
   // Extract MCP resources mentioned with @ symbol in format @server:uri
   // Example: "@server1:resource/path" would extract "server1:resource/path"
-  const atMentionRegex = /(^|\s)@([^\s]+:[^\s]+)\b/g
+  //
+  // Two guards against Windows-path / quoted-file collisions (see
+  // `attachments.extractors.test.ts`):
+  //
+  // 1. `(?!")` right after `@` drops quoted tokens entirely. The earlier
+  //    form (without the lookahead and with `[^\s]` character classes)
+  //    backtracked past the closing `"` at the `\b` anchor and produced
+  //    ghost matches like `"C:\Users\...\file.txt` for any quoted file
+  //    mention containing a colon.
+  // 2. The `"` added to the character classes is belt-and-braces: even
+  //    if the lookahead were later removed or bypassed, the engine can
+  //    no longer consume a quote character mid-match.
+  const atMentionRegex = /(^|\s)@(?!")([^\s"]+:[^\s"]+)\b/g
   const matches = content.match(atMentionRegex) || []
 
-  // Remove the prefix (everything before @) from each match
-  return uniq(matches.map(match => match.slice(match.indexOf('@') + 1)))
+  return uniq(
+    matches
+      .map(match => match.slice(match.indexOf('@') + 1))
+      // Post-match filter: a single-letter "server" followed by `:\` or
+      // `:/` is always a Windows drive-letter prefix, never a real MCP
+      // resource. This covers the unquoted `@C:\Users\...` case that
+      // the regex alone cannot disambiguate from `@server:resource`.
+      .filter(m => !/^[A-Za-z]:[\\/]/.test(m)),
+  )
 }
 
 export function extractAgentMentions(content: string): string[] {
@@ -2862,7 +2882,7 @@ async function getDiagnosticAttachments(
   }
 
   // Get new diagnostics from the tracker (IDE diagnostics via MCP)
-  const newDiagnostics = await diagnosticTracker.getNewDiagnostics()
+  const newDiagnostics = await diagnosticTracker.getNewDiagnosticsCompat()
   if (newDiagnostics.length === 0) {
     return []
   }
@@ -3519,7 +3539,7 @@ async function getAsyncHookResponseAttachments(): Promise<Attachment[]> {
 
 /**
  * Get teammate mailbox attachments for agent swarm communication
- * Teammates are independent Gakr sessions running in parallel (swarms),
+ * Teammates are independent GakrCLI sessions running in parallel (swarms),
  * not parent-child subagent relationships.
  *
  * This function checks two sources for messages:

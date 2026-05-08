@@ -11,13 +11,16 @@ const execFileNoThrowMock = mock(
   async () => ({ code: 0, stdout: '', stderr: '' }),
 )
 
-mock.module('../../utils/execFileNoThrow.js', () => ({
-  execFileNoThrow: execFileNoThrowMock,
-}))
+function installOscMocks(): void {
+  mock.module('../../utils/execFileNoThrow.js', () => ({
+    execFileNoThrow: execFileNoThrowMock,
+    execFileNoThrowWithCwd: execFileNoThrowMock,
+  }))
 
-mock.module('../../utils/tempfile.js', () => ({
-  generateTempFilePath: generateTempFilePathMock,
-}))
+  mock.module('../../utils/tempfile.js', () => ({
+    generateTempFilePath: generateTempFilePathMock,
+  }))
+}
 
 async function importFreshOscModule() {
   return import(`./osc.ts?ts=${Date.now()}-${Math.random()}`)
@@ -44,6 +47,7 @@ async function waitForExecCall(
 
 describe('Windows clipboard fallback', () => {
   beforeEach(() => {
+    installOscMocks()
     execFileNoThrowMock.mockClear()
     generateTempFilePathMock.mockClear()
     process.env = { ...originalEnv }
@@ -66,15 +70,15 @@ describe('Windows clipboard fallback', () => {
     expect(execFileNoThrowMock.mock.calls.some(([cmd]) => cmd === 'clip')).toBe(
       false,
     )
-    expect(
-      execFileNoThrowMock.mock.calls.some(([cmd]) => cmd === 'powershell'),
-    ).toBe(true)
+    expect(windowsCall).toBeDefined()
   })
 
   test('passes Windows clipboard text through a UTF-8 temp file instead of stdin', async () => {
     const { setClipboard } = await importFreshOscModule()
 
     await setClipboard('Привет мир')
+    await flushClipboardCopy()
+
     const windowsCall = await waitForExecCall('powershell')
 
     expect(windowsCall?.[2]).toMatchObject({
@@ -83,7 +87,7 @@ describe('Windows clipboard fallback', () => {
     expect(windowsCall?.[2]).not.toMatchObject({ input: 'Привет мир' })
     expect(windowsCall?.[2]).not.toMatchObject({
       env: expect.objectContaining({
-        GAKR_CLIPBOARD_TEXT_B64: expect.any(String),
+        GAKRCLI_CLIPBOARD_TEXT_B64: expect.any(String),
       }),
     })
     expect(windowsCall?.[1]).toContain(
@@ -94,6 +98,7 @@ describe('Windows clipboard fallback', () => {
 
 describe('clipboard path behavior remains stable', () => {
   beforeEach(() => {
+    installOscMocks()
     execFileNoThrowMock.mockClear()
     process.env = { ...originalEnv }
     delete process.env['SSH_CONNECTION']
