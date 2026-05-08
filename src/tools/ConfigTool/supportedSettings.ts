@@ -85,7 +85,7 @@ export const SUPPORTED_SETTINGS: Record<string, SettingConfig> = {
     type: 'string',
     description:
       'Show per-query cache hit/miss summary at end of turn (off | compact | full)',
-    options: SHOW_CACHE_STATS_MODES,
+    getOptions: () => SHOW_CACHE_STATS_MODES as unknown as string[],
   },
   terminalProgressBarEnabled: {
     source: 'global',

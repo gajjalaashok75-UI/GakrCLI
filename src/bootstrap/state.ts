@@ -112,15 +112,15 @@ type State = {
   agentColorIndex: number
   // Last API request for bug reports
   lastAPIRequest: Omit<BetaMessageStreamParams, 'messages'> | null
-  // Messages from the last API request (ant-only; reference, not clone).
-  // Captures the exact post-compaction, GAKR.md-injected message set sent
+  // Messages from the last API request (internal-only; reference, not clone).
+  // Captures the exact post-compaction, GAKRCLI.md-injected message set sent
   // to the API so /share's serialized_conversation.json reflects reality.
   lastAPIRequestMessages: BetaMessageStreamParams['messages'] | null
   // Last auto-mode classifier request(s) for /share transcript
   lastClassifierRequests: unknown[] | null
-  // GAKR.md content cached by context.ts for the auto-mode classifier.
+  // GAKRCLI.md content cached by context.ts for the auto-mode classifier.
   // Breaks the yoloClassifier → gakrclimd → filesystem → permissions cycle.
-  cachedgakrcliMdContent: string | null
+  cachedGakrcliMdContent: string | null
   // In-memory error log for recent errors
   inMemoryErrorLog: Array<{ error: string; timestamp: string }>
   // Session-only plugins from --plugin-dir flag
@@ -185,7 +185,7 @@ type State = {
       agentId: string | null
     }
   >
-  // Track slow operations for dev bar display (ant-only)
+  // Track slow operations for dev bar display (internal-only)
   slowOperations: Array<{
     operation: string
     durationMs: number
@@ -203,8 +203,8 @@ type State = {
   systemPromptSectionCache: Map<string, string | null>
   // Last date emitted to the model (for detecting midnight date changes)
   lastEmittedDate: string | null
-  // Additional directories from --add-dir flag (for GAKR.md loading)
-  additionalDirectoriesForgakrcliMd: string[]
+  // Additional directories from --add-dir flag (for GAKRCLI.md loading)
+  additionalDirectoriesForGakrcliMd: string[]
   // Channel server allowlist from --channels flag (servers whose channel
   // notifications should register this session). Parsed once in main.tsx —
   // the tag decides trust model: 'plugin' → marketplace verification +
@@ -344,7 +344,7 @@ function getInitialState(): State {
     lastAPIRequestMessages: null,
     // Last auto-mode classifier request(s) for /share transcript
     lastClassifierRequests: null,
-    cachedgakrcliMdContent: null,
+    cachedGakrcliMdContent: null,
     // In-memory error log for recent errors
     inMemoryErrorLog: [],
     // Session-only plugins from --plugin-dir flag
@@ -399,8 +399,8 @@ function getInitialState(): State {
     systemPromptSectionCache: new Map(),
     // Last date emitted to the model
     lastEmittedDate: null,
-    // Additional directories from --add-dir flag (for GAKR.md loading)
-    additionalDirectoriesForgakrcliMd: [],
+    // Additional directories from --add-dir flag (for GAKRCLI.md loading)
+    additionalDirectoriesForGakrcliMd: [],
     // Channel server allowlist from --channels flag
     allowedChannels: [],
     hasDevChannels: false,
@@ -436,7 +436,7 @@ const STATE: State = getInitialState()
  * Not available in browsers or non-Node JavaScript environments.
  * SDK consumers must run in a Node.js runtime (Node.js 12.17.0+ or 14.0.0+).
  */
-export type SdkContext = {
+type SdkContext = {
   sessionId: SessionId
   sessionProjectDir: string | null
   cwd: string
@@ -501,7 +501,10 @@ export function regenerateSessionId(
 
 export function getParentSessionId(): SessionId | undefined {
   const ctx = getSdkContext()
-  return ctx?.parentSessionId ?? STATE.parentSessionId
+  if (ctx) {
+    return ctx.parentSessionId
+  }
+  return STATE.parentSessionId
 }
 
 /**
@@ -576,9 +579,9 @@ export function setOriginalCwd(cwd: string): void {
   const ctx = getSdkContext()
   if (ctx) {
     ctx.originalCwd = cwd.normalize('NFC')
-  } else {
-    STATE.originalCwd = cwd.normalize('NFC')
+    return
   }
+  STATE.originalCwd = cwd.normalize('NFC')
 }
 
 /**
@@ -598,9 +601,9 @@ export function setCwdState(cwd: string): void {
   const ctx = getSdkContext()
   if (ctx) {
     ctx.cwd = cwd.normalize('NFC')
-  } else {
-    STATE.cwd = cwd.normalize('NFC')
+    return
   }
+  STATE.cwd = cwd.normalize('NFC')
 }
 
 export function getDirectConnectServerUrl(): string | undefined {
@@ -1024,7 +1027,7 @@ export function setMeter(
 
   // Initialize all counters using the provided factory
   STATE.sessionCounter = createCounter('gakr_code.session.count', {
-    description: 'Count of Gakr CLI sessions started',
+    description: 'Count of CLI sessions started',
   })
   STATE.locCounter = createCounter('gakr_code.lines_of_code.count', {
     description:
@@ -1037,7 +1040,7 @@ export function setMeter(
     description: 'Number of git commits created',
   })
   STATE.costCounter = createCounter('gakr_code.cost.usage', {
-    description: 'Cost of the Gakr session',
+    description: 'Cost of the GakrCLI session',
     unit: 'USD',
   })
   STATE.tokenCounter = createCounter('gakr_code.token.usage', {
@@ -1276,11 +1279,11 @@ export function getLastClassifierRequests(): unknown[] | null {
 }
 
 export function setCachedgakrcliMdContent(content: string | null): void {
-  STATE.cachedgakrcliMdContent = content
+  STATE.cachedGakrcliMdContent = content
 }
 
 export function getCachedgakrcliMdContent(): string | null {
-  return STATE.cachedgakrcliMdContent
+  return STATE.cachedGakrcliMdContent
 }
 
 export function addToInMemoryErrorLog(errorInfo: {
@@ -1633,29 +1636,8 @@ export function clearInvokedSkillsForAgent(agentId: string): void {
   }
 }
 
-// Slow operations tracking for dev bar
-const MAX_SLOW_OPERATIONS = 10
-const SLOW_OPERATION_TTL_MS = 10000
-
-export function addSlowOperation(operation: string, durationMs: number): void {
-  if (process.env.USER_TYPE !== 'ant') return
-  // Skip tracking for editor sessions (user editing a prompt file in $EDITOR)
-  // These are intentionally slow since the user is drafting text
-  if (operation.includes('exec') && operation.includes('gakrcli-prompt-')) {
-    return
-  }
-  const now = Date.now()
-  // Remove stale operations
-  STATE.slowOperations = STATE.slowOperations.filter(
-    op => now - op.timestamp < SLOW_OPERATION_TTL_MS,
-  )
-  // Add new operation
-  STATE.slowOperations.push({ operation, durationMs, timestamp: now })
-  // Keep only the most recent operations
-  if (STATE.slowOperations.length > MAX_SLOW_OPERATIONS) {
-    STATE.slowOperations = STATE.slowOperations.slice(-MAX_SLOW_OPERATIONS)
-  }
-}
+// Slow operations tracking removed (was internal-only).
+// Functions kept as no-ops to avoid breaking callers.
 
 const EMPTY_SLOW_OPERATIONS: ReadonlyArray<{
   operation: string
@@ -1663,32 +1645,17 @@ const EMPTY_SLOW_OPERATIONS: ReadonlyArray<{
   timestamp: number
 }> = []
 
+export function addSlowOperation(
+  _operation: string,
+  _durationMs: number,
+): void {}
+
 export function getSlowOperations(): ReadonlyArray<{
   operation: string
   durationMs: number
   timestamp: number
 }> {
-  // Most common case: nothing tracked. Return a stable reference so the
-  // caller's setState() can bail via Object.is instead of re-rendering at 2fps.
-  if (STATE.slowOperations.length === 0) {
-    return EMPTY_SLOW_OPERATIONS
-  }
-  const now = Date.now()
-  // Only allocate a new array when something actually expired; otherwise keep
-  // the reference stable across polls while ops are still fresh.
-  if (
-    STATE.slowOperations.some(op => now - op.timestamp >= SLOW_OPERATION_TTL_MS)
-  ) {
-    STATE.slowOperations = STATE.slowOperations.filter(
-      op => now - op.timestamp < SLOW_OPERATION_TTL_MS,
-    )
-    if (STATE.slowOperations.length === 0) {
-      return EMPTY_SLOW_OPERATIONS
-    }
-  }
-  // Safe to return directly: addSlowOperation() reassigns STATE.slowOperations
-  // before pushing, so the array held in React state is never mutated.
-  return STATE.slowOperations
+  return EMPTY_SLOW_OPERATIONS
 }
 
 export function getMainThreadAgentType(): string | undefined {
@@ -1735,13 +1702,13 @@ export function setLastEmittedDate(date: string | null): void {
 }
 
 export function getAdditionalDirectoriesForgakrcliMd(): string[] {
-  return STATE.additionalDirectoriesForgakrcliMd
+  return STATE.additionalDirectoriesForGakrcliMd
 }
 
 export function setAdditionalDirectoriesForgakrcliMd(
   directories: string[],
 ): void {
-  STATE.additionalDirectoriesForgakrcliMd = directories
+  STATE.additionalDirectoriesForGakrcliMd = directories
 }
 
 export function getAllowedChannels(): ChannelEntry[] {
@@ -1825,5 +1792,14 @@ export function getPromptId(): string | null {
 
 export function setPromptId(id: string | null): void {
   STATE.promptId = id
+}
+
+// Stub for feature-gated REPL bridge (not available in open build)
+export function isReplBridgeActive(): boolean {
+  return false
+}
+
+export function getReplBridgeHandle(): null {
+  return null
 }
 

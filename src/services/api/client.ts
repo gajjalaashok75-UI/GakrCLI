@@ -13,6 +13,7 @@ import { getUserAgent } from 'src/utils/http.js'
 import { getSmallFastModel } from 'src/utils/model/model.js'
 import {
   getAPIProvider,
+  isFirstPartyAnthropicBaseUrl,
   isGithubNativeAnthropicMode,
 } from 'src/utils/model/providers.js'
 import { getProxyFetchOptions } from 'src/utils/proxy.js'
@@ -93,6 +94,162 @@ function createStderrLogger(): ClientOptions['logger'] {
   }
 }
 
+function isMiniMaxModelName(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase()
+  return Boolean(
+    normalized &&
+      (normalized.startsWith('minimax-') || normalized.startsWith('minimax/')),
+  )
+}
+
+function isXaiModelName(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase()
+  return Boolean(
+    normalized &&
+      (normalized.startsWith('grok-') || normalized.startsWith('xai/')),
+  )
+}
+
+function getMiniMaxBaseUrlOverride(): string | undefined {
+  const base = process.env.OPENAI_BASE_URL?.trim() || process.env.OPENAI_API_BASE?.trim()
+  if (!base) return undefined
+  try {
+    const url = new URL(base)
+    return url.hostname.includes('minimax') ? base : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function getXaiBaseUrlOverride(): string | undefined {
+  const base = process.env.OPENAI_BASE_URL?.trim() || process.env.OPENAI_API_BASE?.trim()
+  if (!base) return undefined
+  try {
+    const url = new URL(base)
+    return url.hostname.includes('x.ai') ? base : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function getRouteDefaultBaseUrl(route: 'minimax' | 'xai'): string {
+  return route === 'minimax' ? 'https://api.minimax.io/v1' : 'https://api.x.ai/v1'
+}
+
+function getRouteDefaultModel(route: 'minimax' | 'xai'): string {
+  return route === 'minimax' ? 'MiniMax-M2.5' : 'grok-4'
+}
+
+function applyMiniMaxEnvOnlyDefaults(requestedModel?: string): void {
+  const baseUrlOverride = getMiniMaxBaseUrlOverride()
+  const hasMiniMaxBaseOverride = baseUrlOverride !== undefined
+  const modelOverride = process.env.OPENAI_MODEL?.trim() || undefined
+
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL =
+    baseUrlOverride ?? getRouteDefaultBaseUrl('minimax')
+  
+  // Priority: requested model (if MiniMax) > env override (if MiniMax) > default
+  const finalModel = 
+    (requestedModel && isMiniMaxModelName(requestedModel) ? requestedModel : undefined) ??
+    (hasMiniMaxBaseOverride || isMiniMaxModelName(modelOverride) ? modelOverride : undefined) ??
+    getRouteDefaultModel('minimax')
+  
+  process.env.OPENAI_MODEL = finalModel
+  process.env.OPENAI_API_KEY = process.env.MINIMAX_API_KEY
+  delete process.env.OPENAI_API_FORMAT
+  delete process.env.OPENAI_AUTH_HEADER
+  delete process.env.OPENAI_AUTH_SCHEME
+  delete process.env.OPENAI_AUTH_HEADER_VALUE
+  // Delete conflicting API keys to prevent the openaiShim from using the wrong one
+  delete process.env.XAI_API_KEY
+}
+
+function applyXaiEnvOnlyDefaults(requestedModel?: string): void {
+  const baseUrlOverride = getXaiBaseUrlOverride()
+  const hasXaiBaseOverride = baseUrlOverride !== undefined
+  const modelOverride = process.env.OPENAI_MODEL?.trim() || undefined
+
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL =
+    baseUrlOverride ?? getRouteDefaultBaseUrl('xai')
+  
+  // Priority: requested model (if xAI) > env override (if xAI) > default
+  const finalModel =
+    (requestedModel && isXaiModelName(requestedModel) ? requestedModel : undefined) ??
+    (hasXaiBaseOverride || isXaiModelName(modelOverride) ? modelOverride : undefined) ??
+    getRouteDefaultModel('xai')
+  
+  process.env.OPENAI_MODEL = finalModel
+  process.env.OPENAI_API_KEY = process.env.XAI_API_KEY
+  delete process.env.OPENAI_API_FORMAT
+  delete process.env.OPENAI_AUTH_HEADER
+  delete process.env.OPENAI_AUTH_SCHEME
+  delete process.env.OPENAI_AUTH_HEADER_VALUE
+  // Delete conflicting API keys to prevent the openaiShim from using the wrong one
+  delete process.env.MINIMAX_API_KEY
+}
+
+function hasNoExplicitNonOpenAICompatibleProvider(): boolean {
+  return (
+    !isEnvTruthy(process.env.GAKR_CODE_USE_BEDROCK) &&
+    !isEnvTruthy(process.env.GAKR_CODE_USE_VERTEX) &&
+    !isEnvTruthy(process.env.GAKR_CODE_USE_FOUNDRY)
+  )
+}
+
+function resolveEnvOnlyProviderRouteId(): 'xai' | 'minimax' | null {
+  const baseUrl = process.env.OPENAI_BASE_URL?.trim() || process.env.OPENAI_API_BASE?.trim()
+  
+  // xAI check
+  if (
+    process.env.XAI_API_KEY &&
+    hasNoExplicitNonOpenAICompatibleProvider()
+  ) {
+    // If there's a base URL, it must be xAI-compatible
+    if (baseUrl) {
+      try {
+        const url = new URL(baseUrl)
+        if (!url.hostname.includes('x.ai')) {
+          // Base URL is not xAI-compatible, don't select xAI
+          // Continue to check other providers
+        } else {
+          return 'xai'
+        }
+      } catch {
+        // Invalid URL, don't select xAI
+      }
+    } else {
+      // No base URL, select xAI
+      return 'xai'
+    }
+  }
+
+  // MiniMax check
+  if (
+    process.env.MINIMAX_API_KEY &&
+    !process.env.OPENAI_API_KEY &&
+    !process.env.XAI_API_KEY &&
+    hasNoExplicitNonOpenAICompatibleProvider()
+  ) {
+    // If there's a base URL, it must be MiniMax-compatible
+    if (baseUrl) {
+      try {
+        const url = new URL(baseUrl)
+        if (!url.hostname.includes('minimax')) {
+          return null
+        }
+      } catch {
+        return null
+      }
+    }
+    return 'minimax'
+  }
+
+  return null
+}
+
+
 export async function getAnthropicClient({
   apiKey,
   maxRetries,
@@ -148,7 +305,7 @@ export async function getAnthropicClient({
   }
 
   const isGakrcliAiSubscriber =
-    shouldUseFirstPartyAuth && isGakrcliAISubscriber()
+    shouldUseFirstPartyAuth && isgakrcliAISubscriber()
 
   if (shouldUseFirstPartyAuth && !isGakrcliAiSubscriber) {
     await configureApiKeyHeaders(defaultHeaders, getIsNonInteractiveSession())
@@ -186,7 +343,21 @@ export async function getAnthropicClient({
       providerOverride,
     }) as unknown as Anthropic
   }
+
+  // Check for env-only provider routes (MiniMax, xAI)
+  const envOnlyProviderRouteId = resolveEnvOnlyProviderRouteId()
+  const useXaiEnvOnlyProvider = envOnlyProviderRouteId === 'xai'
+  const useMiniMaxEnvOnlyProvider = envOnlyProviderRouteId === 'minimax'
+  if (useMiniMaxEnvOnlyProvider) {
+    applyMiniMaxEnvOnlyDefaults(model)
+  }
+  if (useXaiEnvOnlyProvider) {
+    applyXaiEnvOnlyDefaults(model)
+  }
+
   if (
+    useMiniMaxEnvOnlyProvider ||
+    useXaiEnvOnlyProvider ||
     isEnvTruthy(process.env.GAKR_CODE_USE_OPENAI) ||
     isEnvTruthy(process.env.GAKR_CODE_USE_GITHUB) ||
     isEnvTruthy(process.env.GAKR_CODE_USE_GEMINI) ||

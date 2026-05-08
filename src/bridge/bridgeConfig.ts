@@ -14,21 +14,14 @@
 import { getOauthConfig } from '../constants/oauth.js'
 import { getgakrcliAIOAuthTokens } from '../utils/auth.js'
 
-/** Ant-only dev override: GAKR_BRIDGE_OAUTH_TOKEN, else undefined. */
+/** Dev override: GAKR_BRIDGE_OAUTH_TOKEN, else undefined. */
 export function getBridgeTokenOverride(): string | undefined {
-  return (
-    (process.env.USER_TYPE === 'ant' &&
-      process.env.GAKR_BRIDGE_OAUTH_TOKEN) ||
-    undefined
-  )
+  return process.env.GAKR_BRIDGE_OAUTH_TOKEN || undefined
 }
 
-/** Ant-only dev override: GAKR_BRIDGE_BASE_URL, else undefined. */
+/** Dev override: GAKR_BRIDGE_BASE_URL, else undefined. */
 export function getBridgeBaseUrlOverride(): string | undefined {
-  return (
-    (process.env.USER_TYPE === 'ant' && process.env.GAKR_BRIDGE_BASE_URL) ||
-    undefined
-  )
+  return process.env.GAKR_BRIDGE_BASE_URL || undefined
 }
 
 /**

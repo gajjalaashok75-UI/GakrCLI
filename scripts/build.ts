@@ -529,6 +529,10 @@ sdkResult = await Bun.build({
           path: args.path,
           namespace: 'sdk-missing-stub',
         }))
+        build.onResolve({ filter: /^(\.\.?\/)+hooks\// }, (args) => ({
+          path: args.path,
+          namespace: 'sdk-missing-stub',
+        }))
         // Stub relative imports to state/ directory EXCEPT for store.js and AppStateStore.js
         // which are React-free utilities needed by the SDK for state management.
         build.onResolve({ filter: /^(\.\.?\/)+state\// }, (args) => {
@@ -609,6 +613,10 @@ sdkResult = await Bun.build({
           namespace: 'sdk-missing-stub',
         }))
         build.onResolve({ filter: /^src\/cli\// }, (args) => ({
+          path: args.path,
+          namespace: 'sdk-missing-stub',
+        }))
+        build.onResolve({ filter: /^src\/hooks\// }, (args) => ({
           path: args.path,
           namespace: 'sdk-missing-stub',
         }))
@@ -770,9 +778,9 @@ export const Fragment = null;
           }
           const isStubbedSpecifier = (s: string) =>
             missingModules.includes(s) ||
-            /^(\.\.?\/)+(components|ink|commands|cli|context|state|keybindings)\//.test(s) ||
+            /^(\.\.?\/)+(components|ink|commands|cli|context|state|keybindings|hooks)\//.test(s) ||
             /^(\.\.?\/)+ink\.js$/.test(s) ||
-            /^src\/(components|ink|commands|cli|state|context|keybindings)\//.test(s) ||
+            /^src\/(components|ink|commands|cli|state|context|keybindings|hooks)\//.test(s) ||
             /^src\/ink\.js$/.test(s) ||
             /(?:^|\/)UI\.js$/.test(s) ||
             s === 'react-compiler-runtime' ||
