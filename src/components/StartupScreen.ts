@@ -12,6 +12,7 @@ import { getLocalOpenAICompatibleProviderLabel } from '../utils/providerDiscover
 import { getSettings_DEPRECATED } from '../utils/settings/settings.js'
 import { parseUserSpecifiedModel } from '../utils/model/model.js'
 import { DEFAULT_GEMINI_MODEL } from '../utils/providerProfile.js'
+import { isZaiBaseUrl, containsExactZaiGlmModelId } from '../utils/zaiProvider.js'
 
 declare const MACRO: { VERSION: string; DISPLAY_VERSION?: string }
 
