@@ -1,4 +1,0 @@
-interface:
-  display_name: "Anime.js Atlas"
-  short_description: "Help with Anime.js 4 docs and workflows"
-  default_prompt: "Use $animejs-atlas to map the best Anime.js module, imports, and APIs for this task."

@@ -48,4 +48,6 @@ For each issue, provide:
 - Testing approach
 - Prevention recommendations
 
+also use this skill ok   
+- debugging-strategies
 Focus on fixing the underlying issue, not just symptoms.
