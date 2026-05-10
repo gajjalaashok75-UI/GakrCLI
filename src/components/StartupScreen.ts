@@ -92,7 +92,7 @@ export function detectProvider(modelOverride?: string): { name: string; model: s
   if (useMistral) {
     const model = modelOverride || process.env.MISTRAL_MODEL || 'devstral-latest'
     const baseUrl = process.env.MISTRAL_BASE_URL || 'https://api.mistral.ai/v1'
-    return { name: 'Mistral', model, baseUrl, isLocal: false }
+    return { name: 'Mistral AI', model, baseUrl, isLocal: false }
   }
   if (useNvidia) {
     const model = process.env.NVIDIA_MODEL || 'stepfun-ai/step-3.5-flash'
@@ -115,6 +115,7 @@ export function detectProvider(modelOverride?: string): { name: string; model: s
     })
     const baseUrl = resolvedRequest.baseUrl
     const isLocal = isLocalProviderUrl(baseUrl)
+    const routeId = resolveRouteIdFromBaseUrl(baseUrl)
     let name = 'OpenAI'
     // Explicit dedicated-provider env flags win.
     if (process.env.NVIDIA_NIM) name = 'NVIDIA NIM'
@@ -137,8 +138,10 @@ export function detectProvider(modelOverride?: string): { name: string; model: s
     else if (/moonshot/i.test(baseUrl)) name = 'Moonshot AI - API'
     else if (/deepseek/i.test(baseUrl)) name = 'DeepSeek'
     else if (/x\.ai/i.test(baseUrl)) name = 'xAI'
-    else if (isZaiBaseUrl(baseUrl)) name = 'Z.AI - GLM'
-    else if (/mistral/i.test(baseUrl)) name = 'Mistral'
+    else if (isZaiBaseUrl(baseUrl)) name = 'Z.AI'
+    else if (/mistral/i.test(baseUrl)) name = 'Mistral AI'
+    else if (routeId && routeId !== 'openai' && routeId !== 'custom')
+      name = getRouteLabel(routeId) ?? name
     // rawModel fallback — fires only when base URL is generic/custom.
     else if (/nvidia/i.test(rawModel)) name = 'NVIDIA NIM'
     else if (/minimax/i.test(rawModel)) name = 'MiniMax'
@@ -148,12 +151,10 @@ export function detectProvider(modelOverride?: string): { name: string; model: s
       name = 'Moonshot AI - API'
     else if (/deepseek/i.test(rawModel)) name = 'DeepSeek'
     else if (/grok/i.test(rawModel)) name = 'xAI'
-    else if (containsExactZaiGlmModelId(rawModel)) name = 'Z.AI - GLM'
     else if (/mistral/i.test(rawModel)) name = 'Mistral'
     else if (/llama/i.test(rawModel)) name = 'Meta Llama'
     else if (/bankr/i.test(baseUrl)) name = 'Bankr'
     else if (/bankr/i.test(rawModel)) name = 'Bankr'
-    else if (/x\.ai/i.test(baseUrl)) name = 'xAI'
     else if (isLocal) name = getLocalOpenAICompatibleProviderLabel(baseUrl)
     
     // Resolve model alias to actual model name + reasoning effort
