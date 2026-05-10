@@ -782,9 +782,12 @@ export function REPL({
   }, [localTools, initialTools]);
 
   // Initialize plugin management
-  const pluginCommands = useManagePlugins({
+  useManagePlugins({
     enabled: !isRemoteSession
   });
+  
+  // Get plugin commands from AppState
+  const pluginCommands = useAppState(s => s.plugins.commands);
   const tasksV2 = useTasksV2WithCollapseEffect();
 
   // Start background plugin installations

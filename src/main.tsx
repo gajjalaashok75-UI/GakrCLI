@@ -981,6 +981,10 @@ async function run() {
         if (options.prefill) {
             seedEarlyInput(options.prefill);
         }
+        // If a prompt argument was provided and we're in interactive mode, seed it as early input
+        if (prompt && !options.print) {
+            seedEarlyInput(prompt);
+        }
         // Promise for file downloads - started early, awaited before REPL renders
         let fileDownloadPromise;
         const agentsJson = options.agents;
@@ -1421,11 +1425,13 @@ async function run() {
                         ...mcpConfig
                     };
                     allowedTools.push(...cuTools);
+                } else {
                 }
             }
             catch (error) {
                 logForDebugging(`[Computer Use MCP] Setup failed: ${errorMessage(error)}`);
             }
+        } else {
         }
         // Store additional directories for GAKR.md loading (controlled by env var)
         setAdditionalDirectoriesForgakrcliMd(addDir);
@@ -1514,6 +1520,7 @@ async function run() {
                     dev_plugins: joinPluginIds(devChannels ?? [])
                 });
             }
+        } else {
         }
         // SDK opt-in for SendUserMessage via --tools. All sessions require
         // explicit opt-in; listing it in --tools signals intent. Runs BEFORE
@@ -1686,7 +1693,11 @@ async function run() {
         // reads synchronously. Previously ran inside setup() after ~20ms of
         // await points, so the parallel getCommands() memoized an empty list.
         if (process.env.GAKR_CODE_ENTRYPOINT !== 'local-agent') {
-            initBuiltinPlugins();
+            try {
+                initBuiltinPlugins();
+            } catch (error) {
+                // Continue without builtin plugins for now
+            }
             initBundledSkills();
         }
         const setupPromise = setup(preSetupCwd, permissionMode, allowDangerouslySkipPermissions, worktreeEnabled, worktreeName, tmuxEnabled, sessionId ? validateUuid(sessionId) : undefined, worktreePRNumber, messagingSocketPath);

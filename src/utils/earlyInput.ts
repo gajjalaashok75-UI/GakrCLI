@@ -30,13 +30,8 @@ export function startCapturingEarlyInput(): void {
   // Only capture in interactive mode: stdin must be a TTY, and we must not
   // be in print mode. Raw mode disables ISIG (terminal Ctrl+C → SIGINT),
   // which would make -p uninterruptible.
-  //
-  // Skip on Windows: setRawMode is not supported in the same way as Unix，
-  // so we don't capture early input there. This prevents stdin from being
-  // in an inconsistent state when the REPL renders.
   if (
     !process.stdin.isTTY ||
-    process.platform === 'win32' ||
     isCapturing ||
     process.argv.includes('-p') ||
     process.argv.includes('--print')
