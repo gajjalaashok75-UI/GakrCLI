@@ -23,7 +23,7 @@ type TipMatcher = {
   tip: ValidationTip
 }
 
-const DOCUMENTATION_BASE = 'https://github.com/gakr-gakr/gakr/docs/en'
+const DOCUMENTATION_BASE = 'https://github.com/gajjalaashok75-UI/GakrCLI/docs/en'
 
 const TIP_MATCHERS: TipMatcher[] = [
   {

@@ -30,6 +30,6 @@ export const features = [
 export const navLinks = [
   { href: '#features', label: 'features' },
   { href: '#install', label: 'install' },
-  { href: 'https://github.com/gakr-gakr/gakr', label: 'github' },
+  { href: 'https://github.com/gajjalaashok75-UI/GakrCLI', label: 'github' },
   { href: 'https://gitlawb.com', label: 'gitlawb' },
 ] as const

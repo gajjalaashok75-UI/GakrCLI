@@ -154,10 +154,10 @@ export function generateHeatmap(
   lines.push(
     '    Less ' +
       [
-        gakrcliOrange('░'),
-        gakrcliOrange('▒'),
-        gakrcliOrange('▓'),
-        gakrcliOrange('█'),
+        gakrcliBlue('░'),
+        gakrcliBlue('▒'),
+        gakrcliBlue('▓'),
+        gakrcliBlue('█'),
       ].join(' ') +
       ' More',
   )
@@ -177,21 +177,21 @@ function getIntensity(
   return 1
 }
 
-// Gakr orange color (hex #da7756)
-const gakrcliOrange = chalk.hex('#da7756')
+// Blue color instead of orange (hex #5769f7)
+const gakrcliBlue = chalk.hex('#5769f7')
 
 function getHeatmapChar(intensity: number): string {
   switch (intensity) {
     case 0:
       return chalk.gray('·')
     case 1:
-      return gakrcliOrange('░')
+      return gakrcliBlue('░')
     case 2:
-      return gakrcliOrange('▒')
+      return gakrcliBlue('▒')
     case 3:
-      return gakrcliOrange('▓')
+      return gakrcliBlue('▓')
     case 4:
-      return gakrcliOrange('█')
+      return gakrcliBlue('█')
     default:
       return chalk.gray('·')
   }

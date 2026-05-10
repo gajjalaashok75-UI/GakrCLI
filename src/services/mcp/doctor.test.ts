@@ -96,7 +96,7 @@ test('findingsFromValidationErrors maps Windows npx warnings into doctor finding
       path: 'mcpServers.node-tools',
       message: "Windows requires 'cmd /c' wrapper to execute npx",
       suggestion:
-        'Change command to "cmd" with args ["/c", "npx", ...]. See: https://github.com/gakr-gakr/gakr/docs/en/mcp#configure-mcp-servers',
+        'Change command to "cmd" with args ["/c", "npx", ...]. See: https://github.com/gajjalaashok75-UI/GakrCLI/docs/en/mcp#configure-mcp-servers',
       mcpErrorMetadata: {
         scope: 'project',
         serverName: 'node-tools',

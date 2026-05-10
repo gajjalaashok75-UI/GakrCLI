@@ -100,7 +100,7 @@ import type { OutputStyleConfig } from './outputStyles.js'
 import { CYBER_RISK_INSTRUCTION } from './cyberRiskInstruction.js'
 
 export const GAKR_CODE_DOCS_MAP_URL =
-  'https://github.com/gakr-gakr/gakr/docs/en/gakrcli_code_docs_map.md'
+  'https://github.com/gajjalaashok75-UI/GakrCLI/docs/en/gakrcli_code_docs_map.md'
 
 /**
  * Boundary marker separating static (cross-org cacheable) content from dynamic content.

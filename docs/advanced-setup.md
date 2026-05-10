@@ -15,7 +15,7 @@ npm install -g @gakr-gakr/gakrcli
 Use Bun `1.3.11` or newer for source builds on Windows. Older Bun versions can fail during `bun run build`.
 
 ```bash
-git clone https://github.com/gakr-gakr/gakrcli.git
+git clone https://github.com/gajjalaashok75-UI/GakrCLI.git
 cd gakrcli
 
 bun install
@@ -26,7 +26,7 @@ npm link
 ### Option C: Run directly with Bun
 
 ```bash
-git clone https://github.com/gakr-gakr/gakrcli.git
+git clone https://github.com/gajjalaashok75-UI/GakrCLI.git
 cd gakrcli
 
 bun install
@@ -462,8 +462,8 @@ Install from the VS Code marketplace or build from source in `vscode-extension/`
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/gakr-gakr/gakrcli/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/gakr-gakr/gakrcli/discussions)
+- **Issues**: [GitHub Issues](https://github.com/gajjalaashok75-UI/GakrCLI/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/gajjalaashok75-UI/GakrCLI/discussions)
 - **Documentation**: [docs/](../)
 
 ### AWS Bedrock

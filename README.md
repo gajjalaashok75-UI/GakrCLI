@@ -92,7 +92,7 @@ gakrcli
 ### Source Build (For Development)
 
 ```bash
-git clone https://github.com/gakr-gakr/gakrcli.git
+git clone https://github.com/gajjalaashok75-UI/GakrCLI.git
 cd gakrcli
 bun install
 bun run build

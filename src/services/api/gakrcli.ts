@@ -3382,7 +3382,7 @@ export async function queryWithModel({
 }
 
 // Non-streaming requests have a 10min max per the docs:
-// https://github.com/gakr-gakr/gakr/docs/en/api/errors#long-requests
+// https://github.com/gajjalaashok75-UI/GakrCLI/docs/en/api/errors#long-requests
 // The SDK's 21333-token cap is derived from 10min × 128k tokens/hour, but we
 // bypass it by setting a client-level timeout, so we can cap higher.
 export const MAX_NON_STREAMING_TOKENS = 64_000

@@ -50,7 +50,7 @@ jobs:
 
           # Optional: Add gakrcli_args to customize behavior and configuration
           # See https://github.com/anthropics/gakrcli-code-action/blob/main/docs/usage.md
-          # or https://github.com/gakr-gakr/gakr/docs/en/cli-reference for available options
+          # or https://github.com/gajjalaashok75-UI/GakrCLI/docs/en/cli-reference for available options
           # gakrcli_args: '--allowed-tools Bash(gh pr:*)'
 
 `
@@ -139,6 +139,6 @@ jobs:
           plugins: 'code-review@gakrcli-code-plugins'
           prompt: '/code-review:code-review \${{ github.repository }}/pull/\${{ github.event.pull_request.number }}'
           # See https://github.com/anthropics/gakrcli-code-action/blob/main/docs/usage.md
-          # or https://github.com/gakr-gakr/gakr/docs/en/cli-reference for available options
+          # or https://github.com/gajjalaashok75-UI/GakrCLI/docs/en/cli-reference for available options
 
 `

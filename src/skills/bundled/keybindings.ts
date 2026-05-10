@@ -113,7 +113,7 @@ function generateReservedShortcuts(): string {
 
 const FILE_FORMAT_EXAMPLE: KeybindingsSchemaType = {
   $schema: 'https://www.schemastore.org/gakrcli-code-keybindings.json',
-  $docs: 'https://github.com/gakr-gakr/gakr/docs/en/keybindings',
+  $docs: 'https://github.com/gajjalaashok75-UI/GakrCLI/docs/en/keybindings',
   bindings: [
     {
       context: 'Chat',
