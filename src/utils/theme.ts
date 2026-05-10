@@ -249,22 +249,22 @@ const lightAnsiTheme: Theme = {
   bashMessageBackgroundColor: 'ansi:whiteBright',
 
   memoryBackgroundColor: 'ansi:white',
-  rate_limit_fill: 'ansi:yellow',
+  rate_limit_fill: 'ansi:blue', // Changed from yellow to blue
   rate_limit_empty: 'ansi:black',
-  fastMode: 'ansi:red',
-  fastModeShimmer: 'ansi:redBright',
+  fastMode: 'ansi:blue', // Changed from red to blue
+  fastModeShimmer: 'ansi:blueBright', // Changed from redBright to blueBright
   briefLabelYou: 'ansi:blue',
   briefLabelgakrcli: 'ansi:blue',
   rainbow_red: 'ansi:red',
-  rainbow_orange: 'ansi:redBright',
-  rainbow_yellow: 'ansi:yellow',
+  rainbow_orange: 'ansi:blueBright', // Changed from redBright to blueBright
+  rainbow_yellow: 'ansi:cyanBright', // Changed from yellow to cyanBright
   rainbow_green: 'ansi:green',
   rainbow_blue: 'ansi:cyan',
   rainbow_indigo: 'ansi:blue',
   rainbow_violet: 'ansi:magenta',
   rainbow_red_shimmer: 'ansi:redBright',
-  rainbow_orange_shimmer: 'ansi:yellow',
-  rainbow_yellow_shimmer: 'ansi:yellowBright',
+  rainbow_orange_shimmer: 'ansi:blueBright', // Changed from yellow to blueBright
+  rainbow_yellow_shimmer: 'ansi:cyanBright', // Changed from yellowBright to cyanBright
   rainbow_green_shimmer: 'ansi:greenBright',
   rainbow_blue_shimmer: 'ansi:cyanBright',
   rainbow_indigo_shimmer: 'ansi:blueBright',
