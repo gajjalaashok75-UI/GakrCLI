@@ -1,8 +1,8 @@
-# Gakr
+# GakrCLI
 
-**Version 0.3.1** — Any model. Every tool. Zero limits.
+**Version 0.4.9** — Any model. Every tool. Zero limits.
 
-Gakr is a terminal-first coding-agent CLI that brings the powerful workflow to multiple LLM providers - Use OpenAI-compatible APIs, Gemini, GitHub Models, Codex OAuth, Codex, Ollama, Atomic Chat, and other supported backends while keeping one terminal-first workflow: prompts, tools, agents, MCP, slash commands, and streaming output.
+GakrCLI is a terminal-first AI coding agent that brings powerful LLM workflows to your command line. Use OpenAI, Anthropic, Gemini, DeepSeek, Ollama, and 200+ other models while keeping one unified terminal workflow: prompts, tools, agents, MCP integration, slash commands, and streaming output.
 
 The packaged command is `gakrcli`.
 
@@ -14,31 +14,66 @@ The packaged command is `gakrcli`.
 |----------|---------------|--------------|
 | **Anthropic** | `ANTHROPIC_API_KEY` or `gakrcli auth login` | Native Claude models with full tool support |
 | **OpenAI-compatible** | `OPENAI_API_KEY` | Works with OpenAI, OpenRouter, DeepSeek, Groq, Mistral, Together AI, Azure OpenAI, LM Studio, and any OpenAI-compatible local server |
-| **Gemini** | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | Google Gemini 2.0+ models |
-| **GitHub Models** | `GITHUB_TOKEN` / `GH_TOKEN` | Free tier via GitHub's model marketplace |
-| **NVIDIA NIMs** | `NVIDIA_API_KEY` | Enterprise-grade models via NIM endpoint |
-| **Codex** | `CODEX_API_KEY` or `~/.codex/auth.json` | ChatGPT Codex backend with reasoning |
-| **Ollama** | No API key | Local inference, full privacy |
-| **Atomic Chat** | No API key | Apple Silicon local models |
+| **Gemini** | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | Google Gemini 2.0+ models with native integration |
+| **GitHub Models** | `GITHUB_TOKEN` / `GH_TOKEN` | Free tier access via GitHub's model marketplace |
+| **NVIDIA NIMs** | `NVIDIA_API_KEY` | Enterprise-grade models via NVIDIA's inference microservices |
+| **DeepSeek** | `OPENAI_API_KEY` + `OPENAI_BASE_URL` | DeepSeek V4 models with reasoning capabilities |
+| **Ollama** | No API key | Local inference with complete privacy |
+| **Atomic Chat** | No API key | Apple Silicon optimized local models |
 | **Bedrock** | AWS credentials | Amazon Bedrock Claude models |
-| **Vertex AI** | Google Cloud credentials | Claude on Google Cloud |
-| **Foundry** | Anyscale credentials | Anthropic on Anyscale |
+| **Vertex AI** | Google Cloud credentials | Claude on Google Cloud Platform |
+| **Azure OpenAI** | Azure credentials | OpenAI models via Azure |
 
 ### Core Features
 
-- **Tool Calling**: Read, write, edit files; execute bash commands; search with grep/glob; web search and fetch
-- **Agent Workflows**: Autonomous multi-step reasoning with tool execution loops
-- **MCP Integration**: Connect to external tools, data sources, and services via Model Context Protocol
-- **Provider Profiles**: Saved configurations with `.gakr-profile.json` for project-specific settings
-- **Streaming Output**: Real-time token display for responsive interaction
-- **Cost Tracking**: Token usage and cost monitoring per session
-- **Project Onboarding**: Automatic context extraction and history persistence
-- **VS Code Extension**: Integrated Control Center and workspace awareness
+#### 🛠️ **Comprehensive Tool Suite**
+- **File Operations**: Read, write, edit files with intelligent diff display
+- **Shell Integration**: Execute bash/PowerShell commands with sandboxing
+- **Search & Navigation**: Advanced grep, glob, and ripgrep integration
+- **Web Capabilities**: Web search and fetch with content extraction
+- **Code Analysis**: LSP integration for intelligent code understanding
+- **Image Processing**: Image search, generation, and analysis
+- **Task Management**: Background task execution and monitoring
+
+#### 🤖 **Agent Workflows**
+- **Multi-step Reasoning**: Autonomous tool execution loops
+- **Specialized Agents**: 20+ built-in agents (architect, code-reviewer, security-reviewer, etc.)
+- **Agent Routing**: Route different agents to different models for cost optimization
+- **Team Coordination**: Multi-agent collaboration and task delegation
+
+#### 🔌 **MCP Integration (Model Context Protocol)**
+- **External Tools**: Connect to databases, APIs, and services
+- **Resource Access**: Dynamic resource loading and management
+- **Server Management**: Built-in MCP server discovery and configuration
+- **Authentication**: OAuth and API key management for MCP servers
+
+#### 📦 **Plugin System**
+- **Built-in Plugins**: Extensible plugin architecture with 100+ bundled skills
+- **Custom Plugins**: Create and share custom functionality
+- **Skill Library**: Comprehensive skill library covering development, data science, DevOps, and more
+- **Hot Reloading**: Dynamic plugin loading without restart
+
+#### ⚙️ **Advanced Configuration**
+- **Provider Profiles**: Project-specific configurations with `.gakr-profile.json`
+- **Settings Management**: Hierarchical settings with user, project, and managed overrides
+- **Environment Variables**: Flexible configuration via environment variables
+- **Keybindings**: Vim and Emacs keybinding support
+
+#### 🔒 **Security & Privacy**
 - **Privacy-First**: No telemetry, no phone-home, verified privacy build
+- **Sandboxing**: Secure command execution with configurable permissions
+- **Permission System**: Granular tool permission management
+- **Credential Management**: Secure storage of API keys and tokens
+
+#### 💰 **Cost & Performance**
+- **Token Tracking**: Real-time token usage and cost monitoring
+- **Context Management**: Intelligent context window optimization
+- **Streaming Output**: Real-time response display
+- **Caching**: Intelligent caching for improved performance
 
 ## Install
 
-### Global Install (Recommended for Users)
+### Global Install (Recommended)
 
 ```bash
 npm install -g @gakr-gakr/gakrcli
@@ -57,8 +92,8 @@ gakrcli
 ### Source Build (For Development)
 
 ```bash
-git clone https://github.com/gakr-gakr/gakr.git
-cd gakr
+git clone https://github.com/gakr-gakr/gakrcli.git
+cd gakrcli
 bun install
 bun run build
 npm link  # Optional: makes gakrcli available globally
@@ -69,7 +104,7 @@ npm link  # Optional: makes gakrcli available globally
 - Node.js 20+ (for running the built CLI)
 - TypeScript 6+ (dev dependency)
 
-**Helpful Commands:**
+**Development Commands:**
 
 ```bash
 bun run dev              # Build and run locally with hot reload
@@ -92,16 +127,11 @@ After installing, restart your terminal.
 
 ## Quick Start
 
-Set your provider configuration using environment variables, then run `gakrcli`. Choose your provider:
-
-### Option 1: OpenAI (Quickest Cloud Setup)
+### Option 1: OpenAI (Fastest Cloud Setup)
 
 **Get an API key** from [OpenAI Platform](https://platform.openai.com/api-keys).
 
-Then set these variables:
-
 macOS / Linux:
-
 ```bash
 export GAKR_CODE_USE_OPENAI=1
 export OPENAI_API_KEY=sk-your-key-here
@@ -110,7 +140,6 @@ gakrcli
 ```
 
 Windows PowerShell:
-
 ```powershell
 $env:GAKR_CODE_USE_OPENAI="1"
 $env:OPENAI_API_KEY="sk-your-key-here"
@@ -129,7 +158,6 @@ ollama pull llama3.2:3b  # or qwen2.5-coder:7b, codellama:7b, etc.
 2. Set environment variables:
 
 macOS / Linux:
-
 ```bash
 export GAKR_CODE_USE_OPENAI=1
 export OPENAI_BASE_URL=http://localhost:11434/v1
@@ -138,7 +166,6 @@ gakrcli
 ```
 
 Windows PowerShell:
-
 ```powershell
 $env:GAKR_CODE_USE_OPENAI="1"
 $env:OPENAI_BASE_URL="http://localhost:11434/v1"
@@ -157,24 +184,59 @@ gakrcli
 ```
 
 Or use the guided login:
-
 ```bash
 gakrcli auth login
 ```
 
-### Option 4: Other Providers
+### Option 4: DeepSeek (Cost-Effective)
 
-For Gemini, GitHub Models, NVIDIA NIMs, Codex, DeepSeek, LM Studio, and more, see:
+**Get an API key** from [DeepSeek Platform](https://platform.deepseek.com/).
 
-- **[Advanced Setup Guide](docs/advanced-setup.md)** — Full provider examples and configuration
+```bash
+export GAKR_CODE_USE_OPENAI=1
+export OPENAI_API_KEY=sk-your-deepseek-key
+export OPENAI_BASE_URL=https://api.deepseek.com/v1
+export OPENAI_MODEL=deepseek-v4-flash  # or deepseek-v4-pro
+gakrcli
+```
+
+### Option 5: Other Providers
+
+For Gemini, GitHub Models, NVIDIA NIMs, Azure OpenAI, and more, see:
+- **[Advanced Setup Guide](docs/advanced-setup.md)** — Complete provider configuration
 - **[Provider Configuration Reference](docs/advanced-setup.md#provider-examples)** — All supported backends
+
+## Usage
+
+### Basic Interaction
+
+Once launched:
+- **Start coding**: Type your request naturally (e.g., "Refactor this function to be more readable")
+- **Slash commands**: Type `/help` to see all available commands
+- **Provider setup**: `/provider` for guided configuration
+- **Settings**: `/settings` to view/modify configuration
+- **Clear history**: `/clear` to start fresh
+
+### Key Slash Commands
+
+| Command | Description |
+|---------|-------------|
+| `/help` | Show all available commands |
+| `/provider` | Configure provider settings |
+| `/settings` | View and modify settings |
+| `/skills` | Browse available skills |
+| `/agents` | List available agents |
+| `/mcp` | Manage MCP servers |
+| `/plugin` | Manage plugins |
+| `/tasks` | View background tasks |
+| `/cost` | Show token usage and costs |
+| `/clear` | Clear conversation history |
 
 ### Agent Routing
 
-GakrCLI can route different agents to different models through settings-based routing. This is useful for cost optimization or splitting work by model strength.
+GakrCLI can route different agents to different models for cost optimization:
 
 Add to `~/.gakrcli/settings.json`:
-
 ```json
 {
   "agentModels": {
@@ -188,41 +250,17 @@ Add to `~/.gakrcli/settings.json`:
     }
   },
   "agentRouting": {
-    "Explore": "deepseek-v4-flash",
-    "Plan": "gpt-4o",
-    "general-purpose": "gpt-4o",
-    "frontend-dev": "deepseek-v4-flash",
-    "default": "gpt-4o"
+    "code-reviewer": "deepseek-v4-flash",
+    "architect": "gpt-4o",
+    "security-reviewer": "gpt-4o",
+    "default": "deepseek-v4-flash"
   }
 }
 ```
 
-When no routing match is found, the global provider remains the fallback.
+### Project-Level Configuration
 
-> **Note:** `api_key` values in `settings.json` are stored in plaintext. Keep this file private and do not commit it to version control.
-
----
-
-## Inside Gakr
-
-Once launched:
-
-- **Start coding**: Just type your request naturally (e.g., "Refactor this function to be more readable")
-- **Slash commands**: Type `/help` to see all commands
-- **Provider setup**: `/provider` for guided saved-profile setup
-- **GitHub Models**: `/onboard-github` for secure token onboarding
-- **Settings**: `/settings` to view/modify configuration
-- **Clear history**: `/clear` to start fresh
-
-Gakr will automatically use tools (file operations, bash, grep, etc.) to accomplish your tasks. You'll see streaming output as it works.
-
----
-
-## Project-Level Configuration
-
-For project-specific settings, create `.gakr-profile.json` in your project root. This is automatically loaded when you start Gakr in that directory.
-
-Example profile:
+Create `.gakr-profile.json` in your project root for project-specific settings:
 
 ```json
 {
@@ -231,233 +269,254 @@ Example profile:
   "baseURL": "https://api.openai.com/v1",
   "model": "gpt-4o",
   "temperature": 0.7,
-  "maxTokens": 8000
+  "maxTokens": 8000,
+  "skills": ["typescript-expert", "react-atlas"],
+  "agents": ["code-reviewer", "security-reviewer"]
 }
 ```
 
 Initialize a profile interactively:
-
-```bash
-bun run profile:init
-```
-
-or
-
 ```bash
 gakrcli /provider
 ```
 
-## Provider Setup Paths
+## Available Tools
 
-| Provider | Main setup paths | Notes |
-| --- | --- | --- |
-| Anthropic | `gakrcli auth login` or `ANTHROPIC_API_KEY` | Default mode when no third-party provider flag is enabled |
-| OpenAI-compatible | env vars, `--provider openai`, `/provider`, `bun run profile:init -- --provider openai` | Works with OpenAI, OpenRouter, DeepSeek, Groq, Mistral, Together AI, Azure OpenAI, LM Studio, and compatible local `/v1` servers |
-| Gemini | env vars, `--provider gemini`, `/provider`, `bun run profile:init -- --provider gemini` | Uses `GEMINI_API_KEY` or `GOOGLE_API_KEY` |
-| GitHub Models | `--provider github`, `/onboard-github`, `GITHUB_TOKEN` / `GH_TOKEN` | Runtime default model falls back to `github:copilot -> openai/gpt-4.1` when `OPENAI_MODEL` is unset |
-| NVIDIA NIMs | env vars, `/provider`, `bun run profile:init -- --provider nvidia` | Uses dedicated `NVIDIA_*` env vars and defaults to `https://integrate.api.nvidia.com/v1` |
-| Codex | env vars, `/provider`, `bun run profile:init -- --provider codex`, `bun run dev:codex` | Reads `~/.codex/auth.json` by default or uses `CODEX_API_KEY` plus `CHATGPT_ACCOUNT_ID` / `CODEX_ACCOUNT_ID` |
-| Ollama | env vars, `--provider ollama`, `/provider`, `bun run profile:init -- --provider ollama` | Local provider, no API key required |
-| Atomic Chat | env vars, `bun run profile:init -- --provider atomic-chat`, `bun run dev:atomic-chat` | Uses local `http://127.0.0.1:1337/v1`; Atomic Chat must be running with a model loaded |
-| Bedrock / Vertex / Foundry | env vars | Supported through the runtime provider layer |
+GakrCLI includes 30+ built-in tools:
 
-Notes:
+### File Operations
+- **FileReadTool**: Read files with syntax highlighting
+- **FileWriteTool**: Create new files
+- **FileEditTool**: Edit existing files with intelligent diffs
+- **GlobTool**: Find files using glob patterns
+- **GrepTool**: Search file contents with regex
 
-- The direct CLI `--provider` flag currently supports `anthropic`, `openai`, `gemini`, `github`, `bedrock`, `vertex`, and `ollama`.
-- Saved provider profiles are stored in `.gakr-profile.json` in the current working directory and are loaded automatically on startup unless explicit provider env flags override them.
-- `profile:recommend` and `profile:auto` currently choose between Ollama and OpenAI-compatible profiles based on availability and goal.
+### Shell & System
+- **BashTool**: Execute bash commands (Linux/macOS)
+- **PowerShellTool**: Execute PowerShell commands (Windows)
+- **MonitorTool**: Monitor system resources
+- **SleepTool**: Add delays in workflows
 
-## Provider Profiles And Helpers
+### Web & Search
+- **WebSearchTool**: Search the web with DuckDuckGo
+- **WebFetchTool**: Fetch and extract web page content
+- **ImageSearchTool**: Search for images
+- **VideoSearchTool**: Search for videos
 
-One-time profile bootstrap:
+### Development
+- **LSPTool**: Language Server Protocol integration
+- **AgentTool**: Delegate tasks to specialized agents
+- **TaskCreateTool**: Create background tasks
+- **SkillTool**: Execute specialized skills
 
-```bash
-bun run profile:init
+### MCP Integration
+- **MCPTool**: Execute MCP server tools
+- **ListMcpResourcesTool**: List available MCP resources
+- **ReadMcpResourceTool**: Read MCP resource content
+- **McpAuthTool**: Authenticate with MCP servers
+
+## Available Skills
+
+GakrCLI includes 100+ specialized skills organized by domain:
+
+### Development
+- **typescript-expert**: Advanced TypeScript patterns and best practices
+- **react-atlas**: Comprehensive React development
+- **python-atlas**: Python development and data science
+- **rust-pro**: Modern Rust development
+- **nodejs-backend-patterns**: Node.js backend architecture
+
+### DevOps & Infrastructure
+- **docker-expert**: Container optimization and deployment
+- **git-advanced-workflows**: Advanced Git operations
+- **cloudflare-workers-expert**: Edge computing with Cloudflare
+- **vercel-deployment**: Deployment automation
+
+### AI & Data Science
+- **ai-engineer**: LLM application development
+- **data-scientist**: Advanced analytics and ML
+- **vector-database-engineer**: Vector search and RAG
+- **langchain-architecture**: LangChain development
+- **pytorch-patterns**: Deep learning with PyTorch
+
+### Security & Testing
+- **security-review**: Security analysis and hardening
+- **ethical-hacking-methodology**: Penetration testing
+- **tdd-workflow**: Test-driven development
+- **e2e-testing**: End-to-end testing with Playwright
+
+### Content & Design
+- **article-writing**: Technical writing and documentation
+- **image-generation**: AI image creation
+- **video-generation**: AI video creation
+- **chart-visualization**: Data visualization
+
+## Available Agents
+
+GakrCLI includes 20+ specialized agents:
+
+### Architecture & Planning
+- **architect**: System design and technical decisions
+- **planner**: Task breakdown and project planning
+- **codebase-auditor**: Comprehensive code analysis
+
+### Code Quality
+- **code-reviewer**: Code review and quality assessment
+- **security-reviewer**: Security analysis and recommendations
+- **performance-optimizer**: Performance analysis and optimization
+- **refactor-cleaner**: Code refactoring and cleanup
+
+### Language Specialists
+- **typescript-reviewer**: TypeScript-specific code review
+- **python-reviewer**: Python code analysis
+- **rust-reviewer**: Rust code review
+- **java-reviewer**: Java code analysis
+- **kotlin-reviewer**: Kotlin code review
+
+### Infrastructure
+- **devops-engineer**: CI/CD and infrastructure
+- **database-reviewer**: Database design and optimization
+- **ml-engineer**: Machine learning workflows
+
+### Testing & Documentation
+- **tdd-guide**: Test-driven development guidance
+- **e2e-runner**: End-to-end test execution
+- **doc-updater**: Documentation maintenance
+
+## MCP Integration
+
+GakrCLI has first-class support for the Model Context Protocol (MCP):
+
+### Built-in MCP Servers
+- **File System**: Access local files and directories
+- **Git**: Git repository operations
+- **Database**: SQL database connections
+- **Web**: HTTP requests and web scraping
+- **Cloud**: AWS, GCP, Azure integrations
+
+### MCP Configuration
+
+Add MCP servers to your settings:
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-filesystem", "/path/to/allowed/files"]
+    },
+    "git": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-git", "--repository", "."]
+    },
+    "postgres": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-postgres"],
+      "env": {
+        "POSTGRES_CONNECTION_STRING": "postgresql://user:pass@localhost/db"
+      }
+    }
+  }
+}
 ```
 
-Examples:
+### MCP Commands
 
 ```bash
-bun run profile:init -- --provider openai --api-key sk-your-key --model gpt-4o
-bun run profile:init -- --provider ollama --model qwen2.5-coder:7b
-bun run profile:init -- --provider gemini --api-key your-key --model gemini-2.0-flash
-bun run profile:init -- --provider nvidia --api-key nvapi-your-key
-bun run profile:init -- --provider codex --model codexplan
-bun run profile:init -- --provider atomic-chat
+gakrcli mcp list      # List available MCP servers
+gakrcli mcp install   # Install MCP servers
+gakrcli mcp doctor    # Diagnose MCP issues
 ```
-
-Recommendation helpers:
-
-```bash
-bun run profile:recommend -- --goal coding --benchmark
-bun run profile:auto -- --goal latency
-```
-
-Launch through saved or explicit profiles:
-
-```bash
-bun run dev:profile
-bun run dev:openai
-bun run dev:gemini
-bun run dev:ollama
-bun run dev:codex
-bun run dev:atomic-chat
-```
-
-`dev:profile`, `dev:openai`, `dev:gemini`, `dev:ollama`, `dev:codex`, and `dev:atomic-chat` run the runtime doctor before launching.
 
 ## Architecture Overview
 
-Gakr is built with a modular, layered architecture emphasizing separation of concerns, testability, and extensibility.
+GakrCLI is built with a modular, layered architecture:
 
 ### High-Level Structure
 
 ```
-gakr/
+gakrcli/
 ├── src/
-│   ├── entrypoints/     # CLI entrypoint (main.tsx)
-│   ├── cli/             # CLI transport, I/O, update handler
-│   ├── commands/        # Slash commands (/help, /provider, etc.)
-│   ├── tools/           # Tool implementations (read_file, bash, grep, etc.)
-│   ├── services/        # Provider integrations (OpenAI, Anthropic, etc.)
-│   ├── assistant/       # Agent session management
-│   ├── bridge/          # Remote execution (codespaces, web)
-│   ├── query/           # QueryEngine — orchestrates LLM calls
-│   ├── context/         # Context management and compression
-│   ├── state/           # Global state (app state, settings)
-│   ├── hooks/           # React hooks (if using Ink/React)
-│   ├── components/      # React UI components
-│   ├── screens/         # Full-screen UI views
-│   ├── skills/          # Skill definitions (auto-improvement, etc.)
-│   ├── types/           # TypeScript type definitions
-│   ├── utils/           # Utility functions
-│   ├── constants/       # Constants and configuration
-│   ├── migrations/      # Database migrations (if any)
+│   ├── entrypoints/     # CLI entry points
+│   ├── tools/           # Tool implementations (30+ tools)
+│   ├── skills/          # Skill definitions (100+ skills)
+│   ├── agents/          # Agent definitions (20+ agents)
+│   ├── services/        # Provider integrations and services
 │   ├── plugins/         # Plugin system infrastructure
-│   ├── keybindings/     # Vim/Emacs keybinding support
-│   ├── outputStyles/    # Terminal styling and markup
-│   ├── proactive/       # Proactive hints and suggestions
-│   ├── moreright/       # Right-side panel UI (buddy, etc.)
-│   ├── inks/            # Ink-based UI components
-│   ├── upstreamproxy/   # Proxy for API requests
-│   ├── voice/           # Voice input (disabled in open build)
-│   ├── native-ts/       # Native module bindings
-│   └── memdir/          # Memory directory abstraction
-├── scripts/             # Build, provider, and maintenance scripts
-├── bin/                 # CLI wrapper (gakrcli)
-├── dist/                # Built output (cli.mjs)
-├── vscode-extension/    # VS Code extension
-├── docs/                # Documentation (user guides)
-├── assets/              # Bundled assets (skills, rules, agents)
-└── graphify/            # Auto-generated codebase knowledge graph
+│   ├── integrations/    # Provider and model integrations
+│   ├── utils/           # Utility functions and helpers
+│   └── components/      # React UI components (Ink-based)
+├── assets/              # Bundled assets (skills, agents, rules)
+├── docs/                # Documentation
+└── dist/                # Built output
 ```
 
-The project uses **React** (Ink) for terminal UI, **TypeScript** for type safety, **Bun** for build scripts, and **Commander** for CLI argument parsing. The provider layer uses a unified runtime that selects among multiple backends (OpenAI, Anthropic, etc.) via environment flags.
+### Key Technologies
 
-### Key Modules
+- **React (Ink)**: Terminal UI framework
+- **TypeScript**: Type safety and developer experience
+- **Bun**: Build system and package management
+- **Commander**: CLI argument parsing
+- **MCP SDK**: Model Context Protocol integration
+- **Anthropic SDK**: Native Claude integration
+- **OpenAI SDK**: OpenAI and compatible providers
 
-- `src/entrypoints/main.tsx` — App startup, React renderer
-- `src/commands.ts` — Slash command implementations
-- `src/tools.ts` — Tool definitions and invocation
-- `src/query.ts` — Query processing, tool loop
-- `src/QueryEngine.ts` — LLM interaction, tool calling
-- `src/AssistantSessionChooser.tsx` — Agent session management
-- `src/context.ts` — Context window management
-- `src/cost-tracker.ts` — Token tracking and cost estimation
-- `src/history.ts` — Conversation persistence
-- `src/services/api/` — Provider-specific API clients
-- `src/bridge/` — Remote execution (VS Code, codespaces)
-- `src/mcp/` — Model Context Protocol integration
+## Diagnostics & Validation
 
-The **graphify/** folder (auto-generated) contains a knowledge graph of the codebase with 11,805 nodes and 21,694 edges across 634 functional communities. It's a tool for navigating and understanding the code structure.
-
-## Web Search And Fetch
-
-`WebSearch` behavior depends on the active provider and model:
-
-- Anthropic-native, Vertex, and Foundry backends keep native provider web search behavior.
-- Codex responses mode uses the Codex `web_search` tool through the `/responses` API.
-- On non-native providers with non-gakrcli models, Gakr falls back to DuckDuckGo scraping by default.
-
-If `FIRECRAWL_API_KEY` is set, Gakr can use Firecrawl for non-native search/fetch flows:
+Useful diagnostic commands:
 
 ```bash
-export FIRECRAWL_API_KEY=your-key-here
+gakrcli doctor                    # Comprehensive system check
+gakrcli doctor --json            # JSON output for automation
+bun run doctor:runtime           # Runtime diagnostics
+bun run verify:privacy           # Privacy verification
+bun run smoke                    # Quick smoke test
 ```
 
-`WebFetch` behavior:
-
-- With Firecrawl enabled, it uses Firecrawl scrape-to-markdown.
-- Without Firecrawl, it uses HTTP fetch plus HTML-to-Markdown conversion.
-- Authenticated pages and JavaScript-heavy apps are still unreliable without a specialized MCP tool or Firecrawl.
-
-## Diagnostics And Validation
-
-Useful commands:
-
-```bash
-bun run smoke
-bun run doctor:runtime
-bun run doctor:runtime:json
-bun run doctor:report
-bun run hardening:check
-bun run hardening:strict
-```
-
-`doctor:runtime` validates:
-
-- Node version and build artifacts
-- provider env configuration
-- remote provider reachability
-- Codex auth requirements
-- local Ollama mode checks when applicable
-
-## CLI Notes
-
-Useful entry points exposed by the current CLI include:
-
-- `gakrcli --help`
-- `gakrcli auth`
-- `gakrcli doctor`
-- `gakrcli mcp`
-- `gakrcli plugin`
-- `gakrcli update`
-
-Repo-local startup also loads a repo-root `.env` file before launching when one exists. That is convenient for source builds, but shell or system environment variables remain the portable setup path for global installs.
+The doctor command validates:
+- Node.js version and dependencies
+- Provider configuration and connectivity
+- Tool availability (ripgrep, git, etc.)
+- MCP server status
+- Plugin system health
 
 ## VS Code Extension
 
-This repo also includes a VS Code extension in [`vscode-extension/gakr-vscode`](vscode-extension/gakr-vscode) with:
-
-- a Control Center activity view
-- project-aware launch behavior
-- workspace profile visibility for `.gakr-profile.json`
-- a built-in `Gakr Terminal Black` theme
+GakrCLI includes a VS Code extension with:
+- **Control Center**: Activity view for GakrCLI management
+- **Project Awareness**: Automatic workspace detection
+- **Profile Management**: Visual `.gakr-profile.json` editing
+- **Terminal Integration**: Seamless terminal launching
+- **Theme Support**: Built-in "GakrCLI Terminal Black" theme
 
 ## Documentation
 
-Beginner-friendly guides:
-
+### Beginner Guides
 - [Non-Technical Setup](docs/non-technical-setup.md)
 - [Windows Quick Start](docs/quick-start-windows.md)
 - [macOS / Linux Quick Start](docs/quick-start-mac-linux.md)
 
-Advanced and conceptual guides:
-
+### Advanced Guides
 - [Advanced Setup](docs/advanced-setup.md) — Comprehensive provider configuration
-- [Self-Improvement Architecture](docs/self-improvement-architecture.md) — How Gakr learns and optimizes
+- [Self-Improvement Architecture](docs/self-improvement-architecture.md) — How GakrCLI learns
 - [Android Install](ANDROID_INSTALL.md) — Run on Android (Termux)
-- [Local Agent Playbook](PLAYBOOK.md) — Quick reference for daily use
+- [Local Agent Playbook](PLAYBOOK.md) — Daily usage reference
 
-## Security And Contributing
+### Integration Guides
+- [MCP Integration](docs/integrations/overview.md) — Model Context Protocol setup
+- [Plugin Development](docs/integrations/how-to/) — Creating custom plugins
+- [API Reference](docs/integrations/reference-samples.md) — SDK and API documentation
 
-- [SECURITY.md](SECURITY.md)
-- [CONTRIBUTING.md](CONTRIBUTING.md)
+## Security & Contributing
 
-## Project Note
-
-Gakr is an independent community project and is not affiliated with, endorsed by, or sponsored by Anthropic.
+- [SECURITY.md](SECURITY.md) — Security policy and reporting
+- [CONTRIBUTING.md](CONTRIBUTING.md) — Contribution guidelines
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Community standards
 
 ## License
 
 See [LICENSE](LICENSE).
+
+## Project Note
+
+GakrCLI is an independent community project and is not affiliated with, endorsed by, or sponsored by Anthropic, OpenAI, or any other AI provider.
