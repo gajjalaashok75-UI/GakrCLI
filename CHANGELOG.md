@@ -178,6 +178,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 For upgrade instructions and migration guides, see our [documentation](docs/).
 
 ### Support
-- **Issues**: [GitHub Issues](https://github.com/gakr-gakr/gakrcli/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/gakr-gakr/gakrcli/discussions)
+- **Issues**: [GitHub Issues](https://github.com/gajjalaashok75-UI/GakrCLI/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/gajjalaashok75-UI/GakrCLI/discussions)
 - **Documentation**: [docs/](docs/)

@@ -8,7 +8,7 @@ For user-facing documentation, see [README.md](README.md). For security reports,
 
 ## Before You Start
 
-- Search existing [issues](https://github.com/gakr-gakr/gakrcli/issues) and [discussions](https://github.com/gakr-gakr/gakrcli/discussions) before opening a new thread.
+- Search existing [issues](https://github.com/gajjalaashok75-UI/GakrCLI/issues) and [discussions](https://github.com/gajjalaashok75-UI/GakrCLI/discussions) before opening a new thread.
 - Use issues for confirmed bugs and actionable feature work.
 - Use discussions for setup help, ideas, and general community conversation.
 - For larger changes, open an issue first so the scope is clear before implementation.
@@ -295,8 +295,8 @@ This is normal and helps keep the project maintainable as it grows.
 
 ## Getting Help
 
-- **Issues**: [GitHub Issues](https://github.com/gakr-gakr/gakrcli/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/gakr-gakr/gakrcli/discussions)
+- **Issues**: [GitHub Issues](https://github.com/gajjalaashok75-UI/GakrCLI/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/gajjalaashok75-UI/GakrCLI/discussions)
 - **Documentation**: [docs/](docs/)
 
 Thank you for contributing to GakrCLI!

@@ -141,9 +141,9 @@ result = await Bun.build({
     'MACRO.DISPLAY_VERSION': JSON.stringify(version),
     'MACRO.BUILD_TIME': JSON.stringify(new Date().toISOString()),
     'MACRO.ISSUES_EXPLAINER':
-      JSON.stringify('report the issue at https://github.com/gakr-gakr/gakrcli/issues'),
+      JSON.stringify('report the issue at https://github.com/gajjalaashok75-UI/GakrCLI/issues'),
     'MACRO.FEEDBACK_CHANNEL':
-      JSON.stringify('https://github.com/gakr-gakr/gakrcli/issues'),
+      JSON.stringify('https://github.com/gajjalaashok75-UI/GakrCLI/issues'),
     'MACRO.PACKAGE_URL': JSON.stringify('@gakr-gakr/gakrcli'),
     'MACRO.NATIVE_PACKAGE_URL': 'undefined',
   },
@@ -479,9 +479,9 @@ sdkResult = await Bun.build({
     'MACRO.DISPLAY_VERSION': JSON.stringify(version),
     'MACRO.BUILD_TIME': JSON.stringify(new Date().toISOString()),
     'MACRO.ISSUES_EXPLAINER':
-      JSON.stringify('report the issue at https://github.com/gakr-gakr/gakrcli/issues'),
+      JSON.stringify('report the issue at https://github.com/gajjalaashok75-UI/GakrCLI/issues'),
     'MACRO.FEEDBACK_CHANNEL':
-      JSON.stringify('https://github.com/gakr-gakr/gakrcli/issues'),
+      JSON.stringify('https://github.com/gajjalaashok75-UI/GakrCLI/issues'),
     'MACRO.PACKAGE_URL': JSON.stringify('@gakr-gakr/gakrcli'),
     'MACRO.NATIVE_PACKAGE_URL': 'undefined',
   },

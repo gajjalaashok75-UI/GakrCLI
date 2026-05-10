@@ -15,8 +15,8 @@ import type {
 } from '../loadAgentsDir.js'
 
 const GAKR_CODE_DOCS_MAP_URL =
-  'https://github.com/gakr-gakr/gakr/docs/en/gakrcli_code_docs_map.md'
-const CDP_DOCS_MAP_URL = 'https://github.com/gakr-gakr/gakr/llms.txt'
+  'https://github.com/gajjalaashok75-UI/GakrCLI/docs/en/gakrcli_code_docs_map.md'
+const CDP_DOCS_MAP_URL = 'https://github.com/gajjalaashok75-UI/GakrCLI/llms.txt'
 
 export const GAKR_CODE_GUIDE_AGENT_TYPE = 'gakrcli-code-guide'
 

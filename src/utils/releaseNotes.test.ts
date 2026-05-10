@@ -77,7 +77,7 @@ test('release-please changelog headings are normalized for version lookups', () 
 
 test('getReleaseTagUrl normalizes build metadata to the public tag', () => {
   expect(getReleaseTagUrl('0.8.0+abc123')).toBe(
-    'https://github.com/gakr-gakr/gakrcli/releases/tag/v0.8.0',
+    'https://github.com/gajjalaashok75-UI/GakrCLI/releases/tag/v0.8.0',
   )
 })
 

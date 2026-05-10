@@ -115,8 +115,8 @@ export type ThemeSetting = (typeof THEME_SETTINGS)[number]
 const lightTheme: Theme = {
   autoAccept: 'rgb(135,0,255)', // Electric violet
   bashBorder: 'rgb(255,0,135)', // Vibrant pink
-  gakrcli: 'rgb(114,198,237)', // Gakr orange
-  gakrcliShimmer: 'rgb(170,210,235)', // Lighter gakrcli orange for shimmer effect
+  gakrcli: 'rgb(87,105,247)', // Blue color for spinner
+  gakrcliShimmer: 'rgb(117,135,255)', // Lighter blue for shimmer effect
   gakrcliBlue_FOR_SYSTEM_SPINNER: 'rgb(87,105,247)', // Medium blue for system spinner
   gakrcliBlueShimmer_FOR_SYSTEM_SPINNER: 'rgb(117,135,255)', // Lighter blue for system spinner shimmer
   permission: 'rgb(87,105,247)', // Medium blue
@@ -169,8 +169,8 @@ const lightTheme: Theme = {
   memoryBackgroundColor: 'rgb(230, 245, 250)',
   rate_limit_fill: 'rgb(87,105,247)', // Medium blue
   rate_limit_empty: 'rgb(39,47,111)', // Dark blue
-  fastMode: 'rgb(255,106,0)', // Electric orange
-  fastModeShimmer: 'rgb(255,150,50)', // Lighter orange for shimmer
+  fastMode: 'rgb(87,105,247)', // Blue color instead of orange
+  fastModeShimmer: 'rgb(117,135,255)', // Lighter blue for shimmer
   // Brief/assistant mode
   briefLabelYou: 'rgb(37,99,235)', // Blue
   briefLabelgakrcli: 'rgb(114,198,237)', // Brand orange
@@ -359,8 +359,8 @@ const darkAnsiTheme: Theme = {
 const lightDaltonizedTheme: Theme = {
   autoAccept: 'rgb(135,0,255)', // Electric violet
   bashBorder: 'rgb(0,102,204)', // Blue instead of pink
-  gakrcli: 'rgb(114,198,237)', // Orange adjusted for deuteranopia
-  gakrcliShimmer: 'rgb(170,210,235)', // Lighter orange for shimmer effect
+  gakrcli: 'rgb(87,105,247)', // Blue color for spinner
+  gakrcliShimmer: 'rgb(117,135,255)', // Lighter blue for shimmer effect
   gakrcliBlue_FOR_SYSTEM_SPINNER: 'rgb(51,102,255)', // Bright blue for system spinner
   gakrcliBlueShimmer_FOR_SYSTEM_SPINNER: 'rgb(101,152,255)', // Lighter bright blue for system spinner shimmer
   permission: 'rgb(51,102,255)', // Bright blue
@@ -440,8 +440,8 @@ const lightDaltonizedTheme: Theme = {
 const darkTheme: Theme = {
   autoAccept: 'rgb(175,135,255)', // Electric violet
   bashBorder: 'rgb(253,93,177)', // Bright pink
-  gakrcli: 'rgb(114,198,237)', // Gakr orange
-  gakrcliShimmer: 'rgb(170,210,235)', // Lighter gakrcli orange for shimmer effect
+  gakrcli: 'rgb(87,105,247)', // Blue color for spinner
+  gakrcliShimmer: 'rgb(117,135,255)', // Lighter blue for shimmer effect
   gakrcliBlue_FOR_SYSTEM_SPINNER: 'rgb(147,165,255)', // Blue for system spinner
   gakrcliBlueShimmer_FOR_SYSTEM_SPINNER: 'rgb(177,195,255)', // Lighter blue for system spinner shimmer
   permission: 'rgb(177,185,249)', // Light blue-purple
@@ -521,8 +521,8 @@ const darkTheme: Theme = {
 const darkDaltonizedTheme: Theme = {
   autoAccept: 'rgb(175,135,255)', // Electric violet
   bashBorder: 'rgb(51,153,255)', // Bright blue
-  gakrcli: 'rgb(114,198,237)', // Orange adjusted for deuteranopia
-  gakrcliShimmer: 'rgb(170,210,235)', // Lighter orange for shimmer effect
+  gakrcli: 'rgb(87,105,247)', // Blue color for spinner
+  gakrcliShimmer: 'rgb(117,135,255)', // Lighter blue for shimmer effect
   gakrcliBlue_FOR_SYSTEM_SPINNER: 'rgb(153,204,255)', // Light blue for system spinner
   gakrcliBlueShimmer_FOR_SYSTEM_SPINNER: 'rgb(183,224,255)', // Lighter blue for system spinner shimmer
   permission: 'rgb(153,204,255)', // Light blue
