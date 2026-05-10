@@ -1,407 +1,553 @@
-# Gakr CLI Playbook — Version 0.2.6
+# GakrCLI Playbook — Version 0.4.9
 
-Quick-reference for using Gakr with local models (Ollama, Atomic Chat) and cloud providers. Covers daily workflow, setup, troubleshooting, and command cheatsheet.
+Quick-reference for using GakrCLI with local models (Ollama, Atomic Chat) and cloud providers. Covers daily workflow, setup, troubleshooting, and command cheatsheet.
 
 ## 1. What You Have
 
-- A CLI agent loop that can read/write files, run terminal commands, search code, browse web, and execute multi-step workflows.
-- Provider profile system (`profile:init`, `dev:profile`) for saved configurations.
-- Runtime diagnostics (`doctor:runtime`, `doctor:report`) and health checks.
-- Preset shortcuts: `profile:fast` (llama3.2:3b), `profile:code` (qwen2.5-coder:7b).
+- A terminal-first AI coding agent that can read/write files, run commands, search code, browse web, and execute multi-step workflows
+- Support for 10+ LLM providers (OpenAI, Anthropic, Gemini, DeepSeek, Ollama, etc.)
+- 30+ built-in tools for file operations, shell commands, web search, and more
+- 100+ specialized skills covering development, DevOps, AI, and security
+- 20+ specialized agents for different workflows (architect, code-reviewer, security-reviewer)
+- MCP (Model Context Protocol) integration for external tools and services
+- Plugin system with hot reloading and custom plugin support
+- Provider profile system for project-specific configurations
+- Runtime diagnostics and health checks
 
 ## 2. Daily Start (Fast Path)
 
 In your project root, run:
 
 ```bash
-bun run dev:profile
+gakrcli
 ```
 
-For quick switches to preset models:
+Or with specific provider:
 
 ```bash
-# low latency (llama3.2:3b) — fastest responses
-bun run dev:fast
+# Using environment variables
+export GAKR_CODE_USE_OPENAI=1
+export OPENAI_API_KEY=sk-your-key
+export OPENAI_MODEL=gpt-4o
+gakrcli
 
-# coding-optimized (qwen2.5-coder:7b) — better code quality
-bun run dev:code
+# Using Ollama (local)
+export GAKR_CODE_USE_OPENAI=1
+export OPENAI_BASE_URL=http://localhost:11434/v1
+export OPENAI_MODEL=llama3.2:3b
+gakrcli
 ```
 
-If health checks pass, Gakr CLI launches immediately. If issues are found, `doctor:runtime` output will guide fixes.
+For development builds:
+
+```bash
+bun run dev
+```
 
 ## 3. One-Time Setup
 
-### 3.1 Initialize a profile
-
-Local model (Ollama):
+### 3.1 Global Installation
 
 ```bash
-bun run profile:init -- --provider ollama --model llama3.2:3b
+npm install -g @gakr-gakr/gakrcli
 ```
 
-Or let Gakr recommend a model based on your goal and hardware:
+### 3.2 Source Build (Development)
 
 ```bash
-bun run profile:init -- --provider ollama --goal coding   # or: latency, balanced
+git clone https://github.com/gakr-gakr/gakrcli.git
+cd gakrcli
+bun install
+bun run build
+npm link  # Optional: makes gakrcli available globally
 ```
 
-Preview recommendations without saving:
+### 3.3 Provider Configuration
+
+**OpenAI (Fastest Cloud Setup)**
 
 ```bash
-bun run profile:recommend -- --provider ollama --goal coding --benchmark
+export GAKR_CODE_USE_OPENAI=1
+export OPENAI_API_KEY=sk-your-key-here
+export OPENAI_MODEL=gpt-4o
 ```
 
-Other profile providers supported: `openai`, `gemini`, `nvidia`, `codex`, `atomic-chat`.
-
-### 3.2 Confirm profile
+**Ollama (Local, No API Key)**
 
 ```bash
-cat .gakr-profile.json   # or: Get-Content .gakr-profile.json (PowerShell)
+# First, install and start Ollama
+ollama pull llama3.2:3b
+
+# Then configure
+export GAKR_CODE_USE_OPENAI=1
+export OPENAI_BASE_URL=http://localhost:11434/v1
+export OPENAI_MODEL=llama3.2:3b
 ```
 
-### 3.3 Validate environment
+**Anthropic (Claude)**
 
 ```bash
-bun run doctor:runtime
+export ANTHROPIC_API_KEY=sk-ant-your-key-here
+export ANTHROPIC_MODEL=claude-sonnet-4-5-20251014
 ```
 
-This checks Node version, Bun runtime, provider reachability, and required tools (rg).
+**DeepSeek (Cost-Effective)**
+
+```bash
+export GAKR_CODE_USE_OPENAI=1
+export OPENAI_API_KEY=sk-your-deepseek-key
+export OPENAI_BASE_URL=https://api.deepseek.com/v1
+export OPENAI_MODEL=deepseek-v4-flash
+```
+
+### 3.4 Project-Level Configuration
+
+Create `.gakr-profile.json` in your project root:
+
+```json
+{
+  "provider": "openai-compatible",
+  "apiKey": "sk-...",
+  "baseURL": "https://api.openai.com/v1",
+  "model": "gpt-4o",
+  "temperature": 0.7,
+  "maxTokens": 8000,
+  "skills": ["typescript-expert", "react-atlas"],
+  "agents": ["code-reviewer", "security-reviewer"]
+}
+```
 
 ## 4. Health and Diagnostics
 
-### 4.1 Human-readable checks
+### 4.1 System Checks
 
 ```bash
-bun run doctor:runtime
+gakrcli doctor                    # Comprehensive system check
+gakrcli doctor --json            # JSON output for automation
 ```
 
-### 4.2 JSON output (for CI/automation)
+For development builds:
 
 ```bash
-bun run doctor:runtime:json
+bun run doctor:runtime           # Runtime diagnostics
+bun run doctor:runtime:json      # JSON output
+bun run doctor:report            # Save to reports/
 ```
 
-### 4.3 Save full report
+### 4.2 Privacy Verification
 
 ```bash
-bun run doctor:report
-# Output: reports/doctor-runtime.json
+bun run verify:privacy           # Verify no telemetry/phone-home
 ```
 
-### 4.4 Hardening
+### 4.3 Quick Smoke Test
 
 ```bash
-# Practical checks (build + runtime)
-bun run hardening:check
-
-# Strict checks (typecheck + practical)
-bun run hardening:strict
+gakrcli --version               # Version check
+bun run smoke                   # Build + version check (dev)
 ```
 
-## 5. Provider Profiles (Local + Cloud)
+## 5. Provider Setup Guide
 
-Run `bun run profile:init -- --provider <name>` to create a saved profile.
-
-### 5.1 Local Providers (no API key)
+### 5.1 Local Providers (No API Key)
 
 **Ollama**
 
 ```bash
-bun run profile:init -- --provider ollama --model llama3.2:3b
-bun run dev:profile
+# Install Ollama
+# macOS: brew install ollama
+# Windows: winget install Ollama.Ollama
+# Linux: curl -fsSL https://ollama.com/install.sh | sh
+
+# Pull a model
+ollama pull llama3.2:3b         # Fast, low memory
+ollama pull qwen2.5-coder:7b    # Better for coding
+ollama pull codellama:7b        # Code specialist
+
+# Configure GakrCLI
+export GAKR_CODE_USE_OPENAI=1
+export OPENAI_BASE_URL=http://localhost:11434/v1
+export OPENAI_MODEL=llama3.2:3b
+gakrcli
 ```
 
-Requires: Ollama running (`ollama serve`), model already pulled (`ollama pull <model>`).
-
-**Atomic Chat** (Apple Silicon)
+**Atomic Chat (Apple Silicon)**
 
 ```bash
-bun run profile:init -- --provider atomic-chat --model <model-id>
-bun run dev:profile
+# Install and run Atomic Chat app
+# Configure GakrCLI
+export GAKR_CODE_USE_OPENAI=1
+export OPENAI_BASE_URL=http://127.0.0.1:1337/v1
+export OPENAI_MODEL=<model-loaded-in-atomic-chat>
+gakrcli
 ```
 
-Requires: Atomic Chat app running on 127.0.0.1:1337 with a model loaded.
+### 5.2 Cloud Providers
 
-### 5.2 Cloud Providers (API key required)
-
-**OpenAI-compatible** (OpenAI, OpenRouter, DeepSeek, Groq, etc.)
+**OpenAI**
 
 ```bash
-bun run profile:init -- --provider openai --api-key sk-... --model gpt-4o
-bun run dev:profile
+export GAKR_CODE_USE_OPENAI=1
+export OPENAI_API_KEY=sk-your-key
+export OPENAI_MODEL=gpt-4o      # or gpt-4.1, o3-mini
+gakrcli
 ```
 
-**Gemini**
+**Anthropic**
 
 ```bash
-bun run profile:init -- --provider gemini --api-key <key> --model gemini-2.0-flash
-bun run dev:profile
+export ANTHROPIC_API_KEY=sk-ant-your-key
+export ANTHROPIC_MODEL=claude-sonnet-4-5-20251014
+gakrcli
+
+# Or use guided login
+gakrcli auth login
+```
+
+**Google Gemini**
+
+```bash
+export GAKR_CODE_USE_GEMINI=1
+export GEMINI_API_KEY=your-key
+export GEMINI_MODEL=gemini-2.0-flash
+gakrcli
+```
+
+**DeepSeek**
+
+```bash
+export GAKR_CODE_USE_OPENAI=1
+export OPENAI_API_KEY=sk-your-deepseek-key
+export OPENAI_BASE_URL=https://api.deepseek.com/v1
+export OPENAI_MODEL=deepseek-v4-flash
+gakrcli
+```
+
+**GitHub Models (Free)**
+
+```bash
+export GAKR_CODE_USE_GITHUB=1
+export GITHUB_TOKEN=ghp-your-token
+export OPENAI_MODEL=openai/gpt-4.1
+gakrcli
 ```
 
 **NVIDIA NIMs**
 
 ```bash
-bun run profile:init -- --provider nvidia --api-key <key> --model nvidia/llama-3.1-nemotron-70b-instruct
-bun run dev:profile
+export GAKR_CODE_USE_NVIDIA=1
+export NVIDIA_API_KEY=nvapi-your-key
+export NVIDIA_MODEL=stepfun-ai/step-3.5-flash
+gakrcli
 ```
-
-**Codex**
-
-```bash
-bun run profile:init -- --provider codex --model codexplan
-# Uses CODEX_API_KEY or ~/.codex/auth.json
-bun run dev:profile
-```
-
-### 5.3 Special Modes (Environment Variables)
-
-**Anthropic (Claude)** — no saved profile; configure via environment:
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-export ANTHROPIC_MODEL=claude-sonnet-4-5-20251014
-bun run dev:profile   # auto-detects Anthropic credentials
-```
-
-Or use guided login:
-
-```bash
-gakrcli auth login
-```
-
-**GitHub Models** (free tier)
-
-```bash
-export GAKR_CODE_USE_GITHUB=1
-export GITHUB_TOKEN=ghp_...   # or GH_TOKEN
-bun run dev:profile
-```
-
-Default model: `openai/gpt-4.1` (via GitHub's model gateway).
-
-**Other AWS/Google/Anyscale providers**
-
-Set the corresponding env flags:
-
-- `GAKR_CODE_USE_BEDROCK=1` (AWS Bedrock)
-- `GAKR_CODE_USE_VERTEX=1` (Google Vertex AI)
-- `GAKR_CODE_USE_FOUNDRY=1` (Anyscale Foundry)
-
-These use the provider's native credential chains.
 
 ## 6. Troubleshooting Matrix
 
-### 6.1 "Script not found: dev"
+### 6.1 "gakrcli: command not found"
 
-**Cause:** Running commands outside the Gakr project root.
+**Cause:** GakrCLI not installed or not in PATH.
 
 **Fix:**
-
 ```bash
-cd /path/to/gakrcli   # project root with package.json
-bun run dev:profile
+npm install -g @gakr-gakr/gakrcli
+# Or check PATH if using source build
 ```
 
-### 6.2 "ollama: command not found"
+### 6.2 "ripgrep (rg) not found"
 
-**Cause:** Ollama not installed or not in PATH.
-
-**Fix:**
-- Install: https://ollama.com/download or `winget install Ollama.Ollama` (Windows)
-- Verify: `ollama --version`
-- Restart terminal after install.
-
-### 6.3 Provider reachability failed (localhost refused)
-
-**Cause:** Ollama or Atomic Chat service not running.
-
-**Fix:**
-- Ollama: `ollama serve` (in a separate terminal)
-- Atomic Chat: Launch the Atomic Chat app.
-
-Then re-run: `bun run doctor:runtime`
-
-### 6.4 "Missing API key" or "authentication required"
-
-**Cause:** Provider requires a valid API key but none provided.
-
-**Fix:**
-- For cloud providers: pass `--api-key` to `profile:init` or set the appropriate environment variable.
-- For local providers: ensure you're using `--provider ollama` and that Ollama is running.
-
-### 6.5 "No viable Ollama chat model discovered"
-
-**Cause:** Ollama is running but no chat model is pulled/loaded.
-
-**Fix:**
-
-```bash
-ollama pull llama3.2:3b   # or your preferred model
-```
-
-Then re-run `profile:init` to create/update your profile with the new model.
-
-### 6.6 "ripgrep (rg) not found"
-
-**Cause:** `rg` is required but not installed.
+**Cause:** Required dependency missing.
 
 **Fix:**
 - macOS: `brew install ripgrep`
 - Ubuntu/Debian: `sudo apt-get install ripgrep`
-- Windows: `winget install ripgrep` or download from ripgrep.org
+- Windows: `winget install ripgrep`
 - Verify: `rg --version`
 
-Restart terminal after installation.
+### 6.3 "Connection refused" (Ollama)
 
-### 6.7 "Placeholder key" or "SUA_CHAVE" errors
-
-**Cause:** You used a placeholder value instead of a real key.
+**Cause:** Ollama service not running.
 
 **Fix:**
-- Replace with actual API key from your provider.
-- For local providers (Ollama, Atomic Chat) no API key is needed; omit `--api-key`.
+```bash
+ollama serve                    # Start Ollama server
+ollama pull llama3.2:3b        # Ensure model is available
+```
+
+### 6.4 "Invalid API key"
+
+**Cause:** Missing or incorrect API key.
+
+**Fix:**
+- Verify API key is correct and active
+- Check environment variable name matches provider
+- For local providers, ensure no API key is set
+
+### 6.5 "Model not found"
+
+**Cause:** Specified model not available.
+
+**Fix:**
+- Check model name spelling
+- For Ollama: `ollama list` to see available models
+- For cloud providers: check provider documentation
+
+### 6.6 Windows Input Prompt Hang
+
+**Cause:** Known issue in older versions.
+
+**Fix:**
+- Update to GakrCLI 0.4.9 or later
+- Ensure all dependencies are installed
+- Try running with `--debug` flag for more information
 
 ## 7. Recommended Models
 
-### Local (Ollama) presets
+### 7.1 Local Models (Ollama)
 
-- `llama3.2:3b` — fastest, low RAM (8GB+), good general purpose
-- `qwen2.5-coder:7b` — optimized for code, best quality/size tradeoff
-- `codellama:7b` — code specialist alternative
-- Larger: `qwen2.5-coder:14b`, `llama3.1:8b` (need 16GB+ RAM)
+**For Speed (Low Memory)**
+- `llama3.2:3b` — Fastest, 8GB+ RAM, good general purpose
+- `qwen2.5:3b` — Alternative fast option
 
-Quick switch:
+**For Code Quality**
+- `qwen2.5-coder:7b` — Best coding model for size
+- `codellama:7b` — Code specialist alternative
+- `deepseek-coder:6.7b` — Another coding option
 
-```bash
-bun run profile:init -- --provider ollama --model qwen2.5-coder:7b
-bun run dev:profile
+**For Best Quality (High Memory)**
+- `qwen2.5-coder:14b` — Excellent coding, needs 16GB+ RAM
+- `llama3.1:8b` — Good general purpose, needs 16GB+ RAM
+- `codellama:13b` — Large code model, needs 24GB+ RAM
+
+### 7.2 Cloud Models
+
+**OpenAI**
+- `gpt-4o` — Best overall, fast and capable
+- `gpt-4.1` — Latest model with improved reasoning
+- `o3-mini` — Cost-effective reasoning model
+
+**Anthropic**
+- `claude-sonnet-4-5-20251014` — Latest Sonnet, excellent for code
+- `claude-3-7-sonnet` — Alternative Sonnet version
+
+**Google Gemini**
+- `gemini-2.0-flash` — Fast and capable
+- `gemini-1.5-pro` — More capable, slower
+
+**DeepSeek**
+- `deepseek-v4-flash` — Very cost-effective, fast
+- `deepseek-v4-pro` — Better quality, higher cost
+
+## 8. Daily Usage Patterns
+
+### 8.1 Code Understanding
+
+```
+Map this repository architecture and explain the execution flow from entrypoint to tool invocation.
+
+Find the top 5 risky modules and explain why.
+
+Analyze the dependencies and identify potential security issues.
 ```
 
-Preset shortcuts:
+### 8.2 Development Tasks
 
-```bash
-bun run profile:fast   # -> llama3.2:3b
-bun run profile:code   # -> qwen2.5-coder:7b
+```
+Refactor this module for clarity without behavior change, then run tests.
+
+Add comprehensive error handling to this function.
+
+Create unit tests for this component with edge cases.
+
+Implement the missing authentication middleware.
 ```
 
-Goal-based auto-selection (picks best available model):
+### 8.3 Code Review
 
-```bash
-bun run profile:init -- --provider ollama --goal latency   # fastest available
-bun run profile:init -- --provider ollama --goal balanced  # balanced speed/quality
-bun run profile:init -- --provider ollama --goal coding    # optimize for code
+```
+Review the changes in this PR and identify potential issues.
+
+Check this code for security vulnerabilities.
+
+Suggest performance improvements for this algorithm.
 ```
 
-### Cloud defaults
+### 8.4 Debugging
 
-- OpenAI: `gpt-4o`, `gpt-4.1`, `o3-mini`
-- Gemini: `gemini-2.0-flash`, `gemini-1.5-pro`
-- NVIDIA: `nvidia/llama-3.1-nemotron-70b-instruct`
-- Codex: `codexplan`
-- GitHub Models: `openai/gpt-4.1` (via GitHub's gateway)
+```
+Reproduce this bug, identify the root cause, and implement a fix.
 
-## 8. Practical Prompt Playbook (Copy/Paste)
+Trace this error path and list likely failure points.
 
-## 8.1 Code understanding
+Add debugging logs to help diagnose this intermittent issue.
+```
 
-- "Map this repository architecture and explain the execution flow from entrypoint to tool invocation."
-- "Find the top 5 risky modules and explain why."
+### 8.5 Documentation
 
-## 8.2 Refactoring
+```
+Generate comprehensive API documentation for this module.
 
-- "Refactor this module for clarity without behavior change, then run checks and summarize diff impact."
-- "Extract shared logic from duplicated functions and add minimal tests."
+Create a README for this project with setup instructions.
 
-## 8.3 Debugging
+Write inline comments explaining this complex algorithm.
+```
 
-- "Reproduce the failure, identify root cause, implement fix, and validate with commands."
-- "Trace this error path and list likely failure points with confidence levels."
+## 9. Slash Commands Reference
 
-## 8.4 Reliability
+### 9.1 Essential Commands
 
-- "Add runtime guardrails and fail-fast messages for invalid provider env vars."
-- "Create a diagnostic command that outputs JSON report for CI artifacts."
+```bash
+/help                   # Show all available commands
+/provider              # Configure provider settings
+/settings              # View and modify settings
+/clear                 # Clear conversation history
+/cost                  # Show token usage and costs
+```
 
-## 8.5 Review mode
+### 9.2 Skills and Agents
 
-- "Do a code review of unstaged changes, prioritize bugs/regressions, and suggest concrete patches."
+```bash
+/skills                # Browse available skills
+/agents                # List available agents
+/typescript-expert     # Use TypeScript skill
+/code-reviewer         # Use code review agent
+/security-reviewer     # Use security review agent
+```
 
-## 9. Safe Working Rules
+### 9.3 Tools and Utilities
 
-- Run `doctor:runtime` before debugging provider issues.
-- Prefer `dev:profile` over manual env edits.
-- Keep `.gakr-profile.json` local (already gitignored).
-- Use `doctor:report` before asking for help so you have a reproducible snapshot.
+```bash
+/mcp                   # Manage MCP servers
+/plugin                # Manage plugins
+/tasks                 # View background tasks
+/status                # Show system status
+/doctor                # Run diagnostics
+```
 
-## 10. Quick Recovery Checklist
+### 9.4 Project Management
+
+```bash
+/init                  # Initialize project configuration
+/onboard-github        # Set up GitHub integration
+/git-push              # Stage, commit, and push changes
+```
+
+## 10. MCP Integration
+
+### 10.1 Built-in MCP Servers
+
+- **File System**: Access local files and directories
+- **Git**: Git repository operations
+- **Web**: HTTP requests and web scraping
+- **Database**: SQL database connections
+
+### 10.2 MCP Configuration
+
+Add to `~/.gakrcli/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-filesystem", "/path/to/allowed/files"]
+    },
+    "git": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-git", "--repository", "."]
+    }
+  }
+}
+```
+
+### 10.3 MCP Commands
+
+```bash
+gakrcli mcp list       # List available MCP servers
+gakrcli mcp install    # Install MCP servers
+gakrcli mcp doctor     # Diagnose MCP issues
+```
+
+## 11. Agent Routing
+
+Configure different agents to use different models:
+
+```json
+{
+  "agentModels": {
+    "deepseek-v4-flash": {
+      "base_url": "https://api.deepseek.com/v1",
+      "api_key": "sk-your-key"
+    },
+    "gpt-4o": {
+      "base_url": "https://api.openai.com/v1",
+      "api_key": "sk-your-key"
+    }
+  },
+  "agentRouting": {
+    "code-reviewer": "deepseek-v4-flash",
+    "architect": "gpt-4o",
+    "security-reviewer": "gpt-4o",
+    "default": "deepseek-v4-flash"
+  }
+}
+```
+
+## 12. Quick Recovery Checklist
 
 When something breaks, run in order:
 
 ```bash
-bun run doctor:runtime
-bun run doctor:report
-bun run smoke
+gakrcli doctor                  # System diagnostics
+gakrcli --version              # Verify installation
 ```
 
-If answers are very slow, check processor mode:
+For development builds:
 
 ```bash
-ollama ps
+bun run doctor:runtime
+bun run smoke
+bun run verify:privacy
 ```
 
-If `PROCESSOR` shows `CPU`, your setup is valid but latency will be higher for large models.
-
-If local model mode is failing:
+If local model is failing:
 
 ```bash
 ollama --version
 ollama serve
-bun run doctor:runtime
-bun run dev:profile
+ollama list                    # Check available models
 ```
 
-## 11. Command Reference
+## 13. Performance Tips
 
-```bash
-# Build & run
-bun run dev              # build + run with hot reload (dev)
-bun run start            # run built CLI
-bun run dev:profile      # launch using saved profile (most common)
+### 13.1 Local Models
 
-# Shortcuts
-bun run dev:fast         # fast preset (llama3.2:3b + low-latency flags)
-bun run dev:code         # coding preset (qwen2.5-coder:7b)
-bun run dev:ollama       # force Ollama profile
-bun run dev:openai       # force OpenAI profile
+- Use smaller models (3B-7B) for faster responses
+- Ensure sufficient RAM (8GB+ for 3B, 16GB+ for 7B)
+- Use SSD storage for better model loading
+- Close other memory-intensive applications
 
-# Profile management
-bun run profile:init -- --provider ollama --model <model>   # create profile
-bun run profile:init -- --provider openai --api-key <key> --model gpt-4o
-bun run profile:recommend -- --provider ollama --goal coding --benchmark
-bun run profile:auto       # auto-select best provider and apply
-bun run profile:fast       # preset: llama3.2:3b
-bun run profile:code       # preset: qwen2.5-coder:7b
+### 13.2 Cloud Models
 
-# Diagnostics
-bun run doctor:runtime            # system checks
-bun run doctor:runtime:json       # JSON output
-bun run doctor:report             # save to reports/doctor-runtime.json
+- Use faster models (gpt-4o, deepseek-v4-flash) for interactive work
+- Use cheaper models (deepseek-v4-flash) for batch processing
+- Monitor token usage with `/cost` command
+- Set appropriate context limits
 
-# Quality & verification
-bun run smoke                     # build + version check
-bun run hardening:check           # smoke + doctor
-bun run hardening:strict          # typecheck + hardening:check
-bun run typecheck                 # TypeScript check only
-bun run verify:privacy            # ensure no telemetry
+## 14. Security Best Practices
 
-# Testing
-bun test                          # run test suite
-```
+- Store API keys in environment variables, not code
+- Use project profiles to limit scope per project
+- Review MCP servers before installation
+- Use sandboxing and permission controls
+- Monitor file access in sensitive directories
+- Keep GakrCLI updated to latest version
 
-## 12. Success Criteria
+## 15. Success Criteria
 
 Your setup is healthy when:
 
-- `bun run doctor:runtime` passes provider and reachability checks.
-- `bun run dev:profile` opens the CLI normally.
-- Model shown in the UI matches your selected profile model.
+- `gakrcli doctor` passes all checks
+- `gakrcli --version` shows current version (0.4.9+)
+- CLI starts and shows input prompt correctly
+- Model shown in UI matches your configuration
+- Tools and commands work as expected

@@ -1,10 +1,10 @@
-# Gakr Advanced Setup (v0.2.6)
+# GakrCLI Advanced Setup (v0.4.9)
 
 This guide is for users who want source builds, Bun workflows, provider profiles, diagnostics, or more control over runtime behavior.
 
 ## Install Options
 
-### Option A: npm
+### Option A: npm (Recommended)
 
 ```bash
 npm install -g @gakr-gakr/gakrcli
@@ -15,8 +15,8 @@ npm install -g @gakr-gakr/gakrcli
 Use Bun `1.3.11` or newer for source builds on Windows. Older Bun versions can fail during `bun run build`.
 
 ```bash
-git clone https://github.com/gakr-gakr/gakr.git
-cd gakr
+git clone https://github.com/gakr-gakr/gakrcli.git
+cd gakrcli
 
 bun install
 bun run build
@@ -26,8 +26,8 @@ npm link
 ### Option C: Run directly with Bun
 
 ```bash
-git clone https://github.com/gakr-gakr/gakr.git
-cd gakr
+git clone https://github.com/gakr-gakr/gakrcli.git
+cd gakrcli
 
 bun install
 bun run dev
@@ -40,26 +40,7 @@ bun run dev
 ```bash
 export GAKR_CODE_USE_OPENAI=1
 export OPENAI_API_KEY=sk-...
-export OPENAI_MODEL=gpt-4o  # or gpt-4.1, o1, o3-mini
-```
-
-### Codex via ChatGPT auth
-
-`codexplan` maps to GPT-5.4 on the Codex backend with high reasoning.
-`codexspark` maps to GPT-5.3 Codex Spark for faster loops.
-
-If you use the in-app provider wizard, choose `Codex OAuth` to open ChatGPT sign-in in your browser and let GakrCLI store Codex credentials securely.
-
-If you already use the Codex CLI, Gakr reads `~/.codex/auth.json` automatically. You can also point it elsewhere with `CODEX_AUTH_JSON_PATH` or override the token directly with `CODEX_API_KEY`.
-
-```bash
-export GAKR_CODE_USE_OPENAI=1
-export OPENAI_MODEL=codexplan
-
-# optional if you do not already have ~/.codex/auth.json
-export CODEX_API_KEY=...
-
-gakrcli
+export OPENAI_MODEL=gpt-4o  # or gpt-4.1, o3-mini
 ```
 
 ### DeepSeek
@@ -98,6 +79,392 @@ export GAKR_CODE_USE_GITHUB=1
 export GITHUB_TOKEN=ghp_...  # or GH_TOKEN
 export OPENAI_MODEL=openai/gpt-4.1  # or github:copilot, meta-llama/Llama-3.3-70B-Instruct-Turbo
 ```
+
+### Anthropic (Claude)
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+export ANTHROPIC_MODEL=claude-sonnet-4-5-20251014  # or claude-3-7-sonnet
+```
+
+Or use the guided login:
+
+```bash
+gakrcli auth login
+```
+
+### Ollama (Local)
+
+```bash
+# First install and start Ollama
+ollama pull llama3.2:3b  # or qwen2.5-coder:7b, codellama:7b
+
+export GAKR_CODE_USE_OPENAI=1
+export OPENAI_BASE_URL=http://localhost:11434/v1
+export OPENAI_MODEL=llama3.2:3b
+```
+
+### Atomic Chat (Apple Silicon)
+
+```bash
+# Ensure Atomic Chat is running with a model loaded
+export GAKR_CODE_USE_OPENAI=1
+export OPENAI_BASE_URL=http://127.0.0.1:1337/v1
+export OPENAI_MODEL=<model-loaded-in-atomic-chat>
+```
+
+### Azure OpenAI
+
+```bash
+export GAKR_CODE_USE_OPENAI=1
+export OPENAI_API_KEY=your-azure-key
+export OPENAI_BASE_URL=https://your-resource.openai.azure.com/openai/deployments/your-deployment
+export OPENAI_MODEL=gpt-4o
+```
+
+### AWS Bedrock
+
+```bash
+export GAKR_CODE_USE_BEDROCK=1
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+export AWS_REGION=us-east-1
+export ANTHROPIC_MODEL=claude-sonnet-4-5-20251014
+```
+
+### Google Vertex AI
+
+```bash
+export GAKR_CODE_USE_VERTEX=1
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+export ANTHROPIC_MODEL=claude-sonnet-4-5-20251014
+```
+
+## Advanced Configuration
+
+### Project Profiles
+
+Create `.gakr-profile.json` in your project root:
+
+```json
+{
+  "provider": "openai-compatible",
+  "apiKey": "sk-...",
+  "baseURL": "https://api.openai.com/v1",
+  "model": "gpt-4o",
+  "temperature": 0.7,
+  "maxTokens": 8000,
+  "skills": ["typescript-expert", "react-atlas"],
+  "agents": ["code-reviewer", "security-reviewer"],
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-filesystem", "."]
+    }
+  }
+}
+```
+
+### Global Settings
+
+Configure global settings in `~/.gakrcli/settings.json`:
+
+```json
+{
+  "defaultModel": "gpt-4o",
+  "temperature": 0.7,
+  "maxTokens": 8000,
+  "enabledPlugins": {
+    "typescript-expert@builtin": true,
+    "security-review@builtin": true
+  },
+  "agentModels": {
+    "deepseek-v4-flash": {
+      "base_url": "https://api.deepseek.com/v1",
+      "api_key": "sk-your-key"
+    },
+    "gpt-4o": {
+      "base_url": "https://api.openai.com/v1",
+      "api_key": "sk-your-key"
+    }
+  },
+  "agentRouting": {
+    "code-reviewer": "deepseek-v4-flash",
+    "architect": "gpt-4o",
+    "security-reviewer": "gpt-4o",
+    "default": "deepseek-v4-flash"
+  }
+}
+```
+
+### MCP Server Configuration
+
+Configure MCP servers in your settings:
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-filesystem", "/path/to/allowed/files"]
+    },
+    "git": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-git", "--repository", "."]
+    },
+    "postgres": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-postgres"],
+      "env": {
+        "POSTGRES_CONNECTION_STRING": "postgresql://user:pass@localhost/db"
+      }
+    },
+    "web": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-web"]
+    }
+  }
+}
+```
+
+### Custom Authentication Headers
+
+For providers requiring non-standard authentication:
+
+```bash
+export GAKR_CODE_USE_OPENAI=1
+export OPENAI_BASE_URL=https://api.custom-provider.com/v1
+export OPENAI_AUTH_HEADER=X-API-Key
+export OPENAI_AUTH_SCHEME=raw
+export OPENAI_AUTH_HEADER_VALUE=your-custom-key
+export OPENAI_MODEL=custom-model
+```
+
+### API Format Selection
+
+Switch between Chat Completions and Responses API formats:
+
+```bash
+export OPENAI_API_FORMAT=responses  # or chat_completions (default)
+```
+
+## Development Commands
+
+### Build and Test
+
+```bash
+bun run build              # Build the CLI
+bun run dev                # Build and run with hot reload
+bun run smoke              # Quick build + version check
+bun run typecheck          # TypeScript type checking
+bun test                   # Run test suite
+bun run test:coverage      # Run tests with coverage
+```
+
+### Diagnostics
+
+```bash
+bun run doctor:runtime     # System diagnostics
+bun run doctor:runtime:json # JSON output for automation
+bun run doctor:report      # Save report to file
+bun run verify:privacy     # Verify no telemetry
+```
+
+### Quality Checks
+
+```bash
+bun run hardening:check    # Build + runtime checks
+bun run hardening:strict   # Typecheck + hardening
+```
+
+## Environment Variables Reference
+
+### Provider Selection
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `GAKR_CODE_USE_OPENAI` | Enable OpenAI-compatible providers | `1` |
+| `GAKR_CODE_USE_ANTHROPIC` | Enable Anthropic (default if no other provider) | `1` |
+| `GAKR_CODE_USE_GEMINI` | Enable Google Gemini | `1` |
+| `GAKR_CODE_USE_GITHUB` | Enable GitHub Models | `1` |
+| `GAKR_CODE_USE_NVIDIA` | Enable NVIDIA NIMs | `1` |
+| `GAKR_CODE_USE_BEDROCK` | Enable AWS Bedrock | `1` |
+| `GAKR_CODE_USE_VERTEX` | Enable Google Vertex AI | `1` |
+
+### OpenAI-Compatible Configuration
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `OPENAI_API_KEY` | API key for OpenAI-compatible providers | `sk-...` |
+| `OPENAI_BASE_URL` | Base URL for API requests | `https://api.openai.com/v1` |
+| `OPENAI_MODEL` | Model to use | `gpt-4o` |
+| `OPENAI_API_FORMAT` | API format (chat_completions or responses) | `chat_completions` |
+| `OPENAI_AUTH_HEADER` | Custom auth header name | `X-API-Key` |
+| `OPENAI_AUTH_SCHEME` | Auth scheme (bearer or raw) | `bearer` |
+| `OPENAI_AUTH_HEADER_VALUE` | Custom auth header value | `your-key` |
+
+### Anthropic Configuration
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `ANTHROPIC_API_KEY` | Anthropic API key | `sk-ant-...` |
+| `ANTHROPIC_MODEL` | Claude model to use | `claude-sonnet-4-5-20251014` |
+
+### Other Provider Configuration
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `GEMINI_API_KEY` | Google Gemini API key | `AI...` |
+| `GEMINI_MODEL` | Gemini model to use | `gemini-2.0-flash` |
+| `NVIDIA_API_KEY` | NVIDIA API key | `nvapi-...` |
+| `NVIDIA_MODEL` | NVIDIA model to use | `stepfun-ai/step-3.5-flash` |
+| `GITHUB_TOKEN` | GitHub token for GitHub Models | `ghp_...` |
+
+### Feature Flags
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `WEB_SEARCH_PROVIDER` | Web search provider | `tavily`, `ddg`, `auto` |
+| `FIRECRAWL_API_KEY` | Firecrawl API key for web scraping | `fc-...` |
+| `GAKR_CODE_SIMPLE` | Enable simple/bare mode | `1` |
+| `GAKR_CODE_DEBUG` | Enable debug mode | `1` |
+
+## Troubleshooting
+
+### Common Issues
+
+**"Command not found: gakrcli"**
+- Install globally: `npm install -g @gakr-gakr/gakrcli`
+- Check PATH if using source build
+
+**"ripgrep (rg) not found"**
+- macOS: `brew install ripgrep`
+- Ubuntu/Debian: `sudo apt-get install ripgrep`
+- Windows: `winget install ripgrep`
+
+**"Connection refused" (Ollama)**
+- Start Ollama: `ollama serve`
+- Pull model: `ollama pull llama3.2:3b`
+
+**"Invalid API key"**
+- Verify API key is correct and active
+- Check environment variable name matches provider
+
+**Windows Input Prompt Hang**
+- Update to GakrCLI 0.4.9 or later
+- Ensure all dependencies are installed
+
+### Debug Mode
+
+Enable debug mode for troubleshooting:
+
+```bash
+export GAKR_CODE_DEBUG=1
+gakrcli
+```
+
+### Health Checks
+
+Run comprehensive health checks:
+
+```bash
+gakrcli doctor
+gakrcli doctor --json  # For automation
+```
+
+## Performance Optimization
+
+### Local Models
+
+- Use appropriate model size for your hardware
+- Ensure sufficient RAM (8GB+ for 3B models, 16GB+ for 7B models)
+- Use SSD storage for better model loading
+- Close memory-intensive applications
+
+### Cloud Models
+
+- Choose faster models for interactive work (gpt-4o, deepseek-v4-flash)
+- Use cheaper models for batch processing
+- Monitor token usage with `/cost` command
+- Set appropriate context limits
+
+### Network Optimization
+
+- Use CDN-backed providers when available
+- Configure appropriate timeouts
+- Use connection pooling for high-volume usage
+
+## Security Considerations
+
+### API Key Management
+
+- Store API keys in environment variables, not code
+- Use different keys for different environments
+- Rotate keys regularly
+- Monitor API key usage
+
+### MCP Security
+
+- Review MCP servers before installation
+- Use principle of least privilege for MCP server access
+- Monitor MCP server activity
+- Keep MCP servers updated
+
+### Sandboxing
+
+- Use built-in sandboxing features
+- Configure appropriate permission levels
+- Monitor file system access
+- Review shell command execution
+
+## Integration Examples
+
+### CI/CD Integration
+
+```yaml
+# GitHub Actions example
+- name: Run GakrCLI Analysis
+  env:
+    GAKR_CODE_USE_OPENAI: 1
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    OPENAI_MODEL: gpt-4o
+  run: |
+    npm install -g @gakr-gakr/gakrcli
+    gakrcli "Analyze this codebase for security issues and generate a report"
+```
+
+### Docker Integration
+
+```dockerfile
+FROM node:20-alpine
+
+RUN npm install -g @gakr-gakr/gakrcli
+RUN apk add --no-cache ripgrep
+
+ENV GAKR_CODE_USE_OPENAI=1
+ENV OPENAI_MODEL=gpt-4o
+
+WORKDIR /app
+COPY . .
+
+CMD ["gakrcli"]
+```
+
+### VS Code Integration
+
+The GakrCLI VS Code extension provides:
+- Control Center activity view
+- Project-aware launch behavior
+- Workspace profile visibility
+- Built-in terminal theme
+
+Install from the VS Code marketplace or build from source in `vscode-extension/`.
+
+## Support
+
+- **Issues**: [GitHub Issues](https://github.com/gakr-gakr/gakrcli/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/gakr-gakr/gakrcli/discussions)
+- **Documentation**: [docs/](../)
 
 ### AWS Bedrock
 
