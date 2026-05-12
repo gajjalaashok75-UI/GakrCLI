@@ -3,7 +3,7 @@ export const DEFAULT_SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000
 
 /** Reusable login guidance appended to bridge auth errors. */
 export const BRIDGE_LOGIN_INSTRUCTION =
-  'Remote Control is only available with gakr.ai subscriptions. Please use `/login` to sign in with your gakr.ai account.'
+  'Remote Control is only available with gakr.ai subscriptions. Please use `gakr oauth login` to sign in with your gakr.ai account.'
 
 /** Full error printed when `gakrcli remote-control` is run without auth. */
 export const BRIDGE_LOGIN_ERROR =

@@ -95,7 +95,7 @@ function Web({
           logEvent('tengu_remote_setup_result', {
             result: 'not_signed_in' as SafeString
           });
-          onDone('Not signed in to Gakr. Run /login first.');
+          onDone('Not signed in to Gakr. Run gakr oauth login first.');
           return;
         case 'gh_not_installed':
         case 'gh_not_authenticated':
