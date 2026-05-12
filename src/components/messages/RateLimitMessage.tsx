@@ -28,7 +28,7 @@ export function getUpsellMessage({
     if (isExtraUsageCommandEnabled) {
       return '/extra-usage to finish what you\u2019re working on.';
     }
-    return 'Run gakr oauth login to switch accounts.';
+    return '/login to switch to an API usage-billed account.';
   }
   if (shouldAutoOpenRateLimitOptionsMenu) {
     return 'Opening your options\u2026';

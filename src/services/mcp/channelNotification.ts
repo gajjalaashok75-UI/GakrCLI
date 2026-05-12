@@ -223,7 +223,7 @@ export function gateChannelServer(
     return {
       action: 'skip',
       kind: 'auth',
-      reason: 'channels requires gakr.ai authentication (run gakr oauth login)',
+      reason: 'channels requires gakr.ai authentication (run /login)',
     }
   }
 

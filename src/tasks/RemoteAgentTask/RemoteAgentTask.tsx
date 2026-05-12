@@ -146,7 +146,7 @@ export async function checkRemoteAgentEligibility({
 export function formatPreconditionError(error: BackgroundRemoteSessionPrecondition): string {
   switch (error.type) {
     case 'not_logged_in':
-      return 'Please run gakr oauth login and sign in with your Gakr.ai account (not Console).';
+      return 'Please run /login and sign in with your Gakr.ai account (not Console).';
     case 'no_remote_environment':
       return 'No cloud environment available. Set one up at https://gakr.ai/code/onboarding?magic=env-setup';
     case 'not_in_git_repo':
@@ -491,7 +491,7 @@ async function restoreRemoteAgentTasksImpl(context: TaskContext): Promise<void> 
       remoteStatus = session.session_status;
     } catch (e) {
       // Only 404 means the CCR session is truly gone. Auth errors (401,
-      // missing OAuth token) are recoverable via gakr oauth login — the remote
+      // missing OAuth token) are recoverable via /login — the remote
       // session is still running. fetchSession throws plain Error for all
       // 4xx (validateStatus treats <500 as success), so isTransientNetworkError
       // can't distinguish them; match the 404 message instead.

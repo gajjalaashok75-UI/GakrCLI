@@ -70,13 +70,13 @@ export async function isBridgeEnabledBlocking(): Promise<boolean> {
 export async function getBridgeDisabledReason(): Promise<string | null> {
   if (feature('BRIDGE_MODE')) {
     if (!isgakrcliAISubscriber()) {
-      return 'Remote Control requires a gakrcli.ai subscription. Run `gakr oauth login` to sign in with your gakrcli.ai account.'
+      return 'Remote Control requires a gakrcli.ai subscription. Run `gakrcli auth login` to sign in with your gakrcli.ai account.'
     }
     if (!hasProfileScope()) {
-      return 'Remote Control requires a full-scope login token. Long-lived tokens (from `gakrcli setup-token` or GAKR_CODE_OAUTH_TOKEN) are limited to inference-only for security reasons. Run `gakr oauth login` to use Remote Control.'
+      return 'Remote Control requires a full-scope login token. Long-lived tokens (from `gakrcli setup-token` or GAKR_CODE_OAUTH_TOKEN) are limited to inference-only for security reasons. Run `gakrcli auth login` to use Remote Control.'
     }
     if (!getOauthAccountInfo()?.organizationUuid) {
-      return 'Unable to determine your organization for Remote Control eligibility. Run `gakr oauth login` to refresh your account information.'
+      return 'Unable to determine your organization for Remote Control eligibility. Run `gakrcli auth login` to refresh your account information.'
     }
     if (!(await checkGate_CACHED_OR_BLOCKING('tengu_ccr_bridge'))) {
       return 'Remote Control is not yet enabled for your account.'

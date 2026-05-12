@@ -2,16 +2,8 @@ import { describe, expect, test } from 'bun:test'
 import { builtInCommandNames, formatDescriptionWithSource } from './commands.js'
 
 describe('builtInCommandNames', () => {
-  test('includes the provider command', () => {
-    expect(builtInCommandNames()).toContain('provider')
-  })
-
-  test('uses provider setup instead of login/logout slash commands', () => {
-    const names = builtInCommandNames()
-
-    expect(names).toContain('provider')
-    expect(names).not.toContain('login')
-    expect(names).not.toContain('logout')
+  test('includes the LSP command', () => {
+    expect(builtInCommandNames()).toContain('lsp')
   })
 })
 
