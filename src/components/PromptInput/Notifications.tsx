@@ -305,7 +305,7 @@ function NotificationContent({
         </Box>}
       {(!isUsing3PServices() && (apiKeyStatus === 'invalid' || apiKeyStatus === 'missing')) && <Box>
           <Text color="error" wrap="truncate">
-            {isEnvTruthy(process.env.GAKR_CODE_REMOTE) ? 'Authentication error · Try again' : 'Not logged in · Run gakr oauth login'}
+            {isEnvTruthy(process.env.GAKR_CODE_REMOTE) ? 'Authentication error · Try again' : 'Not logged in · Run /login'}
           </Text>
         </Box>}
       {debug && <Box>
