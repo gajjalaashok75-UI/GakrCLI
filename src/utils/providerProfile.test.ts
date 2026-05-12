@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 
 import { DEFAULT_CODEX_BASE_URL } from '../services/api/providerConfig.js'
+import { getProviderValidationError } from './providerValidation.js'
 import {
   applySavedProfileToCurrentSession,
   buildStartupEnvFromProfile,
@@ -12,6 +13,7 @@ import {
   buildCodexProfileEnv,
   buildGeminiProfileEnv,
   buildLaunchEnv,
+  buildNvidiaNimProfileEnv,
   buildOllamaProfileEnv,
   buildOpenAIProfileEnv,
   clearPersistedCodexOAuthProfile,
@@ -1254,6 +1256,41 @@ test('openai profiles use the first model from a semicolon-separated list', () =
     OPENAI_MODEL: 'gpt-5.4',
     OPENAI_API_KEY: 'sk-live',
   })
+})
+
+test('nvidia nim profiles persist the dedicated NVIDIA credential alias', () => {
+  const env = buildNvidiaNimProfileEnv({
+    apiKey: 'nvapi-live',
+    model: 'nvidia/llama-3.1-nemotron-70b-instruct',
+    baseUrl: 'https://integrate.api.nvidia.com/v1',
+    processEnv: {},
+  })
+
+  assert.deepEqual(env, {
+    OPENAI_BASE_URL: 'https://integrate.api.nvidia.com/v1',
+    OPENAI_MODEL: 'nvidia/llama-3.1-nemotron-70b-instruct',
+    OPENAI_API_KEY: 'nvapi-live',
+    NVIDIA_API_KEY: 'nvapi-live',
+    NVIDIA_NIM: '1',
+  })
+})
+
+test('startup env restores legacy nvidia nim profiles saved with only OPENAI_API_KEY', async () => {
+  const env = await buildStartupEnvFromProfile({
+    persisted: profile('nvidia-nim', {
+      OPENAI_API_KEY: 'nvapi-legacy',
+      OPENAI_MODEL: 'nvidia/llama-3.1-nemotron-70b-instruct',
+      OPENAI_BASE_URL: 'https://integrate.api.nvidia.com/v1',
+      NVIDIA_NIM: '1',
+    }),
+    processEnv: {},
+  })
+
+  assert.equal(env.GAKR_CODE_USE_OPENAI, '1')
+  assert.equal(env.OPENAI_API_KEY, 'nvapi-legacy')
+  assert.equal(env.OPENAI_MODEL, 'nvidia/llama-3.1-nemotron-70b-instruct')
+  assert.equal(env.OPENAI_BASE_URL, 'https://integrate.api.nvidia.com/v1')
+  assert.equal(await getProviderValidationError(env), null)
 })
 
 test('openai profiles ignore poisoned shell model and base url values', () => {

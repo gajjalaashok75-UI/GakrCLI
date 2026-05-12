@@ -1272,6 +1272,50 @@ describe('setActiveProviderProfile', () => {
     }
   })
 
+  test('persists nvidia nim profiles with both openai and nvidia credential env vars', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-'))
+    const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-config-'))
+    process.chdir(tempDir)
+    process.env.GAKR_CONFIG_DIR = configDir
+
+    try {
+      const { setActiveProviderProfile } =
+        await importFreshProviderProfileModules()
+      const nvidiaProfile = buildProfile({
+        id: 'nvidia_prof',
+        name: 'NVIDIA NIM',
+        provider: 'nvidia-nim',
+        baseUrl: 'https://integrate.api.nvidia.com/v1',
+        model: 'nvidia/llama-3.1-nemotron-70b-instruct',
+        apiKey: 'nvapi-live',
+      })
+
+      saveMockGlobalConfig(current => ({
+        ...current,
+        providerProfiles: [nvidiaProfile],
+      }))
+
+      const result = setActiveProviderProfile('nvidia_prof')
+      const persisted = JSON.parse(
+        readFileSync(join(configDir, '.gakrcli-profile.json'), 'utf8'),
+      )
+
+      expect(result?.id).toBe('nvidia_prof')
+      expect(persisted.profile).toBe('nvidia-nim')
+      expect(persisted.env).toEqual({
+        OPENAI_BASE_URL: 'https://integrate.api.nvidia.com/v1',
+        OPENAI_MODEL: 'nvidia/llama-3.1-nemotron-70b-instruct',
+        OPENAI_API_KEY: 'nvapi-live',
+        NVIDIA_API_KEY: 'nvapi-live',
+        NVIDIA_NIM: '1',
+      })
+    } finally {
+      process.chdir(originalCwd)
+      rmSync(tempDir, { recursive: true, force: true })
+      rmSync(configDir, { recursive: true, force: true })
+    }
+  })
+
   test('persists anthropic profiles using a dedicated anthropic startup profile', async () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-'))
     const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-config-'))
