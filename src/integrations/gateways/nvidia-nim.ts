@@ -26,9 +26,9 @@ export default defineGateway({
   },
   validation: {
     kind: 'credential-env',
-    credentialEnvVars: ['NVIDIA_API_KEY'],
+    credentialEnvVars: ['NVIDIA_API_KEY', 'OPENAI_API_KEY'],
     missingCredentialMessage:
-      'NVIDIA_API_KEY is required when using NVIDIA NIM.',
+      'NVIDIA_API_KEY or OPENAI_API_KEY is required when using NVIDIA NIM.',
     routing: {
       enablementEnvVar: 'NVIDIA_NIM',
       matchDefaultBaseUrl: true,

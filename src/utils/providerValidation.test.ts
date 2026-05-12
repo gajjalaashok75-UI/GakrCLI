@@ -166,6 +166,15 @@ test('nvidia nim validation accepts NVIDIA_API_KEY without OPENAI_API_KEY', asyn
   await expect(getProviderValidationError(process.env)).resolves.toBeNull()
 })
 
+test('nvidia nim validation accepts OPENAI_API_KEY saved by openai-compatible profiles', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://integrate.api.nvidia.com/v1'
+  process.env.OPENAI_API_KEY = 'nvidia-live-key'
+  delete process.env.NVIDIA_API_KEY
+
+  await expect(getProviderValidationError(process.env)).resolves.toBeNull()
+})
+
 test('nvidia nim validation accepts NVIDIA_API_KEY for custom NIM endpoints when NVIDIA_NIM is set', async () => {
   process.env.GAKR_CODE_USE_OPENAI = '1'
   process.env.NVIDIA_NIM = '1'

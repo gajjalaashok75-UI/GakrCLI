@@ -399,7 +399,10 @@ export function buildNvidiaNimProfileEnv(options: {
   }
 
   const defaultBaseUrl = 'https://integrate.api.nvidia.com/v1'
-  const secretSource: SecretValueSource = { OPENAI_API_KEY: key }
+  const secretSource: SecretValueSource = {
+    OPENAI_API_KEY: key,
+    NVIDIA_API_KEY: key,
+  }
 
   return {
     OPENAI_BASE_URL:
@@ -415,6 +418,7 @@ export function buildNvidiaNimProfileEnv(options: {
       ) ||
       'nvidia/llama-3.1-nemotron-70b-instruct',
     OPENAI_API_KEY: key,
+    NVIDIA_API_KEY: key,
     NVIDIA_NIM: '1',
   }
 }
