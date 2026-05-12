@@ -131,6 +131,7 @@ function filterAnthropicHeaders(
     if (
       lower.startsWith('x-anthropic') ||
       lower.startsWith('anthropic-') ||
+      lower.startsWith('x-claude') ||
       lower.startsWith('x-gakrcli') ||
       lower === 'x-app' ||
       lower === 'x-client-app' ||

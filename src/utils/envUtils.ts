@@ -3,29 +3,42 @@ import { existsSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 
+export function resolveGakrcliConfigHomeDir(options?: {
+  configDirEnv?: string
+  homeDir?: string
+  gakrcliExists?: boolean
+  legacyClaudeExists?: boolean
+}): string {
+  if (options?.configDirEnv) {
+    return options.configDirEnv.normalize('NFC')
+  }
+
+  const homeDir = options?.homeDir ?? homedir()
+  const gakrcliDir = join(homeDir, '.gakrcli')
+  const legacyClaudeDir = join(homeDir, '.claude')
+  const gakrcliExists = options?.gakrcliExists ?? existsSync(gakrcliDir)
+  const legacyClaudeExists =
+    options?.legacyClaudeExists ?? existsSync(legacyClaudeDir)
+
+  if (!gakrcliExists && legacyClaudeExists) {
+    return legacyClaudeDir.normalize('NFC')
+  }
+
+  return gakrcliDir.normalize('NFC')
+}
+
 // Memoized: 150+ callers, many on hot paths. Keyed off GAKR_CONFIG_DIR so
 // tests that change the env var get a fresh value without explicit cache.clear.
 export const getGakrcliConfigHomeDir = memoize(
   (): string => {
-    if (process.env.GAKR_CONFIG_DIR) {
-      return process.env.GAKR_CONFIG_DIR.normalize('NFC')
-    }
-    const newDefault = join(homedir(), '.gakrcli')
-    const opengakrcliLegacyPath = join(homedir(), '.opengakrcli')
-    // Migration compatibility: prefer ~/.gakrcli for new installs, but keep using
-    // ~/.opengakrcli or ~/.gakrcli when they already exist so older installs
-    // don't lose their data on upgrade.
-    const legacyPath = join(homedir(), '.gakrcli')
-    if (!existsSync(newDefault) && existsSync(opengakrcliLegacyPath)) {
-      return opengakrcliLegacyPath.normalize('NFC')
-    }
-    if (!existsSync(newDefault) && existsSync(legacyPath)) {
-      return legacyPath.normalize('NFC')
-    }
-    return newDefault.normalize('NFC')
+    return resolveGakrcliConfigHomeDir({
+      configDirEnv: process.env.GAKR_CONFIG_DIR,
+    })
   },
   () => process.env.GAKR_CONFIG_DIR,
 )
+
+export const getgakrcliConfigHomeDir = getGakrcliConfigHomeDir
 
 export function getTeamsDir(): string {
   return join(getGakrcliConfigHomeDir(), 'teams')

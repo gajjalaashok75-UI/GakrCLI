@@ -314,19 +314,19 @@ function buildProviderState(label, detail, source) {
 
 function getDetail(env, fallback) {
   return (
-    asNonEmptyString(env.OPENAI_MODEL) ||
-    asNonEmptyString(env.GEMINI_MODEL) ||
-    asNonEmptyString(env.NVIDIA_MODEL) ||
-    asNonEmptyString(env.OPENAI_BASE_URL) ||
-    asNonEmptyString(env.GEMINI_BASE_URL) ||
-    asNonEmptyString(env.NVIDIA_BASE_URL) ||
+    asNonEmptyString(getEnvValue(env, 'OPENAI_MODEL')) ||
+    asNonEmptyString(getEnvValue(env, 'GEMINI_MODEL')) ||
+    asNonEmptyString(getEnvValue(env, 'NVIDIA_MODEL')) ||
+    asNonEmptyString(getEnvValue(env, 'OPENAI_BASE_URL')) ||
+    asNonEmptyString(getEnvValue(env, 'GEMINI_BASE_URL')) ||
+    asNonEmptyString(getEnvValue(env, 'NVIDIA_BASE_URL')) ||
     fallback
   );
 }
 
 function describeOpenAICompatible(env, source) {
-  const baseUrl = asNonEmptyString(env.OPENAI_BASE_URL) || asNonEmptyString(env.OPENAI_API_BASE);
-  const model = asNonEmptyString(env.OPENAI_MODEL);
+  const baseUrl = asNonEmptyString(getEnvValue(env, 'OPENAI_BASE_URL')) || asNonEmptyString(getEnvValue(env, 'OPENAI_API_BASE'));
+  const model = asNonEmptyString(getEnvValue(env, 'OPENAI_MODEL'));
   const label = getOpenAICompatibleLabel(baseUrl, model);
 
   if (label === 'Codex') {
@@ -359,31 +359,31 @@ function describeProviderState({ shimEnabled, env, profile }) {
     return describeSavedProfile(profile);
   }
 
-  if (isEnvTruthy(env.GAKR_CODE_USE_GEMINI)) {
+  if (isEnvTruthy(getEnvValue(env, 'GAKR_CODE_USE_GEMINI'))) {
     return buildProviderState('Gemini', getDetail(env, 'from environment'), 'env');
   }
 
-  if (isEnvTruthy(env.GAKR_CODE_USE_GITHUB)) {
+  if (isEnvTruthy(getEnvValue(env, 'GAKR_CODE_USE_GITHUB'))) {
     return buildProviderState('GitHub Models', getDetail(env, 'from environment'), 'env');
   }
 
-  if (isEnvTruthy(env.GAKR_CODE_USE_NVIDIA)) {
+  if (isEnvTruthy(getEnvValue(env, 'GAKR_CODE_USE_NVIDIA'))) {
     return buildProviderState('NVIDIA NIMs', getDetail(env, 'from environment'), 'env');
   }
 
-  if (isEnvTruthy(env.GAKR_CODE_USE_BEDROCK)) {
+  if (isEnvTruthy(getEnvValue(env, 'GAKR_CODE_USE_BEDROCK'))) {
     return buildProviderState('Bedrock', 'from environment', 'env');
   }
 
-  if (isEnvTruthy(env.GAKR_CODE_USE_VERTEX)) {
+  if (isEnvTruthy(getEnvValue(env, 'GAKR_CODE_USE_VERTEX'))) {
     return buildProviderState('Vertex AI', 'from environment', 'env');
   }
 
-  if (isEnvTruthy(env.GAKR_CODE_USE_FOUNDRY)) {
+  if (isEnvTruthy(getEnvValue(env, 'GAKR_CODE_USE_FOUNDRY'))) {
     return buildProviderState('Foundry', 'from environment', 'env');
   }
 
-  if (isEnvTruthy(env.GAKR_CODE_USE_OPENAI)) {
+  if (isEnvTruthy(getEnvValue(env, 'GAKR_CODE_USE_OPENAI'))) {
     return describeOpenAICompatible(env, 'env');
   }
 

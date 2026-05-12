@@ -221,7 +221,7 @@ test('renderControlCenterHtml makes shared workspace-root launches explicit for 
   );
 
   assert.match(html, /Project-aware launch is anchored to the workspace root by the relative command · \/workspace\/gakrcli/);
-  assert.match(html, /Same workspace-root target as Launch Gakrcli because the relative command resolves from the workspace root · \/workspace\/gakrcli/);
+  assert.match(html, /Same workspace-root target as Launch GakrCLI because the relative command resolves from the workspace root · \/workspace\/gakrcli/);
 });
 
 test('renderControlCenterHtml escapes hostile text and title values', () => {

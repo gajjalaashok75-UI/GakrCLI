@@ -63,7 +63,7 @@ export type CacheAwareProvider =
   // local to one branch.
   | 'self-hosted'
   | 'copilot'
-  | 'copilot-claude'
+  | 'copilot-gakrcli'
 
 /** Unified cache metrics for one API response. */
 export type CacheMetrics = {
@@ -224,7 +224,7 @@ function isLocalOrPrivateUrl(url: string): boolean {
 /**
  * Map the canonical APIProvider enum (+ environment hints) into a
  * cache-capability bucket. We separate `copilot` (no cache) from
- * `copilot-claude` (Anthropic shim via Copilot with explicit cache)
+ * `copilot-gakrcli` (Anthropic shim via Copilot with explicit cache)
  * because the two behave very differently even under the same provider
  * flag — see `isGithubNativeAnthropicMode` in utils/model/providers.ts.
  *
@@ -244,7 +244,7 @@ export function resolveCacheProvider(
   hints?: { githubNativeAnthropic?: boolean; openAiBaseUrl?: string },
 ): CacheAwareProvider {
   if (provider === 'github') {
-    return hints?.githubNativeAnthropic ? 'copilot-claude' : 'copilot'
+    return hints?.githubNativeAnthropic ? 'copilot-gakrcli' : 'copilot'
   }
   if (provider === 'firstParty' || provider === 'bedrock' || provider === 'vertex' || provider === 'foundry') {
     return 'anthropic'

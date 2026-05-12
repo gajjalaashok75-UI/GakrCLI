@@ -23,6 +23,9 @@ async function importFreshInstaller() {
 test('install command displays ~/.local/bin/gakrcli on non-Windows', async () => {
   mock.module('../utils/env.js', () => ({
     env: { platform: 'darwin' },
+    getGlobalGakrcliFile: () => join(homedir(), '.gakrcli.json'),
+    getHostPlatformForAnalytics: () => 'darwin',
+    JETBRAINS_IDES: [],
   }))
 
   const { getInstallationPath } = await importFreshInstallCommand()
@@ -33,6 +36,9 @@ test('install command displays ~/.local/bin/gakrcli on non-Windows', async () =>
 test('install command displays gakrcli.exe path on Windows', async () => {
   mock.module('../utils/env.js', () => ({
     env: { platform: 'win32' },
+    getGlobalGakrcliFile: () => join(homedir(), '.gakrcli.json'),
+    getHostPlatformForAnalytics: () => 'win32',
+    JETBRAINS_IDES: [],
   }))
 
   const { getInstallationPath } = await importFreshInstallCommand()

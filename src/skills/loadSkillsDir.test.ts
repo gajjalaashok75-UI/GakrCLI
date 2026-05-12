@@ -27,7 +27,7 @@ test('loads flat and nested skills with colon namespaces', async () => {
     writeSkill(configDir, 'git/commit')
     writeSkill(configDir, 'frontend/react/form')
 
-    process.env.GAKR_CONFIG_DIR = configDir
+    process.env.GAKR_CONFIG_DIR = join(configDir, '.gakrcli')
     clearSkillCaches()
 
     const skills = await getSkillDirCommands(cwd)
@@ -42,7 +42,7 @@ test('loads flat and nested skills with colon namespaces', async () => {
 
     const nestedSkill = promptSkills.find(skill => skill.name === 'git:commit')
     assert.ok(nestedSkill)
-    assert.equal(nestedSkill.skillRoot, join(configDir, '.clagakrcliude', 'skills', 'git', 'commit'))
+    assert.equal(nestedSkill.skillRoot, join(configDir, '.gakrcli', 'skills', 'git', 'commit'))
 
     const deepSkill = promptSkills.find(
       skill => skill.name === 'frontend:react:form',

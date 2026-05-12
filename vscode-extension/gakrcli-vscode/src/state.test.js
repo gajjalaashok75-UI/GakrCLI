@@ -163,7 +163,7 @@ test('describeProviderState reports environment-backed provider details', () => 
     describeProviderState({
       shimEnabled: false,
       env: {
-        gakrcli_CODE_USE_OPENAI: '1',
+        GAKR_CODE_USE_OPENAI: '1',
         OPENAI_BASE_URL: 'http://localhost:11434/v1',
         OPENAI_MODEL: 'llama3.2:3b',
       },

@@ -39,9 +39,24 @@ export function getSmallFastModel(): ModelName {
   if (getAPIProvider() === 'gemini') {
     return process.env.GEMINI_MODEL || 'gemini-2.0-flash-lite'
   }
+  if (getAPIProvider() === 'mistral') {
+    return process.env.MISTRAL_MODEL || 'devstral-latest'
+  }
   // For OpenAI provider, use OPENAI_MODEL or a sensible default
   if (getAPIProvider() === 'openai') {
     return process.env.OPENAI_MODEL || 'gpt-4o-mini'
+  }
+  if (getAPIProvider() === 'codex') {
+    return process.env.OPENAI_MODEL || 'codexspark'
+  }
+  if (getAPIProvider() === 'github') {
+    return process.env.OPENAI_MODEL || 'github:copilot'
+  }
+  if (getAPIProvider() === 'nvidia-nim') {
+    return process.env.OPENAI_MODEL || process.env.NVIDIA_MODEL || 'meta/llama-3.1-8b-instruct'
+  }
+  if (getAPIProvider() === 'minimax') {
+    return process.env.OPENAI_MODEL || 'MiniMax-M2.5-highspeed'
   }
   // For xAI provider, use grok-3 as the fast model
   if (getAPIProvider() === 'xai') {
@@ -153,17 +168,26 @@ export function getDefaultOpusModel(): ModelName {
   if (getAPIProvider() === 'gemini') {
     return process.env.GEMINI_MODEL || 'gemini-2.5-pro-preview-03-25'
   }
+  if (getAPIProvider() === 'mistral') {
+    return process.env.MISTRAL_MODEL || 'mistral-large-latest'
+  }
   // OpenAI provider: use user-specified model or default
   if (getAPIProvider() === 'openai') {
     return process.env.OPENAI_MODEL || 'gpt-4o'
   }
   // NVIDIA provider: use configured NVIDIA model
   if (getAPIProvider() === 'nvidia-nim') {
-    return process.env.NVIDIA_MODEL || 'stepfun-ai/step-3.5-flash'
+    return process.env.OPENAI_MODEL || process.env.NVIDIA_MODEL || 'nvidia/llama-3.1-nemotron-70b-instruct'
   }
   // Codex provider: use user-specified model or default to gpt-5.4
   if (getAPIProvider() === 'codex') {
-    return process.env.OPENAI_MODEL || 'gpt-5.4'
+    return process.env.OPENAI_MODEL || 'gpt-5.5'
+  }
+  if (getAPIProvider() === 'github') {
+    return process.env.OPENAI_MODEL || 'github:copilot'
+  }
+  if (getAPIProvider() === 'minimax') {
+    return process.env.OPENAI_MODEL || 'MiniMax-M2.7'
   }
   // xAI provider: use grok-4 as the most capable model
   if (getAPIProvider() === 'xai') {
@@ -187,17 +211,26 @@ export function getDefaultSonnetModel(): ModelName {
   if (getAPIProvider() === 'gemini') {
     return process.env.GEMINI_MODEL || 'gemini-2.0-flash'
   }
+  if (getAPIProvider() === 'mistral') {
+    return process.env.MISTRAL_MODEL || 'mistral-medium-latest'
+  }
   // OpenAI provider
   if (getAPIProvider() === 'openai') {
     return process.env.OPENAI_MODEL || 'gpt-4o'
   }
   // NVIDIA provider
   if (getAPIProvider() === 'nvidia-nim') {
-    return process.env.NVIDIA_MODEL || 'stepfun-ai/step-3.5-flash'
+    return process.env.OPENAI_MODEL || process.env.NVIDIA_MODEL || 'nvidia/llama-3.1-nemotron-70b-instruct'
   }
   // Codex provider
   if (getAPIProvider() === 'codex') {
-    return process.env.OPENAI_MODEL || 'gpt-5.4'
+    return process.env.OPENAI_MODEL || 'gpt-5.5'
+  }
+  if (getAPIProvider() === 'github') {
+    return process.env.OPENAI_MODEL || 'github:copilot'
+  }
+  if (getAPIProvider() === 'minimax') {
+    return process.env.OPENAI_MODEL || 'MiniMax-M2.5'
   }
   // xAI provider: use grok-4 as the default model
   if (getAPIProvider() === 'xai') {
@@ -215,9 +248,8 @@ export function getDefaultHaikuModel(): ModelName {
   if (process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL) {
     return process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL
   }
-  // Gemini provider
-  if (getAPIProvider() === 'gemini') {
-    return process.env.GEMINI_MODEL || 'gemini-2.0-flash-lite'
+  if (getAPIProvider() === 'mistral') {
+    return process.env.MISTRAL_MODEL || 'devstral-latest'
   }
   // OpenAI provider
   if (getAPIProvider() === 'openai') {
@@ -225,11 +257,21 @@ export function getDefaultHaikuModel(): ModelName {
   }
   // NVIDIA provider
   if (getAPIProvider() === 'nvidia-nim') {
-    return process.env.NVIDIA_MODEL || 'stepfun-ai/step-3.5-flash'
+    return process.env.OPENAI_MODEL || process.env.NVIDIA_MODEL || 'meta/llama-3.1-8b-instruct'
   }
   // Codex provider
   if (getAPIProvider() === 'codex') {
-    return process.env.OPENAI_MODEL || 'gpt-5.4'
+    return process.env.OPENAI_MODEL || 'gpt-5.5'
+  }
+  if (getAPIProvider() === 'github') {
+    return process.env.OPENAI_MODEL || 'github:copilot'
+  }
+  // Gemini provider
+  if (getAPIProvider() === 'gemini') {
+    return process.env.GEMINI_MODEL || 'gemini-2.0-flash-lite'
+  }
+  if (getAPIProvider() === 'minimax') {
+    return process.env.OPENAI_MODEL || 'MiniMax-M2.5-highspeed'
   }
   // xAI provider: use grok-3 as the fast/small model
   if (getAPIProvider() === 'xai') {

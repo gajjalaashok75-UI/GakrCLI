@@ -10,6 +10,7 @@ import {
 import { MarketplaceSourceSchema } from '../plugins/schemas.js'
 import { GAKR_CODE_SETTINGS_SCHEMA_URL } from './constants.js'
 import { PermissionRuleSchema } from './permissionValidation.js'
+import { AutoFixConfigSchema } from '../../services/autoFix/autoFixConfig.js'
 
 // Re-export hook schemas and types from centralized location for backward compatibility
 export {
@@ -68,6 +69,12 @@ export const PermissionsSchema = lazySchema(() =>
         .enum(['disable'])
         .optional()
         .describe('Disable the ability to bypass permission prompts'),
+      allowBypassPermissionsMode: z
+        .boolean()
+        .optional()
+        .describe(
+          'Allow bypass permissions mode to appear in the mode list without requiring the CLI flag',
+        ),
       ...(feature('TRANSCRIPT_CLASSIFIER')
         ? {
             disableAutoMode: z
@@ -435,6 +442,12 @@ export const SettingsSchema = lazySchema(() =>
       hooks: HooksSchema()
         .optional()
         .describe('Custom commands to run before/after tool executions'),
+      autoFix: AutoFixConfigSchema
+        .optional()
+        .describe(
+          'Auto-fix configuration: automatically run lint/test after AI file edits ' +
+          'and feed errors back for self-repair.',
+        ),
       worktree: z
         .object({
           symlinkDirectories: z

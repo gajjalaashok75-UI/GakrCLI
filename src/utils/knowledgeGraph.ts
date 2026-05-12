@@ -84,7 +84,8 @@ export function saveProjectGraph(cwd: string): void {
     }
     writeFileSync(path, JSON.stringify(projectGraph, null, 2), 'utf-8')
   } catch (e) {
-    console.error(`Failed to save project graph to ${path}:`, e)
+    const message = e instanceof Error ? e.message : String(e)
+    console.warn(`Failed to save project graph to ${path}: ${message}`)
   }
 }
 

@@ -152,7 +152,11 @@ const TEAMMATE_ENV_VARS = [
  * plus any provider/config env vars that are set in the current process.
  */
 export function buildInheritedEnvVars(): string {
-  const envVars = ['gakrcliCODE=1', 'GAKR_CODE_EXPERIMENTAL_AGENT_TEAMS=1']
+  const envVars = [
+    'gakrcliCODE=1',
+    'GAKR_CODE_EXPERIMENTAL_AGENT_TEAMS=1',
+    'GAKR_CODE_PROVIDER_MANAGED_BY_HOST=1',
+  ]
 
   for (const key of TEAMMATE_ENV_VARS) {
     const value = process.env[key]
