@@ -51,6 +51,7 @@ import { AGENT_TOOL_NAME, LEGACY_AGENT_TOOL_NAME, ONE_SHOT_BUILTIN_AGENT_TYPES }
 import { buildForkedMessages, buildWorktreeNotice, FORK_AGENT, isForkSubagentEnabled, isInForkChild } from './forkSubagent.js';
 import type { AgentDefinition } from './loadAgentsDir.js';
 import { filterAgentsByMcpRequirements, hasRequiredMcpServers, isBuiltInAgent } from './loadAgentsDir.js';
+import { shouldBubbleAsyncAgentPermissionPrompts } from './permissionPromptPolicy.js';
 import { getPrompt } from './prompt.js';
 import { runAgent } from './runAgent.js';
 import { renderGroupedAgentToolUse, renderToolResultMessage, renderToolUseErrorMessage, renderToolUseMessage, renderToolUseProgressMessage, renderToolUseRejectedMessage, renderToolUseTag, userFacingName, userFacingNameBackgroundColor } from './UI.js';
@@ -643,6 +644,11 @@ export const AgentTool = buildTool({
       ...(isForkPath && {
         useExactTools: true
       }),
+      canShowPermissionPrompts: shouldBubbleAsyncAgentPermissionPrompts({
+        shouldRunAsync,
+        isNonInteractiveSession: toolUseContext.options.isNonInteractiveSession,
+        shouldAvoidPermissionPrompts: appState.toolPermissionContext.shouldAvoidPermissionPrompts
+      }) ? true : undefined,
       worktreePath: worktreeInfo?.worktreePath,
       description,
       agentName: name,
@@ -938,6 +944,11 @@ export const AgentTool = buildTool({
                     for await (const msg of runAgent({
                       ...runAgentParams,
                       isAsync: true,
+                      canShowPermissionPrompts: runAgentParams.canShowPermissionPrompts ?? (shouldBubbleAsyncAgentPermissionPrompts({
+                        shouldRunAsync: true,
+                        isNonInteractiveSession: toolUseContext.options.isNonInteractiveSession,
+                        shouldAvoidPermissionPrompts: toolUseContext.getAppState().toolPermissionContext.shouldAvoidPermissionPrompts
+                      }) ? true : undefined),
                       // Agent is now running in background
                       override: {
                         ...runAgentParams.override,
