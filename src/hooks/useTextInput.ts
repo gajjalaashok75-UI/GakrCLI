@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState } from 'react'
 import { isInputModeCharacter } from 'src/components/PromptInput/inputModes.js'
 import { useNotifications } from 'src/context/notifications.js'
 import stripAnsi from 'strip-ansi'
@@ -100,9 +101,70 @@ export function useTextInput({
     prewarmModifiers()
   }
 
-  const offset = externalOffset
-  const setOffset = onOffsetChange
-  const cursor = Cursor.fromText(originalValue, columns, offset)
+  const [renderState, setRenderState] = useState(() => ({
+    value: originalValue,
+    offset: externalOffset,
+  }))
+  const liveValueRef = useRef(originalValue)
+  const liveOffsetRef = useRef(externalOffset)
+  const lastSeenPropsRef = useRef({
+    value: originalValue,
+    offset: externalOffset,
+  })
+  const updateRenderedInput = (nextValue: string, nextOffset: number): void => {
+    liveValueRef.current = nextValue
+    liveOffsetRef.current = nextOffset
+    setRenderState(prev =>
+      prev.value === nextValue && prev.offset === nextOffset
+        ? prev
+        : { value: nextValue, offset: nextOffset },
+    )
+  }
+  useLayoutEffect(() => {
+    if (
+      lastSeenPropsRef.current.value === originalValue &&
+      lastSeenPropsRef.current.offset === externalOffset
+    ) {
+      return
+    }
+
+    lastSeenPropsRef.current = {
+      value: originalValue,
+      offset: externalOffset,
+    }
+    updateRenderedInput(originalValue, externalOffset)
+  }, [originalValue, externalOffset])
+
+  const value = renderState.value
+  const offset = renderState.offset
+  const getLiveValue = (): string => liveValueRef.current
+  const setValue = (nextValue: string, nextOffset = liveOffsetRef.current): void => {
+    const previousValue = liveValueRef.current
+    const previousOffset = liveOffsetRef.current
+
+    if (previousValue === nextValue && previousOffset === nextOffset) {
+      return
+    }
+
+    updateRenderedInput(nextValue, nextOffset)
+
+    if (previousValue !== nextValue) {
+      onChange(nextValue)
+    }
+
+    if (previousOffset !== nextOffset) {
+      onOffsetChange(nextOffset)
+    }
+  }
+  const setOffset = (nextOffset: number): void => {
+    if (nextOffset === liveOffsetRef.current) {
+      return
+    }
+
+    updateRenderedInput(liveValueRef.current, nextOffset)
+    onOffsetChange(nextOffset)
+  }
+  const cursor = Cursor.fromText(value, columns, offset)
   const { addNotification, removeNotification } = useNotifications()
 
   const handleCtrlC = useDoublePress(
@@ -111,9 +173,9 @@ export function useTextInput({
     },
     () => onExit?.(),
     () => {
-      if (originalValue) {
-        onChange('')
-        setOffset(0)
+      const currentValue = getLiveValue()
+      if (currentValue) {
+        setValue('', 0)
         onHistoryReset?.()
       }
     },
@@ -125,7 +187,8 @@ export function useTextInput({
   // not dialog dismissal, and needs the double-press safety mechanism.
   const handleEscape = useDoublePress(
     (show: boolean) => {
-      if (!originalValue || !show) {
+      const currentValue = getLiveValue()
+      if (!currentValue || !show) {
         return
       }
       addNotification({
@@ -139,14 +202,14 @@ export function useTextInput({
       // Remove the "Esc again to clear" notification immediately
       removeNotification('escape-again-to-clear')
       onClearInput?.()
-      if (originalValue) {
+      const currentValue = getLiveValue()
+      if (currentValue) {
         // Track double-escape usage for feature discovery
         // Save to history before clearing
-        if (originalValue.trim() !== '') {
-          addToHistory(originalValue)
+        if (currentValue.trim() !== '') {
+          addToHistory(currentValue)
         }
-        onChange('')
-        setOffset(0)
+        setValue('', 0)
         onHistoryReset?.()
       }
     },
@@ -154,13 +217,13 @@ export function useTextInput({
 
   const handleEmptyCtrlD = useDoublePress(
     show => {
-      if (originalValue !== '') {
+      if (getLiveValue() !== '') {
         return
       }
       onExitMessage?.(show, 'Ctrl-D')
     },
     () => {
-      if (originalValue !== '') {
+      if (getLiveValue() !== '') {
         return
       }
       onExit?.()
@@ -317,7 +380,7 @@ export function useTextInput({
     return cursor
   }
 
-  function mapKey(key: Key): InputMapper {
+  function mapKey(key: Key, cursor: Cursor): InputMapper {
     switch (true) {
       case key.escape:
         return () => {
@@ -431,6 +494,11 @@ export function useTextInput({
   }
 
   function onInput(input: string, key: Key): void {
+    const currentCursor = Cursor.fromText(
+      liveValueRef.current,
+      columns,
+      liveOffsetRef.current,
+    )
     // Note: Image paste shortcut (chat:imagePaste) is handled via useKeybindings in PromptInput
 
     // Apply filter if provided
@@ -448,18 +516,15 @@ export function useTextInput({
 
       // Apply all DEL characters as backspace operations synchronously
       // Try to delete tokens first, fall back to character backspace
-      let currentCursor = cursor
+      let nextCursor = currentCursor
       for (let i = 0; i < delCount; i++) {
-        currentCursor =
-          currentCursor.deleteTokenBefore() ?? currentCursor.backspace()
+        nextCursor =
+          nextCursor.deleteTokenBefore() ?? nextCursor.backspace()
       }
 
       // Update state once with the final result
-      if (!cursor.equals(currentCursor)) {
-        if (cursor.text !== currentCursor.text) {
-          onChange(currentCursor.text)
-        }
-        setOffset(currentCursor.offset)
+      if (!currentCursor.equals(nextCursor)) {
+        setValue(nextCursor.text, nextCursor.offset)
       }
       resetKillAccumulation()
       resetYankState()
@@ -476,13 +541,10 @@ export function useTextInput({
       resetYankState()
     }
 
-    const nextCursor = mapKey(key)(filteredInput)
+    const nextCursor = mapKey(key, currentCursor)(filteredInput)
     if (nextCursor) {
-      if (!cursor.equals(nextCursor)) {
-        if (cursor.text !== nextCursor.text) {
-          onChange(nextCursor.text)
-        }
-        setOffset(nextCursor.offset)
+      if (!currentCursor.equals(nextCursor)) {
+        setValue(nextCursor.text, nextCursor.offset)
       }
       // SSH-coalesced Enter: on slow links, "o" + Enter can arrive as one
       // chunk "o\r". parseKeypress only matches s === '\r', so it hit the
@@ -514,6 +576,7 @@ export function useTextInput({
 
   return {
     onInput,
+    value,
     renderedValue: cursor.render(
       cursorChar,
       mask,
@@ -522,6 +585,7 @@ export function useTextInput({
       maxVisibleLines,
     ),
     offset,
+    setValue,
     setOffset,
     cursorLine: cursorPos.line - cursor.getViewportStartLine(maxVisibleLines),
     cursorColumn: cursorPos.column,

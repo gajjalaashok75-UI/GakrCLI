@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { platform, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
@@ -610,7 +610,9 @@ test('saveProfileFile defaults to user config instead of the working directory',
     assert.equal(filePath, join(configDir, PROFILE_FILE_NAME))
     assert.equal(getDefaultProfileFilePath(), join(configDir, PROFILE_FILE_NAME))
     assert.equal(existsSync(join(cwd, PROFILE_FILE_NAME)), false)
-    assert.equal(statSync(configDir).mode & 0o777, 0o700)
+    if (platform() !== 'win32') {
+      assert.equal(statSync(configDir).mode & 0o777, 0o700)
+    }
     assert.deepEqual(loadProfileFile(), persisted)
   } finally {
     process.chdir(previousCwd)
@@ -803,13 +805,24 @@ test('clearPersistedCodexOAuthProfile removes only persisted Codex OAuth profile
   }
 })
 
-test('clearPersistedCodexOAuthProfile clears both default and legacy OAuth profiles', () => {
+test('clearPersistedCodexOAuthProfile clears both default and legacy OAuth profiles', async () => {
   const cwd = mkdtempSync(join(tmpdir(), 'gakrcli-clear-oauth-profile-'))
   const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-clear-oauth-config-'))
   const previousConfigDir = process.env.GAKR_CONFIG_DIR
   const previousCwd = process.cwd()
 
   try {
+    const providerProfileModule = await import(
+      `./providerProfile.js?ts=${Date.now()}-${Math.random()}`
+    )
+    const {
+      PROFILE_FILE_NAME,
+      clearPersistedCodexOAuthProfile,
+      createProfileFile,
+      loadProfileFile,
+      saveProfileFile,
+    } = providerProfileModule
+
     process.env.GAKR_CONFIG_DIR = configDir
     process.chdir(cwd)
 

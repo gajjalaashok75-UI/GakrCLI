@@ -3,6 +3,7 @@
  */
 
 import { access, chmod, writeFile } from 'fs/promises'
+import { homedir } from 'os'
 import { join } from 'path'
 import { type ReleaseChannel, saveGlobalConfig } from './config.js'
 import { getGakrcliConfigHomeDir } from './envUtils.js'
@@ -19,16 +20,48 @@ import { jsonStringify } from './slowOperations.js'
 function getLocalInstallDir(): string {
   return join(getGakrcliConfigHomeDir(), 'local')
 }
-export function getLocalgakrcliPath(): string {
+
+function getLegacyLocalInstallDir(homeDir = homedir()): string {
+  return join(homeDir, '.claude', 'local')
+}
+
+export function getCandidateLocalInstallDirs(options?: {
+  configHomeDir?: string
+  homeDir?: string
+}): string[] {
+  const homeDir = options?.homeDir ?? homedir()
+  const configHomeDir = options?.configHomeDir ?? getGakrcliConfigHomeDir()
+  return Array.from(
+    new Set([join(configHomeDir, 'local'), getLegacyLocalInstallDir(homeDir)]),
+  )
+}
+
+function getCandidateLocalBinaryPaths(localInstallDir: string): string[] {
+  return [
+    join(localInstallDir, 'node_modules', '.bin', 'gakrcli'),
+    join(localInstallDir, 'node_modules', '.bin', 'claude'),
+  ]
+}
+
+export function isManagedLocalInstallationPath(execPath: string): boolean {
+  const normalizedExecPath = execPath.replace(/\\+/g, '/')
+  return (
+    normalizedExecPath.includes('/.gakrcli/local/node_modules/') ||
+    normalizedExecPath.includes('/.claude/local/node_modules/')
+  )
+}
+
+export function getLocalGakrcliPath(): string {
   return join(getLocalInstallDir(), 'gakrcli')
 }
+
+export const getLocalgakrcliPath = getLocalGakrcliPath
 
 /**
  * Check if we're running from our managed local installation
  */
 export function isRunningFromLocalInstallation(): boolean {
-  const execPath = process.argv[1] || ''
-  return execPath.includes('/.gakrcli/local/node_modules/')
+  return isManagedLocalInstallationPath(process.argv[1] || '')
 }
 
 /**
@@ -71,7 +104,7 @@ export async function ensureLocalPackageEnvironment(): Promise<boolean> {
     )
 
     // Create the wrapper script if it doesn't exist
-    const wrapperPath = join(localInstallDir, 'gakrcli')
+    const wrapperPath = getLocalGakrcliPath()
     const created = await writeIfMissing(
       wrapperPath,
       `#!/bin/sh\nexec "${localInstallDir}/node_modules/.bin/gakrcli" "$@"`,
@@ -142,12 +175,31 @@ export async function installOrUpdategakrcliPackage(
  * Pure existence probe — callers use this to choose update path / UI hints.
  */
 export async function localInstallationExists(): Promise<boolean> {
-  try {
-    await access(join(getLocalInstallDir(), 'node_modules', '.bin', 'gakrcli'))
-    return true
-  } catch {
-    return false
+  for (const localInstallDir of getCandidateLocalInstallDirs()) {
+    for (const binaryPath of getCandidateLocalBinaryPaths(localInstallDir)) {
+      try {
+        await access(binaryPath)
+        return true
+      } catch {
+        // Try next candidate
+      }
+    }
   }
+  return false
+}
+
+export async function getDetectedLocalInstallDir(): Promise<string | null> {
+  for (const localInstallDir of getCandidateLocalInstallDirs()) {
+    for (const binaryPath of getCandidateLocalBinaryPaths(localInstallDir)) {
+      try {
+        await access(binaryPath)
+        return localInstallDir
+      } catch {
+        // Try next candidate
+      }
+    }
+  }
+  return null
 }
 
 /**

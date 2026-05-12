@@ -725,7 +725,9 @@ async function loadSkillsFromCommandsDir(
 export const getSkillDirCommands = memoize(
   async (cwd: string): Promise<Command[]> => {
     const userSkillsDir = join(getGakrcliConfigHomeDir(), 'skills')
-    const userGakrSkillsDir = join(homedir(), '.gakrcli', 'skills')
+    const userGakrSkillsDir = process.env.GAKR_CONFIG_DIR
+      ? null
+      : join(homedir(), '.gakrcli', 'skills')
     const managedSkillsDir = join(getManagedFilePath(), '.gakrcli', 'skills')
     const projectSkillsDirs = getProjectDirsUpToHome('skills', cwd)
 
@@ -743,7 +745,7 @@ export const getSkillDirCommands = memoize(
       // Ignore errors when checking npm global location
     }
 
-    const allSkillDirs = [managedSkillsDir, userSkillsDir, userGakrSkillsDir, ...(npmGlobalSkillsDir ? [npmGlobalSkillsDir] : []), ...projectSkillsDirs]
+    const allSkillDirs = [managedSkillsDir, userSkillsDir, ...(userGakrSkillsDir ? [userGakrSkillsDir] : []), ...(npmGlobalSkillsDir ? [npmGlobalSkillsDir] : []), ...projectSkillsDirs]
 
     logForDebugging(
       `Loading skills from: managed=${managedSkillsDir}, user=${userSkillsDir}, user-gakrcli=${userGakrSkillsDir}, npm-global=${npmGlobalSkillsDir}, project=[${projectSkillsDirs.join(', ')}]`,
@@ -795,7 +797,7 @@ export const getSkillDirCommands = memoize(
       isSettingSourceEnabled('userSettings') && !skillsLocked
         ? loadSkillsFromSkillsDir(userSkillsDir, 'userSettings')
         : Promise.resolve([]),
-      isSettingSourceEnabled('userSettings') && !skillsLocked
+      userGakrSkillsDir && isSettingSourceEnabled('userSettings') && !skillsLocked
         ? loadSkillsFromSkillsDir(userGakrSkillsDir, 'userSettings')
         : Promise.resolve([]),
       npmGlobalSkillsDir && projectSettingsEnabled

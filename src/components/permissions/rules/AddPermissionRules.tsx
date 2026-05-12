@@ -32,7 +32,7 @@ export function optionForPermissionSaveDestination(saveDestination: EditableSett
     case 'userSettings':
       return {
         label: 'User settings',
-        description: `Saved in at ~/.gakrcli/settings.json`,
+        description: `Saved in ~/.gakrcli/settings.json`,
         value: saveDestination
       };
   }

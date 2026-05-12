@@ -92,6 +92,14 @@ async function importHookChainsHarness(
   // through this mocked tool launcher from runtime callback wiring.
   mock.module('../tools/AgentTool/AgentTool.js', () => ({
     AgentTool: {
+      name: 'Task',
+      userFacingName: () => 'Task',
+      description: () => 'Launch an agent',
+      prompt: () => '',
+      inputSchema: {},
+      isEnabled: () => true,
+      isReadOnly: () => false,
+      needsPermissions: () => false,
       call: agentToolCallSpy,
     },
   }))

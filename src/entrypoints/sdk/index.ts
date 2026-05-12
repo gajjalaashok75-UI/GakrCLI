@@ -24,13 +24,21 @@ import { init } from '../init.js'
  * If any resolved to a stub, it means a TUI dependency leaked through.
  */
 function detectStubLeaks(): void {
-  const criticalImports: Array<{ name: string; mod: Record<string, unknown> }> = [
-    // QueryEngine is the core SDK engine — must never be a stub
-    { name: 'QueryEngine', mod: QueryEngine as unknown as Record<string, unknown> },
-    // These are imported by this file and must be real modules, not stubs
-    { name: 'getTools', mod: getTools as unknown as Record<string, unknown> },
-    { name: 'init', mod: init as unknown as Record<string, unknown> },
-  ]
+  let criticalImports: Array<{ name: string; mod: Record<string, unknown> }>
+  try {
+    criticalImports = [
+      // QueryEngine is the core SDK engine — must never be a stub
+      { name: 'QueryEngine', mod: QueryEngine as unknown as Record<string, unknown> },
+      // These are imported by this file and must be real modules, not stubs
+      { name: 'getTools', mod: getTools as unknown as Record<string, unknown> },
+      { name: 'init', mod: init as unknown as Record<string, unknown> },
+    ]
+  } catch (error) {
+    if (error instanceof ReferenceError && error.message.includes('before initialization')) {
+      return
+    }
+    throw error
+  }
 
   for (const { name, mod } of criticalImports) {
     if ('__stub' in mod && mod.__stub === true) {

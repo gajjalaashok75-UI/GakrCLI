@@ -300,9 +300,9 @@ export function getRelativeSettingsFilePathForSource(
 ): string {
   switch (source) {
     case 'projectSettings':
-      return join('.gakrcli', 'settings.json')
+      return '.gakrcli/settings.json'
     case 'localSettings':
-      return join('.gakrcli', 'settings.local.json')
+      return '.gakrcli/settings.local.json'
   }
 }
 

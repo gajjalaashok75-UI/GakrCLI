@@ -6,14 +6,13 @@
  */
 
 import { access, readFile, writeFile, mkdir, unlink } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
+import { getGakrcliConfigHomeDir } from '../envUtils.js'
 import { getAPIProvider } from './providers.js'
 
 const CACHE_VERSION = '1'
 const CACHE_TTL_HOURS = 24
-const CACHE_DIR_NAME = '.gakrcli-model-cache'
+const CACHE_DIR_NAME = 'model-cache'
 
 interface ModelCache {
   version: string
@@ -23,12 +22,16 @@ interface ModelCache {
 }
 
 function getCacheDir(): string {
-  const home = homedir()
-  const cacheDir = join(home, CACHE_DIR_NAME)
-  if (!existsSync(cacheDir)) {
-    mkdir(cacheDir, { recursive: true })
+  return join(getGakrcliConfigHomeDir(), CACHE_DIR_NAME)
+}
+
+async function ensureCacheDir(): Promise<boolean> {
+  try {
+    await mkdir(getCacheDir(), { recursive: true })
+    return true
+  } catch {
+    return false
   }
-  return cacheDir
 }
 
 function getCacheFilePath(provider: string): string {
@@ -96,6 +99,10 @@ export async function saveModelsToCache(
   const provider = getAPIProvider()
   if (!provider) return
 
+  if (!(await ensureCacheDir())) {
+    return
+  }
+
   const cachePath = getCacheFilePath(provider)
   const cacheData: ModelCache = {
     version: CACHE_VERSION,
@@ -121,6 +128,9 @@ export async function clearModelCache(provider?: string): Promise<void> {
     }
   } else {
     const cacheDir = getCacheDir()
+    if (!(await ensureCacheDir())) {
+      return
+    }
     try {
       await unlink(join(cacheDir, 'ollama.json'))
       await unlink(join(cacheDir, 'nvidia-nim.json'))

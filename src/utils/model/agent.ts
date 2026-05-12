@@ -157,6 +157,8 @@ export function checkIsClaudeNativeProvider(): boolean {
   )
 }
 
+export const checkIsGakrcliNativeProvider = checkIsClaudeNativeProvider
+
 export function getAgentModelDisplay(model: string | undefined): string {
   // When model is omitted, getDefaultSubagentModel() returns 'inherit' at runtime
   if (!model) return 'Inherit from parent (default)'

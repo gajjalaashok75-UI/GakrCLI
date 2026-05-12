@@ -8,11 +8,11 @@ import { getAPIProvider } from '../utils/model/providers.js'
 import { getWorkload } from '../utils/workloadContext.js'
 
 const DEFAULT_PREFIX =
-  `You are Gakr, an open-source fork of Gakr.`
+  `You are GakrCLI, an open-source coding agent and CLI.`
 const AGENT_SDK_GAKR_CODE_PRESET_PREFIX =
-  `You are Gakr, an open-source fork of Gakr, running within the Gakr Agent SDK.`
+  `You are GakrCLI, an open-source coding agent and CLI, running within the Gakr Agent SDK.`
 const AGENT_SDK_PREFIX =
-  `You are a Gakr agent running in Gakr, built on the Gakr Agent SDK.`
+  `You are a GakrCLI agent running in GakrCLI, built on the Gakr Agent SDK.`
 
 const CLI_SYSPROMPT_PREFIX_VALUES = [
   DEFAULT_PREFIX,

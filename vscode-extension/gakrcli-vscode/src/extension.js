@@ -1226,6 +1226,7 @@ function deactivate() {}
 module.exports = {
   activate,
   deactivate,
+  GakrCLIControlCenterProvider: gakrcliControlCenterProvider,
   gakrcliControlCenterProvider,
   renderControlCenterHtml,
   resolveLaunchTargets,

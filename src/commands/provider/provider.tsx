@@ -14,6 +14,11 @@ import { useCodexOAuthFlow } from '../../components/useCodexOAuthFlow.js'
 import { useTerminalSize } from '../../hooks/useTerminalSize.js'
 import { Box, Text } from '../../ink.js'
 import {
+  getProviderPresetUiMetadata,
+  getRouteLabel,
+  resolveRouteIdFromBaseUrl,
+} from '../../integrations/index.js'
+import {
   type CodexOAuthTokens,
 } from '../../services/api/codexOAuth.js'
 import {
@@ -227,6 +232,33 @@ function getSafeDisplayValue(
   )
 }
 
+function getConfiguredOpenAICompatibleProviderLabel(
+  baseUrl: string,
+  options?: {
+    model?: string
+  },
+): string {
+  const routeId = resolveRouteIdFromBaseUrl(baseUrl)
+  if (routeId) {
+    return getRouteLabel(routeId) ?? 'OpenAI-compatible'
+  }
+
+  const request = resolveProviderRequest({
+    model: options?.model,
+    baseUrl,
+  })
+
+  if (request.transport === 'codex_responses') {
+    return 'Codex'
+  }
+
+  if (isLocalProviderUrl(request.baseUrl)) {
+    return getLocalOpenAICompatibleProviderLabel(request.baseUrl)
+  }
+
+  return 'OpenAI-compatible'
+}
+
 export function getProviderWizardDefaults(
   processEnv: NodeJS.ProcessEnv = process.env,
 ): ProviderWizardDefaults {
@@ -274,8 +306,9 @@ export function buildCurrentProviderSummary(options?: {
   const savedProfileLabel = persisted?.profile ?? 'none'
 
   if (isEnvTruthy(processEnv.GAKR_CODE_USE_GEMINI)) {
+    const geminiMetadata = getProviderPresetUiMetadata('gemini', processEnv)
     return {
-      providerLabel: 'Google Gemini',
+      providerLabel: geminiMetadata.label,
       modelLabel: getSafeDisplayValue(
         processEnv.GEMINI_MODEL ?? DEFAULT_GEMINI_MODEL,
         secretSource,
@@ -304,8 +337,9 @@ export function buildCurrentProviderSummary(options?: {
   }
 
   if (isEnvTruthy(processEnv.GAKR_CODE_USE_MISTRAL)) {
+    const mistralMetadata = getProviderPresetUiMetadata('mistral', processEnv)
     return {
-      providerLabel: 'Mistral',
+      providerLabel: mistralMetadata.label,
       modelLabel: getSafeDisplayValue(
         processEnv.MISTRAL_MODEL ?? DEFAULT_MISTRAL_MODEL,
         processEnv
@@ -340,19 +374,13 @@ export function buildCurrentProviderSummary(options?: {
       baseUrl: processEnv.OPENAI_BASE_URL,
     })
 
-    let providerLabel = 'OpenAI-compatible'
-    if (request.transport === 'codex_responses') {
-      providerLabel = 'Codex'
-    } else if (request.baseUrl.includes('localhost:11434')) {
-      providerLabel = 'Ollama'
-    } else if (request.baseUrl.includes('localhost:1234')) {
-      providerLabel = 'LM Studio'
-    } else if (isLocalProviderUrl(request.baseUrl)) {
-      providerLabel = getLocalOpenAICompatibleProviderLabel(request.baseUrl)
-    }
-
     return {
-      providerLabel,
+      providerLabel: getConfiguredOpenAICompatibleProviderLabel(
+        request.baseUrl,
+        {
+          model: processEnv.OPENAI_MODEL,
+        },
+      ),
       modelLabel: getSafeDisplayValue(request.requestedModel, secretSource),
       endpointLabel: getSafeDisplayValue(request.baseUrl, secretSource),
       savedProfileLabel,
@@ -381,8 +409,10 @@ function buildSavedProfileSummary(
 ): SavedProfileSummary {
   switch (profile) {
     case 'gemini':
+      {
+        const geminiMetadata = getProviderPresetUiMetadata('gemini')
       return {
-        providerLabel: 'Google Gemini',
+        providerLabel: geminiMetadata.label,
         modelLabel: getSafeDisplayValue(
           env.GEMINI_MODEL ?? DEFAULT_GEMINI_MODEL,
           process.env,
@@ -402,9 +432,12 @@ function buildSavedProfileSummary(
               ? 'configured'
               : undefined,
       }
-      case 'mistral':
+      }
+    case 'mistral':
+      {
+        const mistralMetadata = getProviderPresetUiMetadata('mistral')
       return {
-        providerLabel: 'Mistral',
+        providerLabel: mistralMetadata.label,
         modelLabel: getSafeDisplayValue(
           env.MISTRAL_MODEL ?? DEFAULT_MISTRAL_MODEL,
           process.env,
@@ -419,6 +452,7 @@ function buildSavedProfileSummary(
           maskSecretForDisplay(env.MISTRAL_API_KEY) !== undefined
             ? 'configured'
             : undefined,
+      }
       }
     case 'codex':
       return {
@@ -471,12 +505,12 @@ function buildSavedProfileSummary(
         ),
       }
     case 'openai':
-    default:
+    default: {
       const baseUrl = env.OPENAI_BASE_URL ?? DEFAULT_OPENAI_BASE_URL
       return {
-        providerLabel: isLocalProviderUrl(baseUrl)
-          ? getLocalOpenAICompatibleProviderLabel(baseUrl)
-          : 'OpenAI-compatible',
+        providerLabel: getConfiguredOpenAICompatibleProviderLabel(baseUrl, {
+          model: env.OPENAI_MODEL,
+        }),
         modelLabel: getSafeDisplayValue(
           env.OPENAI_MODEL ?? 'gpt-4o',
           process.env,
@@ -492,6 +526,7 @@ function buildSavedProfileSummary(
             ? 'configured'
             : undefined,
       }
+    }
   }
 }
 

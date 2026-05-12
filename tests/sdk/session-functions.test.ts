@@ -15,6 +15,28 @@ import {
 import { readJSONLFile } from '../../src/utils/json.js'
 import { getProjectDir } from '../../src/utils/sessionStoragePortable.js'
 
+let testConfigDir: string | undefined
+let previousConfigDir: string | undefined
+
+beforeEach(() => {
+  previousConfigDir = process.env.GAKR_CONFIG_DIR
+  testConfigDir = join(tmpdir(), `sdk-session-config-${process.pid}-${randomUUID()}`)
+  process.env.GAKR_CONFIG_DIR = testConfigDir
+})
+
+afterEach(() => {
+  if (previousConfigDir === undefined) {
+    delete process.env.GAKR_CONFIG_DIR
+  } else {
+    process.env.GAKR_CONFIG_DIR = previousConfigDir
+  }
+
+  if (testConfigDir) {
+    rmSync(testConfigDir, { recursive: true, force: true })
+  }
+  testConfigDir = undefined
+})
+
 describe('SDK session functions', () => {
   test('listSessions returns array', async () => {
     const sessions = await listSessions()

@@ -56,9 +56,9 @@ describe('GakrCLI paths', () => {
     const { getgakrcliConfigHomeDir, resolveGakrcliConfigHomeDir } =
       await importFreshEnvUtils()
 
-    expect(getClaudeConfigHomeDir()).toBe('/tmp/custom-gakrcli')
+    expect(getgakrcliConfigHomeDir()).toBe('/tmp/custom-gakrcli')
     expect(
-      resolveClaudeConfigHomeDir({
+      resolveGakrcliConfigHomeDir({
         configDirEnv: '/tmp/custom-gakrcli',
       }),
     ).toBe('/tmp/custom-gakrcli')
@@ -68,10 +68,10 @@ describe('GakrCLI paths', () => {
     const { getRelativeSettingsFilePathForSource } = await importFreshSettings()
 
     expect(getRelativeSettingsFilePathForSource('projectSettings')).toBe(
-      '.openclaude/settings.json',
+      '.gakrcli/settings.json',
     )
     expect(getRelativeSettingsFilePathForSource('localSettings')).toBe(
-      '.openclaude/settings.local.json',
+      '.gakrcli/settings.local.json',
     )
   })
 

@@ -32,7 +32,6 @@ const TIP_MATCHERS: TipMatcher[] = [
     tip: {
       suggestion:
         'Valid modes: "acceptEdits" (ask before file changes), "plan" (analysis only), "bypassPermissions" (auto-accept all), or "default" (standard behavior)',
-      docLink: `${DOCUMENTATION_BASE}/iam#permission-modes`,
     },
   },
   {
@@ -153,7 +152,7 @@ export function getValidationTip(context: TipContext): ValidationTip | null {
   }
 
   // Add documentation link based on path prefix
-  if (!tip.docLink && context.path) {
+  if (!tip.docLink && context.path && context.path !== 'permissions.defaultMode') {
     const pathPrefix = context.path.split('.')[0]
     if (pathPrefix) {
       tip.docLink = PATH_DOC_LINKS[pathPrefix]

@@ -15,6 +15,23 @@ function restoreEnv(key: string, value: string | undefined): void {
   }
 }
 
+function mockDebugModule(debugSpy: ReturnType<typeof mock>): void {
+  mock.module('../../utils/debug.js', () => ({
+    enableDebugLogging: () => false,
+    flushDebugLogs: async () => {},
+    getDebugFilePath: () => null,
+    getDebugFilter: () => null,
+    getDebugLogPath: () => '',
+    getHasFormattedOutput: () => false,
+    getMinDebugLogLevel: () => 'debug',
+    isDebugMode: () => false,
+    isDebugToStdErr: () => false,
+    logAntError: mock(() => {}),
+    logForDebugging: debugSpy,
+    setHasFormattedOutput: () => {},
+  }))
+}
+
 afterEach(() => {
   globalThis.fetch = originalFetch
   restoreEnv('OPENAI_BASE_URL', originalEnv.OPENAI_BASE_URL)
@@ -25,9 +42,7 @@ afterEach(() => {
 
 test('logs classified transport diagnostics with category and code', async () => {
   const debugSpy = mock(() => {})
-  mock.module('../../utils/debug.js', () => ({
-    logForDebugging: debugSpy,
-  }))
+  mockDebugModule(debugSpy)
 
   const nonce = `${Date.now()}-${Math.random()}`
   const { createOpenAIShimClient } = await import(`./openaiShim.ts?ts=${nonce}`)
@@ -72,9 +87,7 @@ test('logs classified transport diagnostics with category and code', async () =>
 
 test('redacts credentials in transport diagnostic URL logs', async () => {
   const debugSpy = mock(() => {})
-  mock.module('../../utils/debug.js', () => ({
-    logForDebugging: debugSpy,
-  }))
+  mockDebugModule(debugSpy)
 
   const nonce = `${Date.now()}-${Math.random()}`
   const { createOpenAIShimClient } = await import(`./openaiShim.ts?ts=${nonce}`)
@@ -119,9 +132,7 @@ test('redacts credentials in transport diagnostic URL logs', async () => {
 })
 test('logs self-heal localhost fallback with redacted from/to URLs', async () => {
   const debugSpy = mock(() => {})
-  mock.module('../../utils/debug.js', () => ({
-    logForDebugging: debugSpy,
-  }))
+  mockDebugModule(debugSpy)
 
   const nonce = `${Date.now()}-${Math.random()}`
   const { createOpenAIShimClient } = await import(`./openaiShim.ts?ts=${nonce}`)
@@ -196,9 +207,7 @@ test('logs self-heal localhost fallback with redacted from/to URLs', async () =>
 
 test('logs self-heal toolless retry for local tool-call incompatibility', async () => {
   const debugSpy = mock(() => {})
-  mock.module('../../utils/debug.js', () => ({
-    logForDebugging: debugSpy,
-  }))
+  mockDebugModule(debugSpy)
 
   const nonce = `${Date.now()}-${Math.random()}`
   const { createOpenAIShimClient } = await import(`./openaiShim.ts?ts=${nonce}`)

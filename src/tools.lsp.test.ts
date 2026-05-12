@@ -8,6 +8,7 @@ mock.module('./services/lsp/manager.js', () => ({
   getLspServerManager: () => undefined,
   isLspConnected: () => lspConnected,
   reinitializeLspServerManager: () => {},
+  shutdownLspServerManager: async () => {},
   waitForInitialization: async () => {},
 }))
 

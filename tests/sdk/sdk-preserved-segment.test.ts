@@ -139,8 +139,22 @@ function createCompactTranscriptWithPreservedSegment(
 }
 
 let tempDirs: string[] = []
+let originalConfigDir: string | undefined
+
+beforeEach(() => {
+  originalConfigDir = process.env.GAKR_CONFIG_DIR
+  const configDir = join(tmpdir(), `sdk-preserved-config-${randomUUID()}`)
+  process.env.GAKR_CONFIG_DIR = configDir
+  tempDirs.push(configDir)
+})
 
 afterEach(() => {
+  if (originalConfigDir === undefined) {
+    delete process.env.GAKR_CONFIG_DIR
+  } else {
+    process.env.GAKR_CONFIG_DIR = originalConfigDir
+  }
+
   for (const dir of tempDirs) {
     rmSync(dir, { recursive: true, force: true })
   }

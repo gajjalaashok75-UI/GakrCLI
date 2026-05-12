@@ -4,6 +4,8 @@ import type { AssistantMessage, Message } from '../types/message.js'
 import { SYNTHETIC_MESSAGES, SYNTHETIC_MODEL } from './messages.js'
 import { jsonStringify } from './slowOperations.js'
 
+export { extractThinkingTokens } from './thinkingTokenExtractor.js'
+
 export function getTokenUsage(message: Message): Usage | undefined {
   if (
     message?.type === 'assistant' &&

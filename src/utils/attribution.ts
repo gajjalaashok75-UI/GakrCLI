@@ -5,11 +5,6 @@ import { getRemoteSessionUrl, isRemoteSessionLocal } from '../constants/product.
 import { isEnvTruthy } from './envUtils.js'
 import { TERMINAL_OUTPUT_TAGS } from '../constants/xml.js'
 import type { AppState } from '../state/AppState.js'
-import { FILE_EDIT_TOOL_NAME } from '../tools/FileEditTool/constants.js'
-import { FILE_READ_TOOL_NAME } from '../tools/FileReadTool/prompt.js'
-import { FILE_WRITE_TOOL_NAME } from '../tools/FileWriteTool/prompt.js'
-import { GLOB_TOOL_NAME } from '../tools/GlobTool/prompt.js'
-import { GREP_TOOL_NAME } from '../tools/GrepTool/prompt.js'
 import type { Entry } from '../types/logs.js'
 import {
   type AttributionData,
@@ -51,10 +46,24 @@ function sanitizeCoAuthorNamePart(value: string): string {
 function formatGakrcliCoAuthorName(model: string): string {
   const publicName = getPublicModelDisplayName(model)
   if (!publicName) {
-    return sanitizeCoAuthorNamePart(getPublicModelName(model))
+    if (model.toLowerCase().includes('gakrcli')) {
+      if (model.toLowerCase().includes('opus-4-6')) {
+        return 'GakrCLI Opus 4.6'
+      }
+      const publicModelName = getPublicModelName(model)
+      return sanitizeCoAuthorNamePart(
+        publicModelName.startsWith('Gakr ')
+          ? `GakrCLI ${publicModelName.slice('Gakr '.length)}`
+          : publicModelName,
+      )
+    }
+    const sanitizedModel = sanitizeCoAuthorNamePart(model)
+    return sanitizedModel ? `GakrCLI (${sanitizedModel})` : 'GakrCLI'
   }
   const coAuthorName = publicName.startsWith('GakrCLI ')
     ? publicName
+    : publicName.startsWith('Gakr ')
+    ? `GakrCLI ${publicName.slice('Gakr '.length)}`
     : `GakrCLI ${publicName}`
   return sanitizeCoAuthorNamePart(coAuthorName)
 }
@@ -75,9 +84,12 @@ export function getDefaultCommitCoAuthorName({
     apiProvider === 'bedrock' ||
     apiProvider === 'vertex' ||
     apiProvider === 'foundry' ||
-    normalizedModel.includes('GakrCLI')
+    normalizedModel.includes('gakrcli')
 
-  if (isGakrcliProvider && (isInternalRepo || isKnownPublicModel)) {
+  if (
+    isGakrcliProvider &&
+    (isInternalRepo || isKnownPublicModel || normalizedModel.includes('gakrcli'))
+  ) {
     return formatGakrcliCoAuthorName(model)
   }
 
@@ -86,7 +98,7 @@ export function getDefaultCommitCoAuthorName({
   // actual configured model instead of claiming GakrCLI Opus.
   if (apiProvider === 'firstParty') {
     // @[MODEL LAUNCH]: Update this fallback when the default public GakrCLI model changes.
-    return 'GakrCLI Opus 4.6'
+    return 'Gakr Opus 4.6'
   }
 
   const sanitizedModel = sanitizeCoAuthorNamePart(model)
@@ -273,11 +285,11 @@ async function getPRAttributionData(
 }
 
 const MEMORY_ACCESS_TOOL_NAMES = new Set([
-  FILE_READ_TOOL_NAME,
-  GREP_TOOL_NAME,
-  GLOB_TOOL_NAME,
-  FILE_EDIT_TOOL_NAME,
-  FILE_WRITE_TOOL_NAME,
+  'Read',
+  'Grep',
+  'Glob',
+  'Edit',
+  'Write',
 ])
 
 /**

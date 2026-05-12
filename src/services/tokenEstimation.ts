@@ -235,7 +235,7 @@ export interface ModelTokenizerConfig {
 }
 
 export const MODEL_TOKENIZER_CONFIGS: ModelTokenizerConfig[] = [
-  { modelFamily: 'gakr', bytesPerToken: 3.5, supportsJson: true, supportsCode: true },
+  { modelFamily: 'claude', bytesPerToken: 3.5, supportsJson: true, supportsCode: true },
   { modelFamily: 'gpt-4', bytesPerToken: 4, supportsJson: true, supportsCode: true },
   { modelFamily: 'gpt-3.5', bytesPerToken: 4, supportsJson: true, supportsCode: true },
   { modelFamily: 'gemini', bytesPerToken: 3.5, supportsJson: true, supportsCode: true },

@@ -104,6 +104,13 @@ test('login picker shows the third-party platform option', async () => {
 })
 
 test('third-party provider branch opens the first-run provider manager', async () => {
+  const previousNvidiaMode = process.env.GAKR_CODE_USE_NVIDIA
+  const previousNvidiaModel = process.env.NVIDIA_MODEL
+  const previousNvidiaBaseUrl = process.env.NVIDIA_BASE_URL
+  delete process.env.GAKR_CODE_USE_NVIDIA
+  delete process.env.NVIDIA_MODEL
+  delete process.env.NVIDIA_BASE_URL
+
   const output = await renderFrame(
     <ConsoleOAuthFlow
       initialStatus={{ state: 'platform_setup' }}
@@ -111,12 +118,25 @@ test('third-party provider branch opens the first-run provider manager', async (
     />,
   )
 
-  expect(output).toContain('Set up provider')
-  // Anthropic is pinned first and the remaining presets stay near
-  // description order, so these sentinel labels should remain visible
-  // in the 13-row test frame.
-  expect(output).toContain('Anthropic')
-  expect(output).toContain('Azure OpenAI')
-  expect(output).toContain('DeepSeek')
-  expect(output).toContain('Google Gemini')
+  if (previousNvidiaMode === undefined) {
+    delete process.env.GAKR_CODE_USE_NVIDIA
+  } else {
+    process.env.GAKR_CODE_USE_NVIDIA = previousNvidiaMode
+  }
+  if (previousNvidiaModel === undefined) {
+    delete process.env.NVIDIA_MODEL
+  } else {
+    process.env.NVIDIA_MODEL = previousNvidiaModel
+  }
+  if (previousNvidiaBaseUrl === undefined) {
+    delete process.env.NVIDIA_BASE_URL
+  } else {
+    process.env.NVIDIA_BASE_URL = previousNvidiaBaseUrl
+  }
+
+  expect(output).toContain('Set up a provider profile')
+  expect(output).toContain('Ollama')
+  expect(output).toContain('OpenAI-compatible')
+  expect(output).toContain('NVIDIA NIMs')
+  expect(output).toContain('Gemini')
 })

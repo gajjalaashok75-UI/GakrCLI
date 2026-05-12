@@ -23,7 +23,11 @@ import { STATUSLINE_SETUP_AGENT } from '../tools/AgentTool/built-in/statuslineSe
 const originalSimpleEnv = process.env.GAKR_CODE_SIMPLE
 
 afterEach(() => {
-  process.env.GKAR_CODE_SIMPLE = originalSimpleEnv
+  if (originalSimpleEnv === undefined) {
+    delete process.env.GAKR_CODE_SIMPLE
+  } else {
+    process.env.GAKR_CODE_SIMPLE = originalSimpleEnv
+  }
   clearSystemPromptSections()
 })
 

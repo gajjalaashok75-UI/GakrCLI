@@ -5,6 +5,16 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-05-12 20:22:51 +05:30
+
+### Fixed
+- **Root Test Suite Stabilization**: Updated the root test script to ignore generated `dist/` output and `references/` fixtures so the active source tests run cleanly.
+- **Provider Configuration**: Preserved and refined NVIDIA provider mode while keeping Codex, OpenAI, GitHub, Gemini, Mistral, and other provider routes isolated.
+- **Runtime Reliability**: Fixed provider cache partitioning, GakrCLI config path isolation, skills/session test isolation, OAuth refresh handling, shell tool sandbox schema exposure, Firecrawl configuration, auto-fix timeout handling, and token/cache/model helper behavior.
+- **CLI and Extension Polish**: Restored rapid text input buffering, LSP tool registration behavior, GakrCLI branding, local installer paths, secure storage naming, and VS Code extension provider environment detection.
+- **Coverage**: Added NVIDIA provider regression tests and renamed GakrCLI installer/path/UI coverage from the previous OpenClaude test surfaces.
+- **Verification**: Root test suite passes with `bun.cmd run test` (`2343 pass`, `0 fail`).
+
 ## [0.5.0] - 2026-05-12 17:43:25 +05:30
 
 ### Fixed

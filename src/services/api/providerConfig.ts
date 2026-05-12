@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { isIP } from 'node:net'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -14,7 +15,14 @@ import {
   asTrimmedString,
   parseChatgptAccountId,
 } from './codexOAuthShared.js'
-import { DEFAULT_GEMINI_BASE_URL } from 'src/utils/providerProfile.js'
+import {
+  DEFAULT_GEMINI_BASE_URL,
+  DEFAULT_GEMINI_MODEL,
+} from 'src/utils/providerProfile.js'
+import {
+  openAIShimSupportsApiFormatForModel,
+  resolveOpenAIShimRuntimeContext,
+} from '../../integrations/runtimeMetadata.js'
 export const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1'
 export const DEFAULT_CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex'
 export const DEFAULT_NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1'
@@ -110,6 +118,17 @@ type ModelDescriptor = {
 }
 
 const LOCALHOST_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1'])
+
+function hashCacheScopePartition(value: unknown): string {
+  return createHash('sha256')
+    .update(JSON.stringify(value))
+    .digest('hex')
+    .slice(0, 16)
+}
+
+function normalizeCacheScopeHeaderValue(value: string | undefined): string {
+  return value?.trim() ?? ''
+}
 
 function isPrivateIpv4Address(hostname: string): boolean {
   const octets = hostname.split('.').map(part => Number.parseInt(part, 10))
@@ -503,24 +522,46 @@ export function resolveProviderRequest(options?: {
   reasoningEffortOverride?: ReasoningEffort
   apiFormat?: OpenAICompatibleApiFormat | string
 }): ResolvedProviderRequest {
+  const explicitModel = options?.model?.trim()
+  const isOpenAIMode = isEnvTruthy(process.env.GAKR_CODE_USE_OPENAI)
   const isGithubMode = isEnvTruthy(process.env.GAKR_CODE_USE_GITHUB)
-  const isNvidiaMode = isEnvTruthy(process.env.GAKR_CODE_USE_NVIDIA)
   const isMistralMode = isEnvTruthy(process.env.GAKR_CODE_USE_MISTRAL)
   const isGeminiMode = isEnvTruthy(process.env.GAKR_CODE_USE_GEMINI)
+  const openAIEnvModel = process.env.OPENAI_MODEL?.trim()
+  const nvidiaEnvModel = process.env.NVIDIA_MODEL?.trim()
+  const openAIEnvBaseUrl = asEnvUrl(process.env.OPENAI_BASE_URL)
+  const openAIEnvModelLooksNvidia =
+    !openAIEnvModel ||
+    openAIEnvModel === nvidiaEnvModel ||
+    openAIEnvModel.startsWith('nvidia/')
+  const openAIEnvBaseUrlLooksNvidia =
+    !openAIEnvBaseUrl ||
+    openAIEnvBaseUrl.toLowerCase().includes('nvidia')
+  const isNvidiaMode =
+    isEnvTruthy(process.env.GAKR_CODE_USE_NVIDIA) &&
+    !isOpenAIMode &&
+    !isGithubMode &&
+    !isMistralMode &&
+    !isGeminiMode &&
+    openAIEnvModelLooksNvidia &&
+    openAIEnvBaseUrlLooksNvidia &&
+    (!explicitModel ||
+      explicitModel === nvidiaEnvModel ||
+      explicitModel.startsWith('nvidia/'))
+  const envRequestedModel = isMistralMode
+    ? process.env.MISTRAL_MODEL?.trim()
+    : isGeminiMode
+    ? process.env.GEMINI_MODEL?.trim()
+    : isNvidiaMode
+    ? nvidiaEnvModel ?? openAIEnvModel
+    : openAIEnvModel
   const requestedModel =
-    options?.model?.trim() ||
-    (isNvidiaMode ? process.env.NVIDIA_MODEL?.trim() : undefined) ||
-    process.env.OPENAI_MODEL?.trim() ||
+    explicitModel ||
+    envRequestedModel ||
     options?.fallbackModel?.trim() ||
-    options?.model?.trim() ||
-    (isMistralMode
-      ? process.env.MISTRAL_MODEL?.trim()
-      : process.env.OPENAI_MODEL?.trim()) ||
-    (isGeminiMode
-      ? process.env.GEMINI_MODEL?.trim()
-      : process.env.OPENAI_MODEL?.trim()) ||
-    options?.fallbackModel?.trim() ||
-    (isNvidiaMode ? DEFAULT_NVIDIA_MODEL : isGithubMode ? 'github:copilot' : 'gpt-4o')
+    (isGeminiMode ? DEFAULT_GEMINI_MODEL : undefined) ||
+    (isNvidiaMode ? DEFAULT_NVIDIA_MODEL : undefined) ||
+    (isGithubMode ? 'github:copilot' : 'gpt-4o')
   const descriptor = parseModelDescriptor(requestedModel)
   const explicitBaseUrl = asEnvUrl(options?.baseUrl)
 
@@ -533,10 +574,17 @@ export function resolveProviderRequest(options?: {
     process.env.GEMINI_BASE_URL,
     'GEMINI_BASE_URL',
   )
+
+  const normalizedNvidiaEnvBaseUrl = asNamedEnvUrl(
+    process.env.NVIDIA_BASE_URL,
+    'NVIDIA_BASE_URL',
+  )
   const primaryEnvBaseUrl = isMistralMode
     ? normalizedMistralEnvBaseUrl
     : isGeminiMode
     ? normalizedGeminiEnvBaseUrl
+    : isNvidiaMode
+    ? normalizedNvidiaEnvBaseUrl
     : asNamedEnvUrl(process.env.OPENAI_BASE_URL, 'OPENAI_BASE_URL')
 
   // In Mistral mode, a literal "undefined" MISTRAL_BASE_URL is treated as
@@ -549,6 +597,10 @@ export function resolveProviderRequest(options?: {
     : isGeminiMode
     ? (primaryEnvBaseUrl === undefined
       ? asNamedEnvUrl(process.env.OPENAI_API_BASE, 'OPENAI_API_BASE') ?? DEFAULT_GEMINI_BASE_URL
+      : undefined)
+    : isNvidiaMode
+    ? (primaryEnvBaseUrl === undefined
+      ? asNamedEnvUrl(process.env.OPENAI_API_BASE, 'OPENAI_API_BASE') ?? DEFAULT_NVIDIA_BASE_URL
       : undefined)
     : (primaryEnvBaseUrl === undefined
       ? asNamedEnvUrl(process.env.OPENAI_API_BASE, 'OPENAI_API_BASE')
@@ -563,12 +615,7 @@ export function resolveProviderRequest(options?: {
     isCodexModelForGithub && envBaseUrlRaw && getGithubEndpointType(envBaseUrlRaw) === 'custom'
       ? undefined
       : envBaseUrlRaw
-  const rawBaseUrl =
-    options?.baseUrl ??
-    (isNvidiaMode ? process.env.NVIDIA_BASE_URL : undefined) ??
-    process.env.OPENAI_BASE_URL ??
-    process.env.OPENAI_API_BASE ??
-    undefined
+  const rawBaseUrl = explicitBaseUrl ?? envBaseUrl
   // Use Codex transport only when:
   // - the base URL is explicitly the Codex endpoint, OR
   // - the model is a Codex alias AND no custom base URL has been set
@@ -602,13 +649,31 @@ export function resolveProviderRequest(options?: {
     ? normalizeGithubModelsApiModel(requestedModel)
     : requestedModel
   const requestedApiFormat =
-    parseOpenAICompatibleApiFormat(options?.apiFormat) ??
-    parseOpenAICompatibleApiFormat(process.env.OPENAI_API_FORMAT)
+    isGithubMode
+      ? undefined
+      : parseOpenAICompatibleApiFormat(options?.apiFormat) ??
+        parseOpenAICompatibleApiFormat(process.env.OPENAI_API_FORMAT)
+  const supportsRequestedApiFormat =
+    requestedApiFormat !== 'responses' ||
+    (() => {
+      const runtimeShimContext = resolveOpenAIShimRuntimeContext({
+        processEnv: process.env,
+        baseUrl: finalBaseUrl,
+        model: descriptor.baseModel,
+        treatAsLocal: finalBaseUrl ? isLocalProviderUrl(finalBaseUrl) : false,
+      })
+
+      return openAIShimSupportsApiFormatForModel(
+        runtimeShimContext.openaiShimConfig,
+        'responses',
+        descriptor.baseModel,
+      )
+    })()
   const transport: ProviderTransport =
     shouldUseCodexTransport(requestedModel, finalBaseUrl) ||
       (isGithubCopilot && shouldUseGithubResponsesApi(githubResolvedModel))
       ? 'codex_responses'
-      : requestedApiFormat === 'responses'
+      : requestedApiFormat === 'responses' && supportsRequestedApiFormat
         ? 'responses'
         : 'chat_completions'
   
@@ -620,8 +685,6 @@ export function resolveProviderRequest(options?: {
     ? normalizeGithubCopilotModel(descriptor.baseModel)
     : (isGithubModels || isGithubCustom
       ? normalizeGithubModelsApiModel(descriptor.baseModel)
-      : isNvidiaMode
-      ? descriptor.baseModel // Use model as-is for NVIDIA
       : descriptor.baseModel)
 
   const reasoning = options?.reasoningEffortOverride
@@ -638,8 +701,6 @@ export function resolveProviderRequest(options?: {
           ? GITHUB_COPILOT_BASE_URL
           : (isGithubMode
             ? GITHUB_COPILOT_BASE_URL
-            : isNvidiaMode
-            ? DEFAULT_NVIDIA_BASE_URL
             : DEFAULT_OPENAI_BASE_URL))
       ).replace(/\/+$/, ''),
     reasoning,
@@ -650,6 +711,7 @@ export function getAdditionalModelOptionsCacheScope(): string | null {
     if (!isEnvTruthy(process.env.GAKR_CODE_USE_GEMINI) &&
         !isEnvTruthy(process.env.GAKR_CODE_USE_MISTRAL) &&
         !isEnvTruthy(process.env.GAKR_CODE_USE_GITHUB) &&
+        !isEnvTruthy(process.env.GAKR_CODE_USE_NVIDIA) &&
         !isEnvTruthy(process.env.GAKR_CODE_USE_BEDROCK) &&
         !isEnvTruthy(process.env.GAKR_CODE_USE_VERTEX) &&
         !isEnvTruthy(process.env.GAKR_CODE_USE_FOUNDRY)) {
@@ -667,7 +729,15 @@ export function getAdditionalModelOptionsCacheScope(): string | null {
     return null
   }
 
-  return `openai:${request.baseUrl.toLowerCase()}`
+  const partition = hashCacheScopePartition({
+    apiKey: normalizeCacheScopeHeaderValue(process.env.OPENAI_API_KEY),
+    authHeader: normalizeCacheScopeHeaderValue(process.env.OPENAI_AUTH_HEADER).toLowerCase(),
+    authScheme: normalizeCacheScopeHeaderValue(process.env.OPENAI_AUTH_SCHEME).toLowerCase(),
+    authHeaderValue: normalizeCacheScopeHeaderValue(process.env.OPENAI_AUTH_HEADER_VALUE),
+    customHeaders: normalizeCacheScopeHeaderValue(process.env.ANTHROPIC_CUSTOM_HEADERS),
+  })
+
+  return `openai:${request.baseUrl.toLowerCase()}:${partition}`
 }
 export function resolveCodexAuthPath(
   env: NodeJS.ProcessEnv = process.env,
