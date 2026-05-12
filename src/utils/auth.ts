@@ -2019,7 +2019,7 @@ export async function validateForceLoginOrg(): Promise<OrgValidationResult> {
     message:
       `Your authentication token belongs to organization ${tokenOrgUuid},\n` +
       `but this machine requires organization ${requiredOrgUuid}.\n\n` +
-      `Please log in with the correct organization: gakrcli auth login`,
+      `Please log in with the correct organization: gakr oauth login`,
   }
 }
 

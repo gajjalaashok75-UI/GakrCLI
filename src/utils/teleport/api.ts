@@ -185,7 +185,7 @@ export async function prepareApiRequest(): Promise<{
   const accessToken = getgakrcliAIOAuthTokens()?.accessToken
   if (accessToken === undefined) {
     throw new Error(
-      'Gakr web sessions require authentication with a Gakr.ai account. API key authentication is not sufficient. Please run /login to authenticate, or check your authentication status with /status.',
+      'Gakr web sessions require authentication with a Gakr.ai account. API key authentication is not sufficient. Please run gakr oauth login to authenticate, or check your authentication status with /status.',
     )
   }
 
@@ -314,7 +314,7 @@ export async function fetchSession(
     }
 
     if (response.status === 401) {
-      throw new Error('Session expired. Please run /login to sign in again.')
+      throw new Error('Session expired. Please run gakr oauth login to sign in again.')
     }
 
     throw new Error(

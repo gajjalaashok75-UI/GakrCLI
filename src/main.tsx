@@ -2012,13 +2012,8 @@ async function run() {
                 }
                 agentDef.pendingSnapshotUpdate = undefined;
             }
-            // Skip executing /login if we just completed onboarding for it
-            if (onboardingShown && prompt?.trim().toLowerCase() === '/login') {
-                prompt = '';
-            }
             if (onboardingShown) {
-                // Refresh auth-dependent services now that the user has logged in during onboarding.
-                // Keep in sync with the post-login logic in src/commands/login.tsx
+                // Refresh auth-dependent services now that onboarding may have updated credentials.
                 void refreshRemoteManagedSettings();
                 void refreshPolicyLimits();
                 // Clear user data cache BEFORE GrowthBook refresh so it picks up fresh credentials
@@ -3657,7 +3652,7 @@ async function run() {
             // Argv rewriting in main() should have consumed `ssh <host>` before
             // commander runs. Reaching here means host was missing or the
             // rewrite predicate didn't match.
-            process.stderr.write('Usage: gakrcli ssh <user@host | ssh-config-alias> [dir]\n\n' + "Runs Gakr on a remote Linux host. You don't need to install\n" + 'anything on the remote or run `gakrcli auth login` there — the binary is\n' + 'deployed over SSH and API auth tunnels back through your local machine.\n');
+            process.stderr.write('Usage: gakrcli ssh <user@host | ssh-config-alias> [dir]\n\n' + "Runs Gakr on a remote Linux host. You don't need to install\n" + 'anything on the remote or run `gakr oauth login` there — the binary is\n' + 'deployed over SSH and API auth tunnels back through your local machine.\n');
             process.exit(1);
         });
     }
@@ -3695,7 +3690,7 @@ async function run() {
         });
     }
     // gakrcli auth
-    const auth = program.command('auth').description('Manage authentication').configureHelp(createSortedHelpConfig());
+    const auth = program.command('auth').alias('oauth').description('Manage authentication').configureHelp(createSortedHelpConfig());
     auth.command('login').description('Sign in with your Gakr account').option('--email <email>', 'Pre-populate email address on the login page').option('--sso', 'Force SSO login flow').option('--gakrcliai', 'Use Gakr subscription (default)').action(async ({ email, sso, gakrcliai }) => {
         const { authLogin } = await import('./cli/handlers/auth.js');
         await authLogin({

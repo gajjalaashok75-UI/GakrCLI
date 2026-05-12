@@ -33,7 +33,7 @@ export async function fetchEnvironments(): Promise<EnvironmentResource[]> {
   const accessToken = getgakrcliAIOAuthTokens()?.accessToken
   if (!accessToken) {
     throw new Error(
-      'Gakr web sessions require authentication with a Gakr.ai account. API key authentication is not sufficient. Please run /login to authenticate, or check your authentication status with /status.',
+      'Gakr web sessions require authentication with a Gakr.ai account. API key authentication is not sufficient. Please run gakr oauth login to authenticate, or check your authentication status with /status.',
     )
   }
 
