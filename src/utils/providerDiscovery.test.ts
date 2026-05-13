@@ -16,7 +16,8 @@ afterEach(() => {
 })
 
 test('lists models from a local openai-compatible /models endpoint', async () => {
-  const { listOpenAICompatibleModels } = await loadProviderDiscoveryModule()
+  const { listOpenAICompatibleModelEntries, listOpenAICompatibleModels } =
+    await loadProviderDiscoveryModule()
 
   globalThis.fetch = mock((input, init) => {
     const url = typeof input === 'string' ? input : input.url
@@ -45,6 +46,91 @@ test('lists models from a local openai-compatible /models endpoint', async () =>
   ).resolves.toEqual([
     'qwen2.5-coder-7b-instruct',
     'llama-3.2-3b-instruct',
+  ])
+
+  await expect(
+    listOpenAICompatibleModelEntries({
+      baseUrl: 'http://localhost:1234/v1',
+      apiKey: 'local-key',
+    }),
+  ).resolves.toEqual([
+    { id: 'qwen2.5-coder-7b-instruct' },
+    { id: 'llama-3.2-3b-instruct' },
+  ])
+})
+
+test('normalizes rich openai-compatible model metadata', async () => {
+  const { listOpenAICompatibleModelEntries } = await loadProviderDiscoveryModule()
+
+  globalThis.fetch = mock(() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              id: 'openai/gpt-5-mini',
+              name: 'GPT-5 Mini',
+              context_length: 400000,
+            },
+            {
+              id: 'deepseek-v4-pro',
+              owned_by: 'deepseek',
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    ),
+  ) as typeof globalThis.fetch
+
+  await expect(
+    listOpenAICompatibleModelEntries({
+      baseUrl: 'https://openrouter.ai/api/v1',
+    }),
+  ).resolves.toEqual([
+    {
+      id: 'openai/gpt-5-mini',
+      label: 'GPT-5 Mini',
+      owner: 'openai',
+      contextWindow: 400000,
+    },
+    {
+      id: 'deepseek-v4-pro',
+      owner: 'deepseek',
+    },
+  ])
+})
+
+test('normalizes top-level array model lists', async () => {
+  const { listOpenAICompatibleModelEntries } = await loadProviderDiscoveryModule()
+
+  globalThis.fetch = mock(() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify([
+          {
+            id: 'Qwen/Qwen3.5-9B',
+            display_name: 'Qwen 3.5 9B',
+            organization: 'Qwen',
+            context_length: 131072,
+          },
+        ]),
+        { status: 200 },
+      ),
+    ),
+  ) as typeof globalThis.fetch
+
+  await expect(
+    listOpenAICompatibleModelEntries({
+      baseUrl: 'https://api.together.xyz/v1',
+    }),
+  ).resolves.toEqual([
+    {
+      id: 'Qwen/Qwen3.5-9B',
+      label: 'Qwen 3.5 9B',
+      owner: 'Qwen',
+      contextWindow: 131072,
+    },
   ])
 })
 

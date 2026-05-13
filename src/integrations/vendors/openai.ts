@@ -45,7 +45,11 @@ export default defineVendor({
   },
   isFirstParty: true,
   catalog: {
-    source: 'static',
+    source: 'hybrid',
+    discovery: { kind: 'openai-compatible' },
+    discoveryCacheTtl: '1d',
+    discoveryRefreshMode: 'background-if-stale',
+    allowManualRefresh: true,
     models: [
       { id: 'gpt-5.4', apiName: 'gpt-5.4', label: 'GPT-5.4' },
       { id: 'gpt-5-mini', apiName: 'gpt-5-mini', label: 'GPT-5 Mini' },

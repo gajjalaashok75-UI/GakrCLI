@@ -77,6 +77,7 @@ export interface ModelCatalogEntry {
   id: string
   apiName: string
   label?: string
+  owner?: string
   default?: boolean
   hidden?: boolean
   modelDescriptorId?: string

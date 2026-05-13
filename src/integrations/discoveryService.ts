@@ -23,10 +23,11 @@ import type {
   OllamaGenerationReadiness,
 } from '../utils/providerDiscovery.js'
 import {
-  listOpenAICompatibleModels,
+  listOpenAICompatibleModelEntries,
   probeOllamaModelCatalog,
   probeAtomicChatReadiness,
   probeOllamaGenerationReadiness,
+  type OpenAICompatibleModelInfo,
 } from '../utils/providerDiscovery.js'
 import { isEssentialTrafficOnly } from '../utils/privacyLevel.js'
 
@@ -174,11 +175,23 @@ function getRouteDiscoveryHeaders(
   return Object.keys(headers).length > 0 ? headers : undefined
 }
 
-function toDiscoveredModelEntry(modelId: string): ModelCatalogEntry {
+function toDiscoveredModelEntry(
+  model: string | OpenAICompatibleModelInfo,
+): ModelCatalogEntry {
+  if (typeof model !== 'string') {
+    return {
+      id: model.id,
+      apiName: model.id,
+      ...(model.label ? { label: model.label } : {}),
+      ...(model.owner ? { owner: model.owner } : {}),
+      ...(model.contextWindow ? { contextWindow: model.contextWindow } : {}),
+    }
+  }
+
   return {
-    id: modelId,
-    apiName: modelId,
-    label: modelId,
+    id: model,
+    apiName: model,
+    label: model,
   }
 }
 
@@ -236,7 +249,7 @@ async function runDiscovery(
     }
 
     case 'openai-compatible': {
-      const models = await listOpenAICompatibleModels({
+      const models = await listOpenAICompatibleModelEntries({
         baseUrl: getRouteBaseUrl(routeId, options),
         apiKey: getRouteDiscoveryApiKey(routeId, options),
         headers: getRouteDiscoveryHeaders(routeId, options),

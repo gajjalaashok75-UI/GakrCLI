@@ -35,7 +35,11 @@ export default defineVendor({
       'MiniMax auth is required. Set MINIMAX_API_KEY or OPENAI_API_KEY.',
   },
   catalog: {
-    source: 'static',
+    source: 'hybrid',
+    discovery: { kind: 'openai-compatible' },
+    discoveryCacheTtl: '1d',
+    discoveryRefreshMode: 'background-if-stale',
+    allowManualRefresh: true,
     models: [
       { id: 'minimax-m2', apiName: 'MiniMax-M2', label: 'MiniMax M2', modelDescriptorId: 'minimax-m2' },
       { id: 'minimax-m2.1', apiName: 'MiniMax-M2.1', label: 'MiniMax M2.1', modelDescriptorId: 'minimax-m2.1' },

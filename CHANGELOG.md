@@ -5,6 +5,13 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-05-13 08:18:26 +05:30
+
+### Added
+- **Provider Model Discovery**: Enabled dynamic `/model` catalog refresh for OpenAI-compatible providers with confirmed model-list endpoints, including OpenAI, OpenRouter, DeepSeek, Groq, Mistral, NVIDIA NIM, Together AI, xAI, MiniMax, Moonshot/Kimi API, Hicap, LM Studio, Atomic Chat, and Ollama.
+- **Model Metadata Display**: Normalized discovered model metadata so model picker entries can show clean labels, owners, and context windows when providers return them.
+- **Discovery Coverage**: Added regression coverage for OpenAI-compatible model-list parsing, top-level array responses, descriptor discovery wiring, and richer discovered model metadata.
+
 ## [0.5.0] - 2026-05-13 07:46:30 +05:30
 
 ### Fixed
