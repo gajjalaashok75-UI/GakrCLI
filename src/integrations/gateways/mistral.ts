@@ -45,7 +45,11 @@ export default defineGateway({
       'MISTRAL_API_KEY is required when GAKR_CODE_USE_MISTRAL=1.',
   },
   catalog: {
-    source: 'static',
+    source: 'hybrid',
+    discovery: { kind: 'openai-compatible' },
+    discoveryCacheTtl: '1d',
+    discoveryRefreshMode: 'background-if-stale',
+    allowManualRefresh: true,
     models: [
       { id: 'mistral-devstral', apiName: 'devstral-latest', label: 'Devstral Latest', modelDescriptorId: 'devstral-latest' },
     ],

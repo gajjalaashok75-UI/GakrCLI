@@ -97,4 +97,34 @@ describe('loaded registry validation', () => {
 
     expect(missingModels).toEqual([])
   })
+
+  test('confirmed OpenAI-compatible model-list routes enable discovery', () => {
+    const routes = [...getAllVendors(), ...getAllGateways()]
+    const discoveryRoutes = new Set(
+      routes
+        .filter(route => route.catalog?.discovery)
+        .map(route => route.id),
+    )
+
+    const expectedDiscoveryRoutes = [
+      'atomic-chat',
+      'deepseek',
+      'groq',
+      'hicap',
+      'lmstudio',
+      'minimax',
+      'mistral',
+      'moonshot',
+      'nvidia-nim',
+      'ollama',
+      'openai',
+      'openrouter',
+      'together',
+      'xai',
+    ]
+
+    for (const routeId of expectedDiscoveryRoutes) {
+      expect(discoveryRoutes.has(routeId)).toBe(true)
+    }
+  })
 })

@@ -32,7 +32,11 @@ export default defineVendor({
       'XAI_API_KEY is required for the xAI provider.',
   },
   catalog: {
-    source: 'static',
+    source: 'hybrid',
+    discovery: { kind: 'openai-compatible' },
+    discoveryCacheTtl: '1d',
+    discoveryRefreshMode: 'background-if-stale',
+    allowManualRefresh: true,
     models: [
       {
         id: 'grok-4',

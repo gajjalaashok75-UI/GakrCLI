@@ -25,7 +25,11 @@ export default defineGateway({
     vendorId: 'openai',
   },
   catalog: {
-    source: 'static',
+    source: 'hybrid',
+    discovery: { kind: 'openai-compatible' },
+    discoveryCacheTtl: '1d',
+    discoveryRefreshMode: 'background-if-stale',
+    allowManualRefresh: true,
     models: [
       { id: 'together-qwen-3.5-9b', apiName: 'Qwen/Qwen3.5-9B', label: 'Qwen 3.5 9B', modelDescriptorId: 'Qwen/Qwen3.5-9B' },
     ],

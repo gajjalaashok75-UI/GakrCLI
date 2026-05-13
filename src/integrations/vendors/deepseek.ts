@@ -31,7 +31,11 @@ export default defineVendor({
     apiKeyEnvVars: ['DEEPSEEK_API_KEY'],
   },
   catalog: {
-    source: 'static',
+    source: 'hybrid',
+    discovery: { kind: 'openai-compatible' },
+    discoveryCacheTtl: '1d',
+    discoveryRefreshMode: 'background-if-stale',
+    allowManualRefresh: true,
     models: [
       { id: 'deepseek-chat', apiName: 'deepseek-chat', label: 'DeepSeek Chat', modelDescriptorId: 'deepseek-chat' },
       { id: 'deepseek-reasoner', apiName: 'deepseek-reasoner', label: 'DeepSeek Reasoner', modelDescriptorId: 'deepseek-reasoner' },

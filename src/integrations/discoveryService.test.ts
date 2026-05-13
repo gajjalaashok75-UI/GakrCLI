@@ -8,6 +8,7 @@ const originalFetch = globalThis.fetch
 const originalEnv = {
   GAKR_CONFIG_DIR: process.env.GAKR_CONFIG_DIR,
   OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+  TOGETHER_API_KEY: process.env.TOGETHER_API_KEY,
   OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
   OPENAI_API_BASE: process.env.OPENAI_API_BASE,
   OPENAI_MODEL: process.env.OPENAI_MODEL,
@@ -63,6 +64,7 @@ beforeEach(() => {
   tempDir = mkdtempSync(join(tmpdir(), 'gakrcli-discovery-service-test-'))
   process.env.GAKR_CONFIG_DIR = tempDir
   delete process.env.OPENROUTER_API_KEY
+  delete process.env.TOGETHER_API_KEY
   clearProviderEnv()
   globalThis.fetch = originalFetch
 })
@@ -73,6 +75,7 @@ afterEach(() => {
   rmSync(tempDir, { recursive: true, force: true })
   restoreEnvValue('GAKR_CONFIG_DIR')
   restoreEnvValue('OPENROUTER_API_KEY')
+  restoreEnvValue('TOGETHER_API_KEY')
   restoreEnvValue('OPENAI_BASE_URL')
   restoreEnvValue('OPENAI_API_BASE')
   restoreEnvValue('OPENAI_MODEL')
@@ -207,7 +210,11 @@ describe('discoverModelsForRoute', () => {
           JSON.stringify({
             data: [
               { id: 'openai/gpt-5-mini' },
-              { id: 'anthropic/claude-sonnet-4' },
+              {
+                id: 'anthropic/claude-sonnet-4',
+                name: 'Claude Sonnet 4',
+                context_length: 200000,
+              },
             ],
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -224,6 +231,69 @@ describe('discoverModelsForRoute', () => {
       'anthropic/claude-sonnet-4',
     ])
     expect(result?.models[0]?.label).toBe('GPT-5 Mini (via OpenRouter)')
+    expect(result?.models[1]).toMatchObject({
+      label: 'Claude Sonnet 4',
+      owner: 'anthropic',
+      contextWindow: 200000,
+    })
+  })
+
+  test('openai-compatible discovery accepts top-level array model lists', async () => {
+    const { discoverModelsForRoute } = await loadDiscoveryServiceModule()
+
+    registerGateway({
+      id: 'top-level-array-test',
+      label: 'Top Level Array Test',
+      category: 'hosted',
+      defaultBaseUrl: 'https://top-level-array.example/v1',
+      setup: {
+        requiresAuth: true,
+        authMode: 'api-key',
+        credentialEnvVars: ['TOP_LEVEL_ARRAY_TEST_API_KEY'],
+      },
+      transportConfig: {
+        kind: 'openai-compatible',
+      },
+      catalog: {
+        source: 'dynamic',
+        discovery: {
+          kind: 'openai-compatible',
+        },
+      },
+    })
+
+    process.env.TOGETHER_API_KEY = 'together-key'
+    setMockFetch(mock((_input, init) => {
+      expect(init?.headers).toEqual({ Authorization: 'Bearer together-key' })
+      return Promise.resolve(
+        new Response(
+          JSON.stringify([
+            {
+              id: 'Qwen/Qwen3.5-9B',
+              display_name: 'Qwen 3.5 9B',
+              organization: 'Qwen',
+              context_length: 131072,
+            },
+          ]),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    }) as unknown as typeof globalThis.fetch)
+
+    const result = await discoverModelsForRoute('top-level-array-test', {
+      apiKey: 'together-key',
+      forceRefresh: true,
+    })
+
+    expect(result?.source).toBe('network')
+    expect(result?.models).toContainEqual(
+      expect.objectContaining({
+        apiName: 'Qwen/Qwen3.5-9B',
+        label: 'Qwen 3.5 9B',
+        owner: 'Qwen',
+        contextWindow: 131072,
+      }),
+    )
   })
 
   test('openai-compatible discovery applies descriptor static headers with auth', async () => {

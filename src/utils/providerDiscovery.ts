@@ -255,6 +255,101 @@ export async function listOpenAICompatibleModels(options?: {
   apiKey?: string
   headers?: Record<string, string>
 }): Promise<string[] | null> {
+  const entries = await listOpenAICompatibleModelEntries(options)
+  return entries?.map(entry => entry.id) ?? null
+}
+
+export type OpenAICompatibleModelInfo = {
+  id: string
+  label?: string
+  owner?: string
+  contextWindow?: number
+}
+
+type OpenAICompatibleModelsPayload =
+  | {
+      data?: OpenAICompatibleModelPayload[]
+    }
+  | OpenAICompatibleModelPayload[]
+
+type OpenAICompatibleModelPayload = {
+  id?: unknown
+  name?: unknown
+  display_name?: unknown
+  displayName?: unknown
+  owned_by?: unknown
+  owner?: unknown
+  organization?: unknown
+  context_length?: unknown
+  contextWindow?: unknown
+  inputTokenLimit?: unknown
+}
+
+function trimString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function numberValue(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function inferModelOwnerFromId(modelId: string): string | undefined {
+  const slashIndex = modelId.indexOf('/')
+  if (slashIndex <= 0) {
+    return undefined
+  }
+
+  return modelId.slice(0, slashIndex)
+}
+
+function normalizeOpenAICompatibleModelsPayload(
+  payload: OpenAICompatibleModelsPayload,
+): OpenAICompatibleModelInfo[] {
+  const rawModels = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload.data)
+      ? payload.data
+      : []
+  const seen = new Set<string>()
+  const models: OpenAICompatibleModelInfo[] = []
+
+  for (const rawModel of rawModels) {
+    const id = trimString(rawModel.id)
+    if (!id || seen.has(id.toLowerCase())) {
+      continue
+    }
+
+    seen.add(id.toLowerCase())
+    const label =
+      trimString(rawModel.name) ??
+      trimString(rawModel.display_name) ??
+      trimString(rawModel.displayName)
+    const owner =
+      trimString(rawModel.owned_by) ??
+      trimString(rawModel.owner) ??
+      trimString(rawModel.organization) ??
+      inferModelOwnerFromId(id)
+    const contextWindow =
+      numberValue(rawModel.context_length) ??
+      numberValue(rawModel.contextWindow) ??
+      numberValue(rawModel.inputTokenLimit)
+
+    models.push({
+      id,
+      ...(label && label !== id ? { label } : {}),
+      ...(owner ? { owner } : {}),
+      ...(contextWindow ? { contextWindow } : {}),
+    })
+  }
+
+  return models
+}
+
+export async function listOpenAICompatibleModelEntries(options?: {
+  baseUrl?: string
+  apiKey?: string
+  headers?: Record<string, string>
+}): Promise<OpenAICompatibleModelInfo[] | null> {
   const { signal, clear } = withTimeoutSignal(5000)
   try {
     const baseUrl = getOpenAICompatibleModelsBaseUrl(options?.baseUrl)
@@ -279,17 +374,8 @@ export async function listOpenAICompatibleModels(options?: {
       return null
     }
 
-    const data = (await response.json()) as {
-      data?: Array<{ id?: string }>
-    }
-
-    return Array.from(
-      new Set(
-        (data.data ?? [])
-          .filter(model => Boolean(model.id))
-          .map(model => model.id!),
-      ),
-    )
+    const data = (await response.json()) as OpenAICompatibleModelsPayload
+    return normalizeOpenAICompatibleModelsPayload(data)
   } catch {
     return null
   } finally {
