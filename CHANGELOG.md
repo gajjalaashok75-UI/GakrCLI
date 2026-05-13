@@ -5,6 +5,13 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-05-13 08:54:00 +05:30
+
+### Fixed
+- **Effort Persistence**: Normalized OpenAI/Codex `xhigh` selections to the internal `max` effort value so picker and `/effort xhigh` choices survive settings reloads while still displaying as `xhigh`.
+- **Chat Completions Reasoning Effort**: Threaded resolved effort into OpenAI-compatible chat-completions requests so direct OpenAI, Codex, and provider override routes send `reasoning_effort` correctly.
+- **Effort Clamp**: Preserved `max` for OpenAI/Codex models instead of downgrading it to `high`, while keeping the Anthropic non-Opus `max` clamp intact.
+
 ## [0.5.0] - 2026-05-13 08:43:39 +05:30
 
 ### Fixed
