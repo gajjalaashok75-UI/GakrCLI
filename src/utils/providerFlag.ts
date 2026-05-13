@@ -90,7 +90,7 @@ export function applyProviderFlagFromArgs(
  * Extract the value of --model from argv.
  * Returns null if absent.
  */
-function parseModelFlag(args: string[]): string | null {
+export function parseModelFlag(args: string[]): string | null {
   const idx = args.indexOf('--model')
   if (idx === -1) return null
   const value = args[idx + 1]
@@ -117,6 +117,49 @@ function getRouteDefaults(provider: string): {
   return {
     defaultBaseUrl: gateway?.defaultBaseUrl ?? vendor?.defaultBaseUrl,
     defaultModel,
+  }
+}
+
+/**
+ * Apply --model without --provider to process.env for this process only.
+ *
+ * This runs after saved provider profiles are applied, so it can route the
+ * override to the already-active provider's model env var before startup
+ * rendering and request resolution read it.
+ */
+export function applyModelFlagFromArgs(args: string[]): void {
+  if (args.includes('--provider')) return
+
+  const model = parseModelFlag(args)
+  if (!model) return
+
+  const useGemini =
+    process.env.GAKR_CODE_USE_GEMINI === '1' ||
+    process.env.GAKR_CODE_USE_GEMINI === 'true'
+  const useMistral =
+    process.env.GAKR_CODE_USE_MISTRAL === '1' ||
+    process.env.GAKR_CODE_USE_MISTRAL === 'true'
+  const useOpenAI =
+    process.env.GAKR_CODE_USE_OPENAI === '1' ||
+    process.env.GAKR_CODE_USE_OPENAI === 'true'
+  const useGithub =
+    process.env.GAKR_CODE_USE_GITHUB === '1' ||
+    process.env.GAKR_CODE_USE_GITHUB === 'true'
+  const useNvidia =
+    process.env.GAKR_CODE_USE_NVIDIA === '1' ||
+    process.env.GAKR_CODE_USE_NVIDIA === 'true'
+
+  if (useGemini) {
+    process.env.GEMINI_MODEL = model
+  } else if (useMistral) {
+    process.env.MISTRAL_MODEL = model
+  } else if (useNvidia) {
+    process.env.NVIDIA_MODEL = model
+    process.env.OPENAI_MODEL = model
+  } else if (useOpenAI || useGithub) {
+    process.env.OPENAI_MODEL = model
+  } else {
+    process.env.ANTHROPIC_MODEL = model
   }
 }
 

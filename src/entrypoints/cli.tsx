@@ -139,6 +139,13 @@ async function main(): Promise<void> {
     hydrateGithubModelsTokenFromSecureStorage()
   }
 
+  // --model alone: route the process-scoped override to the active provider's
+  // model env var after saved profiles are applied and before startup reads it.
+  if (args.includes('--model')) {
+    const { applyModelFlagFromArgs } = await import('../utils/providerFlag.js')
+    applyModelFlagFromArgs(args)
+  }
+
   await validateProviderEnvForStartupOrExit()
 
   // Parse --model early so the startup screen can display the override
