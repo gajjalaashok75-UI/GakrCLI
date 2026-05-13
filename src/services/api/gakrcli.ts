@@ -830,6 +830,7 @@ export async function* executeNonStreamingRequest(
     fetchOverride?: Options['fetchOverride']
     source: string
     providerOverride?: Options['providerOverride']
+    effortValue?: EffortValue
   },
   retryOptions: {
     model: string
@@ -858,6 +859,7 @@ export async function* executeNonStreamingRequest(
         fetchOverride: clientOptions.fetchOverride,
         source: clientOptions.source,
         providerOverride: clientOptions.providerOverride,
+        effortValue: clientOptions.effortValue,
       }),
     async (anthropic, attempt, context) => {
       const start = Date.now()
@@ -1816,6 +1818,7 @@ async function* queryModel(
           fetchOverride: options.fetchOverride,
           source: options.querySource,
           providerOverride: options.providerOverride,
+          effortValue: effort,
         }),
       async (anthropic, attempt, context) => {
         attemptNumber = attempt
