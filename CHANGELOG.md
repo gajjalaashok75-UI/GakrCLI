@@ -5,6 +5,16 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-05-13 07:46:30 +05:30
+
+### Fixed
+- **Codex OAuth Browser Sign-In**: Prevented the OAuth browser flow from restarting after successful authorization when React callback identity changes during status updates.
+- **Active Provider Startup**: Applied the saved active provider profile during CLI bootstrap so restarts use the last selected provider instead of stale legacy startup profile data.
+- **Codex OAuth Profile Persistence**: Persisted Codex OAuth startup profile metadata correctly, including secure-credential markers, so stale NVIDIA startup routing is cleared after switching providers.
+- **Model Selection Persistence**: Saved `/model` changes back to the active provider profile and startup profile so restarts keep the last selected model for the active provider.
+- **Multi-Model Profiles**: Preserved multi-model provider profile lists while promoting the last selected model to the primary startup model.
+- **Documentation**: Reworked the Codex OAuth browser sign-in document with the full flow, storage formats, secure credential loading, profile persistence, browser authorization, and troubleshooting details.
+
 ## [0.5.1] - 2026-05-12 20:22:51 +05:30
 
 ### Fixed

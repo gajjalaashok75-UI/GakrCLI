@@ -95,6 +95,69 @@ afterEach(() => {
   mock.restore()
 })
 
+test('does not restart OAuth when an inline authenticated callback changes after status updates', async () => {
+  let resolveFlow!: (tokens: typeof TOKENS) => void
+  const flowFinished = new Promise<typeof TOKENS>(resolve => {
+    resolveFlow = resolve
+  })
+  const startOAuthFlow = mock(
+    async (onAuthorizationUrl: (authUrl: string) => void | Promise<void>) => {
+      await onAuthorizationUrl('https://chatgpt.com/codex')
+      return await flowFinished
+    },
+  )
+  const cleanup = mock(() => {})
+  const openBrowser = mock(async () => true)
+  const onAuthenticated = mock(async () => {})
+  const deps = {
+    createOAuthService: () => ({
+      startOAuthFlow,
+      cleanup,
+    }),
+    openBrowser,
+    saveCodexCredentials: mock(() => ({ success: true })),
+    isBareMode: () => false,
+  }
+
+  const { useCodexOAuthFlow } = await import(
+    `./useCodexOAuthFlow.js?real-stable-effect-${Date.now()}-${Math.random()}`
+  )
+
+  function Harness(): React.ReactNode {
+    const status = useCodexOAuthFlow({
+      onAuthenticated: async (tokens, persistCredentials) => {
+        await onAuthenticated(tokens, persistCredentials)
+      },
+      deps,
+    })
+
+    return <Text>{status.state}</Text>
+  }
+
+  const streams = createTestStreams()
+  const root = await createRoot({
+    stdout: streams.stdout as unknown as NodeJS.WriteStream,
+    stdin: streams.stdin as unknown as NodeJS.ReadStream,
+    patchConsole: false,
+  })
+  root.render(<Harness />)
+
+  try {
+    await waitForCondition(() => openBrowser.mock.calls.length === 1)
+    await Bun.sleep(25)
+    expect(startOAuthFlow).toHaveBeenCalledTimes(1)
+    expect(cleanup).not.toHaveBeenCalled()
+
+    resolveFlow(TOKENS)
+    await waitForCondition(() => onAuthenticated.mock.calls.length === 1)
+  } finally {
+    root.unmount()
+    streams.stdin.end()
+    streams.stdout.end()
+    await Bun.sleep(0)
+  }
+})
+
 test('does not persist credentials when downstream setup rejects', async () => {
   const saveCodexCredentials = mock(() => ({ success: true }))
   const cleanup = mock(() => {})

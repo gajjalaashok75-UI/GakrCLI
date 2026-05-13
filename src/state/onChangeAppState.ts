@@ -13,6 +13,7 @@ import {
   permissionModeFromString,
   toExternalPermissionMode,
 } from '../utils/permissions/PermissionMode.js'
+import { persistActiveProviderProfileModel } from '../utils/providerProfiles.js'
 import {
   notifyPermissionModeChanged,
   notifySessionMetadataChanged,
@@ -109,6 +110,7 @@ export function onChangeAppState({
   ) {
     // Save to settings
     updateSettingsForSource('userSettings', { model: newState.mainLoopModel })
+    persistActiveProviderProfileModel(newState.mainLoopModel)
     setMainLoopModelOverride(newState.mainLoopModel)
   }
 

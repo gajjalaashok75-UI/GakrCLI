@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -940,6 +940,80 @@ describe('persistActiveProviderProfileModel', () => {
     expect(saved?.model).toBe('minimax-m2.5:cloud')
   })
 
+  test('updates restart startup profile when active profile model changes', async () => {
+    const {
+      applyProviderProfileToProcessEnv,
+      persistActiveProviderProfileModel,
+    } = await importFreshProviderProfileModules()
+    const activeProfile = buildProfile({
+      id: 'nvidia_prof',
+      name: 'NVIDIA NIM',
+      provider: 'nvidia-nim',
+      baseUrl: 'https://integrate.api.nvidia.com/v1',
+      model: 'z-ai/glm-5.1',
+      apiKey: 'nvapi-test-key',
+    })
+
+    saveMockGlobalConfig(current => ({
+      ...current,
+      providerProfiles: [activeProfile],
+      activeProviderProfileId: activeProfile.id,
+    }))
+    applyProviderProfileToProcessEnv(activeProfile)
+
+    const updated = persistActiveProviderProfileModel(
+      'nvidia/llama-3.1-nemotron-70b-instruct',
+    )
+    const persisted = JSON.parse(
+      readFileSync(join(testConfigDir!, '.gakrcli-profile.json'), 'utf8'),
+    )
+
+    expect(updated?.model).toBe('nvidia/llama-3.1-nemotron-70b-instruct')
+    expect(process.env.OPENAI_MODEL).toBe(
+      'nvidia/llama-3.1-nemotron-70b-instruct',
+    )
+    expect(persisted.profile).toBe('nvidia-nim')
+    expect(persisted.env).toMatchObject({
+      OPENAI_BASE_URL: 'https://integrate.api.nvidia.com/v1',
+      OPENAI_MODEL: 'nvidia/llama-3.1-nemotron-70b-instruct',
+      OPENAI_API_KEY: 'nvapi-test-key',
+      NVIDIA_API_KEY: 'nvapi-test-key',
+      NVIDIA_NIM: '1',
+    })
+  })
+
+  test('promotes selected model in multi-model active profiles', async () => {
+    const {
+      applyProviderProfileToProcessEnv,
+      getProviderProfiles,
+      persistActiveProviderProfileModel,
+    } = await importFreshProviderProfileModules()
+    const activeProfile = buildProfile({
+      id: 'multi_openai',
+      model: 'glm-4.5, glm-4.7, glm-4.7-flash',
+    })
+
+    saveMockGlobalConfig(current => ({
+      ...current,
+      providerProfiles: [activeProfile],
+      activeProviderProfileId: activeProfile.id,
+    }))
+    applyProviderProfileToProcessEnv(activeProfile)
+
+    persistActiveProviderProfileModel('glm-4.7')
+
+    const saved = getProviderProfiles().find(
+      (profile: ProviderProfile) => profile.id === activeProfile.id,
+    )
+    const persisted = JSON.parse(
+      readFileSync(join(testConfigDir!, '.gakrcli-profile.json'), 'utf8'),
+    )
+
+    expect(saved?.model).toBe('glm-4.7, glm-4.5, glm-4.7-flash')
+    expect(process.env.OPENAI_MODEL).toBe('glm-4.7')
+    expect(persisted.env.OPENAI_MODEL).toBe('glm-4.7')
+  })
+
   test('does not mutate process env when session is not profile-managed', async () => {
     const {
       getProviderProfiles,
@@ -1309,6 +1383,62 @@ describe('setActiveProviderProfile', () => {
         NVIDIA_API_KEY: 'nvapi-live',
         NVIDIA_NIM: '1',
       })
+    } finally {
+      process.chdir(originalCwd)
+      rmSync(tempDir, { recursive: true, force: true })
+      rmSync(configDir, { recursive: true, force: true })
+    }
+  })
+
+  test('persists codex oauth profiles over a stale nvidia startup profile', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-'))
+    const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-config-'))
+    process.chdir(tempDir)
+    process.env.GAKR_CONFIG_DIR = configDir
+
+    try {
+      const { setActiveProviderProfile } =
+        await importFreshProviderProfileModules()
+      const codexProfile = buildProfile({
+        id: 'codex_prof',
+        name: 'Codex OAuth',
+        provider: 'openai',
+        baseUrl: 'https://chatgpt.com/backend-api/codex',
+        model: 'codexplan',
+      })
+
+      saveMockGlobalConfig(current => ({
+        ...current,
+        providerProfiles: [codexProfile],
+      }))
+
+      writeFileSync(
+        join(configDir, '.gakrcli-profile.json'),
+        JSON.stringify({
+          profile: 'nvidia-nim',
+          env: {
+            OPENAI_BASE_URL: 'https://integrate.api.nvidia.com/v1',
+            OPENAI_MODEL: 'stepfun-ai/step-3.5-flash',
+            NVIDIA_NIM: '1',
+          },
+          createdAt: '2026-05-13T00:00:00.000Z',
+        }),
+        'utf8',
+      )
+
+      const result = setActiveProviderProfile('codex_prof')
+      const persisted = JSON.parse(
+        readFileSync(join(configDir, '.gakrcli-profile.json'), 'utf8'),
+      )
+
+      expect(result?.id).toBe('codex_prof')
+      expect(persisted.profile).toBe('codex')
+      expect(persisted.env).toEqual({
+        OPENAI_BASE_URL: 'https://chatgpt.com/backend-api/codex',
+        OPENAI_MODEL: 'codexplan',
+        CODEX_CREDENTIAL_SOURCE: 'oauth',
+      })
+      expect(persisted.env.NVIDIA_NIM).toBeUndefined()
     } finally {
       process.chdir(originalCwd)
       rmSync(tempDir, { recursive: true, force: true })

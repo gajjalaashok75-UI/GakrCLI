@@ -1,209 +1,284 @@
 # Codex OAuth Browser Sign-In Flow
 
-This document explains the Codex OAuth browser sign-in implementation in GakrCLI: what it is for, how the flow works end-to-end, how credentials are stored and used, and which files implement or consume it.
+This document is the working guide for the Codex OAuth browser sign-in flow in
+GakrCLI. It explains what the flow is for, where it is implemented, how the
+browser authorization round trip works, where credentials and profiles are
+stored, how the saved login is loaded on later runs, and how to debug common
+failures.
 
-## Purpose
+## What This Flow Does
 
-Codex OAuth lets a user authenticate GakrCLI with their ChatGPT/Codex account through a browser sign-in instead of manually providing a `CODEX_API_KEY` or copying an existing Codex CLI `auth.json` file.
+Codex OAuth lets a user connect GakrCLI to the official ChatGPT/Codex backend by
+signing in through a browser. The user does not have to paste a `CODEX_API_KEY`
+or copy a Codex CLI `auth.json` file.
 
-After sign-in, GakrCLI can:
+After a successful sign-in, GakrCLI can:
 
-- call the official ChatGPT Codex backend at `https://chatgpt.com/backend-api/codex`
+- route Codex requests to `https://chatgpt.com/backend-api/codex`
 - use Codex model aliases such as `codexplan` and `codexspark`
-- persist Codex credentials in OS secure storage for later sessions
-- refresh expiring OAuth tokens when a refresh token is available
-- build and activate a provider profile without storing secrets in provider profile files
+- store OAuth tokens in native secure storage
+- refresh expiring access tokens when a refresh token is available
+- create and activate a non-secret provider profile
+- send Codex API requests with both a bearer token and `chatgpt-account-id`
 
-The flow is exposed in provider setup screens such as `/provider` and the first-run provider manager.
+The flow is exposed from two UI paths:
 
-## High-level architecture
+- first-run/provider manager: `src/components/ProviderManager.tsx`
+- `/provider` wizard: `src/commands/provider/provider.tsx`
+
+Both paths use the shared hook in `src/components/useCodexOAuthFlow.ts`.
+
+## Important Concepts
+
+The implementation stores two different kinds of data.
+
+Sensitive OAuth credentials are stored in native secure storage under the
+`codex` key. This includes the access token, refresh token, optional id token,
+optional exchanged Codex API-key token, account id, profile id, and refresh
+timestamps. The storage implementation is in `src/utils/codexCredentials.ts`
+and `src/utils/secureStorage/*`.
+
+Provider profile metadata is stored separately. A Codex OAuth profile records
+which backend and model to use, plus the ChatGPT account id, but it does not
+store refresh tokens. The profile helpers are in `src/utils/providerProfile.ts`
+and the newer profile list is in `src/utils/providerProfiles.ts`.
+
+These two pieces are intentionally separate: the profile says "use Codex", while
+secure storage provides the secret token material at request time.
+
+## End-to-End Sequence
 
 ```mermaid
 sequenceDiagram
   participant User
-  participant CLI as GakrCLI UI
-  participant Listener as Localhost callback listener
+  participant UI as GakrCLI UI
+  participant Hook as useCodexOAuthFlow
+  participant Service as CodexOAuthService
+  participant Listener as Localhost listener
   participant Browser
   participant OpenAI as auth.openai.com
-  participant Store as OS secure storage
+  participant Store as Secure storage
   participant Codex as chatgpt.com/backend-api/codex
 
-  User->>CLI: Choose Codex OAuth
-  CLI->>Listener: Start http://localhost:1455/auth/callback
-  CLI->>CLI: Generate PKCE verifier/challenge + state
-  CLI->>Browser: Open OpenAI authorize URL
-  Browser->>OpenAI: User signs in with ChatGPT
-  OpenAI->>Listener: Redirect with code + state
-  Listener->>CLI: Return authorization code
-  CLI->>OpenAI: Exchange code + verifier for OAuth tokens
-  CLI->>OpenAI: Optionally exchange id_token for Codex API key token
-  CLI->>Store: Save access/refresh/id/api key/account id
-  CLI->>CLI: Save/activate Codex provider profile
-  CLI->>Codex: Send requests with Bearer token + chatgpt-account-id
+  User->>UI: Choose Codex OAuth
+  UI->>Hook: Mount OAuth setup screen
+  Hook->>Service: startOAuthFlow()
+  Service->>Listener: Listen on localhost callback port
+  Service->>Service: Generate PKCE verifier/challenge and state
+  Service->>Browser: Open authorize URL
+  Browser->>OpenAI: User signs in and authorizes
+  OpenAI->>Listener: Redirect with code and state
+  Listener->>Service: Return authorization code
+  Service->>OpenAI: Exchange code plus PKCE verifier for tokens
+  Service->>OpenAI: Optionally exchange id_token for Codex API-key token
+  Service->>Hook: Return OAuth tokens
+  Hook->>UI: onAuthenticated(tokens, persistCredentials)
+  UI->>UI: Save/activate provider profile
+  UI->>Store: Save credentials securely
+  UI->>Codex: Later requests use bearer token plus chatgpt-account-id
 ```
 
-## Where credentials and profiles are stored
+## Files Involved
 
-Codex OAuth stores two different kinds of data in two different places:
+Core OAuth flow:
 
-1. **Sensitive OAuth credential material**: access token, refresh token, id token, optional Codex API-key token, account id, and profile id.
-2. **Non-secret provider profile metadata**: provider name, Codex base URL, model alias, and active-profile selection.
+| File | Responsibility |
+| --- | --- |
+| `src/services/api/codexOAuth.ts` | Main service. Builds the authorize URL, starts the callback listener, exchanges the authorization code, renders browser success/error/cancel pages, and cleans up. |
+| `src/services/api/codexOAuthShared.ts` | Shared constants and helpers: issuer, client id, callback port, scopes, JWT parsing, account-id parsing, and id-token-to-Codex-token exchange. |
+| `src/services/oauth/auth-code-listener.ts` | Reusable temporary localhost callback server with callback path and `state` validation. |
+| `src/services/oauth/crypto.ts` | PKCE verifier/challenge and OAuth state generation. |
 
-### Sensitive Codex OAuth credentials
+UI integration:
 
-Sensitive Codex OAuth credentials are stored under the secure-storage key `codex` (`src/utils/codexCredentials.ts:12`). The credential object shape is defined by `CodexCredentialBlob` (`src/utils/codexCredentials.ts:16`).
+| File | Responsibility |
+| --- | --- |
+| `src/components/useCodexOAuthFlow.ts` | React hook that starts one OAuth flow for the mounted screen, opens the browser, tracks UI state, and exposes a credential persistence callback. |
+| `src/components/ProviderManager.tsx` | First-run/provider manager Codex OAuth setup, profile creation/update, activation, and logout. |
+| `src/commands/provider/provider.tsx` | `/provider` wizard Codex OAuth step and legacy single-profile save path. |
+| `src/utils/browser.ts` | Opens the authorization URL with the operating system browser command. |
 
-GakrCLI intentionally calls `getSecureStorage({ allowPlainTextFallback: false })` for Codex credentials (`src/utils/codexCredentials.ts:41`). That means Codex OAuth credentials do **not** use the plaintext fallback file `~/.gakrcli/.credentials.json`. If native secure storage cannot be used, saving Codex OAuth credentials fails instead of writing the tokens in plaintext.
+Credential and profile persistence:
 
-The generic plaintext fallback implementation does exist at `src/utils/secureStorage/plainTextStorage.ts:13`, and it would write `.credentials.json` inside `getGakrcliConfigHomeDir()` with mode `0600` (`src/utils/secureStorage/plainTextStorage.ts:44`). However, Codex OAuth disables that fallback, so it is not the normal Codex OAuth storage path.
+| File | Responsibility |
+| --- | --- |
+| `src/utils/codexCredentials.ts` | Read/write/clear secure Codex credentials and refresh access tokens. |
+| `src/utils/secureStorage/index.ts` | Selects native secure storage and controls plaintext fallback behavior. |
+| `src/utils/secureStorage/windowsCredentialStorage.ts` | Windows DPAPI-backed encrypted storage file. |
+| `src/utils/secureStorage/macOsKeychainStorage.ts` | macOS Keychain-backed storage. |
+| `src/utils/secureStorage/linuxSecretStorage.ts` | Linux Secret Service/libsecret-backed storage. |
+| `src/utils/providerProfile.ts` | Builds Codex OAuth profile env, legacy single-profile file helpers, and in-session profile application. |
+| `src/utils/providerProfiles.ts` | Newer saved provider-profile list and active profile selection. |
+| `src/services/api/providerConfig.ts` | Resolves Codex aliases, transport, `auth.json`, secure-storage credentials, and runtime credential precedence. |
 
-Native secure-storage backend selection is implemented in `src/utils/secureStorage/index.ts:65`:
+Runtime API usage:
 
-| OS | Backend | Where/how it is stored |
-| --- | --- | --- |
-| Windows | DPAPI-backed `windowsCredentialStorage` | Encrypted file named like `<service>.secure.dpapi` inside the Gakr config directory, protected with Windows DPAPI `CurrentUser` scope (`src/utils/secureStorage/windowsCredentialStorage.ts:28` and `src/utils/secureStorage/windowsCredentialStorage.ts:142`). It can also read legacy Windows PasswordVault entries (`src/utils/secureStorage/windowsCredentialStorage.ts:63`). |
-| macOS | Keychain-backed `macOsKeychainStorage` | macOS Keychain generic password entry using the `security` CLI (`src/utils/secureStorage/macOsKeychainStorage.ts:26`). The service name is based on `Gakr...-credentials` (`src/utils/secureStorage/macOsKeychainHelpers.ts:27`). |
-| Linux | Secret Service/libsecret | `secret-tool` stores a Secret Service entry with service/account attributes (`src/utils/secureStorage/linuxSecretStorage.ts:14`). |
+| File | Responsibility |
+| --- | --- |
+| `src/services/api/openaiShim.ts` | Selects Codex transport, refreshes stored credentials, resolves runtime credentials, validates auth/account id, and calls the Codex shim. |
+| `src/services/api/codexShim.ts` | Sends Codex Responses API requests to the official backend with auth headers. |
+| `src/services/api/codexUsage.ts` | Fetches Codex usage with refreshed/resolved credentials. |
+| `src/tools/WebSearchTool/WebSearchTool.ts` | Uses Codex credentials/account id for Codex web search mode. |
 
-The Gakr config directory defaults to `~/.gakrcli`, unless `GAKR_CONFIG_DIR` is set (`src/utils/envUtils.ts:8`). On this Windows setup, the Codex secure-storage backend resolves to the DPAPI encrypted file `C:\Users\gajja\.gakrcli\Gakr-credentials.secure.dpapi`. This file is the encrypted credential container; it is not readable JSON token data.
+Tests:
 
-The active provider profile is stored separately in the global GakrCLI config file. On this Windows setup, that file is `C:\Users\gajja\.gakrcli.json`: the `providerProfiles` list contains the `Codex OAuth` profile, and `activeProviderProfileId` points to that Codex OAuth profile. The small `C:\Users\gajja\.gakrcli\config.json` file is not the active provider-profile store; it only contains version/creation metadata.
+| File | Coverage |
+| --- | --- |
+| `src/components/useCodexOAuthFlow.test.tsx` | Hook persistence behavior and a regression test that prevents browser relaunch loops after status updates. |
+| `src/services/api/codexOAuth.test.ts` | Service success page and cancellation during token exchange. |
+| `src/services/oauth/auth-code-listener.test.ts` | Listener cancellation behavior. |
+| `src/utils/codexCredentials.test.ts` | Secure storage normalization, refresh, cooldown, and profile linkage. |
+| `src/services/api/providerConfig.codexSecureStorage.test.ts` | Secure-storage credential resolution. |
+| `src/services/api/providerConfig.runtimeCodexCredentials.test.ts` | Runtime credential precedence. |
+| `src/services/api/codexUsage.test.ts` | Usage endpoint credential handling. |
+| `src/services/api/codexShim.test.ts` | Codex transport and request behavior. |
 
-### Provider profile metadata
+## OAuth Constants
 
-The provider profile is not the OAuth token store. It only records enough non-secret routing information to select Codex later.
+The constants live in `src/services/api/codexOAuthShared.ts`.
 
-For Codex OAuth, `buildCodexOAuthProfileEnv()` creates this profile env (`src/utils/providerProfile.ts:554`):
+| Constant or env var | Value or behavior |
+| --- | --- |
+| Issuer | `https://auth.openai.com` |
+| Authorize endpoint | `https://auth.openai.com/oauth/authorize` |
+| Token endpoint | `https://auth.openai.com/oauth/token` |
+| Default client id | `app_EMoamEEZ73f0CkXaXp7hrann` |
+| Default callback port | `1455` |
+| Callback path | `/auth/callback` |
+| Redirect URI | `http://localhost:1455/auth/callback` by default |
+| Scope | `openid profile email offline_access api.connectors.read api.connectors.invoke` |
+| Originator | `codex_cli_rs` |
+| `CODEX_OAUTH_CLIENT_ID` | Overrides the default client id. |
+| `CODEX_OAUTH_CALLBACK_PORT` | Overrides the callback port. Invalid values fall back to `1455`. |
 
-```text
-OPENAI_BASE_URL=https://chatgpt.com/backend-api/codex
-OPENAI_MODEL=codexplan
-CHATGPT_ACCOUNT_ID=<account id>
-CODEX_CREDENTIAL_SOURCE=oauth
-```
-
-The newer provider-profile system stores profiles in global config through `saveGlobalConfig()` via `addProviderProfile()` and `updateProviderProfile()` (`src/utils/providerProfiles.ts:755` and `src/utils/providerProfiles.ts:791`). The active profile id is stored as `activeProviderProfileId` with the `providerProfiles` list (`src/utils/providerProfiles.ts:766`). The global config file path is resolved by `getGlobalGakrcliFile()` (`src/utils/env.ts:14`), typically `~/.gakrcli.json` or a suffix variant in the home/config directory.
-
-There is also a legacy single-profile file path handled by `loadProfileFile()` / `saveProfileFile()` (`src/utils/providerProfile.ts:633` and `src/utils/providerProfile.ts:647`). The current `/provider` profile list uses the newer global config profile list.
-
-## End-to-end flow
-
-### 1. User selects Codex OAuth
-
-There are two main UI entry points:
-
-- `src/commands/provider/provider.tsx:1087` implements the `/provider` wizard `CodexOAuthStep`.
-- `src/components/ProviderManager.tsx:332` implements the first-run/provider-manager `CodexOAuthSetup` screen.
-
-Both screens call the shared React hook `useCodexOAuthFlow` from `src/components/useCodexOAuthFlow.ts:44`.
-
-The UI tells the user to finish signing in with ChatGPT in the browser. If browser launch fails, the UI displays the authorization URL for manual copy/paste.
-
-### 2. The hook starts the OAuth service
-
-`src/components/useCodexOAuthFlow.ts:62` starts the flow in a React effect.
-
-Important behavior:
-
-- It refuses to run in `--bare` mode because secure storage is disabled (`src/components/useCodexOAuthFlow.ts:63`).
-- It creates `CodexOAuthService` (`src/components/useCodexOAuthFlow.ts:37`).
-- It opens the authorization URL with `openBrowser` (`src/components/useCodexOAuthFlow.ts:75`).
-- On success, it provides a `persistCredentials()` callback that saves credentials securely (`src/components/useCodexOAuthFlow.ts:94`).
-- On component cleanup/cancel, it calls `oauthService.cleanup()` (`src/components/useCodexOAuthFlow.ts:121`).
-
-### 3. Local callback server starts
-
-`CodexOAuthService.startOAuthFlow()` is implemented in `src/services/api/codexOAuth.ts:183`.
-
-It creates an `AuthCodeListener` for `/auth/callback` and starts it on the configured callback port:
-
-- default port: `1455`
-- callback path: `/auth/callback`
-- redirect URI: `http://localhost:1455/auth/callback`
-
-The constants live in `src/services/api/codexOAuthShared.ts:1`:
-
-- issuer: `https://auth.openai.com`
-- default OAuth client id: `app_EMoamEEZ73f0CkXaXp7hrann`
-- default callback port: `1455`
-- scope: `openid profile email offline_access api.connectors.read api.connectors.invoke`
-- originator: `codex_cli_rs`
-
-The port can be overridden with `CODEX_OAUTH_CALLBACK_PORT` (`src/services/api/codexOAuthShared.ts:26`). The client id can be overridden with `CODEX_OAUTH_CLIENT_ID` (`src/services/api/codexOAuthShared.ts:20`).
-
-If the callback port is unavailable, the service throws a user-facing error explaining that Codex OAuth needs `localhost:<port>` (`src/services/api/codexOAuth.ts:274`).
-
-### 4. PKCE and CSRF state are generated
-
-The flow uses OAuth Authorization Code + PKCE:
-
-- `generateCodeVerifier()` creates a random verifier (`src/services/oauth/crypto.ts:11`).
-- `generateCodeChallenge()` SHA-256 hashes the verifier and base64url encodes it (`src/services/oauth/crypto.ts:15`).
-- `generateState()` creates a random state token for CSRF protection (`src/services/oauth/crypto.ts:21`).
-
-The callback listener validates that the returned state matches the expected state (`src/services/oauth/auth-code-listener.ts:223`).
-
-### 5. Authorization URL is built and opened
-
-`buildCodexAuthorizeUrl()` builds the OpenAI authorization URL (`src/services/api/codexOAuth.ts:33`).
-
-It sends these query parameters:
+The authorize URL includes:
 
 | Parameter | Purpose |
 | --- | --- |
 | `response_type=code` | Requests an authorization code. |
 | `client_id` | Codex OAuth client id. |
 | `redirect_uri` | Localhost callback URL. |
-| `scope` | OpenID, profile/email, offline access, and Codex connector scopes. |
+| `scope` | OpenID, offline access, profile/email, and Codex connector scopes. |
 | `code_challenge` | PKCE S256 challenge. |
-| `code_challenge_method=S256` | PKCE challenge method. |
-| `id_token_add_organizations=true` | Asks for organization/account information in token data. |
-| `codex_cli_simplified_flow=true` | Matches Codex CLI-style simplified browser flow. |
-| `state` | CSRF protection token. |
+| `code_challenge_method=S256` | PKCE method. |
+| `id_token_add_organizations=true` | Requests account/organization information in token data. |
+| `codex_cli_simplified_flow=true` | Matches the Codex CLI-style browser flow. |
+| `state` | CSRF protection token validated by the listener. |
 | `originator=codex_cli_rs` | Identifies the flow as Codex CLI-compatible. |
 
-The URL points to:
+## Step-By-Step Runtime Flow
+
+### 1. The User Selects Codex OAuth
+
+The provider manager renders `CodexOAuthSetup` in
+`src/components/ProviderManager.tsx`. The `/provider` command renders
+`CodexOAuthStep` in `src/commands/provider/provider.tsx`.
+
+Both components call `useCodexOAuthFlow()` and provide an `onAuthenticated`
+callback. That callback receives:
+
+- the OAuth tokens returned by `CodexOAuthService`
+- `persistCredentials(options?)`, a function that writes those tokens to secure
+  storage after the profile has been saved
+
+The UI saves the profile first and then persists credentials with the saved
+profile id when one is available. This avoids storing credentials that point at
+a profile that failed to save.
+
+### 2. The Hook Starts One Flow For The Mounted Screen
+
+`src/components/useCodexOAuthFlow.ts` starts the flow in a React effect.
+
+It first rejects `--bare` mode because bare mode disables secure storage.
+
+Then it creates `CodexOAuthService`, calls `startOAuthFlow()`, opens the
+browser when the service provides an authorize URL, and updates UI state:
+
+- `starting`
+- `waiting` with the authorize URL and browser-open result
+- `error` with a displayable message
+
+The hook keeps the latest `onAuthenticated` callback in a ref. This matters
+because provider screens can re-render while the OAuth flow is waiting. A
+re-render must not cancel the in-progress callback listener and launch a second
+browser sign-in. The regression test in `src/components/useCodexOAuthFlow.test.tsx`
+verifies that an inline callback changing identity after a status update does
+not restart OAuth.
+
+### 3. The Local Callback Listener Starts
+
+`CodexOAuthService.startOAuthFlow()` creates an `AuthCodeListener` for
+`/auth/callback` and starts it on the configured callback port.
+
+By default the listener binds to:
 
 ```text
-https://auth.openai.com/oauth/authorize
+http://localhost:1455/auth/callback
 ```
 
-### 6. Browser redirects to localhost with code and state
+If that port is in use, the service throws a user-facing error telling the user
+that Codex OAuth needs `localhost:<port>`.
 
-`AuthCodeListener` is a temporary localhost HTTP server in `src/services/oauth/auth-code-listener.ts:18`.
+The listener is temporary. It exists only while the sign-in flow is active.
 
-It is not an OAuth provider. It only captures the redirect from the browser.
+### 4. PKCE And State Are Generated
 
-Behavior:
+The flow uses OAuth Authorization Code with PKCE:
 
-- Listens on `localhost` (`src/services/oauth/auth-code-listener.ts:46`).
-- Accepts only the configured callback path (`src/services/oauth/auth-code-listener.ts:199`).
-- Reads `code` and `state` query parameters (`src/services/oauth/auth-code-listener.ts:205`).
-- Rejects missing authorization code (`src/services/oauth/auth-code-listener.ts:216`).
-- Rejects invalid state (`src/services/oauth/auth-code-listener.ts:223`).
-- Keeps the browser response open until GakrCLI can return a final success/error/cancel HTML page (`src/services/oauth/auth-code-listener.ts:230`).
+- `generateCodeVerifier()` creates a random verifier.
+- `generateCodeChallenge()` SHA-256 hashes and base64url-encodes the verifier.
+- `generateState()` creates a random CSRF state token.
 
-After a successful token exchange, `CodexOAuthService` serves a success HTML page that tells the user to return to GakrCLI (`src/services/api/codexOAuth.ts:55` and `src/services/api/codexOAuth.ts:236`).
+The listener validates the returned `state` before accepting an authorization
+code. If the state does not match, the callback returns `400` and the flow is
+rejected.
 
-If the flow fails or is cancelled, the browser receives an error or cancelled HTML page (`src/services/api/codexOAuth.ts:75`, `src/services/api/codexOAuth.ts:96`, and `src/services/api/codexOAuth.ts:255`).
+### 5. The Browser Opens
 
-### 7. Authorization code is exchanged for tokens
+`useCodexOAuthFlow()` calls `openBrowser(authUrl)` from `src/utils/browser.ts`.
 
-`exchangeAuthorizationCode()` posts the code to OpenAI's token endpoint (`src/services/api/codexOAuth.ts:115`).
+Browser behavior by platform:
 
-Endpoint:
+| Platform | Default command |
+| --- | --- |
+| Windows | `rundll32` URL open handler |
+| macOS | `open` |
+| Linux | `xdg-open` |
+
+If `BROWSER` is set, the helper tries that command instead. If the browser
+cannot be opened, the UI still shows the authorization URL so the user can copy
+it manually.
+
+### 6. OpenAI Redirects Back To Localhost
+
+After the user signs in and authorizes in the browser, OpenAI redirects to:
+
+```text
+http://localhost:<port>/auth/callback?code=<authorization-code>&state=<state>
+```
+
+`AuthCodeListener` accepts only the configured callback path. It rejects missing
+authorization codes and invalid state values.
+
+On a valid callback, it keeps the browser response open while the CLI exchanges
+the code for tokens. This lets the CLI return a final success, error, or cancel
+HTML page to the same browser tab.
+
+### 7. The Authorization Code Is Exchanged For Tokens
+
+`exchangeAuthorizationCode()` in `src/services/api/codexOAuth.ts` posts to:
 
 ```text
 https://auth.openai.com/oauth/token
 ```
 
-Request fields:
+The request body is `application/x-www-form-urlencoded`:
 
 | Field | Value |
 | --- | --- |
 | `grant_type` | `authorization_code` |
-| `code` | Authorization code from callback. |
-| `redirect_uri` | Same localhost redirect URI. |
+| `code` | Authorization code from the callback. |
+| `redirect_uri` | The same localhost redirect URI used in the authorize URL. |
 | `client_id` | Codex OAuth client id. |
 | `code_verifier` | Original PKCE verifier. |
 
@@ -212,82 +287,64 @@ The response must include:
 - `access_token`
 - `refresh_token`
 
-It may include:
+The response may include:
 
 - `id_token`
 
-If access or refresh token is missing, the flow fails with a clear error (`src/services/api/codexOAuth.ts:150`).
+If the token endpoint fails, the error includes the HTTP status and response
+body when available. If the access token or refresh token is missing, the flow
+fails with a clear "missing credentials" error.
 
-### 8. Optional id-token-to-API-key exchange
+### 8. The Optional Codex API-Key Token Is Requested
 
-If an `id_token` is returned, GakrCLI attempts a token exchange to obtain a Codex API key token (`src/services/api/codexOAuth.ts:159`).
+If an `id_token` is present, GakrCLI attempts an RFC 8693 token exchange using
+`exchangeCodexIdTokenForApiKey()` in `src/services/api/codexOAuthShared.ts`.
 
-The helper is `exchangeCodexIdTokenForApiKey()` in `src/services/api/codexOAuthShared.ts:101`.
-
-It posts to the same token endpoint with:
+The request goes to the same token endpoint and sends:
 
 | Field | Value |
 | --- | --- |
 | `grant_type` | `urn:ietf:params:oauth:grant-type:token-exchange` |
+| `client_id` | Codex OAuth client id. |
 | `requested_token` | `openai-api-key` |
-| `subject_token` | OAuth `id_token` |
+| `subject_token` | OAuth id token. |
 | `subject_token_type` | `urn:ietf:params:oauth:token-type:id_token` |
 
-If this optional API-key exchange fails, the main OAuth sign-in can still continue with access/refresh tokens because the call is caught and converted to `undefined` (`src/services/api/codexOAuth.ts:160`).
+This exchange is optional. If it fails, OAuth sign-in can still continue using
+the access token and refresh token.
 
-### 9. ChatGPT account id is extracted
+### 9. The ChatGPT Account Id Is Extracted
 
-Codex backend requests require the ChatGPT account id header.
+Codex backend requests require the ChatGPT account id. GakrCLI extracts it from
+token claims with `parseChatgptAccountId()` in `src/services/api/codexOAuthShared.ts`.
 
-GakrCLI extracts it from JWT payload claims using `parseChatgptAccountId()` (`src/services/api/codexOAuthShared.ts:61`). It checks:
+Supported claim shapes:
 
 - nested `https://api.openai.com/auth.chatgpt_account_id`
 - flat `https://api.openai.com/auth.chatgpt_account_id`
 - top-level `chatgpt_account_id`
 
-The OAuth service tries to parse the account id from the `id_token`, then from the access token (`src/services/api/codexOAuth.ts:169`).
+The service checks the id token first, then the access token.
 
-### 10. Credentials are saved to secure storage
+If no account id can be found, profile creation fails because a Codex OAuth
+provider profile cannot be built safely without `CHATGPT_ACCOUNT_ID`.
 
-The hook creates a `persistCredentials()` callback (`src/components/useCodexOAuthFlow.ts:94`). The caller invokes this callback after it has successfully built/saved the provider profile.
+### 10. The Browser Gets A Final Page
 
-Credentials are saved through `saveCodexCredentials()` in `src/utils/codexCredentials.ts:183`.
+After token exchange, the pending browser response receives one of three HTML
+pages from `src/services/api/codexOAuth.ts`:
 
-Stored fields are defined by `CodexCredentialBlob` (`src/utils/codexCredentials.ts:16`):
+- success: "Codex login complete"
+- error: "Codex login failed" plus the error message
+- cancelled: "Codex login cancelled"
 
-- `apiKey`
-- `accessToken`
-- `refreshToken`
-- `idToken`
-- `accountId`
-- `profileId`
-- `lastRefreshAt`
-- `lastRefreshFailureAt`
+The success page intentionally tells the user to return to GakrCLI. It does not
+try to redirect into another web app.
 
-The storage key is `codex` (`src/utils/codexCredentials.ts:12`).
+### 11. The Profile Is Saved And Activated
 
-Security behavior:
-
-- Codex credentials use native OS secure storage only.
-- Plaintext fallback is disabled for Codex credentials (`src/utils/codexCredentials.ts:41`).
-- Codex OAuth credentials are **not normally written as plaintext into `~/.gakrcli/.credentials.json`**. That plaintext file belongs to the generic fallback storage implementation, but Codex OAuth requests native secure storage with fallback disabled.
-- On Windows, the native backend writes an encrypted DPAPI blob under the Gakr config directory, protected for the current Windows user (`src/utils/secureStorage/windowsCredentialStorage.ts:28`).
-- On macOS, the native backend writes a Keychain generic password entry (`src/utils/secureStorage/macOsKeychainStorage.ts:26`).
-- On Linux, the native backend writes a Secret Service entry through `secret-tool` (`src/utils/secureStorage/linuxSecretStorage.ts:14`).
-- If secure storage is unavailable, saving fails instead of writing plaintext.
-- `--bare` mode disables secure storage reads/writes (`src/utils/codexCredentials.ts:149` and `src/utils/codexCredentials.ts:183`).
-
-The platform storage selector is in `src/utils/secureStorage/index.ts:61`:
-
-- macOS: Keychain
-- Linux: libsecret/Secret Service
-- Windows: Credential Locker
-
-### 11. Provider profile is saved/activated
-
-Codex OAuth credentials are stored separately from provider profiles. The provider profile stores non-secret routing information.
-
-`buildCodexOAuthProfileEnv()` returns this profile env (`src/utils/providerProfile.ts:554`):
+`buildCodexOAuthProfileEnv()` in `src/utils/providerProfile.ts` builds this
+non-secret env payload:
 
 ```text
 OPENAI_BASE_URL=https://chatgpt.com/backend-api/codex
@@ -296,104 +353,298 @@ CHATGPT_ACCOUNT_ID=<account id>
 CODEX_CREDENTIAL_SOURCE=oauth
 ```
 
-In the provider manager, a `Codex OAuth` provider profile is added or updated (`src/components/ProviderManager.tsx:1738`). The default model is `codexplan` (`src/components/ProviderManager.tsx:167`).
+In the provider manager, the profile is saved to the global provider-profile
+list using `addProviderProfile()` or `updateProviderProfile()` from
+`src/utils/providerProfiles.ts`. The active profile id is stored in global
+config as `activeProviderProfileId`.
 
-After saving the profile, GakrCLI:
+The global profile entry is a sanitized `ProviderProfile` from
+`src/utils/config.ts`. For Codex OAuth it is stored roughly like this in the
+global config JSON:
 
-1. persists the credentials with the saved profile id (`src/components/ProviderManager.tsx:1779`)
-2. clears startup provider override if needed (`src/components/ProviderManager.tsx:1780`)
-3. applies the saved profile to the current session (`src/components/ProviderManager.tsx:742`)
-4. reports whether the current session switched immediately or only the next startup was saved (`src/components/ProviderManager.tsx:730`)
+```json
+{
+  "providerProfiles": [
+    {
+      "id": "provider_abc123def456",
+      "name": "Codex OAuth",
+      "provider": "openai",
+      "baseUrl": "https://chatgpt.com/backend-api/codex",
+      "model": "codexplan"
+    }
+  ],
+  "activeProviderProfileId": "provider_abc123def456"
+}
+```
 
-The `/provider` wizard also supports Codex OAuth through `CodexOAuthStep` (`src/commands/provider/provider.tsx:1087`).
+There is normally no `apiKey` field for Codex OAuth in this profile entry. The
+empty API-key value used by the setup UI is sanitized away before saving. The
+ChatGPT account id and `CODEX_CREDENTIAL_SOURCE=oauth` are not stored in this
+newer global profile object directly; they are represented in the legacy
+startup profile file described below and in the secure credential blob.
 
-## Startup/load path: how the saved Codex OAuth profile becomes active
+The `/provider` command also supports a legacy single-profile file through
+`saveProfileFile()` in `src/utils/providerProfile.ts`. The newer provider
+manager uses the global provider-profile list as the main source of truth.
+When an active provider profile is selected through `setActiveProviderProfile()`,
+GakrCLI also writes a legacy startup profile so early startup can rebuild env
+before the TUI is fully loaded.
 
-After Codex OAuth setup completes, later sessions load the saved profile and credentials through two connected paths:
+That legacy startup file is named `.gakrcli-profile.json` and lives in
+`getGakrcliConfigHomeDir()` by default, usually:
 
-1. **Profile selection/loading**
-   - `getProviderProfiles()` reads the saved provider list from global config (`src/utils/providerProfiles.ts:390`).
-   - `getActiveProviderProfile()` selects `activeProviderProfileId`, or the first profile if no active id is set (`src/utils/providerProfiles.ts:573`).
-   - `applyActiveProviderProfileFromConfig()` applies the active profile to `process.env` unless explicit startup provider env already takes priority (`src/utils/providerProfiles.ts:712`).
-   - For an OpenAI-compatible Codex profile, `applyProviderProfileToProcessEnv()` sets `GAKR_CODE_USE_OPENAI=1`, `OPENAI_BASE_URL`, and `OPENAI_MODEL` (`src/utils/providerProfiles.ts:687`).
+```text
+~/.gakrcli/.gakrcli-profile.json
+```
 
-2. **Credential loading for actual Codex requests**
-   - The profile marks `CODEX_CREDENTIAL_SOURCE=oauth`, but the secret tokens are loaded separately from secure storage.
-   - Before a Codex request, `openaiShim.ts` calls `refreshCodexAccessTokenIfNeeded()` and then `resolveRuntimeCodexCredentials()` (`src/services/api/openaiShim.ts:1347`).
-   - `resolveCodexApiCredentials()` prefers explicit env/auth-json credentials, then securely stored Codex OAuth credentials, then default `~/.codex/auth.json` fallback when needed (`src/services/api/providerConfig.ts:867`).
-   - `performCodexRequest()` sends the resolved credential as `Authorization: Bearer ...` and sends the account id as `chatgpt-account-id` (`src/services/api/codexShim.ts:545`).
+For Codex OAuth its JSON shape is:
 
-So the profile answers **which backend/model to use**, while secure storage answers **which OAuth token/account to authenticate with**.
+```json
+{
+  "profile": "codex",
+  "env": {
+    "OPENAI_BASE_URL": "https://chatgpt.com/backend-api/codex",
+    "OPENAI_MODEL": "codexplan",
+    "CHATGPT_ACCOUNT_ID": "acct_...",
+    "CODEX_CREDENTIAL_SOURCE": "oauth"
+  },
+  "createdAt": "2026-05-13T00:00:00.000Z"
+}
+```
 
-## Runtime credential resolution
+This file still does not contain the OAuth access token or refresh token.
 
-When the Codex transport is used, runtime credential resolution happens in `src/services/api/providerConfig.ts`.
+After saving the profile, the UI calls `persistCredentials({ profileId })`.
 
-Credential priority is:
+### 12. Credentials Are Saved Securely
 
-1. Explicit `CODEX_API_KEY` (`src/services/api/providerConfig.ts:790`).
-2. Explicit Codex auth file via `CODEX_AUTH_JSON_PATH` or `CODEX_HOME` (`src/services/api/providerConfig.ts:672` and `src/services/api/providerConfig.ts:803`).
-3. Securely stored Codex OAuth credentials (`src/services/api/providerConfig.ts:888`).
-4. Default Codex CLI auth file at `~/.codex/auth.json` (`src/services/api/providerConfig.ts:681` and `src/services/api/providerConfig.ts:903`).
+`persistCredentials()` calls `saveCodexCredentials()` in
+`src/utils/codexCredentials.ts`.
 
-`resolveCodexApiCredentials()` implements that runtime lookup (`src/services/api/providerConfig.ts:867`).
+The stored blob shape is:
 
-`resolveRuntimeCodexCredentials()` lets request paths prefer freshly refreshed credentials passed from async secure-storage reads (`src/services/api/providerConfig.ts:824`).
+```ts
+type CodexCredentialBlob = {
+  apiKey?: string
+  accessToken: string
+  refreshToken?: string
+  idToken?: string
+  accountId?: string
+  profileId?: string
+  lastRefreshAt?: number
+  lastRefreshFailureAt?: number
+}
+```
 
-Supported `auth.json` token field names include:
+The secure storage value is the wider `SecureStorageData` JSON object from
+`src/utils/secureStorage/index.ts`. The Codex login is stored under the top-level
+`codex` property, so the plaintext form before native encryption looks like:
+
+```json
+{
+  "codex": {
+    "apiKey": "optional-exchanged-codex-token",
+    "accessToken": "oauth-access-token",
+    "refreshToken": "oauth-refresh-token",
+    "idToken": "optional-oidc-id-token",
+    "accountId": "acct_...",
+    "profileId": "provider_abc123def456",
+    "lastRefreshAt": 1778611200000
+  }
+}
+```
+
+Other secure-storage features can share the same JSON object under other
+top-level keys such as `mcpOAuth`, `trustedDeviceToken`, or `pluginSecrets`.
+`clearCodexCredentials()` deletes only the `codex` property and writes the rest
+back unchanged.
+
+Codex credentials call `getSecureStorage({ allowPlainTextFallback: false })`.
+That means Codex OAuth does not write tokens to the plaintext fallback file
+`~/.gakrcli/.credentials.json`. If native secure storage cannot save the
+credentials, sign-in fails after profile setup with a secure-storage error.
+
+Native storage by platform:
+
+| OS | Storage implementation and on-disk/keychain format |
+| --- | --- |
+| Windows | `windowsCredentialStorage` serializes the `SecureStorageData` JSON, encrypts it with DPAPI `ProtectedData.Protect(..., CurrentUser)`, base64-encodes the encrypted bytes, and writes that base64 string to `<config-dir>/<service>.secure.dpapi`. The file is not readable JSON. Legacy PasswordVault reads/deletes are only attempted when `GAKR_ENABLE_LEGACY_WINDOWS_PASSWORDVAULT=1`. |
+| macOS | `macOsKeychainStorage` serializes the `SecureStorageData` JSON and stores it as a generic password using the `security` CLI. The service name is the secure-storage service name, and the account is the current username. Writes pass the JSON as hex password data with `security add-generic-password -X`; reads use `security find-generic-password -w`. |
+| Linux | `linuxSecretStorage` serializes the `SecureStorageData` JSON and stores it through `secret-tool store --label <service> service <service> account <username>`, passing the JSON payload on stdin. Reads use `secret-tool lookup service <service> account <username>`. |
+
+The secure-storage service name is generated by
+`getSecureStorageServiceName('-credentials')` in
+`src/utils/secureStorage/macOsKeychainHelpers.ts`. In normal production config
+it is:
+
+```text
+GakrCLI-credentials
+```
+
+If Gakr is running with a non-production OAuth suffix or a non-default
+`GAKR_CONFIG_DIR`, the service name gets a suffix such as
+`-staging-oauth`, `-local-oauth`, `-custom-oauth`, and/or an eight-character
+hash of the config directory. On Windows the same service name is sanitized and
+used as the DPAPI file name stem.
+
+The generic plaintext fallback storage, when allowed by other features, writes
+the same `SecureStorageData` JSON to:
+
+```text
+<config-dir>/.credentials.json
+```
+
+with file mode `0600`. Codex OAuth explicitly disables this fallback.
+
+The config directory is resolved by `getGakrcliConfigHomeDir()` in
+`src/utils/envUtils.ts`. It defaults to `~/.gakrcli`, unless `GAKR_CONFIG_DIR`
+is set. If a legacy `~/.claude` directory exists and `~/.gakrcli` does not, the
+resolver may use the legacy directory for compatibility.
+
+The global provider-profile config path is resolved by `getGlobalGakrcliFile()`
+in `src/utils/env.ts`. By default it is `~/.gakrcli.json`, with suffix and
+legacy fallback behavior for OAuth/config variants.
+`saveGlobalConfig()` writes JSON with mode `0600` and filters out default values,
+so empty defaults like an empty provider profile list may be omitted from disk.
+
+## Loading A Saved Codex OAuth Login
+
+Startup has two connected paths: profile loading and credential loading.
+
+Profile loading:
+
+1. `applyActiveProviderProfileFromConfig()` in `src/utils/providerProfiles.ts`
+   reads the global config.
+2. `getActiveProviderProfile()` selects `activeProviderProfileId`, or falls
+   back to the first profile.
+3. `applyProviderProfileToProcessEnv()` applies the selected profile to
+   `process.env`.
+4. For the saved Codex OAuth global profile, this applies OpenAI-compatible
+   routing env such as `GAKR_CODE_USE_OPENAI=1`, `OPENAI_BASE_URL`, and
+   `OPENAI_MODEL`. The global profile object itself does not carry
+   `CHATGPT_ACCOUNT_ID`; request-time credential resolution gets the account id
+   from secure storage, token claims, env overrides, or `auth.json`.
+5. `setActiveProviderProfile()` also keeps the legacy `.gakrcli-profile.json`
+   file in sync when the active profile changes, so future startup can rebuild
+   the Codex OAuth env marker and account id early.
+
+Legacy single-profile loading:
+
+1. `buildStartupEnvFromProfile()` in `src/utils/providerProfile.ts` reads the
+   legacy profile file with `loadProfileFile()`.
+2. `loadProfileFile()` first checks the default config-dir path
+   `<config-dir>/.gakrcli-profile.json`. If no file exists there, it checks the
+   legacy working-directory path `./.gakrcli-profile.json`.
+3. If the newer provider-profile system has already applied env, the legacy file
+   is skipped to avoid overwriting the active saved profile.
+4. If there is no saved profile, Codex defaults may be injected so the provider
+   picker starts from the Codex-first default.
+
+Credential loading:
+
+1. Before Codex requests, `openaiShim.ts` calls
+   `refreshCodexAccessTokenIfNeeded()`.
+2. It then calls `resolveRuntimeCodexCredentials()`.
+3. Runtime resolution uses explicit env or explicit auth file first, then
+   freshly read secure-storage credentials, then default Codex CLI `auth.json`
+   when appropriate.
+4. The Codex shim sends `Authorization: Bearer <token>` and
+   `chatgpt-account-id: <account id>`.
+
+## Runtime Credential Priority
+
+For Codex API calls, `src/services/api/providerConfig.ts` resolves credentials
+in this order:
+
+1. `CODEX_API_KEY`
+2. Explicit Codex auth file via `CODEX_AUTH_JSON_PATH` or `CODEX_HOME`
+3. Secure-storage Codex OAuth credentials
+4. Default Codex CLI auth file at `~/.codex/auth.json`
+
+There is one important detail: if an explicit auth file path is configured, that
+explicit configuration is respected even when the file is missing or incomplete.
+In that case GakrCLI does not silently fall back to secure-storage OAuth.
+
+Supported `auth.json` bearer token fields include:
 
 - `openai_api_key`
 - `openaiApiKey`
 - `access_token`
 - `accessToken`
-- nested `tokens.access_token`
-- nested `auth.access_token`
-- nested `token.access_token`
+- `tokens.access_token`
+- `tokens.accessToken`
+- `auth.access_token`
+- `auth.accessToken`
+- `token.access_token`
+- `token.accessToken`
 
-The account id can come from env (`CODEX_ACCOUNT_ID` or `CHATGPT_ACCOUNT_ID`), auth JSON fields, or parsed JWT claims (`src/services/api/providerConfig.ts:714`).
+The account id can come from:
 
-## Token refresh
+- `CODEX_ACCOUNT_ID`
+- `CHATGPT_ACCOUNT_ID`
+- `account_id` or `accountId` fields in `auth.json`
+- JWT claims in the bearer token
+- JWT claims in an id token
+- stored OAuth credential metadata
 
-`refreshCodexAccessTokenIfNeeded()` refreshes stored OAuth credentials (`src/utils/codexCredentials.ts:268`).
+OIDC `id_token` values are used only to discover account metadata or exchange
+for a Codex API-key token. They are not treated as bearer credentials for Codex
+API requests.
+
+## Token Refresh
+
+`refreshCodexAccessTokenIfNeeded()` in `src/utils/codexCredentials.ts` refreshes
+stored OAuth credentials.
 
 Refresh behavior:
 
-- Skips refresh in `--bare` mode (`src/utils/codexCredentials.ts:274`).
-- Skips refresh when `CODEX_API_KEY` is explicitly set (`src/utils/codexCredentials.ts:278`).
-- Reads secure storage asynchronously (`src/utils/codexCredentials.ts:282`).
-- Requires a stored `refreshToken` (`src/utils/codexCredentials.ts:287`).
-- Refreshes when token expiry is within a 60-second skew (`src/utils/codexCredentials.ts:96`).
-- Deduplicates concurrent refresh attempts with `inFlightCodexRefresh` (`src/utils/codexCredentials.ts:299`).
-- Uses a 60-second cooldown after refresh failure (`src/utils/codexCredentials.ts:13`, `src/utils/codexCredentials.ts:105`, and `src/utils/codexCredentials.ts:366`).
-- Attempts to exchange the refreshed id token for an API key token (`src/utils/codexCredentials.ts:347`).
-- Saves refreshed credentials back to secure storage (`src/utils/codexCredentials.ts:354`).
+- skipped in `--bare` mode
+- skipped when `CODEX_API_KEY` is explicitly set
+- skipped when no secure-storage Codex credentials exist
+- skipped when no refresh token is stored
+- triggered when the access token or id token expires within the refresh skew
+- deduplicated with a shared in-flight refresh promise
+- cooled down briefly after refresh failure
+- saved back to native secure storage after a successful refresh
 
-The refresh endpoint is `https://auth.openai.com/oauth/token`, with `grant_type=refresh_token` (`src/utils/codexCredentials.ts:306`).
+The refresh request posts to:
 
-## How Codex OAuth credentials are used for API calls
+```text
+https://auth.openai.com/oauth/token
+```
 
-Codex model aliases and base URL detection are handled in `src/services/api/providerConfig.ts`.
+with:
 
-Important constants:
+```text
+grant_type=refresh_token
+client_id=<Codex OAuth client id>
+refresh_token=<stored refresh token>
+```
 
-- official Codex backend: `https://chatgpt.com/backend-api/codex` (`src/services/api/providerConfig.ts:19`)
-- `codexplan` resolves to a GPT-5.x Codex model with high reasoning (`src/services/api/providerConfig.ts:34`)
-- `codexspark` resolves to the Codex Spark model (`src/services/api/providerConfig.ts:57`)
+If the refreshed response includes an id token, GakrCLI again attempts the
+optional id-token-to-Codex-token exchange.
 
-`resolveProviderRequest()` chooses `codex_responses` transport when:
+## How Requests Use The Login
 
-- the base URL is the official Codex backend, or
-- a Codex shortcut alias is selected and no custom base URL overrides it
+Codex request routing is determined in `src/services/api/providerConfig.ts`.
 
-This logic is in `src/services/api/providerConfig.ts:278` and `src/services/api/providerConfig.ts:572`.
+The official Codex base URL is:
 
-The OpenAI-compatible shim uses the Codex request path in `src/services/api/openaiShim.ts:1347`:
+```text
+https://chatgpt.com/backend-api/codex
+```
 
-1. refresh stored credentials if needed (`src/services/api/openaiShim.ts:1348`)
-2. resolve runtime Codex credentials (`src/services/api/openaiShim.ts:1360`)
-3. require an API key/access token (`src/services/api/openaiShim.ts:1363`)
-4. require a ChatGPT account id (`src/services/api/openaiShim.ts:1375`)
-5. call `performCodexRequest()` (`src/services/api/openaiShim.ts:1381`)
+`codexplan` and `codexspark` are shortcut aliases that resolve to Codex
+transport. When the official Codex backend or a Codex alias is selected,
+`resolveProviderRequest()` uses the `codex_responses` transport.
+
+`openaiShim.ts` then:
+
+1. refreshes stored OAuth credentials if needed
+2. resolves runtime Codex credentials
+3. requires a bearer credential
+4. requires a ChatGPT account id
+5. calls `performCodexRequest()` in `src/services/api/codexShim.ts`
 
 `performCodexRequest()` sends the request to:
 
@@ -401,166 +652,142 @@ The OpenAI-compatible shim uses the Codex request path in `src/services/api/open
 https://chatgpt.com/backend-api/codex/responses
 ```
 
-It sets:
+with headers:
 
-- `Authorization: Bearer <apiKey or accessToken>`
-- `chatgpt-account-id: <account id>` when available
-- `originator: gakrcli`
-- JSON body in OpenAI Responses API shape
+```text
+Authorization: Bearer <apiKey or accessToken>
+chatgpt-account-id: <account id>
+originator: gakrcli
+```
 
-This is implemented in `src/services/api/codexShim.ts:473` and header construction is at `src/services/api/codexShim.ts:545`.
+## Logout And Cleanup
 
-## Codex usage endpoint
+The provider manager exposes "Log out Codex OAuth" when stored OAuth credentials
+exist.
 
-Codex usage retrieval also uses the stored OAuth credentials.
+Logout does the following:
 
-`src/services/api/codexUsage.ts:400` refreshes stored credentials before usage fetch. It then resolves runtime credentials and requires both an auth token and ChatGPT account id (`src/services/api/codexUsage.ts:422`).
+1. clears the `codex` key from secure storage with `clearCodexCredentials()`
+2. removes the associated Codex OAuth provider profile when found
+3. clears persisted legacy Codex OAuth profile data
+4. clears startup provider overrides when needed
+5. refreshes provider/profile UI state
 
-The request includes:
+`clearCodexCredentials()` removes only the Codex credential entry. It leaves
+other secure-storage entries, such as MCP OAuth credentials, intact.
 
-- `Authorization: Bearer <apiKey>`
-- `chatgpt-account-id: <account id>`
-- `originator: gakrcli`
-
-Header construction is at `src/services/api/codexUsage.ts:438`.
-
-## Logout / clearing credentials
-
-Provider manager exposes `Log out Codex OAuth` when stored Codex OAuth credentials exist (`src/components/ProviderManager.tsx:539`).
-
-Logout behavior at `src/components/ProviderManager.tsx:1608`:
-
-1. clears secure-storage Codex credentials via `clearCodexCredentials()`
-2. hides the logout option
-3. removes the associated Codex OAuth provider profile if found
-4. clears persisted Codex OAuth profile data
-5. clears startup provider override when needed
-
-`clearCodexCredentials()` removes only the `codex` key from secure storage and leaves other secure-storage data intact (`src/utils/codexCredentials.ts:249`).
-
-## Environment variables
+## Environment Variables
 
 | Variable | Purpose |
 | --- | --- |
-| `CODEX_OAUTH_CLIENT_ID` | Override the default Codex OAuth client id. |
-| `CODEX_OAUTH_CALLBACK_PORT` | Override the localhost callback port. Default: `1455`. |
-| `CODEX_API_KEY` | Explicit Codex token override. Takes priority over secure storage. |
-| `CODEX_AUTH_JSON_PATH` | Explicit path to a Codex CLI-compatible `auth.json`. |
+| `CODEX_OAUTH_CLIENT_ID` | Override the Codex OAuth client id. |
+| `CODEX_OAUTH_CALLBACK_PORT` | Override the localhost callback port. |
+| `CODEX_API_KEY` | Explicit Codex bearer token. Takes priority over OAuth storage. |
+| `CODEX_AUTH_JSON_PATH` | Explicit Codex CLI-compatible `auth.json` path. |
 | `CODEX_HOME` | Alternative Codex home directory; auth file resolves to `<CODEX_HOME>/auth.json`. |
 | `CODEX_ACCOUNT_ID` | Explicit ChatGPT account id. |
 | `CHATGPT_ACCOUNT_ID` | Explicit ChatGPT account id fallback. |
-| `OPENAI_BASE_URL` | For Codex profile, set to official Codex backend. |
+| `OPENAI_BASE_URL` | For Codex OAuth profiles, set to the official Codex backend. |
 | `OPENAI_MODEL` | Codex aliases such as `codexplan` or `codexspark`. |
-| `CODEX_CREDENTIAL_SOURCE` | Profile marker; `oauth` means credentials are stored separately in secure storage. |
+| `CODEX_CREDENTIAL_SOURCE` | Profile marker. `oauth` means secrets are stored separately in secure storage. |
+| `GAKR_CONFIG_DIR` | Overrides the Gakr config directory. |
+| `GAKR_ENABLE_LEGACY_WINDOWS_PASSWORDVAULT` | Enables best-effort legacy Windows PasswordVault compatibility. |
 
-## Existing Codex CLI compatibility
+## Error Handling
 
-GakrCLI can reuse credentials from the Codex CLI without browser OAuth if `~/.codex/auth.json` exists. The default path is resolved in `resolveCodexAuthPath()` (`src/services/api/providerConfig.ts:672`).
+Common failures and where they are handled:
 
-The advanced setup guide documents this behavior in `docs/advanced-setup.md:46`.
-
-## Error and cancellation handling
-
-Common failure paths:
-
-- `--bare` mode: OAuth is unavailable because secure storage is disabled (`src/components/useCodexOAuthFlow.ts:63`).
-- Callback port in use: user is told to free `localhost:<port>` (`src/services/api/codexOAuth.ts:274`).
-- Missing authorization code: listener returns `400` and rejects (`src/services/oauth/auth-code-listener.ts:216`).
-- Invalid state: listener returns `400` and rejects (`src/services/oauth/auth-code-listener.ts:223`).
-- Token endpoint failure: error includes status and response body when possible (`src/services/api/codexOAuth.ts:141`).
-- Missing access/refresh token: flow fails after token response validation (`src/services/api/codexOAuth.ts:150`).
-- Secure-storage save failure: hook throws a clear persistence error (`src/components/useCodexOAuthFlow.ts:103`).
-- Missing account id at request time: request path asks user to re-login or set account id env vars (`src/services/api/openaiShim.ts:1375`).
-
-Cancellation calls `cleanup()`, aborts token exchange if active, completes any pending browser response with the cancelled HTML page, rejects pending authorization, and closes the listener (`src/services/api/codexOAuth.ts:288`).
-
-## Files implementing or using Codex OAuth
-
-### Core OAuth implementation
-
-| File | Role |
+| Failure | Behavior |
 | --- | --- |
-| `src/services/api/codexOAuth.ts` | Main Codex OAuth service: builds authorize URL, starts callback listener, exchanges authorization code, renders success/error/cancel pages, cleanup. |
-| `src/services/api/codexOAuthShared.ts` | Shared constants and helpers: issuer, client id, callback port, scopes, JWT parsing, account-id extraction, token exchange for API key. |
-| `src/services/oauth/auth-code-listener.ts` | Reusable localhost OAuth callback listener with state validation and pending browser response handling. |
-| `src/services/oauth/crypto.ts` | PKCE verifier/challenge and random state generation. |
+| `--bare` mode | Hook returns an error because secure storage is disabled. |
+| Callback port in use | Service tells the user to free `localhost:<port>`. |
+| Browser launch fails | UI shows the authorize URL for manual copy/paste. |
+| Missing authorization code | Listener responds `400` and rejects the flow. |
+| Invalid state | Listener responds `400` and rejects the flow. |
+| Token endpoint failure | Service includes HTTP status and response body when available. |
+| Missing access or refresh token | Service rejects with a missing credentials error. |
+| Missing account id | Profile creation fails because `CHATGPT_ACCOUNT_ID` cannot be built. |
+| Secure-storage save failure | Hook throws a persistence error after profile setup attempts to save credentials. |
+| Cancellation/unmount | Service aborts token exchange, completes pending browser response with cancel HTML, rejects pending authorization, and closes the listener. |
 
-### React/UI integration
+## Browser Reopening Loop: Fixed Behavior
 
-| File | Role |
-| --- | --- |
-| `src/components/useCodexOAuthFlow.ts` | Shared React hook that starts the service, opens browser, exposes status, and saves credentials through a callback. |
-| `src/components/ProviderManager.tsx` | First-run/provider-manager Codex OAuth setup, provider profile creation, activation, logout, and credential state refresh. |
-| `src/commands/provider/provider.tsx` | `/provider` wizard Codex OAuth step and Codex credential/profile setup. |
-| `src/components/ProviderManager.test.tsx` | Tests first-run setup, activation fallback, hiding in bare mode, logout visibility, and async credential state. |
-| `src/components/useCodexOAuthFlow.test.tsx` | Tests hook failure and credential persistence behavior. |
-| `src/commands/provider/provider.test.tsx` | Tests provider wizard behavior including Codex OAuth visibility and profile env building. |
+The reported symptom was:
 
-### Credential storage and resolution
+1. GakrCLI opens the browser.
+2. The user authorizes.
+3. The browser or CLI shows an error.
+4. Returning to GakrCLI starts the browser flow again.
+5. The same cycle repeats.
 
-| File | Role |
-| --- | --- |
-| `src/utils/codexCredentials.ts` | Secure storage read/write/clear, token refresh, refresh cooldown, profile id attachment. |
-| `src/utils/secureStorage/index.ts` | Chooses OS secure storage implementation and controls plaintext fallback. |
-| `src/utils/secureStorage/macOsKeychainStorage.ts` | macOS Keychain-backed storage. |
-| `src/utils/secureStorage/linuxSecretStorage.ts` | Linux Secret Service/libsecret-backed storage. |
-| `src/utils/secureStorage/windowsCredentialStorage.ts` | Windows Credential Locker-backed storage. |
-| `src/services/api/providerConfig.ts` | Codex model aliases, Codex transport detection, auth.json loading, runtime credential resolution. |
-| `src/utils/providerProfile.ts` | Builds Codex OAuth provider profile env and detects/clears persisted Codex OAuth profiles. |
-| `src/utils/providerValidation.ts` | Provides Codex auth validation messages and hints. |
-| `src/utils/providerAutoDetect.ts` | Detects Codex availability from env or `~/.codex/auth.json`. |
-| `src/utils/providerSecrets.ts` | Marks `CODEX_API_KEY` as a provider secret. |
-| `src/utils/providerStartupOverrides.ts` | Handles provider startup env overrides including Codex secrets. |
+The root cause was the shared React hook restarting the OAuth effect whenever
+the `onAuthenticated` callback identity changed. Provider screens can pass
+callbacks that are recreated during render. The hook also updates state when the
+browser URL is ready and when browser-open succeeds. Those state updates can
+cause a re-render. Before the fix, a changed callback identity was enough to
+run the effect cleanup, cancel the active listener/token exchange, and start a
+fresh OAuth flow that opened the browser again.
 
-### API usage
+The fix is in `src/components/useCodexOAuthFlow.ts`:
 
-| File | Role |
-| --- | --- |
-| `src/services/api/openaiShim.ts` | Selects Codex transport, refreshes/resolves credentials, validates auth/account id, and calls Codex shim. |
-| `src/services/api/codexShim.ts` | Converts Anthropic-style requests to Responses API shape and sends requests to Codex backend with auth headers. |
-| `src/services/api/codexUsage.ts` | Fetches Codex usage with refreshed/resolved Codex credentials. |
+- the latest `onAuthenticated` callback is stored in a React ref
+- the OAuth-starting effect no longer depends on `onAuthenticated`
+- re-rendering the screen updates the ref but does not restart the flow
+- cleanup still runs when the screen actually unmounts or dependencies that
+  own the service/browser behavior change
 
-### Tests
+The regression test is in `src/components/useCodexOAuthFlow.test.tsx`:
 
-| File | Coverage |
-| --- | --- |
-| `src/services/api/codexOAuth.test.ts` | OAuth success page, cancellation, authorization URL/callback behavior. |
-| `src/services/oauth/auth-code-listener.test.ts` | Callback listener and cancellation behavior. |
-| `src/services/oauth/auth-code-listener.analytics.test.ts` | Callback redirect analytics behavior. |
-| `src/services/oauth/crypto.test.ts` | PKCE/state helper behavior. |
-| `src/utils/codexCredentials.test.ts` | Secure credential storage, refresh, cooldown, deduplication, profile id linkage. |
-| `src/services/api/providerConfig.codexSecureStorage.test.ts` | Provider config behavior for secure-storage Codex credentials. |
-| `src/services/api/providerConfig.runtimeCodexCredentials.test.ts` | Runtime credential precedence and stored-credential resolution. |
-| `src/services/api/codexUsage.test.ts` | Codex usage auth and credential behavior. |
-| `src/services/api/codexShim.test.ts` | Codex Responses API request/stream behavior. |
+- it passes an inline `onAuthenticated` callback that changes identity after
+  status updates
+- it verifies `startOAuthFlow()` is called only once
+- it verifies cleanup is not called just because the callback changed
 
-### Existing documentation
-
-| File | Codex OAuth content |
-| --- | --- |
-| `docs/advanced-setup.md` | Documents Codex via ChatGPT auth, choosing `Codex OAuth`, `~/.codex/auth.json`, `CODEX_AUTH_JSON_PATH`, and `CODEX_API_KEY`. |
-| `docs/non-technical-setup.md` | Mentions Codex as a provider for users already using Codex CLI or ChatGPT auth. |
-| `.env.example` | Mentions native web search mode for Anthropic/Codex; most Codex OAuth env behavior is documented in setup docs and code. |
-
-## Practical user flow
+## Practical User Flow
 
 1. Start GakrCLI.
-2. Open provider setup, usually `/provider`.
+2. Open provider setup or run `/provider`.
 3. Choose `Codex OAuth`.
-4. Browser opens to ChatGPT/OpenAI sign-in.
-5. Complete sign-in.
-6. Browser redirects to `http://localhost:1455/auth/callback`.
-7. GakrCLI exchanges the code and stores credentials securely.
-8. GakrCLI saves a `Codex OAuth` provider profile with `codexplan`.
-9. Current session switches to Codex if activation succeeds; otherwise it is saved for next startup.
-10. Future Codex requests use secure-storage credentials and refresh them when needed.
+4. GakrCLI starts a temporary localhost listener.
+5. GakrCLI opens the browser authorization URL.
+6. Sign in with ChatGPT/OpenAI and authorize.
+7. Browser redirects to `http://localhost:1455/auth/callback` by default.
+8. GakrCLI validates `state`, exchanges the code for tokens, and extracts the
+   account id.
+9. GakrCLI saves or updates a `Codex OAuth` provider profile.
+10. GakrCLI saves OAuth credentials to native secure storage.
+11. The current session is activated when possible; otherwise the profile is
+   saved for next startup.
+12. Later Codex requests use secure-storage credentials and refresh tokens when
+   needed.
 
-## Security notes
+## Troubleshooting Checklist
 
-- The flow uses PKCE S256 and a random `state` parameter.
-- The local HTTP listener only binds to `localhost`.
-- The listener validates callback path and state before accepting a code.
-- Codex OAuth does not allow plaintext fallback for credential storage.
-- Provider profiles store routing/account metadata, not the OAuth refresh token.
-- Explicit env credentials override stored OAuth credentials, which is useful for CI or troubleshooting but can bypass secure storage.
-- `CODEX_API_KEY`, `CODEX_AUTH_JSON_PATH`, and account-id env vars should be treated as sensitive configuration.
+If browser OAuth still fails:
+
+1. Check whether `localhost:1455` is already in use. If needed, set
+   `CODEX_OAUTH_CALLBACK_PORT` to another free port.
+2. Check whether `CODEX_OAUTH_CLIENT_ID` is set. A bad override can cause
+   authorize or token exchange failures.
+3. Check whether `CODEX_AUTH_JSON_PATH` or `CODEX_HOME` is set. Explicit auth
+   file settings take priority over secure-storage OAuth and can block fallback.
+4. Check whether `CODEX_API_KEY` is set. It overrides secure-storage OAuth.
+5. Confirm native secure storage works on the current platform. Codex OAuth does
+   not allow plaintext fallback for tokens.
+6. If the flow completed but requests fail, verify a ChatGPT account id is
+   available from stored credentials, token claims, `CHATGPT_ACCOUNT_ID`, or
+   `CODEX_ACCOUNT_ID`.
+7. If the browser opens repeatedly, confirm the build includes the hook fix
+   described in "Browser Reopening Loop: Fixed Behavior".
+
+## Security Notes
+
+- The OAuth flow uses PKCE S256.
+- A random `state` value protects the callback from CSRF.
+- The listener binds to `localhost` and accepts only the configured callback
+  path.
+- Browser callback responses are completed with local success/error/cancel HTML.
+- Codex OAuth credentials require native secure storage.
+- Provider profiles store routing metadata, not refresh tokens.
+- Explicit env credentials override stored OAuth credentials and should be
+  treated as sensitive.
