@@ -108,6 +108,13 @@ async function main(): Promise<void> {
     applySafeConfigEnvironmentVariables()
   }
 
+  {
+    const { applyActiveProviderProfileFromConfig } = await import(
+      '../utils/providerProfiles.js'
+    )
+    applyActiveProviderProfileFromConfig()
+  }
+
   const startupEnv = await buildStartupEnvFromProfile({
     processEnv: process.env,
   })

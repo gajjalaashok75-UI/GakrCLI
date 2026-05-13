@@ -3,6 +3,7 @@ import {
   isCodexBaseUrl,
   parseOpenAICompatibleApiFormat,
 } from '../services/api/providerConfig.js'
+import { readCodexCredentials } from './codexCredentials.js'
 import {
   getGlobalConfig,
   saveGlobalConfig,
@@ -813,15 +814,17 @@ export function persistActiveProviderProfileModel(
     return null
   }
 
-  // If the model is already part of the profile's model list, don't
-  // overwrite the field. This preserves comma-separated model lists like
-  // "glm-4.5, glm-4.7". Switching between models in the list is a
-  // session-level choice handled by mainLoopModelOverride, not a profile
-  // edit — the profile's model list should only change via explicit edit.
+  // Keep multi-model profile choices, but promote the last selected model so
+  // restart uses it as the primary model. This preserves model lists like
+  // "glm-4.5, glm-4.7" while moving the selected model first.
   const existingModels = parseModelList(activeProfile.model)
-  if (existingModels.includes(nextModel)) {
-    return activeProfile
-  }
+  const nextProfileModel =
+    existingModels.length > 1
+      ? [
+          nextModel,
+          ...existingModels.filter(existingModel => existingModel !== nextModel),
+        ].join(', ')
+      : nextModel
 
   saveGlobalConfig(current => {
     const currentProfiles = getProviderProfiles(current)
@@ -834,14 +837,14 @@ export function persistActiveProviderProfileModel(
     }
 
     const currentProfile = currentProfiles[profileIndex]
-    if (currentProfile.model === nextModel) {
+    if (currentProfile.model === nextProfileModel) {
       return current
     }
 
     const nextProfiles = [...currentProfiles]
     nextProfiles[profileIndex] = {
       ...currentProfile,
-      model: nextModel,
+      model: nextProfileModel,
     }
 
     return {
@@ -860,6 +863,12 @@ export function persistActiveProviderProfileModel(
     trimOrUndefined(process.env[PROFILE_ENV_APPLIED_ID]) === resolvedProfile.id
   ) {
     applyProviderProfileToProcessEnv(resolvedProfile)
+  }
+
+  const startupProfile = buildStartupProfileFromActiveProfile(resolvedProfile)
+
+  if (startupProfile) {
+    saveProfileFile(createProfileFile(startupProfile.profile, startupProfile.env))
   }
 
   return resolvedProfile
@@ -1011,6 +1020,24 @@ function buildStartupProfileFromActiveProfile(
         })),
       }
     case 'openai': {
+      if (isCodexBaseUrl(activeProfile.baseUrl)) {
+        const storedCodexCredentials = readCodexCredentials()
+        const accountId =
+          trimOrUndefined(process.env.CHATGPT_ACCOUNT_ID) ??
+          trimOrUndefined(process.env.CODEX_ACCOUNT_ID) ??
+          trimOrUndefined(storedCodexCredentials?.accountId)
+
+        return {
+          profile: 'codex',
+          env: {
+            OPENAI_BASE_URL: activeProfile.baseUrl,
+            OPENAI_MODEL: getPrimaryModel(activeProfile.model),
+            CODEX_CREDENTIAL_SOURCE: 'oauth',
+            ...(accountId ? { CHATGPT_ACCOUNT_ID: accountId } : {}),
+          },
+        }
+      }
+
       if (route.gatewayId === 'nvidia-nim') {
         const env =
           buildNvidiaNimProfileEnv({
