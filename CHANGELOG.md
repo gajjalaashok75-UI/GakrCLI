@@ -5,6 +5,15 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-05-13 09:13:54 +05:30
+
+### Added
+- **Brave Web Search Adapter**: Added first-class Brave Search support with `BRAVE_API_KEY`, bare `X-Subscription-Token` auth, provider mode selection, and auto-chain inclusion before Bing.
+
+### Fixed
+- **Web Search Presets**: Fixed the Brave preset to send a bare token and rewired Google Custom Search to use `?key=` plus `GOOGLE_CSE_ID`/`cx` query params with clear missing-env errors.
+- **Exa Snippets**: Requested Exa highlights and mapped returned excerpts into result descriptions so Exa hits no longer return empty snippets.
+
 ## [0.5.0] - 2026-05-13 08:54:00 +05:30
 
 ### Fixed

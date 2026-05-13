@@ -47,6 +47,16 @@ interface ProviderPreset {
   authScheme?: string
   jsonPath?: string
   responseAdapter?: (data: any) => SearchHit[]
+  /**
+   * When set, WEB_KEY is sent as this query parameter instead of an HTTP
+   * header. Auth headers are suppressed unless WEB_AUTH_HEADER is explicit.
+   */
+  authQueryParam?: string
+  /**
+   * Additional query params sourced from environment variables.
+   * Format: { paramName: ENV_VAR_NAME } (for example, { cx: 'GOOGLE_CSE_ID' }).
+   */
+  envQueryParams?: Record<string, string>
 }
 
 const BUILT_IN_PROVIDERS: Record<string, ProviderPreset> = {
@@ -67,10 +77,13 @@ const BUILT_IN_PROVIDERS: Record<string, ProviderPreset> = {
     },
   },
   google: {
+    // Google Custom Search JSON API requires key and cx query params.
+    // Set WEB_KEY=<api-key> and GOOGLE_CSE_ID=<engine-id>.
+    // Google has announced this API will be discontinued on 2027-01-01.
     urlTemplate: 'https://www.googleapis.com/customsearch/v1',
     queryParam: 'q',
-    authHeader: 'Authorization',
-    authScheme: 'Bearer',
+    authQueryParam: 'key',
+    envQueryParams: { cx: 'GOOGLE_CSE_ID' },
     responseAdapter(data: any) {
       return (data.items ?? []).map((r: any) => ({
         title: r.title ?? '',
@@ -84,6 +97,8 @@ const BUILT_IN_PROVIDERS: Record<string, ProviderPreset> = {
     urlTemplate: 'https://api.search.brave.com/res/v1/web/search',
     queryParam: 'q',
     authHeader: 'X-Subscription-Token',
+    // Brave wants the bare token in X-Subscription-Token, not "Bearer <token>".
+    authScheme: '',
     responseAdapter(data: any) {
       return (data.web?.results ?? []).map((r: any) => ({
         title: r.title ?? '',
@@ -343,6 +358,12 @@ function auditLogCustomSearch(url: string): void {
 // ---------------------------------------------------------------------------
 
 export function buildAuthHeadersForPreset(preset?: ProviderPreset): Record<string, string> {
+  // Presets that authenticate via query parameter (for example Google's
+  // ?key=...) do not send auth headers unless the user explicitly asks for one.
+  if (preset?.authQueryParam && process.env.WEB_AUTH_HEADER === undefined) {
+    return {}
+  }
+
   const apiKey = process.env.WEB_KEY
   if (!apiKey) return {}
 
@@ -354,7 +375,8 @@ export function buildAuthHeadersForPreset(preset?: ProviderPreset): Record<strin
   const scheme = process.env.WEB_AUTH_SCHEME !== undefined
     ? process.env.WEB_AUTH_SCHEME
     : (preset?.authScheme ?? 'Bearer')
-  return { [headerName]: `${scheme} ${apiKey}`.trim() }
+  const value = scheme ? `${scheme} ${apiKey}` : apiKey
+  return { [headerName]: value }
 }
 
 // ---------------------------------------------------------------------------
@@ -398,6 +420,7 @@ function parseExtraParams(): Record<string, string> {
 function buildRequest(query: string) {
   const config = resolveConfig()
   const method = config.method.toUpperCase()
+  const preset = config.preset
 
   // --- URL ---
   const rawTemplate = config.urlTemplate
@@ -412,6 +435,30 @@ function buildRequest(query: string) {
   // If {query} wasn't in template, add as param
   if (!rawTemplate.includes('{query}')) {
     url.searchParams.set(config.queryParam, query)
+  }
+
+  if (preset?.envQueryParams) {
+    for (const [paramName, envVar] of Object.entries(preset.envQueryParams)) {
+      const value = process.env[envVar]
+      if (!value) {
+        throw new Error(
+          `Search preset "${process.env.WEB_PROVIDER}" requires environment ` +
+          `variable ${envVar} (used as ?${paramName}=). Set ${envVar} and try again.`,
+        )
+      }
+      url.searchParams.set(paramName, value)
+    }
+  }
+
+  if (preset?.authQueryParam) {
+    const apiKey = process.env.WEB_KEY
+    if (!apiKey) {
+      throw new Error(
+        `Search preset "${process.env.WEB_PROVIDER}" requires WEB_KEY ` +
+        `(sent as ?${preset.authQueryParam}=). Set WEB_KEY and try again.`,
+      )
+    }
+    url.searchParams.set(preset.authQueryParam, apiKey)
   }
 
   const urlString = url.toString()
