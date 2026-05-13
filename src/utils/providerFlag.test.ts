@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import {
   parseProviderFlag,
+  parseModelFlag,
   applyProviderFlag,
   applyProviderFlagFromArgs,
+  applyModelFlagFromArgs,
   VALID_PROVIDERS,
 } from './providerFlag.js'
 
@@ -10,12 +12,17 @@ const ENV_KEYS = [
   'GAKR_CODE_USE_OPENAI',
   'GAKR_CODE_USE_GEMINI',
   'GAKR_CODE_USE_GITHUB',
+  'GAKR_CODE_USE_MISTRAL',
+  'GAKR_CODE_USE_NVIDIA',
   'GAKR_CODE_USE_BEDROCK',
   'GAKR_CODE_USE_VERTEX',
   'OPENAI_BASE_URL',
   'OPENAI_API_KEY',
   'OPENAI_MODEL',
   'GEMINI_MODEL',
+  'MISTRAL_MODEL',
+  'ANTHROPIC_MODEL',
+  'NVIDIA_MODEL',
   'NVIDIA_API_KEY',
   'NVIDIA_NIM',
   'BNKR_API_KEY',
@@ -36,12 +43,17 @@ const RESET_KEYS = [
   'GAKR_CODE_USE_OPENAI',
   'GAKR_CODE_USE_GEMINI',
   'GAKR_CODE_USE_GITHUB',
+  'GAKR_CODE_USE_MISTRAL',
+  'GAKR_CODE_USE_NVIDIA',
   'GAKR_CODE_USE_BEDROCK',
   'GAKR_CODE_USE_VERTEX',
   'OPENAI_BASE_URL',
   'OPENAI_API_KEY',
   'OPENAI_MODEL',
   'GEMINI_MODEL',
+  'MISTRAL_MODEL',
+  'ANTHROPIC_MODEL',
+  'NVIDIA_MODEL',
   'NVIDIA_API_KEY',
   'NVIDIA_NIM',
   'BNKR_API_KEY',
@@ -387,5 +399,110 @@ describe('applyProviderFlagFromArgs', () => {
 
   test('returns undefined when --provider is absent', () => {
     expect(applyProviderFlagFromArgs(['--model', 'gpt-4o'])).toBeUndefined()
+  })
+})
+
+// --- parseModelFlag ---
+
+describe('parseModelFlag', () => {
+  test('returns model value when --model is present', () => {
+    expect(parseModelFlag(['--model', 'gpt-4o-mini'])).toBe('gpt-4o-mini')
+  })
+
+  test('returns null when --model is absent', () => {
+    expect(parseModelFlag(['--provider', 'openai'])).toBeNull()
+  })
+
+  test('returns null when --model has no value', () => {
+    expect(parseModelFlag(['--model'])).toBeNull()
+  })
+
+  test('returns null when --model value looks like another flag', () => {
+    expect(parseModelFlag(['--model', '--provider'])).toBeNull()
+  })
+})
+
+// --- applyModelFlagFromArgs ---
+
+describe('applyModelFlagFromArgs', () => {
+  test('is a no-op when --model is absent', () => {
+    applyModelFlagFromArgs(['--ide'])
+
+    expect(process.env.OPENAI_MODEL).toBeUndefined()
+    expect(process.env.GEMINI_MODEL).toBeUndefined()
+    expect(process.env.MISTRAL_MODEL).toBeUndefined()
+    expect(process.env.ANTHROPIC_MODEL).toBeUndefined()
+  })
+
+  test('is a no-op when --provider is also present', () => {
+    process.env.GAKR_CODE_USE_OPENAI = '1'
+
+    applyModelFlagFromArgs(['--provider', 'openai', '--model', 'gpt-4o'])
+
+    expect(process.env.OPENAI_MODEL).toBeUndefined()
+  })
+
+  test('sets OPENAI_MODEL when OpenAI-compatible mode is active', () => {
+    process.env.GAKR_CODE_USE_OPENAI = '1'
+
+    applyModelFlagFromArgs(['--model', 'gpt-4o-mini'])
+
+    expect(process.env.OPENAI_MODEL).toBe('gpt-4o-mini')
+  })
+
+  test('sets GEMINI_MODEL when Gemini mode is active', () => {
+    process.env.GAKR_CODE_USE_GEMINI = '1'
+
+    applyModelFlagFromArgs(['--model', 'gemini-2.0-flash'])
+
+    expect(process.env.GEMINI_MODEL).toBe('gemini-2.0-flash')
+  })
+
+  test('sets MISTRAL_MODEL when Mistral mode is active', () => {
+    process.env.GAKR_CODE_USE_MISTRAL = '1'
+
+    applyModelFlagFromArgs(['--model', 'devstral-latest'])
+
+    expect(process.env.MISTRAL_MODEL).toBe('devstral-latest')
+  })
+
+  test('sets OPENAI_MODEL when GitHub mode is active', () => {
+    process.env.GAKR_CODE_USE_GITHUB = '1'
+
+    applyModelFlagFromArgs(['--model', 'gpt-4.1'])
+
+    expect(process.env.OPENAI_MODEL).toBe('gpt-4.1')
+  })
+
+  test('sets NVIDIA_MODEL when dedicated NVIDIA mode is active', () => {
+    process.env.GAKR_CODE_USE_NVIDIA = '1'
+
+    applyModelFlagFromArgs(['--model', 'nvidia/custom-model'])
+
+    expect(process.env.NVIDIA_MODEL).toBe('nvidia/custom-model')
+    expect(process.env.OPENAI_MODEL).toBe('nvidia/custom-model')
+  })
+
+  test('falls back to ANTHROPIC_MODEL when no provider mode is active', () => {
+    applyModelFlagFromArgs(['--model', 'claude-sonnet-4-6'])
+
+    expect(process.env.ANTHROPIC_MODEL).toBe('claude-sonnet-4-6')
+  })
+
+  test('overrides an existing profile model value for the process', () => {
+    process.env.GAKR_CODE_USE_OPENAI = '1'
+    process.env.OPENAI_MODEL = 'gpt-4o'
+
+    applyModelFlagFromArgs(['--model', 'gpt-4o-mini'])
+
+    expect(process.env.OPENAI_MODEL).toBe('gpt-4o-mini')
+  })
+
+  test('accepts model values containing colons', () => {
+    process.env.GAKR_CODE_USE_OPENAI = '1'
+
+    applyModelFlagFromArgs(['--model', 'qwen2.5-coder:14b'])
+
+    expect(process.env.OPENAI_MODEL).toBe('qwen2.5-coder:14b')
   })
 })
