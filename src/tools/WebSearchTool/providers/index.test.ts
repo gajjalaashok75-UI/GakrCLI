@@ -37,6 +37,11 @@ describe('getProviderMode', () => {
     expect(getProviderMode()).toBe('native')
   })
 
+  test('returns brave mode', () => {
+    process.env.WEB_SEARCH_PROVIDER = 'brave'
+    expect(getProviderMode()).toBe('brave')
+  })
+
   test('falls back to auto for invalid mode', () => {
     process.env.WEB_SEARCH_PROVIDER = 'nonexistent_provider'
     expect(getProviderMode()).toBe('auto')
@@ -76,6 +81,12 @@ describe('getProviderChain', () => {
     const chain = getProviderChain('ddg' as ProviderMode)
     expect(chain).toHaveLength(1)
     expect(chain[0].name).toBe('duckduckgo')
+  })
+
+  test('brave mode returns brave provider', () => {
+    const chain = getProviderChain('brave' as ProviderMode)
+    expect(chain).toHaveLength(1)
+    expect(chain[0].name).toBe('brave')
   })
 
   test('native mode returns empty chain', () => {
@@ -148,6 +159,15 @@ describe('getAvailableProviders', () => {
     expect(providers.some(p => p.name === 'tavily')).toBe(true)
     if (saved === undefined) delete process.env.TAVILY_API_KEY
     else process.env.TAVILY_API_KEY = saved
+  })
+
+  test('includes brave when BRAVE_API_KEY is set', () => {
+    const saved = process.env.BRAVE_API_KEY
+    process.env.BRAVE_API_KEY = 'test-key'
+    const providers = getAvailableProviders()
+    expect(providers.some(p => p.name === 'brave')).toBe(true)
+    if (saved === undefined) delete process.env.BRAVE_API_KEY
+    else process.env.BRAVE_API_KEY = saved
   })
 
   test('excludes providers when API keys are missing', () => {
