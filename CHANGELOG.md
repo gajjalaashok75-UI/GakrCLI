@@ -5,6 +5,12 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-05-13 08:43:39 +05:30
+
+### Fixed
+- **Async Agent Orchestration**: Updated async-launched agent tool result instructions so the main model ends its turn after launching background work unless it has clearly non-overlapping work to continue.
+- **Source Map Cleanup**: Removed stray inline `//# sourceMappingURL=data:` comments from TypeScript and TSX sources.
+
 ## [0.5.0] - 2026-05-13 08:31:00 +05:30
 
 ### Fixed
