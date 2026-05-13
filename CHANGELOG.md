@@ -5,6 +5,11 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-05-13 08:31:00 +05:30
+
+### Fixed
+- **Published CLI Startup**: Replaced the runtime teammate helper `require()` in `AppStateStore` with a static ESM import so Bun inlines `teammate.js` into `dist/cli.mjs` and published npm installs do not resolve a missing `utils/teammate.js` file at startup.
+
 ## [0.5.0] - 2026-05-13 08:18:26 +05:30
 
 ### Added
