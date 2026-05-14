@@ -71,6 +71,9 @@ publish-changes.md
 *~
 .DS_Store
 Thumbs.db
+**/*:Zone.Identifier
+**/__pycache__/
+**/*.pyc
 
 # Test and coverage
 coverage/

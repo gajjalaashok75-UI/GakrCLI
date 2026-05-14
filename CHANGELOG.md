@@ -5,6 +5,11 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-05-14 09:35:00 +05:30
+
+### Fixed
+- **Package Contents**: Tightened npm package inclusion to ship only the CLI bin entry and removed Windows `Zone.Identifier` metadata plus Python bytecode cache artifacts from release assets.
+
 ## [0.5.0] - 2026-05-14 09:05:45 +05:30
 
 ### Fixed

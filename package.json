@@ -15,7 +15,7 @@
     }
   },
   "files": [
-    "bin/",
+    "bin/gakrcli.js",
     "dist/cli.mjs",
     "dist/sdk.mjs",
     "assets/",
