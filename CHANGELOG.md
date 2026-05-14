@@ -5,6 +5,11 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-05-14 10:47:30 +05:30
+
+### Fixed
+- **OpenAI-Compatible Reasoning Effort**: Normalized Groq `reasoning_effort` payloads per supported model family, avoided standalone reasoning effort on DeepSeek-compatible thinking routes, and added a one-time retry without `reasoning_effort` for OpenAI-compatible providers that reject the field.
+
 ## [0.5.0] - 2026-05-14 09:35:00 +05:30
 
 ### Fixed

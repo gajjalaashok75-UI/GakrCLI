@@ -163,6 +163,70 @@ function normalizeDeepSeekReasoningEffort(
   return effort === 'xhigh' ? 'max' : 'high'
 }
 
+function hasGroqApiHost(baseUrl: string | undefined): boolean {
+  if (!baseUrl) return false
+
+  try {
+    return new URL(baseUrl).hostname.toLowerCase() === 'api.groq.com'
+  } catch {
+    return false
+  }
+}
+
+function normalizeGroqReasoningEffort(
+  model: string,
+  effort: 'low' | 'medium' | 'high' | 'xhigh',
+): 'low' | 'medium' | 'high' | 'default' | undefined {
+  const normalizedModel = model.trim().toLowerCase()
+
+  if (normalizedModel === 'qwen/qwen3-32b') {
+    return 'default'
+  }
+
+  if (normalizedModel.startsWith('openai/gpt-oss-')) {
+    return effort === 'xhigh' ? 'high' : effort
+  }
+
+  return undefined
+}
+
+function normalizeChatCompletionsReasoningEffort(options: {
+  baseUrl: string
+  routeId: string | null
+  model: string
+  effort: 'low' | 'medium' | 'high' | 'xhigh' | undefined
+  thinkingRequestFormat: 'none' | 'deepseek-compatible' | undefined
+}): 'low' | 'medium' | 'high' | 'xhigh' | 'default' | undefined {
+  if (!options.effort) {
+    return undefined
+  }
+
+  if (options.thinkingRequestFormat === 'deepseek-compatible') {
+    return undefined
+  }
+
+  if (options.routeId === 'groq' || hasGroqApiHost(options.baseUrl)) {
+    return normalizeGroqReasoningEffort(options.model, options.effort)
+  }
+
+  return options.effort
+}
+
+function isUnsupportedReasoningEffortError(status: number, body: string): boolean {
+  if (status !== 400 && status !== 422) {
+    return false
+  }
+
+  const lower = body.toLowerCase()
+  return (
+    lower.includes('reasoning_effort') &&
+    (lower.includes('not supported') ||
+      lower.includes('must be one of') ||
+      lower.includes('unsupported') ||
+      lower.includes('invalid'))
+  )
+}
+
 function formatRetryAfterHint(response: Response): string {
   const ra = response.headers.get('retry-after')
   return ra ? ` (Retry-After: ${ra})` : ''
@@ -1566,12 +1630,18 @@ class OpenAIShimMessages {
       stream: params.stream ?? false,
       store: false,
     }
-    // Emit reasoning_effort for chat_completions when the resolved provider
-     // request carries a reasoning effort (set via /effort, model alias default,
-     // or `?reasoning=<level>` query on the model string). OpenAI, Codex, and
-     // most OpenAI-compatible endpoints read it from this top-level field.
-    if (request.reasoning) {
-      body.reasoning_effort = request.reasoning.effort
+    // Emit reasoning_effort only when the active endpoint accepts the OpenAI
+    // shape. Groq is OpenAI-compatible but model-specific here: GPT-OSS accepts
+    // low/medium/high, Qwen accepts default/none, and Llama/Compound reject it.
+    const chatCompletionsReasoningEffort = normalizeChatCompletionsReasoningEffort({
+      baseUrl: request.baseUrl,
+      routeId: runtimeShimContext.routeId,
+      model: request.resolvedModel,
+      effort: request.reasoning?.effort,
+      thinkingRequestFormat: shimConfig.thinkingRequestFormat,
+    })
+    if (chatCompletionsReasoningEffort) {
+      body.reasoning_effort = chatCompletionsReasoningEffort
     }
     // Convert max_tokens to max_completion_tokens for OpenAI API compatibility.
     // Azure OpenAI requires max_completion_tokens and does not accept max_tokens.
@@ -1906,7 +1976,12 @@ class OpenAIShimMessages {
     const maxSelfHealAttempts = isLocal
       ? localRetryBaseUrls.length + 1
       : 0
-    const maxAttempts = (isGithub ? GITHUB_429_MAX_RETRIES : 1) + maxSelfHealAttempts
+    const maxReasoningEffortSelfHealAttempts = 1
+    const maxAttempts =
+      (isGithub ? GITHUB_429_MAX_RETRIES : 1) +
+      maxSelfHealAttempts +
+      maxReasoningEffortSelfHealAttempts
+    let didRetryWithoutReasoningEffort = false
 
     const throwClassifiedTransportError = (
       error: unknown,
@@ -2111,6 +2186,22 @@ class OpenAIShimMessages {
         failure.category === 'endpoint_not_found' &&
         promoteNextLocalBaseUrl('endpoint_not_found')
       ) {
+        continue
+      }
+
+      if (
+        !didRetryWithoutReasoningEffort &&
+        body.reasoning_effort !== undefined &&
+        isUnsupportedReasoningEffortError(response.status, errorBody)
+      ) {
+        didRetryWithoutReasoningEffort = true
+        delete body.reasoning_effort
+        refreshSerializedBody()
+
+        logForDebugging(
+          `[OpenAIShim] self-heal retry reason=unsupported_reasoning_effort method=POST url=${redactUrlForDiagnostics(requestUrl)} model=${request.resolvedModel}`,
+          { level: 'warn' },
+        )
         continue
       }
 

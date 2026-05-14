@@ -4132,6 +4132,130 @@ test('Groq: keeps max_completion_tokens and strips unsupported store', async () 
   expect(requestBody?.store).toBeUndefined()
 })
 
+test('Groq: omits reasoning_effort for models that do not support it', async () => {
+  process.env.OPENAI_BASE_URL = 'https://api.groq.com/openai/v1'
+  process.env.OPENAI_API_KEY = 'gsk-test'
+
+  let requestBody: Record<string, unknown> | undefined
+  globalThis.fetch = (async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body))
+    return new Response(
+      JSON.stringify({
+        id: 'chatcmpl-1',
+        model: 'llama-3.3-70b-versatile',
+        choices: [
+          { message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
+        ],
+        usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
+      }),
+      { headers: { 'Content-Type': 'application/json' } },
+    )
+  }) as FetchType
+
+  const client = createOpenAIShimClient({
+    reasoningEffort: 'high',
+  }) as OpenAIShimClient
+  await client.beta.messages.create({
+    model: 'llama-3.3-70b-versatile',
+    messages: [{ role: 'user', content: 'hi' }],
+    max_tokens: 256,
+    stream: false,
+  })
+
+  expect(requestBody?.reasoning_effort).toBeUndefined()
+})
+
+test('Groq: maps reasoning_effort for supported reasoning models', async () => {
+  process.env.OPENAI_BASE_URL = 'https://api.groq.com/openai/v1'
+  process.env.OPENAI_API_KEY = 'gsk-test'
+
+  const requestBodies: Array<Record<string, unknown>> = []
+  globalThis.fetch = (async (_input, init) => {
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+    requestBodies.push(body)
+    return new Response(
+      JSON.stringify({
+        id: 'chatcmpl-1',
+        model: body.model,
+        choices: [
+          { message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
+        ],
+        usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
+      }),
+      { headers: { 'Content-Type': 'application/json' } },
+    )
+  }) as FetchType
+
+  const client = createOpenAIShimClient({
+    reasoningEffort: 'xhigh',
+  }) as OpenAIShimClient
+
+  await client.beta.messages.create({
+    model: 'qwen/qwen3-32b',
+    messages: [{ role: 'user', content: 'hi' }],
+    max_tokens: 256,
+    stream: false,
+  })
+  await client.beta.messages.create({
+    model: 'openai/gpt-oss-120b',
+    messages: [{ role: 'user', content: 'hi' }],
+    max_tokens: 256,
+    stream: false,
+  })
+
+  expect(requestBodies[0]?.reasoning_effort).toBe('default')
+  expect(requestBodies[1]?.reasoning_effort).toBe('high')
+})
+
+test('retries once without reasoning_effort when an OpenAI-compatible provider rejects it', async () => {
+  process.env.OPENAI_BASE_URL = 'https://provider.example/v1'
+  process.env.OPENAI_API_KEY = 'sk-test'
+
+  const requestBodies: Array<Record<string, unknown>> = []
+  globalThis.fetch = (async (_input, init) => {
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+    requestBodies.push(body)
+
+    if (requestBodies.length === 1) {
+      return new Response(
+        JSON.stringify({
+          error: {
+            message: '`reasoning_effort` is not supported with this model',
+            type: 'invalid_request_error',
+          },
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+
+    return new Response(
+      JSON.stringify({
+        id: 'chatcmpl-1',
+        model: 'provider-model',
+        choices: [
+          { message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
+        ],
+        usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
+      }),
+      { headers: { 'Content-Type': 'application/json' } },
+    )
+  }) as FetchType
+
+  const client = createOpenAIShimClient({
+    reasoningEffort: 'high',
+  }) as OpenAIShimClient
+  await client.beta.messages.create({
+    model: 'provider-model',
+    messages: [{ role: 'user', content: 'hi' }],
+    max_tokens: 256,
+    stream: false,
+  })
+
+  expect(requestBodies).toHaveLength(2)
+  expect(requestBodies[0]?.reasoning_effort).toBe('high')
+  expect(requestBodies[1]?.reasoning_effort).toBeUndefined()
+})
+
 test('Local provider (vLLM/Ollama/etc.): strips unsupported store on chat_completions', async () => {
   process.env.OPENAI_BASE_URL = 'http://localhost:8000/v1'
   process.env.OPENAI_API_KEY = 'sk-local'
@@ -4617,6 +4741,41 @@ test('DeepSeek omits thinking controls when the Anthropic-side request does not 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
   await client.beta.messages.create({
     model: 'deepseek-v4-flash',
+    system: 'test',
+    messages: [{ role: 'user', content: 'hi' }],
+    max_tokens: 32,
+    stream: false,
+  })
+
+  expect(requestBody?.thinking).toBeUndefined()
+  expect(requestBody?.reasoning_effort).toBeUndefined()
+})
+
+test('DeepSeek omits standalone reasoning_effort without a thinking toggle', async () => {
+  process.env.OPENAI_BASE_URL = 'https://api.deepseek.com/v1'
+  process.env.OPENAI_API_KEY = 'sk-deepseek'
+
+  let requestBody: Record<string, unknown> | undefined
+  globalThis.fetch = (async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body))
+    return new Response(
+      JSON.stringify({
+        id: 'chatcmpl-1',
+        model: 'deepseek-v4-pro',
+        choices: [
+          { message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
+        ],
+        usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
+      }),
+      { headers: { 'Content-Type': 'application/json' } },
+    )
+  }) as FetchType
+
+  const client = createOpenAIShimClient({
+    reasoningEffort: 'xhigh',
+  }) as OpenAIShimClient
+  await client.beta.messages.create({
+    model: 'deepseek-v4-pro',
     system: 'test',
     messages: [{ role: 'user', content: 'hi' }],
     max_tokens: 32,
