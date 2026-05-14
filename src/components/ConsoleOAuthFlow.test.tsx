@@ -134,9 +134,18 @@ test('third-party provider branch opens the first-run provider manager', async (
     process.env.NVIDIA_BASE_URL = previousNvidiaBaseUrl
   }
 
-  expect(output).toContain('Set up a provider profile')
+  expect(output).toContain('Set up provider')
+  expect(output).toContain('Anthropic')
+  expect(output).toContain('Alibaba Coding Plan (China)')
+  expect(output).toContain('Alibaba Coding Plan')
+  expect(output).toContain('Azure OpenAI')
+  expect(output).toContain('Bankr')
+  expect(output).toContain('DeepSeek')
+  expect(output).toContain('Codex OAuth')
+  expect(output).toContain('Groq')
+  expect(output).toContain('Hicap')
+  expect(output).toContain('LM Studio')
+  expect(output).toContain('Atomic Chat')
   expect(output).toContain('Ollama')
-  expect(output).toContain('OpenAI-compatible')
-  expect(output).toContain('NVIDIA NIMs')
-  expect(output).toContain('Gemini')
+  expect(output).not.toContain('Set up a provider profile')
 })
