@@ -1,13 +1,14 @@
 import { c as _c } from "react-compiler-runtime";
 import * as React from 'react';
 import { Text } from '../../ink.js';
+import type { Color } from '../../ink/styles.js';
 import type { Theme } from '../../utils/theme.js';
 type Props = {
   char: string;
   index: number;
   glimmerIndex: number;
-  messageColor: keyof Theme;
-  shimmerColor: keyof Theme;
+  messageColor: keyof Theme | Color;
+  shimmerColor: keyof Theme | Color;
 };
 export function ShimmerChar(t0) {
   const $ = _c(3);

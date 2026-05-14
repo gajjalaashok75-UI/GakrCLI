@@ -5,6 +5,11 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-05-14 09:05:45 +05:30
+
+### Fixed
+- **Logo Palette Spinner Colors**: Applied the selected startup logo palette to runtime spinners while preserving the existing no-progress warning color shift, and added coverage that saved palette choices are used on startup.
+
 ## [0.5.0] - 2026-05-14 08:52:52 +05:30
 
 ### Fixed

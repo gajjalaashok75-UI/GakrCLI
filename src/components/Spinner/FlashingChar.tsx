@@ -1,14 +1,21 @@
 import { c as _c } from "react-compiler-runtime";
 import * as React from 'react';
 import { Text, useTheme } from '../../ink.js';
+import type { Color } from '../../ink/styles.js';
 import { getTheme, type Theme } from '../../utils/theme.js';
 import { interpolateColor, parseRGB, toRGBColor } from './utils.js';
 type Props = {
   char: string;
   flashOpacity: number;
-  messageColor: keyof Theme;
-  shimmerColor: keyof Theme;
+  messageColor: keyof Theme | Color;
+  shimmerColor: keyof Theme | Color;
 };
+function resolveColorValue(color: keyof Theme | Color, theme: Theme): string | undefined {
+  if (color.startsWith('rgb(') || color.startsWith('#') || color.startsWith('ansi256(') || color.startsWith('ansi:')) {
+    return color;
+  }
+  return theme[color as keyof Theme];
+}
 export function FlashingChar(t0) {
   const $ = _c(9);
   const {
@@ -23,8 +30,8 @@ export function FlashingChar(t0) {
     t1 = Symbol.for("react.early_return_sentinel");
     bb0: {
       const theme = getTheme(themeName);
-      const baseColorStr = theme[messageColor];
-      const shimmerColorStr = theme[shimmerColor];
+      const baseColorStr = resolveColorValue(messageColor, theme);
+      const shimmerColorStr = resolveColorValue(shimmerColor, theme);
       const baseRGB = baseColorStr ? parseRGB(baseColorStr) : null;
       const shimmerRGB = shimmerColorStr ? parseRGB(shimmerColorStr) : null;
       if (baseRGB && shimmerRGB) {

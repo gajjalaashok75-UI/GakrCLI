@@ -36,6 +36,8 @@ import { getCurrentTurnTokenBudget, getTurnOutputTokens } from '../bootstrap/sta
 import { TeammateSpinnerTree } from './Spinner/TeammateSpinnerTree.js';
 import { useAnimationFrame } from '../ink.js';
 import { getGlobalConfig } from '../utils/config.js';
+import type { Color } from '../ink/styles.js';
+import { resolveLogoSpinnerColors } from './StartupScreen.palettes.js';
 export type { SpinnerMode } from './Spinner/index.js';
 const DEFAULT_CHARACTERS = getDefaultCharacters();
 const SPINNER_FRAMES = [...DEFAULT_CHARACTERS, ...[...DEFAULT_CHARACTERS].reverse()];
@@ -46,8 +48,8 @@ type Props = {
   pauseStartTimeRef: React.RefObject<number | null>;
   spinnerTip?: string;
   responseLengthRef: React.RefObject<number>;
-  overrideColor?: keyof Theme | null;
-  overrideShimmerColor?: keyof Theme | null;
+  overrideColor?: keyof Theme | Color | null;
+  overrideShimmerColor?: keyof Theme | Color | null;
   overrideMessage?: string | null;
   spinnerSuffix?: string | null;
   verbose: boolean;
@@ -208,8 +210,9 @@ function SpinnerWithVerbInner({
   // the ref. The tree is only shown when teammates are running; teammate
   // progress updates to s.tasks trigger re-renders that keep this fresh.
   const leaderTokenCount = Math.round(responseLengthRef.current / 4);
-  const defaultColor: keyof Theme = 'gakrcli';
-  const defaultShimmerColor = 'gakrcliShimmer';
+  const defaultSpinnerColors = resolveLogoSpinnerColors(getGlobalConfig().logoColor);
+  const defaultColor: Color = defaultSpinnerColors.accent;
+  const defaultShimmerColor: Color = defaultSpinnerColors.shimmer;
   const messageColor = overrideColor ?? defaultColor;
   const shimmerColor = overrideShimmerColor ?? defaultShimmerColor;
 
@@ -314,7 +317,7 @@ type BriefSpinnerProps = {
   overrideMessage?: string | null;
 };
 function BriefSpinner(t0) {
-  const $ = _c(31);
+  const $ = _c(32);
   const {
     mode,
     overrideMessage
@@ -324,6 +327,7 @@ function BriefSpinner(t0) {
   const [randomVerb] = useState(_temp4);
   const verb = overrideMessage ?? randomVerb;
   const connStatus = useAppState(_temp5);
+  const logoSpinnerColors = resolveLogoSpinnerColors(getGlobalConfig().logoColor);
   let t1;
   let t2;
   if ($[0] !== mode) {
@@ -402,35 +406,36 @@ function BriefSpinner(t0) {
   const leftWidth = t6 + 3;
   const pad = Math.max(1, columns - 2 - leftWidth - stringWidth(rightText));
   let t7;
-  if ($[18] !== after || $[19] !== before || $[20] !== connText || $[21] !== dots || $[22] !== shimmer || $[23] !== showConnWarning) {
-    t7 = showConnWarning ? <Text color="error">{connText + dots}</Text> : <>{before ? <Text dimColor={true}>{before}</Text> : null}{shimmer ? <Text>{shimmer}</Text> : null}{after ? <Text dimColor={true}>{after}</Text> : null}<Text dimColor={true}>{dots}</Text></>;
+  if ($[18] !== after || $[19] !== before || $[20] !== connText || $[21] !== dots || $[22] !== logoSpinnerColors.accent || $[23] !== shimmer || $[24] !== showConnWarning) {
+    t7 = showConnWarning ? <Text color="error">{connText + dots}</Text> : <>{before ? <Text dimColor={true}>{before}</Text> : null}{shimmer ? <Text color={logoSpinnerColors.accent}>{shimmer}</Text> : null}{after ? <Text dimColor={true}>{after}</Text> : null}<Text color={logoSpinnerColors.accent}>{dots}</Text></>;
     $[18] = after;
     $[19] = before;
     $[20] = connText;
     $[21] = dots;
-    $[22] = shimmer;
-    $[23] = showConnWarning;
-    $[24] = t7;
+    $[22] = logoSpinnerColors.accent;
+    $[23] = shimmer;
+    $[24] = showConnWarning;
+    $[25] = t7;
   } else {
-    t7 = $[24];
+    t7 = $[25];
   }
   let t8;
-  if ($[25] !== pad || $[26] !== rightText) {
+  if ($[26] !== pad || $[27] !== rightText) {
     t8 = rightText ? <><Text>{" ".repeat(pad)}</Text><Text color="subtle">{rightText}</Text></> : null;
-    $[25] = pad;
-    $[26] = rightText;
-    $[27] = t8;
+    $[26] = pad;
+    $[27] = rightText;
+    $[28] = t8;
   } else {
-    t8 = $[27];
+    t8 = $[28];
   }
   let t9;
-  if ($[28] !== t7 || $[29] !== t8) {
+  if ($[29] !== t7 || $[30] !== t8) {
     t9 = <Box flexDirection="row" width="100%" marginTop={1} paddingLeft={2}>{t7}{t8}</Box>;
-    $[28] = t7;
-    $[29] = t8;
-    $[30] = t9;
+    $[29] = t7;
+    $[30] = t8;
+    $[31] = t9;
   } else {
-    t9 = $[30];
+    t9 = $[31];
   }
   return t9;
 }
@@ -505,46 +510,50 @@ function _temp7(s) {
   return s.remoteConnectionStatus;
 }
 export function Spinner() {
-  const $ = _c(8);
+  const $ = _c(11);
   const settings = useSettings();
   const reducedMotion = settings.prefersReducedMotion ?? false;
   const [ref, time] = useAnimationFrame(reducedMotion ? null : 120);
+  const spinnerColor = resolveLogoSpinnerColors(getGlobalConfig().logoColor).accent;
   if (reducedMotion) {
     let t0;
-    if ($[0] === Symbol.for("react.memo_cache_sentinel")) {
-      t0 = <Text color="text">●</Text>;
-      $[0] = t0;
+    if ($[0] !== spinnerColor) {
+      t0 = <Text color={spinnerColor}>●</Text>;
+      $[0] = spinnerColor;
+      $[1] = t0;
     } else {
-      t0 = $[0];
+      t0 = $[1];
     }
     let t1;
-    if ($[1] !== ref) {
+    if ($[2] !== ref || $[3] !== t0) {
       t1 = <Box ref={ref} flexWrap="wrap" height={1} width={2}>{t0}</Box>;
-      $[1] = ref;
-      $[2] = t1;
+      $[2] = ref;
+      $[3] = t0;
+      $[4] = t1;
     } else {
-      t1 = $[2];
+      t1 = $[4];
     }
     return t1;
   }
   const frame = Math.floor(time / 120) % SPINNER_FRAMES.length;
   const t0 = SPINNER_FRAMES[frame];
   let t1;
-  if ($[3] !== t0) {
-    t1 = <Text color="text">{t0}</Text>;
-    $[3] = t0;
-    $[4] = t1;
+  if ($[5] !== spinnerColor || $[6] !== t0) {
+    t1 = <Text color={spinnerColor}>{t0}</Text>;
+    $[5] = spinnerColor;
+    $[6] = t0;
+    $[7] = t1;
   } else {
-    t1 = $[4];
+    t1 = $[7];
   }
   let t2;
-  if ($[5] !== ref || $[6] !== t1) {
+  if ($[8] !== ref || $[9] !== t1) {
     t2 = <Box ref={ref} flexWrap="wrap" height={1} width={2}>{t1}</Box>;
-    $[5] = ref;
-    $[6] = t1;
-    $[7] = t2;
+    $[8] = ref;
+    $[9] = t1;
+    $[10] = t2;
   } else {
-    t2 = $[7];
+    t2 = $[10];
   }
   return t2;
 }

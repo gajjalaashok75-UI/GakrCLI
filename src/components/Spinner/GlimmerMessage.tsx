@@ -2,6 +2,7 @@ import { c as _c } from "react-compiler-runtime";
 import * as React from 'react';
 import { stringWidth } from '../../ink/stringWidth.js';
 import { Text, useTheme } from '../../ink.js';
+import type { Color } from '../../ink/styles.js';
 import { getGraphemeSegmenter } from '../../utils/intl.js';
 import { getTheme, type Theme } from '../../utils/theme.js';
 import type { SpinnerMode } from './types.js';
@@ -9,12 +10,18 @@ import { interpolateColor, parseRGB, toRGBColor } from './utils.js';
 type Props = {
   message: string;
   mode: SpinnerMode;
-  messageColor: keyof Theme;
+  messageColor: keyof Theme | Color;
   glimmerIndex: number;
   flashOpacity: number;
-  shimmerColor: keyof Theme;
+  shimmerColor: keyof Theme | Color;
   stalledIntensity?: number;
 };
+function resolveColorValue(color: keyof Theme | Color, theme: Theme): string | undefined {
+  if (color.startsWith('rgb(') || color.startsWith('#') || color.startsWith('ansi256(') || color.startsWith('ansi:')) {
+    return color;
+  }
+  return theme[color as keyof Theme];
+}
 const ERROR_RED = {
   r: 171,
   g: 43,
@@ -85,7 +92,7 @@ export function GlimmerMessage(t0) {
         break bb0;
       }
       if (stalledIntensity > 0) {
-        const baseColorStr = theme[messageColor];
+        const baseColorStr = resolveColorValue(messageColor, theme);
         const baseRGB = baseColorStr ? parseRGB(baseColorStr) : null;
         if (baseRGB) {
           const interpolated = interpolateColor(baseRGB, ERROR_RED, stalledIntensity);
@@ -132,8 +139,8 @@ export function GlimmerMessage(t0) {
         break bb0;
       }
       if (mode === "tool-use") {
-        const baseColorStr_0 = theme[messageColor];
-        const shimmerColorStr = theme[shimmerColor];
+        const baseColorStr_0 = resolveColorValue(messageColor, theme);
+        const shimmerColorStr = resolveColorValue(shimmerColor, theme);
         const baseRGB_0 = baseColorStr_0 ? parseRGB(baseColorStr_0) : null;
         const shimmerRGB = shimmerColorStr ? parseRGB(shimmerColorStr) : null;
         if (baseRGB_0 && shimmerRGB) {
