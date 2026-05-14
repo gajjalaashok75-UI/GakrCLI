@@ -24,6 +24,8 @@ import {
   buildOpenAIProfileEnv,
   buildVertexProfileEnv,
   clearManagedProfileEnv,
+  sanitizeApiKey,
+  sanitizeProviderConfigValue,
   type ProfileEnv,
   type ProviderProfile as ProviderProfileStartup,
 } from './providerProfile.js'
@@ -114,12 +116,12 @@ function trimOrUndefined(value: string | undefined): string | undefined {
 }
 
 function sanitizeAuthHeader(value: string | undefined): string | undefined {
-  const trimmed = trimOrUndefined(value)
-  if (!trimmed) {
+  const sanitized = sanitizeProviderConfigValue(value)
+  if (!sanitized) {
     return undefined
   }
-  return /^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/.test(trimmed)
-    ? trimmed
+  return /^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/.test(sanitized)
+    ? sanitized
     : undefined
 }
 
@@ -145,12 +147,34 @@ function sanitizeProfile(profile: ProviderProfile): ProviderProfile | null {
   const id = trimValue(profile.id)
   const name = trimValue(profile.name)
   const provider = trimValue(profile.provider)
-  const baseUrl = normalizeBaseUrl(profile.baseUrl)
-  const model = trimValue(profile.model)
+  const apiKey = sanitizeApiKey(profile.apiKey)
+  const authHeaderValue = sanitizeApiKey(profile.authHeaderValue)
+  const secretSource = {
+    OPENAI_API_KEY: apiKey,
+    OPENAI_AUTH_HEADER_VALUE: authHeaderValue,
+    CODEX_API_KEY: apiKey,
+    GEMINI_API_KEY: apiKey,
+    GOOGLE_API_KEY: apiKey,
+    MINIMAX_API_KEY: apiKey,
+    MISTRAL_API_KEY: apiKey,
+    NVIDIA_API_KEY: apiKey,
+    BNKR_API_KEY: apiKey,
+    XAI_API_KEY: apiKey,
+  }
+  const baseUrl = normalizeBaseUrl(
+    sanitizeProviderConfigValue(profile.baseUrl, secretSource) ?? '',
+  )
+  const model = trimValue(
+    sanitizeProviderConfigValue(profile.model, secretSource),
+  )
   const apiFormat = parseOpenAICompatibleApiFormat(profile.apiFormat)
-  const authHeader = sanitizeAuthHeader(profile.authHeader)
+  const sanitizedAuthHeader = sanitizeAuthHeader(profile.authHeader)
+  const authHeader =
+    (apiKey && sanitizedAuthHeader === apiKey) ||
+    (authHeaderValue && sanitizedAuthHeader === authHeaderValue)
+      ? undefined
+      : sanitizedAuthHeader
   const authScheme = sanitizeAuthScheme(profile.authScheme)
-  const authHeaderValue = trimOrUndefined(profile.authHeaderValue)
   const capabilityRouteId = resolveProfileCapabilityRouteId(provider, baseUrl)
   const supportsApiFormat = routeSupportsApiFormatSelection(capabilityRouteId)
   const supportsAuthHeaders = routeSupportsAuthHeaders(capabilityRouteId)
@@ -168,7 +192,7 @@ function sanitizeProfile(profile: ProviderProfile): ProviderProfile | null {
     provider,
     baseUrl,
     model,
-    apiKey: trimOrUndefined(profile.apiKey),
+    apiKey,
   }
   if (supportsApiFormat && apiFormat) {
     sanitized.apiFormat = apiFormat

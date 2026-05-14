@@ -5,6 +5,13 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-05-14 08:19:17 +05:30
+
+### Fixed
+- **NVIDIA Provider Authentication**: Hid NVIDIA NIM custom auth-header prompts in `/provider` so saved NVIDIA profiles use the standard `Authorization: Bearer <key>` header instead of accidentally persisting an API key as a header name.
+- **Provider Profile Sanitization**: Tightened active and inactive provider profile loading/saving to trim API keys, reject placeholder credentials, and prevent secret-looking values from being saved as base URLs, model names, or custom auth header names.
+- **Profile Persistence Coverage**: Added regression coverage for NVIDIA startup profile mirroring, route auth-header UI metadata, secret-like value filtering, and malformed saved provider profiles.
+
 ## [0.5.0] - 2026-05-14 07:31:46 +05:30
 
 ### Added

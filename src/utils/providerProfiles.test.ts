@@ -630,6 +630,44 @@ describe('getProviderProfiles', () => {
     expect(profiles).toHaveLength(1)
     expect(profiles[0]?.provider).toBe('moonshot')
   })
+
+  test('sanitizes credential fields and rejects secret-poisoned model routing', async () => {
+    const { addProviderProfile, getProviderProfiles } =
+      await importFreshProviderProfileModules()
+
+    const clean = addProviderProfile(
+      {
+        provider: 'nvidia-nim',
+        name: 'NVIDIA NIM',
+        baseUrl: 'https://integrate.api.nvidia.com/v1',
+        model: 'nvidia/llama-3.1-nemotron-70b-instruct',
+        apiKey: '  nvapi-live  ',
+        authHeader: 'nvapi-live',
+        authHeaderValue: 'SUA_CHAVE',
+      },
+      { makeActive: false },
+    )
+
+    expect(clean?.apiKey).toBe('nvapi-live')
+    expect(clean?.authHeader).toBeUndefined()
+    expect(clean?.authHeaderValue).toBeUndefined()
+
+    const poisoned = addProviderProfile(
+      {
+        provider: 'openai',
+        name: 'Poisoned',
+        baseUrl: 'sk-live',
+        model: 'sk-live',
+        apiKey: 'sk-live',
+      },
+      { makeActive: false },
+    )
+
+    expect(poisoned).toBeNull()
+    expect(getProviderProfiles().map(profile => profile.name)).toEqual([
+      'NVIDIA NIM',
+    ])
+  })
 })
 
 describe('applyActiveProviderProfileFromConfig', () => {
@@ -1383,6 +1421,47 @@ describe('setActiveProviderProfile', () => {
         NVIDIA_API_KEY: 'nvapi-live',
         NVIDIA_NIM: '1',
       })
+    } finally {
+      process.chdir(originalCwd)
+      rmSync(tempDir, { recursive: true, force: true })
+      rmSync(configDir, { recursive: true, force: true })
+    }
+  })
+
+  test('ignores nvidia api key accidentally saved as auth header', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-'))
+    const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-config-'))
+    process.chdir(tempDir)
+    process.env.GAKR_CONFIG_DIR = configDir
+
+    try {
+      const { setActiveProviderProfile } =
+        await importFreshProviderProfileModules()
+      const nvidiaProfile = buildProfile({
+        id: 'nvidia_prof',
+        name: 'NVIDIA NIM',
+        provider: 'nvidia-nim',
+        baseUrl: 'https://integrate.api.nvidia.com/v1',
+        model: 'nvidia/llama-3.1-nemotron-70b-instruct',
+        apiKey: 'nvapi-live',
+        authHeader: 'nvapi-live',
+      })
+
+      saveMockGlobalConfig(current => ({
+        ...current,
+        providerProfiles: [nvidiaProfile],
+      }))
+
+      const result = setActiveProviderProfile('nvidia_prof')
+      const persisted = JSON.parse(
+        readFileSync(join(configDir, '.gakrcli-profile.json'), 'utf8'),
+      )
+
+      expect(result?.authHeader).toBeUndefined()
+      expect(process.env.OPENAI_AUTH_HEADER).toBeUndefined()
+      expect(persisted.env.OPENAI_AUTH_HEADER).toBeUndefined()
+      expect(persisted.env.OPENAI_API_KEY).toBe('nvapi-live')
+      expect(persisted.env.NVIDIA_API_KEY).toBe('nvapi-live')
     } finally {
       process.chdir(originalCwd)
       rmSync(tempDir, { recursive: true, force: true })

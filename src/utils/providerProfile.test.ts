@@ -1211,11 +1211,13 @@ test('redactSecretValueForDisplay masks poisoned display fields that equal confi
 
 test('sanitizeProviderConfigValue drops secret-like poisoned values', () => {
   const apiKey = 'sk-secret-12345678'
+  const nvidiaApiKey = 'nvapi-secret-12345678'
 
   assert.equal(
     sanitizeProviderConfigValue(apiKey, { OPENAI_API_KEY: apiKey }),
     undefined,
   )
+  assert.equal(sanitizeProviderConfigValue(nvidiaApiKey), undefined)
   assert.equal(
     sanitizeProviderConfigValue('gpt-4o', { OPENAI_API_KEY: apiKey }),
     'gpt-4o',
