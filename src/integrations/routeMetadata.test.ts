@@ -5,6 +5,9 @@ import {
   getRouteCredentialValue,
   getRouteProviderTypeLabel,
   resolveActiveRouteIdFromEnv,
+  routeShowsAuthHeader,
+  routeShowsAuthHeaderValue,
+  routeShowsCustomHeaders,
 } from './routeMetadata.js'
 
 test('getRouteProviderTypeLabel uses descriptor transport kinds for provider labels', () => {
@@ -55,6 +58,12 @@ test('getRouteCredentialValue reads the first configured route credential', () =
       OPENAI_API_KEY: 'sk-openai-fallback',
     }),
   ).toBe('sk-openai-fallback')
+})
+
+test('NVIDIA NIM hides custom auth header prompts but keeps custom headers available', () => {
+  expect(routeShowsAuthHeader('nvidia-nim')).toBe(false)
+  expect(routeShowsAuthHeaderValue('nvidia-nim')).toBe(false)
+  expect(routeShowsCustomHeaders('nvidia-nim')).toBe(true)
 })
 
 test('resolveActiveRouteIdFromEnv treats MiniMax credential-only env as MiniMax', () => {

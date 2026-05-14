@@ -16,6 +16,10 @@ export default defineGateway({
     kind: 'openai-compatible',
     openaiShim: {
       supportsAuthHeaders: true,
+      ui: {
+        showAuthHeader: false,
+        showAuthHeaderValue: false,
+      },
     },
   },
   preset: {

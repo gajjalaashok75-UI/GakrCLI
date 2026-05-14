@@ -4,6 +4,7 @@ const SECRET_ENV_KEYS = [
   'CODEX_API_KEY',
   'GEMINI_API_KEY',
   'GOOGLE_API_KEY',
+  'MINIMAX_API_KEY',
   'MISTRAL_API_KEY',
   'NVIDIA_API_KEY',
   'BNKR_API_KEY',
@@ -17,8 +18,16 @@ export type SecretValueSource = Partial<
 export function sanitizeApiKey(
   key: string | null | undefined,
 ): string | undefined {
-  if (!key || key === 'SUA_CHAVE') return undefined
-  return key
+  const trimmed = key?.trim()
+  if (
+    !trimmed ||
+    trimmed === 'SUA_CHAVE' ||
+    trimmed.toLowerCase() === 'undefined' ||
+    trimmed.toLowerCase() === 'null'
+  ) {
+    return undefined
+  }
+  return trimmed
 }
 
 function looksLikeSecretValue(value: string): boolean {
@@ -29,7 +38,21 @@ function looksLikeSecretValue(value: string): boolean {
     return true
   }
 
+  if (trimmed.startsWith('nvapi-')) {
+    return true
+  }
+
   if (trimmed.startsWith('AIza')) {
+    return true
+  }
+
+  if (
+    trimmed.startsWith('ghp_') ||
+    trimmed.startsWith('gho_') ||
+    trimmed.startsWith('ghu_') ||
+    trimmed.startsWith('ghs_') ||
+    trimmed.startsWith('github_pat_')
+  ) {
     return true
   }
 
