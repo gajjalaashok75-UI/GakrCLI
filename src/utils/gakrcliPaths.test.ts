@@ -18,6 +18,10 @@ async function importFreshLocalInstaller() {
   return import(`./localInstaller.ts?ts=${Date.now()}-${Math.random()}`)
 }
 
+async function importFreshPlans() {
+  return import(`./plans.ts?ts=${Date.now()}-${Math.random()}`)
+}
+
 afterEach(() => {
   process.env = { ...originalEnv }
   process.argv = [...originalArgv]
@@ -62,6 +66,39 @@ describe('GakrCLI paths', () => {
         configDirEnv: '/tmp/custom-gakrcli',
       }),
     ).toBe('/tmp/custom-gakrcli')
+  })
+
+  test('default plans directory uses ~/.gakrcli/plans', async () => {
+    delete process.env.GAKR_CONFIG_DIR
+    const { getDefaultPlansDirectory } = await importFreshPlans()
+
+    expect(getDefaultPlansDirectory({ homeDir: homedir() })).toBe(
+      join(homedir(), '.gakrcli', 'plans'),
+    )
+  })
+
+  test('default plans directory respects explicit GAKR_CONFIG_DIR', async () => {
+    const { getDefaultPlansDirectory } = await importFreshPlans()
+
+    expect(
+      getDefaultPlansDirectory({ configDirEnv: '/tmp/custom-gakrcli' }),
+    ).toBe(join('/tmp/custom-gakrcli', 'plans'))
+  })
+
+  test('default plans directory normalizes generated path to NFC', async () => {
+    const { getDefaultPlansDirectory } = await importFreshPlans()
+
+    expect(
+      getDefaultPlansDirectory({ homeDir: '/tmp/cafe\u0301' }),
+    ).toBe(join('/tmp/caf\u00e9', '.gakrcli', 'plans'))
+  })
+
+  test('default plans directory normalizes explicit GAKR_CONFIG_DIR to NFC', async () => {
+    const { getDefaultPlansDirectory } = await importFreshPlans()
+
+    expect(
+      getDefaultPlansDirectory({ configDirEnv: '/tmp/cafe\u0301-gakrcli' }),
+    ).toBe(join('/tmp/caf\u00e9-gakrcli', 'plans'))
   })
 
   test('project and local settings paths use .gakrcli', async () => {

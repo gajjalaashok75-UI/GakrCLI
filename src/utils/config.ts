@@ -623,6 +623,10 @@ export type GlobalConfig = {
 
   // Knowledge Graph configuration
   knowledgeGraphEnabled: boolean
+
+  // Startup splash logo color scheme. Stored as a plain string and validated
+  // on read to avoid pulling UI modules into the config layer.
+  logoColor?: string
 }
 
 /**
@@ -720,6 +724,7 @@ export const GLOBAL_CONFIG_KEYS = [
   'remoteControlAtStartup',
   'remoteDialogSeen',
   'knowledgeGraphEnabled',
+  'logoColor',
 ] as const
 
 export type GlobalConfigKey = (typeof GLOBAL_CONFIG_KEYS)[number]

@@ -60,6 +60,7 @@ beforeEach(() => {
   saveGlobalConfig(current => ({
     ...current,
     model: undefined,
+    logoColor: undefined,
   }))
 })
 
@@ -68,6 +69,7 @@ afterEach(() => {
   saveGlobalConfig(current => ({
     ...current,
     model: undefined,
+    logoColor: undefined,
   }))
   ;(globalThis as Record<string, unknown>).MACRO = originalMacro
   Object.defineProperty(process.stdout, 'isTTY', {

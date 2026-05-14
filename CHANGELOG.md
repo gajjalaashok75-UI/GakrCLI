@@ -5,6 +5,15 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-05-14 07:31:46 +05:30
+
+### Added
+- **Startup Logo Palette Picker**: Added `/logo` for selecting the startup logo palette, keeping the existing sky-blue palette as the default and adding alternate palettes.
+
+### Fixed
+- **OpenAI Shim Local Providers**: Stripped the OpenAI-only `store` field for local OpenAI-compatible endpoints so strict vLLM, llama.cpp, and custom gateways do not reject chat-completions requests.
+- **Plan Mode Text and Paths**: Removed hard-coded assistant branding from plan approval/rejection copy and made the default plans directory resolve to `.gakrcli/plans`.
+
 ## [0.5.0] - 2026-05-13 09:46:56 +05:30
 
 ### Added
