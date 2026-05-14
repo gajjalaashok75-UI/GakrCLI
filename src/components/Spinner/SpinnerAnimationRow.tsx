@@ -7,6 +7,7 @@ import { Box, Text, useAnimationFrame } from '../../ink.js';
 import type { InProcessTeammateTaskState } from '../../tasks/InProcessTeammateTask/types.js';
 import { formatDuration, formatNumber } from '../../utils/format.js';
 import { toInkColor } from '../../utils/ink.js';
+import type { Color } from '../../ink/styles.js';
 import type { Theme } from '../../utils/theme.js';
 import { Byline } from '../design-system/Byline.js';
 import { GlimmerMessage } from './GlimmerMessage.js';
@@ -42,9 +43,9 @@ export type SpinnerAnimationRowProps = {
 
   // Message (stable within a turn)
   message: string;
-  messageColor: keyof Theme;
-  shimmerColor: keyof Theme;
-  overrideColor?: keyof Theme | null;
+  messageColor: keyof Theme | Color;
+  shimmerColor: keyof Theme | Color;
+  overrideColor?: keyof Theme | Color | null;
 
   // Timer refs (stable references)
   loadingStartTimeRef: React.RefObject<number>;

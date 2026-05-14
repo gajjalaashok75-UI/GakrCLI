@@ -305,3 +305,30 @@ describe('detectProvider — modelOverride from --model flag', () => {
     expect(result.model).toContain('sonnet')
   })
 })
+
+describe('printStartupScreen — logo palette persistence', () => {
+  test('uses the saved logo palette when rendering on startup', () => {
+    let output = ''
+    Object.defineProperty(process.stdout, 'isTTY', {
+      configurable: true,
+      value: true,
+    })
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += chunk.toString()
+      return true
+    }) as typeof process.stdout.write
+    ;(globalThis as Record<string, unknown>).MACRO = {
+      VERSION: '0.0.0-test',
+      DISPLAY_VERSION: '0.0.0-test',
+    }
+    saveGlobalConfig(current => ({
+      ...current,
+      logoColor: 'sunset',
+    }))
+
+    printStartupScreen()
+
+    expect(output).toContain('\x1b[38;2;255;180;100m')
+    expect(output).toContain('\x1b[38;2;240;148;100m')
+  })
+})

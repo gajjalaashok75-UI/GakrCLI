@@ -1,6 +1,7 @@
 import { c as _c } from "react-compiler-runtime";
 import * as React from 'react';
 import { Box, Text, useTheme } from '../../ink.js';
+import type { Color } from '../../ink/styles.js';
 import { getTheme, type Theme } from '../../utils/theme.js';
 import { getDefaultCharacters, interpolateColor, parseRGB, toRGBColor } from './utils.js';
 const DEFAULT_CHARACTERS = getDefaultCharacters();
@@ -14,11 +15,17 @@ const ERROR_RED = {
 };
 type Props = {
   frame: number;
-  messageColor: keyof Theme;
+  messageColor: keyof Theme | Color;
   stalledIntensity?: number;
   reducedMotion?: boolean;
   time?: number;
 };
+function resolveColorValue(color: keyof Theme | Color, theme: Theme): string | undefined {
+  if (color.startsWith('rgb(') || color.startsWith('#') || color.startsWith('ansi256(') || color.startsWith('ansi:')) {
+    return color;
+  }
+  return theme[color as keyof Theme];
+}
 export function SpinnerGlyph(t0) {
   const $ = _c(9);
   const {
@@ -48,7 +55,7 @@ export function SpinnerGlyph(t0) {
   }
   const spinnerChar = SPINNER_FRAMES[frame % SPINNER_FRAMES.length];
   if (stalledIntensity > 0) {
-    const baseColorStr = theme[messageColor];
+    const baseColorStr = resolveColorValue(messageColor, theme);
     const baseRGB = baseColorStr ? parseRGB(baseColorStr) : null;
     if (baseRGB) {
       const interpolated = interpolateColor(baseRGB, ERROR_RED, stalledIntensity);

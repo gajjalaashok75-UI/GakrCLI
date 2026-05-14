@@ -3,6 +3,8 @@
  * Selected via /logo, persisted in GlobalConfig.logoColor.
  */
 
+import type { RGBColor } from '../ink/styles.js'
+
 export type RGB = readonly [number, number, number]
 
 export type LogoPalette = {
@@ -110,4 +112,23 @@ export function resolveLogoPalette(name: string | undefined): LogoPalette {
   return isLogoPaletteName(name)
     ? LOGO_PALETTES[name]
     : LOGO_PALETTES[DEFAULT_LOGO_PALETTE]
+}
+
+export type LogoSpinnerColors = {
+  accent: RGBColor
+  shimmer: RGBColor
+}
+
+export function rgbToInkColor([r, g, b]: RGB): RGBColor {
+  return `rgb(${r},${g},${b})`
+}
+
+export function resolveLogoSpinnerColors(
+  name: string | undefined,
+): LogoSpinnerColors {
+  const palette = resolveLogoPalette(name)
+  return {
+    accent: rgbToInkColor(palette.accent),
+    shimmer: rgbToInkColor(palette.gradient[0] ?? palette.accent),
+  }
 }
