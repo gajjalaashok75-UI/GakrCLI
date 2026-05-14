@@ -13,6 +13,11 @@ import { getSettings_DEPRECATED } from '../utils/settings/settings.js'
 import { parseUserSpecifiedModel } from '../utils/model/model.js'
 import { DEFAULT_GEMINI_MODEL } from '../utils/providerProfile.js'
 import { isZaiBaseUrl, containsExactZaiGlmModelId } from '../utils/zaiProvider.js'
+import { getGlobalConfig } from '../utils/config.js'
+import {
+  resolveLogoPalette,
+  type RGB,
+} from './StartupScreen.palettes.js'
 
 declare const MACRO: { VERSION: string; DISPLAY_VERSION?: string }
 
@@ -20,7 +25,6 @@ const ESC = '\x1b['
 const RESET = `${ESC}0m`
 const DIM = `${ESC}2m`
 
-type RGB = [number, number, number]
 const rgb = (r: number, g: number, b: number) => `${ESC}38;2;${r};${g};${b}m`
 
 function lerp(a: RGB, b: RGB, t: number): RGB {
@@ -31,7 +35,7 @@ function lerp(a: RGB, b: RGB, t: number): RGB {
   ]
 }
 
-function gradAt(stops: RGB[], t: number): RGB {
+function gradAt(stops: readonly RGB[], t: number): RGB {
   const c = Math.max(0, Math.min(1, t))
   const s = c * (stops.length - 1)
   const i = Math.floor(s)
@@ -39,7 +43,7 @@ function gradAt(stops: RGB[], t: number): RGB {
   return lerp(stops[i], stops[i + 1], s - i)
 }
 
-function paintLine(text: string, stops: RGB[], lineT: number): string {
+function paintLine(text: string, stops: readonly RGB[], lineT: number): string {
   let out = ''
   for (let i = 0; i < text.length; i++) {
     const t = text.length > 1 ? lineT * 0.5 + (i / (text.length - 1)) * 0.5 : lineT
@@ -50,19 +54,6 @@ function paintLine(text: string, stops: RGB[], lineT: number): string {
 }
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
-
-const BLUE_GRAD: RGB[] = [
-  [170, 210, 235], // Soft reflection, very light but muted
-  [135, 185, 220], // Soft cyan, dimmed
-  [114, 198, 237], // Main brand color, slightly muted
-  [90, 160, 210],  // Deep but soft blue for shadow
-  [70, 140, 185],  // Dim accent, subtle depth
-]
-
-const ACCENT: RGB = [114, 198, 237] // Main brand, soft sky-blue
-const CREAM: RGB = [180, 160, 140] // Soft cream, dimmed
-const DIMCOL: RGB = [135, 185, 220] // Dimmed cyan for labels
-const BORDER: RGB = [70, 140, 185] // Darker muted blue for edges
 
 // ─── Filled Block Text Logo ───────────────────────────────────────────────────
 
@@ -177,9 +168,9 @@ export function detectProvider(modelOverride?: string): { name: string; model: s
 
 // ─── Box drawing ──────────────────────────────────────────────────────────────
 
-function boxRow(content: string, width: number, rawLen: number): string {
+function boxRow(content: string, width: number, rawLen: number, border: RGB): string {
   const pad = Math.max(0, width - 2 - rawLen)
-  return `${rgb(...BORDER)}\u2502${RESET}${content}${' '.repeat(pad)}${rgb(...BORDER)}\u2502${RESET}`
+  return `${rgb(...border)}\u2502${RESET}${content}${' '.repeat(pad)}${rgb(...border)}\u2502${RESET}`
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -187,6 +178,13 @@ function boxRow(content: string, width: number, rawLen: number): string {
 export function printStartupScreen(modelOverride?: string): void {
   // Skip in non-interactive / CI / print mode
   if (process.env.CI || !process.stdout.isTTY) return
+
+  const palette = resolveLogoPalette(getGlobalConfig().logoColor)
+  const ACCENT = palette.accent
+  const CREAM = palette.cream
+  const DIMCOL = palette.dim
+  const BORDER = palette.border
+  const GRAD = palette.gradient
 
   const p = detectProvider(modelOverride)
   const W = 62
@@ -202,7 +200,7 @@ export function printStartupScreen(modelOverride?: string): void {
     if (allLogo[i] === '') {
       out.push('')
     } else {
-      out.push(paintLine(allLogo[i], BLUE_GRAD, t))
+      out.push(paintLine(allLogo[i], GRAD, t))
     }
   }
 
@@ -222,12 +220,12 @@ export function printStartupScreen(modelOverride?: string): void {
 
   const provC: RGB = p.isLocal ? [130, 175, 130] : ACCENT
   let [r, l] = lbl('Provider', p.name, provC)
-  out.push(boxRow(r, W, l))
+  out.push(boxRow(r, W, l, BORDER))
   ;[r, l] = lbl('Model', p.model)
-  out.push(boxRow(r, W, l))
+  out.push(boxRow(r, W, l, BORDER))
   const ep = p.baseUrl.length > 38 ? p.baseUrl.slice(0, 35) + '...' : p.baseUrl
   ;[r, l] = lbl('Endpoint', ep)
-  out.push(boxRow(r, W, l))
+  out.push(boxRow(r, W, l, BORDER))
 
   out.push(`${rgb(...BORDER)}\u2560${'\u2550'.repeat(W - 2)}\u2563${RESET}`)
 
@@ -235,7 +233,7 @@ export function printStartupScreen(modelOverride?: string): void {
   const sL = p.isLocal ? 'local' : 'cloud'
   const sRow = ` ${rgb(...sC)}\u25cf${RESET} ${DIM}${rgb(...DIMCOL)}${sL}${RESET}    ${DIM}${rgb(...DIMCOL)}Ready \u2014 type ${RESET}${rgb(...ACCENT)}/help${RESET}${DIM}${rgb(...DIMCOL)} to begin${RESET}`
   const sLen = ` \u25cf ${sL}    Ready \u2014 type /help to begin`.length
-  out.push(boxRow(sRow, W, sLen))
+  out.push(boxRow(sRow, W, sLen, BORDER))
 
   out.push(`${rgb(...BORDER)}\u255a${'\u2550'.repeat(W - 2)}\u255d${RESET}`)
   out.push(`  ${DIM}${rgb(...DIMCOL)}gakrcli ${RESET}${rgb(...ACCENT)}v${MACRO.DISPLAY_VERSION ?? MACRO.VERSION}${RESET}`)

@@ -1,3 +1,4 @@
+export const PRODUCT_DISPLAY_NAME = 'GakrCLI'
 export const PRODUCT_URL = 'https://gakrcli.com/gakrcli-code'
 
 // Gakr Remote session URLs
