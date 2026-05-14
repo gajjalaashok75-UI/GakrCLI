@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import './styles.css'
-import { features, installCommand, navLinks } from './content'
+import { features, installCommand, navLinks, useCases } from './content'
 
 type Theme = 'light' | 'dark'
 
@@ -73,6 +73,21 @@ function App() {
           </ul>
         </section>
 
+        <section id="purpose" className="features" aria-labelledby="purpose-heading">
+          <div className="section-head">
+            <p className="eyebrow">// purpose</p>
+            <h2 id="purpose-heading">from prompt to verified change.</h2>
+          </div>
+          <ul className="feature-list">
+            {useCases.map(u => (
+              <li key={u.title} className="feature-row">
+                <h3>{u.title}</h3>
+                <p>— {u.body}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+
         <section id="install" className="install-block" aria-labelledby="install-heading">
           <div className="section-head">
             <p className="eyebrow">// install</p>
@@ -91,15 +106,22 @@ function App() {
               <li>
                 <span className="step-num">02</span>
                 <div>
-                  <strong>start</strong>
-                  <p>run <code>gakrcli</code> in any repo.</p>
+                  <strong>start in a repo</strong>
+                  <p>run <code>gakrcli</code> inside the project you want to work on.</p>
                 </div>
               </li>
               <li>
                 <span className="step-num">03</span>
                 <div>
-                  <strong>pick a provider</strong>
-                  <p>type <code>/provider</code> to wire openai, ollama, gemini, or a gateway.</p>
+                  <strong>choose model access</strong>
+                  <p>type <code>/provider</code> to wire openai-compatible apis, ollama, gemini, or a gateway.</p>
+                </div>
+              </li>
+              <li>
+                <span className="step-num">04</span>
+                <div>
+                  <strong>ask for the work</strong>
+                  <p>describe what you want changed, reviewed, tested, explained, or shipped.</p>
                 </div>
               </li>
             </ol>
@@ -115,8 +137,6 @@ function App() {
             <span className="ver">v0.4.9</span>
           </span>
           <span className="sep">|</span>
-          <a href="https://gitlawb.com">gitlawb ↗</a>
-          <span className="sep">|</span>
           <a href="https://github.com/gajjalaashok75-UI/GakrCLI/blob/main/LICENSE">license</a>
           <span className="sep">·</span>
           <span>{new Date().getFullYear()}</span>
@@ -131,17 +151,18 @@ function Hero() {
     <section className="hero" aria-labelledby="hero-heading">
       <div className="hero-eyebrow">
         <span className="dot" aria-hidden="true" />
-        open source · gitlawb-aligned · model-neutral
+        open source · terminal-first · model-neutral
       </div>
 
       <h1 id="hero-heading" className="hero-title">
-        runs anywhere.<br />
-        uses anything.
+        ship with agents.<br />
+        keep control.
       </h1>
 
       <p className="hero-sub">
-        not a chatbot wrapper or another ide plugin. an open coding agent that runs in your
-        terminal, talks to any model, and keeps every change reviewable.
+        gakrcli is an open-source coding agent for your terminal. use it to understand projects,
+        edit code, run tools, validate changes, and keep development work reviewable from start
+        to finish.
       </p>
 
       <div className="hero-cta">
