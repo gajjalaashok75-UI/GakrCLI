@@ -3,7 +3,12 @@
  * Called once at CLI startup before the Ink UI renders.
  */
 
-import { isLocalProviderUrl, resolveProviderRequest } from '../services/api/providerConfig.js'
+import {
+  DEFAULT_NVIDIA_BASE_URL,
+  DEFAULT_NVIDIA_MODEL,
+  isLocalProviderUrl,
+  resolveProviderRequest,
+} from '../services/api/providerConfig.js'
 import {
   getRouteLabel,
   resolveRouteIdFromBaseUrl,
@@ -86,8 +91,8 @@ export function detectProvider(modelOverride?: string): { name: string; model: s
     return { name: 'Mistral AI', model, baseUrl, isLocal: false }
   }
   if (useNvidia) {
-    const model = process.env.NVIDIA_MODEL || 'stepfun-ai/step-3.5-flash'
-    const baseUrl = process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1'
+    const model = modelOverride || process.env.NVIDIA_MODEL || DEFAULT_NVIDIA_MODEL
+    const baseUrl = process.env.NVIDIA_BASE_URL || DEFAULT_NVIDIA_BASE_URL
     return { name: 'NVIDIA NIMs', model, baseUrl, isLocal: false }
   }
 

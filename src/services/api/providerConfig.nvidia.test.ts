@@ -25,6 +25,10 @@ for (const key of ENV_KEYS) {
   originalEnv[key] = process.env[key]
 }
 
+test('default NVIDIA model is a NVIDIA NIM model id', () => {
+  expect(DEFAULT_NVIDIA_MODEL).toBe('nvidia/llama-3.1-nemotron-70b-instruct')
+})
+
 function restoreEnv(key: string, value: string | undefined): void {
   if (value === undefined) {
     delete process.env[key]
@@ -53,6 +57,30 @@ test('resolves dedicated NVIDIA provider env when GAKR_CODE_USE_NVIDIA is set', 
 
   expect(resolveProviderRequest()).toMatchObject({
     transport: 'chat_completions',
+    requestedModel: DEFAULT_NVIDIA_MODEL,
+    resolvedModel: DEFAULT_NVIDIA_MODEL,
+    baseUrl: DEFAULT_NVIDIA_BASE_URL,
+  })
+})
+
+test('dedicated NVIDIA provider falls back to the NVIDIA default model', () => {
+  clearProviderEnv()
+  process.env.GAKR_CODE_USE_NVIDIA = '1'
+
+  expect(resolveProviderRequest()).toMatchObject({
+    transport: 'chat_completions',
+    requestedModel: DEFAULT_NVIDIA_MODEL,
+    resolvedModel: DEFAULT_NVIDIA_MODEL,
+    baseUrl: DEFAULT_NVIDIA_BASE_URL,
+  })
+})
+
+test('dedicated NVIDIA provider normalizes the old invalid default model from env', () => {
+  clearProviderEnv()
+  process.env.GAKR_CODE_USE_NVIDIA = '1'
+  process.env.NVIDIA_MODEL = 'stepfun-ai/step-3.5-flash'
+
+  expect(resolveProviderRequest()).toMatchObject({
     requestedModel: DEFAULT_NVIDIA_MODEL,
     resolvedModel: DEFAULT_NVIDIA_MODEL,
     baseUrl: DEFAULT_NVIDIA_BASE_URL,

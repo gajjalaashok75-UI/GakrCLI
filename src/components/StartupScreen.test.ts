@@ -20,6 +20,7 @@ import {
   resetSettingsCache,
   setSessionSettingsCache,
 } from '../utils/settings/settingsCache.js'
+import { DEFAULT_NVIDIA_MODEL } from '../services/api/providerConfig.js'
 
 const ENV_KEYS = [
   'CI',
@@ -38,6 +39,8 @@ const ENV_KEYS = [
   'ANTHROPIC_MODEL',
   'GAKR_MODEL',
   'NVIDIA_NIM',
+  'NVIDIA_BASE_URL',
+  'NVIDIA_MODEL',
   'MINIMAX_API_KEY',
   'XAI_API_KEY',
   'ANTHROPIC_DEFAULT_OPUS_MODEL',
@@ -223,6 +226,16 @@ describe('detectProvider — rawModel fallback when URL is generic', () => {
 // --- Explicit env flags win over URL heuristics ---
 
 describe('detectProvider — explicit dedicated-provider env flags', () => {
+  test('GAKR_CODE_USE_NVIDIA uses NVIDIA NIM defaults', () => {
+    process.env.GAKR_CODE_USE_NVIDIA = '1'
+
+    const result = detectProvider()
+
+    expect(result.name).toBe('NVIDIA NIMs')
+    expect(result.model).toBe(DEFAULT_NVIDIA_MODEL)
+    expect(result.baseUrl).toBe('https://integrate.api.nvidia.com/v1')
+  })
+
   test('NVIDIA_NIM=1 overrides aggregator URL', () => {
     setupOpenAIMode('https://openrouter.ai/api/v1', 'some-nim-model')
     process.env.NVIDIA_NIM = '1'
