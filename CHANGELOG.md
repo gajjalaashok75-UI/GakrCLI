@@ -5,6 +5,11 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-05-15 11:09:33 +05:30
+
+### Fixed
+- **Web App Construction**: Wired the Get Started, Providers, and Commands pages into the React app shell, removed duplicate navigation links, cleaned corrupted text encoding in web metadata/content, and added responsive styling for the new web pages.
+
 ## [0.5.1] - 2026-05-14 10:47:30 +05:30
 
 ### Fixed
