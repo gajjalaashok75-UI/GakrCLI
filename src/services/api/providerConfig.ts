@@ -32,6 +32,11 @@ export const DEFAULT_GITHUB_MODELS_API_MODEL = 'gpt-4o'
 /** Default NVIDIA model */
 export const DEFAULT_NVIDIA_MODEL = 'nvidia/llama-3.1-nemotron-70b-instruct'
 const LEGACY_INVALID_NVIDIA_MODEL = 'stepfun-ai/step-3.5-flash'
+const GITHUB_COPILOT_MODEL_ALIASES: Record<string, string> = {
+  'claude-sonnet-4-6': 'claude-sonnet-4.6',
+  'claude-opus-4-6': 'claude-opus-4.6',
+  'claude-haiku-4-5': 'claude-haiku-4.5',
+}
 const warnedUndefinedEnvNames = new Set<string>()
 const CODEX_ALIAS_MODELS: Record<
   string,
@@ -478,10 +483,8 @@ export function normalizeGithubCopilotModel(requestedModel: string): string {
   }
   // Strip provider prefix if present (e.g., "openai/gpt-4o" -> "gpt-4o")
   const slashIndex = segment.indexOf('/')
-  if (slashIndex !== -1) {
-    return segment.slice(slashIndex + 1)
-  }
-  return segment
+  const model = slashIndex !== -1 ? segment.slice(slashIndex + 1) : segment
+  return GITHUB_COPILOT_MODEL_ALIASES[model.toLowerCase()] ?? model
 }
 /**
  * Normalize user model string for GitHub Models API inference.

@@ -354,6 +354,65 @@ describe('discoverModelsForRoute', () => {
     expect(result?.models.map((model: { apiName: string }) => model.apiName)).toEqual(['discovered-model'])
   })
 
+  test('GitHub Copilot discovery sends Copilot integration headers and maps live models', async () => {
+    const { discoverModelsForRoute } = await loadDiscoveryServiceModule()
+
+    setMockFetch(mock((input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      expect(url).toBe('https://api.githubcopilot.com/models')
+      expect(init?.headers).toEqual({
+        'User-Agent': 'GitHubCopilotChat/0.26.7',
+        'Editor-Version': 'vscode/1.99.3',
+        'Editor-Plugin-Version': 'copilot-chat/0.26.7',
+        'Copilot-Integration-Id': 'vscode-chat',
+        Authorization: 'Bearer copilot-token',
+      })
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: 'claude-sonnet-4.6',
+                policy: { state: 'enabled' },
+              },
+              { id: 'gpt-4o-2024-11-20', name: 'GPT-4o' },
+              { id: 'gpt-4o-2024-11-20', name: 'GPT-4o duplicate' },
+              {
+                id: 'gpt-5.5',
+                policy: { state: 'disabled' },
+              },
+              { id: 'gpt-3.5-turbo' },
+              { id: 'accounts/msft/routers/f185i3v4' },
+              { id: 'oswe-vscode-prime' },
+              { id: 'text-embedding-3-small' },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    }) as unknown as typeof globalThis.fetch)
+
+    const result = await discoverModelsForRoute('github', {
+      apiKey: 'copilot-token',
+      forceRefresh: true,
+    })
+
+    expect(result?.source).toBe('network')
+    expect(result?.models.map(model => model.apiName)).toEqual([
+      'github:copilot',
+      'claude-sonnet-4.6',
+      'gpt-4o-2024-11-20',
+    ])
+    expect(result?.models[1]).toMatchObject({
+      label: 'Claude Sonnet 4.6',
+      contextWindow: 200000,
+    })
+    expect(result?.models[2]).toMatchObject({
+      label: 'GPT-4o (2024-11-20)',
+    })
+  })
+
   test('openai-compatible discovery can opt out of auth', async () => {
     const { discoverModelsForRoute } = await loadDiscoveryServiceModule()
 
