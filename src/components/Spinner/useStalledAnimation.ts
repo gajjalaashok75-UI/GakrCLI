@@ -1,5 +1,8 @@
 import { useRef } from 'react'
 
+const STALLED_SPINNER_THRESHOLD_MS = 10_000
+const STALLED_SPINNER_FADE_MS = 2_000
+
 // Hook to handle the transition to red when tokens stop flowing.
 // Driven by the parent's animation clock time instead of independent intervals,
 // so it slows down when the terminal is blurred.
@@ -38,10 +41,15 @@ export function useStalledAnimation(
   }
 
   // Calculate stalled intensity based on time since last token
-  // Start showing red after 3 seconds of no new tokens (only when no tools are active)
-  const isStalled = timeSinceLastToken > 3000 && !hasActiveTools
+  // Start showing red after 10 seconds of no new tokens (only when no tools are active)
+  const isStalled =
+    timeSinceLastToken > STALLED_SPINNER_THRESHOLD_MS && !hasActiveTools
   const intensity = isStalled
-    ? Math.min((timeSinceLastToken - 3000) / 2000, 1) // Fade over 2 seconds
+    ? Math.min(
+        (timeSinceLastToken - STALLED_SPINNER_THRESHOLD_MS) /
+          STALLED_SPINNER_FADE_MS,
+        1,
+      )
     : 0
 
   // Smooth intensity transition driven by animation frame ticks
