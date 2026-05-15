@@ -1909,13 +1909,8 @@ export const call: LocalJSXCommandCall = async (onDone, _context, args) => {
     <ProviderManager
       mode="manage"
       onDone={result => {
-        const message =
-          result?.message ??
-          (result?.action === 'saved'
-            ? 'Provider profile updated'
-            : 'Provider manager closed')
-
-        onDone(message, { display: 'system' })
+        const { message, metaMessages } = buildProviderManagerCompletion(result)
+        onDone(message, { display: 'system', metaMessages })
       }}
     />
   )

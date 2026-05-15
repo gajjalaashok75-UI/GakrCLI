@@ -34,6 +34,9 @@ export type ModelShortName = string
 export type ModelName = string
 export type ModelSetting = ModelName | ModelAlias | null
 
+const DEFAULT_XIAOMI_MIMO_MODEL = 'mimo-v2.5-pro'
+const DEFAULT_XIAOMI_MIMO_FAST_MODEL = 'mimo-v2-flash'
+
 export function getSmallFastModel(): ModelName {
   if (process.env.ANTHROPIC_SMALL_FAST_MODEL) return process.env.ANTHROPIC_SMALL_FAST_MODEL
   // For Gemini provider, use a fast model
@@ -58,6 +61,9 @@ export function getSmallFastModel(): ModelName {
   }
   if (getAPIProvider() === 'minimax') {
     return process.env.OPENAI_MODEL || 'MiniMax-M2.5-highspeed'
+  }
+  if (getAPIProvider() === 'xiaomi-mimo') {
+    return process.env.OPENAI_MODEL || DEFAULT_XIAOMI_MIMO_FAST_MODEL
   }
   // For xAI provider, use grok-3 as the fast model
   if (getAPIProvider() === 'xai') {
@@ -118,6 +124,7 @@ export function getUserSpecifiedModelSetting(): ModelSetting | undefined {
       provider === 'github' ||
       provider === 'nvidia-nim' ||
       provider === 'minimax' ||
+      provider === 'xiaomi-mimo' ||
       provider === 'xai'
     specifiedModel =
       (provider === 'gemini' ? process.env.GEMINI_MODEL : undefined) ||
@@ -190,6 +197,9 @@ export function getDefaultOpusModel(): ModelName {
   if (getAPIProvider() === 'minimax') {
     return process.env.OPENAI_MODEL || 'MiniMax-M2.7'
   }
+  if (getAPIProvider() === 'xiaomi-mimo') {
+    return process.env.OPENAI_MODEL || DEFAULT_XIAOMI_MIMO_MODEL
+  }
   // xAI provider: use grok-4 as the most capable model
   if (getAPIProvider() === 'xai') {
     return process.env.OPENAI_MODEL || 'grok-4'
@@ -233,6 +243,9 @@ export function getDefaultSonnetModel(): ModelName {
   if (getAPIProvider() === 'minimax') {
     return process.env.OPENAI_MODEL || 'MiniMax-M2.5'
   }
+  if (getAPIProvider() === 'xiaomi-mimo') {
+    return process.env.OPENAI_MODEL || DEFAULT_XIAOMI_MIMO_MODEL
+  }
   // xAI provider: use grok-4 as the default model
   if (getAPIProvider() === 'xai') {
     return process.env.OPENAI_MODEL || 'grok-4'
@@ -273,6 +286,9 @@ export function getDefaultHaikuModel(): ModelName {
   }
   if (getAPIProvider() === 'minimax') {
     return process.env.OPENAI_MODEL || 'MiniMax-M2.5-highspeed'
+  }
+  if (getAPIProvider() === 'xiaomi-mimo') {
+    return process.env.OPENAI_MODEL || DEFAULT_XIAOMI_MIMO_FAST_MODEL
   }
   // xAI provider: use grok-3 as the fast/small model
   if (getAPIProvider() === 'xai') {
@@ -341,6 +357,10 @@ export function getDefaultMainLoopModelSetting(): ModelName | ModelAlias {
   // xAI provider: always use the configured xAI model (default grok-4)
   if (getAPIProvider() === 'xai') {
     return process.env.OPENAI_MODEL || 'grok-4'
+  }
+  // Xiaomi MiMo provider: always use the configured OpenAI-compatible model
+  if (getAPIProvider() === 'xiaomi-mimo') {
+    return process.env.OPENAI_MODEL || DEFAULT_XIAOMI_MIMO_MODEL
   }
 
   // Ants default to defaultModel from flag config, or Opus 1M if not configured

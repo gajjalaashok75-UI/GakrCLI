@@ -22,6 +22,8 @@ import {
   buildMistralProfileEnv,
   buildNvidiaNimProfileEnv,
   buildOpenAIProfileEnv,
+  buildVeniceProfileEnv,
+  buildXiaomiMimoProfileEnv,
   buildVertexProfileEnv,
   clearManagedProfileEnv,
   sanitizeApiKey,
@@ -32,6 +34,7 @@ import {
 import { refreshStartupDiscoveryForRoute } from '../integrations/discoveryService.js'
 import {
   getProviderPresetUiMetadata,
+  normalizeXiaomiMimoBaseUrl,
   routeSupportsApiFormatSelection,
   routeSupportsAuthHeaders,
   routeSupportsCustomHeaders,
@@ -162,6 +165,8 @@ function sanitizeProfile(profile: ProviderProfile): ProviderProfile | null {
     NVIDIA_API_KEY: apiKey,
     BNKR_API_KEY: apiKey,
     XAI_API_KEY: apiKey,
+    VENICE_API_KEY: apiKey,
+    MIMO_API_KEY: apiKey,
   }
   const baseUrl = normalizeBaseUrl(
     sanitizeProviderConfigValue(profile.baseUrl, secretSource) ?? '',
@@ -316,11 +321,15 @@ export function getProviderPresetDefaults(
   preset: ProviderPreset,
 ): ProviderPresetDefaults {
   const metadata = getProviderPresetUiMetadata(preset)
+  const routeDefaults =
+    preset === 'custom'
+      ? metadata
+      : getProviderPresetUiMetadata(preset, {})
   return {
     provider: metadata.provider,
     name: metadata.name,
-    baseUrl: metadata.baseUrl,
-    model: metadata.model,
+    baseUrl: routeDefaults.baseUrl,
+    model: routeDefaults.model,
     apiKey: metadata.apiKey,
     requiresApiKey: metadata.requiresApiKey,
   }
@@ -555,6 +564,15 @@ function isProcessEnvAlignedWithProfile(
     (profile.baseUrl?.toLowerCase().includes('x.ai')
       ? !includeApiKey ||
         sameOptionalEnvValue(processEnv.XAI_API_KEY, profile.apiKey)
+      : true) &&
+    (profile.baseUrl?.toLowerCase().includes('api.venice.ai')
+      ? !includeApiKey ||
+        sameOptionalEnvValue(processEnv.VENICE_API_KEY, profile.apiKey)
+      : true) &&
+    (profile.baseUrl?.toLowerCase().includes('api.xiaomimimo.com') ||
+      profile.baseUrl?.toLowerCase().includes('api.mimo-v2.com')
+      ? !includeApiKey ||
+        sameOptionalEnvValue(processEnv.MIMO_API_KEY, profile.apiKey)
       : true)
   )
 }
@@ -633,8 +651,12 @@ export function applyProviderProfileToProcessEnv(profile: ProviderProfile): void
     )
     const supportsApiFormat = routeSupportsApiFormatSelection(capabilityRouteId)
     const supportsAuthHeaders = routeSupportsAuthHeaders(capabilityRouteId)
+    const normalizedProfileBaseUrl =
+      route.routeId === 'xiaomi-mimo'
+        ? normalizeXiaomiMimoBaseUrl(profile.baseUrl) ?? profile.baseUrl
+        : profile.baseUrl
     const openAIProfileEnv: ProfileEnv = {
-      OPENAI_BASE_URL: profile.baseUrl,
+      OPENAI_BASE_URL: normalizedProfileBaseUrl,
       OPENAI_MODEL: primaryModel,
     }
     if (supportsApiFormat && profile.apiFormat) {
@@ -669,6 +691,12 @@ export function applyProviderProfileToProcessEnv(profile: ProviderProfile): void
       }
       if (route.routeId === 'xai' || profile.baseUrl.toLowerCase().includes('x.ai')) {
         openAIProfileEnv.XAI_API_KEY = profile.apiKey
+      }
+      if (route.routeId === 'venice' || profile.baseUrl.toLowerCase().includes('api.venice.ai')) {
+        openAIProfileEnv.VENICE_API_KEY = profile.apiKey
+      }
+      if (route.routeId === 'xiaomi-mimo' || profile.baseUrl.toLowerCase().includes('api.xiaomimimo.com') || profile.baseUrl.toLowerCase().includes('api.mimo-v2.com')) {
+        openAIProfileEnv.MIMO_API_KEY = profile.apiKey
       }
     }
     if (route.gatewayId === 'nvidia-nim') {
@@ -976,6 +1004,15 @@ function buildOpenAICompatibleStartupEnv(
     if (activeProfile.baseUrl?.toLowerCase().includes('x.ai')) {
       env.XAI_API_KEY = activeProfile.apiKey
     }
+    if (activeProfile.baseUrl?.toLowerCase().includes('api.venice.ai')) {
+      env.VENICE_API_KEY = activeProfile.apiKey
+    }
+    if (
+      activeProfile.baseUrl?.toLowerCase().includes('api.xiaomimimo.com') ||
+      activeProfile.baseUrl?.toLowerCase().includes('api.mimo-v2.com')
+    ) {
+      env.MIMO_API_KEY = activeProfile.apiKey
+    }
   } else {
     delete env.OPENAI_API_KEY
   }
@@ -1093,6 +1130,32 @@ function buildStartupProfileFromActiveProfile(
           }) ?? null
         return env
           ? { profile: 'minimax', env: applySupportedProfileCustomHeaders(activeProfile, env) }
+          : null
+      }
+
+      if (route.vendorId === 'venice') {
+        const env =
+          buildVeniceProfileEnv({
+            model: getPrimaryModel(activeProfile.model),
+            baseUrl: activeProfile.baseUrl,
+            apiKey: activeProfile.apiKey,
+            processEnv: process.env,
+          }) ?? null
+        return env
+          ? { profile: 'openai', env: applySupportedProfileCustomHeaders(activeProfile, env) }
+          : null
+      }
+
+      if (route.vendorId === 'xiaomi-mimo') {
+        const env =
+          buildXiaomiMimoProfileEnv({
+            model: getPrimaryModel(activeProfile.model),
+            baseUrl: activeProfile.baseUrl,
+            apiKey: activeProfile.apiKey,
+            processEnv: process.env,
+          }) ?? null
+        return env
+          ? { profile: 'openai', env: applySupportedProfileCustomHeaders(activeProfile, env) }
           : null
       }
 

@@ -45,6 +45,14 @@ test('getRouteCredentialEnvVars keeps descriptor env vars and openai fallback fo
     'OPENAI_API_KEY',
   ])
   expect(getRouteCredentialEnvVars('custom')).toEqual(['OPENAI_API_KEY'])
+  expect(getRouteCredentialEnvVars('venice')).toEqual([
+    'VENICE_API_KEY',
+    'OPENAI_API_KEY',
+  ])
+  expect(getRouteCredentialEnvVars('xiaomi-mimo')).toEqual([
+    'MIMO_API_KEY',
+    'OPENAI_API_KEY',
+  ])
 })
 
 test('getRouteCredentialValue reads the first configured route credential', () => {
@@ -91,6 +99,22 @@ test('resolveActiveRouteIdFromEnv prefers xAI when env-only keys compete', () =>
   ).toBe('xai')
 })
 
+test('resolveActiveRouteIdFromEnv treats Xiaomi MiMo credential-only env as Xiaomi MiMo', () => {
+  expect(
+    resolveActiveRouteIdFromEnv({
+      MIMO_API_KEY: 'mimo-key',
+    }),
+  ).toBe('xiaomi-mimo')
+})
+
+test('resolveActiveRouteIdFromEnv treats Venice credential-only env as Venice', () => {
+  expect(
+    resolveActiveRouteIdFromEnv({
+      VENICE_API_KEY: 'venice-key',
+    }),
+  ).toBe('venice')
+})
+
 test('resolveActiveRouteIdFromEnv keeps xAI primary base over stale API base', () => {
   expect(
     resolveActiveRouteIdFromEnv({
@@ -113,6 +137,8 @@ test('resolveActiveRouteIdFromEnv keeps MiniMax primary base over stale API base
 
 test.each([
   ['MiniMax', 'https://api.minimax.io/v1', 'MiniMax-M2.7', 'minimax'],
+  ['Xiaomi MiMo', 'https://api.xiaomimimo.com/v1', 'mimo-v2.5-pro', 'xiaomi-mimo'],
+  ['Venice', 'https://api.venice.ai/api/v1', 'venice-uncensored', 'venice'],
   ['xAI', 'https://api.x.ai/v1', 'grok-4', 'xai'],
   ['NVIDIA NIM', 'https://integrate.api.nvidia.com/v1', 'nvidia/llama-3.1-nemotron-70b-instruct', 'nvidia-nim'],
   ['OpenRouter', 'https://openrouter.ai/api/v1', 'openai/gpt-5-mini', 'openrouter'],

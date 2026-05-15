@@ -35,6 +35,8 @@ const originalEnv = {
   OPENAI_MODEL: process.env.OPENAI_MODEL,
   MINIMAX_API_KEY: process.env.MINIMAX_API_KEY,
   XAI_API_KEY: process.env.XAI_API_KEY,
+  VENICE_API_KEY: process.env.VENICE_API_KEY,
+  MIMO_API_KEY: process.env.MIMO_API_KEY,
   NVIDIA_NIM: process.env.NVIDIA_NIM,
   NVIDIA_API_KEY: process.env.NVIDIA_API_KEY,
   NVIDIA_BASE_URL: process.env.NVIDIA_BASE_URL,
@@ -77,6 +79,8 @@ beforeEach(() => {
   delete process.env.OPENAI_MODEL
   delete process.env.MINIMAX_API_KEY
   delete process.env.XAI_API_KEY
+  delete process.env.VENICE_API_KEY
+  delete process.env.MIMO_API_KEY
   delete process.env.NVIDIA_NIM
   delete process.env.NVIDIA_API_KEY
   delete process.env.NVIDIA_BASE_URL
@@ -109,6 +113,8 @@ afterEach(() => {
   restoreEnv('OPENAI_MODEL', originalEnv.OPENAI_MODEL)
   restoreEnv('MINIMAX_API_KEY', originalEnv.MINIMAX_API_KEY)
   restoreEnv('XAI_API_KEY', originalEnv.XAI_API_KEY)
+  restoreEnv('VENICE_API_KEY', originalEnv.VENICE_API_KEY)
+  restoreEnv('MIMO_API_KEY', originalEnv.MIMO_API_KEY)
   restoreEnv('NVIDIA_NIM', originalEnv.NVIDIA_NIM)
   restoreEnv('NVIDIA_API_KEY', originalEnv.NVIDIA_API_KEY)
   restoreEnv('NVIDIA_BASE_URL', originalEnv.NVIDIA_BASE_URL)
@@ -856,6 +862,127 @@ test('env-only xAI wins when MiniMax key is also present', async () => {
   expect(capturedUrl).toBe('https://api.x.ai/v1/chat/completions')
   expect(capturedHeaders?.get('authorization')).toBe('Bearer xai-test-key')
   expect(process.env.OPENAI_API_KEY).toBe('xai-test-key')
+})
+
+test('routes env-only Venice requests through the OpenAI-compatible shim', async () => {
+  let capturedUrl: string | undefined
+  let capturedHeaders: Headers | undefined
+  let capturedBody: Record<string, unknown> | undefined
+
+  delete process.env.GAKR_CODE_USE_GEMINI
+  delete process.env.GEMINI_API_KEY
+  delete process.env.GEMINI_MODEL
+  delete process.env.GEMINI_BASE_URL
+  delete process.env.GEMINI_AUTH_MODE
+  process.env.VENICE_API_KEY = 'venice-test-key'
+
+  globalThis.fetch = (async (input, init) => {
+    capturedUrl =
+      typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url
+    capturedHeaders = new Headers(init?.headers)
+    capturedBody = JSON.parse(String(init?.body)) as Record<string, unknown>
+
+    return new Response(
+      JSON.stringify({
+        id: 'chatcmpl-venice',
+        model: 'venice-uncensored',
+        choices: [
+          {
+            message: { role: 'assistant', content: 'venice ok' },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { prompt_tokens: 8, completion_tokens: 3, total_tokens: 11 },
+      }),
+      { headers: { 'Content-Type': 'application/json' } },
+    )
+  }) as FetchType
+
+  const client = (await getAnthropicClient({
+    maxRetries: 0,
+    model: 'venice-uncensored',
+  })) as unknown as ShimClient
+
+  const response = await client.beta.messages.create({
+    model: 'venice-uncensored',
+    system: 'test system',
+    messages: [{ role: 'user', content: 'hello' }],
+    max_tokens: 64,
+    stream: false,
+  })
+
+  expect(capturedUrl).toBe('https://api.venice.ai/api/v1/chat/completions')
+  expect(capturedHeaders?.get('authorization')).toBe('Bearer venice-test-key')
+  expect(capturedBody?.model).toBe('venice-uncensored')
+  expect(response).toMatchObject({
+    role: 'assistant',
+    model: 'venice-uncensored',
+  })
+})
+
+test('routes env-only Xiaomi MiMo requests through the OpenAI-compatible shim', async () => {
+  let capturedUrl: string | undefined
+  let capturedHeaders: Headers | undefined
+  let capturedBody: Record<string, unknown> | undefined
+
+  delete process.env.GAKR_CODE_USE_GEMINI
+  delete process.env.GEMINI_API_KEY
+  delete process.env.GEMINI_MODEL
+  delete process.env.GEMINI_BASE_URL
+  delete process.env.GEMINI_AUTH_MODE
+  process.env.MIMO_API_KEY = 'mimo-test-key'
+
+  globalThis.fetch = (async (input, init) => {
+    capturedUrl =
+      typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url
+    capturedHeaders = new Headers(init?.headers)
+    capturedBody = JSON.parse(String(init?.body)) as Record<string, unknown>
+
+    return new Response(
+      JSON.stringify({
+        id: 'chatcmpl-mimo',
+        model: 'mimo-v2.5-pro',
+        choices: [
+          {
+            message: { role: 'assistant', content: 'mimo ok' },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { prompt_tokens: 8, completion_tokens: 3, total_tokens: 11 },
+      }),
+      { headers: { 'Content-Type': 'application/json' } },
+    )
+  }) as FetchType
+
+  const client = (await getAnthropicClient({
+    maxRetries: 0,
+    model: 'mimo-v2.5-pro',
+  })) as unknown as ShimClient
+
+  const response = await client.beta.messages.create({
+    model: 'mimo-v2.5-pro',
+    system: 'test system',
+    messages: [{ role: 'user', content: 'hello' }],
+    max_tokens: 64,
+    stream: false,
+  })
+
+  expect(capturedUrl).toBe('https://api.xiaomimimo.com/v1/chat/completions')
+  expect(capturedHeaders?.get('api-key')).toBe('mimo-test-key')
+  expect(capturedHeaders?.get('authorization')).toBeNull()
+  expect(capturedBody?.model).toBe('mimo-v2.5-pro')
+  expect(response).toMatchObject({
+    role: 'assistant',
+    model: 'mimo-v2.5-pro',
+  })
 })
 
 test('env-only MiniMax fallback yields to explicit Bedrock selection', async () => {

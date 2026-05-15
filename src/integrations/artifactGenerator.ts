@@ -232,6 +232,13 @@ function compareProviderPresetEntries(
     return 0
   }
 
+  if (leftPreset === 'gitlawb-opengateway') {
+    return -1
+  }
+  if (rightPreset === 'gitlawb-opengateway') {
+    return 1
+  }
+
   if (leftPreset === 'anthropic') {
     return -1
   }

@@ -105,13 +105,14 @@ async function waitForCondition(
 // Order matches ProviderManager.renderPresetSelection() when
 // canUseCodexOAuth === true (default in mocked tests).
 const PRESET_ORDER = [
+  'Gitlawb Opengateway',
   'Anthropic',
   'Alibaba Coding Plan (China)',
   'Alibaba Coding Plan',
   'Azure OpenAI',
   'Bankr',
-  'DeepSeek',
   'Codex OAuth',
+  'DeepSeek',
   'Google Gemini',
   'Groq',
   'Hicap',
@@ -126,7 +127,9 @@ const PRESET_ORDER = [
   'OpenAI',
   'OpenRouter',
   'Together AI',
+  'Venice',
   'xAI',
+  'Xiaomi MiMo',
   'Z.AI - GLM Coding Plan',
   'Custom',
 ] as const
