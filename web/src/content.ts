@@ -46,5 +46,8 @@ export const navLinks = [
   { href: '#features', label: 'features' },
   { href: '#purpose', label: 'purpose' },
   { href: '#install', label: 'install' },
+  { href: '/get-started', label: 'get started' },
+  { href: '/providers', label: 'providers' },
+  { href: '/commands', label: 'commands' },
   { href: 'https://github.com/gajjalaashok75-UI/GakrCLI', label: 'github' },
 ] as const

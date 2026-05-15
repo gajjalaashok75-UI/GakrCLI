@@ -1,0 +1,17 @@
+export const commands = [
+  { id: 'run', command: 'gakrcli', description: 'Start an interactive GakrCLI session in the current directory.', shortcut: '' },
+  { id: 'oneoff', command: 'gakrcli <prompt>', description: 'Run a single prompt without entering interactive mode.', shortcut: '' },
+  { id: 'provider', command: '/provider', description: 'Select or change the active LLM provider.', shortcut: '' },
+  { id: 'help', command: '/help', description: 'Show help for slash commands and shortcuts.', shortcut: '' },
+  { id: 'fast', command: '/fast', description: 'Toggle the faster runtime profile when it is configured.', shortcut: '' },
+  { id: 'config', command: 'gakrcli --config', description: 'Open or inspect configuration.', shortcut: '' },
+  { id: 'memory', command: '/memory', description: 'Inspect or edit GakrCLI memory files.', shortcut: '' },
+  { id: 'agents', command: '/agents', description: 'List available agents and start one.', shortcut: '' },
+  { id: 'skills', command: '/skills', description: 'List and invoke installed skills.', shortcut: '' },
+  { id: 'plugins', command: '/plugins', description: 'Manage GakrCLI plugins.', shortcut: '' },
+  { id: 'session', command: '/session', description: 'View current session information.', shortcut: '' },
+  { id: 'settings', command: '/settings', description: 'Adjust runtime settings.', shortcut: '' },
+  { id: 'ctrl-o', command: 'Ctrl+O', description: 'Toggle verbose or thinking display mode.', shortcut: 'Ctrl+O' },
+  { id: 'alt-t', command: 'Alt+T', description: 'Toggle always-thinking mode.', shortcut: 'Alt+T' },
+  { id: 'option-t', command: 'Option+T', description: 'Toggle always-thinking mode on macOS.', shortcut: 'Option+T' },
+] as const
