@@ -17,6 +17,7 @@ import {
   saveGithubModelsToken,
 } from '../../utils/githubModelsCredentials.js'
 import { updateSettingsForSource } from '../../utils/settings/settings.js'
+import { useSetAppState } from '../../state/AppState.js'
 
 const DEFAULT_MODEL = 'github:copilot'
 const FORCE_RELOGIN_ARGS = new Set([
@@ -174,11 +175,62 @@ export function activateGithubOnboardingMode(
   return { ok: true }
 }
 
+function useSwitchGithubSessionModel(): (model?: string) => void {
+  const setAppState = useSetAppState()
+  return useCallback(
+    (model: string = DEFAULT_MODEL) => {
+      setAppState(prev => ({
+        ...prev,
+        mainLoopModel: model.trim() || DEFAULT_MODEL,
+        mainLoopModelForSession: null,
+      }))
+    },
+    [setAppState],
+  )
+}
+
+function ActivateExistingGithubLogin(props: {
+  onDone: Parameters<LocalJSXCommandCall>[0]
+  onChangeAPIKey: () => void
+}): React.ReactNode {
+  const { onDone, onChangeAPIKey } = props
+  const switchSessionModel = useSwitchGithubSessionModel()
+  const ranRef = React.useRef(false)
+
+  React.useEffect(() => {
+    if (ranRef.current) {
+      return
+    }
+    ranRef.current = true
+
+    const activated = activateGithubOnboardingMode(DEFAULT_MODEL, {
+      onChangeAPIKey,
+    })
+    if (!activated.ok) {
+      onDone(
+        `GitHub token detected, but settings activation failed: ${activated.detail ?? 'unknown error'}. ` +
+          'Set GAKR_CODE_USE_GITHUB=1 and OPENAI_MODEL=github:copilot in user settings manually.',
+        { display: 'system' },
+      )
+      return
+    }
+
+    switchSessionModel(DEFAULT_MODEL)
+    onDone(
+      'GitHub Models already authorized. Activated GitHub Models mode using your existing token and switched this session to github:copilot. Use /onboard-github --force to re-authenticate.',
+      { display: 'user' },
+    )
+  }, [onChangeAPIKey, onDone, switchSessionModel])
+
+  return null
+}
+
 function OnboardGithub(props: {
   onDone: Parameters<LocalJSXCommandCall>[0]
   onChangeAPIKey: () => void
 }): React.ReactNode {
   const { onDone, onChangeAPIKey } = props
+  const switchSessionModel = useSwitchGithubSessionModel()
   const [step, setStep] = useState<Step>('menu')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [deviceHint, setDeviceHint] = useState<{
@@ -214,8 +266,9 @@ function OnboardGithub(props: {
       process.env.OPENAI_MODEL = model.trim() || DEFAULT_MODEL
       hydrateGithubModelsTokenFromSecureStorage()
       onChangeAPIKey()
+      switchSessionModel(model)
       onDone(
-        'GitHub Models onboard complete. Token stored in secure storage; user settings updated. Restart if the model does not switch.',
+        'GitHub Models onboard complete. Token stored in secure storage; user settings updated; this session switched to github:copilot.',
         { display: 'user' },
       )
     },
@@ -263,8 +316,9 @@ function OnboardGithub(props: {
       process.env.OPENAI_MODEL = DEFAULT_MODEL
       hydrateGithubModelsTokenFromSecureStorage()
       onChangeAPIKey()
+      switchSessionModel(DEFAULT_MODEL)
       onDone(
-        'GitHub Models onboard complete. Token stored in secure storage; user settings updated. Restart if the model does not switch.',
+        'GitHub Models onboard complete. Token stored in secure storage; user settings updated; this session switched to github:copilot.',
         { display: 'user' },
       )
     } catch (e) {
@@ -396,23 +450,12 @@ function OnboardGithub(props: {
 export const call: LocalJSXCommandCall = async (onDone, context, args) => {
   const forceRelogin = shouldForceGithubRelogin(args)
   if (hasExistingGithubModelsLoginToken() && !forceRelogin) {
-    const activated = activateGithubOnboardingMode(DEFAULT_MODEL, {
-      onChangeAPIKey: context.onChangeAPIKey,
-    })
-    if (!activated.ok) {
-      onDone(
-        `GitHub token detected, but settings activation failed: ${activated.detail ?? 'unknown error'}. ` +
-          'Set GAKR_CODE_USE_GITHUB=1 and OPENAI_MODEL=github:copilot in user settings manually.',
-        { display: 'system' },
-      )
-      return null
-    }
-
-    onDone(
-      'GitHub Models already authorized. Activated GitHub Models mode using your existing token. Use /onboard-github --force to re-authenticate.',
-      { display: 'user' },
+    return (
+      <ActivateExistingGithubLogin
+        onDone={onDone}
+        onChangeAPIKey={context.onChangeAPIKey}
+      />
     )
-    return null
   }
 
   return (

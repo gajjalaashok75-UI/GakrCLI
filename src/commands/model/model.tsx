@@ -59,6 +59,7 @@ import { validateModel } from '../../utils/model/validateModel.js'
 import { getLocalOpenAICompatibleProviderLabel } from '../../utils/providerDiscovery.js'
 import { isEssentialTrafficOnly } from '../../utils/privacyLevel.js'
 import { parseCustomHeadersEnv } from '../../utils/providerCustomHeaders.js'
+import { hydrateGithubModelsTokenFromSecureStorage } from '../../utils/githubModelsCredentials.js'
 import {
   getActiveOpenAIModelOptionsCache,
   getActiveProviderProfile,
@@ -120,6 +121,10 @@ function getOpenAIDiscoveryRequestOptions(routeId?: string | null): {
   baseUrl?: string
   headers?: Record<string, string>
 } {
+  if (routeId === 'github') {
+    hydrateGithubModelsTokenFromSecureStorage()
+  }
+
   const request = resolveProviderRequest({
     model: process.env.OPENAI_MODEL,
     baseUrl: process.env.OPENAI_BASE_URL,
@@ -248,9 +253,7 @@ async function loadDescriptorDiscoveryContext(
 
 async function loadModelDiscoveryContext(): Promise<ModelDiscoveryContext | null> {
   const routeId = getActiveRouteId()
-  // GitHub Copilot has a richer local registry in modelOptions.ts than the
-  // gateway descriptor's minimal static catalog. Let the picker use that list.
-  if (routeId && routeId !== 'anthropic' && routeId !== 'github') {
+  if (routeId && routeId !== 'anthropic') {
     const descriptorContext = await loadDescriptorDiscoveryContext(routeId)
     if (descriptorContext) {
       return descriptorContext

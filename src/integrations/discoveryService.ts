@@ -260,9 +260,15 @@ async function runDiscovery(
           return null
         }
         const entries: ModelCatalogEntry[] = []
+        const seenApiNames = new Set<string>()
         for (const raw of rawModels) {
           const entry = discovery.mapModel(raw)
           if (entry !== null) {
+            const normalizedApiName = entry.apiName.trim().toLowerCase()
+            if (!normalizedApiName || seenApiNames.has(normalizedApiName)) {
+              continue
+            }
+            seenApiNames.add(normalizedApiName)
             entries.push(entry)
           }
         }
