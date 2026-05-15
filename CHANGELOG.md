@@ -5,6 +5,12 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-05-15 15:09:17 +05:30
+
+### Fixed
+- **GitHub Copilot Onboarding**: Exchanged browser device-flow OAuth tokens for Copilot runtime tokens before saving credentials so GitHub Copilot requests authenticate after `/onboard-github`.
+- **GitHub Model Picker**: Let `/model` use the full local Copilot model registry instead of the minimal GitHub gateway catalog so supported Copilot models are selectable.
+
 ## [0.5.1] - 2026-05-15 11:32:47 +05:30
 
 ### Fixed
