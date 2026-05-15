@@ -5,6 +5,7 @@ import { Spinner } from '../../components/Spinner.js'
 import TextInput from '../../components/TextInput.js'
 import { Box, Text } from '../../ink.js'
 import {
+  exchangeForCopilotToken,
   openVerificationUri,
   pollAccessToken,
   requestDeviceCode,
@@ -75,6 +76,24 @@ export function hasExistingGithubModelsLoginToken(
     return false
   }
   return Boolean(persisted)
+}
+
+export async function saveGithubDeviceFlowToken(
+  oauthToken: string,
+  deps?: {
+    exchangeForCopilotToken?: typeof exchangeForCopilotToken
+    saveGithubModelsToken?: typeof saveGithubModelsToken
+  },
+): Promise<{ success: boolean; warning?: string }> {
+  const trimmedOauthToken = oauthToken.trim()
+  if (!trimmedOauthToken) {
+    return { success: false, warning: 'Token is empty.' }
+  }
+
+  const exchange = deps?.exchangeForCopilotToken ?? exchangeForCopilotToken
+  const save = deps?.saveGithubModelsToken ?? saveGithubModelsToken
+  const copilotToken = await exchange(trimmedOauthToken)
+  return save(copilotToken.token, trimmedOauthToken)
 }
 
 export function buildGithubOnboardingSettingsEnv(
@@ -218,12 +237,41 @@ function OnboardGithub(props: {
         initialInterval: device.interval,
         timeoutSeconds: device.expires_in,
       })
-      await finalize(token, DEFAULT_MODEL)
+      const saved = await saveGithubDeviceFlowToken(token)
+      if (!saved.success) {
+        setErrorMsg(saved.warning ?? 'Could not save token to secure storage.')
+        setStep('error')
+        return
+      }
+
+      const activated = activateGithubOnboardingMode(DEFAULT_MODEL, {
+        onChangeAPIKey,
+      })
+      if (!activated.ok) {
+        setErrorMsg(
+          `Token saved, but settings were not updated: ${activated.detail ?? 'unknown error'}. ` +
+            `Add env GAKR_CODE_USE_GITHUB=1 and OPENAI_MODEL to ~/.gakrcli/settings.json manually.`,
+        )
+        setStep('error')
+        return
+      }
+
+      for (const key of PROVIDER_SPECIFIC_KEYS) {
+        delete process.env[key]
+      }
+      process.env.GAKR_CODE_USE_GITHUB = '1'
+      process.env.OPENAI_MODEL = DEFAULT_MODEL
+      hydrateGithubModelsTokenFromSecureStorage()
+      onChangeAPIKey()
+      onDone(
+        'GitHub Models onboard complete. Token stored in secure storage; user settings updated. Restart if the model does not switch.',
+        { display: 'user' },
+      )
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : String(e))
       setStep('error')
     }
-  }, [finalize])
+  }, [onChangeAPIKey, onDone])
 
   if (step === 'error' && errorMsg) {
     const options = [

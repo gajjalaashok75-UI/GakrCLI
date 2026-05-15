@@ -248,7 +248,9 @@ async function loadDescriptorDiscoveryContext(
 
 async function loadModelDiscoveryContext(): Promise<ModelDiscoveryContext | null> {
   const routeId = getActiveRouteId()
-  if (routeId && routeId !== 'anthropic') {
+  // GitHub Copilot has a richer local registry in modelOptions.ts than the
+  // gateway descriptor's minimal static catalog. Let the picker use that list.
+  if (routeId && routeId !== 'anthropic' && routeId !== 'github') {
     const descriptorContext = await loadDescriptorDiscoveryContext(routeId)
     if (descriptorContext) {
       return descriptorContext

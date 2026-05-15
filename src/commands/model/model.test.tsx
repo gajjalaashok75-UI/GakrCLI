@@ -150,6 +150,25 @@ test('opens the model picker without awaiting descriptor-backed route refresh', 
   expect(result).not.toBe('timeout')
 })
 
+test('/model uses full local Copilot registry for GitHub provider', async () => {
+  process.env.GAKR_CODE_USE_GITHUB = '1'
+  process.env.OPENAI_MODEL = 'github:copilot'
+  delete process.env.GAKR_CODE_USE_OPENAI
+  delete process.env.GAKR_CODE_USE_GEMINI
+  delete process.env.GAKR_CODE_USE_MISTRAL
+  delete process.env.GAKR_CODE_USE_BEDROCK
+  delete process.env.GAKR_CODE_USE_VERTEX
+  delete process.env.GAKR_CODE_USE_FOUNDRY
+  delete process.env.OPENAI_BASE_URL
+  delete process.env.OPENAI_API_BASE
+
+  const { call } = await importFreshModelModule('github-local-registry')
+  const result = await call(() => {}, {} as never, '')
+
+  expect(result).toBeTruthy()
+  expect((result as { props: { discoveryContext: unknown } }).props.discoveryContext).toBe(null)
+})
+
 test('shouldAutoRefreshRouteCatalog respects discovery refresh modes', async () => {
   const { shouldAutoRefreshRouteCatalog } =
     await importFreshModelModule('descriptor-refresh-modes')

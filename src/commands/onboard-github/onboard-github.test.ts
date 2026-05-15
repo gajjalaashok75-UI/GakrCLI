@@ -5,6 +5,7 @@ import {
   applyGithubOnboardingProcessEnv,
   buildGithubOnboardingSettingsEnv,
   hasExistingGithubModelsLoginToken,
+  saveGithubDeviceFlowToken,
   shouldForceGithubRelogin,
 } from './onboard-github.js'
 
@@ -48,6 +49,33 @@ describe('hasExistingGithubModelsLoginToken', () => {
 
   test('returns false when both env and stored token are missing', () => {
     expect(hasExistingGithubModelsLoginToken({}, '')).toBe(false)
+  })
+})
+
+describe('saveGithubDeviceFlowToken', () => {
+  test('exchanges the OAuth token and stores both tokens', async () => {
+    const saved: Array<{ token: string; oauthToken?: string }> = []
+
+    const result = await saveGithubDeviceFlowToken(' oauth-token ', {
+      exchangeForCopilotToken: async oauthToken => {
+        expect(oauthToken).toBe('oauth-token')
+        return {
+          token: 'copilot-token',
+          expires_at: 123,
+          refresh_in: 456,
+          endpoints: { api: 'https://api.githubcopilot.com' },
+        }
+      },
+      saveGithubModelsToken: (token, oauthToken) => {
+        saved.push({ token, oauthToken })
+        return { success: true }
+      },
+    })
+
+    expect(result).toEqual({ success: true })
+    expect(saved).toEqual([
+      { token: 'copilot-token', oauthToken: 'oauth-token' },
+    ])
   })
 })
 
