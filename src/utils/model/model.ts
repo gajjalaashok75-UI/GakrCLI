@@ -28,6 +28,7 @@ import { LIGHTNING_BOLT } from '../../constants/figures.js'
 import { isModelAllowed } from './modelAllowlist.js'
 import { type ModelAlias, isModelAlias } from './aliases.js'
 import { capitalize } from '../stringUtils.js'
+import { DEFAULT_NVIDIA_MODEL } from '../../services/api/providerConfig.js'
 
 export type ModelShortName = string
 export type ModelName = string
@@ -331,7 +332,7 @@ export function getDefaultMainLoopModelSetting(): ModelName | ModelAlias {
   }
   // NVIDIA provider: always use the configured NVIDIA model
   if (getAPIProvider() === 'nvidia-nim') {
-    return process.env.NVIDIA_MODEL || 'stepfun-ai/step-3.5-flash'
+    return process.env.OPENAI_MODEL || process.env.NVIDIA_MODEL || DEFAULT_NVIDIA_MODEL
   }
   // Codex provider: always use the configured Codex model (default gpt-5.4)
   if (getAPIProvider() === 'codex') {

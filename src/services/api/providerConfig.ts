@@ -30,7 +30,8 @@ export const DEFAULT_MISTRAL_BASE_URL = 'https://api.mistral.ai/v1'
 /** Default GitHub Models API model when user selects copilot / github:copilot */
 export const DEFAULT_GITHUB_MODELS_API_MODEL = 'gpt-4o'
 /** Default NVIDIA model */
-export const DEFAULT_NVIDIA_MODEL = 'stepfun-ai/step-3.5-flash'
+export const DEFAULT_NVIDIA_MODEL = 'nvidia/llama-3.1-nemotron-70b-instruct'
+const LEGACY_INVALID_NVIDIA_MODEL = 'stepfun-ai/step-3.5-flash'
 const warnedUndefinedEnvNames = new Set<string>()
 const CODEX_ALIAS_MODELS: Record<
   string,
@@ -218,6 +219,10 @@ function parseReasoningEffort(value: string | undefined): ReasoningEffort | unde
     return normalized
   }
   return undefined
+}
+
+function normalizeNvidiaModel(value: string | undefined): string | undefined {
+  return value === LEGACY_INVALID_NVIDIA_MODEL ? DEFAULT_NVIDIA_MODEL : value
 }
 
 export function parseOpenAICompatibleApiFormat(
@@ -522,18 +527,20 @@ export function resolveProviderRequest(options?: {
   reasoningEffortOverride?: ReasoningEffort
   apiFormat?: OpenAICompatibleApiFormat | string
 }): ResolvedProviderRequest {
-  const explicitModel = options?.model?.trim()
+  const rawExplicitModel = options?.model?.trim()
   const isOpenAIMode = isEnvTruthy(process.env.GAKR_CODE_USE_OPENAI)
   const isGithubMode = isEnvTruthy(process.env.GAKR_CODE_USE_GITHUB)
   const isMistralMode = isEnvTruthy(process.env.GAKR_CODE_USE_MISTRAL)
   const isGeminiMode = isEnvTruthy(process.env.GAKR_CODE_USE_GEMINI)
   const openAIEnvModel = process.env.OPENAI_MODEL?.trim()
-  const nvidiaEnvModel = process.env.NVIDIA_MODEL?.trim()
+  const nvidiaEnvModel = normalizeNvidiaModel(process.env.NVIDIA_MODEL?.trim())
+  const nvidiaCompatibleOpenAIEnvModel = normalizeNvidiaModel(openAIEnvModel)
+  const nvidiaCompatibleExplicitModel = normalizeNvidiaModel(rawExplicitModel)
   const openAIEnvBaseUrl = asEnvUrl(process.env.OPENAI_BASE_URL)
   const openAIEnvModelLooksNvidia =
-    !openAIEnvModel ||
-    openAIEnvModel === nvidiaEnvModel ||
-    openAIEnvModel.startsWith('nvidia/')
+    !nvidiaCompatibleOpenAIEnvModel ||
+    nvidiaCompatibleOpenAIEnvModel === nvidiaEnvModel ||
+    nvidiaCompatibleOpenAIEnvModel.startsWith('nvidia/')
   const openAIEnvBaseUrlLooksNvidia =
     !openAIEnvBaseUrl ||
     openAIEnvBaseUrl.toLowerCase().includes('nvidia')
@@ -545,15 +552,18 @@ export function resolveProviderRequest(options?: {
     !isGeminiMode &&
     openAIEnvModelLooksNvidia &&
     openAIEnvBaseUrlLooksNvidia &&
-    (!explicitModel ||
-      explicitModel === nvidiaEnvModel ||
-      explicitModel.startsWith('nvidia/'))
+    (!nvidiaCompatibleExplicitModel ||
+      nvidiaCompatibleExplicitModel === nvidiaEnvModel ||
+      nvidiaCompatibleExplicitModel.startsWith('nvidia/'))
+  const explicitModel = isNvidiaMode
+    ? nvidiaCompatibleExplicitModel
+    : rawExplicitModel
   const envRequestedModel = isMistralMode
     ? process.env.MISTRAL_MODEL?.trim()
     : isGeminiMode
     ? process.env.GEMINI_MODEL?.trim()
     : isNvidiaMode
-    ? nvidiaEnvModel ?? openAIEnvModel
+    ? nvidiaEnvModel ?? nvidiaCompatibleOpenAIEnvModel
     : openAIEnvModel
   const requestedModel =
     explicitModel ||

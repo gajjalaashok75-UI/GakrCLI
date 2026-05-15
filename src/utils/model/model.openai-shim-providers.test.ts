@@ -38,6 +38,7 @@ const SAVED_ENV = {
   GAKR_CODE_USE_FOUNDRY: process.env.GAKR_CODE_USE_FOUNDRY,
   NVIDIA_NIM: process.env.NVIDIA_NIM,
   MINIMAX_API_KEY: process.env.MINIMAX_API_KEY,
+  NVIDIA_MODEL: process.env.NVIDIA_MODEL,
   OPENAI_MODEL: process.env.OPENAI_MODEL,
   OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
   CODEX_API_KEY: process.env.CODEX_API_KEY,
@@ -66,6 +67,7 @@ beforeEach(() => {
   delete process.env.GAKR_CODE_USE_VERTEX
   delete process.env.GAKR_CODE_USE_FOUNDRY
   delete process.env.NVIDIA_NIM
+  delete process.env.NVIDIA_MODEL
   delete process.env.MINIMAX_API_KEY
   delete process.env.OPENAI_MODEL
   delete process.env.OPENAI_BASE_URL
@@ -199,6 +201,16 @@ test('getDefaultSonnetModel returns OPENAI_MODEL for NVIDIA NIM', async () => {
 
   const { getDefaultSonnetModel } = await importFreshModelModule()
   expect(getDefaultSonnetModel()).toBe('nvidia/llama-3.1-nemotron-70b-instruct')
+})
+
+test('getDefaultMainLoopModelSetting returns NVIDIA NIM default instead of stale legacy model', async () => {
+  process.env.NVIDIA_NIM = '1'
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+
+  const { getDefaultMainLoopModelSetting } = await importFreshModelModule()
+  expect(getDefaultMainLoopModelSetting()).toBe(
+    'nvidia/llama-3.1-nemotron-70b-instruct',
+  )
 })
 
 test('getDefaultHaikuModel returns OPENAI_MODEL for MiniMax', async () => {

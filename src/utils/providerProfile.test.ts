@@ -1290,6 +1290,20 @@ test('nvidia nim profiles persist the dedicated NVIDIA credential alias', () => 
   })
 })
 
+test('nvidia nim profiles normalize the legacy invalid default model', () => {
+  const env = buildNvidiaNimProfileEnv({
+    apiKey: 'nvapi-live',
+    model: 'stepfun-ai/step-3.5-flash',
+    baseUrl: 'https://integrate.api.nvidia.com/v1',
+    processEnv: {},
+  })
+
+  assert.equal(
+    env?.OPENAI_MODEL,
+    'nvidia/llama-3.1-nemotron-70b-instruct',
+  )
+})
+
 test('startup env restores legacy nvidia nim profiles saved with only OPENAI_API_KEY', async () => {
   const env = await buildStartupEnvFromProfile({
     persisted: profile('nvidia-nim', {
@@ -1305,6 +1319,25 @@ test('startup env restores legacy nvidia nim profiles saved with only OPENAI_API
   assert.equal(env.OPENAI_API_KEY, 'nvapi-legacy')
   assert.equal(env.OPENAI_MODEL, 'nvidia/llama-3.1-nemotron-70b-instruct')
   assert.equal(env.OPENAI_BASE_URL, 'https://integrate.api.nvidia.com/v1')
+  assert.equal(await getProviderValidationError(env), null)
+})
+
+test('startup env heals legacy nvidia nim profiles saved with the old invalid default model', async () => {
+  const env = await buildStartupEnvFromProfile({
+    persisted: profile('nvidia-nim', {
+      OPENAI_API_KEY: 'nvapi-legacy',
+      OPENAI_MODEL: 'stepfun-ai/step-3.5-flash',
+      OPENAI_BASE_URL: 'https://integrate.api.nvidia.com/v1',
+      NVIDIA_NIM: '1',
+    }),
+    processEnv: {},
+  })
+
+  assert.equal(
+    env.OPENAI_MODEL,
+    'nvidia/llama-3.1-nemotron-70b-instruct',
+  )
+  assert.equal(env.OPENAI_API_KEY, 'nvapi-legacy')
   assert.equal(await getProviderValidationError(env), null)
 })
 

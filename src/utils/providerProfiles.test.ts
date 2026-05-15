@@ -668,6 +668,29 @@ describe('getProviderProfiles', () => {
       'NVIDIA NIM',
     ])
   })
+
+  test('normalizes NVIDIA profiles saved with the old invalid default model', async () => {
+    const { getProviderProfiles } = await importFreshProviderProfileModules()
+
+    saveMockGlobalConfig(current => ({
+      ...current,
+      providerProfiles: [
+        buildProfile({
+          provider: 'nvidia-nim',
+          name: 'NVIDIA NIM',
+          baseUrl: 'https://integrate.api.nvidia.com/v1',
+          model: 'stepfun-ai/step-3.5-flash',
+          apiKey: 'nvapi-live',
+        }),
+      ],
+    }))
+
+    const profiles = getProviderProfiles()
+
+    expect(profiles[0]?.model).toBe(
+      'nvidia/llama-3.1-nemotron-70b-instruct',
+    )
+  })
 })
 
 describe('applyActiveProviderProfileFromConfig', () => {
