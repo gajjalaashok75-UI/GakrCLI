@@ -116,6 +116,22 @@ function isXaiModelName(value: string | undefined): boolean {
   )
 }
 
+function isXiaomiMimoModelName(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase()
+  return Boolean(
+    normalized &&
+      (normalized.startsWith('mimo-') || normalized.startsWith('mimo/')),
+  )
+}
+
+function isVeniceModelName(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase()
+  return Boolean(
+    normalized &&
+      (normalized.startsWith('venice-') || normalized.startsWith('venice/')),
+  )
+}
+
 function getMiniMaxBaseUrlOverride(): string | undefined {
   const base = process.env.OPENAI_BASE_URL?.trim() || process.env.OPENAI_API_BASE?.trim()
   if (!base) return undefined
@@ -138,12 +154,44 @@ function getXaiBaseUrlOverride(): string | undefined {
   }
 }
 
-function getRouteDefaultBaseUrl(route: 'minimax' | 'xai'): string {
-  return route === 'minimax' ? 'https://api.minimax.io/v1' : 'https://api.x.ai/v1'
+function getXiaomiMimoBaseUrlOverride(): string | undefined {
+  const base = process.env.OPENAI_BASE_URL?.trim() || process.env.OPENAI_API_BASE?.trim()
+  if (!base) return undefined
+  try {
+    const url = new URL(base)
+    const hostname = url.hostname.toLowerCase()
+    if (hostname === 'api.xiaomimimo.com') return base
+    if (hostname === 'api.mimo-v2.com') return 'https://api.xiaomimimo.com/v1'
+    return undefined
+  } catch {
+    return undefined
+  }
 }
 
-function getRouteDefaultModel(route: 'minimax' | 'xai'): string {
-  return route === 'minimax' ? 'MiniMax-M2.5' : 'grok-4'
+function getVeniceBaseUrlOverride(): string | undefined {
+  const base = process.env.OPENAI_BASE_URL?.trim() || process.env.OPENAI_API_BASE?.trim()
+  if (!base) return undefined
+  try {
+    return new URL(base).hostname.toLowerCase() === 'api.venice.ai'
+      ? base
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function getRouteDefaultBaseUrl(route: 'minimax' | 'xai' | 'xiaomi-mimo' | 'venice'): string {
+  if (route === 'minimax') return 'https://api.minimax.io/v1'
+  if (route === 'xiaomi-mimo') return 'https://api.xiaomimimo.com/v1'
+  if (route === 'venice') return 'https://api.venice.ai/api/v1'
+  return 'https://api.x.ai/v1'
+}
+
+function getRouteDefaultModel(route: 'minimax' | 'xai' | 'xiaomi-mimo' | 'venice'): string {
+  if (route === 'minimax') return 'MiniMax-M2.5'
+  if (route === 'xiaomi-mimo') return 'mimo-v2.5-pro'
+  if (route === 'venice') return 'venice-uncensored'
+  return 'grok-4'
 }
 
 function applyMiniMaxEnvOnlyDefaults(requestedModel?: string): void {
@@ -196,6 +244,55 @@ function applyXaiEnvOnlyDefaults(requestedModel?: string): void {
   delete process.env.MINIMAX_API_KEY
 }
 
+function applyXiaomiMimoEnvOnlyDefaults(requestedModel?: string): void {
+  const baseUrlOverride = getXiaomiMimoBaseUrlOverride()
+  const hasBaseOverride = baseUrlOverride !== undefined
+  const modelOverride = process.env.OPENAI_MODEL?.trim() || undefined
+
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL =
+    baseUrlOverride ?? getRouteDefaultBaseUrl('xiaomi-mimo')
+
+  const finalModel =
+    (requestedModel && isXiaomiMimoModelName(requestedModel) ? requestedModel : undefined) ??
+    (hasBaseOverride || isXiaomiMimoModelName(modelOverride) ? modelOverride : undefined) ??
+    getRouteDefaultModel('xiaomi-mimo')
+
+  process.env.OPENAI_MODEL = finalModel
+  process.env.OPENAI_API_KEY = process.env.MIMO_API_KEY
+  delete process.env.OPENAI_API_FORMAT
+  delete process.env.OPENAI_AUTH_HEADER
+  delete process.env.OPENAI_AUTH_SCHEME
+  delete process.env.OPENAI_AUTH_HEADER_VALUE
+  delete process.env.MINIMAX_API_KEY
+  delete process.env.XAI_API_KEY
+}
+
+function applyVeniceEnvOnlyDefaults(requestedModel?: string): void {
+  const baseUrlOverride = getVeniceBaseUrlOverride()
+  const hasBaseOverride = baseUrlOverride !== undefined
+  const modelOverride = process.env.OPENAI_MODEL?.trim() || undefined
+
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL =
+    baseUrlOverride ?? getRouteDefaultBaseUrl('venice')
+
+  const finalModel =
+    (requestedModel && isVeniceModelName(requestedModel) ? requestedModel : undefined) ??
+    (hasBaseOverride || isVeniceModelName(modelOverride) ? modelOverride : undefined) ??
+    getRouteDefaultModel('venice')
+
+  process.env.OPENAI_MODEL = finalModel
+  process.env.OPENAI_API_KEY = process.env.VENICE_API_KEY
+  delete process.env.OPENAI_API_FORMAT
+  delete process.env.OPENAI_AUTH_HEADER
+  delete process.env.OPENAI_AUTH_SCHEME
+  delete process.env.OPENAI_AUTH_HEADER_VALUE
+  delete process.env.MINIMAX_API_KEY
+  delete process.env.XAI_API_KEY
+  delete process.env.MIMO_API_KEY
+}
+
 function hasNoExplicitNonOpenAICompatibleProvider(): boolean {
   return (
     !isEnvTruthy(process.env.GAKR_CODE_USE_BEDROCK) &&
@@ -204,7 +301,7 @@ function hasNoExplicitNonOpenAICompatibleProvider(): boolean {
   )
 }
 
-function resolveEnvOnlyProviderRouteId(): 'xai' | 'minimax' | null {
+function resolveEnvOnlyProviderRouteId(): 'xai' | 'minimax' | 'venice' | 'xiaomi-mimo' | null {
   const baseUrl = process.env.OPENAI_BASE_URL?.trim() || process.env.OPENAI_API_BASE?.trim()
   
   // xAI check
@@ -250,6 +347,51 @@ function resolveEnvOnlyProviderRouteId(): 'xai' | 'minimax' | null {
       }
     }
     return 'minimax'
+  }
+
+  if (
+    process.env.VENICE_API_KEY &&
+    !process.env.OPENAI_API_KEY &&
+    !process.env.XAI_API_KEY &&
+    !process.env.MINIMAX_API_KEY &&
+    hasNoExplicitNonOpenAICompatibleProvider()
+  ) {
+    if (baseUrl) {
+      try {
+        const url = new URL(baseUrl)
+        if (url.hostname.toLowerCase() !== 'api.venice.ai') {
+          return null
+        }
+      } catch {
+        return null
+      }
+    }
+    return 'venice'
+  }
+
+  if (
+    process.env.MIMO_API_KEY &&
+    !process.env.OPENAI_API_KEY &&
+    !process.env.XAI_API_KEY &&
+    !process.env.MINIMAX_API_KEY &&
+    !process.env.VENICE_API_KEY &&
+    hasNoExplicitNonOpenAICompatibleProvider()
+  ) {
+    if (baseUrl) {
+      try {
+        const url = new URL(baseUrl)
+        const hostname = url.hostname.toLowerCase()
+        if (
+          hostname !== 'api.xiaomimimo.com' &&
+          hostname !== 'api.mimo-v2.com'
+        ) {
+          return null
+        }
+      } catch {
+        return null
+      }
+    }
+    return 'xiaomi-mimo'
   }
 
   return null
@@ -359,12 +501,20 @@ export async function getAnthropicClient({
     }) as unknown as Anthropic
   }
 
-  // Check for env-only provider routes (MiniMax, xAI)
+  // Check for env-only provider routes (MiniMax, xAI, Venice, Xiaomi MiMo)
   const envOnlyProviderRouteId = resolveEnvOnlyProviderRouteId()
   const useXaiEnvOnlyProvider = envOnlyProviderRouteId === 'xai'
   const useMiniMaxEnvOnlyProvider = envOnlyProviderRouteId === 'minimax'
+  const useVeniceEnvOnlyProvider = envOnlyProviderRouteId === 'venice'
+  const useXiaomiMimoEnvOnlyProvider = envOnlyProviderRouteId === 'xiaomi-mimo'
   if (useMiniMaxEnvOnlyProvider) {
     applyMiniMaxEnvOnlyDefaults(model)
+  }
+  if (useVeniceEnvOnlyProvider) {
+    applyVeniceEnvOnlyDefaults(model)
+  }
+  if (useXiaomiMimoEnvOnlyProvider) {
+    applyXiaomiMimoEnvOnlyDefaults(model)
   }
   if (useXaiEnvOnlyProvider) {
     applyXaiEnvOnlyDefaults(model)
@@ -372,6 +522,8 @@ export async function getAnthropicClient({
 
   if (
     useMiniMaxEnvOnlyProvider ||
+    useVeniceEnvOnlyProvider ||
+    useXiaomiMimoEnvOnlyProvider ||
     useXaiEnvOnlyProvider ||
     isEnvTruthy(process.env.GAKR_CODE_USE_OPENAI) ||
     isEnvTruthy(process.env.GAKR_CODE_USE_GITHUB) ||

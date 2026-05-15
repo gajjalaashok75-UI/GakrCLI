@@ -28,7 +28,8 @@ function getBuiltinModelStrings(provider: APIProvider): ModelStrings {
   const providerKey = provider === 'codex' || provider === 'github' ? 'openai' : provider
   const out = {} as ModelStrings
   for (const key of MODEL_KEYS) {
-    out[key] = ALL_MODEL_CONFIGS[key][providerKey]
+    const config = ALL_MODEL_CONFIGS[key] as Record<string, string>
+    out[key] = config[providerKey] ?? config.openai
   }
   return out
 }

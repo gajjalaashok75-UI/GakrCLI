@@ -201,12 +201,12 @@ function normalizeChatCompletionsReasoningEffort(options: {
     return undefined
   }
 
-  if (options.thinkingRequestFormat === 'deepseek-compatible') {
-    return undefined
-  }
-
   if (options.routeId === 'groq' || hasGroqApiHost(options.baseUrl)) {
     return normalizeGroqReasoningEffort(options.model, options.effort)
+  }
+
+  if (options.thinkingRequestFormat === 'deepseek-compatible') {
+    return undefined
   }
 
   return options.effort
@@ -2058,6 +2058,8 @@ class OpenAIShimMessages {
     let response: Response | undefined
     const provider = request.baseUrl.includes('nvidia') ? 'nvidia-nim'
       : request.baseUrl.includes('minimax') ? 'minimax'
+      : request.baseUrl.includes('xiaomimimo') || request.baseUrl.includes('mimo-v2') ? 'xiaomi-mimo'
+      : request.baseUrl.includes('venice.ai') ? 'venice'
       : request.baseUrl.includes('localhost:11434') || request.baseUrl.includes('localhost:11435') ? 'ollama'
       : request.baseUrl.includes('anthropic') ? 'anthropic'
       : 'openai'

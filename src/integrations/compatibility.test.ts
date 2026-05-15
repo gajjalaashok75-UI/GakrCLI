@@ -15,6 +15,7 @@ import { resolveProfileRoute } from './profileResolver.js'
 import type { ProviderPreset } from '../utils/providerProfiles.js'
 
 const EXPECTED_PRESETS = [
+  'gitlawb-opengateway',
   'anthropic',
   'openai',
   'ollama',
@@ -34,7 +35,9 @@ const EXPECTED_PRESETS = [
   'custom',
   'nvidia-nim',
   'minimax',
+  'venice',
   'xai',
+  'xiaomi-mimo',
   'zai',
   'bankr',
   'atomic-chat',

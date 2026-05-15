@@ -285,12 +285,13 @@ describe('detectBestProvider — orchestrator', () => {
       fetchImpl,
       skipLocal: true,
       hasCodexAuth: () => false,
+      skipOpengatewayFallback: true,
     })
     expect(result).toBeNull()
     expect(probeCalled).toBe(false)
   })
 
-  test('completely empty environment returns null', async () => {
+  test('completely empty environment returns Opengateway fallback', async () => {
     const fetchImpl = (async () => {
       throw new Error('nothing reachable')
     }) as typeof fetch
@@ -300,6 +301,23 @@ describe('detectBestProvider — orchestrator', () => {
       fetchImpl,
       timeoutMs: 100,
       hasCodexAuth: () => false,
+    })
+    expect(result?.kind).toBe('gitlawb-opengateway')
+    expect(result?.baseUrl).toBe('https://opengateway.gitlawb.com/v1/xiaomi-mimo')
+    expect(result?.model).toBe('mimo-v2.5-pro')
+  })
+
+  test('Opengateway fallback can be disabled', async () => {
+    const fetchImpl = (async () => {
+      throw new Error('nothing reachable')
+    }) as typeof fetch
+
+    const result = await detectBestProvider({
+      env: {},
+      fetchImpl,
+      timeoutMs: 100,
+      hasCodexAuth: () => false,
+      skipOpengatewayFallback: true,
     })
     expect(result).toBeNull()
   })

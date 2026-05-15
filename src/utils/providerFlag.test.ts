@@ -28,6 +28,8 @@ const ENV_KEYS = [
   'BNKR_API_KEY',
   'XAI_API_KEY',
   'MINIMAX_API_KEY',
+  'VENICE_API_KEY',
+  'MIMO_API_KEY',
 ]
 
 const originalEnv: Record<string, string | undefined> = {}
@@ -59,6 +61,8 @@ const RESET_KEYS = [
   'BNKR_API_KEY',
   'XAI_API_KEY',
   'MINIMAX_API_KEY',
+  'VENICE_API_KEY',
+  'MIMO_API_KEY',
 ] as const
 
 beforeEach(() => {
@@ -367,6 +371,46 @@ describe('applyProviderFlag - xai', () => {
     applyProviderFlag('xai', [])
 
     expect(process.env.OPENAI_API_KEY).toBe('existing-openai-key')
+  })
+})
+
+describe('applyProviderFlag - venice', () => {
+  test('sets GAKR_CODE_USE_OPENAI=1 with Venice defaults when unset', () => {
+    const result = applyProviderFlag('venice', [])
+
+    expect(result.error).toBeUndefined()
+    expect(process.env.GAKR_CODE_USE_OPENAI).toBe('1')
+    expect(process.env.OPENAI_BASE_URL).toBe('https://api.venice.ai/api/v1')
+    expect(process.env.OPENAI_MODEL).toBe('venice-uncensored')
+  })
+
+  test('propagates VENICE_API_KEY to OPENAI_API_KEY when only VENICE_API_KEY is set', () => {
+    process.env.VENICE_API_KEY = 'venice-live-key'
+
+    const result = applyProviderFlag('venice', [])
+
+    expect(result.error).toBeUndefined()
+    expect(process.env.OPENAI_API_KEY).toBe('venice-live-key')
+  })
+})
+
+describe('applyProviderFlag - xiaomi-mimo', () => {
+  test('sets GAKR_CODE_USE_OPENAI=1 with Xiaomi MiMo defaults when unset', () => {
+    const result = applyProviderFlag('xiaomi-mimo', [])
+
+    expect(result.error).toBeUndefined()
+    expect(process.env.GAKR_CODE_USE_OPENAI).toBe('1')
+    expect(process.env.OPENAI_BASE_URL).toBe('https://api.xiaomimimo.com/v1')
+    expect(process.env.OPENAI_MODEL).toBe('mimo-v2.5-pro')
+  })
+
+  test('propagates MIMO_API_KEY to OPENAI_API_KEY when only MIMO_API_KEY is set', () => {
+    process.env.MIMO_API_KEY = 'mimo-live-key'
+
+    const result = applyProviderFlag('xiaomi-mimo', [])
+
+    expect(result.error).toBeUndefined()
+    expect(process.env.OPENAI_API_KEY).toBe('mimo-live-key')
   })
 })
 

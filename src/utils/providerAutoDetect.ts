@@ -41,9 +41,11 @@ export type DetectedProviderKind =
   | 'gemini'
   | 'mistral'
   | 'minimax'
+  | 'xiaomi-mimo'
   | 'xai'
   | 'ollama'
   | 'lm-studio'
+  | 'gitlawb-opengateway'
 
 export type DetectedProvider = {
   kind: DetectedProviderKind
@@ -161,6 +163,10 @@ export function detectProviderFromEnv(
     return { kind: 'minimax', source: 'MINIMAX_API_KEY set' }
   }
 
+  if (envHasNonEmpty(env, 'MIMO_API_KEY')) {
+    return { kind: 'xiaomi-mimo', source: 'MIMO_API_KEY set' }
+  }
+
   if (envHasNonEmpty(env, 'XAI_API_KEY')) {
     return { kind: 'xai', source: 'XAI_API_KEY set' }
   }
@@ -258,6 +264,21 @@ export async function detectLocalService(options?: {
   return null
 }
 
+const OPENGATEWAY_DEFAULT_BASE_URL = 'https://opengateway.gitlawb.com/v1/xiaomi-mimo'
+const OPENGATEWAY_DEFAULT_MODEL = 'mimo-v2.5-pro'
+
+function defaultOpengatewayProvider(env: EnvLike): DetectedProvider {
+  const baseUrl =
+    (typeof env.OPENGATEWAY_BASE_URL === 'string' && env.OPENGATEWAY_BASE_URL.trim()) ||
+    OPENGATEWAY_DEFAULT_BASE_URL
+  return {
+    kind: 'gitlawb-opengateway',
+    source: 'Gitlawb Opengateway (free MiMo - no key required)',
+    baseUrl,
+    model: OPENGATEWAY_DEFAULT_MODEL,
+  }
+}
+
 /**
  * Orchestrator: env scan first (sync, free), then local-service probes
  * (async, ~1-2s worst case) only if nothing was found in env.
@@ -270,6 +291,8 @@ export async function detectBestProvider(options?: {
   skipLocal?: boolean
   /** Override for Codex auth-file detection. See detectProviderFromEnv. */
   hasCodexAuth?: () => boolean
+  /** Disable the zero-key Opengateway fallback. */
+  skipOpengatewayFallback?: boolean
 }): Promise<DetectedProvider | null> {
   const env = options?.env ?? process.env
 
@@ -279,11 +302,16 @@ export async function detectBestProvider(options?: {
   })
   if (fromEnv) return fromEnv
 
-  if (options?.skipLocal) return null
+  if (!options?.skipLocal) {
+    const local = await detectLocalService({
+      env,
+      fetchImpl: options?.fetchImpl,
+      timeoutMs: options?.timeoutMs,
+    })
+    if (local) return local
+  }
 
-  return detectLocalService({
-    env,
-    fetchImpl: options?.fetchImpl,
-    timeoutMs: options?.timeoutMs,
-  })
+  if (options?.skipOpengatewayFallback) return null
+
+  return defaultOpengatewayProvider(env)
 }
