@@ -354,7 +354,7 @@ export default defineAnthropicProxy({
   label: 'Acme Anthropic Proxy',
   classification: 'anthropic-proxy',
   defaultBaseUrl: 'https://anthropic-proxy.acme.example',
-  defaultModel: 'claude-sonnet-4-5',
+  defaultModel: 'claude-sonnet-4-6',
   requiredEnvVars: ['ACME_ANTHROPIC_PROXY_TOKEN'],
   setup: {
     requiresAuth: true,

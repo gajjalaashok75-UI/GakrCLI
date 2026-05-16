@@ -31,9 +31,9 @@ model_list:
       model: openai/gpt-4o
       api_key: os.environ/OPENAI_API_KEY
 
-  - model_name: claude-sonnet-4
+  - model_name: claude-sonnet-4-6
     litellm_params:
-      model: anthropic/claude-sonnet-4-5-20250929
+      model: anthropic/claude-sonnet-4-6
       api_key: os.environ/ANTHROPIC_API_KEY
 
   - model_name: gemini-2.5-flash
@@ -67,7 +67,7 @@ export OPENAI_MODEL=<your-litellm-model-alias>
 gakrcli
 ```
 
-Replace `<your-litellm-model-alias>` with a model name from your `litellm_config.yaml` (e.g., `gpt-4o`, `claude-sonnet-4`, `gemini-2.5-flash`).
+Replace `<your-litellm-model-alias>` with a model name from your `litellm_config.yaml` (e.g., `gpt-4o`, `claude-sonnet-4-6`, `gemini-2.5-flash`).
 
 If your LiteLLM proxy is local and does not enforce auth, `OPENAI_API_KEY` can
 be omitted when you configure env vars manually.
@@ -95,9 +95,9 @@ model_list:
       model: openai/gpt-4o
       api_key: os.environ/OPENAI_API_KEY
 
-  - model_name: claude-sonnet-4
+  - model_name: claude-sonnet-4-6
     litellm_params:
-      model: anthropic/claude-sonnet-4-5-20250929
+      model: anthropic/claude-sonnet-4-6
       api_key: os.environ/ANTHROPIC_API_KEY
 
   - model_name: deepseek-chat

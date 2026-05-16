@@ -53,13 +53,13 @@
                     (WebSocket/SSE or HTTP)
                                   ↕
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                    GAKRCLI CLI TOOL (v0.3.0)                            │
+│                    GAKRCLI CLI TOOL (v0.5.1)                            │
 │                                                                          │
 │  ┌─────────────────────────────────────────────────────────────┐       │
 │  │ Input Processing                                            │       │
 │  │ ├── Parse user message                                      │       │
 │  │ ├── Load workspace context                                  │       │
-│  │ ├── Read .gakr-profile.json                                │       │
+│  │ ├── Read .gakrcli-profile.json                                │       │
 │  │ └── Prepare system prompt                                   │       │
 │  └─────────────────────────────────────────────────────────────┘       │
 │                                  ↓                                      │
@@ -261,7 +261,7 @@ User Sends Message
   ├─→ GakrCLI Receives Message
   │   ├─→ Parse input
   │   ├─→ Load workspace config
-  │   ├─→ Read .gakr-profile.json
+  │   ├─→ Read .gakrcli-profile.json
   │   ├─→ Prepare system prompt
   │   └─→ Build LLM request
   │

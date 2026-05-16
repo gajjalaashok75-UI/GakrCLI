@@ -15,8 +15,8 @@ function createStatus(overrides = {}) {
     launchCwdLabel: '/workspace/gakrcli/very/long/path/example-project',
     canLaunchInWorkspaceRoot: true,
     profileStatusLabel: 'Found',
-    profileStatusHint: '/workspace/gakrcli/very/long/path/example-project/.gakr-profile.json',
-    workspaceProfilePath: '/workspace/gakrcli/very/long/path/example-project/.gakr-profile.json',
+    profileStatusHint: '/workspace/gakrcli/very/long/path/example-project/.gakrcli-profile.json',
+    workspaceProfilePath: '/workspace/gakrcli/very/long/path/example-project/.gakrcli-profile.json',
     providerState: {
       label: 'Codex',
       detail: 'gpt-5.4',

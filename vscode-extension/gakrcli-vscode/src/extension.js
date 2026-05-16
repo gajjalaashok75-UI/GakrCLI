@@ -18,7 +18,7 @@ const { DiffContentProvider, SCHEME: DIFF_SCHEME } = require('./chat/diffControl
 
 const GAKRCLI_REPO_URL = 'https://github.com/Gakrcli/gakrcli';
 const GAKRCLI_SETUP_URL = 'https://github.com/Gakrcli/gakrcli/blob/main/README.md#quick-start';
-const PROFILE_FILE_NAME = '.gakr-profile.json';
+const PROFILE_FILE_NAME = '.gakrcli-profile.json';
 
 function escapeHtml(value) {
   return String(value)

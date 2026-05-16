@@ -1,4 +1,4 @@
-# GakrCLI Advanced Setup (v0.4.9)
+# GakrCLI Advanced Setup (v0.5.1)
 
 This guide is for users who want source builds, Bun workflows, provider profiles, diagnostics, or more control over runtime behavior.
 
@@ -40,7 +40,7 @@ bun run dev
 ```bash
 export GAKR_CODE_USE_OPENAI=1
 export OPENAI_API_KEY=sk-...
-export OPENAI_MODEL=gpt-4o  # or gpt-4.1, o3-mini
+export OPENAI_MODEL=gpt-4o  # or another model supported by your provider
 ```
 
 ### DeepSeek
@@ -49,17 +49,17 @@ export OPENAI_MODEL=gpt-4o  # or gpt-4.1, o3-mini
 export GAKR_CODE_USE_OPENAI=1
 export OPENAI_API_KEY=sk-...
 export OPENAI_BASE_URL=https://api.deepseek.com/v1
-export OPENAI_MODEL=deepseek-v4-flash
+export OPENAI_MODEL=deepseek-chat
 ```
 
-Use `deepseek-v4-pro` when you want the stronger model. `deepseek-chat` and `deepseek-reasoner` remain available as DeepSeek's legacy API aliases.
+Use `deepseek-reasoner` when you want DeepSeek's reasoning model.
 
 ### NVIDIA NIMs
 
 ```bash
 export GAKR_CODE_USE_NVIDIA=1
 export NVIDIA_API_KEY=nvapi-...
-export NVIDIA_MODEL=stepfun-ai/step-3.5-flash  # default
+export NVIDIA_MODEL=nvidia/llama-3.1-nemotron-70b-instruct  # default
 # optional: NVIDIA_BASE_URL (default: https://integrate.api.nvidia.com/v1)
 ```
 
@@ -68,7 +68,7 @@ export NVIDIA_MODEL=stepfun-ai/step-3.5-flash  # default
 ```bash
 export GAKR_CODE_USE_GEMINI=1
 export GEMINI_API_KEY=...
-export GEMINI_MODEL=gemini-2.0-flash  # or gemini-2.5-flash, gemini-2.0-flash-lite
+export GEMINI_MODEL=gemini-3-flash-preview  # default; use another Gemini model if needed
 # optional: GEMINI_BASE_URL (default: https://generativelanguage.googleapis.com/v1beta/openai)
 ```
 
@@ -84,13 +84,13 @@ export OPENAI_MODEL=openai/gpt-4.1  # or github:copilot, meta-llama/Llama-3.3-70
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
-export ANTHROPIC_MODEL=claude-sonnet-4-5-20251014  # or claude-3-7-sonnet
+export ANTHROPIC_MODEL=claude-sonnet-4-6
 ```
 
 Or use the guided login:
 
 ```bash
-gakrcli auth login
+/login
 ```
 
 ### Ollama (Local)
@@ -129,7 +129,7 @@ export GAKR_CODE_USE_BEDROCK=1
 export AWS_ACCESS_KEY_ID=...
 export AWS_SECRET_ACCESS_KEY=...
 export AWS_REGION=us-east-1
-export ANTHROPIC_MODEL=claude-sonnet-4-5-20251014
+export ANTHROPIC_MODEL=claude-sonnet-4-6
 ```
 
 ### Google Vertex AI
@@ -137,14 +137,14 @@ export ANTHROPIC_MODEL=claude-sonnet-4-5-20251014
 ```bash
 export GAKR_CODE_USE_VERTEX=1
 export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
-export ANTHROPIC_MODEL=claude-sonnet-4-5-20251014
+export ANTHROPIC_MODEL=claude-sonnet-4-6
 ```
 
 ## Advanced Configuration
 
 ### Project Profiles
 
-Create `.gakr-profile.json` in your project root:
+Create `.gakrcli-profile.json` in your project root:
 
 ```json
 {
@@ -179,7 +179,7 @@ Configure global settings in `~/.gakrcli/settings.json`:
     "security-review@builtin": true
   },
   "agentModels": {
-    "deepseek-v4-flash": {
+    "deepseek-chat": {
       "base_url": "https://api.deepseek.com/v1",
       "api_key": "sk-your-key"
     },
@@ -189,10 +189,10 @@ Configure global settings in `~/.gakrcli/settings.json`:
     }
   },
   "agentRouting": {
-    "code-reviewer": "deepseek-v4-flash",
+    "code-reviewer": "deepseek-chat",
     "architect": "gpt-4o",
     "security-reviewer": "gpt-4o",
-    "default": "deepseek-v4-flash"
+    "default": "deepseek-chat"
   }
 }
 ```
@@ -308,16 +308,16 @@ bun run hardening:strict   # Typecheck + hardening
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `ANTHROPIC_API_KEY` | Anthropic API key | `sk-ant-...` |
-| `ANTHROPIC_MODEL` | Claude model to use | `claude-sonnet-4-5-20251014` |
+| `ANTHROPIC_MODEL` | Claude model to use | `claude-sonnet-4-6` |
 
 ### Other Provider Configuration
 
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `GEMINI_API_KEY` | Google Gemini API key | `AI...` |
-| `GEMINI_MODEL` | Gemini model to use | `gemini-2.0-flash` |
+| `GEMINI_MODEL` | Gemini model to use | `gemini-3-flash-preview` |
 | `NVIDIA_API_KEY` | NVIDIA API key | `nvapi-...` |
-| `NVIDIA_MODEL` | NVIDIA model to use | `stepfun-ai/step-3.5-flash` |
+| `NVIDIA_MODEL` | NVIDIA model to use | `nvidia/llama-3.1-nemotron-70b-instruct` |
 | `GITHUB_TOKEN` | GitHub token for GitHub Models | `ghp_...` |
 
 ### Feature Flags
@@ -351,7 +351,7 @@ bun run hardening:strict   # Typecheck + hardening
 - Check environment variable name matches provider
 
 **Windows Input Prompt Hang**
-- Update to GakrCLI 0.4.9 or later
+- Update to GakrCLI 0.5.1 or later
 - Ensure all dependencies are installed
 
 ### Debug Mode
@@ -383,7 +383,7 @@ gakrcli doctor --json  # For automation
 
 ### Cloud Models
 
-- Choose faster models for interactive work (gpt-4o, deepseek-v4-flash)
+- Choose faster models for interactive work
 - Use cheaper models for batch processing
 - Monitor token usage with `/cost` command
 - Set appropriate context limits
@@ -501,10 +501,10 @@ export ANTHROPIC_MODEL=claude-opus-4  # or claude-sonnet-4.5, claude-haiku-4.5
 export GAKR_CODE_USE_OPENAI=1
 export OPENAI_API_KEY=sk-or-...
 export OPENAI_BASE_URL=https://openrouter.ai/api/v1
-export OPENAI_MODEL=google/gemini-2.0-flash-001  # or google/gemini-2.5-flash-preview
+export OPENAI_MODEL=google/gemini-2.5-flash
 ```
 
-OpenRouter model availability changes over time. If a model stops working, try another current OpenRouter model before assuming the integration is broken.
+OpenRouter model availability changes over time. If a model stops working, choose another current Gemini model from OpenRouter before assuming the integration is broken.
 
 ### Ollama
 
@@ -586,7 +586,7 @@ export OPENAI_MODEL=gpt-4o
 |----------|----------|-------------|
 | `GAKR_CODE_USE_OPENAI` | Yes | Set to `1` to enable OpenAI-compatible providers (OpenAI, DeepSeek, Together AI, Groq, Mistral, Azure, LM Studio, etc.) |
 | `OPENAI_API_KEY` | Yes* | Your API key (`*` not needed for local models like Ollama or Atomic Chat) |
-| `OPENAI_MODEL` | Yes | Model name such as `gpt-4o`, `deepseek-v4-flash`, or `llama3.3:70b` |
+| `OPENAI_MODEL` | Yes | Model name such as `gpt-4o`, `deepseek-chat`, or `llama3.3:70b` |
 | `OPENAI_BASE_URL` | No | API endpoint, defaults to `https://api.openai.com/v1` |
 
 ### Specialized Providers
@@ -595,11 +595,11 @@ export OPENAI_MODEL=gpt-4o
 |----------|----------|-------------|
 | `GAKR_CODE_USE_GEMINI` | Gemini only | Set to `1` to enable Google Gemini |
 | `GEMINI_API_KEY` | Gemini only | Your Google AI API key |
-| `GEMINI_MODEL` | No | Gemini model (default: `gemini-2.0-flash`) |
+| `GEMINI_MODEL` | No | Gemini model (default: `gemini-3-flash-preview`) |
 | `GEMINI_BASE_URL` | No | Gemini API base URL (default: Google's endpoint) |
 | `GAKR_CODE_USE_NVIDIA` | NVIDIA only | Set to `1` to enable NVIDIA NIMs |
 | `NVIDIA_API_KEY` | NVIDIA only | Your NVIDIA API key (`nvapi-...`) |
-| `NVIDIA_MODEL` | No | NVIDIA model (default: `stepfun-ai/step-3.5-flash`) |
+| `NVIDIA_MODEL` | No | NVIDIA model (default: `nvidia/llama-3.1-nemotron-70b-instruct`) |
 | `NVIDIA_BASE_URL` | No | NVIDIA API base URL (default: `https://integrate.api.nvidia.com/v1`) |
 | `GAKR_CODE_USE_GITHUB` | GitHub only | Set to `1` to enable GitHub Models |
 | `GITHUB_TOKEN` or `GH_TOKEN` | GitHub only | GitHub Personal Access Token with models access |
@@ -697,7 +697,7 @@ bun run profile:init -- --provider atomic-chat
 # codex bootstrap with a fast model alias
 bun run profile:init -- --provider codex --model codexspark
 
-# launch using persisted profile (.gakr-profile.json)
+# launch using persisted profile (.gakrcli-profile.json)
 bun run dev:profile
 
 # codex profile (uses CODEX_API_KEY or ~/.codex/auth.json)
@@ -713,7 +713,7 @@ bun run dev:ollama
 bun run dev:gemini
 
 # NVIDIA profile
-bun run dev:nvidia-nim
+bun run scripts/provider-launch.ts nvidia-nim
 
 # Atomic Chat profile (Apple Silicon local LLMs at 127.0.0.1:1337)
 bun run dev:atomic-chat
@@ -733,7 +733,7 @@ Use `--provider gemini` or `--provider nvidia-nim` for those services.
 
 **Note**: For GitHub Models, AWS Bedrock, Google Vertex AI, and Azure Foundry, configure the required environment variables directly (see the provider examples above) and run `gakrcli`. These providers are not yet supported by the automated profile bootstrap.
 
-`dev:openai`, `dev:ollama`, `dev:atomic-chat`, `dev:codex`, `dev:gemini`, and `dev:nvidia-nim` run `doctor:runtime` first and only launch the app if checks pass.
+`dev:openai`, `dev:ollama`, `dev:atomic-chat`, `dev:codex`, and `dev:gemini` are package scripts. For NVIDIA NIM, use `bun run scripts/provider-launch.ts nvidia-nim`.
 
 For `dev:ollama`, make sure Ollama is running locally before launch.
 

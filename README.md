@@ -1,6 +1,6 @@
 # GakrCLI
 
-**Version 0.4.9** — Any model. Every tool. Zero limits.
+**Version 0.5.1** — Any model. Every tool. Zero limits.
 
 GakrCLI is a terminal-first AI coding agent that brings powerful LLM workflows to your command line. Use OpenAI, Anthropic, Gemini, DeepSeek, Ollama, and 200+ other models while keeping one unified terminal workflow: prompts, tools, agents, MCP integration, slash commands, and streaming output.
 
@@ -12,12 +12,12 @@ The packaged command is `gakrcli`.
 
 | Provider | Authentication | Key Features |
 |----------|---------------|--------------|
-| **Anthropic** | `ANTHROPIC_API_KEY` or `gakrcli auth login` | Native Claude models with full tool support |
+| **Anthropic** | `ANTHROPIC_API_KEY` or `/login` inside GakrCLI | Native Claude models with full tool support |
 | **OpenAI-compatible** | `OPENAI_API_KEY` | Works with OpenAI, OpenRouter, DeepSeek, Groq, Mistral, Together AI, Azure OpenAI, LM Studio, and any OpenAI-compatible local server |
 | **Gemini** | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | Google Gemini 2.0+ models with native integration |
 | **GitHub Models** | `GITHUB_TOKEN` / `GH_TOKEN` | Free tier access via GitHub's model marketplace |
 | **NVIDIA NIMs** | `NVIDIA_API_KEY` | Enterprise-grade models via NVIDIA's inference microservices |
-| **DeepSeek** | `OPENAI_API_KEY` + `OPENAI_BASE_URL` | DeepSeek V4 models with reasoning capabilities |
+| **DeepSeek** | `OPENAI_API_KEY` + `OPENAI_BASE_URL` | DeepSeek chat and reasoning models through the OpenAI-compatible route |
 | **Ollama** | No API key | Local inference with complete privacy |
 | **Atomic Chat** | No API key | Apple Silicon optimized local models |
 | **Bedrock** | AWS credentials | Amazon Bedrock Claude models |
@@ -54,7 +54,7 @@ The packaged command is `gakrcli`.
 - **Hot Reloading**: Dynamic plugin loading without restart
 
 #### ⚙️ **Advanced Configuration**
-- **Provider Profiles**: Project-specific configurations with `.gakr-profile.json`
+- **Provider Profiles**: Guided saved provider profiles managed by `/provider`, plus legacy single-profile fallback support
 - **Settings Management**: Hierarchical settings with user, project, and managed overrides
 - **Environment Variables**: Flexible configuration via environment variables
 - **Keybindings**: Vim and Emacs keybinding support
@@ -135,7 +135,7 @@ macOS / Linux:
 ```bash
 export GAKR_CODE_USE_OPENAI=1
 export OPENAI_API_KEY=sk-your-key-here
-export OPENAI_MODEL=gpt-4o  # or gpt-4.1, o3-mini, etc.
+export OPENAI_MODEL=gpt-4o  # or another model supported by your provider
 gakrcli
 ```
 
@@ -179,13 +179,13 @@ gakrcli
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-your-key-here
-export ANTHROPIC_MODEL=claude-sonnet-4-5-20251014  # or claude-3-7-sonnet
+export ANTHROPIC_MODEL=claude-sonnet-4-6
 gakrcli
 ```
 
-Or use the guided login:
+Or use the guided login inside GakrCLI:
 ```bash
-gakrcli auth login
+/login
 ```
 
 ### Option 4: DeepSeek (Cost-Effective)
@@ -196,7 +196,7 @@ gakrcli auth login
 export GAKR_CODE_USE_OPENAI=1
 export OPENAI_API_KEY=sk-your-deepseek-key
 export OPENAI_BASE_URL=https://api.deepseek.com/v1
-export OPENAI_MODEL=deepseek-v4-flash  # or deepseek-v4-pro
+export OPENAI_MODEL=deepseek-chat  # or deepseek-reasoner
 gakrcli
 ```
 
@@ -214,7 +214,7 @@ Once launched:
 - **Start coding**: Type your request naturally (e.g., "Refactor this function to be more readable")
 - **Slash commands**: Type `/help` to see all available commands
 - **Provider setup**: `/provider` for guided configuration
-- **Settings**: `/settings` to view/modify configuration
+- **Settings**: `/config` (alias `/settings`) to view or modify configuration
 - **Clear history**: `/clear` to start fresh
 
 ### Key Slash Commands
@@ -223,7 +223,7 @@ Once launched:
 |---------|-------------|
 | `/help` | Show all available commands |
 | `/provider` | Configure provider settings |
-| `/settings` | View and modify settings |
+| `/config` | View and modify settings (also available as `/settings`) |
 | `/skills` | Browse available skills |
 | `/agents` | List available agents |
 | `/mcp` | Manage MCP servers |
@@ -240,7 +240,7 @@ Add to `~/.gakrcli/settings.json`:
 ```json
 {
   "agentModels": {
-    "deepseek-v4-flash": {
+    "deepseek-chat": {
       "base_url": "https://api.deepseek.com/v1",
       "api_key": "sk-your-key"
     },
@@ -250,17 +250,17 @@ Add to `~/.gakrcli/settings.json`:
     }
   },
   "agentRouting": {
-    "code-reviewer": "deepseek-v4-flash",
+    "code-reviewer": "deepseek-chat",
     "architect": "gpt-4o",
     "security-reviewer": "gpt-4o",
-    "default": "deepseek-v4-flash"
+    "default": "deepseek-chat"
   }
 }
 ```
 
 ### Project-Level Configuration
 
-Create `.gakr-profile.json` in your project root for project-specific settings:
+Prefer `/provider` for guided profile creation. The legacy single-profile JSON format is still supported as `.gakrcli-profile.json`:
 
 ```json
 {
@@ -275,9 +275,9 @@ Create `.gakr-profile.json` in your project root for project-specific settings:
 }
 ```
 
-Initialize a profile interactively:
+Open provider management interactively:
 ```bash
-gakrcli /provider
+/provider
 ```
 
 ## Available Tools
@@ -423,9 +423,9 @@ Add MCP servers to your settings:
 ### MCP Commands
 
 ```bash
-gakrcli mcp list      # List available MCP servers
-gakrcli mcp install   # Install MCP servers
-gakrcli mcp doctor    # Diagnose MCP issues
+gakrcli mcp list              # List configured MCP servers
+gakrcli mcp add <name> <cmd>  # Add a server
+gakrcli mcp doctor [name]     # Diagnose MCP issues
 ```
 
 ## Architecture Overview
@@ -485,7 +485,7 @@ The doctor command validates:
 GakrCLI includes a VS Code extension with:
 - **Control Center**: Activity view for GakrCLI management
 - **Project Awareness**: Automatic workspace detection
-- **Profile Management**: Visual `.gakr-profile.json` editing
+- **Profile Management**: Workspace profile status and quick access
 - **Terminal Integration**: Seamless terminal launching
 - **Theme Support**: Built-in "GakrCLI Terminal Black" theme
 

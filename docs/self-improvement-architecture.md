@@ -1,6 +1,6 @@
-# Gakr Self-Improvement System Architecture (v0.2.6+)
+# Gakr Self-Improvement System Architecture
 
-**Status**: This document describes the planned architecture for the self-improvement system, which is under active development for v0.2.6 and future releases. Some components may not be fully implemented yet.
+**Status**: This document describes a planned architecture for the self-improvement system. Some components may not be fully implemented yet.
 
 ## Overview
 

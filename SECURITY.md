@@ -6,7 +6,7 @@ GakrCLI is currently maintained on the latest `main` branch and the latest npm r
 
 | Version | Supported |
 | ------- | --------- |
-| Latest release (0.4.9+) | :white_check_mark: |
+| Latest release (0.5.1+) | :white_check_mark: |
 | Older releases | :x: |
 | Unreleased forks / modified builds | :x: |
 

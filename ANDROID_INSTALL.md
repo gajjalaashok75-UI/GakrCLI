@@ -1,161 +1,156 @@
-# Gakr on Android (Termux)
+# GakrCLI On Android (Termux)
 
-A complete guide to running Gakr on Android using Termux + proot Ubuntu.
+This guide explains how to run GakrCLI on Android with Termux and a proot Ubuntu environment.
 
----
+## What Works
+
+- Running the built CLI with Node.js 20+
+- Building from source inside Ubuntu proot with Bun
+- Cloud providers and OpenAI-compatible gateways
+- Local Android inference only if you provide a compatible local `/v1` endpoint
 
 ## Prerequisites
 
-- Android phone with ~700MB free storage
-- [Termux](https://f-droid.org/en/packages/com.termux/) installed from **F-Droid** (not Play Store)
-- An [OpenRouter](https://openrouter.ai) API key (free, no credit card required)
+- Android phone with at least 1 GB free storage
+- Termux installed from F-Droid, not the Play Store
+- A provider API key, unless you are using a local OpenAI-compatible endpoint
 
----
+## Why Use proot Ubuntu?
 
-## Why This Setup?
+GakrCLI uses Bun for source builds. Bun does not support Android directly, but its Linux binary works inside an Ubuntu userspace created by `proot-distro`.
 
-Gakr requires [Bun](https://bun.sh) to build, and Bun does not support Android natively. The workaround is running a real Ubuntu environment inside Termux via `proot-distro`, where Bun's Linux binary works correctly.
+## Install
 
----
-
-## Installation
-
-### Step 1 — Update Termux
+### 1. Update Termux
 
 ```bash
 pkg update && pkg upgrade
 ```
 
-Press `N` or Enter for any config file conflict prompts.
+Press Enter for normal package prompts unless you know you need a custom choice.
 
-### Step 2 — Install dependencies
-
-```bash
-pkg install nodejs-lts git proot-distro ripgrep
-```
-
-Verify Node.js:
-```bash
-node --version  # should be v20+
-```
-
-### Step 3 — Clone Gakr
+### 2. Install Termux Dependencies
 
 ```bash
-git clone https://github.com/gakr-gakr/gakr.git
-cd gakr
-bun install
+pkg install git proot-distro ripgrep
 ```
 
-### Step 4 — Install Ubuntu via proot
+### 3. Install Ubuntu
 
 ```bash
 proot-distro install ubuntu
+proot-distro login ubuntu
 ```
 
-This downloads ~200–400MB. Wait for it to complete.
+All remaining commands in this guide run inside the Ubuntu shell.
 
-### Step 5 — Install Bun inside Ubuntu
+### 4. Install Ubuntu Dependencies
 
 ```bash
-proot-distro login ubuntu
+apt update
+apt install -y curl git nodejs npm ripgrep
+node --version
+npm --version
+```
+
+GakrCLI requires Node.js 20 or newer. If Ubuntu's package repository provides an older Node.js, install a current Node.js release before continuing.
+
+### 5. Install Bun
+
+```bash
 curl -fsSL https://bun.sh/install | bash
 source ~/.bashrc
-bun --version  # should show 1.3.11+
+bun --version
 ```
 
-### Step 6 — Build Gakr
+Use Bun `1.3.11` or newer.
+
+### 6. Clone And Build GakrCLI
 
 ```bash
-cd /data/data/com.termux/files/home/gakr
+git clone https://github.com/gajjalaashok75-UI/GakrCLI.git
+cd GakrCLI # Not work then use this before clone , cd /data/data/com.termux/files/home
+bun install
 bun run build
+node dist/cli.mjs --version
 ```
 
-You should see:
-```
-✓ Built gakrcli v0.2.6 → dist/cli.mjs
-```
+### 7. Configure A Provider
 
-### Step 7 — Save env vars permanently
-
-Still inside Ubuntu, add your OpenRouter config to `.bashrc`:
+Use any OpenAI-compatible provider by setting the standard environment variables:
 
 ```bash
-echo 'export GAKR_CODE_USE_OPENAI=1' >> ~/.bashrc
-echo 'export OPENAI_API_KEY=your_openrouter_key_here' >> ~/.bashrc
-echo 'export OPENAI_BASE_URL=https://openrouter.ai/api/v1' >> ~/.bashrc
-echo 'export OPENAI_MODEL=qwen/qwen3.6-plus-preview:free' >> ~/.bashrc
+export GAKR_CODE_USE_OPENAI=1
+export OPENAI_API_KEY=your_provider_key_here
+export OPENAI_BASE_URL=https://openrouter.ai/api/v1
+export OPENAI_MODEL=your/provider-model
+```
+
+For OpenRouter, model availability and free tiers change over time. Check OpenRouter's model page and choose a currently available model that supports tool use and has enough context for coding-agent prompts.
+
+To persist the provider setup:
+
+```bash
+cat >> ~/.bashrc <<'EOF'
+export GAKR_CODE_USE_OPENAI=1
+export OPENAI_API_KEY=your_provider_key_here
+export OPENAI_BASE_URL=https://openrouter.ai/api/v1
+export OPENAI_MODEL=your/provider-model
+EOF
 source ~/.bashrc
 ```
 
-Replace `your_openrouter_key_here` with your actual key from [openrouter.ai/keys](https://openrouter.ai/keys).
+Do not commit real keys to this repository.
 
-### Step 8 — Run Gakr
+### 8. Run GakrCLI
 
 ```bash
 node dist/cli.mjs
 ```
 
-Select **3** (3rd-party platform) at the login screen. Your env vars will be detected automatically.
+Inside the CLI, run `/provider` if you prefer guided provider setup.
 
----
+## Restarting Later
 
-## Restarting After Closing Termux
-
-Every time you reopen Termux after killing it, run:
+After reopening Termux:
 
 ```bash
 proot-distro login ubuntu
-cd /data/data/com.termux/files/home/gakr
+cd ~/GakrCLI
 node dist/cli.mjs
 ```
 
----
+## Updating
 
-## Recommended Free Model
-
-**`qwen/qwen3.6-plus-preview:free`** — Best free model on OpenRouter as of April 2026.
-
-- 1M token context window
-- Beats gakrcli 4.5 Opus on Terminal-Bench 2.0 agentic coding (61.6 vs 59.3)
-- Built-in chain-of-thought reasoning
-- Native tool use and function calling
-- $0/M tokens (preview period)
-
-> ⚠️ Free status may change when the preview period ends. Check [openrouter.ai](https://openrouter.ai/qwen/qwen3.6-plus-preview:free) for current pricing.
-
----
-
-## Alternative Free Models (OpenRouter)
-
-| Model ID | Context | Notes |
-|---|---|---|
-| `qwen/qwen3-coder:free` | 262K | Best for pure coding tasks |
-| `openai/gpt-oss-120b:free` | 131K | OpenAI open model, strong tool calling |
-| `nvidia/nemotron-3-super-120b-a12b:free` | 262K | Hybrid MoE, good general use |
-| `meta-llama/llama-3.3-70b-instruct:free` | 66K | Reliable, widely tested |
-
-Switch models anytime:
 ```bash
-export OPENAI_MODEL=qwen/qwen3-coder:free
-node dist/cli.mjs
+proot-distro login ubuntu
+cd ~/GakrCLI
+git pull
+bun install
+bun run build
+node dist/cli.mjs --version
 ```
 
----
+## Troubleshooting
 
-## Why Not Groq or Cerebras?
+### `bun: command not found`
 
-Both were tested and fail due to Gakr's large system prompt (~50K tokens):
+Run:
 
-- **Groq free tier**: TPM limits too low (6K–12K tokens/min)
-- **Cerebras free tier**: TPM limits exceeded, even on `llama3.1-8b`
+```bash
+source ~/.bashrc
+```
 
-OpenRouter free models have no TPM restrictions — only 20 req/min and 200 req/day.
+If Bun is still missing, rerun the Bun installer inside Ubuntu.
 
----
+### `node --version` Is Below 20
 
-## Tips
+Install a current Node.js release inside Ubuntu before building or running GakrCLI.
 
-- **Don't swipe Termux away** from recent apps mid-session — use the home button to minimize instead.
-- The Ubuntu environment persists between Termux sessions; your build and config are saved.
-- Run `bun run build` again only if you pull updates to the Gakr repo.
+### Provider Fails With Context Or Rate Limit Errors
+
+Coding-agent prompts can be large. Choose a provider/model with a sufficiently large context window and rate limits. Free tiers may fail even when a model is otherwise compatible.
+
+### Termux Session Stops
+
+Avoid swiping Termux away while GakrCLI is working. Use the home button to background it instead.

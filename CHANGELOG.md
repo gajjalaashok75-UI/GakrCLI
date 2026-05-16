@@ -5,6 +5,15 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-05-16
+
+### Changed
+- **Documentation Refresh**: Updated root setup, Android/Termux, provider, VS Code extension, LiteLLM, integration, security, and playbook docs for the current `0.5.1` release, current model defaults, and the `.gakrcli-profile.json` profile path.
+- **Safe Run Notes**: Replaced scratch run notes containing real-looking provider tokens with safe reusable build, provider, and validation instructions.
+
+### Fixed
+- **VS Code Extension Profile Detection**: Aligned workspace profile detection and tests with the current `.gakrcli-profile.json` filename and switched the extension test script to Bun so the documented test command matches the test mocks.
+
 ## [0.5.1] - 2026-05-15 15:35:56 +05:30
 
 ### Fixed

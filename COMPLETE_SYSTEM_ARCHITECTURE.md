@@ -30,7 +30,7 @@ GakrCLI is a **three-layer system** that connects your IDE with an AI-powered CL
 └─────────────────────────────────────────────────────────────────┘
                            ↕
 ┌─────────────────────────────────────────────────────────────────┐
-│                    GAKRCLI CLI TOOL (v0.3.0)                    │
+│                    GAKRCLI CLI TOOL (v0.5.1)                    │
 │  ├── LLM Provider Integration                                   │
 │  │   ├── OpenAI, Anthropic, Gemini, Ollama, etc.               │
 │  │   └── Model Context Protocol (MCP)                          │
@@ -71,7 +71,7 @@ The VS Code Extension is the **user interface layer** that makes GakrCLI accessi
 │ Status: ✓ Installed                 │
 │ Command: gakrcli                    │
 │ Workspace: /path/to/project         │
-│ Profile: .gakr-profile.json (found) │
+│ Profile: .gakrcli-profile.json (found) │
 │ Provider: OpenAI                    │
 ├─────────────────────────────────────┤
 │ [Launch GakrCLI]                    │
@@ -85,7 +85,7 @@ The VS Code Extension is the **user interface layer** that makes GakrCLI accessi
 **What It Shows**:
 - ✓ gakrcli is installed and available
 - Current workspace folder
-- Whether `.gakr-profile.json` exists
+- Whether `.gakrcli-profile.json` exists
 - Detected LLM provider
 - Quick action buttons
 
@@ -356,7 +356,7 @@ Final Output
 
 4. GAKRCLI PROCESSES REQUEST
    ├── Reads workspace context
-   ├── Loads .gakr-profile.json (provider config)
+   ├── Loads .gakrcli-profile.json (provider config)
    ├── Connects to LLM (e.g., OpenAI)
    └── Sends prompt with tools available
 
@@ -466,7 +466,7 @@ Send results back to LLM
 
 ## Configuration & Context
 
-### Workspace Profile (.gakr-profile.json)
+### Workspace Profile (.gakrcli-profile.json)
 
 Located in workspace root:
 
@@ -726,5 +726,5 @@ Save to Session
 4. **Open Chat**: Press `Ctrl+Shift+L`
 5. **Start Chatting**: Type your request
 
-**Version**: GakrCLI v0.3.0 + Extension v0.2.0
+**Version**: GakrCLI v0.5.1 + Extension v0.2.0
 **Status**: Published to VS Code Marketplace

@@ -113,7 +113,7 @@ function printHumanSummary(payload: {
   }
 
   if (payload.applied) {
-    console.log('\nSaved .gakr-profile.json with the recommended profile.')
+    console.log('\nSaved .gakrcli-profile.json with the recommended profile.')
     console.log('Next: bun run dev:profile')
   } else {
     console.log(

@@ -1,4 +1,4 @@
-# Gakr Quick Start for Windows (v0.2.6)
+# Gakr Quick Start for Windows (v0.5.1)
 
 This guide uses Windows PowerShell.
 
@@ -41,7 +41,7 @@ gakrcli
 $env:GAKR_CODE_USE_OPENAI="1"
 $env:OPENAI_API_KEY="sk-your-key-here"
 $env:OPENAI_BASE_URL="https://api.deepseek.com/v1"
-$env:OPENAI_MODEL="deepseek-v4-flash"
+$env:OPENAI_MODEL="deepseek-chat"
 
 gakrcli
 ```
