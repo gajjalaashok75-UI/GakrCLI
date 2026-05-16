@@ -1,4 +1,4 @@
-# Gakr for Non-Technical Users (v0.5.1)
+# Gakr for Non-Technical Users (v0.5.2)
 
 This guide is for people who want the easiest setup path.
 
