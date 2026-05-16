@@ -30,7 +30,7 @@ GakrCLI is a **three-layer system** that connects your IDE with an AI-powered CL
 └─────────────────────────────────────────────────────────────────┘
                            ↕
 ┌─────────────────────────────────────────────────────────────────┐
-│                    GAKRCLI CLI TOOL (v0.5.1)                    │
+│                    GAKRCLI CLI TOOL (v0.5.2)                    │
 │  ├── LLM Provider Integration                                   │
 │  │   ├── OpenAI, Anthropic, Gemini, Ollama, etc.               │
 │  │   └── Model Context Protocol (MCP)                          │
@@ -726,5 +726,5 @@ Save to Session
 4. **Open Chat**: Press `Ctrl+Shift+L`
 5. **Start Chatting**: Type your request
 
-**Version**: GakrCLI v0.5.1 + Extension v0.2.0
+**Version**: GakrCLI v0.5.2 + Extension v0.2.0
 **Status**: Published to VS Code Marketplace

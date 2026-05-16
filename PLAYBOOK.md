@@ -1,4 +1,4 @@
-# GakrCLI Playbook — Version 0.5.1
+# GakrCLI Playbook — Version 0.5.2
 
 Quick-reference for using GakrCLI with local models (Ollama, Atomic Chat) and cloud providers. Covers daily workflow, setup, troubleshooting, and command cheatsheet.
 
@@ -296,7 +296,7 @@ ollama pull llama3.2:3b        # Ensure model is available
 **Cause:** Known issue in older versions.
 
 **Fix:**
-- Update to GakrCLI 0.5.1 or later
+- Update to GakrCLI 0.5.2 or later
 - Ensure all dependencies are installed
 - Try running with `--debug` flag for more information
 
@@ -547,7 +547,7 @@ ollama list                    # Check available models
 Your setup is healthy when:
 
 - `gakrcli doctor` passes all checks
-- `gakrcli --version` shows current version (0.5.1+)
+- `gakrcli --version` shows current version (0.5.2+)
 - CLI starts and shows input prompt correctly
 - Model shown in UI matches your configuration
 - Tools and commands work as expected

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Hybrid Knowledge Graph Search**: Upgraded persistent project memory with serialized async mutations, JSON/SQLite storage, Orama-backed semantic indexing, recovery for corrupted indexes, and focused stress coverage for concurrent updates.
+- **Provider Spinner Tips**: Added rotating tips for `/provider` multi-provider setup and `/onboard-github` GitHub Models onboarding.
 
 ## [0.5.1] - 2026-05-16
 

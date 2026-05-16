@@ -1,6 +1,6 @@
 # GakrCLI Capabilities, Tools, And Agents
 
-Current package version: `0.5.1`
+Current package version: `0.5.2`
 
 GakrCLI is a terminal-first AI coding agent. It combines provider routing, file and shell tools, MCP integration, slash commands, skills, agents, session history, and cost tracking in one CLI.
 

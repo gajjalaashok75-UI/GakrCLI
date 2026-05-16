@@ -1,6 +1,6 @@
 # GakrCLI + VS Code Extension Quick Start
 
-This guide covers the current CLI package (`0.5.1`) and the VS Code extension package (`0.2.0`).
+This guide covers the current CLI package (`0.5.2`) and the VS Code extension package (`0.2.0`).
 
 ## Install
 
