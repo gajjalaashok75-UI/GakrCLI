@@ -390,7 +390,7 @@ async function* queryLoop(
       messagesForQuery.length > 0
     ) {
       const { updateArcPhase } = await import('./utils/conversationArc.js')
-      updateArcPhase([messagesForQuery[messagesForQuery.length - 1]])
+      await updateArcPhase([messagesForQuery[messagesForQuery.length - 1]])
     }
 
     // Enforce per-message budget on aggregate tool result size. Runs BEFORE
@@ -492,7 +492,7 @@ async function* queryLoop(
             ? lastMessage.message.content
             : ''
         const { getArcSummary } = await import('./utils/conversationArc.js')
-        const arcSummary = getArcSummary(userQueryText)
+        const arcSummary = await getArcSummary(userQueryText)
         if (arcSummary) {
           promptWithArc = [...systemPrompt, arcSummary]
         }
@@ -930,7 +930,7 @@ async function* queryLoop(
                 getGlobalConfig().knowledgeGraphEnabled
               ) {
                 const { updateArcPhase } = await import('./utils/conversationArc.js')
-                updateArcPhase([message])
+                await updateArcPhase([message])
               }
 
               const msgToolUseBlocks = message.message.content.filter(
@@ -1467,7 +1467,7 @@ async function* queryLoop(
         getGlobalConfig().knowledgeGraphEnabled
       ) {
         const { finalizeArcTurn } = await import('./utils/conversationArc.js')
-        finalizeArcTurn()
+        await finalizeArcTurn()
       }
 
       // Continuation nudge: detect when the model signals intent to act but

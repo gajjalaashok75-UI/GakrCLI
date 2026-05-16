@@ -7,7 +7,7 @@ export function resolveGakrcliConfigHomeDir(options?: {
   configDirEnv?: string
   homeDir?: string
   gakrcliExists?: boolean
-  legacyClaudeExists?: boolean
+  legacyConfigExists?: boolean
 }): string {
   if (options?.configDirEnv) {
     return options.configDirEnv.normalize('NFC')
@@ -15,33 +15,49 @@ export function resolveGakrcliConfigHomeDir(options?: {
 
   const homeDir = options?.homeDir ?? homedir()
   const gakrcliDir = join(homeDir, '.gakrcli')
-  const legacyClaudeDir = join(homeDir, '.claude')
+  const legacyConfigDir = join(homeDir, '.claude')
   const gakrcliExists = options?.gakrcliExists ?? existsSync(gakrcliDir)
-  const legacyClaudeExists =
-    options?.legacyClaudeExists ?? existsSync(legacyClaudeDir)
+  const legacyConfigExists =
+    options?.legacyConfigExists ?? existsSync(legacyConfigDir)
 
-  if (!gakrcliExists && legacyClaudeExists) {
-    return legacyClaudeDir.normalize('NFC')
+  if (!gakrcliExists && legacyConfigExists) {
+    return legacyConfigDir.normalize('NFC')
   }
 
   return gakrcliDir.normalize('NFC')
+}
+
+let gakrcliConfigHomeDirOverride: string | undefined
+
+export function setGakrcliConfigHomeDirForTesting(
+  configDir: string | undefined,
+): void {
+  gakrcliConfigHomeDirOverride = configDir?.normalize('NFC')
 }
 
 // Memoized: 150+ callers, many on hot paths. Keyed off GAKR_CONFIG_DIR so
 // tests that change the env var get a fresh value without explicit cache.clear.
 export const getGakrcliConfigHomeDir = memoize(
   (): string => {
+    if (gakrcliConfigHomeDirOverride) {
+      return gakrcliConfigHomeDirOverride
+    }
+
     return resolveGakrcliConfigHomeDir({
       configDirEnv: process.env.GAKR_CONFIG_DIR,
     })
   },
-  () => process.env.GAKR_CONFIG_DIR,
+  () => `${gakrcliConfigHomeDirOverride ?? ''}\0${process.env.GAKR_CONFIG_DIR ?? ''}`,
 )
 
 export const getgakrcliConfigHomeDir = getGakrcliConfigHomeDir
 
 export function getTeamsDir(): string {
   return join(getGakrcliConfigHomeDir(), 'teams')
+}
+
+export function getProjectsDir(): string {
+  return join(getGakrcliConfigHomeDir(), 'projects')
 }
 
 /**
@@ -55,17 +71,6 @@ export function hasNodeOption(flag: string): boolean {
   }
   return nodeOptions.split(/\s+/).includes(flag)
 }
-
-/**
- * Alias for getGakrcliConfigHomeDir for compatibility with CLAUDE-named env vars
- * Used by files copied from reference that expect CLAUDE_ naming
- */
-export const getClaudeConfigHomeDir = getGakrcliConfigHomeDir
-
-/**
- * Alias for GAKR_CONFIG_DIR env var
- */
-const CLAUDE_CONFIG_DIR = process.env.GAKR_CONFIG_DIR
 
 export function isEnvTruthy(envVar: string | boolean | undefined): boolean {
   if (!envVar) return false
