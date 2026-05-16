@@ -5,6 +5,11 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-05-16
+
+### Added
+- **Hybrid Knowledge Graph Search**: Upgraded persistent project memory with serialized async mutations, JSON/SQLite storage, Orama-backed semantic indexing, recovery for corrupted indexes, and focused stress coverage for concurrent updates.
+
 ## [0.5.1] - 2026-05-16
 
 ### Changed
@@ -136,7 +141,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Provider Configuration**: Preserved and refined NVIDIA provider mode while keeping Codex, OpenAI, GitHub, Gemini, Mistral, and other provider routes isolated.
 - **Runtime Reliability**: Fixed provider cache partitioning, GakrCLI config path isolation, skills/session test isolation, OAuth refresh handling, shell tool sandbox schema exposure, Firecrawl configuration, auto-fix timeout handling, and token/cache/model helper behavior.
 - **CLI and Extension Polish**: Restored rapid text input buffering, LSP tool registration behavior, GakrCLI branding, local installer paths, secure storage naming, and VS Code extension provider environment detection.
-- **Coverage**: Added NVIDIA provider regression tests and renamed GakrCLI installer/path/UI coverage from the previous OpenClaude test surfaces.
+- **Coverage**: Added NVIDIA provider regression tests and renamed GakrCLI installer/path/UI coverage from the previous upstream test surfaces.
 - **Verification**: Root test suite passes with `bun.cmd run test` (`2343 pass`, `0 fail`).
 
 ## [0.5.0] - 2026-05-12 17:43:25 +05:30
@@ -169,7 +174,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.4.8] - 2025-01-10
 
 ### Fixed
-- **Branding Updates**: Updated all OpenClaude references to GakrCLI for consistent branding
+- **Branding Updates**: Updated legacy branding references to GakrCLI for consistent naming
 - **Provider Profile Detection**: Fixed startup banner to show correct active provider
 - **Model Settings**: Normalized model settings and removed duplicate provider entries
 - **Test Coverage**: Improved test files and error handling across multiple components
