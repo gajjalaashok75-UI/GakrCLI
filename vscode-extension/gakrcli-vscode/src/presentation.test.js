@@ -9,8 +9,8 @@ test('truncateMiddle keeps the profile filename visible', () => {
   const { truncateMiddle } = loadPresentation();
 
   assert.equal(
-    truncateMiddle('/Users/example/projects/gakr/workspace/.gakr-profile.json', 30),
-    '.../.gakr-profile.json',
+    truncateMiddle('/Users/example/projects/gakr/workspace/.gakrcli-profile.json', 30),
+    '.../.gakrcli-profile.json',
   );
 });
 
@@ -18,8 +18,8 @@ test('truncateMiddle keeps the filename visible for Windows-style paths', () => 
   const { truncateMiddle } = loadPresentation();
 
   assert.equal(
-    truncateMiddle('C:\\Users\\example\\gakr\\workspace\\.gakr-profile.json', 30),
-    '...\\.gakr-profile.json',
+    truncateMiddle('C:\\Users\\example\\gakr\\workspace\\.gakrcli-profile.json', 30),
+    '...\\.gakrcli-profile.json',
   );
 });
 
@@ -63,13 +63,13 @@ test('buildActionModel includes workspace-profile action when a profile exists',
 
   const model = buildActionModel({
     canLaunchInWorkspaceRoot: true,
-    workspaceProfilePath: 'C:\\Users\\example\\gakr\\workspace\\.gakr-profile.json',
+    workspaceProfilePath: 'C:\\Users\\example\\gakr\\workspace\\.gakrcli-profile.json',
   });
 
   assert.deepEqual(model.openProfile, {
     id: 'openProfile',
     label: 'Open Workspace Profile',
-    detail: 'Inspect ...\\.gakr-profile.json',
+    detail: 'Inspect ...\\.gakrcli-profile.json',
     tone: 'neutral',
     disabled: false,
   });
@@ -88,8 +88,8 @@ function createStatus(overrides = {}) {
     launchCwdLabel: '/workspace/gakr',
     canLaunchInWorkspaceRoot: true,
     profileStatusLabel: 'Found',
-    profileStatusHint: '/workspace/gakr/.gakr-profile.json',
-    workspaceProfilePath: '/workspace/gakr/.gakr-profile.json',
+    profileStatusHint: '/workspace/gakr/.gakrcli-profile.json',
+    workspaceProfilePath: '/workspace/gakr/.gakrcli-profile.json',
     providerState: {
       label: 'Codex',
       detail: 'gpt-5.4',
@@ -173,7 +173,7 @@ test('buildControlCenterViewModel uses a concise project summary before full pat
           key: 'profileStatus',
           label: 'Workspace profile',
           summary: 'Found',
-          detail: '/workspace/gakr/.gakr-profile.json',
+          detail: '/workspace/gakr/.gakrcli-profile.json',
           tone: 'neutral',
         },
       ],

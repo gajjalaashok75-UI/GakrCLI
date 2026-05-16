@@ -1,4 +1,4 @@
-# GakrCLI Playbook — Version 0.4.9
+# GakrCLI Playbook — Version 0.5.1
 
 Quick-reference for using GakrCLI with local models (Ollama, Atomic Chat) and cloud providers. Covers daily workflow, setup, troubleshooting, and command cheatsheet.
 
@@ -88,7 +88,7 @@ export OPENAI_MODEL=llama3.2:3b
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-your-key-here
-export ANTHROPIC_MODEL=claude-sonnet-4-5-20251014
+export ANTHROPIC_MODEL=claude-sonnet-4-6
 ```
 
 **DeepSeek (Cost-Effective)**
@@ -97,12 +97,12 @@ export ANTHROPIC_MODEL=claude-sonnet-4-5-20251014
 export GAKR_CODE_USE_OPENAI=1
 export OPENAI_API_KEY=sk-your-deepseek-key
 export OPENAI_BASE_URL=https://api.deepseek.com/v1
-export OPENAI_MODEL=deepseek-v4-flash
+export OPENAI_MODEL=deepseek-chat
 ```
 
 ### 3.4 Project-Level Configuration
 
-Create `.gakr-profile.json` in your project root:
+Prefer `/provider` for profile management. The legacy single-profile fallback is `.gakrcli-profile.json`:
 
 ```json
 {
@@ -189,7 +189,7 @@ gakrcli
 ```bash
 export GAKR_CODE_USE_OPENAI=1
 export OPENAI_API_KEY=sk-your-key
-export OPENAI_MODEL=gpt-4o      # or gpt-4.1, o3-mini
+export OPENAI_MODEL=gpt-4o      # or another model supported by your provider
 gakrcli
 ```
 
@@ -197,11 +197,11 @@ gakrcli
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-your-key
-export ANTHROPIC_MODEL=claude-sonnet-4-5-20251014
+export ANTHROPIC_MODEL=claude-sonnet-4-6
 gakrcli
 
-# Or use guided login
-gakrcli auth login
+# Or use guided login inside GakrCLI
+/login
 ```
 
 **Google Gemini**
@@ -209,7 +209,7 @@ gakrcli auth login
 ```bash
 export GAKR_CODE_USE_GEMINI=1
 export GEMINI_API_KEY=your-key
-export GEMINI_MODEL=gemini-2.0-flash
+export GEMINI_MODEL=gemini-3-flash-preview
 gakrcli
 ```
 
@@ -219,7 +219,7 @@ gakrcli
 export GAKR_CODE_USE_OPENAI=1
 export OPENAI_API_KEY=sk-your-deepseek-key
 export OPENAI_BASE_URL=https://api.deepseek.com/v1
-export OPENAI_MODEL=deepseek-v4-flash
+export OPENAI_MODEL=deepseek-chat
 gakrcli
 ```
 
@@ -237,7 +237,7 @@ gakrcli
 ```bash
 export GAKR_CODE_USE_NVIDIA=1
 export NVIDIA_API_KEY=nvapi-your-key
-export NVIDIA_MODEL=stepfun-ai/step-3.5-flash
+export NVIDIA_MODEL=nvidia/llama-3.1-nemotron-70b-instruct
 gakrcli
 ```
 
@@ -296,7 +296,7 @@ ollama pull llama3.2:3b        # Ensure model is available
 **Cause:** Known issue in older versions.
 
 **Fix:**
-- Update to GakrCLI 0.4.9 or later
+- Update to GakrCLI 0.5.1 or later
 - Ensure all dependencies are installed
 - Try running with `--debug` flag for more information
 
@@ -323,19 +323,19 @@ ollama pull llama3.2:3b        # Ensure model is available
 **OpenAI**
 - `gpt-4o` — Best overall, fast and capable
 - `gpt-4.1` — Latest model with improved reasoning
-- `o3-mini` — Cost-effective reasoning model
+- Use your provider's current low-cost reasoning model for batch or review tasks
 
 **Anthropic**
-- `claude-sonnet-4-5-20251014` — Latest Sonnet, excellent for code
-- `claude-3-7-sonnet` — Alternative Sonnet version
+- `claude-sonnet-4-6` — Current default Sonnet alias in this codebase
+- `claude-haiku-4-5` — Smaller Claude option where supported
 
 **Google Gemini**
-- `gemini-2.0-flash` — Fast and capable
-- `gemini-1.5-pro` — More capable, slower
+- `gemini-3-flash-preview` — Current default Gemini model in this codebase
+- `gemini-2.5-flash` — Common fast fallback where available
 
 **DeepSeek**
-- `deepseek-v4-flash` — Very cost-effective, fast
-- `deepseek-v4-pro` — Better quality, higher cost
+- `deepseek-chat` — General DeepSeek chat model
+- `deepseek-reasoner` — DeepSeek reasoning model
 
 ## 8. Daily Usage Patterns
 
@@ -398,7 +398,7 @@ Write inline comments explaining this complex algorithm.
 ```bash
 /help                   # Show all available commands
 /provider              # Configure provider settings
-/settings              # View and modify settings
+/config                # View and modify settings
 /clear                 # Clear conversation history
 /cost                  # Show token usage and costs
 ```
@@ -428,7 +428,7 @@ Write inline comments explaining this complex algorithm.
 ```bash
 /init                  # Initialize project configuration
 /onboard-github        # Set up GitHub integration
-/git-push              # Stage, commit, and push changes
+/commit                # Create a git commit from current changes
 ```
 
 ## 10. MCP Integration
@@ -462,9 +462,9 @@ Add to `~/.gakrcli/settings.json`:
 ### 10.3 MCP Commands
 
 ```bash
-gakrcli mcp list       # List available MCP servers
-gakrcli mcp install    # Install MCP servers
-gakrcli mcp doctor     # Diagnose MCP issues
+gakrcli mcp list              # List configured MCP servers
+gakrcli mcp add <name> <cmd>  # Add a server
+gakrcli mcp doctor [name]     # Diagnose MCP issues
 ```
 
 ## 11. Agent Routing
@@ -474,7 +474,7 @@ Configure different agents to use different models:
 ```json
 {
   "agentModels": {
-    "deepseek-v4-flash": {
+    "deepseek-chat": {
       "base_url": "https://api.deepseek.com/v1",
       "api_key": "sk-your-key"
     },
@@ -484,10 +484,10 @@ Configure different agents to use different models:
     }
   },
   "agentRouting": {
-    "code-reviewer": "deepseek-v4-flash",
+    "code-reviewer": "deepseek-chat",
     "architect": "gpt-4o",
     "security-reviewer": "gpt-4o",
-    "default": "deepseek-v4-flash"
+    "default": "deepseek-chat"
   }
 }
 ```
@@ -528,8 +528,8 @@ ollama list                    # Check available models
 
 ### 13.2 Cloud Models
 
-- Use faster models (gpt-4o, deepseek-v4-flash) for interactive work
-- Use cheaper models (deepseek-v4-flash) for batch processing
+- Use faster models for interactive work
+- Use cheaper models for batch processing
 - Monitor token usage with `/cost` command
 - Set appropriate context limits
 
@@ -547,7 +547,7 @@ ollama list                    # Check available models
 Your setup is healthy when:
 
 - `gakrcli doctor` passes all checks
-- `gakrcli --version` shows current version (0.4.9+)
+- `gakrcli --version` shows current version (0.5.1+)
 - CLI starts and shows input prompt correctly
 - Model shown in UI matches your configuration
 - Tools and commands work as expected

@@ -10,7 +10,7 @@ A practical VS Code companion for GakrCLI with a project-aware **Control Center*
   - whether the launch shim injects `GAKR_CODE_USE_OPENAI=1`
   - the current workspace folder
   - the launch cwd that will be used for terminal sessions
-  - whether `.gakr-profile.json` exists in the current workspace root
+  - whether `.gakrcli-profile.json` exists in the current workspace root
   - a conservative provider summary derived from the workspace profile or known environment flags
 - **Project-aware launch behavior**:
   - `Launch GakrCLI` launches from the active editor's workspace when possible
@@ -49,7 +49,7 @@ A practical VS Code companion for GakrCLI with a project-aware **Control Center*
 
 ## Notes on Status Detection
 
-- Provider status prefers the real workspace `.gakr-profile.json` file when present.
+- Provider status prefers the real workspace `.gakrcli-profile.json` file when present.
 - If no saved profile exists, the extension falls back to known environment flags available to the VS Code extension host.
 - If the source of truth is unclear, the extension shows `unknown` instead of guessing.
 
