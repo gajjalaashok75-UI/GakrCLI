@@ -1163,6 +1163,43 @@ test('buildStartupEnvFromProfile falls back to legacy file when plural system ha
   assert.equal(env.OPENAI_MODEL, 'gpt-4o')
 })
 
+test('buildStartupEnvFromProfile reads GAKR_PROFILE_GOAL for OpenAI defaults', async () => {
+  const env = await buildStartupEnvFromProfile({
+    persisted: profile('openai', {
+      OPENAI_API_KEY: 'sk-live',
+    }),
+    processEnv: {
+      GAKR_PROFILE_GOAL: 'latency',
+    },
+  })
+
+  assert.equal(env.GAKR_CODE_USE_OPENAI, '1')
+  assert.equal(env.OPENAI_BASE_URL, 'https://api.openai.com/v1')
+  assert.equal(env.OPENAI_MODEL, 'gpt-4o-mini')
+  assert.equal(env.OPENAI_API_KEY, 'sk-live')
+})
+
+test('applySavedProfileToCurrentSession reads GAKR_PROFILE_GOAL for OpenAI defaults', async () => {
+  const { applySavedProfileToCurrentSession } =
+    await importFreshProviderProfileModule()
+  const processEnv: NodeJS.ProcessEnv = {
+    GAKR_PROFILE_GOAL: 'latency',
+  }
+
+  const error = await applySavedProfileToCurrentSession({
+    profileFile: profile('openai', {
+      OPENAI_API_KEY: 'sk-live',
+    }),
+    processEnv,
+  })
+
+  assert.equal(error, null)
+  assert.equal(processEnv.GAKR_CODE_USE_OPENAI, '1')
+  assert.equal(processEnv.OPENAI_BASE_URL, 'https://api.openai.com/v1')
+  assert.equal(processEnv.OPENAI_MODEL, 'gpt-4o-mini')
+  assert.equal(processEnv.OPENAI_API_KEY, 'sk-live')
+})
+
 test('buildStartupEnvFromProfile treats explicit falsey provider flags as user intent', async () => {
   const processEnv = {
     GAKR_CODE_USE_OPENAI: '0',

@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Atomic Chat Provider Tests**: Replaced stale duplicate Ollama coverage with Atomic Chat provider tests adapted for GakrCLI.
 - **Shared Mutation Lock Tests**: Restored isolated test mutex helpers so env-mutating tests can exercise timeout behavior without touching global state.
 - **Runtime Dependency Metadata**: Declared the `cross-spawn` runtime dependency directly so Windows-safe process spawning is available from package installs.
+- **Provider Profile Goal Env**: Corrected startup and session profile loading to honor `GAKR_PROFILE_GOAL` for default model selection.
 
 ## [0.5.2] - 2026-05-16
 
