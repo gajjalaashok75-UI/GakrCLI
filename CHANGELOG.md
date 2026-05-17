@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Runtime Dependency Metadata**: Declared the `cross-spawn` runtime dependency directly so Windows-safe process spawning is available from package installs.
 - **Provider Profile Goal Env**: Corrected startup and session profile loading to honor `GAKR_PROFILE_GOAL` for default model selection.
 - **Active Provider Startup Env**: Reapplied active `/provider` profiles after settings env merges and prevented stale legacy profile files from overriding concrete configured provider startup env.
+- **Profile File Cleanup**: Added explicit config-directory profile file handling so user config profiles and legacy workspace fallbacks can be cleaned up together without mutating global env.
 
 ## [0.5.2] - 2026-05-16
 

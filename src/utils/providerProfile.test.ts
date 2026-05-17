@@ -735,6 +735,37 @@ test('deleteProfileFile clears the default profile and legacy workspace fallback
   }
 })
 
+test('deleteProfileFile with configDir and cwd clears both user config and legacy fallback', () => {
+  const cwd = mkdtempSync(join(tmpdir(), 'gakrcli-delete-mixed-profile-'))
+  const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-delete-mixed-config-profile-'))
+
+  try {
+    const configProfile = createProfileFile('openai', {
+      OPENAI_API_KEY: 'sk-test',
+    })
+    const legacyProfile = createProfileFile('ollama', {
+      OPENAI_BASE_URL: 'http://localhost:11434/v1',
+      OPENAI_MODEL: 'llama3.1:8b',
+    })
+
+    saveProfileFile(configProfile, { configDir, cwd })
+    writeFileSync(
+      join(cwd, PROFILE_FILE_NAME),
+      JSON.stringify(legacyProfile, null, 2),
+      'utf8',
+    )
+
+    deleteProfileFile({ configDir, cwd })
+
+    assert.equal(existsSync(join(configDir, PROFILE_FILE_NAME)), false)
+    assert.equal(existsSync(join(cwd, PROFILE_FILE_NAME)), false)
+    assert.equal(loadProfileFile({ configDir, cwd }), null)
+  } finally {
+    rmSync(cwd, { recursive: true, force: true })
+    rmSync(configDir, { recursive: true, force: true })
+  }
+})
+
 test('buildCodexProfileEnv tags OAuth-saved profiles so logout can remove them safely', () => {
   const env = buildCodexProfileEnv({
     model: 'codexplan',
