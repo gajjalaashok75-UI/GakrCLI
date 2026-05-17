@@ -81,7 +81,7 @@ import {
   processStreamChunk,
   getStreamStats,
 } from '../../utils/streamingOptimizer.js'
-import { stableStringify } from '../../utils/stableStringify.js'
+import { stableStringifyJson } from '../../utils/stableStringify.js'
 
 type SecretValueSource = Partial<{
   OPENAI_API_KEY: string
@@ -1939,12 +1939,12 @@ class OpenAIShimMessages {
     // depth so spurious insertion-order differences across rebuilds of
     // `body` (spread-merge, conditional assignments above) don't bust
     // the provider's prefix hash.
-    let serializedBody = stableStringify(
+    let serializedBody = stableStringifyJson(
       request.transport === 'responses' ? buildResponsesBody() : body,
     )
 
     const refreshSerializedBody = (): void => {
-      serializedBody = stableStringify(
+      serializedBody = stableStringifyJson(
         request.transport === 'responses' ? buildResponsesBody() : body,
       )
     }
@@ -2132,7 +2132,7 @@ class OpenAIShimMessages {
             responsesResponse = await fetchWithProxyRetry(responsesUrl, {
               method: 'POST',
               headers,
-              body: stableStringify(responsesBody),
+              body: stableStringifyJson(responsesBody),
               signal: options?.signal,
             })
           } catch (error) {

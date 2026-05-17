@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Network Diagnostics Cleanup**: Shared URL query-secret redaction across diagnostics paths, delayed MCP OAuth timeout cleanup until error-body normalization completes, and used the product display name in Web Fetch permission prompts.
 - **SDK Test Isolation**: Added shared mutation locks and local TypeScript compiler execution across SDK tests that mutate env, session state, tool schema caches, or package-consumer fixtures.
 - **Expired OAuth Hints**: Pointed expired OAuth-token 401s toward `/onboard-github` or `/login` re-authentication instead of generic API-key troubleshooting.
+- **Stable JSON Serialization**: Emitted compact sorted request bodies directly, added a strict JSON wrapper for API payloads, and isolated tool-history compression mocks with the shared mutation lock.
 
 ## [0.5.2] - 2026-05-16
 
