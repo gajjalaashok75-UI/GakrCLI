@@ -1000,6 +1000,10 @@ export function selectAutoProfile(
   return recommendedOllamaModel ? 'ollama' : 'openai'
 }
 
+function getProcessProfileGoal(processEnv: NodeJS.ProcessEnv): RecommendationGoal {
+  return normalizeRecommendationGoal(processEnv.GAKR_PROFILE_GOAL)
+}
+
 export async function buildLaunchEnv(options: {
   profile: ProviderProfile
   persisted: ProfileFile | null
@@ -1505,9 +1509,7 @@ export async function buildStartupEnvFromProfile(options?: {
   return buildLaunchEnv({
     profile: persisted.profile,
     persisted,
-    goal:
-      options?.goal ??
-      normalizeRecommendationGoal(processEnv.OPENGAKR_PROFILE_GOAL),
+    goal: options?.goal ?? getProcessProfileGoal(processEnv),
     processEnv,
     getOllamaChatBaseUrl:
       options?.getOllamaChatBaseUrl ?? getOllamaChatBaseUrl,
@@ -1547,7 +1549,7 @@ export async function applySavedProfileToCurrentSession(options: {
     const explicitEnv = await buildLaunchEnv({
       profile: options.profileFile.profile,
       persisted: options.profileFile,
-      goal: normalizeRecommendationGoal(processEnv.OPENGAKR_PROFILE_GOAL),
+      goal: getProcessProfileGoal(processEnv),
       processEnv: buildEnvSource,
       getOllamaChatBaseUrl,
       readGeminiAccessToken,
@@ -1596,7 +1598,7 @@ export async function applySavedProfileToCurrentSession(options: {
   const nextEnv = await buildLaunchEnv({
     profile: options.profileFile.profile,
     persisted: options.profileFile,
-    goal: normalizeRecommendationGoal(processEnv.OPENGAKR_PROFILE_GOAL),
+    goal: getProcessProfileGoal(processEnv),
     processEnv: baseEnv,
     getOllamaChatBaseUrl,
     readGeminiAccessToken,
