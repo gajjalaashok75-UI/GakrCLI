@@ -13,9 +13,30 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onCommand:gakrcli.start",
+    "onCommand:gakrcli.startInWorkspaceRoot",
+    "onCommand:gakrcli.openDocs",
+    "onCommand:gakrcli.openSetupDocs",
+    "onCommand:gakrcli.openWorkspaceProfile",
+    "onCommand:gakrcli.openControlCenter",
+    "onCommand:gakrcli.newChat",
+    "onCommand:gakrcli.openChat",
+    "onCommand:gakrcli.resumeSession",
+    "onCommand:gakrcli.abortChat",
+    "onView:gakrcli.controlCenter",
+    "onView:gakrcli.chat"
   ],
   "main": "./src/extension.js",
+  "files": [
+    "README.md",
+    "media/**",
+    "src/extension.js",
+    "src/presentation.js",
+    "src/state.js",
+    "src/chat/**",
+    "themes/**"
+  ],
   "contributes": {
     "commands": [
       {
