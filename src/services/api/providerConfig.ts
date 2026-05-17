@@ -364,6 +364,55 @@ export function isLocalProviderUrl(baseUrl: string | undefined): boolean {
     return false
   }
 }
+
+// Fast-path opt-outs that are safe for local OpenAI-compatible endpoints.
+// These transforms target cloud behaviours such as prefix caching and strict
+// gateway validation; local backends do not need the extra client-side walks.
+const LOCAL_FAST_PATH_ENV = 'GAKR_LOCAL_FAST_PATH'
+
+export type LocalFastPathConfig = {
+  enabled: boolean
+  skipStableStringify: boolean
+  skipStrictTools: boolean
+  skipToolHistoryCompression: boolean
+}
+
+const LOCAL_FAST_PATH_OFF: LocalFastPathConfig = {
+  enabled: false,
+  skipStableStringify: false,
+  skipStrictTools: false,
+  skipToolHistoryCompression: false,
+}
+
+const LOCAL_FAST_PATH_ON: LocalFastPathConfig = {
+  enabled: true,
+  skipStableStringify: true,
+  skipStrictTools: true,
+  skipToolHistoryCompression: true,
+}
+
+function parseLocalFastPathOverride(raw: string | undefined): boolean | undefined {
+  if (raw === undefined) return undefined
+  const value = raw.trim().toLowerCase()
+  if (value === '' || value === 'auto') return undefined
+  if (value === '0' || value === 'false' || value === 'off' || value === 'no') {
+    return false
+  }
+  if (value === '1' || value === 'true' || value === 'on' || value === 'yes') {
+    return true
+  }
+  return undefined
+}
+
+export function getLocalFastPathConfig(
+  baseUrl: string | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): LocalFastPathConfig {
+  const override = parseLocalFastPathOverride(env[LOCAL_FAST_PATH_ENV])
+  const enabled = override ?? isLocalProviderUrl(baseUrl)
+  return enabled ? LOCAL_FAST_PATH_ON : LOCAL_FAST_PATH_OFF
+}
+
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '')
 }

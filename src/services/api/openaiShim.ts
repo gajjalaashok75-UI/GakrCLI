@@ -56,12 +56,14 @@ import { buildAnthropicUsageFromRawUsage } from './cacheMetrics.js'
 import { compressToolHistory } from './compressToolHistory.js'
 import { fetchWithProxyRetry } from './fetchWithProxyRetry.js'
 import {
+  getLocalFastPathConfig,
   getLocalProviderRetryBaseUrls,
   getGithubEndpointType,
   isLocalProviderUrl,
   resolveRuntimeCodexCredentials,
   resolveProviderRequest,
   shouldAttemptLocalToollessRetry,
+  type LocalFastPathConfig,
 } from './providerConfig.js'
 import {
   buildOpenAICompatibilityErrorMessage,
@@ -142,6 +144,49 @@ function hasGeminiApiHost(baseUrl: string | undefined): boolean {
     return new URL(baseUrl).hostname.toLowerCase() === GEMINI_API_HOST
   } catch {
     return false
+  }
+}
+
+function isGeminiModelName(model: string | undefined): boolean {
+  const normalized = model?.trim().toLowerCase()
+  return (
+    normalized?.startsWith('google/gemini-') === true ||
+    normalized?.startsWith('gemini-') === true
+  )
+}
+
+function shouldPreserveGeminiThoughtSignature(
+  model: string | undefined,
+  baseUrl?: string,
+): boolean {
+  return isGeminiMode() || hasGeminiApiHost(baseUrl) || isGeminiModelName(model)
+}
+
+function geminiThoughtSignatureFromExtraContent(
+  extraContent: unknown,
+): string | undefined {
+  if (!extraContent || typeof extraContent !== 'object') return undefined
+  const google = (extraContent as Record<string, unknown>).google
+  if (!google || typeof google !== 'object') return undefined
+  const signature = (google as Record<string, unknown>).thought_signature
+  return typeof signature === 'string' && signature.length > 0 ? signature : undefined
+}
+
+function mergeGeminiThoughtSignature(
+  extraContent: Record<string, unknown> | undefined,
+  signature: string | undefined,
+): Record<string, unknown> | undefined {
+  if (!signature) return extraContent
+  const existingGoogle =
+    extraContent?.google && typeof extraContent.google === 'object'
+      ? extraContent.google as Record<string, unknown>
+      : {}
+  return {
+    ...extraContent,
+    google: {
+      ...existingGoogle,
+      thought_signature: signature,
+    },
   }
 }
 
@@ -493,10 +538,12 @@ function convertMessages(
   options?: {
     preserveReasoningContent?: boolean
     reasoningContentFallback?: '' | 'omit'
+    preserveGeminiThoughtSignature?: boolean
   },
 ): OpenAIMessage[] {
   const preserveReasoningContent = options?.preserveReasoningContent === true
   const reasoningContentFallback = options?.reasoningContentFallback
+  const preserveGeminiThoughtSignature = options?.preserveGeminiThoughtSignature === true
   const result: OpenAIMessage[] = []
   const knownToolCallIds = new Set<string>()
 
@@ -658,28 +705,20 @@ function convertMessages(
                   toolCall.extra_content = { ...tu.extra_content }
                 }
 
-                // Handle Gemini thought_signature
-                if (isGeminiMode()) {
-                  // If the model provided a signature in the tool_use block itself (e.g. from a previous Turn/Step)
-                  // Use thinkingBlock.signature for ALL tool calls in the same assistant turn if available.
-                  // The API requires the same signature on every replayed function call part in a parallel set.
+                // Gemini OpenAI-compatible endpoints require Google's
+                // thought_signature to be replayed with prior function-call
+                // parts. Preserve only real signatures received from the
+                // provider; synthetic placeholders are rejected by GMI.
+                if (preserveGeminiThoughtSignature) {
                   const signature =
-                    tu.signature ?? (thinkingBlock as any)?.signature
+                    tu.signature ??
+                    geminiThoughtSignatureFromExtraContent(tu.extra_content) ??
+                    (thinkingBlock as { signature?: string } | undefined)?.signature
 
-                  // Merge into existing google-specific metadata if present
-                  const existingGoogle =
-                    (toolCall.extra_content?.google as Record<
-                      string,
-                      unknown
-                    >) ?? {}
-                  toolCall.extra_content = {
-                    ...toolCall.extra_content,
-                    google: {
-                      ...existingGoogle,
-                      thought_signature:
-                        signature ?? 'skip_thought_signature_validator',
-                    },
-                  }
+                  toolCall.extra_content = mergeGeminiThoughtSignature(
+                    toolCall.extra_content,
+                    signature,
+                  )
                 }
 
                 return toolCall
@@ -851,8 +890,13 @@ function normalizeSchemaForOpenAI(
 
 function convertTools(
   tools: Array<{ name: string; description?: string; input_schema?: Record<string, unknown> }>,
+  options: { skipStrict?: boolean } = {},
 ): OpenAITool[] {
   const isGemini = isGeminiMode()
+  const strict =
+    !isGemini &&
+    !isEnvTruthy(process.env.GAKRCLI_DISABLE_STRICT_TOOLS) &&
+    !options.skipStrict
 
   return tools
     .filter(t => t.name !== 'ToolSearchTool') // Not relevant for OpenAI
@@ -877,7 +921,7 @@ function convertTools(
           description: t.description ?? '',
           parameters: normalizeSchemaForOpenAI(
             schema,
-            !isGemini && !isEnvTruthy(process.env.GAKRCLI_DISABLE_STRICT_TOOLS),
+            strict,
           ),
         },
       }
@@ -898,6 +942,7 @@ interface OpenAIStreamChunk {
       role?: string
       content?: string | null
       reasoning_content?: string | null
+      extra_content?: Record<string, unknown>
       tool_calls?: Array<{
         index: number
         id?: string
@@ -1170,6 +1215,14 @@ async function* openaiStreamToAnthropic(
               const toolBlockIndex = contentBlockIndex
               const initialArguments = tc.function.arguments ?? ''
               const normalizeAtStop = hasToolFieldMapping(tc.function.name)
+              const toolExtraContent = tc.extra_content ?? delta.extra_content
+              const toolSignature =
+                geminiThoughtSignatureFromExtraContent(tc.extra_content) ??
+                geminiThoughtSignatureFromExtraContent(delta.extra_content)
+              const mergedToolExtraContent = mergeGeminiThoughtSignature(
+                toolExtraContent,
+                toolSignature,
+              )
               processStreamChunk(streamState, tc.function.arguments ?? '')
               activeToolCalls.set(tc.index, {
                 id: tc.id,
@@ -1187,14 +1240,8 @@ async function* openaiStreamToAnthropic(
                   id: tc.id,
                   name: tc.function.name,
                   input: {},
-                  ...(tc.extra_content ? { extra_content: tc.extra_content } : {}),
-                  // Extract Gemini signature from extra_content
-                  ...((tc.extra_content?.google as any)?.thought_signature
-                    ? {
-                        signature: (tc.extra_content.google as any)
-                          .thought_signature,
-                      }
-                    : {}),
+                  ...(mergedToolExtraContent ? { extra_content: mergedToolExtraContent } : {}),
+                  ...(toolSignature ? { signature: toolSignature } : {}),
                 },
               }
               contentBlockIndex++
@@ -1587,14 +1634,15 @@ class OpenAIShimMessages {
     params: ShimCreateParams,
     options?: { signal?: AbortSignal; headers?: Record<string, string> },
   ): Promise<Response> {
-    const compressedMessages = compressToolHistory(
-      params.messages as Array<{
-        role: string
-        message?: { role?: string; content?: unknown }
-        content?: unknown
-      }>,
-      request.resolvedModel,
-    )
+    const fastPath: LocalFastPathConfig = getLocalFastPathConfig(request.baseUrl)
+    const rawMessages = params.messages as Array<{
+      role: string
+      message?: { role?: string; content?: unknown }
+      content?: unknown
+    }>
+    const compressedMessages = fastPath.skipToolHistoryCompression
+      ? rawMessages
+      : compressToolHistory(rawMessages, request.resolvedModel)
     const runtimeShimContext = resolveOpenAIShimRuntimeContext({
       processEnv: process.env,
       baseUrl: request.baseUrl,
@@ -1605,6 +1653,10 @@ class OpenAIShimMessages {
     const openaiMessages = convertMessages(compressedMessages, params.system, {
       preserveReasoningContent: shimConfig.preserveReasoningContent,
       reasoningContentFallback: shimConfig.reasoningContentFallback,
+      preserveGeminiThoughtSignature: shouldPreserveGeminiThoughtSignature(
+        request.resolvedModel,
+        request.baseUrl,
+      ),
     })
 
     const body: Record<string, unknown> = {
@@ -1705,6 +1757,7 @@ class OpenAIShimMessages {
           description?: string
           input_schema?: Record<string, unknown>
         }>,
+        { skipStrict: fastPath.skipStrictTools },
       )
       if (converted.length > 0) {
         body.tools = converted
@@ -1939,14 +1992,17 @@ class OpenAIShimMessages {
     // depth so spurious insertion-order differences across rebuilds of
     // `body` (spread-merge, conditional assignments above) don't bust
     // the provider's prefix hash.
-    let serializedBody = stableStringifyJson(
-      request.transport === 'responses' ? buildResponsesBody() : body,
-    )
+    const serializeBody = (): string => {
+      const payload =
+        request.transport === 'responses' ? buildResponsesBody() : body
+      return fastPath.skipStableStringify
+        ? JSON.stringify(payload)
+        : stableStringifyJson(payload)
+    }
+    let serializedBody = serializeBody()
 
     const refreshSerializedBody = (): void => {
-      serializedBody = stableStringifyJson(
-        request.transport === 'responses' ? buildResponsesBody() : body,
-      )
+      serializedBody = serializeBody()
     }
 
     const buildFetchInit = () => ({
@@ -2247,6 +2303,7 @@ class OpenAIShimMessages {
             | null
             | Array<{ type?: string; text?: string }>
           reasoning_content?: string | null
+          extra_content?: Record<string, unknown>
           tool_calls?: Array<{
             id: string
             function: { name: string; arguments: string }
@@ -2311,22 +2368,28 @@ class OpenAIShimMessages {
           tc.function.name,
           tc.function.arguments,
         )
+        const toolExtraContent = tc.extra_content ?? choice.message.extra_content
+        const toolSignature =
+          geminiThoughtSignatureFromExtraContent(tc.extra_content) ??
+          geminiThoughtSignatureFromExtraContent(choice.message.extra_content)
+        const mergedToolExtraContent = mergeGeminiThoughtSignature(
+          toolExtraContent,
+          toolSignature,
+        )
         content.push({
           type: 'tool_use',
           id: tc.id,
           name: tc.function.name,
           input,
-          ...(tc.extra_content ? { extra_content: tc.extra_content } : {}),
-          // Extract Gemini signature from extra_content
-          ...((tc.extra_content?.google as any)?.thought_signature
-            ? { signature: (tc.extra_content.google as any).thought_signature }
-            : {}),
+          ...(mergedToolExtraContent ? { extra_content: mergedToolExtraContent } : {}),
+          ...(toolSignature ? { signature: toolSignature } : {}),
         })
       }
     }
 
     const stopReason =
-      choice?.finish_reason === 'tool_calls'
+      choice?.finish_reason === 'tool_calls' ||
+      content.some(block => block.type === 'tool_use')
         ? 'tool_use'
         : choice?.finish_reason === 'length'
           ? 'max_tokens'

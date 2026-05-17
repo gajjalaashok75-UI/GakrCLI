@@ -40,6 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Expired OAuth Hints**: Pointed expired OAuth-token 401s toward `/onboard-github` or `/login` re-authentication instead of generic API-key troubleshooting.
 - **Stable JSON Serialization**: Emitted compact sorted request bodies directly, added a strict JSON wrapper for API payloads, and isolated tool-history compression mocks with the shared mutation lock.
 - **Codex Strict Schemas**: Inferred missing JSON schema types for Codex Responses tools and dropped orphan required keys so untyped MCP schemas do not fail strict-mode validation.
+- **Local Provider Fast Path**: Wired `GAKR_LOCAL_FAST_PATH` into OpenAI-compatible requests so local endpoints can skip cloud-only stable serialization, strict tool rewrites, and tool-history compression.
+- **Gemini Tool Signatures**: Replayed real Gemini `thought_signature` metadata by model or base URL and preserved signatures from streaming and non-streaming OpenAI-compatible responses.
 
 ## [0.5.2] - 2026-05-16
 
