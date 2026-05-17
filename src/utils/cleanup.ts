@@ -476,7 +476,7 @@ export async function cleanupNpmCacheForAnthropicPackages(): Promise<void> {
       key: string
       time: number
     }>) {
-      if (entry.key.includes('@anthropic-ai/gakrcli-')) {
+      if (entry.key.includes('@anthropic-ai/claude-')) {
         anthropicEntries.push({ key: entry.key, time: entry.time })
       }
     }

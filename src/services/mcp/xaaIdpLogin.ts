@@ -20,6 +20,7 @@ import { createServer, type Server } from 'http'
 import { parse } from 'url'
 import xss from 'xss'
 import { openBrowser } from '../../utils/browser.js'
+import { createCombinedAbortSignal } from '../../utils/combinedAbortSignal.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
 import { toError } from '../../utils/errors.js'
 import { logMCPDebug } from '../../utils/log.js'
@@ -204,11 +205,19 @@ export async function discoverOidc(
 ): Promise<OpenIdProviderDiscoveryMetadata> {
   const base = idpIssuer.endsWith('/') ? idpIssuer : idpIssuer + '/'
   const url = new URL('.well-known/openid-configuration', base)
-  // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
-  const res = await fetch(url, {
-    headers: { Accept: 'application/json' },
-    signal: AbortSignal.timeout(IDP_REQUEST_TIMEOUT_MS),
+  const { signal, cleanup } = createCombinedAbortSignal(undefined, {
+    timeoutMs: IDP_REQUEST_TIMEOUT_MS,
   })
+  let res: Response
+  try {
+    // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
+    res = await fetch(url, {
+      headers: { Accept: 'application/json' },
+      signal,
+    })
+  } finally {
+    cleanup()
+  }
   if (!res.ok) {
     throw new Error(
       `XAA IdP: OIDC discovery failed: HTTP ${res.status} at ${url}`,
@@ -456,12 +465,16 @@ export async function acquireIdpIdToken(
     authorizationCode,
     codeVerifier,
     redirectUri,
-    fetchFn: (url, init) =>
+    fetchFn: (url, init) => {
+      const { signal, cleanup } = createCombinedAbortSignal(init?.signal, {
+        timeoutMs: IDP_REQUEST_TIMEOUT_MS,
+      })
       // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
-      fetch(url, {
+      return fetch(url, {
         ...init,
-        signal: AbortSignal.timeout(IDP_REQUEST_TIMEOUT_MS),
-      }),
+        signal,
+      }).finally(cleanup)
+    },
   })
   if (!tokens.id_token) {
     throw new Error(

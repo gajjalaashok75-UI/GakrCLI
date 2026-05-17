@@ -13,8 +13,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Xiaomi MiMo Model Picker**: Added cached Xiaomi MiMo model options with provider detection coverage for MiMo credentials and base URLs.
 - **Maintainer Templates**: Added GitHub bug report and feature request issue templates.
 - **Regression Coverage and Shared Helpers**: Added focused tests for storage providers, export rendering, abort-signal cleanup, Bash safety checks, OAuth callback bounds, local fast-path provider config, CLI heap settings, shared mutation locking, agent markdown rendering, and extracted keybinding, plugin command, and FileRead tool-name helpers.
+- **Provider Setup Hints**: Documented Z.AI, Hicap, self-hosted Firecrawl, and structured token-usage logging environment options in the sample environment file.
+- **NVIDIA NIM Model Coverage**: Added current NIM route entries for DeepSeek V4, GLM 5.1, MiniMax M2.7, Nemotron, Mistral, Kimi, and related models, with coverage to prevent duplicate picker IDs.
+
+### Changed
+- **Pinned Bun Runtime**: Added the shared `.bun-version` and wired CI and Docker builds to use the repo-tracked Bun version.
 
 ### Fixed
+- **Windows Bin Import Path**: Normalized Windows drive-letter paths in the CLI bin import helper so built entrypoint URLs are valid across path contexts.
+- **Abort Timeout Cleanup**: Replaced raw timeout abort signals across runtime fetch, hook, bridge, shutdown, and updater paths with cleanup-safe combined abort signals.
+- **Legacy npm Package Cleanup**: Restored cleanup and doctor checks for the real legacy `@anthropic-ai/claude-code` package while keeping GakrCLI package checks pointed at `@gakr-gakr/gakrcli`.
+- **Codex OAuth Callback Settings**: Restored loopback callback host validation and host-aware redirect URI construction for Codex OAuth.
+- **Web Fetch Firecrawl Endpoint**: Let Web Fetch use self-hosted Firecrawl endpoints via `FIRECRAWL_API_URL`, matching Web Search behavior.
+- **Atomic Chat Provider Tests**: Replaced stale duplicate Ollama coverage with Atomic Chat provider tests adapted for GakrCLI.
+- **Shared Mutation Lock Tests**: Restored isolated test mutex helpers so env-mutating tests can exercise timeout behavior without touching global state.
 - **Runtime Dependency Metadata**: Declared the `cross-spawn` runtime dependency directly so Windows-safe process spawning is available from package installs.
 
 ## [0.5.2] - 2026-05-16

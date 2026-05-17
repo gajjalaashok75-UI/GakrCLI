@@ -4620,7 +4620,9 @@ export async function executeStatusLineCommand(
   }
 
   // Use provided signal or create a default one
-  const abortSignal = signal || AbortSignal.timeout(timeoutMs)
+  const { signal: abortSignal, cleanup } = signal
+    ? { signal, cleanup: () => {} }
+    : createCombinedAbortSignal(undefined, { timeoutMs })
 
   try {
     // Convert status input to JSON
@@ -4667,6 +4669,8 @@ export async function executeStatusLineCommand(
   } catch (error) {
     logForDebugging(`Status hook failed: ${error}`, { level: 'error' })
     return undefined
+  } finally {
+    cleanup()
   }
 }
 
@@ -4710,7 +4714,9 @@ export async function executeFileSuggestionCommand(
   }
 
   // Use provided signal or create a default one
-  const abortSignal = signal || AbortSignal.timeout(timeoutMs)
+  const { signal: abortSignal, cleanup } = signal
+    ? { signal, cleanup: () => {} }
+    : createCombinedAbortSignal(undefined, { timeoutMs })
 
   try {
     const jsonInput = jsonStringify(fileSuggestionInput)
@@ -4739,6 +4745,8 @@ export async function executeFileSuggestionCommand(
       level: 'error',
     })
     return []
+  } finally {
+    cleanup()
   }
 }
 

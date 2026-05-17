@@ -23,6 +23,7 @@ import { mkdir, readFile, unlink, writeFile } from 'fs/promises'
 import { homedir } from 'os'
 import { join } from 'path'
 import { registerCleanup } from '../utils/cleanupRegistry.js'
+import { createCombinedAbortSignal } from '../utils/combinedAbortSignal.js'
 import { logForDebugging } from '../utils/debug.js'
 import { isEnvTruthy } from '../utils/envUtils.js'
 import { isENOENT } from '../utils/errors.js'
@@ -269,12 +270,15 @@ async function downloadCaBundle(
   outPath: string,
 ): Promise<boolean> {
   try {
+    const { signal, cleanup } = createCombinedAbortSignal(undefined, {
+      timeoutMs: 5000,
+    })
     // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
     const resp = await fetch(`${baseUrl}/v1/code/upstreamproxy/ca-cert`, {
       // Bun has no default fetch timeout — a hung endpoint would block CLI
       // startup forever. 5s is generous for a small PEM.
-      signal: AbortSignal.timeout(5000),
-    })
+      signal,
+    }).finally(cleanup)
     if (!resp.ok) {
       logForDebugging(
         `[upstreamproxy] ca-cert fetch ${resp.status}; proxy disabled`,

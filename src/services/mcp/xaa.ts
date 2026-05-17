@@ -22,6 +22,7 @@ import {
 } from '@modelcontextprotocol/sdk/client/auth.js'
 import type { FetchLike } from '@modelcontextprotocol/sdk/shared/transport.js'
 import { z } from 'zod/v4'
+import { createCombinedAbortSignal } from '../../utils/combinedAbortSignal.js'
 import { lazySchema } from '../../utils/lazySchema.js'
 import { logMCPDebug } from '../../utils/log.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
@@ -41,13 +42,12 @@ const ID_TOKEN_TYPE = 'urn:ietf:params:oauth:token-type:id_token'
  */
 function makeXaaFetch(abortSignal?: AbortSignal): FetchLike {
   return (url, init) => {
-    const timeout = AbortSignal.timeout(XAA_REQUEST_TIMEOUT_MS)
-    const signal = abortSignal
-      ? // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
-        AbortSignal.any([timeout, abortSignal])
-      : timeout
+    const { signal, cleanup } = createCombinedAbortSignal(init?.signal, {
+      signalB: abortSignal,
+      timeoutMs: XAA_REQUEST_TIMEOUT_MS,
+    })
     // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
-    return fetch(url, { ...init, signal })
+    return fetch(url, { ...init, signal }).finally(cleanup)
   }
 }
 
