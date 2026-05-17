@@ -264,8 +264,29 @@ export async function detectLocalService(options?: {
   return null
 }
 
-const OPENGATEWAY_DEFAULT_BASE_URL = 'https://opengateway.gitlawb.com/v1/xiaomi-mimo'
+const OPENGATEWAY_DEFAULT_BASE_URL = 'https://opengateway.gitlawb.com/v1'
 const OPENGATEWAY_DEFAULT_MODEL = 'mimo-v2.5-pro'
+
+function normalizeOpengatewayBaseUrl(baseUrl: string): string {
+  try {
+    const parsed = new URL(baseUrl)
+    const hostname = parsed.hostname.toLowerCase()
+    const path = parsed.pathname.replace(/\/+$/, '').toLowerCase()
+    if (
+      (hostname === 'opengateway.gitlawb.com' ||
+        hostname === 'opengateway.fly.dev') &&
+      (path === '/v1/xiaomi-mimo' || path === '/v1/gmi-cloud')
+    ) {
+      parsed.pathname = '/v1'
+      parsed.search = ''
+      parsed.hash = ''
+      return parsed.toString().replace(/\/+$/, '')
+    }
+  } catch {
+    return baseUrl
+  }
+  return baseUrl
+}
 
 function defaultOpengatewayProvider(env: EnvLike): DetectedProvider {
   const baseUrl =
@@ -273,8 +294,8 @@ function defaultOpengatewayProvider(env: EnvLike): DetectedProvider {
     OPENGATEWAY_DEFAULT_BASE_URL
   return {
     kind: 'gitlawb-opengateway',
-    source: 'Gitlawb Opengateway (free MiMo - no key required)',
-    baseUrl,
+    source: 'Gitlawb Opengateway (free Xiaomi MiMo + GMI Cloud - no key required)',
+    baseUrl: normalizeOpengatewayBaseUrl(baseUrl),
     model: OPENGATEWAY_DEFAULT_MODEL,
   }
 }
