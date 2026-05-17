@@ -191,7 +191,7 @@ function getRouteDefaultModel(route: 'minimax' | 'xai' | 'xiaomi-mimo' | 'venice
   if (route === 'minimax') return 'MiniMax-M2.5'
   if (route === 'xiaomi-mimo') return 'mimo-v2.5-pro'
   if (route === 'venice') return 'venice-uncensored'
-  return 'grok-4'
+  return 'grok-4.3'
 }
 
 function applyMiniMaxEnvOnlyDefaults(requestedModel?: string): void {

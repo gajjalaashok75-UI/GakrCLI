@@ -5,7 +5,7 @@ export default defineVendor({
   label: 'xAI',
   classification: 'openai-compatible',
   defaultBaseUrl: 'https://api.x.ai/v1',
-  defaultModel: 'grok-4',
+  defaultModel: 'grok-4.3',
   requiredEnvVars: ['XAI_API_KEY'],
   setup: {
     requiresAuth: true,
@@ -38,6 +38,12 @@ export default defineVendor({
     discoveryRefreshMode: 'background-if-stale',
     allowManualRefresh: true,
     models: [
+      {
+        id: 'grok-4.3',
+        apiName: 'grok-4.3',
+        label: 'Grok 4.3',
+        modelDescriptorId: 'grok-4.3',
+      },
       {
         id: 'grok-4',
         apiName: 'grok-4',

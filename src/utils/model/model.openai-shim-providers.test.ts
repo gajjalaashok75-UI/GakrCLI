@@ -9,6 +9,7 @@ async function importFreshModelModule() {
       if (process.env.NVIDIA_NIM) return 'nvidia-nim'
       if (process.env.MINIMAX_API_KEY) return 'minimax'
       if (process.env.MIMO_API_KEY) return 'xiaomi-mimo'
+      if (process.env.XAI_API_KEY) return 'xai'
       if (process.env.GAKR_CODE_USE_GEMINI) return 'gemini'
       if (process.env.GAKR_CODE_USE_MISTRAL) return 'mistral'
       if (process.env.GAKR_CODE_USE_GITHUB) return 'github'
@@ -40,6 +41,7 @@ const SAVED_ENV = {
   NVIDIA_NIM: process.env.NVIDIA_NIM,
   MINIMAX_API_KEY: process.env.MINIMAX_API_KEY,
   MIMO_API_KEY: process.env.MIMO_API_KEY,
+  XAI_API_KEY: process.env.XAI_API_KEY,
   NVIDIA_MODEL: process.env.NVIDIA_MODEL,
   OPENAI_MODEL: process.env.OPENAI_MODEL,
   OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
@@ -72,6 +74,7 @@ beforeEach(() => {
   delete process.env.NVIDIA_MODEL
   delete process.env.MINIMAX_API_KEY
   delete process.env.MIMO_API_KEY
+  delete process.env.XAI_API_KEY
   delete process.env.OPENAI_MODEL
   delete process.env.OPENAI_BASE_URL
   delete process.env.CODEX_API_KEY
@@ -252,6 +255,25 @@ test('Xiaomi MiMo default helpers return Xiaomi model ids', async () => {
   expect(getDefaultSonnetModel()).toBe('mimo-v2.5-pro')
   expect(getDefaultHaikuModel()).toBe('mimo-v2-flash')
   expect(getDefaultMainLoopModelSetting()).toBe('mimo-v2.5-pro')
+})
+
+test('xAI default helpers return Grok model ids', async () => {
+  process.env.XAI_API_KEY = 'xai-test'
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+
+  const {
+    getSmallFastModel,
+    getDefaultOpusModel,
+    getDefaultSonnetModel,
+    getDefaultHaikuModel,
+    getDefaultMainLoopModelSetting,
+  } = await importFreshModelModule()
+
+  expect(getSmallFastModel()).toBe('grok-3')
+  expect(getDefaultOpusModel()).toBe('grok-4.3')
+  expect(getDefaultSonnetModel()).toBe('grok-4.3')
+  expect(getDefaultHaikuModel()).toBe('grok-3')
+  expect(getDefaultMainLoopModelSetting()).toBe('grok-4.3')
 })
 
 test('default helpers do not leak claude-* names to shim providers', async () => {

@@ -4165,7 +4165,7 @@ test('Groq: omits reasoning_effort for models that do not support it', async () 
   expect(requestBody?.reasoning_effort).toBeUndefined()
 })
 
-test('Groq: maps reasoning_effort for supported reasoning models', async () => {
+test('Groq: strips reasoning_effort even for reasoning-capable models', async () => {
   process.env.OPENAI_BASE_URL = 'https://api.groq.com/openai/v1'
   process.env.OPENAI_API_KEY = 'gsk-test'
 
@@ -4203,8 +4203,8 @@ test('Groq: maps reasoning_effort for supported reasoning models', async () => {
     stream: false,
   })
 
-  expect(requestBodies[0]?.reasoning_effort).toBe('default')
-  expect(requestBodies[1]?.reasoning_effort).toBe('high')
+  expect(requestBodies[0]?.reasoning_effort).toBeUndefined()
+  expect(requestBodies[1]?.reasoning_effort).toBeUndefined()
 })
 
 test('retries once without reasoning_effort when an OpenAI-compatible provider rejects it', async () => {

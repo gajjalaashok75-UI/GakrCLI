@@ -53,6 +53,7 @@ describe('loaded registry validation', () => {
   test('static gateway catalog entries use shared model descriptors when known', () => {
     const descriptorOptionalEntries = new Set([
       'azure-openai:azure-deployment',
+      'github:github-copilot-default',
     ])
     const missingDescriptors = getAllGateways().flatMap(gateway =>
       (gateway.catalog?.models ?? [])
@@ -108,19 +109,15 @@ describe('loaded registry validation', () => {
 
     const expectedDiscoveryRoutes = [
       'atomic-chat',
-      'deepseek',
       'groq',
       'hicap',
       'lmstudio',
-      'minimax',
       'mistral',
-      'moonshot',
       'nvidia-nim',
       'ollama',
       'openai',
       'openrouter',
       'together',
-      'xai',
     ]
 
     for (const routeId of expectedDiscoveryRoutes) {

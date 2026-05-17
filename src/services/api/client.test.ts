@@ -673,6 +673,26 @@ test('env-only xAI fallback replaces stale OpenAI credentials and model env', as
   expect(process.env.OPENAI_API_KEY).toBe('xai-test-key')
 })
 
+test('env-only xAI fallback uses Grok 4.3 when no xAI model is requested', async () => {
+  delete process.env.GAKR_CODE_USE_GEMINI
+  delete process.env.GEMINI_API_KEY
+  delete process.env.GEMINI_MODEL
+  delete process.env.GEMINI_BASE_URL
+  delete process.env.GEMINI_AUTH_MODE
+  process.env.XAI_API_KEY = 'xai-test-key'
+  process.env.OPENAI_API_KEY = 'openai-test-key'
+  process.env.OPENAI_MODEL = 'gpt-4o'
+
+  await getAnthropicClient({
+    maxRetries: 0,
+    model: 'gakrcli-sonnet-4-6',
+  })
+
+  expect(process.env.GAKR_CODE_USE_OPENAI).toBe('1')
+  expect(process.env.OPENAI_MODEL).toBe('grok-4.3')
+  expect(process.env.OPENAI_API_KEY).toBe('xai-test-key')
+})
+
 test('env-only xAI fallback preserves xAI OPENAI_API_BASE host overrides', async () => {
   let capturedUrl: string | undefined
 

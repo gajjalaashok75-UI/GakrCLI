@@ -32,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Active Provider Startup Env**: Reapplied active `/provider` profiles after settings env merges and prevented stale legacy profile files from overriding concrete configured provider startup env.
 - **Profile File Cleanup**: Added explicit config-directory profile file handling so user config profiles and legacy workspace fallbacks can be cleaned up together without mutating global env.
 - **External Validation Noise**: Marked optional telemetry, cloud SDK, and SDK-only externals as intentional so smoke builds no longer warn about dynamic runtime packages missing from `package.json`.
+- **xAI Grok Defaults**: Updated xAI provider descriptors, runtime fallbacks, provider flags, and model metadata to use Grok 4.3 as the default while preserving explicit Grok 4 selections.
+- **Provider Catalog Constraints**: Switched fixed MiniMax, DeepSeek, Moonshot, and xAI catalogs to static descriptors and stripped unsupported `reasoning_effort` from Groq shim requests.
 
 ## [0.5.2] - 2026-05-16
 
