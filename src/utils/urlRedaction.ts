@@ -15,7 +15,11 @@ const SENSITIVE_URL_QUERY_PARAM_TOKENS = [
   'authorization',
 ]
 
-function shouldRedactUrlQueryParam(name: string): boolean {
+/**
+ * Single source of truth for query parameter names that look credential-like.
+ * Shared by diagnostics paths so URL redaction coverage does not drift.
+ */
+export function shouldRedactUrlQueryParam(name: string): boolean {
   const lower = name.toLowerCase()
   return SENSITIVE_URL_QUERY_PARAM_TOKENS.some(token => lower.includes(token))
 }

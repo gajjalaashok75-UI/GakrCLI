@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **xAI Grok Defaults**: Updated xAI provider descriptors, runtime fallbacks, provider flags, and model metadata to use Grok 4.3 as the default while preserving explicit Grok 4 selections.
 - **Provider Catalog Constraints**: Switched fixed MiniMax, DeepSeek, Moonshot, and xAI catalogs to static descriptors and stripped unsupported `reasoning_effort` from Groq shim requests.
 - **Build Feature Flags**: Switched build-time feature flag replacement to Bun load transforms so smoke/build no longer rewrites source files during bundling.
+- **Network Diagnostics Cleanup**: Shared URL query-secret redaction across diagnostics paths, delayed MCP OAuth timeout cleanup until error-body normalization completes, and used the product display name in Web Fetch permission prompts.
 
 ## [0.5.2] - 2026-05-16
 

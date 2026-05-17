@@ -273,7 +273,7 @@ function createAuthFetch(): FetchLike {
     try {
       // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
       const response = await fetch(url, { ...init, signal })
-      return isPost ? normalizeOAuthErrorBody(response) : response
+      return isPost ? await normalizeOAuthErrorBody(response) : response
     } finally {
       cleanup()
     }

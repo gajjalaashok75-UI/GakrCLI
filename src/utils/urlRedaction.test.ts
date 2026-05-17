@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 
-import { redactUrlForDisplay } from './urlRedaction.ts'
+import {
+  redactUrlForDisplay,
+  shouldRedactUrlQueryParam,
+} from './urlRedaction.ts'
 
 describe('redactUrlForDisplay', () => {
   test('redacts credentials and sensitive query params for valid URLs', () => {
@@ -34,5 +37,10 @@ describe('redactUrlForDisplay', () => {
   test('keeps non-sensitive URLs unchanged', () => {
     const url = 'http://localhost:11434/v1?model=llama3.1:8b'
     expect(redactUrlForDisplay(url)).toBe(url)
+  })
+
+  test('exposes the shared sensitive query parameter classifier', () => {
+    expect(shouldRedactUrlQueryParam('x_access_token')).toBe(true)
+    expect(shouldRedactUrlQueryParam('model')).toBe(false)
   })
 })
