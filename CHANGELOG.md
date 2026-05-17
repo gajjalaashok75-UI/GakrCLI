@@ -5,6 +5,15 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-05-17
+
+### Added
+- **Multi-Format Conversation Exports**: Added export format helpers and coverage for text, Markdown, and JSON transcript exports, including direct filenames, explicit format flags, dialog selection, clipboard export, and file-save flows.
+- **Sponsored Spinner Tips**: Added sponsored tip metadata, Atomic Chat and Xiaomi MiMo sponsored tips, frequency settings, scheduler partitioning, and history coverage.
+- **Xiaomi MiMo Model Picker**: Added cached Xiaomi MiMo model options with provider detection coverage for MiMo credentials and base URLs.
+- **Maintainer Templates**: Added GitHub bug report and feature request issue templates.
+- **Regression Coverage and Shared Helpers**: Added focused tests for storage providers, export rendering, abort-signal cleanup, Bash safety checks, OAuth callback bounds, local fast-path provider config, CLI heap settings, shared mutation locking, agent markdown rendering, and extracted keybinding, plugin command, and FileRead tool-name helpers.
+
 ## [0.5.2] - 2026-05-16
 
 ### Added
