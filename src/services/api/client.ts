@@ -501,6 +501,22 @@ export async function getAnthropicClient({
     }) as unknown as Anthropic
   }
 
+  // GitHub provider in native Anthropic API mode: send Claude-family models in
+  // Anthropic format so cache_control blocks are honored for prompt caching.
+  if (isGithubNativeAnthropicMode(model)) {
+    const githubBaseUrl =
+      (process.env.OPENAI_BASE_URL ?? process.env.OPENAI_API_BASE)
+        ?.replace(/\/$/, '') ?? 'https://api.githubcopilot.com'
+    const githubToken = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? ''
+    const nativeArgs: ConstructorParameters<typeof Anthropic>[0] = {
+      ...ARGS,
+      baseURL: githubBaseUrl,
+      authToken: githubToken,
+      apiKey: null,
+    }
+    return new Anthropic(nativeArgs)
+  }
+
   // Check for env-only provider routes (MiniMax, xAI, Venice, Xiaomi MiMo)
   const envOnlyProviderRouteId = resolveEnvOnlyProviderRouteId()
   const useXaiEnvOnlyProvider = envOnlyProviderRouteId === 'xai'

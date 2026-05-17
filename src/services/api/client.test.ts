@@ -23,6 +23,8 @@ const originalEnv = {
   GAKR_CODE_USE_GITHUB: process.env.GAKR_CODE_USE_GITHUB,
   GAKR_CODE_USE_MISTRAL: process.env.GAKR_CODE_USE_MISTRAL,
   GAKR_CODE_USE_NVIDIA: process.env.GAKR_CODE_USE_NVIDIA,
+  GITHUB_TOKEN: process.env.GITHUB_TOKEN,
+  GH_TOKEN: process.env.GH_TOKEN,
   GEMINI_API_KEY: process.env.GEMINI_API_KEY,
   GEMINI_MODEL: process.env.GEMINI_MODEL,
   GEMINI_BASE_URL: process.env.GEMINI_BASE_URL,
@@ -71,6 +73,8 @@ beforeEach(() => {
   delete process.env.GAKR_CODE_USE_GITHUB
   delete process.env.GAKR_CODE_USE_MISTRAL
   delete process.env.GAKR_CODE_USE_NVIDIA
+  delete process.env.GITHUB_TOKEN
+  delete process.env.GH_TOKEN
   delete process.env.GOOGLE_API_KEY
   delete process.env.OPENAI_API_KEY
   delete process.env.OPENAI_BASE_URL
@@ -101,6 +105,8 @@ afterEach(() => {
   restoreEnv('GAKR_CODE_USE_GITHUB', originalEnv.GAKR_CODE_USE_GITHUB)
   restoreEnv('GAKR_CODE_USE_MISTRAL', originalEnv.GAKR_CODE_USE_MISTRAL)
   restoreEnv('GAKR_CODE_USE_NVIDIA', originalEnv.GAKR_CODE_USE_NVIDIA)
+  restoreEnv('GITHUB_TOKEN', originalEnv.GITHUB_TOKEN)
+  restoreEnv('GH_TOKEN', originalEnv.GH_TOKEN)
   restoreEnv('GEMINI_API_KEY', originalEnv.GEMINI_API_KEY)
   restoreEnv('GEMINI_MODEL', originalEnv.GEMINI_MODEL)
   restoreEnv('GEMINI_BASE_URL', originalEnv.GEMINI_BASE_URL)
@@ -192,6 +198,75 @@ test('first-party Anthropic requests execute the configured fetch wrapper withou
     model: 'claude-sonnet-4-6',
   })
   expect(capturedHeaders).toBeDefined()
+})
+
+test('routes GitHub Claude models through native Anthropic format', async () => {
+  let capturedUrl: string | undefined
+  let capturedHeaders: Headers | undefined
+  let capturedBody: Record<string, unknown> | undefined
+
+  delete process.env.GAKR_CODE_USE_GEMINI
+  delete process.env.GEMINI_API_KEY
+  delete process.env.GEMINI_MODEL
+  delete process.env.GEMINI_BASE_URL
+  delete process.env.GEMINI_AUTH_MODE
+  delete process.env.OPENAI_API_KEY
+  process.env.GAKR_CODE_USE_GITHUB = '1'
+  process.env.OPENAI_MODEL = 'claude-sonnet-4-6'
+  process.env.GITHUB_TOKEN = 'github-native-token'
+
+  const fetchOverride = (async (input, init) => {
+    capturedUrl =
+      typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url
+    capturedHeaders = new Headers(init?.headers)
+    capturedBody = JSON.parse(String(init?.body)) as Record<string, unknown>
+
+    return new Response(
+      JSON.stringify({
+        id: 'msg_github_native',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-sonnet-4-6',
+        content: [{ type: 'text', text: 'github native ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: {
+          input_tokens: 1,
+          output_tokens: 1,
+        },
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+    )
+  }) as FetchType
+
+  const client = await getAnthropicClient({
+    maxRetries: 0,
+    model: 'claude-sonnet-4-6',
+    fetchOverride,
+  })
+
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-6',
+    messages: [{ role: 'user', content: 'hello' }],
+    max_tokens: 64,
+  })
+
+  expect(capturedUrl).toBe('https://api.githubcopilot.com/v1/messages')
+  expect(capturedHeaders?.get('authorization')).toBe('Bearer github-native-token')
+  expect(capturedBody?.model).toBe('claude-sonnet-4-6')
+  expect(response).toMatchObject({
+    id: 'msg_github_native',
+    role: 'assistant',
+    model: 'claude-sonnet-4-6',
+  })
 })
 
 test('routes Gemini provider requests through the OpenAI-compatible shim', async () => {
