@@ -206,6 +206,17 @@ function hasGroqApiHost(baseUrl: string | undefined): boolean {
   }
 }
 
+function hasCerebrasApiHost(baseUrl: string | undefined): boolean {
+  if (!baseUrl) return false
+
+  try {
+    const host = new URL(baseUrl).hostname.toLowerCase()
+    return host === 'api.cerebras.ai' || host.endsWith('.cerebras.ai')
+  } catch {
+    return false
+  }
+}
+
 function normalizeGroqReasoningEffort(
   model: string,
   effort: 'low' | 'medium' | 'high' | 'xhigh',
@@ -286,6 +297,12 @@ function redactUrlForDiagnostics(url: string): string {
   } catch {
     return redactSecretValueForDisplay(url, process.env as SecretValueSource) ?? url
   }
+}
+
+function redactUrlsInMessage(message: string): string {
+  return message.replace(/https?:\/\/\S+/g, match =>
+    redactUrlForDiagnostics(match),
+  )
 }
 
 function sleepMs(ms: number): Promise<void> {
@@ -1882,6 +1899,7 @@ class OpenAIShimMessages {
       (shimConfig.removeBodyFields ?? []).includes('store') ||
       isGeminiMode() ||
       hasGeminiApiHost(request.baseUrl) ||
+      hasCerebrasApiHost(request.baseUrl) ||
       isLocal
 
     if (
@@ -2213,7 +2231,7 @@ class OpenAIShimMessages {
       const redactedUrl = redactUrlForDiagnostics(requestUrl)
       const safeMessage =
         redactSecretValueForDisplay(
-          failure.message,
+          redactUrlsInMessage(failure.message),
           process.env as SecretValueSource,
         ) || 'Request failed'
 
