@@ -111,6 +111,7 @@ import { initializeVersionedPlugins } from './utils/plugins/installedPluginsMana
 import { getManagedPluginNames } from './utils/plugins/managedPlugins.js';
 import { getGlobExclusionsForPluginCache } from './utils/plugins/orphanedPluginFilter.js';
 import { getPluginSeedDirs } from './utils/plugins/pluginDirectories.js';
+import { createCombinedAbortSignal } from './utils/combinedAbortSignal.js';
 import { countFilesRoundedRg } from './utils/ripgrep.js';
 import { processSessionStartHooks, processSetupHooks } from './utils/sessionStart.js';
 import { cacheSessionTitle, getSessionIdFromLog, loadTranscriptFromFile, saveAgentSetting, saveMode, searchSessionsByCustomTitle, sessionIdExists } from './utils/sessionStorage.js';
@@ -384,7 +385,13 @@ export function startDeferredPrefetches() {
     if (isEnvTruthy(process.env.GAKR_CODE_USE_VERTEX) && !isEnvTruthy(process.env.GAKR_CODE_SKIP_VERTEX_AUTH)) {
         void prefetchGcpCredentialsIfSafe();
     }
-    void countFilesRoundedRg(getCwd(), AbortSignal.timeout(3000), []);
+    const { signal: countFilesSignal, cleanup: cleanupCountFilesSignal } =
+        createCombinedAbortSignal(undefined, {
+            timeoutMs: 3000,
+        });
+    void countFilesRoundedRg(getCwd(), countFilesSignal, []).finally(
+        cleanupCountFilesSignal,
+    );
     // Analytics and feature flag initialization
     void initializeAnalyticsGates();
     void prefetchOfficialMcpUrls();

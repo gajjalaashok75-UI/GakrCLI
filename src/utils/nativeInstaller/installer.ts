@@ -71,6 +71,8 @@ import {
   withLock,
 } from './pidLock.js'
 
+const LEGACY_CLAUDE_CODE_PACKAGE = '@anthropic-ai/claude-code'
+
 export const VERSION_RETENTION_COUNT = 2
 
 // 7 days in milliseconds - used for mtime-based lock stale timeout.
@@ -1662,9 +1664,9 @@ export async function cleanupNpmInstallations(): Promise<{
   const warnings: string[] = []
   let removed = 0
 
-  // Always attempt to remove @anthropic-ai/gakrcli-code
+  // Always attempt to remove the legacy Claude Code npm package too.
   const codePackageResult = await attemptNpmUninstall(
-    '@anthropic-ai/gakrcli-code',
+    LEGACY_CLAUDE_CODE_PACKAGE,
   )
   if (codePackageResult.success) {
     removed++
@@ -1676,7 +1678,10 @@ export async function cleanupNpmInstallations(): Promise<{
   }
 
   // Also attempt to remove MACRO.PACKAGE_URL if it's defined and different
-  if (MACRO.PACKAGE_URL && MACRO.PACKAGE_URL !== '@anthropic-ai/gakrcli-code') {
+  if (
+    MACRO.PACKAGE_URL &&
+    MACRO.PACKAGE_URL !== LEGACY_CLAUDE_CODE_PACKAGE
+  ) {
     const macroPackageResult = await attemptNpmUninstall(MACRO.PACKAGE_URL)
     if (macroPackageResult.success) {
       removed++

@@ -53,7 +53,10 @@ import { isFastModeEnabled } from './utils/fastMode.js'
 import { formatDuration, formatNumber } from './utils/format.js'
 import type { FpsMetrics } from './utils/fpsTracker.js'
 import { getCanonicalName } from './utils/model/model.js'
-import { getAPIProvider } from './utils/model/providers.js'
+import {
+  getAPIProvider,
+  isGithubNativeAnthropicMode,
+} from './utils/model/providers.js'
 import { calculateUSDCost } from './utils/modelCost.js'
 export {
   getTotalCostUSD as getTotalCost,
@@ -264,6 +267,14 @@ function round(number: number, precision: number): number {
   return Math.round(number * precision) / precision
 }
 
+// Env-gated verbose token usage log. `verbose` is the documented keyword, but
+// accepting common truthy values keeps it consistent with other GAKR_* flags.
+function shouldLogTokenUsageVerbose(): boolean {
+  const value = (process.env.GAKR_LOG_TOKEN_USAGE ?? '').trim().toLowerCase()
+  if (!value) return false
+  return value !== '0' && value !== 'false' && value !== 'off'
+}
+
 function addToTotalModelUsage(
   cost: number,
   usage: Usage,
@@ -320,11 +331,31 @@ export function addToTotalSessionCost(
   // Record cache metrics for this request
   const provider = getAPIProvider()
   const cacheProvider = resolveCacheProvider(provider, {
-    githubNativeAnthropic: false, // TODO: wire up actual detection
+    githubNativeAnthropic: isGithubNativeAnthropicMode(model),
     openAiBaseUrl: process.env.OPENAI_BASE_URL,
   })
-  const metrics = extractCacheMetrics(usage as unknown as Record<string, unknown>, cacheProvider)
+  const metrics = extractCacheMetrics(
+    usage as unknown as Record<string, unknown>,
+    cacheProvider,
+  )
   recordRequest(metrics, model)
+
+  if (shouldLogTokenUsageVerbose()) {
+    process.stderr.write(
+      JSON.stringify({
+        tag: 'gakrcli.tokenUsage',
+        model,
+        provider: cacheProvider,
+        input_tokens: usage.input_tokens,
+        output_tokens: usage.output_tokens,
+        cache_read_input_tokens: usage.cache_read_input_tokens ?? 0,
+        cache_creation_input_tokens: usage.cache_creation_input_tokens ?? 0,
+        cache_supported: metrics.supported,
+        cache_hit_rate: metrics.hitRate,
+        cost_usd: cost,
+      }) + '\n',
+    )
+  }
 
   let totalCost = cost
   for (const advisorUsage of getAdvisorUsage(usage)) {

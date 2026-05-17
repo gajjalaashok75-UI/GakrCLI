@@ -104,6 +104,44 @@ describe('addToTotalSessionCost → cacheStatsTracker wiring', () => {
     // cache on a cacheable provider is a legitimate "no-hit" signal.
     expect(turn.hitRate).toBe(0)
   })
+
+  test('logs structured token usage when enabled', () => {
+    const originalValue = process.env.GAKR_LOG_TOKEN_USAGE
+    const originalWrite = process.stderr.write
+    let stderr = ''
+    process.env.GAKR_LOG_TOKEN_USAGE = 'verbose'
+    process.stderr.write = ((chunk: unknown) => {
+      stderr += String(chunk)
+      return true
+    }) as typeof process.stderr.write
+
+    try {
+      addToTotalSessionCost(
+        0.01,
+        anthropicUsage({
+          input: 200,
+          output: 50,
+          cacheRead: 800,
+          cacheCreation: 100,
+        }),
+        'claude-sonnet-4',
+      )
+    } finally {
+      process.stderr.write = originalWrite
+      if (originalValue === undefined) {
+        delete process.env.GAKR_LOG_TOKEN_USAGE
+      } else {
+        process.env.GAKR_LOG_TOKEN_USAGE = originalValue
+      }
+    }
+
+    const logged = JSON.parse(stderr.trim()) as Record<string, unknown>
+    expect(logged.tag).toBe('gakrcli.tokenUsage')
+    expect(logged.model).toBe('claude-sonnet-4')
+    expect(logged.input_tokens).toBe(200)
+    expect(logged.cache_read_input_tokens).toBe(800)
+    expect(logged.cache_supported).toBe(true)
+  })
 })
 
 describe('resetCostState wrapper also clears cache tracker', () => {

@@ -70,6 +70,8 @@ export type DiagnosticInfo = {
   }
 }
 
+const LEGACY_CLAUDE_CODE_PACKAGE = '@anthropic-ai/claude-code'
+
 function getNormalizedPaths(): [invokedPath: string, execPath: string] {
   let invokedPath = process.argv[1] || ''
   let execPath = process.execPath || process.argv[0] || ''
@@ -215,8 +217,11 @@ async function detectMultipleInstallations(): Promise<
   }
 
   // Check for global npm installation
-  const packagesToCheck = ['@anthropic-ai/gakrcli-code']
-  if (MACRO.PACKAGE_URL && MACRO.PACKAGE_URL !== '@anthropic-ai/gakrcli-code') {
+  const packagesToCheck = [LEGACY_CLAUDE_CODE_PACKAGE]
+  if (
+    MACRO.PACKAGE_URL &&
+    MACRO.PACKAGE_URL !== LEGACY_CLAUDE_CODE_PACKAGE
+  ) {
     packagesToCheck.push(MACRO.PACKAGE_URL)
   }
   const npmResult = await execFileNoThrow('npm', [
@@ -536,10 +541,10 @@ export async function getDoctorDiagnostic(): Promise<DiagnosticInfo> {
 
     for (const install of npmInstalls) {
       if (install.type === 'npm-global') {
-        let uninstallCmd = 'npm -g uninstall @anthropic-ai/gakrcli-code'
+        let uninstallCmd = `npm -g uninstall ${LEGACY_CLAUDE_CODE_PACKAGE}`
         if (
           MACRO.PACKAGE_URL &&
-          MACRO.PACKAGE_URL !== '@anthropic-ai/gakrcli-code'
+          MACRO.PACKAGE_URL !== LEGACY_CLAUDE_CODE_PACKAGE
         ) {
           uninstallCmd += ` && npm -g uninstall ${MACRO.PACKAGE_URL}`
         }

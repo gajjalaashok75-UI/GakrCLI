@@ -50,6 +50,7 @@ test('install command displays gakrcli.exe path on Windows', async () => {
 
 test('cleanupNpmInstallations removes both gakrcli and legacy claude local install dirs', async () => {
   const removedPaths: string[] = []
+  const uninstalledPackages: string[] = []
   ;(globalThis as Record<string, unknown>).MACRO = {
     PACKAGE_URL: '@gakr-gakr/gakrcli',
   }
@@ -62,10 +63,13 @@ test('cleanupNpmInstallations removes both gakrcli and legacy claude local insta
   }))
 
   mock.module('./execFileNoThrow.js', () => ({
-    execFileNoThrowWithCwd: async () => ({
-      code: 1,
-      stderr: 'npm ERR! code E404',
-    }),
+    execFileNoThrowWithCwd: async (_cmd: string, args: string[]) => {
+      uninstalledPackages.push(args[2] ?? '')
+      return {
+        code: 1,
+        stderr: 'npm ERR! code E404',
+      }
+    },
   }))
 
   mock.module('./envUtils.js', () => ({
@@ -78,4 +82,8 @@ test('cleanupNpmInstallations removes both gakrcli and legacy claude local insta
 
   expect(removedPaths).toContain(join(homedir(), '.gakrcli', 'local'))
   expect(removedPaths).toContain(join(homedir(), '.claude', 'local'))
+  expect(uninstalledPackages).toEqual([
+    '@anthropic-ai/claude-code',
+    '@gakr-gakr/gakrcli',
+  ])
 })

@@ -316,11 +316,7 @@ export async function update() {
     process.stderr.write('Try:\n')
     process.stderr.write('  • Check your internet connection\n')
     process.stderr.write('  • Run with --debug flag for more details\n')
-    const packageName =
-      MACRO.PACKAGE_URL ||
-      (process.env.USER_TYPE === 'ant'
-        ? '@anthropic-ai/gakrcli-cli'
-        : '@anthropic-ai/gakrcli-code')
+    const packageName = MACRO.PACKAGE_URL || '@gakr-gakr/gakrcli'
     process.stderr.write(
       `  • Manually check: npm view ${packageName} version\n`,
     )
