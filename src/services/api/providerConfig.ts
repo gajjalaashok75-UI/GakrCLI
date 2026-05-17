@@ -38,6 +38,36 @@ const GITHUB_COPILOT_MODEL_ALIASES: Record<string, string> = {
   'claude-haiku-4-5': 'claude-haiku-4.5',
 }
 const warnedUndefinedEnvNames = new Set<string>()
+
+function normalizeGitlawbOpengatewayBaseUrl(
+  baseUrl: string | undefined,
+): string | undefined {
+  if (!baseUrl) return undefined
+
+  try {
+    const parsed = new URL(baseUrl)
+    const hostname = parsed.hostname.toLowerCase()
+    if (
+      hostname !== 'opengateway.gitlawb.com' &&
+      hostname !== 'opengateway.fly.dev'
+    ) {
+      return baseUrl
+    }
+
+    const path = parsed.pathname.replace(/\/+$/, '').toLowerCase()
+    if (path === '/v1/xiaomi-mimo' || path === '/v1/gmi-cloud') {
+      parsed.pathname = '/v1'
+      parsed.search = ''
+      parsed.hash = ''
+      return parsed.toString().replace(/\/+$/, '')
+    }
+  } catch {
+    return baseUrl
+  }
+
+  return baseUrl
+}
+
 const CODEX_ALIAS_MODELS: Record<
   string,
   {
@@ -695,10 +725,11 @@ export function resolveProviderRequest(options?: {
   const isCodexAliasModel =
     isOpenAICodexShortcutAlias(requestedModel) || requestedMatchesEnvCodexShortcut
   const hasUserSetBaseUrl = rawBaseUrl && rawBaseUrl !== DEFAULT_OPENAI_BASE_URL
-  const finalBaseUrl =
+  const finalBaseUrlRaw =
     !isGithubMode && isCodexAliasModel && !hasUserSetBaseUrl
       ? DEFAULT_CODEX_BASE_URL
       : rawBaseUrl
+  const finalBaseUrl = normalizeGitlawbOpengatewayBaseUrl(finalBaseUrlRaw)
 
   const githubEndpointType = isGithubMode
     ? getGithubEndpointType(rawBaseUrl)

@@ -44,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Gemini Tool Signatures**: Replayed real Gemini `thought_signature` metadata by model or base URL and preserved signatures from streaming and non-streaming OpenAI-compatible responses.
 - **OpenAI Shim Stream Resilience**: Converted Gemini raw tool-call text into tool-use blocks, surfaced structured in-stream errors, and annotated length-truncated streams.
 - **GitHub Native Claude Mode**: Routed GitHub Claude-family models through Anthropic-native requests so prompt caching and `cache_control` blocks remain available.
+- **Opengateway Smart Route**: Moved Gitlawb Opengateway defaults to the shared `/v1` endpoint, added the Gemini Flash Lite partner model, and normalized older hosted route URLs.
 
 ## [0.5.2] - 2026-05-16
 

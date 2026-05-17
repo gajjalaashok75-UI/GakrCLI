@@ -303,8 +303,41 @@ describe('detectBestProvider — orchestrator', () => {
       hasCodexAuth: () => false,
     })
     expect(result?.kind).toBe('gitlawb-opengateway')
-    expect(result?.baseUrl).toBe('https://opengateway.gitlawb.com/v1/xiaomi-mimo')
+    expect(result?.baseUrl).toBe('https://opengateway.gitlawb.com/v1')
     expect(result?.model).toBe('mimo-v2.5-pro')
+  })
+
+  test('OPENGATEWAY_BASE_URL env overrides the opengateway fallback base URL', async () => {
+    const fetchImpl = (async () => {
+      throw new Error('nothing reachable')
+    }) as typeof fetch
+
+    const result = await detectBestProvider({
+      env: { OPENGATEWAY_BASE_URL: 'http://localhost:8181/v1/xiaomi-mimo' },
+      fetchImpl,
+      timeoutMs: 100,
+      hasCodexAuth: () => false,
+    })
+    expect(result?.kind).toBe('gitlawb-opengateway')
+    expect(result?.baseUrl).toBe('http://localhost:8181/v1/xiaomi-mimo')
+  })
+
+  test('OPENGATEWAY_BASE_URL normalizes hosted legacy route URLs', async () => {
+    const fetchImpl = (async () => {
+      throw new Error('nothing reachable')
+    }) as typeof fetch
+
+    const result = await detectBestProvider({
+      env: {
+        OPENGATEWAY_BASE_URL:
+          'https://opengateway.gitlawb.com/v1/xiaomi-mimo?legacy=1#old',
+      },
+      fetchImpl,
+      timeoutMs: 100,
+      hasCodexAuth: () => false,
+    })
+    expect(result?.kind).toBe('gitlawb-opengateway')
+    expect(result?.baseUrl).toBe('https://opengateway.gitlawb.com/v1')
   })
 
   test('Opengateway fallback can be disabled', async () => {
