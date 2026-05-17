@@ -7,6 +7,7 @@ export function getDistImportSpecifier(baseDir) {
     return `file:///${distPath.replace(/\\/g, '/')}`
   }
 
-  const distPath = join(baseDir, '..', 'dist', 'cli.mjs')
+  const joinImpl = join
+  const distPath = joinImpl(baseDir, '..', 'dist', 'cli.mjs')
   return pathToFileURL(distPath).href
 }
