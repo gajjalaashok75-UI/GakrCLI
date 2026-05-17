@@ -163,7 +163,7 @@ export default defineGateway({
     discoveryRefreshMode: 'on-open',
     allowManualRefresh: true,
     models: [
-      { id: 'github-copilot-default', apiName: 'github:copilot', label: 'GitHub Copilot Default', default: true },
+      { id: 'github-copilot-default', apiName: 'github:copilot', label: 'GitHub Copilot Default' },
     ],
   },
   usage: { supported: false },

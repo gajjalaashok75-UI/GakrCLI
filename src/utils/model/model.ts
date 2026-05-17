@@ -200,9 +200,9 @@ export function getDefaultOpusModel(): ModelName {
   if (getAPIProvider() === 'xiaomi-mimo') {
     return process.env.OPENAI_MODEL || DEFAULT_XIAOMI_MIMO_MODEL
   }
-  // xAI provider: use grok-4 as the most capable model
+  // xAI provider: use the flagship Grok model
   if (getAPIProvider() === 'xai') {
-    return process.env.OPENAI_MODEL || 'grok-4'
+    return process.env.OPENAI_MODEL || 'grok-4.3'
   }
   // 3P providers (Bedrock, Vertex, Foundry) — kept as a separate branch
   // even when values match, since 3P availability lags firstParty and
@@ -246,9 +246,9 @@ export function getDefaultSonnetModel(): ModelName {
   if (getAPIProvider() === 'xiaomi-mimo') {
     return process.env.OPENAI_MODEL || DEFAULT_XIAOMI_MIMO_MODEL
   }
-  // xAI provider: use grok-4 as the default model
+  // xAI provider: use the flagship Grok model
   if (getAPIProvider() === 'xai') {
-    return process.env.OPENAI_MODEL || 'grok-4'
+    return process.env.OPENAI_MODEL || 'grok-4.3'
   }
   // Default to Sonnet 4.5 for 3P since they may not have 4.6 yet
   if (getAPIProvider() !== 'firstParty') {
@@ -354,9 +354,9 @@ export function getDefaultMainLoopModelSetting(): ModelName | ModelAlias {
   if (getAPIProvider() === 'codex') {
     return process.env.OPENAI_MODEL || 'gpt-5.4'
   }
-  // xAI provider: always use the configured xAI model (default grok-4)
+  // xAI provider: always use the configured xAI model (default grok-4.3)
   if (getAPIProvider() === 'xai') {
-    return process.env.OPENAI_MODEL || 'grok-4'
+    return process.env.OPENAI_MODEL || 'grok-4.3'
   }
   // Xiaomi MiMo provider: always use the configured OpenAI-compatible model
   if (getAPIProvider() === 'xiaomi-mimo') {
