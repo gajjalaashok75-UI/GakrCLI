@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Provider Profile Goal Env**: Corrected startup and session profile loading to honor `GAKR_PROFILE_GOAL` for default model selection.
 - **Active Provider Startup Env**: Reapplied active `/provider` profiles after settings env merges and prevented stale legacy profile files from overriding concrete configured provider startup env.
 - **Profile File Cleanup**: Added explicit config-directory profile file handling so user config profiles and legacy workspace fallbacks can be cleaned up together without mutating global env.
+- **External Validation Noise**: Marked optional telemetry, cloud SDK, and SDK-only externals as intentional so smoke builds no longer warn about dynamic runtime packages missing from `package.json`.
 
 ## [0.5.2] - 2026-05-16
 
