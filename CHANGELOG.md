@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Build Feature Flags**: Switched build-time feature flag replacement to Bun load transforms so smoke/build no longer rewrites source files during bundling.
 - **Network Diagnostics Cleanup**: Shared URL query-secret redaction across diagnostics paths, delayed MCP OAuth timeout cleanup until error-body normalization completes, and used the product display name in Web Fetch permission prompts.
 - **SDK Test Isolation**: Added shared mutation locks and local TypeScript compiler execution across SDK tests that mutate env, session state, tool schema caches, or package-consumer fixtures.
+- **Expired OAuth Hints**: Pointed expired OAuth-token 401s toward `/onboard-github` or `/login` re-authentication instead of generic API-key troubleshooting.
 
 ## [0.5.2] - 2026-05-16
 
