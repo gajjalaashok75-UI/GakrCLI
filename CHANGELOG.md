@@ -46,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **GitHub Native Claude Mode**: Routed GitHub Claude-family models through Anthropic-native requests so prompt caching and `cache_control` blocks remain available.
 - **Opengateway Smart Route**: Moved Gitlawb Opengateway defaults to the shared `/v1` endpoint, added the Gemini Flash Lite partner model, and normalized older hosted route URLs.
 - **OpenAI Shim Compatibility**: Redacted credentials from transport-error URLs and stripped unsupported `store` fields for Cerebras chat-completion requests.
+- **VS Code Extension Packaging**: Added explicit activation events, packaged-file allowlists, and isolated extension module mocks during tests.
 
 ## [0.5.2] - 2026-05-16
 
