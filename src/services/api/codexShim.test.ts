@@ -3,6 +3,10 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../../test/sharedMutationLock.js'
+import {
   codexStreamToAnthropic,
   convertAnthropicMessagesToResponsesInput,
   convertCodexResponseToAnthropicMessage,
@@ -19,22 +23,30 @@ const originalEnv = {
   OPENAI_MODEL: process.env.OPENAI_MODEL,
 }
 
+beforeEach(async () => {
+  await acquireSharedMutationLock('codexShim.test.ts')
+})
+
 afterEach(() => {
-  if (originalEnv.OPENAI_BASE_URL === undefined) delete process.env.OPENAI_BASE_URL
-  else process.env.OPENAI_BASE_URL = originalEnv.OPENAI_BASE_URL
+  try {
+    if (originalEnv.OPENAI_BASE_URL === undefined) delete process.env.OPENAI_BASE_URL
+    else process.env.OPENAI_BASE_URL = originalEnv.OPENAI_BASE_URL
 
-  if (originalEnv.OPENAI_API_BASE === undefined) delete process.env.OPENAI_API_BASE
-  else process.env.OPENAI_API_BASE = originalEnv.OPENAI_API_BASE
+    if (originalEnv.OPENAI_API_BASE === undefined) delete process.env.OPENAI_API_BASE
+    else process.env.OPENAI_API_BASE = originalEnv.OPENAI_API_BASE
 
-  if (originalEnv.GAKR_CODE_USE_GITHUB === undefined) delete process.env.GAKR_CODE_USE_GITHUB
-  else process.env.GAKR_CODE_USE_GITHUB = originalEnv.GAKR_CODE_USE_GITHUB
+    if (originalEnv.GAKR_CODE_USE_GITHUB === undefined) delete process.env.GAKR_CODE_USE_GITHUB
+    else process.env.GAKR_CODE_USE_GITHUB = originalEnv.GAKR_CODE_USE_GITHUB
 
-  if (originalEnv.OPENAI_MODEL === undefined) delete process.env.OPENAI_MODEL
-  else process.env.OPENAI_MODEL = originalEnv.OPENAI_MODEL
+    if (originalEnv.OPENAI_MODEL === undefined) delete process.env.OPENAI_MODEL
+    else process.env.OPENAI_MODEL = originalEnv.OPENAI_MODEL
 
-  while (tempDirs.length > 0) {
-    const dir = tempDirs.pop()
-    if (dir) rmSync(dir, { recursive: true, force: true })
+    while (tempDirs.length > 0) {
+      const dir = tempDirs.pop()
+      if (dir) rmSync(dir, { recursive: true, force: true })
+    }
+  } finally {
+    releaseSharedMutationLock()
   }
 })
 
@@ -478,6 +490,139 @@ describe('Codex request translation', () => {
         },
         strict: true,
       },
+    ])
+  })
+
+  test('defaults untyped MCP tool properties to string for Codex strict mode', () => {
+    const tools = convertToolsToResponsesTools([
+      {
+        name: 'mcp__ruflo__config_set',
+        description: 'Set a Ruflo config value',
+        input_schema: {
+          type: 'object',
+          properties: {
+            key: { type: 'string' },
+            value: { description: 'Any JSON value' },
+          },
+          required: ['key', 'value'],
+        },
+      },
+    ])
+
+    const parameters = tools[0].parameters as {
+      properties: Record<string, Record<string, unknown>>
+    }
+    expect(parameters.properties.value.type).toBe('string')
+    expect(parameters.properties.value.description).toBe('Any JSON value')
+  })
+
+  test('drops orphan required keys when an MCP schema has no properties', () => {
+    const tools = convertToolsToResponsesTools([
+      {
+        name: 'mcp__ruflo__daa_workflow_create',
+        description: 'Create a Ruflo DAA workflow',
+        input_schema: {
+          type: 'object',
+          required: ['steps'],
+        },
+      },
+    ])
+
+    expect(tools[0].parameters).toEqual({
+      type: 'object',
+      properties: {},
+      required: [],
+      additionalProperties: false,
+    })
+  })
+
+  test('infers object type for untyped schemas with nested properties', () => {
+    const tools = convertToolsToResponsesTools([
+      {
+        name: 'mcp__nest__call',
+        input_schema: {
+          type: 'object',
+          properties: {
+            payload: {
+              properties: { name: { type: 'string' } },
+            },
+          },
+        },
+      },
+    ])
+
+    const parameters = tools[0].parameters as {
+      properties: Record<string, Record<string, unknown>>
+    }
+    expect(parameters.properties.payload.type).toBe('object')
+  })
+
+  test('infers array type for untyped schemas with items', () => {
+    const tools = convertToolsToResponsesTools([
+      {
+        name: 'mcp__list__call',
+        input_schema: {
+          type: 'object',
+          properties: {
+            tags: { items: { type: 'string' } },
+          },
+        },
+      },
+    ])
+
+    const parameters = tools[0].parameters as {
+      properties: Record<string, Record<string, unknown>>
+    }
+    expect(parameters.properties.tags.type).toBe('array')
+  })
+
+  test('infers type from enum values when type is missing', () => {
+    const tools = convertToolsToResponsesTools([
+      {
+        name: 'mcp__enum__call',
+        input_schema: {
+          type: 'object',
+          properties: {
+            mode: { enum: ['fast', 'slow'] },
+            level: { enum: [1, 2, 3] },
+            ratio: { enum: [0.5, 1.5] },
+            flag: { enum: [true, false] },
+          },
+        },
+      },
+    ])
+
+    const parameters = tools[0].parameters as {
+      properties: Record<string, Record<string, unknown>>
+    }
+    expect(parameters.properties.mode.type).toBe('string')
+    expect(parameters.properties.level.type).toBe('integer')
+    expect(parameters.properties.ratio.type).toBe('number')
+    expect(parameters.properties.flag.type).toBe('boolean')
+  })
+
+  test('leaves combinator-only schemas untyped to preserve alternatives', () => {
+    const tools = convertToolsToResponsesTools([
+      {
+        name: 'mcp__combo__call',
+        input_schema: {
+          type: 'object',
+          properties: {
+            either: {
+              anyOf: [{ type: 'string' }, { type: 'number' }],
+            },
+          },
+        },
+      },
+    ])
+
+    const parameters = tools[0].parameters as {
+      properties: Record<string, Record<string, unknown>>
+    }
+    expect(parameters.properties.either.type).toBeUndefined()
+    expect(parameters.properties.either.anyOf).toEqual([
+      { type: 'string' },
+      { type: 'number' },
     ])
   })
 
