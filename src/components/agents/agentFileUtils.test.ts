@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'bun:test'
-import { formatAgentAsMarkdown } from './agentFileUtils.js'
+import { join } from 'path'
+import type { AgentDefinition } from '../../tools/AgentTool/loadAgentsDir.js'
+import {
+  formatAgentAsMarkdown,
+  getActualAgentFilePath,
+} from './agentFileUtils.js'
 
 describe('formatAgentAsMarkdown', () => {
   it('formats a normal string whenToUse', () => {
@@ -42,5 +47,19 @@ describe('formatAgentAsMarkdown', () => {
       'sp',
     )
     expect(md).toContain('description: ""')
+  })
+})
+
+describe('getActualAgentFilePath', () => {
+  it('uses the loaded baseDir for existing agent files', () => {
+    const baseDir = join('tmp', 'loaded-agents')
+    const filePath = getActualAgentFilePath({
+      source: 'projectSettings',
+      agentType: 'reviewer',
+      filename: 'disk-reviewer',
+      baseDir,
+    } as unknown as AgentDefinition)
+
+    expect(filePath).toBe(join(baseDir, 'disk-reviewer.md'))
   })
 })
