@@ -211,6 +211,25 @@ test('FIX: with compression on Copilot gpt-4o (tier 5/10/rest), 30 turns shrinks
   expect(payloadSize).toBeLessThan(60_000)
 })
 
+test('local fast path skips tool history compression', async () => {
+  process.env.OPENAI_BASE_URL = 'http://localhost:8000/v1'
+  mockState.enabled = true
+  mockState.effectiveWindow = 100_000
+  const messages = buildLongConversation(30, 5_000)
+
+  const body = await captureRequestBody(messages, 'local-model')
+  const toolMessages = getToolMessages(body)
+  const payloadSize = JSON.stringify(body).length
+
+  expect(toolMessages.length).toBe(30)
+  for (const message of toolMessages) {
+    expect(message.content.length).toBeGreaterThanOrEqual(5_000)
+    expect(message.content).not.toContain('[â€¦truncated')
+    expect(message.content).not.toContain('chars omitted')
+  }
+  expect(payloadSize).toBeGreaterThan(150_000)
+})
+
 // ============================================================================
 // FIX: large-context model gets generous tiers — compression effectively inert
 // ============================================================================
