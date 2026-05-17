@@ -6,6 +6,20 @@ import { tmpdir } from 'os'
 import { getProjectDir } from '../../src/utils/sessionStoragePortable.js'
 import { query } from '../../src/entrypoints/sdk/index.js'
 import { unstable_v2_resumeSession } from '../../src/entrypoints/sdk/index.js'
+import {
+  getCwdState,
+  getOriginalCwd,
+  getSessionId,
+  getSessionProjectDir,
+  setCwdState,
+  setOriginalCwd,
+  switchSession,
+} from '../../src/bootstrap/state.js'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../../src/test/sharedMutationLock.js'
+import type { SessionId } from '../../src/entrypoints/agentSdkTypes.js'
 
 /**
  * Regression test for compact preserved segment handling in SDK resume.
@@ -140,25 +154,41 @@ function createCompactTranscriptWithPreservedSegment(
 
 let tempDirs: string[] = []
 let originalConfigDir: string | undefined
+let originalSessionId: SessionId
+let originalSessionProjectDir: string | null
+let originalCwd: string
+let originalOriginalCwd: string
 
-beforeEach(() => {
+beforeEach(async () => {
+  await acquireSharedMutationLock('tests/sdk/sdk-preserved-segment.test.ts')
   originalConfigDir = process.env.GAKR_CONFIG_DIR
+  originalSessionId = getSessionId()
+  originalSessionProjectDir = getSessionProjectDir()
+  originalCwd = getCwdState()
+  originalOriginalCwd = getOriginalCwd()
   const configDir = join(tmpdir(), `sdk-preserved-config-${randomUUID()}`)
   process.env.GAKR_CONFIG_DIR = configDir
   tempDirs.push(configDir)
 })
 
 afterEach(() => {
-  if (originalConfigDir === undefined) {
-    delete process.env.GAKR_CONFIG_DIR
-  } else {
-    process.env.GAKR_CONFIG_DIR = originalConfigDir
-  }
+  try {
+    switchSession(originalSessionId, originalSessionProjectDir)
+    setCwdState(originalCwd)
+    setOriginalCwd(originalOriginalCwd)
+    if (originalConfigDir === undefined) {
+      delete process.env.GAKR_CONFIG_DIR
+    } else {
+      process.env.GAKR_CONFIG_DIR = originalConfigDir
+    }
 
-  for (const dir of tempDirs) {
-    rmSync(dir, { recursive: true, force: true })
+    for (const dir of tempDirs) {
+      rmSync(dir, { recursive: true, force: true })
+    }
+    tempDirs = []
+  } finally {
+    releaseSharedMutationLock()
   }
-  tempDirs = []
 })
 
 describe('Compact preserved segment regression', () => {

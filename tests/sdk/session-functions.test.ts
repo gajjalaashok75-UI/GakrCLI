@@ -14,27 +14,36 @@ import {
 } from '../../src/entrypoints/sdk/index.js'
 import { readJSONLFile } from '../../src/utils/json.js'
 import { getProjectDir } from '../../src/utils/sessionStoragePortable.js'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../../src/test/sharedMutationLock.js'
 
 let testConfigDir: string | undefined
 let previousConfigDir: string | undefined
 
-beforeEach(() => {
+beforeEach(async () => {
+  await acquireSharedMutationLock('tests/sdk/session-functions.test.ts')
   previousConfigDir = process.env.GAKR_CONFIG_DIR
   testConfigDir = join(tmpdir(), `sdk-session-config-${process.pid}-${randomUUID()}`)
   process.env.GAKR_CONFIG_DIR = testConfigDir
 })
 
 afterEach(() => {
-  if (previousConfigDir === undefined) {
-    delete process.env.GAKR_CONFIG_DIR
-  } else {
-    process.env.GAKR_CONFIG_DIR = previousConfigDir
-  }
+  try {
+    if (previousConfigDir === undefined) {
+      delete process.env.GAKR_CONFIG_DIR
+    } else {
+      process.env.GAKR_CONFIG_DIR = previousConfigDir
+    }
 
-  if (testConfigDir) {
-    rmSync(testConfigDir, { recursive: true, force: true })
+    if (testConfigDir) {
+      rmSync(testConfigDir, { recursive: true, force: true })
+    }
+    testConfigDir = undefined
+  } finally {
+    releaseSharedMutationLock()
   }
-  testConfigDir = undefined
 })
 
 describe('SDK session functions', () => {
