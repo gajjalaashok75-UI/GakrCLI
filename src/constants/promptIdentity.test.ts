@@ -22,6 +22,8 @@ let EXPLORE_AGENT:
 let PLAN_AGENT: typeof import('../tools/AgentTool/built-in/planAgent.js').PLAN_AGENT
 let STATUSLINE_SETUP_AGENT:
   typeof import('../tools/AgentTool/built-in/statuslineSetup.js').STATUSLINE_SETUP_AGENT
+let getCoordinatorSystemPrompt:
+  typeof import('../coordinator/coordinatorMode.js').getCoordinatorSystemPrompt
 
 beforeAll(async () => {
   await acquireSharedMutationLock('constants/promptIdentity.test.ts')
@@ -53,6 +55,9 @@ beforeAll(async () => {
   ;({ PLAN_AGENT } = await import('../tools/AgentTool/built-in/planAgent.js'))
   ;({ STATUSLINE_SETUP_AGENT } = await import(
     '../tools/AgentTool/built-in/statuslineSetup.js'
+  ))
+  ;({ getCoordinatorSystemPrompt } = await import(
+    '../coordinator/coordinatorMode.js'
   ))
 })
 
@@ -159,4 +164,12 @@ test('built-in agent prompts describe GakrCLI instead of Claude Code', () => {
   expect(guidePrompt).toContain('**GakrCLI** (the CLI tool)')
   expect(guidePrompt).not.toContain('You are the Claude guide agent.')
   expect(guidePrompt).not.toContain('**Claude Code** (the CLI tool)')
+})
+
+test('coordinator prompt describes GakrCLI instead of Claude Code', () => {
+  const prompt = getCoordinatorSystemPrompt()
+
+  expect(prompt).toContain('You are GakrCLI')
+  expect(prompt).not.toContain('Claude Code')
+  expect(prompt).not.toContain('anthropics/claude-code')
 })
