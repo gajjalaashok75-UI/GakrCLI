@@ -2,9 +2,23 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  mock,
+  setDefaultTimeout,
+  test,
+} from 'bun:test'
 
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../test/sharedMutationLock.js'
 import type { ProviderProfile } from './config.js'
+
+setDefaultTimeout(60_000)
 
 async function importFreshProvidersModule() {
   return import(`./model/providers.ts?ts=${Date.now()}-${Math.random()}`)
@@ -92,7 +106,8 @@ function saveMockGlobalConfig(
   mockConfigState = updater(mockConfigState)
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  await acquireSharedMutationLock('utils/providerProfiles.test.ts')
   for (const key of RESTORED_KEYS) {
     delete process.env[key]
   }
@@ -101,20 +116,24 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  for (const key of RESTORED_KEYS) {
-    if (originalEnv[key] === undefined) {
-      delete process.env[key]
-    } else {
-      process.env[key] = originalEnv[key]
+  try {
+    for (const key of RESTORED_KEYS) {
+      if (originalEnv[key] === undefined) {
+        delete process.env[key]
+      } else {
+        process.env[key] = originalEnv[key]
+      }
     }
-  }
 
-  mock.restore()
-  mockConfigState = createMockConfigState()
-  process.chdir(originalCwd)
-  if (testConfigDir) {
-    rmSync(testConfigDir, { recursive: true, force: true })
-    testConfigDir = null
+    mock.restore()
+    mockConfigState = createMockConfigState()
+    process.chdir(originalCwd)
+    if (testConfigDir) {
+      rmSync(testConfigDir, { recursive: true, force: true })
+      testConfigDir = null
+    }
+  } finally {
+    releaseSharedMutationLock()
   }
 })
 
@@ -1354,6 +1373,47 @@ describe('setActiveProviderProfile', () => {
       )
     } finally {
       rmSync(configDir, { recursive: true, force: true })
+    }
+  })
+
+  test('persists startup profile to an explicit config directory', async () => {
+    const envConfigDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-env-config-'))
+    const explicitConfigDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-explicit-config-'))
+    process.env.GAKR_CONFIG_DIR = envConfigDir
+
+    try {
+      const { setActiveProviderProfile } =
+        await importFreshProviderProfileModules()
+      const openaiProfile = buildProfile({
+        id: 'openai_prof',
+        name: 'OpenAI Provider',
+        provider: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-4o',
+      })
+
+      saveMockGlobalConfig(current => ({
+        ...current,
+        providerProfiles: [openaiProfile],
+      }))
+
+      const result = setActiveProviderProfile('openai_prof', {
+        configDir: explicitConfigDir,
+      })
+      const persisted = JSON.parse(
+        readFileSync(join(explicitConfigDir, '.gakrcli-profile.json'), 'utf8'),
+      )
+
+      expect(result?.id).toBe('openai_prof')
+      expect(existsSync(join(envConfigDir, '.gakrcli-profile.json'))).toBe(false)
+      expect(persisted.profile).toBe('openai')
+      expect(persisted.env).toEqual({
+        OPENAI_BASE_URL: 'https://api.openai.com/v1',
+        OPENAI_MODEL: 'gpt-4o',
+      })
+    } finally {
+      rmSync(envConfigDir, { recursive: true, force: true })
+      rmSync(explicitConfigDir, { recursive: true, force: true })
     }
   })
 

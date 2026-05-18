@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Runtime Dependency Metadata**: Declared the `cross-spawn` runtime dependency directly so Windows-safe process spawning is available from package installs.
 - **Provider Profile Goal Env**: Corrected startup and session profile loading to honor `GAKR_PROFILE_GOAL` for default model selection.
 - **Active Provider Startup Env**: Reapplied active `/provider` profiles after settings env merges and prevented stale legacy profile files from overriding concrete configured provider startup env.
+- **Provider Profile Startup Persistence**: Threaded explicit profile-file locations through active provider profile startup persistence and isolated provider profile tests that mutate process env.
 - **Profile File Cleanup**: Added explicit config-directory profile file handling so user config profiles and legacy workspace fallbacks can be cleaned up together without mutating global env.
 - **External Validation Noise**: Marked optional telemetry, cloud SDK, and SDK-only externals as intentional so smoke builds no longer warn about dynamic runtime packages missing from `package.json`.
 - **xAI Grok Defaults**: Updated xAI provider descriptors, runtime fallbacks, provider flags, and model metadata to use Grok 4.3 as the default while preserving explicit Grok 4 selections.
