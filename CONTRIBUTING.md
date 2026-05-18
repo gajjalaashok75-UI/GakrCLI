@@ -137,28 +137,7 @@ Good PRs usually include:
 
 ### PR Template
 
-```markdown
-## What Changed
-Brief description of the changes made.
-
-## Why
-Explanation of the motivation or problem being solved.
-
-## Impact
-- User impact: How this affects end users
-- Developer impact: How this affects contributors
-- Breaking changes: Any breaking changes (if applicable)
-
-## Testing
-- [ ] `bun run build`
-- [ ] `bun run typecheck`
-- [ ] `bun run smoke`
-- [ ] `bun test` (or specific test files)
-- [ ] Manual testing with [provider/feature]
-
-## Additional Notes
-Any additional context, limitations, or follow-up work needed.
-```
+GitHub pre-fills new PRs from [.github/pull_request_template.md](.github/pull_request_template.md). Use that structure and add extra context when a change affects provider behavior, security, terminal UI, or package/runtime setup.
 
 ## Code Style
 
