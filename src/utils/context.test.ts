@@ -1,4 +1,8 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../test/sharedMutationLock.js'
 
 import { getMaxOutputTokensForModel } from '../services/api/gakrcli.ts'
 import {
@@ -20,7 +24,8 @@ const originalEnv = {
   XAI_API_KEY: process.env.XAI_API_KEY,
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  await acquireSharedMutationLock('context.test.ts')
   delete process.env.GAKR_CODE_USE_OPENAI
   delete process.env.GAKR_CODE_MAX_OUTPUT_TOKENS
   delete process.env.GAKR_CODE_OPENAI_CONTEXT_WINDOWS
@@ -33,53 +38,57 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  if (originalEnv.GAKR_CODE_USE_OPENAI === undefined) {
-    delete process.env.GAKR_CODE_USE_OPENAI
-  } else {
-    process.env.GAKR_CODE_USE_OPENAI = originalEnv.GAKR_CODE_USE_OPENAI
-  }
-  if (originalEnv.GAKR_CODE_MAX_OUTPUT_TOKENS === undefined) {
-    delete process.env.GAKR_CODE_MAX_OUTPUT_TOKENS
-  } else {
-    process.env.GAKR_CODE_MAX_OUTPUT_TOKENS =
-      originalEnv.GAKR_CODE_MAX_OUTPUT_TOKENS
-  }
-  if (originalEnv.GAKR_CODE_OPENAI_CONTEXT_WINDOWS === undefined) {
-    delete process.env.GAKR_CODE_OPENAI_CONTEXT_WINDOWS
-  } else {
-    process.env.GAKR_CODE_OPENAI_CONTEXT_WINDOWS =
-      originalEnv.GAKR_CODE_OPENAI_CONTEXT_WINDOWS
-  }
-  if (originalEnv.GAKR_CODE_OPENAI_MAX_OUTPUT_TOKENS === undefined) {
-    delete process.env.GAKR_CODE_OPENAI_MAX_OUTPUT_TOKENS
-  } else {
-    process.env.GAKR_CODE_OPENAI_MAX_OUTPUT_TOKENS =
-      originalEnv.GAKR_CODE_OPENAI_MAX_OUTPUT_TOKENS
-  }
-  if (originalEnv.OPENAI_MODEL === undefined) {
-    delete process.env.OPENAI_MODEL
-  } else {
-    process.env.OPENAI_MODEL = originalEnv.OPENAI_MODEL
-  }
-  if (originalEnv.OPENAI_BASE_URL === undefined) {
-    delete process.env.OPENAI_BASE_URL
-  } else {
-    process.env.OPENAI_BASE_URL = originalEnv.OPENAI_BASE_URL
-  }
-  if (originalEnv.OPENAI_API_BASE === undefined) {
-    delete process.env.OPENAI_API_BASE
-  } else {
-    process.env.OPENAI_API_BASE = originalEnv.OPENAI_API_BASE
-  }
-  if (originalEnv.MINIMAX_API_KEY === undefined) {
-    delete process.env.MINIMAX_API_KEY
-  } else {
-    process.env.MINIMAX_API_KEY = originalEnv.MINIMAX_API_KEY
-  }
-  if (originalEnv.XAI_API_KEY === undefined) {
-    delete process.env.XAI_API_KEY
-  } else {
-    process.env.XAI_API_KEY = originalEnv.XAI_API_KEY
+  try {
+    if (originalEnv.GAKR_CODE_USE_OPENAI === undefined) {
+      delete process.env.GAKR_CODE_USE_OPENAI
+    } else {
+      process.env.GAKR_CODE_USE_OPENAI = originalEnv.GAKR_CODE_USE_OPENAI
+    }
+    if (originalEnv.GAKR_CODE_MAX_OUTPUT_TOKENS === undefined) {
+      delete process.env.GAKR_CODE_MAX_OUTPUT_TOKENS
+    } else {
+      process.env.GAKR_CODE_MAX_OUTPUT_TOKENS =
+        originalEnv.GAKR_CODE_MAX_OUTPUT_TOKENS
+    }
+    if (originalEnv.GAKR_CODE_OPENAI_CONTEXT_WINDOWS === undefined) {
+      delete process.env.GAKR_CODE_OPENAI_CONTEXT_WINDOWS
+    } else {
+      process.env.GAKR_CODE_OPENAI_CONTEXT_WINDOWS =
+        originalEnv.GAKR_CODE_OPENAI_CONTEXT_WINDOWS
+    }
+    if (originalEnv.GAKR_CODE_OPENAI_MAX_OUTPUT_TOKENS === undefined) {
+      delete process.env.GAKR_CODE_OPENAI_MAX_OUTPUT_TOKENS
+    } else {
+      process.env.GAKR_CODE_OPENAI_MAX_OUTPUT_TOKENS =
+        originalEnv.GAKR_CODE_OPENAI_MAX_OUTPUT_TOKENS
+    }
+    if (originalEnv.OPENAI_MODEL === undefined) {
+      delete process.env.OPENAI_MODEL
+    } else {
+      process.env.OPENAI_MODEL = originalEnv.OPENAI_MODEL
+    }
+    if (originalEnv.OPENAI_BASE_URL === undefined) {
+      delete process.env.OPENAI_BASE_URL
+    } else {
+      process.env.OPENAI_BASE_URL = originalEnv.OPENAI_BASE_URL
+    }
+    if (originalEnv.OPENAI_API_BASE === undefined) {
+      delete process.env.OPENAI_API_BASE
+    } else {
+      process.env.OPENAI_API_BASE = originalEnv.OPENAI_API_BASE
+    }
+    if (originalEnv.MINIMAX_API_KEY === undefined) {
+      delete process.env.MINIMAX_API_KEY
+    } else {
+      process.env.MINIMAX_API_KEY = originalEnv.MINIMAX_API_KEY
+    }
+    if (originalEnv.XAI_API_KEY === undefined) {
+      delete process.env.XAI_API_KEY
+    } else {
+      process.env.XAI_API_KEY = originalEnv.XAI_API_KEY
+    }
+  } finally {
+    releaseSharedMutationLock()
   }
 })
 
@@ -199,6 +208,14 @@ test('gpt-4o clamps oversized max output overrides to the provider limit', () =>
   expect(getMaxOutputTokensForModel('gpt-4o')).toBe(16_384)
 })
 
+test('gpt-5.5 uses conservative Codex-route context window', () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  delete process.env.GAKR_CODE_MAX_OUTPUT_TOKENS
+  delete process.env.OPENAI_MODEL
+
+  expect(getContextWindowForModel('gpt-5.5')).toBe(272_000)
+})
+
 test('gpt-5.4 family uses provider-specific context and output caps', () => {
   process.env.GAKR_CODE_USE_OPENAI = '1'
   delete process.env.GAKR_CODE_MAX_OUTPUT_TOKENS
@@ -285,6 +302,25 @@ test('unknown openai-compatible models use the 128k fallback window (not 8k, see
   delete process.env.OPENAI_MODEL
 
   expect(getContextWindowForModel('some-unknown-3p-model')).toBe(128_000)
+})
+
+test('prefixed Opengateway Gemini Flash Lite uses integration metadata', () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  delete process.env.GAKR_CODE_MAX_OUTPUT_TOKENS
+  delete process.env.OPENAI_MODEL
+
+  expect(getContextWindowForModel('google/gemini-3.1-flash-lite-preview')).toBe(
+    1_048_576,
+  )
+  expect(
+    getModelMaxOutputTokens('google/gemini-3.1-flash-lite-preview'),
+  ).toEqual({
+    default: 65_536,
+    upperLimit: 65_536,
+  })
+  expect(
+    getMaxOutputTokensForModel('google/gemini-3.1-flash-lite-preview'),
+  ).toBe(65_536)
 })
 
 test('OpenAI-compatible custom model limits honor documented env overrides', () => {

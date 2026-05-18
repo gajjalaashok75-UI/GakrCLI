@@ -29,7 +29,10 @@ function gptModel(
 }
 
 export default [
-  gptModel('gpt-5.5', 'GPT-5.5', 1_050_000, 128_000),
+  // gpt-5.5 is primarily routed through the Codex transport, whose effective
+  // input cap is lower than the public API descriptor. Keep compaction
+  // conservative so long turns compact before the transport rejects them.
+  gptModel('gpt-5.5', 'GPT-5.5', 272_000, 128_000),
   gptModel('gpt-5.5-mini', 'GPT-5.5 Mini', 400_000, 128_000),
   gptModel('gpt-5.5-nano', 'GPT-5.5 Nano', 400_000, 128_000),
   gptModel('gpt-5.4', 'GPT-5.4', 1_050_000, 128_000),
