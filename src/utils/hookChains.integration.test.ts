@@ -54,9 +54,17 @@ async function importHookChainsHarness(
       agentId: 'agent-fallback-1',
     },
   }))
+  const realTeammate = await import('./teammate.js')
+  const realTeammateMailbox = await import('./teammateMailbox.js')
+  const realTeamHelpers = await import('./swarm/teamHelpers.js')
+  const realPolicyLimits = await import('../services/policyLimits/index.js')
 
   mock.module('../services/analytics/index.js', () => ({
+    _resetForTesting: () => {},
+    attachAnalyticsSink: () => {},
     logEvent: () => {},
+    logEventAsync: async () => {},
+    stripProtoFields: <V>(metadata: Record<string, V>) => metadata,
   }))
 
   mock.module('./telemetry/events.js', () => ({
@@ -64,18 +72,22 @@ async function importHookChainsHarness(
   }))
 
   mock.module('../services/policyLimits/index.js', () => ({
+    ...realPolicyLimits,
     isPolicyAllowed: () => allowRemoteSessions,
   }))
 
   mock.module('./swarm/teamHelpers.js', () => ({
+    ...realTeamHelpers,
     readTeamFileAsync: async () => options.teamFile ?? null,
   }))
 
   mock.module('./teammateMailbox.js', () => ({
+    ...realTeammateMailbox,
     writeToMailbox: writeToMailboxSpy,
   }))
 
   mock.module('./teammate.js', () => ({
+    ...realTeammate,
     getAgentName: () => senderName,
     getTeamName: () => teamName,
     getTeammateColor: () => 'blue',
