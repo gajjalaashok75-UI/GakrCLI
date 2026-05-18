@@ -1,7 +1,27 @@
-import { describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
+import { setInlinePlugins } from '../../bootstrap/state.js'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../../test/sharedMutationLock.js'
 import type { LoadedPlugin } from '../../types/plugin.js'
-import { mergePluginSources } from './pluginLoader.js'
+import { clearPluginCache, mergePluginSources } from './pluginLoader.js'
+import { clearPluginSkillsCache } from './loadPluginCommands.js'
+
+beforeEach(async () => {
+  await acquireSharedMutationLock('utils/plugins/pluginLoader.test.ts')
+})
+
+afterEach(() => {
+  try {
+    setInlinePlugins([])
+    clearPluginCache('pluginLoader.test cleanup')
+    clearPluginSkillsCache()
+  } finally {
+    releaseSharedMutationLock()
+  }
+})
 
 function marketplacePlugin(
   name: string,

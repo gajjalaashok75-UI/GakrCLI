@@ -7,6 +7,10 @@ import {
   getAgentDefinitionsWithOverrides,
 } from './loadAgentsDir.js'
 import { loadMarkdownFilesForSubdir } from '../../utils/markdownConfigLoader.js'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../../test/sharedMutationLock.js'
 
 const originalEnv = {
   GAKR_CONFIG_DIR: process.env.GAKR_CONFIG_DIR,
@@ -18,6 +22,7 @@ const originalEnv = {
 let tempDir: string
 
 beforeEach(async () => {
+  await acquireSharedMutationLock('loadAgentsDir.test.ts')
   tempDir = await mkdtemp(join(tmpdir(), 'gakrcli-agents-test-'))
   process.env.GAKR_CONFIG_DIR = join(tempDir, '.gakrcli')
   process.env.GAKR_CODE_USE_NATIVE_FILE_SEARCH = '1'
@@ -27,12 +32,16 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  await rm(tempDir, { recursive: true, force: true })
-  restoreEnv('GAKR_CONFIG_DIR')
-  restoreEnv('GAKR_CODE_SIMPLE')
-  restoreEnv('GAKR_CODE_USE_NATIVE_FILE_SEARCH')
-  clearAgentDefinitionsCache()
-  loadMarkdownFilesForSubdir.cache.clear?.()
+  try {
+    await rm(tempDir, { recursive: true, force: true })
+    restoreEnv('GAKR_CONFIG_DIR')
+    restoreEnv('GAKR_CODE_SIMPLE')
+    restoreEnv('GAKR_CODE_USE_NATIVE_FILE_SEARCH')
+    clearAgentDefinitionsCache()
+    loadMarkdownFilesForSubdir.cache.clear?.()
+  } finally {
+    releaseSharedMutationLock()
+  }
 })
 
 function restoreEnv(key: keyof typeof originalEnv): void {
