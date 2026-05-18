@@ -3,6 +3,8 @@ import {
   acquireSharedMutationLock,
   releaseSharedMutationLock,
 } from '../../test/sharedMutationLock.js'
+import * as realConfig from '../../utils/config.js'
+import * as realSettings from '../../utils/settings/settings.js'
 import type { Tip } from './types.js'
 
 const settingsRef: {
@@ -25,13 +27,20 @@ const relevantTipsRef: { value: Tip[] } = { value: [] }
 await acquireSharedMutationLock('services/tips/tipScheduler.test.ts')
 
 mock.module('../../utils/settings/settings.js', () => ({
+  ...realSettings,
   getSettings_DEPRECATED: () => settingsRef.value,
   getInitialSettings: () => settingsRef.value,
   getSettingsForSource: () => undefined,
+  getSettingsWithSources: () => ({ settings: settingsRef.value, sources: {} }),
+  getSettingsWithErrors: () => ({ settings: settingsRef.value, errors: [] }),
+  updateSettingsForSource: () => ({ error: null }),
 }))
 
 mock.module('../../utils/config.js', () => ({
+  ...realConfig,
   getGlobalConfig: () => configRef.value,
+  checkHasTrustDialogAccepted: () => false,
+  getOrCreateUserID: () => 'test-user',
   saveGlobalConfig: (mut: (c: typeof configRef.value) => typeof configRef.value) => {
     configRef.value = mut(configRef.value)
   },
@@ -43,6 +52,7 @@ mock.module('./tipRegistry.js', () => ({
 
 mock.module('../analytics/index.js', () => ({
   logEvent: () => undefined,
+  stripProtoFields: <T>(value: T) => value,
 }))
 
 afterAll(() => {
