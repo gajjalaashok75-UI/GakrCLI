@@ -64,6 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Config Directory Migration**: Hard-cut default config paths to `~/.gakrcli`, copied missing legacy `.claude` config homes and global config files forward, and kept legacy fallbacks scoped to failed migrations or explicit `GAKR_CONFIG_DIR` overrides.
 - **Runtime Identity Cleanup**: Replaced leftover upstream memory, coordinator, ripgrep, and custom Web Search identity strings with GakrCLI names and `GAKR_*` environment variables, with regression coverage for the prompt surfaces.
 - **SDK Package Identity**: Updated SDK consumer type tests, VS Code session discovery, and tool-concurrency tuning to use the GakrCLI package name and `GAKR_*` environment variables, documented the tuning knob in the sample environment file, and cleaned a stale upstream wording note from the landing-page setup guide.
+- **Provider Preset Setup Flow**: Restored the streamlined preset model/API-key setup for non-placeholder providers while keeping placeholder endpoints on the full setup form, with OpenAI, MiniMax, and Hicap regression coverage.
 
 ## [0.5.2] - 2026-05-16
 
