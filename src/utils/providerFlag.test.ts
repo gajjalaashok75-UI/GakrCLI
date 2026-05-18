@@ -283,6 +283,21 @@ describe('applyProviderFlag - descriptor-backed openai-compatible routes', () =>
     expect(process.env.OPENAI_BASE_URL).toBe('https://openrouter.ai/api/v1')
   })
 
+  test('clears MIMO_API_KEY copied into OPENAI_API_KEY when switching routes', () => {
+    process.env.MIMO_API_KEY = 'mimo-live-key'
+
+    const mimoResult = applyProviderFlag('xiaomi-mimo', [])
+    expect(mimoResult.error).toBeUndefined()
+    expect(process.env.OPENAI_API_KEY).toBe('mimo-live-key')
+
+    process.env.OPENAI_BASE_URL = 'https://openrouter.ai/api/v1'
+    const openrouterResult = applyProviderFlag('openrouter', [])
+
+    expect(openrouterResult.error).toBeUndefined()
+    expect(process.env.OPENAI_API_KEY).toBeUndefined()
+    expect(process.env.OPENAI_BASE_URL).toBe('https://openrouter.ai/api/v1')
+  })
+
   test('clears XAI_API_KEY copied into OPENAI_API_KEY when switching routes', () => {
     process.env.XAI_API_KEY = 'xai-live-key'
 
@@ -420,6 +435,12 @@ describe('applyProviderFlag - xiaomi-mimo', () => {
 
     expect(result.error).toBeUndefined()
     expect(process.env.OPENAI_API_KEY).toBe('mimo-live-key')
+  })
+
+  test('sets Xiaomi MiMo OPENAI_MODEL when --model is provided', () => {
+    applyProviderFlag('xiaomi-mimo', ['--model', 'mimo-v2-flash'])
+
+    expect(process.env.OPENAI_MODEL).toBe('mimo-v2-flash')
   })
 })
 
