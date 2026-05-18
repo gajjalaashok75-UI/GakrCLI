@@ -73,6 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Bypass Permission Settings**: Honored trusted `permissions.allowBypassPermissionsMode` settings when initializing tool permissions while keeping project settings excluded from enabling bypass mode.
 - **Sponsored Tip Scheduling**: Completed sponsored spinner-tip wiring with settings validation, persisted throttling history, scheduler partitioning, and registry inclusion.
 - **Settings Runtime Guards**: Moved recursive settings-load and MDM cache state onto GakrCLI global guards and kept the deprecated settings accessor callable during cyclic imports.
+- **Tool Failure Loop Guard**: Added a query-loop guard that stops repeated failing tool calls by signature, error category, or path before optional follow-up work runs.
 
 ## [0.5.2] - 2026-05-16
 
