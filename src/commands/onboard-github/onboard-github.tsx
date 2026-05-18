@@ -16,10 +16,15 @@ import {
   readGithubModelsToken,
   saveGithubModelsToken,
 } from '../../utils/githubModelsCredentials.js'
+import {
+  applyGithubProviderProcessEnv,
+  buildGithubProviderSettingsEnv,
+  GITHUB_PROVIDER_DEFAULT_MODEL,
+  normalizeGithubProviderModel,
+} from '../../utils/githubProviderMode.js'
 import { updateSettingsForSource } from '../../utils/settings/settings.js'
 import { useSetAppState } from '../../state/AppState.js'
 
-const DEFAULT_MODEL = 'github:copilot'
 const FORCE_RELOGIN_ARGS = new Set([
   'force',
   '--force',
@@ -27,24 +32,6 @@ const FORCE_RELOGIN_ARGS = new Set([
   '--relogin',
   'reauth',
   '--reauth',
-])
-
-const PROVIDER_SPECIFIC_KEYS = new Set([
-  'GAKR_CODE_USE_OPENAI',
-  'GAKR_CODE_USE_GEMINI',
-  'GAKR_CODE_USE_BEDROCK',
-  'GAKR_CODE_USE_VERTEX',
-  'GAKR_CODE_USE_FOUNDRY',
-  'OPENAI_BASE_URL',
-  'OPENAI_API_BASE',
-  'OPENAI_API_KEY',
-  'OPENAI_MODEL',
-  'GEMINI_API_KEY',
-  'GOOGLE_API_KEY',
-  'GEMINI_BASE_URL',
-  'GEMINI_MODEL',
-  'GEMINI_ACCESS_TOKEN',
-  'GEMINI_AUTH_MODE',
 ])
 
 const GITHUB_PAT_PREFIXES = ['ghp_', 'gho_', 'ghs_', 'ghr_', 'github_pat_']
@@ -100,44 +87,14 @@ export async function saveGithubDeviceFlowToken(
 export function buildGithubOnboardingSettingsEnv(
   model: string,
 ): Record<string, string | undefined> {
-  return {
-    GAKR_CODE_USE_GITHUB: '1',
-    OPENAI_MODEL: model,
-    OPENAI_API_KEY: undefined,
-    OPENAI_ORG: undefined,
-    OPENAI_PROJECT: undefined,
-    OPENAI_ORGANIZATION: undefined,
-    OPENAI_BASE_URL: undefined,
-    OPENAI_API_BASE: undefined,
-    GAKR_CODE_USE_OPENAI: undefined,
-    GAKR_CODE_USE_GEMINI: undefined,
-    GAKR_CODE_USE_BEDROCK: undefined,
-    GAKR_CODE_USE_VERTEX: undefined,
-    GAKR_CODE_USE_FOUNDRY: undefined,
-  }
+  return buildGithubProviderSettingsEnv(model)
 }
 
 export function applyGithubOnboardingProcessEnv(
   model: string,
   env: NodeJS.ProcessEnv = process.env,
 ): void {
-  env.GAKR_CODE_USE_GITHUB = '1'
-  env.OPENAI_MODEL = model
-
-  delete env.OPENAI_API_KEY
-  delete env.OPENAI_ORG
-  delete env.OPENAI_PROJECT
-  delete env.OPENAI_ORGANIZATION
-  delete env.OPENAI_BASE_URL
-  delete env.OPENAI_API_BASE
-
-  delete env.GAKR_CODE_USE_OPENAI
-  delete env.GAKR_CODE_USE_GEMINI
-  delete env.GAKR_CODE_USE_BEDROCK
-  delete env.GAKR_CODE_USE_VERTEX
-  delete env.GAKR_CODE_USE_FOUNDRY
-  delete env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED
-  delete env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID
+  applyGithubProviderProcessEnv(model, env)
 }
 
 function mergeUserSettingsEnv(model: string): { ok: boolean; detail?: string } {
@@ -151,7 +108,7 @@ function mergeUserSettingsEnv(model: string): { ok: boolean; detail?: string } {
 }
 
 export function activateGithubOnboardingMode(
-  model: string = DEFAULT_MODEL,
+  model: string = GITHUB_PROVIDER_DEFAULT_MODEL,
   options?: {
     mergeSettingsEnv?: (model: string) => { ok: boolean; detail?: string }
     applyProcessEnv?: (model: string) => void
@@ -159,7 +116,7 @@ export function activateGithubOnboardingMode(
     onChangeAPIKey?: () => void
   },
 ): { ok: boolean; detail?: string } {
-  const normalizedModel = model.trim() || DEFAULT_MODEL
+  const normalizedModel = normalizeGithubProviderModel(model)
   const mergeSettingsEnv = options?.mergeSettingsEnv ?? mergeUserSettingsEnv
   const applyProcessEnv = options?.applyProcessEnv ?? applyGithubOnboardingProcessEnv
   const hydrateToken = options?.hydrateToken ?? hydrateGithubModelsTokenFromSecureStorage
@@ -178,10 +135,10 @@ export function activateGithubOnboardingMode(
 function useSwitchGithubSessionModel(): (model?: string) => void {
   const setAppState = useSetAppState()
   return useCallback(
-    (model: string = DEFAULT_MODEL) => {
+    (model: string = GITHUB_PROVIDER_DEFAULT_MODEL) => {
       setAppState(prev => ({
         ...prev,
-        mainLoopModel: model.trim() || DEFAULT_MODEL,
+        mainLoopModel: normalizeGithubProviderModel(model),
         mainLoopModelForSession: null,
       }))
     },
@@ -203,7 +160,7 @@ function ActivateExistingGithubLogin(props: {
     }
     ranRef.current = true
 
-    const activated = activateGithubOnboardingMode(DEFAULT_MODEL, {
+    const activated = activateGithubOnboardingMode(GITHUB_PROVIDER_DEFAULT_MODEL, {
       onChangeAPIKey,
     })
     if (!activated.ok) {
@@ -215,7 +172,7 @@ function ActivateExistingGithubLogin(props: {
       return
     }
 
-    switchSessionModel(DEFAULT_MODEL)
+    switchSessionModel(GITHUB_PROVIDER_DEFAULT_MODEL)
     onDone(
       'GitHub Models already authorized. Activated GitHub Models mode using your existing token and switched this session to github:copilot. Use /onboard-github --force to re-authenticate.',
       { display: 'user' },
@@ -241,7 +198,7 @@ function OnboardGithub(props: {
   const [cursorOffset, setCursorOffset] = useState(0)
 
   const finalize = useCallback(
-    async (token: string, model: string = DEFAULT_MODEL) => {
+    async (token: string, model: string = GITHUB_PROVIDER_DEFAULT_MODEL) => {
       const saved = saveGithubModelsToken(token)
       if (!saved.success) {
         setErrorMsg(saved.warning ?? 'Could not save token to secure storage.')
@@ -259,13 +216,6 @@ function OnboardGithub(props: {
         return
       }
 
-      for (const key of PROVIDER_SPECIFIC_KEYS) {
-        delete process.env[key]
-      }
-      process.env.GAKR_CODE_USE_GITHUB = '1'
-      process.env.OPENAI_MODEL = model.trim() || DEFAULT_MODEL
-      hydrateGithubModelsTokenFromSecureStorage()
-      onChangeAPIKey()
       switchSessionModel(model)
       onDone(
         'GitHub Models onboard complete. Token stored in secure storage; user settings updated; this session switched to github:copilot.',
@@ -297,7 +247,7 @@ function OnboardGithub(props: {
         return
       }
 
-      const activated = activateGithubOnboardingMode(DEFAULT_MODEL, {
+      const activated = activateGithubOnboardingMode(GITHUB_PROVIDER_DEFAULT_MODEL, {
         onChangeAPIKey,
       })
       if (!activated.ok) {
@@ -309,14 +259,7 @@ function OnboardGithub(props: {
         return
       }
 
-      for (const key of PROVIDER_SPECIFIC_KEYS) {
-        delete process.env[key]
-      }
-      process.env.GAKR_CODE_USE_GITHUB = '1'
-      process.env.OPENAI_MODEL = DEFAULT_MODEL
-      hydrateGithubModelsTokenFromSecureStorage()
-      onChangeAPIKey()
-      switchSessionModel(DEFAULT_MODEL)
+      switchSessionModel(GITHUB_PROVIDER_DEFAULT_MODEL)
       onDone(
         'GitHub Models onboard complete. Token stored in secure storage; user settings updated; this session switched to github:copilot.',
         { display: 'user' },
@@ -392,7 +335,7 @@ function OnboardGithub(props: {
             if (!t) {
               return
             }
-            await finalize(t, DEFAULT_MODEL)
+            await finalize(t, GITHUB_PROVIDER_DEFAULT_MODEL)
           }}
           onExit={() => {
             setStep('menu')

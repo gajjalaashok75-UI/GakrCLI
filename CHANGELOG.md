@@ -66,6 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SDK Package Identity**: Updated SDK consumer type tests, VS Code session discovery, and tool-concurrency tuning to use the GakrCLI package name and `GAKR_*` environment variables, documented the tuning knob in the sample environment file, and cleaned a stale upstream wording note from the landing-page setup guide.
 - **Provider Preset Setup Flow**: Restored the streamlined preset model/API-key setup for non-placeholder providers while keeping placeholder endpoints on the full setup form, with OpenAI, MiniMax, and Hicap regression coverage.
 - **Conversation Export Wiring**: Connected `/export`, the export dialog, and semantic Markdown/JSON rendering to the multi-format export helpers, including normalized filenames and duplicate-submit guards.
+- **Provider Mode Cleanup**: Shared GitHub provider activation cleanup across `/onboard-github` and the provider manager, and cleared stale Mistral, NVIDIA, Bankr, xAI, Venice, MiMo, and OpenAI-compatible auth overrides when provider profiles are saved.
 
 ## [0.5.2] - 2026-05-16
 

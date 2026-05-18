@@ -58,6 +58,11 @@ import {
   readGithubModelsTokenAsync,
 } from '../utils/githubModelsCredentials.js'
 import {
+  applyGithubProviderProcessEnv,
+  buildGithubProviderSettingsEnv,
+  GITHUB_PROVIDER_DEFAULT_MODEL,
+} from '../utils/githubProviderMode.js'
+import {
   type AtomicChatReadiness,
   type OllamaGenerationReadiness,
 } from '../utils/providerDiscovery.js'
@@ -198,7 +203,6 @@ const FORM_STEPS: Array<{
 
 const GITHUB_PROVIDER_ID = '__github_models__'
 const GITHUB_PROVIDER_LABEL = 'GitHub Models'
-const GITHUB_PROVIDER_DEFAULT_MODEL = 'github:copilot'
 const GITHUB_PROVIDER_DEFAULT_BASE_URL = 'https://models.github.ai/inference'
 const CODEX_OAUTH_PROVIDER_NAME = 'Codex OAuth'
 const CODEX_OAUTH_PROVIDER_MODEL = 'codexplan'
@@ -1037,41 +1041,13 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
 
   function activateGithubProvider(): string | null {
     const { error } = updateSettingsForSource('userSettings', {
-      env: {
-        GAKR_CODE_USE_GITHUB: '1',
-        OPENAI_MODEL: GITHUB_PROVIDER_DEFAULT_MODEL,
-        OPENAI_API_KEY: undefined as any,
-        OPENAI_ORG: undefined as any,
-        OPENAI_PROJECT: undefined as any,
-        OPENAI_ORGANIZATION: undefined as any,
-        OPENAI_BASE_URL: undefined as any,
-        OPENAI_API_BASE: undefined as any,
-        GAKR_CODE_USE_OPENAI: undefined as any,
-        GAKR_CODE_USE_GEMINI: undefined as any,
-        GAKR_CODE_USE_BEDROCK: undefined as any,
-        GAKR_CODE_USE_VERTEX: undefined as any,
-        GAKR_CODE_USE_FOUNDRY: undefined as any,
-      },
+      env: buildGithubProviderSettingsEnv(GITHUB_PROVIDER_DEFAULT_MODEL),
     })
     if (error) {
       return error.message
     }
 
-    process.env.GAKR_CODE_USE_GITHUB = '1'
-    process.env.OPENAI_MODEL = GITHUB_PROVIDER_DEFAULT_MODEL
-    delete process.env.OPENAI_API_KEY
-    delete process.env.OPENAI_ORG
-    delete process.env.OPENAI_PROJECT
-    delete process.env.OPENAI_ORGANIZATION
-    delete process.env.OPENAI_BASE_URL
-    delete process.env.OPENAI_API_BASE
-    delete process.env.GAKR_CODE_USE_OPENAI
-    delete process.env.GAKR_CODE_USE_GEMINI
-    delete process.env.GAKR_CODE_USE_BEDROCK
-    delete process.env.GAKR_CODE_USE_VERTEX
-    delete process.env.GAKR_CODE_USE_FOUNDRY
-    delete process.env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED
-    delete process.env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID
+    applyGithubProviderProcessEnv(GITHUB_PROVIDER_DEFAULT_MODEL)
     delete process.env[GITHUB_MODELS_HYDRATED_ENV_MARKER]
 
     hydrateGithubModelsTokenFromSecureStorage()
