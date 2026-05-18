@@ -57,6 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Runtime and Plugin Test Isolation**: Isolated remaining runtime, integration, plugin, MCP, LSP, Bash permission, API client, compact, OAuth, GitHub, and cache tests that mutate env, registries, global macros, module mocks, fetch, axios, or platform state, and capped sandbox auto-allow subcommand fanout while preserving AST-validated chains.
 - **Plugin Component Path Hardening**: Rejected plugin command, agent, skill, output-style, and hooks paths that traverse or symlink outside the plugin directory, including nested skill discovery.
 - **Tool Error Handling**: Surfaced Web Search adapter failures with actionable provider guidance and normalized single-question AskUserQuestion payloads before schema validation.
+- **Provider Diagnostic Coverage**: Added regression coverage for Venice and Xiaomi MiMo route defaults, Xiaomi MiMo credential validation, and shared URL credential-parameter redaction.
 
 ## [0.5.2] - 2026-05-16
 

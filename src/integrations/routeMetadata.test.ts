@@ -3,8 +3,11 @@ import { expect, test } from 'bun:test'
 import {
   getRouteCredentialEnvVars,
   getRouteCredentialValue,
+  getRouteDefaultBaseUrl,
+  getRouteDefaultModel,
   getRouteProviderTypeLabel,
   resolveActiveRouteIdFromEnv,
+  resolveRouteIdFromBaseUrl,
   routeShowsAuthHeader,
   routeShowsAuthHeaderValue,
   routeShowsCustomHeaders,
@@ -72,6 +75,37 @@ test('NVIDIA NIM hides custom auth header prompts but keeps custom headers avail
   expect(routeShowsAuthHeader('nvidia-nim')).toBe(false)
   expect(routeShowsAuthHeaderValue('nvidia-nim')).toBe(false)
   expect(routeShowsCustomHeaders('nvidia-nim')).toBe(true)
+})
+
+test('Venice route metadata uses official OpenAI-compatible defaults', () => {
+  expect(getRouteDefaultBaseUrl('venice')).toBe('https://api.venice.ai/api/v1')
+  expect(getRouteDefaultModel('venice')).toBe('venice-uncensored')
+  expect(resolveRouteIdFromBaseUrl('https://api.venice.ai/api/v1')).toBe(
+    'venice',
+  )
+  expect(
+    resolveRouteIdFromBaseUrl(
+      'https://api.venice.ai/api/v1/chat/completions',
+    ),
+  ).toBe('venice')
+})
+
+test('Xiaomi MiMo route metadata uses official OpenAI-compatible defaults', () => {
+  expect(getRouteDefaultBaseUrl('xiaomi-mimo')).toBe(
+    'https://api.xiaomimimo.com/v1',
+  )
+  expect(getRouteDefaultModel('xiaomi-mimo')).toBe('mimo-v2.5-pro')
+  expect(resolveRouteIdFromBaseUrl('https://api.xiaomimimo.com/v1')).toBe(
+    'xiaomi-mimo',
+  )
+  expect(
+    resolveRouteIdFromBaseUrl(
+      'https://api.xiaomimimo.com/v1/chat/completions',
+    ),
+  ).toBe('xiaomi-mimo')
+  expect(resolveRouteIdFromBaseUrl('https://api.mimo-v2.com/v1')).toBe(
+    'xiaomi-mimo',
+  )
 })
 
 test('resolveActiveRouteIdFromEnv treats MiniMax credential-only env as MiniMax', () => {
