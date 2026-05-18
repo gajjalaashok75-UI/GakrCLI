@@ -1,4 +1,8 @@
-import { afterEach, beforeEach, expect, mock, test } from 'bun:test'
+import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../../test/sharedMutationLock.js'
 import { createOpenAIShimClient } from './openaiShim.js'
 
 type FetchType = typeof globalThis.fetch
@@ -15,6 +19,8 @@ const mockState = {
   enabled: true,
   effectiveWindow: 100_000, // Copilot gpt-4o tier
 }
+
+await acquireSharedMutationLock('openaiShim.compression.test.ts')
 
 mock.module('../../utils/config.js', () => ({
   getGlobalConfig: () => ({
@@ -111,6 +117,14 @@ afterEach(() => {
   if (originalEnv.OPENAI_MODEL === undefined) delete process.env.OPENAI_MODEL
   else process.env.OPENAI_MODEL = originalEnv.OPENAI_MODEL
   globalThis.fetch = originalFetch
+})
+
+afterAll(() => {
+  try {
+    mock.restore()
+  } finally {
+    releaseSharedMutationLock()
+  }
 })
 
 async function captureRequestBody(
