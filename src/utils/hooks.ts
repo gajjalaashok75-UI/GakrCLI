@@ -160,10 +160,44 @@ import {
 } from './hooks/sessionHooks.js'
 import type { AppState } from '../state/AppState.js'
 import { jsonStringify, jsonParse } from './slowOperations.js'
+import { stableStringifyJson } from './stableStringify.js'
 import { isEnvTruthy } from './envUtils.js'
 import { errorMessage, getErrnoCode } from './errors.js'
 
 const TOOL_HOOK_EXECUTION_TIMEOUT_MS = 10 * 60 * 1000
+
+function dedupeRegisteredPluginHooks(
+  registeredHooks: Array<HookCallbackMatcher | PluginHookMatcher>,
+): Array<HookCallbackMatcher | PluginHookMatcher> {
+  const seenPluginMatchers = new Set<string>()
+  const deduped: Array<HookCallbackMatcher | PluginHookMatcher> = []
+
+  for (const matcher of registeredHooks) {
+    // SDK callback hooks are runtime values, so only plugin hook matchers are
+    // safe to compare structurally.
+    if (!('pluginRoot' in matcher)) {
+      deduped.push(matcher)
+      continue
+    }
+
+    const pluginMatcherKey = stableStringifyJson({
+      pluginId: matcher.pluginId,
+      pluginName: matcher.pluginName,
+      pluginRoot: matcher.pluginRoot,
+      matcher: matcher.matcher ?? null,
+      hooks: matcher.hooks,
+    })
+
+    if (seenPluginMatchers.has(pluginMatcherKey)) {
+      continue
+    }
+
+    seenPluginMatchers.add(pluginMatcherKey)
+    deduped.push(matcher)
+  }
+
+  return deduped
+}
 
 /**
  * SessionEnd hooks run during shutdown/clear and need a much tighter bound
@@ -1523,7 +1557,7 @@ function getHooksConfig(
   // Process registered hooks (SDK callbacks and plugin native hooks)
   const registeredHooks = getRegisteredHooks()?.[hookEvent]
   if (registeredHooks) {
-    for (const matcher of registeredHooks) {
+    for (const matcher of dedupeRegisteredPluginHooks(registeredHooks)) {
       // Skip plugin hooks when restricted to managed hooks only
       // Plugin hooks have pluginRoot set, SDK callbacks do not
       if (managedOnly && 'pluginRoot' in matcher) {

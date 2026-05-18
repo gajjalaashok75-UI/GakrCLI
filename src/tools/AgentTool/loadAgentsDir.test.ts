@@ -103,10 +103,10 @@ describe('agent definition loading', () => {
     ).toBe(true)
   })
 
-  test('prefers .gakrcli project agents over legacy .gakrcli agents', async () => {
+  test('prefers .gakrcli project agents over legacy .claude agents', async () => {
     const projectDir = join(tempDir, 'project')
     await writeAgent(
-      join(projectDir, '.gakrcli', 'agents', 'shared-agent.md'),
+      join(projectDir, '.claude', 'agents', 'shared-agent.md'),
       'shared-agent',
       'legacy prompt',
     )
