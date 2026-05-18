@@ -77,6 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Custom Select Focus Stability**: Kept select navigation from resetting when option labels or callbacks get fresh identities and restored initial default focus handling.
 - **Tool Reminder Kill Switch**: Honored the documented `GAKR_DISABLE_TOOL_REMINDERS` env var for todo and task reminder attachments.
 - **Hook Chain Recovery Wiring**: Dispatched hook-chain recovery rules from failed tool hooks and completed-task hooks, and kept async-rewake hook commands alive across user interrupts.
+- **Codex OAuth Startup Profile**: Marked newly saved Codex OAuth profiles as the active startup provider during setup instead of only switching the current session.
 
 ## [0.5.2] - 2026-05-16
 

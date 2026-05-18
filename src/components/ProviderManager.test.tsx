@@ -1290,6 +1290,14 @@ test('ProviderManager first-run Codex OAuth switches the current session after l
   const onDone = mock(() => {})
   const applySavedProfileToCurrentSession = mock(async () => null)
   const persistCredentials = mock(() => {})
+  const setActiveProviderProfile = mock((profileId: string) => ({
+    id: profileId,
+    provider: 'openai',
+    name: 'Codex OAuth',
+    baseUrl: 'https://chatgpt.com/backend-api/codex',
+    model: 'codexplan',
+    apiKey: '',
+  }))
   const addProviderProfile = mock((payload: {
     provider: string
     name: string
@@ -1311,6 +1319,7 @@ test('ProviderManager first-run Codex OAuth switches the current session after l
     {
       addProviderProfile,
       applySavedProfileToCurrentSession,
+      setActiveProviderProfile,
       useCodexOAuthFlow: ({ onAuthenticated }) => {
         React.useEffect(() => {
           void onAuthenticated({
@@ -1357,6 +1366,9 @@ test('ProviderManager first-run Codex OAuth switches the current session after l
     expect.objectContaining({ makeActive: false }),
   )
   expect(applySavedProfileToCurrentSession).toHaveBeenCalled()
+  expect(setActiveProviderProfile).toHaveBeenCalledWith(
+    'provider_codex_oauth',
+  )
   expect(persistCredentials).toHaveBeenCalledWith({
     profileId: 'provider_codex_oauth',
   })
@@ -1382,6 +1394,14 @@ test('ProviderManager first-run Codex OAuth reports next-startup fallback when s
     async () => 'validation failed',
   )
   const persistCredentials = mock(() => {})
+  const setActiveProviderProfile = mock((profileId: string) => ({
+    id: profileId,
+    provider: 'openai',
+    name: 'Codex OAuth',
+    baseUrl: 'https://chatgpt.com/backend-api/codex',
+    model: 'codexplan',
+    apiKey: '',
+  }))
   const addProviderProfile = mock((payload: {
     provider: string
     name: string
@@ -1403,6 +1423,7 @@ test('ProviderManager first-run Codex OAuth reports next-startup fallback when s
     {
       addProviderProfile,
       applySavedProfileToCurrentSession,
+      setActiveProviderProfile,
       useCodexOAuthFlow: ({ onAuthenticated }) => {
         React.useEffect(() => {
           void onAuthenticated({
@@ -1441,6 +1462,9 @@ test('ProviderManager first-run Codex OAuth reports next-startup fallback when s
   expect(persistCredentials).toHaveBeenCalledWith({
     profileId: 'provider_codex_oauth',
   })
+  expect(setActiveProviderProfile).toHaveBeenCalledWith(
+    'provider_codex_oauth',
+  )
   expect(onDone).toHaveBeenCalledWith(
     expect.objectContaining({
       action: 'saved',
@@ -1483,6 +1507,14 @@ test('ProviderManager does not hijack a manual Codex profile when OAuth credenti
   }))
   const updateProviderProfile = mock(() => manualProfile)
   const persistCredentials = mock(() => {})
+  const setActiveProviderProfile = mock((profileId: string) => ({
+    id: profileId,
+    provider: 'openai',
+    name: 'Codex OAuth',
+    baseUrl: 'https://chatgpt.com/backend-api/codex',
+    model: 'codexplan',
+    apiKey: '',
+  }))
 
   mockProviderManagerDependencies(
     () => undefined,
@@ -1490,6 +1522,7 @@ test('ProviderManager does not hijack a manual Codex profile when OAuth credenti
     {
       addProviderProfile,
       getProviderProfiles: () => [manualProfile],
+      setActiveProviderProfile,
       updateProviderProfile,
       useCodexOAuthFlow: ({ onAuthenticated }) => {
         const hasAuthenticated = React.useRef(false)
@@ -1534,6 +1567,9 @@ test('ProviderManager does not hijack a manual Codex profile when OAuth credenti
 
   expect(addProviderProfile).toHaveBeenCalledTimes(1)
   expect(updateProviderProfile).not.toHaveBeenCalled()
+  expect(setActiveProviderProfile).toHaveBeenCalledWith(
+    'provider_codex_oauth',
+  )
   expect(persistCredentials).toHaveBeenCalledWith({
     profileId: 'provider_codex_oauth',
   })
