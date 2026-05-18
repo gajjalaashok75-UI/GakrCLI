@@ -1,9 +1,36 @@
-import { describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { homedir } from 'os'
 import { join } from 'path'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../test/sharedMutationLock.js'
 
+import { isInGlobalgakrcliFolder } from '../components/permissions/FilePermissionDialog/permissionOptions.tsx'
 import { optionForPermissionSaveDestination } from '../components/permissions/rules/AddPermissionRules.tsx'
-import { isgakrcliSettingsPath } from './permissions/filesystem.ts'
+import {
+  getgakrcliSkillScope,
+  isgakrcliSettingsPath,
+} from './permissions/filesystem.ts'
 import { getValidationTip } from './settings/validationTips.ts'
+
+const originalConfigDir = process.env.GAKR_CONFIG_DIR
+
+beforeEach(async () => {
+  await acquireSharedMutationLock('gakrcliUiSurfaces.test.ts')
+})
+
+afterEach(() => {
+  try {
+    if (originalConfigDir === undefined) {
+      delete process.env.GAKR_CONFIG_DIR
+    } else {
+      process.env.GAKR_CONFIG_DIR = originalConfigDir
+    }
+  } finally {
+    releaseSharedMutationLock()
+  }
+})
 
 describe('GakrCLI settings path surfaces', () => {
   test('isgakrcliSettingsPath recognizes project .gakrcli settings files', () => {
@@ -40,6 +67,59 @@ describe('GakrCLI settings path surfaces', () => {
       description: 'Saved in .gakrcli/settings.local.json',
       value: 'localSettings',
     })
+  })
+
+  test('permission dialog treats ~/.gakrcli as the global GakrCLI folder', () => {
+    process.env.GAKR_CONFIG_DIR = join(homedir(), '.gakrcli')
+
+    expect(
+      isInGlobalgakrcliFolder(join(homedir(), '.gakrcli', 'settings.json')),
+    ).toBe(true)
+    expect(
+      isInGlobalgakrcliFolder(join(homedir(), '.claude', 'settings.json')),
+    ).toBe(true)
+  })
+
+  test('permission dialog does not treat arbitrary GAKR_CONFIG_DIR as the global GakrCLI folder', () => {
+    process.env.GAKR_CONFIG_DIR = join(homedir(), 'custom-gakrcli')
+
+    expect(
+      isInGlobalgakrcliFolder(
+        join(homedir(), 'custom-gakrcli', 'settings.json'),
+      ),
+    ).toBe(false)
+  })
+
+  test('global skill scope recognizes ~/.gakrcli and legacy ~/.claude skills', () => {
+    process.env.GAKR_CONFIG_DIR = join(homedir(), '.gakrcli')
+
+    expect(
+      getgakrcliSkillScope(
+        join(homedir(), '.gakrcli', 'skills', 'demo', 'SKILL.md'),
+      ),
+    ).toEqual({
+      skillName: 'demo',
+      pattern: '~/.gakrcli/skills/demo/**',
+    })
+
+    expect(
+      getgakrcliSkillScope(
+        join(homedir(), '.claude', 'skills', 'legacy', 'SKILL.md'),
+      ),
+    ).toEqual({
+      skillName: 'legacy',
+      pattern: '~/.claude/skills/legacy/**',
+    })
+  })
+
+  test('global skill scope does not emit fixed rules for arbitrary GAKR_CONFIG_DIR skills', () => {
+    process.env.GAKR_CONFIG_DIR = join(homedir(), 'custom-gakrcli')
+
+    expect(
+      getgakrcliSkillScope(
+        join(homedir(), 'custom-gakrcli', 'skills', 'demo', 'SKILL.md'),
+      ),
+    ).toBe(null)
   })
 })
 

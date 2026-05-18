@@ -1,13 +1,147 @@
 import memoize from 'lodash-es/memoize.js'
-import { existsSync } from 'fs'
+import {
+  copyFileSync,
+  lstatSync,
+  mkdirSync,
+  readlinkSync,
+  readdirSync,
+  statSync,
+  symlinkSync,
+} from 'fs'
 import { homedir } from 'os'
-import { join } from 'path'
+import { dirname, join } from 'path'
+
+const LEGACY_GLOBAL_CONFIG_FILE_RE =
+  /^\.claude(?:-(?:custom|local|staging)-oauth)?\.json$/
+
+function getErrnoCode(error: unknown): string | undefined {
+  if (
+    error &&
+    typeof error === 'object' &&
+    'code' in error &&
+    typeof error.code === 'string'
+  ) {
+    return error.code
+  }
+  return undefined
+}
+
+function pathExists(path: string): boolean {
+  try {
+    lstatSync(path)
+    return true
+  } catch (error) {
+    if (getErrnoCode(error) === 'ENOENT') {
+      return false
+    }
+    return true
+  }
+}
+
+function pathIsDirectory(path: string): boolean {
+  try {
+    return lstatSync(path).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+function getSymlinkType(source: string): 'dir' | 'file' | 'junction' {
+  if (process.platform !== 'win32') {
+    return 'file'
+  }
+
+  try {
+    return statSync(source).isDirectory() ? 'junction' : 'file'
+  } catch {
+    return 'file'
+  }
+}
+
+function copyMissingPathSync(source: string, destination: string): void {
+  const sourceStats = lstatSync(source)
+
+  if (sourceStats.isDirectory()) {
+    if (!pathExists(destination)) {
+      mkdirSync(destination, { recursive: true })
+    } else if (!lstatSync(destination).isDirectory()) {
+      throw new Error(
+        `Cannot migrate ${source}: ${destination} is not a directory`,
+      )
+    }
+
+    for (const entry of readdirSync(source)) {
+      copyMissingPathSync(join(source, entry), join(destination, entry))
+    }
+    return
+  }
+
+  if (pathExists(destination)) {
+    return
+  }
+
+  mkdirSync(dirname(destination), { recursive: true })
+
+  if (sourceStats.isSymbolicLink()) {
+    symlinkSync(readlinkSync(source), destination, getSymlinkType(source))
+    return
+  }
+
+  if (sourceStats.isFile()) {
+    copyFileSync(source, destination)
+  }
+}
+
+function getLegacyGlobalConfigFiles(homeDir: string): string[] {
+  try {
+    return readdirSync(homeDir).filter(file =>
+      LEGACY_GLOBAL_CONFIG_FILE_RE.test(file),
+    )
+  } catch (error) {
+    if (getErrnoCode(error) === 'ENOENT') {
+      return []
+    }
+    throw error
+  }
+}
+
+export function migrateLegacyGakrcliConfigHome(options?: {
+  configDirEnv?: string
+  homeDir?: string
+}): boolean {
+  if (options?.configDirEnv) {
+    return true
+  }
+
+  const homeDir = options?.homeDir ?? homedir()
+  const gakrcliDir = join(homeDir, '.gakrcli')
+  const legacyClaudeDir = join(homeDir, '.claude')
+
+  try {
+    const legacyDirExists = pathIsDirectory(legacyClaudeDir)
+    const legacyGlobalConfigFiles = getLegacyGlobalConfigFiles(homeDir)
+
+    if (!legacyDirExists && legacyGlobalConfigFiles.length === 0) {
+      return true
+    }
+
+    if (legacyDirExists) {
+      copyMissingPathSync(legacyClaudeDir, gakrcliDir)
+    }
+
+    for (const legacyFile of legacyGlobalConfigFiles) {
+      const gakrcliFile = legacyFile.replace(/^\.claude/, '.gakrcli')
+      copyMissingPathSync(join(homeDir, legacyFile), join(homeDir, gakrcliFile))
+    }
+    return true
+  } catch {
+    return false
+  }
+}
 
 export function resolveGakrcliConfigHomeDir(options?: {
   configDirEnv?: string
   homeDir?: string
-  gakrcliExists?: boolean
-  legacyConfigExists?: boolean
 }): string {
   if (options?.configDirEnv) {
     return options.configDirEnv.normalize('NFC')
@@ -15,14 +149,6 @@ export function resolveGakrcliConfigHomeDir(options?: {
 
   const homeDir = options?.homeDir ?? homedir()
   const gakrcliDir = join(homeDir, '.gakrcli')
-  const legacyConfigDir = join(homeDir, '.claude')
-  const gakrcliExists = options?.gakrcliExists ?? existsSync(gakrcliDir)
-  const legacyConfigExists =
-    options?.legacyConfigExists ?? existsSync(legacyConfigDir)
-
-  if (!gakrcliExists && legacyConfigExists) {
-    return legacyConfigDir.normalize('NFC')
-  }
 
   return gakrcliDir.normalize('NFC')
 }
@@ -43,8 +169,27 @@ export const getGakrcliConfigHomeDir = memoize(
       return gakrcliConfigHomeDirOverride
     }
 
+    const configDirEnv = process.env.GAKR_CONFIG_DIR
+    const homeDir = homedir()
+    const migrationSucceeded = migrateLegacyGakrcliConfigHome({
+      configDirEnv,
+      homeDir,
+    })
+    const gakrcliDir = join(homeDir, '.gakrcli')
+    const legacyClaudeDir = join(homeDir, '.claude')
+
+    if (
+      !configDirEnv &&
+      !migrationSucceeded &&
+      !pathIsDirectory(gakrcliDir) &&
+      pathExists(legacyClaudeDir)
+    ) {
+      return legacyClaudeDir.normalize('NFC')
+    }
+
     return resolveGakrcliConfigHomeDir({
-      configDirEnv: process.env.GAKR_CONFIG_DIR,
+      configDirEnv,
+      homeDir,
     })
   },
   () => `${gakrcliConfigHomeDirOverride ?? ''}\0${process.env.GAKR_CONFIG_DIR ?? ''}`,

@@ -57,15 +57,28 @@ test('getGlobalGakrcliFile: new install returns .gakrcli.json when neither file 
   expect(getGlobalGakrcliFile()).toBe(join(tempDir, '.gakrcli.json'))
 })
 
-test('getGlobalGakrcliFile: existing user keeps .gakrcli.json when only legacy file exists', async () => {
+test('getGlobalGakrcliFile: explicit config dir keeps .claude.json fallback when only legacy file exists', async () => {
+  writeFileSync(join(tempDir, '.claude.json'), '{}')
+  const { getGlobalGakrcliFile } = await importFreshEnvModule()
+  expect(getGlobalGakrcliFile()).toBe(join(tempDir, '.claude.json'))
+})
+
+test('getGlobalGakrcliFile: migrated user uses .gakrcli.json when both files exist', async () => {
+  writeFileSync(join(tempDir, '.claude.json'), '{}')
   writeFileSync(join(tempDir, '.gakrcli.json'), '{}')
   const { getGlobalGakrcliFile } = await importFreshEnvModule()
   expect(getGlobalGakrcliFile()).toBe(join(tempDir, '.gakrcli.json'))
 })
 
-test('getGlobalGakrcliFile: migrated user uses .gakrcli.json when both files exist', async () => {
-  writeFileSync(join(tempDir, '.gakrcli.json'), '{}')
-  writeFileSync(join(tempDir, '.gakrcli.json'), '{}')
-  const { getGlobalGakrcliFile } = await importFreshEnvModule()
-  expect(getGlobalGakrcliFile()).toBe(join(tempDir, '.gakrcli.json'))
+test('resolveGlobalGakrcliFile: failed default migration keeps legacy file when new file is missing', async () => {
+  writeFileSync(join(tempDir, '.claude.json'), '{}')
+  const { resolveGlobalGakrcliFile } = await importFreshEnvModule()
+
+  expect(
+    resolveGlobalGakrcliFile({
+      homeDir: tempDir,
+      migrationSucceeded: false,
+      existsSync: path => path === join(tempDir, '.claude.json'),
+    }),
+  ).toBe(join(tempDir, '.claude.json'))
 })
