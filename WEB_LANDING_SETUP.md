@@ -141,7 +141,7 @@ All changes follow the reference implementation from `references/` and are adapt
 - ✅ web:dev / web:build / web:preview / web:typecheck scripts in package.json
 - ✅ web typecheck + build added to pr-checks workflow
 - ✅ web/dist/ and web/*.tsbuildinfo ignored in .gitignore
-- ✅ All "openclaude" references replaced with "gakrcli"
+- ✅ All upstream project-name references replaced with "gakrcli"
 - ✅ All gitlawb links and branding preserved
 - ✅ Version numbers updated to match current package (v0.5.2)
 
