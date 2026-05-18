@@ -199,13 +199,13 @@ describe('extractCacheMetrics — Copilot / Ollama (unsupported)', () => {
     expect(m.hitRate).toBeNull()
   })
 
-  test('Copilot serving GakrCLI (copilot-gakrcli) is supported and uses Anthropic fields', () => {
+  test('Copilot serving Claude (copilot-claude) is supported and uses Anthropic fields', () => {
     const usage = {
       input_tokens: 200,
       cache_read_input_tokens: 800,
       cache_creation_input_tokens: 100,
     }
-    const m = extractCacheMetrics(usage, 'copilot-gakrcli')
+    const m = extractCacheMetrics(usage, 'copilot-claude')
     expect(m.supported).toBe(true)
     expect(m.read).toBe(800)
     expect(m.created).toBe(100)
@@ -234,13 +234,13 @@ describe('resolveCacheProvider', () => {
     expect(resolveCacheProvider('vertex')).toBe('anthropic')
     expect(resolveCacheProvider('foundry')).toBe('anthropic')
   })
-  test('github without gakrcli hint → copilot (unsupported)', () => {
+  test('github without claude hint → copilot (unsupported)', () => {
     expect(resolveCacheProvider('github')).toBe('copilot')
   })
-  test('github with gakrcli hint → copilot-gakrcli', () => {
+  test('github with claude hint → copilot-claude', () => {
     expect(
       resolveCacheProvider('github', { githubNativeAnthropic: true }),
-    ).toBe('copilot-gakrcli')
+    ).toBe('copilot-claude')
   })
   test('openai with localhost / loopback → self-hosted', () => {
     // These used to return 'ollama'; the bucket is now 'self-hosted'

@@ -273,7 +273,7 @@ describe('detectBestProvider — orchestrator', () => {
     expect(result?.kind).toBe('ollama')
   })
 
-  test('skipLocal prevents network probes', async () => {
+  test('skipLocal prevents network probes and falls back to opengateway', async () => {
     let probeCalled = false
     const fetchImpl = (async () => {
       probeCalled = true
@@ -285,13 +285,13 @@ describe('detectBestProvider — orchestrator', () => {
       fetchImpl,
       skipLocal: true,
       hasCodexAuth: () => false,
-      skipOpengatewayFallback: true,
     })
-    expect(result).toBeNull()
+    expect(result?.kind).toBe('gitlawb-opengateway')
+    expect(result?.model).toBe('mimo-v2.5-pro')
     expect(probeCalled).toBe(false)
   })
 
-  test('completely empty environment returns Opengateway fallback', async () => {
+  test('completely empty environment falls back to Gitlawb Opengateway', async () => {
     const fetchImpl = (async () => {
       throw new Error('nothing reachable')
     }) as typeof fetch
@@ -322,7 +322,7 @@ describe('detectBestProvider — orchestrator', () => {
     expect(result?.baseUrl).toBe('http://localhost:8181/v1/xiaomi-mimo')
   })
 
-  test('OPENGATEWAY_BASE_URL normalizes hosted legacy route URLs', async () => {
+  test('OPENGATEWAY_BASE_URL normalizes hosted legacy Xiaomi route to smart route', async () => {
     const fetchImpl = (async () => {
       throw new Error('nothing reachable')
     }) as typeof fetch
@@ -330,7 +330,7 @@ describe('detectBestProvider — orchestrator', () => {
     const result = await detectBestProvider({
       env: {
         OPENGATEWAY_BASE_URL:
-          'https://opengateway.gitlawb.com/v1/xiaomi-mimo?legacy=1#old',
+          'https://opengateway.gitlawb.com/v1/xiaomi-mimo',
       },
       fetchImpl,
       timeoutMs: 100,
@@ -340,7 +340,7 @@ describe('detectBestProvider — orchestrator', () => {
     expect(result?.baseUrl).toBe('https://opengateway.gitlawb.com/v1')
   })
 
-  test('Opengateway fallback can be disabled', async () => {
+  test('skipOpengatewayFallback returns null when nothing else is detected', async () => {
     const fetchImpl = (async () => {
       throw new Error('nothing reachable')
     }) as typeof fetch

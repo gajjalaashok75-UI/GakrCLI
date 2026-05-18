@@ -58,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Plugin Component Path Hardening**: Rejected plugin command, agent, skill, output-style, and hooks paths that traverse or symlink outside the plugin directory, including nested skill discovery.
 - **Tool Error Handling**: Surfaced Web Search adapter failures with actionable provider guidance and normalized single-question AskUserQuestion payloads before schema validation.
 - **Provider Diagnostic Coverage**: Added regression coverage for Venice and Xiaomi MiMo route defaults, Xiaomi MiMo credential validation, and shared URL credential-parameter redaction.
+- **Provider Route Compatibility**: Restored the Copilot Claude cache metrics bucket name and added coverage for Xiaomi MiMo auth headers, max-token shaping, and Gitlawb Opengateway smart-route normalization.
 
 ## [0.5.2] - 2026-05-16
 
