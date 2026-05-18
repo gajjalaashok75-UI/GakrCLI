@@ -3,6 +3,8 @@ import {
   acquireSharedMutationLock,
   releaseSharedMutationLock,
 } from '../../test/sharedMutationLock.js'
+import * as realConfig from '../../utils/config.js'
+import * as realSettings from '../../utils/settings/settings.js'
 
 type StubSettings = {
   sponsoredTipsEnabled?: boolean
@@ -19,13 +21,20 @@ const configRef: {
 await acquireSharedMutationLock('services/tips/sponsoredTips.test.ts')
 
 mock.module('../../utils/settings/settings.js', () => ({
+  ...realSettings,
   getSettings_DEPRECATED: () => settingsRef.value,
   getInitialSettings: () => settingsRef.value,
   getSettingsForSource: () => undefined,
+  getSettingsWithSources: () => ({ settings: settingsRef.value, sources: {} }),
+  getSettingsWithErrors: () => ({ settings: settingsRef.value, errors: [] }),
+  updateSettingsForSource: () => ({ error: null }),
 }))
 
 mock.module('../../utils/config.js', () => ({
+  ...realConfig,
   getGlobalConfig: () => configRef.value,
+  checkHasTrustDialogAccepted: () => false,
+  getOrCreateUserID: () => 'test-user',
   saveGlobalConfig: (mut: (c: typeof configRef.value) => typeof configRef.value) => {
     configRef.value = mut(configRef.value)
   },
