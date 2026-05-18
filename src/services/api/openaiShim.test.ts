@@ -38,6 +38,7 @@ const originalEnv = {
   OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
   DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
   MIMO_API_KEY: process.env.MIMO_API_KEY,
+  GAKR_DISABLE_STRICT_TOOLS: process.env.GAKR_DISABLE_STRICT_TOOLS,
 }
 
 const originalFetch = globalThis.fetch
@@ -120,6 +121,7 @@ beforeEach(async () => {
   delete process.env.OPENROUTER_API_KEY
   delete process.env.DEEPSEEK_API_KEY
   delete process.env.MIMO_API_KEY
+  delete process.env.GAKR_DISABLE_STRICT_TOOLS
 })
 
 afterEach(() => {
@@ -153,6 +155,7 @@ afterEach(() => {
     restoreEnv('OPENROUTER_API_KEY', originalEnv.OPENROUTER_API_KEY)
     restoreEnv('DEEPSEEK_API_KEY', originalEnv.DEEPSEEK_API_KEY)
     restoreEnv('MIMO_API_KEY', originalEnv.MIMO_API_KEY)
+    restoreEnv('GAKR_DISABLE_STRICT_TOOLS', originalEnv.GAKR_DISABLE_STRICT_TOOLS)
     globalThis.fetch = originalFetch
     _clearRegistryForTesting()
     ensureIntegrationsLoaded()
@@ -3517,6 +3520,55 @@ test('optional tool properties are not added to required[] — fixes Groq/Azure 
   expect(required).not.toContain('limit')
   expect(required).not.toContain('pages')
   expect(parameters?.additionalProperties).toBe(false)
+})
+
+test('GAKR_DISABLE_STRICT_TOOLS disables OpenAI-compatible strict schema rewriting', async () => {
+  process.env.GAKR_DISABLE_STRICT_TOOLS = '1'
+  let requestBody: Record<string, unknown> | undefined
+
+  globalThis.fetch = (async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body))
+
+    return new Response(
+      JSON.stringify({
+        id: 'chatcmpl-strict-disabled',
+        model: 'gpt-4o',
+        choices: [
+          { message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
+        ],
+        usage: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 },
+      }),
+      { headers: { 'Content-Type': 'application/json' } },
+    )
+  }) as FetchType
+
+  const client = createOpenAIShimClient({}) as OpenAIShimClient
+
+  await client.beta.messages.create({
+    model: 'gpt-4o',
+    messages: [{ role: 'user', content: 'search' }],
+    tools: [
+      {
+        name: 'Search',
+        description: 'Search remotely',
+        input_schema: {
+          type: 'object',
+          properties: {
+            query: { type: 'string' },
+          },
+        },
+      },
+    ],
+    max_tokens: 16,
+    stream: false,
+  })
+
+  const parameters = (
+    requestBody?.tools as Array<{ function?: { parameters?: Record<string, unknown> } }>
+  )?.[0]?.function?.parameters
+
+  expect(parameters?.required).toEqual([])
+  expect(parameters?.additionalProperties).toBeUndefined()
 })
 
 // ---------------------------------------------------------------------------

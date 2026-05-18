@@ -68,6 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Conversation Export Wiring**: Connected `/export`, the export dialog, and semantic Markdown/JSON rendering to the multi-format export helpers, including normalized filenames and duplicate-submit guards.
 - **Provider Mode Cleanup**: Shared GitHub provider activation cleanup across `/onboard-github` and the provider manager, and cleared stale Mistral, NVIDIA, Bankr, xAI, Venice, MiMo, and OpenAI-compatible auth overrides when provider profiles are saved.
 - **Tool Safety Checks**: Restored Bash command validation guards for nested heredoc substitutions and zsh `fc -e` detection, and aligned Web Search permission text with the GakrCLI product name.
+- **Provider Env Docs Alignment**: Pointed the strict OpenAI-compatible tool-schema kill switch at the documented `GAKR_DISABLE_STRICT_TOOLS` variable and added the Mistral API-key signup hint to provider bootstrap failures.
 
 ## [0.5.2] - 2026-05-16
 

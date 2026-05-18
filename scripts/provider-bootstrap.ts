@@ -127,6 +127,7 @@ async function main(): Promise<void> {
 
     if (!builtEnv) {
       console.error('Mistral profile requires an API key. Use --api-key or set MISTRAL_API_KEY.')
+      console.error('Get a free key at: https://admin.mistral.ai/organization/api-keys')
       process.exit(1)
     }
 
