@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test'
 import { query } from '../../src/entrypoints/sdk/index.js'
+import { setPluginCommandsState } from '../../src/state/pluginCommandsStore.js'
 import {
   acquireSharedMutationLock,
   releaseSharedMutationLock,
@@ -18,6 +19,7 @@ beforeAll(async () => {
 
 afterAll(() => {
   try {
+    setPluginCommandsState([])
     if (savedApiKey === undefined) delete process.env[AUTH_KEY]
     else process.env[AUTH_KEY] = savedApiKey
   } finally {
@@ -86,6 +88,7 @@ describe('QueryImpl.supportedAgents', () => {
 
 describe('QueryImpl.supportedCommands', () => {
   test('returns command names from app state', () => {
+    setPluginCommandsState([])
     const q = query({ prompt: 'test', options: { cwd: process.cwd() } })
 
     ;(q as any).appStateStore.setState(() => ({
@@ -104,7 +107,21 @@ describe('QueryImpl.supportedCommands', () => {
     q.interrupt()
   })
 
+  test('returns command names from plugin command store', () => {
+    setPluginCommandsState([
+      { type: 'prompt', name: '/plugin-alpha', description: '', prompt: '' },
+      { type: 'local-jsx', name: '/plugin-beta', description: '', call: () => null },
+    ])
+
+    const q = query({ prompt: 'test', options: { cwd: process.cwd() } })
+    const cmds = q.supportedCommands()
+    expect(cmds).toEqual(['/plugin-alpha', '/plugin-beta'])
+    q.interrupt()
+    setPluginCommandsState([])
+  })
+
   test('returns empty array when no commands', () => {
+    setPluginCommandsState([])
     const q = query({ prompt: 'test', options: { cwd: process.cwd() } })
     const cmds = q.supportedCommands()
     expect(cmds).toEqual([])
