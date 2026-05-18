@@ -10,6 +10,12 @@
 
 import { describe, test, expect } from 'bun:test'
 import { resolve } from 'path'
+import {
+  clearRegisteredHooks,
+  registerHookCallbacks,
+} from '../bootstrap/state.js'
+import { getMatchingHooks } from '../utils/hooks.js'
+import type { PluginHookMatcher } from '../utils/settings/types.js'
 
 const SRC = resolve(import.meta.dir, '..')
 const file = (relative: string) => Bun.file(resolve(SRC, relative))
@@ -233,6 +239,67 @@ describe('Regression checks', () => {
     expect(openaiShim).toMatch(/store:\s*false/)
     expect(openaiShim).toContain('for (const field of shimConfig.removeBodyFields ?? [])')
     expect(runtimeMetadata).toContain('mergeRemoveBodyFields')
+  })
+
+  test('duplicate plugin hooks are deduplicated before execution', async () => {
+    clearRegisteredHooks()
+
+    const hookA: PluginHookMatcher = {
+      pluginId: 'gakr-mem@example',
+      pluginName: 'gakr-mem',
+      pluginRoot: '/plugins/gakr-mem-a',
+      matcher: 'startup',
+      hooks: [
+        {
+          async: true,
+          command: 'node hook.js',
+          statusMessage: 'warming cache',
+          type: 'command',
+        },
+      ],
+    }
+    const hookB: PluginHookMatcher = {
+      pluginId: 'gakr-mem@example',
+      pluginName: 'gakr-mem',
+      pluginRoot: '/plugins/gakr-mem-a',
+      matcher: 'startup',
+      hooks: [
+        {
+          command: 'node hook.js',
+          type: 'command',
+          statusMessage: 'warming cache',
+          async: true,
+        },
+      ],
+    }
+    const hookDifferentRoot: PluginHookMatcher = {
+      ...hookA,
+      pluginRoot: '/plugins/gakr-mem-b',
+    }
+
+    try {
+      registerHookCallbacks({
+        SessionStart: [hookA, hookB, hookDifferentRoot],
+      })
+
+      const matched = await getMatchingHooks(
+        undefined,
+        'test-session',
+        'SessionStart',
+        {
+          hook_event_name: 'SessionStart',
+          source: 'startup',
+        } as never,
+      )
+
+      expect(matched).toHaveLength(2)
+      expect(matched.map(hook => hook.pluginRoot)).toEqual([
+        '/plugins/gakr-mem-a',
+        '/plugins/gakr-mem-b',
+      ])
+    } finally {
+      clearRegisteredHooks()
+    }
   })
 })
 

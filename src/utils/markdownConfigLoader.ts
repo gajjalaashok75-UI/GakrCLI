@@ -38,6 +38,8 @@ export const GAKR_CONFIG_DIRECTORIES = [
 
 export type gakrcliConfigDirectory = (typeof GAKR_CONFIG_DIRECTORIES)[number]
 
+const PROJECT_CONFIG_DIR_NAMES = ['.claude', '.gakrcli'] as const
+
 export type MarkdownFile = {
   filePath: string
   baseDir: string
@@ -251,25 +253,20 @@ export function getProjectDirsUpToHome(
       break
     }
 
-    const gakrcliSubdir = join(current, '.gakrcli', subdir)
-    const gakrSubdir = join(current, '.gakrcli', subdir)
-    // Filter to existing dirs. This is a perf filter (avoids spawning
-    // ripgrep on non-existent dirs downstream) and the worktree fallback
-    // in loadMarkdownFilesForSubdir relies on it. statSync + explicit error
-    // handling instead of existsSync — re-throws unexpected errors rather
-    // than silently swallowing them. Downstream loadMarkdownFiles handles
-    // the TOCTOU window (dir disappearing before read) gracefully.
-    try {
-      statSync(gakrcliSubdir)
-      dirs.push(gakrcliSubdir)
-    } catch (e: unknown) {
-      if (!isFsInaccessible(e)) throw e
-    }
-    try {
-      statSync(gakrSubdir)
-      dirs.push(gakrSubdir)
-    } catch (e: unknown) {
-      if (!isFsInaccessible(e)) throw e
+    for (const configDirName of PROJECT_CONFIG_DIR_NAMES) {
+      const configSubdir = join(current, configDirName, subdir)
+      // Filter to existing dirs. This is a perf filter (avoids spawning
+      // ripgrep on non-existent dirs downstream) and the worktree fallback
+      // in loadMarkdownFilesForSubdir relies on it. statSync + explicit error
+      // handling instead of existsSync — re-throws unexpected errors rather
+      // than silently swallowing them. Downstream loadMarkdownFiles handles
+      // the TOCTOU window (dir disappearing before read) gracefully.
+      try {
+        statSync(configSubdir)
+        dirs.push(configSubdir)
+      } catch (e: unknown) {
+        if (!isFsInaccessible(e)) throw e
+      }
     }
 
     // Stop after processing the git root directory - this prevents commands from parent
@@ -328,16 +325,18 @@ export const loadMarkdownFilesForSubdir = memoize(
     const gitRoot = findGitRoot(cwd)
     const canonicalRoot = findCanonicalGitRoot(cwd)
     if (gitRoot && canonicalRoot && canonicalRoot !== gitRoot) {
-      const worktreeSubdir = normalizePathForComparison(
-        join(gitRoot, '.gakrcli', subdir),
+      const worktreeSubdirs = PROJECT_CONFIG_DIR_NAMES.map(configDirName =>
+        normalizePathForComparison(join(gitRoot, configDirName, subdir)),
       )
-      const worktreeHasSubdir = projectDirs.some(
-        dir => normalizePathForComparison(dir) === worktreeSubdir,
+      const worktreeHasSubdir = projectDirs.some(dir =>
+        worktreeSubdirs.includes(normalizePathForComparison(dir)),
       )
       if (!worktreeHasSubdir) {
-        const maingakrcliSubdir = join(canonicalRoot, '.gakrcli', subdir)
-        if (!projectDirs.includes(maingakrcliSubdir)) {
-          projectDirs.push(maingakrcliSubdir)
+        for (const configDirName of PROJECT_CONFIG_DIR_NAMES) {
+          const mainConfigSubdir = join(canonicalRoot, configDirName, subdir)
+          if (!projectDirs.includes(mainConfigSubdir)) {
+            projectDirs.push(mainConfigSubdir)
+          }
         }
       }
     }
