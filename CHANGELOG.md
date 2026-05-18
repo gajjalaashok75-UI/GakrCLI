@@ -78,6 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tool Reminder Kill Switch**: Honored the documented `GAKR_DISABLE_TOOL_REMINDERS` env var for todo and task reminder attachments.
 - **Hook Chain Recovery Wiring**: Dispatched hook-chain recovery rules from failed tool hooks and completed-task hooks, and kept async-rewake hook commands alive across user interrupts.
 - **Codex OAuth Startup Profile**: Marked newly saved Codex OAuth profiles as the active startup provider during setup instead of only switching the current session.
+- **Rapid Text Input Stability**: Kept regular and Vim text input cursor operations on the live local buffer so fast keystrokes are preserved before delayed parent updates land.
 
 ## [0.5.2] - 2026-05-16
 

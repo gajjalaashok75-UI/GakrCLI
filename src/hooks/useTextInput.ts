@@ -101,6 +101,8 @@ export function useTextInput({
     prewarmModifiers()
   }
 
+  // Keep a local text/cursor mirror so consecutive keystrokes can advance
+  // immediately even if the controlled parent value hasn't committed yet.
   const [renderState, setRenderState] = useState(() => ({
     value: originalValue,
     offset: externalOffset,
@@ -138,6 +140,8 @@ export function useTextInput({
   const value = renderState.value
   const offset = renderState.offset
   const getLiveValue = (): string => liveValueRef.current
+  const getLiveCursor = (): Cursor =>
+    Cursor.fromText(liveValueRef.current, columns, liveOffsetRef.current)
   const setValue = (nextValue: string, nextOffset = liveOffsetRef.current): void => {
     const previousValue = liveValueRef.current
     const previousOffset = liveOffsetRef.current
@@ -175,7 +179,9 @@ export function useTextInput({
     () => {
       const currentValue = getLiveValue()
       if (currentValue) {
-        setValue('', 0)
+        updateRenderedInput('', 0)
+        onChange('')
+        onOffsetChange(0)
         onHistoryReset?.()
       }
     },
@@ -199,17 +205,19 @@ export function useTextInput({
       })
     },
     () => {
+      const currentValue = getLiveValue()
       // Remove the "Esc again to clear" notification immediately
       removeNotification('escape-again-to-clear')
       onClearInput?.()
-      const currentValue = getLiveValue()
       if (currentValue) {
         // Track double-escape usage for feature discovery
         // Save to history before clearing
         if (currentValue.trim() !== '') {
           addToHistory(currentValue)
         }
-        setValue('', 0)
+        updateRenderedInput('', 0)
+        onChange('')
+        onOffsetChange(0)
         onHistoryReset?.()
       }
     },
@@ -231,6 +239,7 @@ export function useTextInput({
   )
 
   function handleCtrlD(): MaybeCursor {
+    const cursor = getLiveCursor()
     if (cursor.text === '') {
       // When input is empty, handle double-press
       handleEmptyCtrlD()
@@ -241,24 +250,28 @@ export function useTextInput({
   }
 
   function killToLineEnd(): Cursor {
+    const cursor = getLiveCursor()
     const { cursor: newCursor, killed } = cursor.deleteToLineEnd()
     pushToKillRing(killed, 'append')
     return newCursor
   }
 
   function killToLineStart(): Cursor {
+    const cursor = getLiveCursor()
     const { cursor: newCursor, killed } = cursor.deleteToLineStart()
     pushToKillRing(killed, 'prepend')
     return newCursor
   }
 
   function killWordBefore(): Cursor {
+    const cursor = getLiveCursor()
     const { cursor: newCursor, killed } = cursor.deleteWordBefore()
     pushToKillRing(killed, 'prepend')
     return newCursor
   }
 
   function yank(): Cursor {
+    const cursor = getLiveCursor()
     const text = getLastKill()
     if (text.length > 0) {
       const startOffset = cursor.offset
@@ -270,6 +283,7 @@ export function useTextInput({
   }
 
   function handleYankPop(): Cursor {
+    const cursor = getLiveCursor()
     const popResult = yankPop()
     if (!popResult) {
       return cursor
@@ -285,13 +299,19 @@ export function useTextInput({
   }
 
   const handleCtrl = mapInput([
-    ['a', () => cursor.startOfLine()],
-    ['b', () => cursor.left()],
+    ['a', () => getLiveCursor().startOfLine()],
+    ['b', () => getLiveCursor().left()],
     ['c', handleCtrlC],
     ['d', handleCtrlD],
-    ['e', () => cursor.endOfLine()],
-    ['f', () => cursor.right()],
-    ['h', () => cursor.deleteTokenBefore() ?? cursor.backspace()],
+    ['e', () => getLiveCursor().endOfLine()],
+    ['f', () => getLiveCursor().right()],
+    [
+      'h',
+      () => {
+        const cursor = getLiveCursor()
+        return cursor.deleteTokenBefore() ?? cursor.backspace()
+      },
+    ],
     ['k', killToLineEnd],
     ['n', () => downOrHistoryDown()],
     ['p', () => upOrHistoryUp()],
@@ -301,13 +321,15 @@ export function useTextInput({
   ])
 
   const handleMeta = mapInput([
-    ['b', () => cursor.prevWord()],
-    ['f', () => cursor.nextWord()],
-    ['d', () => cursor.deleteWordAfter()],
+    ['b', () => getLiveCursor().prevWord()],
+    ['f', () => getLiveCursor().nextWord()],
+    ['d', () => getLiveCursor().deleteWordAfter()],
     ['y', handleYankPop],
   ])
 
   function handleEnter(key: Key) {
+    const cursor = getLiveCursor()
+    const currentValue = getLiveValue()
     if (
       multiline &&
       cursor.offset > 0 &&
@@ -326,12 +348,11 @@ export function useTextInput({
     if (env.terminal === 'Apple_Terminal' && isModifierPressed('shift')) {
       return cursor.insert('\n')
     }
-    // Submit the input - return cursor unchanged
-    onSubmit?.(originalValue)
-    return cursor
+    onSubmit?.(currentValue)
   }
 
   function upOrHistoryUp() {
+    const cursor = getLiveCursor()
     if (disableCursorMovementForUpDownKeys) {
       onHistoryUp?.()
       return cursor
@@ -356,6 +377,7 @@ export function useTextInput({
     return cursor
   }
   function downOrHistoryDown() {
+    const cursor = getLiveCursor()
     if (disableCursorMovementForUpDownKeys) {
       onHistoryDown?.()
       return cursor
@@ -494,11 +516,7 @@ export function useTextInput({
   }
 
   function onInput(input: string, key: Key): void {
-    const currentCursor = Cursor.fromText(
-      liveValueRef.current,
-      columns,
-      liveOffsetRef.current,
-    )
+    const currentCursor = getLiveCursor()
     // Note: Image paste shortcut (chat:imagePaste) is handled via useKeybindings in PromptInput
 
     // Apply filter if provided
