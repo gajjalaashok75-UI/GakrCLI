@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { registerGateway } from './index.js'
+import { _clearRegistryForTesting, ensureIntegrationsLoaded, registerGateway } from './index.js'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../test/sharedMutationLock.js'
 
 const originalFetch = globalThis.fetch
 const originalEnv = {
@@ -59,7 +63,8 @@ function clearProviderEnv(): void {
   delete process.env.GAKR_CODE_USE_FOUNDRY
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  await acquireSharedMutationLock('discoveryService.test.ts')
   mock.restore()
   tempDir = mkdtempSync(join(tmpdir(), 'gakrcli-discovery-service-test-'))
   process.env.GAKR_CONFIG_DIR = tempDir
@@ -70,23 +75,29 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  mock.restore()
-  globalThis.fetch = originalFetch
-  rmSync(tempDir, { recursive: true, force: true })
-  restoreEnvValue('GAKR_CONFIG_DIR')
-  restoreEnvValue('OPENROUTER_API_KEY')
-  restoreEnvValue('TOGETHER_API_KEY')
-  restoreEnvValue('OPENAI_BASE_URL')
-  restoreEnvValue('OPENAI_API_BASE')
-  restoreEnvValue('OPENAI_MODEL')
-  restoreEnvValue('GAKR_CODE_USE_OPENAI')
-  restoreEnvValue('GAKR_CODE_USE_GEMINI')
-  restoreEnvValue('GAKR_CODE_USE_MISTRAL')
-  restoreEnvValue('GAKR_CODE_USE_GITHUB')
-  restoreEnvValue('GAKR_CODE_USE_BEDROCK')
-  restoreEnvValue('GAKR_CODE_USE_VERTEX')
-  restoreEnvValue('GAKR_CODE_USE_FOUNDRY')
-  restoreEnvValue('GAKR_CODE_DISABLE_NONESSENTIAL_TRAFFIC')
+  try {
+    mock.restore()
+    globalThis.fetch = originalFetch
+    rmSync(tempDir, { recursive: true, force: true })
+    restoreEnvValue('GAKR_CONFIG_DIR')
+    restoreEnvValue('OPENROUTER_API_KEY')
+    restoreEnvValue('TOGETHER_API_KEY')
+    restoreEnvValue('OPENAI_BASE_URL')
+    restoreEnvValue('OPENAI_API_BASE')
+    restoreEnvValue('OPENAI_MODEL')
+    restoreEnvValue('GAKR_CODE_USE_OPENAI')
+    restoreEnvValue('GAKR_CODE_USE_GEMINI')
+    restoreEnvValue('GAKR_CODE_USE_MISTRAL')
+    restoreEnvValue('GAKR_CODE_USE_GITHUB')
+    restoreEnvValue('GAKR_CODE_USE_BEDROCK')
+    restoreEnvValue('GAKR_CODE_USE_VERTEX')
+    restoreEnvValue('GAKR_CODE_USE_FOUNDRY')
+    restoreEnvValue('GAKR_CODE_DISABLE_NONESSENTIAL_TRAFFIC')
+    _clearRegistryForTesting()
+    ensureIntegrationsLoaded()
+  } finally {
+    releaseSharedMutationLock()
+  }
 })
 
 describe('discoverModelsForRoute', () => {

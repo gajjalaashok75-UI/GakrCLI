@@ -1,26 +1,72 @@
-import { afterEach, expect, test } from 'bun:test'
-
-// MACRO is replaced at build time by Bun.define but not in test mode.
-// Define it globally so tests that import modules using MACRO don't crash.
-;(globalThis as Record<string, unknown>).MACRO = {
-  VERSION: '99.0.0',
-  DISPLAY_VERSION: '0.0.0-test',
-  BUILD_TIME: new Date().toISOString(),
-  ISSUES_EXPLAINER: 'report the issue at https://github.com/gajjalaashok75-UI/GakrCLI/issues',
-  PACKAGE_URL: '@gakr-gakr/gakrcli',
-  NATIVE_PACKAGE_URL: undefined,
-}
-
-import { clearSystemPromptSections } from './systemPromptSections.js'
-import { getSystemPrompt, DEFAULT_AGENT_PROMPT } from './prompts.js'
-import { CLI_SYSPROMPT_PREFIXES, getCLISyspromptPrefix } from './system.js'
-import { GAKR_CODE_GUIDE_AGENT } from '../tools/AgentTool/built-in/gakrcliCodeGuideAgent.js'
-import { GENERAL_PURPOSE_AGENT } from '../tools/AgentTool/built-in/generalPurposeAgent.js'
-import { EXPLORE_AGENT } from '../tools/AgentTool/built-in/exploreAgent.js'
-import { PLAN_AGENT } from '../tools/AgentTool/built-in/planAgent.js'
-import { STATUSLINE_SETUP_AGENT } from '../tools/AgentTool/built-in/statuslineSetup.js'
+import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../test/sharedMutationLock.js'
 
 const originalSimpleEnv = process.env.GAKR_CODE_SIMPLE
+const originalMacro = (globalThis as Record<string, unknown>).MACRO
+const hadOriginalMacro = Object.hasOwn(globalThis, 'MACRO')
+
+let clearSystemPromptSections: typeof import('./systemPromptSections.js').clearSystemPromptSections
+let getSystemPrompt: typeof import('./prompts.js').getSystemPrompt
+let DEFAULT_AGENT_PROMPT: typeof import('./prompts.js').DEFAULT_AGENT_PROMPT
+let CLI_SYSPROMPT_PREFIXES: typeof import('./system.js').CLI_SYSPROMPT_PREFIXES
+let getCLISyspromptPrefix: typeof import('./system.js').getCLISyspromptPrefix
+let GAKR_CODE_GUIDE_AGENT:
+  typeof import('../tools/AgentTool/built-in/gakrcliCodeGuideAgent.js').GAKR_CODE_GUIDE_AGENT
+let GENERAL_PURPOSE_AGENT:
+  typeof import('../tools/AgentTool/built-in/generalPurposeAgent.js').GENERAL_PURPOSE_AGENT
+let EXPLORE_AGENT:
+  typeof import('../tools/AgentTool/built-in/exploreAgent.js').EXPLORE_AGENT
+let PLAN_AGENT: typeof import('../tools/AgentTool/built-in/planAgent.js').PLAN_AGENT
+let STATUSLINE_SETUP_AGENT:
+  typeof import('../tools/AgentTool/built-in/statuslineSetup.js').STATUSLINE_SETUP_AGENT
+
+beforeAll(async () => {
+  await acquireSharedMutationLock('constants/promptIdentity.test.ts')
+
+  // MACRO is replaced at build time by Bun.define but not in test mode.
+  // Define it globally under the shared lock before importing modules that use it.
+  ;(globalThis as Record<string, unknown>).MACRO = {
+    VERSION: '99.0.0',
+    DISPLAY_VERSION: '0.0.0-test',
+    BUILD_TIME: new Date().toISOString(),
+    ISSUES_EXPLAINER:
+      'report the issue at https://github.com/gajjalaashok75-UI/GakrCLI/issues',
+    PACKAGE_URL: '@gakr-gakr/gakrcli',
+    NATIVE_PACKAGE_URL: undefined,
+  }
+
+  ;({ clearSystemPromptSections } = await import('./systemPromptSections.js'))
+  ;({ getSystemPrompt, DEFAULT_AGENT_PROMPT } = await import('./prompts.js'))
+  ;({ CLI_SYSPROMPT_PREFIXES, getCLISyspromptPrefix } = await import('./system.js'))
+  ;({ GAKR_CODE_GUIDE_AGENT } = await import(
+    '../tools/AgentTool/built-in/gakrcliCodeGuideAgent.js'
+  ))
+  ;({ GENERAL_PURPOSE_AGENT } = await import(
+    '../tools/AgentTool/built-in/generalPurposeAgent.js'
+  ))
+  ;({ EXPLORE_AGENT } = await import(
+    '../tools/AgentTool/built-in/exploreAgent.js'
+  ))
+  ;({ PLAN_AGENT } = await import('../tools/AgentTool/built-in/planAgent.js'))
+  ;({ STATUSLINE_SETUP_AGENT } = await import(
+    '../tools/AgentTool/built-in/statuslineSetup.js'
+  ))
+})
+
+afterAll(() => {
+  try {
+    if (hadOriginalMacro) {
+      ;(globalThis as Record<string, unknown>).MACRO = originalMacro
+    } else {
+      delete (globalThis as Record<string, unknown>).MACRO
+    }
+  } finally {
+    releaseSharedMutationLock()
+  }
+})
 
 afterEach(() => {
   if (originalSimpleEnv === undefined) {

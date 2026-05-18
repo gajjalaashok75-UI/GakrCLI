@@ -1,4 +1,8 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../../test/sharedMutationLock.js'
 import { getAnthropicClient } from './client.js'
 
 type FetchType = typeof globalThis.fetch
@@ -57,7 +61,8 @@ function restoreEnv(key: string, value: string | undefined): void {
   }
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  await acquireSharedMutationLock('client.test.ts')
   ;(globalThis as Record<string, unknown>).MACRO = { VERSION: 'test-version' }
   process.env.GAKR_CODE_USE_GEMINI = '1'
   process.env.GEMINI_API_KEY = 'gemini-test-key'
@@ -95,41 +100,48 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  ;(globalThis as Record<string, unknown>).MACRO = originalMacro
-  restoreEnv('GAKR_CODE_USE_OPENAI', originalEnv.GAKR_CODE_USE_OPENAI)
-  restoreEnv('GAKR_CODE_USE_BEDROCK', originalEnv.GAKR_CODE_USE_BEDROCK)
-  restoreEnv('GAKR_CODE_SKIP_BEDROCK_AUTH', originalEnv.GAKR_CODE_SKIP_BEDROCK_AUTH)
-  restoreEnv('GAKR_CODE_USE_VERTEX', originalEnv.GAKR_CODE_USE_VERTEX)
-  restoreEnv('GAKR_CODE_USE_FOUNDRY', originalEnv.GAKR_CODE_USE_FOUNDRY)
-  restoreEnv('GAKR_CODE_USE_GEMINI', originalEnv.GAKR_CODE_USE_GEMINI)
-  restoreEnv('GAKR_CODE_USE_GITHUB', originalEnv.GAKR_CODE_USE_GITHUB)
-  restoreEnv('GAKR_CODE_USE_MISTRAL', originalEnv.GAKR_CODE_USE_MISTRAL)
-  restoreEnv('GAKR_CODE_USE_NVIDIA', originalEnv.GAKR_CODE_USE_NVIDIA)
-  restoreEnv('GITHUB_TOKEN', originalEnv.GITHUB_TOKEN)
-  restoreEnv('GH_TOKEN', originalEnv.GH_TOKEN)
-  restoreEnv('GEMINI_API_KEY', originalEnv.GEMINI_API_KEY)
-  restoreEnv('GEMINI_MODEL', originalEnv.GEMINI_MODEL)
-  restoreEnv('GEMINI_BASE_URL', originalEnv.GEMINI_BASE_URL)
-  restoreEnv('GEMINI_AUTH_MODE', originalEnv.GEMINI_AUTH_MODE)
-  restoreEnv('GOOGLE_API_KEY', originalEnv.GOOGLE_API_KEY)
-  restoreEnv('OPENAI_API_KEY', originalEnv.OPENAI_API_KEY)
-  restoreEnv('OPENAI_BASE_URL', originalEnv.OPENAI_BASE_URL)
-  restoreEnv('OPENAI_API_BASE', originalEnv.OPENAI_API_BASE)
-  restoreEnv('OPENAI_API_FORMAT', originalEnv.OPENAI_API_FORMAT)
-  restoreEnv('OPENAI_MODEL', originalEnv.OPENAI_MODEL)
-  restoreEnv('MINIMAX_API_KEY', originalEnv.MINIMAX_API_KEY)
-  restoreEnv('XAI_API_KEY', originalEnv.XAI_API_KEY)
-  restoreEnv('VENICE_API_KEY', originalEnv.VENICE_API_KEY)
-  restoreEnv('MIMO_API_KEY', originalEnv.MIMO_API_KEY)
-  restoreEnv('NVIDIA_NIM', originalEnv.NVIDIA_NIM)
-  restoreEnv('NVIDIA_API_KEY', originalEnv.NVIDIA_API_KEY)
-  restoreEnv('NVIDIA_BASE_URL', originalEnv.NVIDIA_BASE_URL)
-  restoreEnv('NVIDIA_MODEL', originalEnv.NVIDIA_MODEL)
-  restoreEnv('ANTHROPIC_API_KEY', originalEnv.ANTHROPIC_API_KEY)
-  restoreEnv('ANTHROPIC_AUTH_TOKEN', originalEnv.ANTHROPIC_AUTH_TOKEN)
-  restoreEnv('ANTHROPIC_BASE_URL', originalEnv.ANTHROPIC_BASE_URL)
-  restoreEnv('ANTHROPIC_CUSTOM_HEADERS', originalEnv.ANTHROPIC_CUSTOM_HEADERS)
-  globalThis.fetch = originalFetch
+  try {
+    ;(globalThis as Record<string, unknown>).MACRO = originalMacro
+    restoreEnv('GAKR_CODE_USE_OPENAI', originalEnv.GAKR_CODE_USE_OPENAI)
+    restoreEnv('GAKR_CODE_USE_BEDROCK', originalEnv.GAKR_CODE_USE_BEDROCK)
+    restoreEnv(
+      'GAKR_CODE_SKIP_BEDROCK_AUTH',
+      originalEnv.GAKR_CODE_SKIP_BEDROCK_AUTH,
+    )
+    restoreEnv('GAKR_CODE_USE_VERTEX', originalEnv.GAKR_CODE_USE_VERTEX)
+    restoreEnv('GAKR_CODE_USE_FOUNDRY', originalEnv.GAKR_CODE_USE_FOUNDRY)
+    restoreEnv('GAKR_CODE_USE_GEMINI', originalEnv.GAKR_CODE_USE_GEMINI)
+    restoreEnv('GAKR_CODE_USE_GITHUB', originalEnv.GAKR_CODE_USE_GITHUB)
+    restoreEnv('GAKR_CODE_USE_MISTRAL', originalEnv.GAKR_CODE_USE_MISTRAL)
+    restoreEnv('GAKR_CODE_USE_NVIDIA', originalEnv.GAKR_CODE_USE_NVIDIA)
+    restoreEnv('GITHUB_TOKEN', originalEnv.GITHUB_TOKEN)
+    restoreEnv('GH_TOKEN', originalEnv.GH_TOKEN)
+    restoreEnv('GEMINI_API_KEY', originalEnv.GEMINI_API_KEY)
+    restoreEnv('GEMINI_MODEL', originalEnv.GEMINI_MODEL)
+    restoreEnv('GEMINI_BASE_URL', originalEnv.GEMINI_BASE_URL)
+    restoreEnv('GEMINI_AUTH_MODE', originalEnv.GEMINI_AUTH_MODE)
+    restoreEnv('GOOGLE_API_KEY', originalEnv.GOOGLE_API_KEY)
+    restoreEnv('OPENAI_API_KEY', originalEnv.OPENAI_API_KEY)
+    restoreEnv('OPENAI_BASE_URL', originalEnv.OPENAI_BASE_URL)
+    restoreEnv('OPENAI_API_BASE', originalEnv.OPENAI_API_BASE)
+    restoreEnv('OPENAI_API_FORMAT', originalEnv.OPENAI_API_FORMAT)
+    restoreEnv('OPENAI_MODEL', originalEnv.OPENAI_MODEL)
+    restoreEnv('MINIMAX_API_KEY', originalEnv.MINIMAX_API_KEY)
+    restoreEnv('XAI_API_KEY', originalEnv.XAI_API_KEY)
+    restoreEnv('VENICE_API_KEY', originalEnv.VENICE_API_KEY)
+    restoreEnv('MIMO_API_KEY', originalEnv.MIMO_API_KEY)
+    restoreEnv('NVIDIA_NIM', originalEnv.NVIDIA_NIM)
+    restoreEnv('NVIDIA_API_KEY', originalEnv.NVIDIA_API_KEY)
+    restoreEnv('NVIDIA_BASE_URL', originalEnv.NVIDIA_BASE_URL)
+    restoreEnv('NVIDIA_MODEL', originalEnv.NVIDIA_MODEL)
+    restoreEnv('ANTHROPIC_API_KEY', originalEnv.ANTHROPIC_API_KEY)
+    restoreEnv('ANTHROPIC_AUTH_TOKEN', originalEnv.ANTHROPIC_AUTH_TOKEN)
+    restoreEnv('ANTHROPIC_BASE_URL', originalEnv.ANTHROPIC_BASE_URL)
+    restoreEnv('ANTHROPIC_CUSTOM_HEADERS', originalEnv.ANTHROPIC_CUSTOM_HEADERS)
+    globalThis.fetch = originalFetch
+  } finally {
+    releaseSharedMutationLock()
+  }
 })
 
 test('first-party Anthropic requests execute the configured fetch wrapper without runtime symbol errors', async () => {

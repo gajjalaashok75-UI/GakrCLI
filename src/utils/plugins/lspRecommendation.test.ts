@@ -1,4 +1,8 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../../test/sharedMutationLock.js'
 
 type MarketplaceEntry = {
   name: string
@@ -23,8 +27,22 @@ let config = {
 }
 let addMarketplaceSourceFn = mock(() => {})
 
+await acquireSharedMutationLock('utils/plugins/lspRecommendation.test.ts')
+
 mock.module('./marketplaceManager.js', () => ({
+  addMarketplaceSource: addMarketplaceSourceFn,
+  getMarketplaceCacheOnly: async (name: string) => ({
+    plugins: marketplaces[name] ?? [],
+  }),
+  getMarketplacesCacheDir: () => '/tmp/gakrcli-marketplaces',
   loadKnownMarketplacesConfig: async () =>
+    Object.fromEntries(
+      Object.keys(marketplaces).map(name => [
+        name,
+        { installLocation: `/tmp/${name}` },
+      ]),
+    ),
+  loadKnownMarketplacesConfigSafe: async () =>
     Object.fromEntries(
       Object.keys(marketplaces).map(name => [
         name,
@@ -34,7 +52,9 @@ mock.module('./marketplaceManager.js', () => ({
   getMarketplace: async (name: string) => ({
     plugins: marketplaces[name] ?? [],
   }),
-  addMarketplaceSource: addMarketplaceSourceFn,
+  getPluginById: async () => undefined,
+  getPluginByIdCacheOnly: async () => undefined,
+  saveKnownMarketplacesConfig: mock(async () => {}),
 }))
 
 mock.module('../binaryCheck.js', () => ({
@@ -42,20 +62,67 @@ mock.module('../binaryCheck.js', () => ({
 }))
 
 mock.module('./installedPluginsManager.js', () => ({
+  addInstalledPlugin: mock(() => {}),
+  addPluginInstallation: mock(() => {}),
+  clearInstalledPluginsCache: mock(() => {}),
+  getInMemoryInstalledPlugins: () => ({ installations: {}, schemaVersion: 2 }),
+  getGitCommitSha: async () => undefined,
+  getPendingUpdateCount: () => 0,
+  getPendingUpdatesDetails: () => [],
+  hasPendingUpdates: () => false,
+  loadInstalledPluginsFromDisk: () => ({
+    installations: {},
+    schemaVersion: 2,
+  }),
+  removeAllPluginsForMarketplace: () => ({ removed: 0 }),
+  removeInstalledPlugin: mock(() => {}),
+  removePluginInstallation: mock(() => {}),
+  resetInMemoryState: mock(() => {}),
   isPluginInstalled: (pluginId: string) => installedPlugins.has(pluginId),
+  isPluginGloballyInstalled: (pluginId: string) => installedPlugins.has(pluginId),
+  updateInstallationPathOnDisk: mock(() => {}),
 }))
 
 mock.module('../config.js', () => ({
+  checkHasTrustDialogAccepted: () => true,
+  enableConfigs: mock(() => {}),
+  getCurrentProjectConfig: () => ({}),
   getGlobalConfig: () => config,
+  getGlobalConfigWriteCount: () => 0,
+  getAutoUpdaterDisabledReason: () => null,
+  formatAutoUpdaterDisabledReason: () => 'enabled',
+  getManagedClaudeRulesDir: () => '/tmp/gakrcli-managed-rules',
+  getMemoryPath: () => '/tmp/gakrcli-memory.md',
+  getOrCreateUserID: () => 'test-user-id',
+  getProjectPathForConfig: () => '/tmp/gakrcli-project-config.json',
+  getRemoteControlAtStartup: () => false,
+  getUserClaudeRulesDir: () => '/tmp/gakrcli-user-rules',
+  isAutoUpdaterDisabled: () => false,
+  recordFirstStartTime: mock(() => {}),
+  getCustomApiKeyStatus: () => ({ hasCustomApiKey: false }),
+  isGlobalConfigKey: () => false,
+  isPathTrusted: () => true,
+  isProjectConfigKey: () => false,
+  resetTrustDialogAcceptedCacheForTesting: mock(() => {}),
+  shouldSkipPluginAutoupdate: () => false,
   saveGlobalConfig: mock((updater: (current: typeof config) => typeof config) => {
     config = updater(config)
   }),
+  saveCurrentProjectConfig: mock(() => {}),
 }))
 
 const {
   getMatchingLspPlugins,
   listLspPluginCandidates,
 } = await import('./lspRecommendation.js')
+
+afterAll(() => {
+  try {
+    mock.restore()
+  } finally {
+    releaseSharedMutationLock()
+  }
+})
 
 function lspPlugin(
   name: string,

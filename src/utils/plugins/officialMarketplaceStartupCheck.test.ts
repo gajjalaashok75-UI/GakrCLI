@@ -1,4 +1,8 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../../test/sharedMutationLock.js'
 
 type TestGlobalConfig = {
   officialMarketplaceAutoInstallAttempted?: boolean
@@ -32,6 +36,8 @@ const addMarketplaceSource = mock(async () => ({
   resolvedSource: {},
 }))
 
+await acquireSharedMutationLock('utils/plugins/officialMarketplaceStartupCheck.test.ts')
+
 mock.module('../../services/analytics/growthbook.js', () => ({
   getFeatureValue_CACHED_MAY_BE_STALE: () => true,
 }))
@@ -41,8 +47,29 @@ mock.module('../../services/analytics/index.js', () => ({
 }))
 
 mock.module('../config.js', () => ({
+  checkHasTrustDialogAccepted: () => true,
+  enableConfigs: mock(() => {}),
+  getCurrentProjectConfig: () => ({}),
   getGlobalConfig: () => config,
+  getGlobalConfigWriteCount: () => 0,
+  getAutoUpdaterDisabledReason: () => null,
+  formatAutoUpdaterDisabledReason: () => 'enabled',
+  getManagedClaudeRulesDir: () => '/tmp/gakrcli-managed-rules',
+  getMemoryPath: () => '/tmp/gakrcli-memory.md',
+  getOrCreateUserID: () => 'test-user-id',
+  getProjectPathForConfig: () => '/tmp/gakrcli-project-config.json',
+  getRemoteControlAtStartup: () => false,
+  getUserClaudeRulesDir: () => '/tmp/gakrcli-user-rules',
+  isAutoUpdaterDisabled: () => false,
+  recordFirstStartTime: mock(() => {}),
+  getCustomApiKeyStatus: () => ({ hasCustomApiKey: false }),
+  isGlobalConfigKey: () => false,
+  isPathTrusted: () => true,
+  isProjectConfigKey: () => false,
+  resetTrustDialogAcceptedCacheForTesting: mock(() => {}),
+  shouldSkipPluginAutoupdate: () => false,
   saveGlobalConfig,
+  saveCurrentProjectConfig: mock(() => {}),
 }))
 
 mock.module('../debug.js', () => ({
@@ -64,8 +91,13 @@ mock.module('./marketplaceHelpers.js', () => ({
 
 mock.module('./marketplaceManager.js', () => ({
   addMarketplaceSource,
+  getMarketplace: async () => ({ plugins: [] }),
+  getMarketplaceCacheOnly: async () => ({ plugins: [] }),
   getMarketplacesCacheDir: () => '/tmp/gakrcli-marketplaces',
+  getPluginById: async () => undefined,
+  getPluginByIdCacheOnly: async () => undefined,
   loadKnownMarketplacesConfig: async () => knownMarketplaces,
+  loadKnownMarketplacesConfigSafe: async () => knownMarketplaces,
   saveKnownMarketplacesConfig,
 }))
 
@@ -76,6 +108,14 @@ mock.module('./officialMarketplaceGcs.js', () => ({
 const { checkAndInstallOfficialMarketplace } = await import(
   './officialMarketplaceStartupCheck.js'
 )
+
+afterAll(() => {
+  try {
+    mock.restore()
+  } finally {
+    releaseSharedMutationLock()
+  }
+})
 
 beforeEach(() => {
   config = {}
