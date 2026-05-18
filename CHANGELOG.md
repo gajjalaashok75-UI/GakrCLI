@@ -79,6 +79,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Hook Chain Recovery Wiring**: Dispatched hook-chain recovery rules from failed tool hooks and completed-task hooks, and kept async-rewake hook commands alive across user interrupts.
 - **Codex OAuth Startup Profile**: Marked newly saved Codex OAuth profiles as the active startup provider during setup instead of only switching the current session.
 - **Rapid Text Input Stability**: Kept regular and Vim text input cursor operations on the live local buffer so fast keystrokes are preserved before delayed parent updates land.
+- **Plugin Command Refreshes**: Routed plugin slash commands through the shared command store so reloads update the REPL command list without relying on AppState command snapshots.
 
 ## [0.5.2] - 2026-05-16
 

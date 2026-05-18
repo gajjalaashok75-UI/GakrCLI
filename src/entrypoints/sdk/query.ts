@@ -13,6 +13,7 @@ import {
   getDefaultAppState,
   type AppState,
 } from '../../state/AppStateStore.js'
+import { getPluginCommandsState } from '../../state/pluginCommandsStore.js'
 import { createStore, type Store } from '../../state/store.js'
 import {
   getEmptyToolPermissionContext,
@@ -874,8 +875,11 @@ class QueryImpl implements Query {
     const state = this.appStateStore.getState()
     // Commands come from MCP servers and plugins
     const mcpCommands = state.mcp.commands?.map(c => c.name ?? c) ?? []
-    const pluginCommands = state.plugins.commands?.map(c => c.name ?? c) ?? []
-    return [...mcpCommands, ...pluginCommands]
+    const pluginCommands = [
+      ...(state.plugins.commands?.map(c => c.name ?? c) ?? []),
+      ...getPluginCommandsState().map(c => c.name ?? c),
+    ]
+    return [...new Set([...mcpCommands, ...pluginCommands])]
   }
 
   supportedModels(): string[] {
