@@ -118,7 +118,7 @@ test('getTiers: 64k–128k (Copilot gpt-4o) → recent=5, mid=10', () => {
   expect(getTiers(100_000)).toEqual({ recent: 5, mid: 10 })
 })
 
-test('getTiers: 128k–256k (Copilot GakrCLI) → recent=8, mid=15', () => {
+test('getTiers: 128k–256k (Copilot Claude) → recent=8, mid=15', () => {
   expect(getTiers(200_000)).toEqual({ recent: 8, mid: 15 })
 })
 
