@@ -2,6 +2,7 @@ import type {
   BetaContentBlock,
   BetaWebSearchTool20250305,
 } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
+import { PRODUCT_DISPLAY_NAME } from 'src/constants/product.js'
 import { getAPIProvider } from 'src/utils/model/providers.js'
 import type { PermissionResult } from 'src/utils/permissions/PermissionResult.js'
 
@@ -573,7 +574,7 @@ export const WebSearchTool = buildTool({
   maxResultSizeChars: 100_000,
   shouldDefer: true,
   async description(input) {
-    return `Gakr wants to search the web for: ${input.query}`
+    return `${PRODUCT_DISPLAY_NAME} wants to search the web for: ${input.query}`
   },
   userFacingName() {
     return 'Web Search'
