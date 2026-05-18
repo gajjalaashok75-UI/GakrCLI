@@ -636,8 +636,19 @@ export function getManagedSettingsKeysForLogging(
   return allKeys.sort()
 }
 
-// Flag to prevent infinite recursion when loading settings
-let isLoadingSettings = false
+function isSettingsLoadInProgress(): boolean {
+  return (
+    (globalThis as Record<string, unknown>)[
+      '__gakrcliSettingsLoadInProgress'
+    ] === true
+  )
+}
+
+function setSettingsLoadInProgress(value: boolean): void {
+  ;(globalThis as Record<string, unknown>)[
+    '__gakrcliSettingsLoadInProgress'
+  ] = value
+}
 
 /**
  * Load settings from disk without using cache
@@ -645,7 +656,7 @@ let isLoadingSettings = false
  */
 function loadSettingsFromDisk(): SettingsWithErrors {
   // Prevent recursive calls to loadSettingsFromDisk
-  if (isLoadingSettings) {
+  if (isSettingsLoadInProgress()) {
     return { settings: {}, errors: [] }
   }
 
@@ -653,7 +664,7 @@ function loadSettingsFromDisk(): SettingsWithErrors {
   profileCheckpoint('loadSettingsFromDisk_start')
   logForDiagnosticsNoPII('info', 'settings_load_started')
 
-  isLoadingSettings = true
+  setSettingsLoadInProgress(true)
   try {
     // Start with plugin settings as the lowest priority base.
     // All file-based sources (user, project, local, flag, policy) override these.
@@ -792,7 +803,7 @@ function loadSettingsFromDisk(): SettingsWithErrors {
 
     return { settings: mergedSettings, errors: allErrors }
   } finally {
-    isLoadingSettings = false
+    setSettingsLoadInProgress(false)
   }
 }
 
@@ -816,9 +827,12 @@ export function getInitialSettings(): SettingsJson {
 }
 
 /**
- * @deprecated Use getInitialSettings() instead. This alias exists for backwards compatibility.
+ * @deprecated Use getInitialSettings() instead. Keep this as a function
+ * declaration so cyclic test-only module graphs never observe it in TDZ.
  */
-export const getSettings_DEPRECATED = getInitialSettings
+export function getSettings_DEPRECATED(): SettingsJson {
+  return getInitialSettings()
+}
 
 export type SettingsWithSources = {
   effective: SettingsJson
