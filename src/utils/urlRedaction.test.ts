@@ -39,8 +39,49 @@ describe('redactUrlForDisplay', () => {
     expect(redactUrlForDisplay(url)).toBe(url)
   })
 
-  test('exposes the shared sensitive query parameter classifier', () => {
-    expect(shouldRedactUrlQueryParam('x_access_token')).toBe(true)
-    expect(shouldRedactUrlQueryParam('model')).toBe(false)
+  test('redacts passwd / pwd / auth / apikey variants', () => {
+    expect(
+      redactUrlForDisplay('https://api.example.com/v1?passwd=hunter2'),
+    ).toBe('https://api.example.com/v1?passwd=redacted')
+    expect(
+      redactUrlForDisplay('https://api.example.com/v1?pwd=hunter2'),
+    ).toBe('https://api.example.com/v1?pwd=redacted')
+    expect(
+      redactUrlForDisplay('https://api.example.com/v1?auth=Bearer-XYZ'),
+    ).toBe('https://api.example.com/v1?auth=redacted')
+    expect(
+      redactUrlForDisplay('https://api.example.com/v1?apikey=sk-abc'),
+    ).toBe('https://api.example.com/v1?apikey=redacted')
+  })
+})
+
+describe('shouldRedactUrlQueryParam', () => {
+  test('catches the canonical credential param names', () => {
+    for (const name of [
+      'api_key',
+      'apikey',
+      'api-key',
+      'key',
+      'token',
+      'access_token',
+      'access-token',
+      'refresh_token',
+      'signature',
+      'sig',
+      'secret',
+      'password',
+      'passwd',
+      'pwd',
+      'auth',
+      'authorization',
+    ]) {
+      expect(shouldRedactUrlQueryParam(name)).toBe(true)
+    }
+  })
+
+  test('does not flag unrelated param names', () => {
+    for (const name of ['model', 'temperature', 'foo', 'session_id', 'user_id']) {
+      expect(shouldRedactUrlQueryParam(name)).toBe(false)
+    }
   })
 })
