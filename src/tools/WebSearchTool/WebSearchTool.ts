@@ -350,10 +350,27 @@ function makeOutputFromCodexWebSearchResponse(
   }
 }
 
+/**
+ * Build the user-facing error thrown when the adapter path fails in auto mode
+ * and the current provider has no native web-search fallback. The embedded
+ * error carries the underlying adapter failure so the user can act on it.
+ */
+function buildAdapterUnavailableError(
+  provider: string,
+  errMsg: string,
+): string {
+  return (
+    `Web search is unavailable for provider "${provider}". ` +
+    `The search adapter failed (${errMsg}). ` +
+    `Try switching to a provider with built-in web search (e.g. Anthropic, Codex) or try again later.`
+  )
+}
+
 export const __test = {
   makeOutputFromCodexWebSearchResponse,
   buildEmptyAdapterResultHint,
   formatProviderOutputWithEmptyHint,
+  buildAdapterUnavailableError,
 }
 
 async function runCodexWebSearch(
@@ -720,12 +737,12 @@ export const WebSearchTool = buildTool({
         if (!hasNativeSearchFallback()) {
           const provider = getAPIProvider()
           const errMsg = err instanceof Error ? err.message : String(err)
-          throw new Error(
-            `Web search is unavailable for provider "${provider}". ` +
-              `The search adapter failed (${errMsg}). ` +
-              `Try switching to a provider with built-in web search (e.g. Anthropic, Codex) or try again later.`,
-          )
+          throw new Error(buildAdapterUnavailableError(provider, errMsg))
         }
+        // This branch is only reachable if a future provider-selection change
+        // both invokes the adapter and has a native fallback ready. Today auto
+        // mode prefers native providers before adapters, so this intentionally
+        // logs and falls through to native below.
         console.error(
           `[web-search] Adapter failed, falling through to native: ${err}`,
         )
