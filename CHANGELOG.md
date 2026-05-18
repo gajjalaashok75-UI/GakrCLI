@@ -48,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **OpenAI Shim Compatibility**: Redacted credentials from transport-error URLs and stripped unsupported `store` fields for Cerebras chat-completion requests.
 - **VS Code Extension Packaging**: Added explicit activation events, packaged-file allowlists, and isolated extension module mocks during tests.
 - **Agent File Safety**: Prevented non-string agent descriptions from crashing markdown creation and respected loaded agent directories when editing existing agents.
+- **Context and Web Test Stability**: Pinned GPT-5.5 to the conservative Codex context window, added prefixed Gemini Flash Lite metadata, and isolated context plus web-tool tests behind the shared mutation lock.
 
 ## [0.5.2] - 2026-05-16
 
