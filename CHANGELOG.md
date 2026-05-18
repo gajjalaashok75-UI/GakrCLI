@@ -55,6 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Credential Recovery Test Isolation**: Isolated credential, recovery, hook-chain, fast-mode, secure-storage, and prompt-queue tests that mutate process env, module mocks, platform state, or global runtime helpers.
 - **Command and UI Test Isolation**: Isolated command, provider-manager, startup-screen, theme, OAuth, feedback, and prompt-input tests that mutate env, app config, global macros, module mocks, or Ink render state.
 - **Runtime and Plugin Test Isolation**: Isolated remaining runtime, integration, plugin, MCP, LSP, Bash permission, API client, compact, OAuth, GitHub, and cache tests that mutate env, registries, global macros, module mocks, fetch, axios, or platform state, and capped sandbox auto-allow subcommand fanout while preserving AST-validated chains.
+- **Plugin Component Path Hardening**: Rejected plugin command, agent, skill, output-style, and hooks paths that traverse or symlink outside the plugin directory, including nested skill discovery.
 
 ## [0.5.2] - 2026-05-16
 
