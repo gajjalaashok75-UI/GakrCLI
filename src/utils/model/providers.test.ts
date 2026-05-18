@@ -1,4 +1,8 @@
-import { afterEach, expect, test } from 'bun:test'
+import { afterEach, beforeEach, expect, test } from 'bun:test'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../../test/sharedMutationLock.js'
 
 const originalEnv = {
   GAKR_CODE_USE_GEMINI: process.env.GAKR_CODE_USE_GEMINI,
@@ -13,21 +17,31 @@ const originalEnv = {
   OPENAI_API_BASE: process.env.OPENAI_API_BASE,
   OPENAI_MODEL: process.env.OPENAI_MODEL,
   XAI_API_KEY: process.env.XAI_API_KEY,
+  VENICE_API_KEY: process.env.VENICE_API_KEY,
+  MIMO_API_KEY: process.env.MIMO_API_KEY,
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY,
 }
 
+function restoreEnv(key: keyof typeof originalEnv): void {
+  if (originalEnv[key] === undefined) {
+    delete process.env[key]
+  } else {
+    process.env[key] = originalEnv[key]
+  }
+}
+
+beforeEach(async () => {
+  await acquireSharedMutationLock('model/providers.test.ts')
+})
+
 afterEach(() => {
-  process.env.GAKR_CODE_USE_GEMINI = originalEnv.GAKR_CODE_USE_GEMINI
-  process.env.GAKR_CODE_USE_GITHUB = originalEnv.GAKR_CODE_USE_GITHUB
-  process.env.GAKR_CODE_USE_OPENAI = originalEnv.GAKR_CODE_USE_OPENAI
-  process.env.GAKR_CODE_USE_BEDROCK = originalEnv.GAKR_CODE_USE_BEDROCK
-  process.env.GAKR_CODE_USE_VERTEX = originalEnv.GAKR_CODE_USE_VERTEX
-  process.env.GAKR_CODE_USE_FOUNDRY = originalEnv.GAKR_CODE_USE_FOUNDRY
-  process.env.NVIDIA_NIM = originalEnv.NVIDIA_NIM
-  process.env.MINIMAX_API_KEY = originalEnv.MINIMAX_API_KEY
-  process.env.OPENAI_BASE_URL = originalEnv.OPENAI_BASE_URL
-  process.env.OPENAI_API_BASE = originalEnv.OPENAI_API_BASE
-  process.env.OPENAI_MODEL = originalEnv.OPENAI_MODEL
-  process.env.XAI_API_KEY = originalEnv.XAI_API_KEY
+  try {
+    for (const key of Object.keys(originalEnv) as Array<keyof typeof originalEnv>) {
+      restoreEnv(key)
+    }
+  } finally {
+    releaseSharedMutationLock()
+  }
 })
 
 async function importFreshProvidersModule() {
@@ -47,6 +61,9 @@ function clearProviderEnv(): void {
   delete process.env.OPENAI_API_BASE
   delete process.env.OPENAI_MODEL
   delete process.env.XAI_API_KEY
+  delete process.env.VENICE_API_KEY
+  delete process.env.MIMO_API_KEY
+  delete process.env.OPENAI_API_KEY
 }
 
 test('first-party provider keeps Anthropic account setup flow enabled', () => {
