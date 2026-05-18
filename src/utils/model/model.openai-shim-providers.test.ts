@@ -213,6 +213,16 @@ test('getSmallFastModel returns OPENAI_MODEL for NVIDIA NIM (regression)', async
   expect(getSmallFastModel()).toBe('nvidia/llama-3.1-nemotron-70b-instruct')
 })
 
+test('getSmallFastModel returns OPENAI_MODEL for Xiaomi MiMo', async () => {
+  process.env.MIMO_API_KEY = 'mimo-test'
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://api.xiaomimimo.com/v1'
+  process.env.OPENAI_MODEL = 'mimo-v2-flash'
+
+  const { getSmallFastModel } = await importFreshModelModule()
+  expect(getSmallFastModel()).toBe('mimo-v2-flash')
+})
+
 test('getDefaultOpusModel returns OPENAI_MODEL for MiniMax', async () => {
   process.env.MINIMAX_API_KEY = 'minimax-test'
   process.env.OPENAI_MODEL = 'MiniMax-M2.7'
@@ -267,6 +277,35 @@ test('Xiaomi MiMo default helpers return Xiaomi model ids', async () => {
   expect(getDefaultMainLoopModelSetting()).toBe('mimo-v2.5-pro')
 })
 
+test('getDefaultMainLoopModelSetting defaults Xiaomi MiMo to mimo-v2.5-pro', async () => {
+  process.env.MIMO_API_KEY = 'mimo-test'
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://api.xiaomimimo.com/v1'
+
+  const {
+    getDefaultMainLoopModel,
+    getDefaultMainLoopModelSetting,
+  } = await importFreshModelModule()
+
+  expect(getDefaultMainLoopModelSetting()).toBe('mimo-v2.5-pro')
+  expect(getDefaultMainLoopModel()).toBe('mimo-v2.5-pro')
+})
+
+test('modelDisplayString does not show Claude subscription default for Xiaomi MiMo', async () => {
+  process.env.MIMO_API_KEY = 'mimo-test'
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://api.xiaomimimo.com/v1'
+  process.env.OPENAI_MODEL = 'mimo-v2.5-pro'
+
+  const {
+    modelDisplayString,
+    renderDefaultModelSetting,
+  } = await importFreshModelModule()
+
+  expect(modelDisplayString(null)).toBe('Default (mimo-v2.5-pro)')
+  expect(renderDefaultModelSetting('mimo-v2.5-pro')).toBe('mimo-v2.5-pro')
+})
+
 test('xAI default helpers return Grok model ids', async () => {
   process.env.XAI_API_KEY = 'xai-test'
   process.env.GAKR_CODE_USE_OPENAI = '1'
@@ -300,6 +339,30 @@ test('default helpers do not leak claude-* names to shim providers', async () =>
     getDefaultSonnetModel,
     getDefaultHaikuModel,
   } = await importFreshModelModule()
+  for (const fn of [
+    getSmallFastModel,
+    getDefaultOpusModel,
+    getDefaultSonnetModel,
+    getDefaultHaikuModel,
+  ]) {
+    const model = fn()
+    expect(model.toLowerCase()).not.toContain('claude')
+  }
+})
+
+test('default helpers do not leak claude-* names to Xiaomi MiMo', async () => {
+  process.env.MIMO_API_KEY = 'mimo-test'
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://api.xiaomimimo.com/v1'
+  process.env.OPENAI_MODEL = 'mimo-v2.5-pro'
+
+  const {
+    getSmallFastModel,
+    getDefaultOpusModel,
+    getDefaultSonnetModel,
+    getDefaultHaikuModel,
+  } = await importFreshModelModule()
+
   for (const fn of [
     getSmallFastModel,
     getDefaultOpusModel,
