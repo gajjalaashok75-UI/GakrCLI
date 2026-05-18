@@ -33,10 +33,18 @@ export function isIngakrcliFolder(filePath: string): boolean {
  */
 export function isInGlobalgakrcliFolder(filePath: string): boolean {
   const absolutePath = expandPath(filePath);
-  const globalgakrcliFolderPath = join(homedir(), '.gakrcli');
   const normalizedAbsolutePath = normalizeCaseForComparison(absolutePath);
-  const normalizedGlobalgakrcliFolderPath = normalizeCaseForComparison(globalgakrcliFolderPath);
-  return normalizedAbsolutePath.startsWith(normalizedGlobalgakrcliFolderPath + sep.toLowerCase()) || normalizedAbsolutePath.startsWith(normalizedGlobalgakrcliFolderPath + '/');
+  const globalFolders = [
+    join(homedir(), '.gakrcli'),
+    join(homedir(), '.claude'),
+  ];
+  return globalFolders.some(folder => {
+    const normalizedFolder = normalizeCaseForComparison(folder);
+    return (
+      normalizedAbsolutePath.startsWith(normalizedFolder + sep.toLowerCase()) ||
+      normalizedAbsolutePath.startsWith(normalizedFolder + '/')
+    );
+  });
 }
 export type PermissionOption = {
   type: 'accept-once';

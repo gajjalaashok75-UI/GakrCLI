@@ -61,6 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Provider Route Compatibility**: Restored the Copilot Claude cache metrics bucket name and added coverage for Xiaomi MiMo auth headers, max-token shaping, and Gitlawb Opengateway smart-route normalization.
 - **Command and Plugin Hook Safety**: Filtered generated command stubs out of the slash-command registry, deduplicated repeated plugin hook registrations, and restored legacy `.claude` project agent loading with `.gakrcli` precedence.
 - **Provider Profile Coverage**: Added Venice and Xiaomi MiMo regression coverage for provider flags, saved profile env mirroring, startup profile persistence, `/provider` summaries, and OpenAI-shim model defaults.
+- **Config Directory Migration**: Hard-cut default config paths to `~/.gakrcli`, copied missing legacy `.claude` config homes and global config files forward, and kept legacy fallbacks scoped to failed migrations or explicit `GAKR_CONFIG_DIR` overrides.
 
 ## [0.5.2] - 2026-05-16
 
