@@ -1,8 +1,13 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 const actualSettings = await import('../utils/settings/settings.js')
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../test/sharedMutationLock.js'
 
-beforeAll(() => {
+beforeAll(async () => {
+  await acquireSharedMutationLock('StartupScreen.test.ts')
   mock.module('../utils/settings/settings.js', () => ({
     ...actualSettings,
     getSettings_DEPRECATED: () => ({}),
@@ -10,12 +15,16 @@ beforeAll(() => {
 })
 
 afterAll(() => {
-  mock.restore()
+  try {
+    mock.restore()
+  } finally {
+    releaseSharedMutationLock()
+  }
 })
 
 import stripAnsi from 'strip-ansi'
 import { detectProvider, printStartupScreen } from './StartupScreen.js'
-import { saveGlobalConfig } from '../utils/config.js'
+import { getGlobalConfig, saveGlobalConfig } from '../utils/config.js'
 import {
   resetSettingsCache,
   setSessionSettingsCache,
@@ -53,6 +62,7 @@ const originalEnv: Record<string, string | undefined> = {}
 const originalMacro = (globalThis as Record<string, unknown>).MACRO
 const originalIsTTY = process.stdout.isTTY
 const originalWrite = process.stdout.write
+const originalConfig = getGlobalConfig()
 
 beforeEach(() => {
   for (const key of ENV_KEYS) {
@@ -71,8 +81,8 @@ afterEach(() => {
   resetSettingsCache()
   saveGlobalConfig(current => ({
     ...current,
-    model: undefined,
-    logoColor: undefined,
+    model: originalConfig.model,
+    logoColor: originalConfig.logoColor,
   }))
   ;(globalThis as Record<string, unknown>).MACRO = originalMacro
   Object.defineProperty(process.stdout, 'isTTY', {

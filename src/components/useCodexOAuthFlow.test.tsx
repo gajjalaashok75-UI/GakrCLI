@@ -1,9 +1,13 @@
 import { PassThrough } from 'node:stream'
 
-import { afterEach, expect, mock, test } from 'bun:test'
+import { afterEach, beforeEach, expect, mock, test } from 'bun:test'
 import React from 'react'
 
 import { createRoot, Text } from '../ink.js'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../test/sharedMutationLock.js'
 
 const SYNC_START = '\x1B[?2026h'
 const SYNC_END = '\x1B[?2026l'
@@ -91,8 +95,16 @@ const TOKENS = {
   apiKey: 'oauth-api-key',
 }
 
+beforeEach(async () => {
+  await acquireSharedMutationLock('components/useCodexOAuthFlow.test.tsx')
+})
+
 afterEach(() => {
-  mock.restore()
+  try {
+    mock.restore()
+  } finally {
+    releaseSharedMutationLock()
+  }
 })
 
 test('does not restart OAuth when an inline authenticated callback changes after status updates', async () => {

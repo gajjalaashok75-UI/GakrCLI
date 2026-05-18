@@ -1,19 +1,23 @@
 import { PassThrough } from 'node:stream'
 
-import { afterEach, expect, mock, test } from 'bun:test'
+import { afterEach, beforeEach, expect, mock, test } from 'bun:test'
 import React from 'react'
 import stripAnsi from 'strip-ansi'
 
 import { createRoot } from '../ink.js'
 import { KeybindingSetup } from '../keybindings/KeybindingProviderSetup.js'
 import { AppStateProvider } from '../state/AppState.js'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../test/sharedMutationLock.js'
 
 const SYNC_START = '\x1B[?2026h'
 const SYNC_END = '\x1B[?2026l'
 
 const ORIGINAL_ENV = {
   GAKR_CODE_SIMPLE: process.env.GAKR_CODE_SIMPLE,
-  GAKE_CODE_USE_GITHUB: process.env.GAKR_CODE_USE_GITHUB,
+  GAKR_CODE_USE_GITHUB: process.env.GAKR_CODE_USE_GITHUB,
   GITHUB_TOKEN: process.env.GITHUB_TOKEN,
   GH_TOKEN: process.env.GH_TOKEN,
 }
@@ -474,15 +478,23 @@ async function renderProviderManagerFrame(
   return output
 }
 
-afterEach(() => {
-  mock.restore()
+beforeEach(async () => {
+  await acquireSharedMutationLock('components/ProviderManager.test.tsx')
+})
 
-  for (const [key, value] of Object.entries(ORIGINAL_ENV)) {
-    if (value === undefined) {
-      delete process.env[key as keyof typeof ORIGINAL_ENV]
-    } else {
-      process.env[key as keyof typeof ORIGINAL_ENV] = value
+afterEach(() => {
+  try {
+    mock.restore()
+
+    for (const [key, value] of Object.entries(ORIGINAL_ENV)) {
+      if (value === undefined) {
+        delete process.env[key as keyof typeof ORIGINAL_ENV]
+      } else {
+        process.env[key as keyof typeof ORIGINAL_ENV] = value
+      }
     }
+  } finally {
+    releaseSharedMutationLock()
   }
 })
 
