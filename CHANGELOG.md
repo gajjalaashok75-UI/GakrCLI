@@ -63,6 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Provider Profile Coverage**: Added Venice and Xiaomi MiMo regression coverage for provider flags, saved profile env mirroring, startup profile persistence, `/provider` summaries, and OpenAI-shim model defaults.
 - **Config Directory Migration**: Hard-cut default config paths to `~/.gakrcli`, copied missing legacy `.claude` config homes and global config files forward, and kept legacy fallbacks scoped to failed migrations or explicit `GAKR_CONFIG_DIR` overrides.
 - **Runtime Identity Cleanup**: Replaced leftover upstream memory, coordinator, ripgrep, and custom Web Search identity strings with GakrCLI names and `GAKR_*` environment variables, with regression coverage for the prompt surfaces.
+- **SDK Package Identity**: Updated SDK consumer type tests and tool-concurrency tuning to use the GakrCLI package name and `GAKR_CODE_MAX_TOOL_USE_CONCURRENCY`, and documented the tuning knob in the sample environment file.
 
 ## [0.5.2] - 2026-05-16
 

@@ -112,7 +112,7 @@ export function getUserSpecifiedModelSetting(): ModelSetting | undefined {
     // cross-provider leaks (e.g. ANTHROPIC_MODEL sent to the OpenAI API).
     //
     // All OpenAI-shim providers (openai, codex, github, nvidia-nim, minimax)
-    // set CLAUDE_CODE_USE_OPENAI=1 + OPENAI_MODEL via
+    // set GAKR_CODE_USE_OPENAI=1 + OPENAI_MODEL via
     // applyProviderProfileToProcessEnv. Earlier this check only included
     // openai/github — codex/nvidia-nim/minimax fell through to the stale
     // settings.model, so switching from (say) Moonshot to Codex kept firing
