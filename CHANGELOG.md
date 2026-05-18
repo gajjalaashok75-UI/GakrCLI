@@ -53,6 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Utility Test Isolation**: Added shared mutation locks and complete module mock factories for utility/provider tests that mutate process env, fetch, settings caches, or Bun module mocks.
 - **Model Test Isolation**: Isolated model selection, model discovery, swarm env inheritance, and prompt-shell regression tests that mutate settings, provider mocks, env, or tool methods.
 - **Credential Recovery Test Isolation**: Isolated credential, recovery, hook-chain, fast-mode, secure-storage, and prompt-queue tests that mutate process env, module mocks, platform state, or global runtime helpers.
+- **Command and UI Test Isolation**: Isolated command, provider-manager, startup-screen, theme, OAuth, feedback, and prompt-input tests that mutate env, app config, global macros, module mocks, or Ink render state.
 
 ## [0.5.2] - 2026-05-16
 

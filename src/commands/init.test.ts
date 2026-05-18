@@ -1,4 +1,8 @@
-import { afterEach, expect, mock, test } from 'bun:test'
+import { afterEach, beforeEach, expect, mock, test } from 'bun:test'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../test/sharedMutationLock.js'
 
 const originalGakrcliNewInit = process.env.GAKR_CODE_NEW_INIT
 
@@ -6,13 +10,21 @@ async function importInitCommand() {
   return (await import(`./init.ts?ts=${Date.now()}-${Math.random()}`)).default
 }
 
-afterEach(() => {
-  mock.restore()
+beforeEach(async () => {
+  await acquireSharedMutationLock('commands/init.test.ts')
+})
 
-  if (originalGakrcliNewInit === undefined) {
-    delete process.env.GAKR_CODE_NEW_INIT
-  } else {
-    process.env.GAKR_CODE_NEW_INIT = originalGakrcliNewInit
+afterEach(() => {
+  try {
+    mock.restore()
+
+    if (originalGakrcliNewInit === undefined) {
+      delete process.env.GAKR_CODE_NEW_INIT
+    } else {
+      process.env.GAKR_CODE_NEW_INIT = originalGakrcliNewInit
+    }
+  } finally {
+    releaseSharedMutationLock()
   }
 })
 
