@@ -1,47 +1,57 @@
-import { describe, expect, test } from 'bun:test'
-
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import {
-  clearGithubModelsToken,
-  readGithubModelsToken,
-  saveGithubModelsToken,
-} from './githubModelsCredentials.js'
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../test/sharedMutationLock.js'
 
-describe('readGithubModelsToken', () => {
-  test('returns undefined in bare mode', () => {
-    const prev = process.env.GAKR_CODE_SIMPLE
-    process.env.GAKR_CODE_SIMPLE = '1'
-    expect(readGithubModelsToken()).toBeUndefined()
-    if (prev === undefined) {
+const originalSimple = process.env.GAKR_CODE_SIMPLE
+
+beforeEach(async () => {
+  await acquireSharedMutationLock('utils/githubModelsCredentials.test.ts')
+})
+
+afterEach(() => {
+  try {
+    if (originalSimple === undefined) {
       delete process.env.GAKR_CODE_SIMPLE
     } else {
-      process.env.GAKR_CODE_SIMPLE = prev
+      process.env.GAKR_CODE_SIMPLE = originalSimple
     }
+  } finally {
+    releaseSharedMutationLock()
+  }
+})
+
+describe('readGithubModelsToken', () => {
+  test('returns undefined in bare mode', async () => {
+    const { readGithubModelsToken } = await import(
+      './githubModelsCredentials.js?read-bare-mode'
+    )
+
+    process.env.GAKR_CODE_SIMPLE = '1'
+    expect(readGithubModelsToken()).toBeUndefined()
   })
 })
 
 describe('saveGithubModelsToken / clearGithubModelsToken', () => {
-  test('save returns failure in bare mode', () => {
-    const prev = process.env.GAKR_CODE_SIMPLE
+  test('save returns failure in bare mode', async () => {
+    const { saveGithubModelsToken } = await import(
+      './githubModelsCredentials.js?save-bare-mode'
+    )
+
     process.env.GAKR_CODE_SIMPLE = '1'
     const r = saveGithubModelsToken('abc')
     expect(r.success).toBe(false)
     expect(r.warning).toContain('Bare mode')
-    if (prev === undefined) {
-      delete process.env.GAKR_CODE_SIMPLE
-    } else {
-      process.env.GAKR_CODE_SIMPLE = prev
-    }
   })
 
-  test('clear succeeds in bare mode', () => {
-    const prev = process.env.GAKR_CODE_SIMPLE
+  test('clear succeeds in bare mode', async () => {
+    const { clearGithubModelsToken } = await import(
+      './githubModelsCredentials.js?clear-bare-mode'
+    )
+
     process.env.GAKR_CODE_SIMPLE = '1'
     expect(clearGithubModelsToken().success).toBe(true)
-    if (prev === undefined) {
-      delete process.env.GAKR_CODE_SIMPLE
-    } else {
-      process.env.GAKR_CODE_SIMPLE = prev
-    }
   })
 })
 
