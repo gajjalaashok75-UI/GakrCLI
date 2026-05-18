@@ -49,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **VS Code Extension Packaging**: Added explicit activation events, packaged-file allowlists, and isolated extension module mocks during tests.
 - **Agent File Safety**: Prevented non-string agent descriptions from crashing markdown creation and respected loaded agent directories when editing existing agents.
 - **Context and Web Test Stability**: Pinned GPT-5.5 to the conservative Codex context window, added prefixed Gemini Flash Lite metadata, and isolated context plus web-tool tests behind the shared mutation lock.
+- **API Test Isolation**: Added shared mutation locks around API/provider tests that mutate environment variables, global fetch, module mocks, proxy state, or cache-stat counters.
 
 ## [0.5.2] - 2026-05-16
 

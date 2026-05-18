@@ -1,4 +1,8 @@
-import { afterEach, expect, mock, test } from 'bun:test'
+import { afterEach, beforeEach, expect, mock, test } from 'bun:test'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../../test/sharedMutationLock.js'
 
 const originalFetch = globalThis.fetch
 const originalEnv = {
@@ -32,12 +36,20 @@ function mockDebugModule(debugSpy: ReturnType<typeof mock>): void {
   }))
 }
 
+beforeEach(async () => {
+  await acquireSharedMutationLock('openaiShim.diagnostics.test.ts')
+})
+
 afterEach(() => {
-  globalThis.fetch = originalFetch
-  restoreEnv('OPENAI_BASE_URL', originalEnv.OPENAI_BASE_URL)
-  restoreEnv('OPENAI_API_KEY', originalEnv.OPENAI_API_KEY)
-  restoreEnv('OPENAI_MODEL', originalEnv.OPENAI_MODEL)
-  mock.restore()
+  try {
+    globalThis.fetch = originalFetch
+    restoreEnv('OPENAI_BASE_URL', originalEnv.OPENAI_BASE_URL)
+    restoreEnv('OPENAI_API_KEY', originalEnv.OPENAI_API_KEY)
+    restoreEnv('OPENAI_MODEL', originalEnv.OPENAI_MODEL)
+    mock.restore()
+  } finally {
+    releaseSharedMutationLock()
+  }
 })
 
 test('logs classified transport diagnostics with category and code', async () => {

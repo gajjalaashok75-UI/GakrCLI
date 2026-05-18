@@ -1,4 +1,8 @@
-import { afterEach, expect, mock, test } from 'bun:test'
+import { afterEach, beforeEach, expect, mock, test } from 'bun:test'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../../test/sharedMutationLock.js'
 
 const originalEnv = {
   GAKR_CODE_USE_OPENAI: process.env.GAKR_CODE_USE_OPENAI,
@@ -21,18 +25,26 @@ function restoreEnv(key: string, value: string | undefined): void {
   }
 }
 
+beforeEach(async () => {
+  await acquireSharedMutationLock('providerConfig.envDiagnostics.test.ts')
+})
+
 afterEach(() => {
-  restoreEnv('GAKR_CODE_USE_OPENAI', originalEnv.GAKR_CODE_USE_OPENAI)
-  restoreEnv('GAKR_CODE_USE_GEMINI', originalEnv.GAKR_CODE_USE_GEMINI)
-  restoreEnv('GAKR_CODE_USE_MISTRAL', originalEnv.GAKR_CODE_USE_MISTRAL)
-  restoreEnv('OPENAI_BASE_URL', originalEnv.OPENAI_BASE_URL)
-  restoreEnv('OPENAI_MODEL', originalEnv.OPENAI_MODEL)
-  restoreEnv('OPENAI_API_BASE', originalEnv.OPENAI_API_BASE)
-  restoreEnv('MISTRAL_BASE_URL', originalEnv.MISTRAL_BASE_URL)
-  restoreEnv('MISTRAL_MODEL', originalEnv.MISTRAL_MODEL)
-  restoreEnv('GEMINI_BASE_URL', originalEnv.GEMINI_BASE_URL)
-  restoreEnv('GEMINI_MODEL', originalEnv.GEMINI_MODEL)
-  mock.restore()
+  try {
+    restoreEnv('GAKR_CODE_USE_OPENAI', originalEnv.GAKR_CODE_USE_OPENAI)
+    restoreEnv('GAKR_CODE_USE_GEMINI', originalEnv.GAKR_CODE_USE_GEMINI)
+    restoreEnv('GAKR_CODE_USE_MISTRAL', originalEnv.GAKR_CODE_USE_MISTRAL)
+    restoreEnv('OPENAI_BASE_URL', originalEnv.OPENAI_BASE_URL)
+    restoreEnv('OPENAI_MODEL', originalEnv.OPENAI_MODEL)
+    restoreEnv('OPENAI_API_BASE', originalEnv.OPENAI_API_BASE)
+    restoreEnv('MISTRAL_BASE_URL', originalEnv.MISTRAL_BASE_URL)
+    restoreEnv('MISTRAL_MODEL', originalEnv.MISTRAL_MODEL)
+    restoreEnv('GEMINI_BASE_URL', originalEnv.GEMINI_BASE_URL)
+    restoreEnv('GEMINI_MODEL', originalEnv.GEMINI_MODEL)
+    mock.restore()
+  } finally {
+    releaseSharedMutationLock()
+  }
 })
 
 test('logs a warning when OPENAI_BASE_URL is literal undefined', async () => {
