@@ -32,7 +32,7 @@ function simpleHash(str) {
 }
 
 function resolveConfigDir() {
-  const envDir = process.env.CLAUDE_CONFIG_DIR;
+  const envDir = process.env.GAKR_CONFIG_DIR;
   if (envDir) return envDir;
   const home = os.homedir();
   const gakrcliDir = path.join(home, '.gakrcli');
