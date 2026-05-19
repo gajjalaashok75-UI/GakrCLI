@@ -6,6 +6,10 @@ describe('builtInCommandNames', () => {
   test('includes the LSP command', () => {
     expect(builtInCommandNames()).toContain('lsp')
   })
+
+  test('includes the commit attribution command', () => {
+    expect(builtInCommandNames()).toContain('commit-message')
+  })
 })
 
 describe('isCommand', () => {

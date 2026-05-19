@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Multi-Format Conversation Exports**: Added export format helpers and coverage for text, Markdown, and JSON transcript exports, including direct filenames, explicit format flags, dialog selection, clipboard export, and file-save flows.
 - **Sponsored Spinner Tips**: Added sponsored tip metadata, Atomic Chat and Xiaomi MiMo sponsored tips, frequency settings, scheduler partitioning, and history coverage.
 - **Xiaomi MiMo Model Picker**: Added cached Xiaomi MiMo model options with provider detection coverage for MiMo credentials and base URLs.
+- **Command and Buddy Runtime Wiring**: Exposed the existing `/commit-message` command in the slash-command registry, registered `/loop` through its runtime visibility gate, and routed Buddy UI surfaces through the shared runtime feature helper.
 - **Maintainer Templates**: Added GitHub bug report and feature request issue templates.
 - **Regression Coverage and Shared Helpers**: Added focused tests for storage providers, export rendering, abort-signal cleanup, Bash safety checks, OAuth callback bounds, local fast-path provider config, CLI heap settings, shared mutation locking, agent markdown rendering, and extracted keybinding, plugin command, and FileRead tool-name helpers.
 - **Provider Setup Hints**: Documented Z.AI, Hicap, self-hosted Firecrawl, and structured token-usage logging environment options in the sample environment file.
