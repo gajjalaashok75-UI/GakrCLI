@@ -633,6 +633,7 @@ export async function runAsyncAgentLifecycle({
         durationMs: agentResult.totalDurationMs,
       },
       toolUseId: toolUseContext.toolUseId,
+      agentId: toolUseContext.agentId,
       ...worktreeResult,
     })
   } catch (error) {
@@ -662,6 +663,7 @@ export async function runAsyncAgentLifecycle({
         status: 'killed',
         setAppState: rootSetAppState,
         toolUseId: toolUseContext.toolUseId,
+        agentId: toolUseContext.agentId,
         finalMessage: partialResult,
         ...worktreeResult,
       })
@@ -677,6 +679,7 @@ export async function runAsyncAgentLifecycle({
       error: msg,
       setAppState: rootSetAppState,
       toolUseId: toolUseContext.toolUseId,
+      agentId: toolUseContext.agentId,
       ...worktreeResult,
     })
   } finally {

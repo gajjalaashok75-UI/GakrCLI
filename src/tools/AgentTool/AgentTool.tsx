@@ -1011,6 +1011,7 @@ export const AgentTool = buildTool({
                         durationMs: agentResult.totalDurationMs
                       },
                       toolUseId: toolUseContext.toolUseId,
+                      agentId: toolUseContext.agentId,
                       ...worktreeResult
                     });
                   } catch (error) {
@@ -1034,6 +1035,7 @@ export const AgentTool = buildTool({
                         status: 'killed',
                         setAppState: rootSetAppState,
                         toolUseId: toolUseContext.toolUseId,
+                        agentId: toolUseContext.agentId,
                         finalMessage: partialResult,
                         ...worktreeResult
                       });
@@ -1049,6 +1051,7 @@ export const AgentTool = buildTool({
                       error: errMsg,
                       setAppState: rootSetAppState,
                       toolUseId: toolUseContext.toolUseId,
+                      agentId: toolUseContext.agentId,
                       ...worktreeResult
                     });
                   } finally {
