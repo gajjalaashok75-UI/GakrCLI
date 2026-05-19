@@ -11,6 +11,7 @@ import {
   getCachedXiaomiMimoModelOptions,
   isXiaomiMimoProvider,
 } from './xiaomi-mimoModels.js'
+import { getModelOptions } from './modelOptions.js'
 
 const originalEnv = {
   GAKR_CODE_USE_OPENAI: process.env.GAKR_CODE_USE_OPENAI,
@@ -90,6 +91,23 @@ test('Xiaomi MiMo provider exposes MiMo catalog models in /model options', async
   expect(
     options.some(option => option.label === 'MiMo V2.5 Pro'),
   ).toBe(true)
+})
+
+test('/model options include Xiaomi MiMo catalog when MiMo provider is active', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://api.xiaomimimo.com/v1'
+  process.env.OPENAI_MODEL = 'mimo-v2.5-pro'
+  process.env.MIMO_API_KEY = 'mimo-live-key'
+
+  const options = getModelOptions()
+  const values = options.map(option => option.value)
+
+  expect(values).toContain(null)
+  expect(values).toContain('mimo-v2.5-pro')
+  expect(values).toContain('mimo-v2-flash')
+  expect(options.find(option => option.value === 'mimo-v2.5-pro')?.label).toBe(
+    'MiMo V2.5 Pro',
+  )
 })
 
 test('Xiaomi MiMo provider does not activate for unrelated OpenAI-compatible mimo-prefixed models', async () => {

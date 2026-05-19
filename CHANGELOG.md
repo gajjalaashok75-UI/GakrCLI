@@ -78,6 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tool Failure Loop Guard**: Added a query-loop guard that stops repeated failing tool calls by signature, error category, or path before optional follow-up work runs.
 - **Bridge Session Diagnostics**: Logged bridge session fetch failures with status, method, URL, timeout, and error-code context, allowed `GAKR_BRIDGE_SESSION_INGRESS_URL` to override session ingress outside internal-only shells, and kept bridge pointer project discovery on the shared config-home resolver.
 - **Effort Level Settings**: Accepted persisted `max` effort settings for supported models, matching the SDK and runtime effort controls.
+- **Xiaomi MiMo Model Picker**: Surfaced the MiMo catalog in `/model` options whenever the Xiaomi MiMo provider route is active.
 - **Custom Select Focus Stability**: Kept select navigation from resetting when option labels or callbacks get fresh identities and restored initial default focus handling.
 - **Tool Reminder Kill Switch**: Honored the documented `GAKR_DISABLE_TOOL_REMINDERS` env var for todo and task reminder attachments.
 - **Hook Chain Recovery Wiring**: Dispatched hook-chain recovery rules from failed tool hooks and completed-task hooks, and kept async-rewake hook commands alive across user interrupts.
