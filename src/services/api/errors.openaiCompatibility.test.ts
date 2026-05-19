@@ -74,3 +74,20 @@ test('maps tool_call_incompatible category markers to model/tool guidance', () =
   expect(text).toContain('rejected tool-calling payloads')
   expect(text).toContain('/model')
 })
+
+test('maps 500 context overflow responses to new-session guidance', () => {
+  const error = APIError.generate(
+    500,
+    undefined,
+    'request too large: maximum context length exceeded',
+    new Headers(),
+  )
+
+  const message = getAssistantMessageFromError(error, 'qwen2.5-coder:7b')
+  const text = getFirstText(message)
+
+  expect(message.isApiErrorMessage).toBe(true)
+  expect(message.errorDetails).toContain('Context overflow (500)')
+  expect(text).toContain('The conversation has grown too large')
+  expect(text).toContain('/new')
+})

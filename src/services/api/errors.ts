@@ -910,30 +910,6 @@ export function getAssistantMessageFromError(
     })
   }
 
-  // 500 errors caused by context overflow — the API returns 500 instead of 400
-  // when the request body (including conversation context) exceeds limits.
-  // This happens when auto-compact fails or the token estimation undercounts.
-  // Detect by checking for context-related keywords in 500 responses.
-  if (
-    error instanceof APIError &&
-    error.status >= 500 &&
-    (error.message.toLowerCase().includes('too many tokens') ||
-      error.message.toLowerCase().includes('request too large') ||
-      error.message.toLowerCase().includes('context length') ||
-      error.message.toLowerCase().includes('maximum context') ||
-      error.message.toLowerCase().includes('input length') ||
-      error.message.toLowerCase().includes('payload too large'))
-  ) {
-    const rewindInstruction = getIsNonInteractiveSession()
-      ? ''
-      : ' Press esc twice to go up a few messages, or run /compact to reduce context.'
-    return createAssistantAPIErrorMessage({
-      content: `The conversation has grown too large for the API to process.${rewindInstruction} Alternatively, start a new session with /new.`,
-      error: 'invalid_request',
-      errorDetails: `Context overflow (500): ${error.message}`,
-    })
-  }
-
   // "Organization has been disabled" — commonly a stale ANTHROPIC_API_KEY
   // from a previous employer/project overriding subscription auth. Only handle
   // the env-var case; apiKeyHelper and /login-managed keys mean the active
