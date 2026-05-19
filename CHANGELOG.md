@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Xiaomi MiMo Model Picker**: Added cached Xiaomi MiMo model options with provider detection coverage for MiMo credentials and base URLs.
 - **Command and Buddy Runtime Wiring**: Exposed the existing `/commit-message` command in the slash-command registry, registered `/loop` through its runtime visibility gate, and routed Buddy UI surfaces through the shared runtime feature helper.
 - **Config and Tool Reminder Controls**: Added the tool-history compression toggle to `/config`, memoized model picker options by fast-mode state, and let `GAKR_DISABLE_TOOL_REMINDERS` suppress FileRead mitigation reminders.
+- **Permission Prompt Identity**: Routed permission, plan-mode, log-search, and notification setting copy through the shared GakrCLI product display name.
 - **Maintainer Templates**: Added GitHub bug report and feature request issue templates.
 - **Regression Coverage and Shared Helpers**: Added focused tests for storage providers, export rendering, abort-signal cleanup, Bash safety checks, OAuth callback bounds, local fast-path provider config, CLI heap settings, shared mutation locking, agent markdown rendering, and extracted keybinding, plugin command, and FileRead tool-name helpers.
 - **Provider Setup Hints**: Documented Z.AI, Hicap, self-hosted Firecrawl, and structured token-usage logging environment options in the sample environment file.
