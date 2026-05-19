@@ -52,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **GitHub Native Claude Mode**: Routed GitHub Claude-family models through Anthropic-native requests so prompt caching and `cache_control` blocks remain available.
 - **Opengateway Smart Route**: Moved Gitlawb Opengateway defaults to the shared `/v1` endpoint, added the Gemini Flash Lite partner model, and normalized older hosted route URLs.
 - **OpenAI Shim Compatibility**: Redacted credentials from transport-error URLs and stripped unsupported `store` fields for Cerebras chat-completion requests.
+- **API Context Overflow Handling**: Removed a duplicate 500-context-overflow error branch while keeping regression coverage for the friendly new-session guidance.
 - **VS Code Extension Packaging**: Added explicit activation events, packaged-file allowlists, and isolated extension module mocks during tests.
 - **Agent File Safety**: Prevented non-string agent descriptions from crashing markdown creation and respected loaded agent directories when editing existing agents.
 - **Agent Creation and Handoffs**: Rejected generated agents with non-string required fields, routed async child-agent completion and cancellation notifications back to the invoking subagent, and kept agent creation/statusline prompts aligned with the active GakrCLI product and settings home.
