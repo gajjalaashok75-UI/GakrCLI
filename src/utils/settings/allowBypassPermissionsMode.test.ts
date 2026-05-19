@@ -76,6 +76,17 @@ describe('SettingsSchema allowBypassPermissionsMode', () => {
   })
 })
 
+describe('SettingsSchema effortLevel', () => {
+  test('accepts max effort level', async () => {
+    const { SettingsSchema } = await import('./types.js')
+    const result = SettingsSchema().safeParse({
+      effortLevel: 'max',
+    })
+
+    expect(result.success).toBe(true)
+  })
+})
+
 describe('hasAllowBypassPermissionsMode', () => {
   test('returns true for trusted flag settings', async () => {
     setFlagSettingsInline({
