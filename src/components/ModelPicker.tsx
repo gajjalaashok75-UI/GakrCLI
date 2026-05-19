@@ -88,7 +88,15 @@ export function ModelPicker(t0) {
   }
   const [effort, setEffort] = useState(t1);
   const t2 = isFastMode ?? false;
-  const modelOptions = optionsOverride ?? getModelOptions(t2);
+  let t3;
+  if ($[2] !== t2) {
+    t3 = getModelOptions(t2);
+    $[2] = t2;
+    $[3] = t3;
+  } else {
+    t3 = $[3];
+  }
+  const modelOptions = optionsOverride ?? t3;
   let t4;
   bb0: {
     if (initial !== null && !modelOptions.some(opt => opt.value === initial)) {
