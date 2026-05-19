@@ -6,6 +6,7 @@ import { CodexOAuthService } from './codexOAuth.js'
 
 const originalFetch = globalThis.fetch
 const originalCallbackPort = process.env.CODEX_OAUTH_CALLBACK_PORT
+const originalCallbackHost = process.env.CODEX_OAUTH_CALLBACK_HOST
 const originalClientId = process.env.CODEX_OAUTH_CLIENT_ID
 
 afterEach(() => {
@@ -16,6 +17,12 @@ afterEach(() => {
     delete process.env.CODEX_OAUTH_CALLBACK_PORT
   } else {
     process.env.CODEX_OAUTH_CALLBACK_PORT = originalCallbackPort
+  }
+
+  if (originalCallbackHost === undefined) {
+    delete process.env.CODEX_OAUTH_CALLBACK_HOST
+  } else {
+    process.env.CODEX_OAUTH_CALLBACK_HOST = originalCallbackHost
   }
 
   if (originalClientId === undefined) {
@@ -64,14 +71,18 @@ function buildCallbackRequest(authUrl: string): string {
   return callbackUrl.toString()
 }
 
+function isCallbackRequest(input: unknown): boolean {
+  const url = String(input)
+  return url.startsWith('http://localhost:') || url.startsWith('http://127.0.0.1:')
+}
+
 test('serves updated success copy after a successful Codex OAuth flow', async () => {
   const callbackPort = await getFreePort()
   process.env.CODEX_OAUTH_CALLBACK_PORT = String(callbackPort)
   process.env.CODEX_OAUTH_CLIENT_ID = 'test-client-id'
 
   globalThis.fetch = mock(async (input, init) => {
-    const url = String(input)
-    if (url.startsWith('http://localhost:')) {
+    if (isCallbackRequest(input)) {
       return originalFetch(input, init)
     }
 
@@ -118,8 +129,7 @@ test('cancellation during token exchange returns a cancelled page and rejects th
   })
 
   globalThis.fetch = mock((input, init) => {
-    const url = String(input)
-    if (url.startsWith('http://localhost:')) {
+    if (isCallbackRequest(input)) {
       return originalFetch(input, init)
     }
 
@@ -163,4 +173,46 @@ test('cancellation during token exchange returns a cancelled page and rejects th
 
   expect(html).toContain('Codex login cancelled')
   expect(html).toContain('retry in GakrCLI')
+})
+
+test('binds Codex OAuth callback server to configured loopback host', async () => {
+  const callbackPort = await getFreePort()
+  process.env.CODEX_OAUTH_CALLBACK_PORT = String(callbackPort)
+  process.env.CODEX_OAUTH_CALLBACK_HOST = '127.0.0.1'
+  process.env.CODEX_OAUTH_CLIENT_ID = 'test-client-id'
+
+  globalThis.fetch = mock(async (input, init) => {
+    if (isCallbackRequest(input)) {
+      return originalFetch(input, init)
+    }
+
+    return new Response(
+      JSON.stringify({
+        access_token: 'access-token',
+        refresh_token: 'refresh-token',
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      },
+    )
+  }) as typeof fetch
+
+  const service = new CodexOAuthService()
+  let capturedAuthUrl = ''
+  let callbackResponsePromise!: Promise<Response>
+
+  const flowPromise = service.startOAuthFlow(async authUrl => {
+    capturedAuthUrl = authUrl
+    callbackResponsePromise = originalFetch(buildCallbackRequest(authUrl))
+  })
+
+  const tokens = await flowPromise
+  const callbackResponse = await callbackResponsePromise
+
+  expect(tokens.accessToken).toBe('access-token')
+  expect(callbackResponse.status).toBe(200)
+  expect(capturedAuthUrl).toContain(
+    encodeURIComponent(`http://127.0.0.1:${callbackPort}/auth/callback`),
+  )
 })

@@ -207,7 +207,7 @@ export class CodexOAuthService {
     this.port = null
 
     try {
-      const port = await authCodeListener.start(callbackPort)
+      const port = await authCodeListener.start(callbackPort, callbackHost)
       this.port = port
 
       const state = generateState()
@@ -296,7 +296,7 @@ export class CodexOAuthService {
         message.includes(String(callbackPort))
       ) {
         throw new Error(
-          `Codex OAuth needs localhost:${callbackPort} for its callback. Close any app already using that port and try again.`,
+          `Codex OAuth needs ${callbackHost}:${callbackPort} for its callback. Close any app already using that port and try again.`,
         )
       }
       throw error
