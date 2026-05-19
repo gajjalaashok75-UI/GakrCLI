@@ -1,4 +1,5 @@
 import { feature } from 'bun:bundle'
+import { PRODUCT_DISPLAY_NAME } from '../../constants/product.js'
 import {
   getRemoteControlAtStartup,
   SHOW_CACHE_STATS_MODES,
@@ -132,7 +133,7 @@ export const SUPPORTED_SETTINGS: Record<string, SettingConfig> = {
     source: 'settings',
     type: 'string',
     description:
-      'Preferred language for Gakr responses and voice dictation (e.g., "japanese", "spanish")',
+      `Preferred language for ${PRODUCT_DISPLAY_NAME} responses and voice dictation (e.g., "japanese", "spanish")`,
   },
   teammateMode: {
     source: 'global',
@@ -177,7 +178,7 @@ export const SUPPORTED_SETTINGS: Record<string, SettingConfig> = {
           source: 'global' as const,
           type: 'boolean' as const,
           description:
-            'Push to your mobile device when idle after Gakr finishes (requires Remote Control)',
+            `Push to your mobile device when idle after ${PRODUCT_DISPLAY_NAME} finishes (requires Remote Control)`,
         },
         inputNeededNotifEnabled: {
           source: 'global' as const,
@@ -189,7 +190,7 @@ export const SUPPORTED_SETTINGS: Record<string, SettingConfig> = {
           source: 'global' as const,
           type: 'boolean' as const,
           description:
-            'Allow Gakr to push to your mobile device when it deems it appropriate (requires Remote Control)',
+            `Allow ${PRODUCT_DISPLAY_NAME} to push to your mobile device when it deems it appropriate (requires Remote Control)`,
         },
       }
     : {}),
