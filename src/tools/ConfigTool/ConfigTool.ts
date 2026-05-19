@@ -4,6 +4,7 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../../services/analytics/index.js'
+import { PRODUCT_DISPLAY_NAME } from '../../constants/product.js'
 import { buildTool, type ToolDef } from '../../Tool.js'
 import {
   type GlobalConfig,
@@ -66,7 +67,7 @@ export type Output = z.infer<OutputSchema>
 
 export const ConfigTool = buildTool({
   name: CONFIG_TOOL_NAME,
-  searchHint: 'get or set Gakr settings (theme, model)',
+  searchHint: `get or set ${PRODUCT_DISPLAY_NAME} settings (theme, model)`,
   maxResultSizeChars: 100_000,
   async description() {
     return DESCRIPTION

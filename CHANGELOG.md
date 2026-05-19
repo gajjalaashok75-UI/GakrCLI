@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Xiaomi MiMo Model Picker**: Added cached Xiaomi MiMo model options with provider detection coverage for MiMo credentials and base URLs.
 - **Command and Buddy Runtime Wiring**: Exposed the existing `/commit-message` command in the slash-command registry, registered `/loop` through its runtime visibility gate, and routed Buddy UI surfaces through the shared runtime feature helper.
 - **Config and Tool Reminder Controls**: Added the tool-history compression toggle to `/config`, memoized model picker options by fast-mode state, and let `GAKR_DISABLE_TOOL_REMINDERS` suppress FileRead mitigation reminders.
+- **Tool Prompt Product Copy**: Routed ConfigTool and EnterPlanMode prompt surfaces through the shared product display name and removed the internal-only plan-mode prompt fork.
 - **Permission Prompt Identity**: Routed permission, plan-mode, log-search, and notification setting copy through the shared GakrCLI product display name.
 - **Codex OAuth Callback Host**: Bound the Codex OAuth callback listener to the configured loopback host and covered `CODEX_OAUTH_CALLBACK_HOST=127.0.0.1`.
 - **Maintainer Templates**: Added GitHub bug report and feature request issue templates.
