@@ -35,17 +35,13 @@ export function isIngakrcliFolder(filePath: string): boolean {
 export function isInGlobalgakrcliFolder(filePath: string): boolean {
   const absolutePath = expandPath(filePath);
   const normalizedAbsolutePath = normalizeCaseForComparison(absolutePath);
-  const globalFolders = [
+  const normalizedFolder = normalizeCaseForComparison(
     join(homedir(), '.gakrcli'),
-    join(homedir(), '.claude'),
-  ];
-  return globalFolders.some(folder => {
-    const normalizedFolder = normalizeCaseForComparison(folder);
-    return (
-      normalizedAbsolutePath.startsWith(normalizedFolder + sep.toLowerCase()) ||
-      normalizedAbsolutePath.startsWith(normalizedFolder + '/')
-    );
-  });
+  );
+  return (
+    normalizedAbsolutePath.startsWith(normalizedFolder + sep.toLowerCase()) ||
+    normalizedAbsolutePath.startsWith(normalizedFolder + '/')
+  );
 }
 export type PermissionOption = {
   type: 'accept-once';

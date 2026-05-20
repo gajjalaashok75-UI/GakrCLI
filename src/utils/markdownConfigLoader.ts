@@ -38,7 +38,7 @@ export const GAKR_CONFIG_DIRECTORIES = [
 
 export type gakrcliConfigDirectory = (typeof GAKR_CONFIG_DIRECTORIES)[number]
 
-const PROJECT_CONFIG_DIR_NAMES = ['.claude', '.gakrcli'] as const
+const PROJECT_CONFIG_DIR_NAMES = ['.gakrcli'] as const
 
 export type MarkdownFile = {
   filePath: string

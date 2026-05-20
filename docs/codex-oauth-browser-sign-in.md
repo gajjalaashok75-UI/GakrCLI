@@ -498,12 +498,11 @@ with file mode `0600`. Codex OAuth explicitly disables this fallback.
 
 The config directory is resolved by `getGakrcliConfigHomeDir()` in
 `src/utils/envUtils.ts`. It defaults to `~/.gakrcli`, unless `GAKR_CONFIG_DIR`
-is set. If a legacy `~/.claude` directory exists and `~/.gakrcli` does not, the
-resolver may use the legacy directory for compatibility.
+is set.
 
 The global provider-profile config path is resolved by `getGlobalGakrcliFile()`
-in `src/utils/env.ts`. By default it is `~/.gakrcli.json`, with suffix and
-legacy fallback behavior for OAuth/config variants.
+in `src/utils/env.ts`. By default it is `~/.gakrcli.json`, with suffix handling
+for OAuth/config variants.
 `saveGlobalConfig()` writes JSON with mode `0600` and filters out default values,
 so empty defaults like an empty provider profile list may be omitted from disk.
 

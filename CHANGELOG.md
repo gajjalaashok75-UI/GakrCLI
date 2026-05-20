@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.5.2] - 2026-05-17
 
+### Changed
+- **GakrCLI Config Home Cleanup (2026-05-20 09:37:21 +05:30)**: Removed active legacy `~/.claude` and project `.claude` config fallback paths so user config, project markdown loading, managed local install detection, VS Code session discovery, and permission special-casing now rely on `~/.gakrcli` / `.gakrcli` only.
+- **Pinned Bun Runtime**: Added the shared `.bun-version` and wired CI and Docker builds to use the repo-tracked Bun version.
+
 ### Added
 - **Multi-Format Conversation Exports**: Added export format helpers and coverage for text, Markdown, and JSON transcript exports, including direct filenames, explicit format flags, dialog selection, clipboard export, and file-save flows.
 - **Sponsored Spinner Tips**: Added sponsored tip metadata, Atomic Chat and Xiaomi MiMo sponsored tips, frequency settings, scheduler partitioning, and history coverage.
@@ -20,9 +24,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Regression Coverage and Shared Helpers**: Added focused tests for storage providers, export rendering, abort-signal cleanup, Bash safety checks, OAuth callback bounds, local fast-path provider config, CLI heap settings, shared mutation locking, agent markdown rendering, and extracted keybinding, plugin command, and FileRead tool-name helpers.
 - **Provider Setup Hints**: Documented Z.AI, Hicap, self-hosted Firecrawl, and structured token-usage logging environment options in the sample environment file.
 - **NVIDIA NIM Model Coverage**: Added current NIM route entries for DeepSeek V4, GLM 5.1, MiniMax M2.7, Nemotron, Mistral, Kimi, and related models, with coverage to prevent duplicate picker IDs.
-
-### Changed
-- **Pinned Bun Runtime**: Added the shared `.bun-version` and wired CI and Docker builds to use the repo-tracked Bun version.
 
 ### Fixed
 - **Windows Bin Import Path**: Normalized Windows drive-letter paths in the CLI bin import helper so built entrypoint URLs are valid across path contexts.
@@ -68,9 +69,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tool Error Handling**: Surfaced Web Search adapter failures with actionable provider guidance and normalized single-question AskUserQuestion payloads before schema validation.
 - **Provider Diagnostic Coverage**: Added regression coverage for Venice and Xiaomi MiMo route defaults, Xiaomi MiMo credential validation, and shared URL credential-parameter redaction.
 - **Provider Route Compatibility**: Restored the Copilot Claude cache metrics bucket name and added coverage for Xiaomi MiMo auth headers, max-token shaping, and Gitlawb Opengateway smart-route normalization.
-- **Command and Plugin Hook Safety**: Filtered generated command stubs out of the slash-command registry, deduplicated repeated plugin hook registrations, and restored legacy `.claude` project agent loading with `.gakrcli` precedence.
+- **Command and Plugin Hook Safety**: Filtered generated command stubs out of the slash-command registry and deduplicated repeated plugin hook registrations.
 - **Provider Profile Coverage**: Added Venice and Xiaomi MiMo regression coverage for provider flags, saved profile env mirroring, startup profile persistence, `/provider` summaries, and OpenAI-shim model defaults.
-- **Config Directory Migration**: Hard-cut default config paths to `~/.gakrcli`, copied missing legacy `.claude` config homes and global config files forward, and kept legacy fallbacks scoped to failed migrations or explicit `GAKR_CONFIG_DIR` overrides.
+- **Config Directory Cleanup**: Hard-cut default config paths to `~/.gakrcli` and kept explicit `GAKR_CONFIG_DIR` overrides as the only config-directory override.
 - **Runtime Identity Cleanup**: Replaced leftover upstream memory, coordinator, ripgrep, and custom Web Search identity strings with GakrCLI names and `GAKR_*` environment variables, with regression coverage for the prompt surfaces.
 - **SDK Package Identity**: Updated SDK consumer type tests, VS Code session discovery, and tool-concurrency tuning to use the GakrCLI package name and `GAKR_*` environment variables, documented the tuning knob in the sample environment file, and cleaned a stale upstream wording note from the landing-page setup guide.
 - **Provider Preset Setup Flow**: Restored the streamlined preset model/API-key setup for non-placeholder providers while keeping placeholder endpoints on the full setup form, with OpenAI, MiniMax, and Hicap regression coverage.

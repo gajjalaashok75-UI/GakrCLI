@@ -113,10 +113,6 @@ export function getgakrcliSkillScope(
       dir: expandPath(join(homedir(), '.gakrcli', 'skills')),
       prefix: '~/.gakrcli/skills/',
     },
-    {
-      dir: expandPath(join(homedir(), '.claude', 'skills')),
-      prefix: '~/.claude/skills/',
-    },
   ]
 
   for (const { dir, prefix } of bases) {

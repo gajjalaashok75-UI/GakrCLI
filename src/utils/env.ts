@@ -7,7 +7,6 @@ import { createCombinedAbortSignal } from './combinedAbortSignal.js'
 import {
   getGakrcliConfigHomeDir,
   isEnvTruthy,
-  migrateLegacyGakrcliConfigHome,
 } from './envUtils.js'
 import { findExecutable } from './findExecutable.js'
 import { getFsImplementation } from './fsOperations.js'
@@ -19,22 +18,11 @@ export function resolveGlobalGakrcliFile(options: {
   configDirEnv?: string
   homeDir?: string
   oauthSuffix?: string
-  migrationSucceeded?: boolean
-  existsSync: (path: string) => boolean
 }): string {
   const oauthSuffix = options.oauthSuffix ?? ''
   const configDir = options.configDirEnv || options.homeDir || homedir()
-  const hasExplicitConfigDir = Boolean(options.configDirEnv)
   const newFilename = `.gakrcli${oauthSuffix}.json`
-  const legacyFilename = `.claude${oauthSuffix}.json`
 
-  if (
-    (hasExplicitConfigDir || options.migrationSucceeded === false) &&
-    !options.existsSync(join(configDir, newFilename)) &&
-    options.existsSync(join(configDir, legacyFilename))
-  ) {
-    return join(configDir, legacyFilename)
-  }
   return join(configDir, newFilename)
 }
 
@@ -51,19 +39,11 @@ export const getGlobalGakrcliFile = memoize((): string => {
 
   const oauthSuffix = fileSuffixForOauthConfig()
   const configDir = process.env.GAKR_CONFIG_DIR || homedir()
-  const hasExplicitConfigDir = Boolean(process.env.GAKR_CONFIG_DIR)
-  let migrationSucceeded = true
-
-  if (!hasExplicitConfigDir) {
-    migrationSucceeded = migrateLegacyGakrcliConfigHome({ homeDir: configDir })
-  }
 
   return resolveGlobalGakrcliFile({
     configDirEnv: process.env.GAKR_CONFIG_DIR,
     homeDir: configDir,
     oauthSuffix,
-    migrationSucceeded,
-    existsSync: path => getFsImplementation().existsSync(path),
   })
 })
 
