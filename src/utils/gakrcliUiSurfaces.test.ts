@@ -77,7 +77,7 @@ describe('GakrCLI settings path surfaces', () => {
     ).toBe(true)
     expect(
       isInGlobalgakrcliFolder(join(homedir(), '.claude', 'settings.json')),
-    ).toBe(true)
+    ).toBe(false)
   })
 
   test('permission dialog does not treat arbitrary GAKR_CONFIG_DIR as the global GakrCLI folder', () => {
@@ -90,7 +90,7 @@ describe('GakrCLI settings path surfaces', () => {
     ).toBe(false)
   })
 
-  test('global skill scope recognizes ~/.gakrcli and legacy ~/.claude skills', () => {
+  test('global skill scope recognizes ~/.gakrcli skills only', () => {
     process.env.GAKR_CONFIG_DIR = join(homedir(), '.gakrcli')
 
     expect(
@@ -106,10 +106,7 @@ describe('GakrCLI settings path surfaces', () => {
       getgakrcliSkillScope(
         join(homedir(), '.claude', 'skills', 'legacy', 'SKILL.md'),
       ),
-    ).toEqual({
-      skillName: 'legacy',
-      pattern: '~/.claude/skills/legacy/**',
-    })
+    ).toBe(null)
   })
 
   test('global skill scope does not emit fixed rules for arbitrary GAKR_CONFIG_DIR skills', () => {

@@ -1693,13 +1693,7 @@ export async function cleanupNpmInstallations(): Promise<{
     }
   }
 
-  // Preserve compatibility with pre-migration installs under ~/.claude/local.
-  const localInstallDirs = Array.from(
-    new Set([
-      join(getGakrcliConfigHomeDir(), 'local'),
-      join(homedir(), '.claude', 'local'),
-    ]),
-  )
+  const localInstallDirs = [join(getGakrcliConfigHomeDir(), 'local')]
 
   for (const localInstallDir of localInstallDirs) {
     try {

@@ -4,8 +4,6 @@
  *
  * Session files live under:
  *   ~/.gakrcli/projects/<sanitized-cwd>/<sessionId>.jsonl
- *
- * Falls back to ~/.claude/projects/ for legacy installs.
  */
 
 const fs = require('fs');
@@ -34,13 +32,7 @@ function simpleHash(str) {
 function resolveConfigDir() {
   const envDir = process.env.GAKR_CONFIG_DIR;
   if (envDir) return envDir;
-  const home = os.homedir();
-  const gakrcliDir = path.join(home, '.gakrcli');
-  const legacyDir = path.join(home, '.claude');
-  if (!fs.existsSync(gakrcliDir) && fs.existsSync(legacyDir)) {
-    return legacyDir;
-  }
-  return gakrcliDir;
+  return path.join(os.homedir(), '.gakrcli');
 }
 
 function getProjectsDir() {

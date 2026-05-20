@@ -3,7 +3,6 @@
  */
 
 import { access, chmod, writeFile } from 'fs/promises'
-import { homedir } from 'os'
 import { join } from 'path'
 import { type ReleaseChannel, saveGlobalConfig } from './config.js'
 import { getGakrcliConfigHomeDir } from './envUtils.js'
@@ -21,34 +20,20 @@ function getLocalInstallDir(): string {
   return join(getGakrcliConfigHomeDir(), 'local')
 }
 
-function getLegacyLocalInstallDir(homeDir = homedir()): string {
-  return join(homeDir, '.claude', 'local')
-}
-
 export function getCandidateLocalInstallDirs(options?: {
   configHomeDir?: string
-  homeDir?: string
 }): string[] {
-  const homeDir = options?.homeDir ?? homedir()
   const configHomeDir = options?.configHomeDir ?? getGakrcliConfigHomeDir()
-  return Array.from(
-    new Set([join(configHomeDir, 'local'), getLegacyLocalInstallDir(homeDir)]),
-  )
+  return [join(configHomeDir, 'local')]
 }
 
 function getCandidateLocalBinaryPaths(localInstallDir: string): string[] {
-  return [
-    join(localInstallDir, 'node_modules', '.bin', 'gakrcli'),
-    join(localInstallDir, 'node_modules', '.bin', 'claude'),
-  ]
+  return [join(localInstallDir, 'node_modules', '.bin', 'gakrcli')]
 }
 
 export function isManagedLocalInstallationPath(execPath: string): boolean {
   const normalizedExecPath = execPath.replace(/\\+/g, '/')
-  return (
-    normalizedExecPath.includes('/.gakrcli/local/node_modules/') ||
-    normalizedExecPath.includes('/.claude/local/node_modules/')
-  )
+  return normalizedExecPath.includes('/.gakrcli/local/node_modules/')
 }
 
 export function getLocalGakrcliPath(): string {
