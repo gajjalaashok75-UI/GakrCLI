@@ -3,6 +3,7 @@ import type { AppState } from '../../state/AppState.js';
 import { checkHasTrustDialogAccepted } from '../config.js';
 import { logForDebugging } from '../debug.js';
 import { clearMarketplacesCache, registerSeedMarketplaces } from './marketplaceManager.js';
+import { checkAndInstallOfficialMarketplace } from './officialMarketplaceStartupCheck.js';
 import { clearPluginCache } from './pluginLoader.js';
 type SetAppState = (f: (prevState: AppState) => AppState) => void;
 
@@ -57,6 +58,12 @@ export async function performStartupChecks(setAppState: SetAppState): Promise<vo
           }
         };
       });
+    }
+
+    const officialMarketplaceResult = await checkAndInstallOfficialMarketplace();
+    if (officialMarketplaceResult.installed) {
+      clearMarketplacesCache();
+      clearPluginCache('performStartupChecks: official marketplace installed');
     }
 
     // Start background installations without waiting

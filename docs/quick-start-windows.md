@@ -1,4 +1,4 @@
-# Gakr Quick Start for Windows (v0.5.2)
+# Gakr Quick Start for Windows (v0.5.3)
 
 This guide uses Windows PowerShell.
 

@@ -5,6 +5,19 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.3] - 2026-05-22
+
+### Added
+- **Official Plugin Marketplace Bootstrap**: Added the built-in `gakrcli-official-plugins` plugin and startup checks that automatically install and enable the official GakrCLI plugin marketplace when needed.
+- **Plugin MCP Regression Coverage**: Added focused tests for plugin MCP working-directory resolution, official marketplace startup repair, and UTF-8 BOM-safe JSON parsing.
+
+### Fixed
+- **Plugin Marketplace JSON Parsing**: Stripped UTF-8 BOM markers before JSON parsing so marketplace manifests downloaded from GitHub parse correctly.
+- **Plugin MCP Startup on Windows**: Spawned plugin-provided stdio MCP servers from the plugin install directory and accepted both `${GAKR_PLUGIN_*}` and legacy `${GAKRCLI_PLUGIN_*}` variable names, fixing official Telegram MCP startup.
+
+### Removed
+- **Bundled Karpathy Guidelines Plugin**: Removed the bundled Karpathy guidelines plugin and its tests.
+
 ## [0.5.2] - 2026-05-17
 
 ### Changed

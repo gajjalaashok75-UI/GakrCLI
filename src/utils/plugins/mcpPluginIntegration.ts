@@ -507,6 +507,12 @@ export function resolvePluginMcpEnvironment(
         stdioConfig.args = stdioConfig.args.map(arg => resolveValue(arg))
       }
 
+      if (stdioConfig.cwd) {
+        stdioConfig.cwd = resolveValue(stdioConfig.cwd)
+      } else {
+        stdioConfig.cwd = plugin.path
+      }
+
       // Resolve environment variables and add GAKR_PLUGIN_ROOT / GAKR_PLUGIN_DATA
       const resolvedEnv: Record<string, string> = {
         GAKR_PLUGIN_ROOT: plugin.path,

@@ -974,6 +974,7 @@ export const connectToServer = memoize(
             ...serverRef.env,
           } as Record<string, string>,
           stderr: 'pipe', // prevents error output from the MCP server from printing to the UI
+          cwd: serverRef.cwd,
         })
       } else {
         throw new Error(`Unsupported server type: ${serverRef.type}`)
