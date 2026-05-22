@@ -14,11 +14,11 @@
  * 2. Call registerBuiltinPlugin() with the plugin definition here
  */
 
-import { registerKarpathyGuidelinesPlugin } from './karpathyGuidelines.js'
+import { registerGakrcliOfficialPluginsPlugin } from './gakrcliOfficialPlugins.js'
 
 /**
  * Initialize built-in plugins. Called during CLI startup.
  */
 export function initBuiltinPlugins(): void {
-  registerKarpathyGuidelinesPlugin()
+  registerGakrcliOfficialPluginsPlugin()
 }

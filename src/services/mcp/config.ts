@@ -143,6 +143,15 @@ function getServerCommandArray(config: McpServerConfig): string[] | null {
   return [stdioConfig.command, ...(stdioConfig.args ?? [])]
 }
 
+function getServerCommandSignature(config: McpServerConfig): string[] | null {
+  const command = getServerCommandArray(config)
+  if (!command) {
+    return null
+  }
+  const stdioConfig = config as McpStdioServerConfig
+  return [stdioConfig.cwd ?? '', ...command]
+}
+
 /**
  * Check if two command arrays match exactly
  */
@@ -200,7 +209,7 @@ export function unwrapCcrProxyUrl(url: string): string {
  * Returns null only for configs with neither command nor url (sdk type).
  */
 export function getMcpServerSignature(config: McpServerConfig): string | null {
-  const cmd = getServerCommandArray(config)
+  const cmd = getServerCommandSignature(config)
   if (cmd) {
     return `stdio:${jsonStringify(cmd)}`
   }
