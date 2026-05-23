@@ -112,6 +112,10 @@ export function getMarketplacesCacheDir(): string {
   return join(getPluginsDirectory(), 'marketplaces')
 }
 
+export function isBuiltInMarketplace(name: string): boolean {
+  return name === OFFICIAL_MARKETPLACE_NAME
+}
+
 /**
  * Memoized inner function to get marketplace data.
  * This caches the marketplace in memory after loading from disk or network.
@@ -1939,6 +1943,13 @@ export async function removeMarketplaceSource(name: string): Promise<void> {
 
   if (!config[name]) {
     throw new Error(`Marketplace '${name}' not found`)
+  }
+
+  if (isBuiltInMarketplace(name)) {
+    throw new Error(
+      `Marketplace '${name}' is built in and cannot be removed. ` +
+        `To stop using a plugin from this marketplace, disable or uninstall the plugin instead.`,
+    )
   }
 
   // Seed-registered marketplaces are admin-baked into the container — removing
