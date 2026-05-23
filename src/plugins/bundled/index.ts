@@ -14,11 +14,11 @@
  * 2. Call registerBuiltinPlugin() with the plugin definition here
  */
 
-import { registerGakrcliOfficialPluginsPlugin } from './gakrcliOfficialPlugins.js'
-
 /**
  * Initialize built-in plugins. Called during CLI startup.
  */
 export function initBuiltinPlugins(): void {
-  registerGakrcliOfficialPluginsPlugin()
+  // No built-in plugins are registered today.
+  // The official plugin source is a built-in marketplace, installed by
+  // performStartupChecks(), rather than a visible @builtin plugin row.
 }

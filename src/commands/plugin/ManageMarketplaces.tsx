@@ -15,7 +15,7 @@ import { shouldSkipPluginAutoupdate } from '../../utils/config.js';
 import { errorMessage } from '../../utils/errors.js';
 import { clearAllCaches } from '../../utils/plugins/cacheUtils.js';
 import { createPluginId, formatMarketplaceLoadingErrors, getMarketplaceSourceDisplay, loadMarketplacesWithGracefulDegradation } from '../../utils/plugins/marketplaceHelpers.js';
-import { loadKnownMarketplacesConfig, refreshMarketplace, removeMarketplaceSource, setMarketplaceAutoUpdate } from '../../utils/plugins/marketplaceManager.js';
+import { isBuiltInMarketplace, loadKnownMarketplacesConfig, refreshMarketplace, removeMarketplaceSource, setMarketplaceAutoUpdate } from '../../utils/plugins/marketplaceManager.js';
 import { updatePluginsForMarketplaces } from '../../utils/plugins/pluginAutoupdate.js';
 import { loadAllPlugins } from '../../utils/plugins/pluginLoader.js';
 import { isMarketplaceAutoUpdate } from '../../utils/plugins/schemas.js';
@@ -44,6 +44,7 @@ type MarketplaceState = {
   pendingUpdate?: boolean;
   pendingRemove?: boolean;
   autoUpdate?: boolean;
+  builtIn?: boolean;
 };
 type InternalViewState = 'list' | 'details' | 'confirm-remove';
 export function ManageMarketplaces({
@@ -100,7 +101,8 @@ export function ManageMarketplaces({
             installedPlugins: installedFromMarketplace,
             pendingUpdate: false,
             pendingRemove: false,
-            autoUpdate: isMarketplaceAutoUpdate(name, entry)
+            autoUpdate: isMarketplaceAutoUpdate(name, entry),
+            builtIn: isBuiltInMarketplace(name)
           });
         }
 
@@ -135,7 +137,7 @@ export function ManageMarketplaces({
               const newStates = [...states];
               if (action === 'update') {
                 newStates[targetIndex]!.pendingUpdate = true;
-              } else if (action === 'remove') {
+              } else if (action === 'remove' && !targetState?.builtIn) {
                 newStates[targetIndex]!.pendingRemove = true;
               }
               setMarketplaceStates(newStates);
@@ -196,6 +198,10 @@ export function ManageMarketplaces({
       for (const state of statesToProcess) {
         // Handle remove
         if (state.pendingRemove) {
+          if (state.builtIn) {
+            setProcessError(`Marketplace '${state.name}' is built in and cannot be removed.`);
+            continue;
+          }
           // First uninstall all plugins from this marketplace
           if (state.installedPlugins && state.installedPlugins.length > 0) {
             const newEnabledPlugins = {
@@ -282,7 +288,8 @@ export function ManageMarketplaces({
           installedPlugins: installedFromMarketplace,
           pendingUpdate: false,
           pendingRemove: false,
-          autoUpdate: isMarketplaceAutoUpdate(name, entry)
+          autoUpdate: isMarketplaceAutoUpdate(name, entry),
+          builtIn: isBuiltInMarketplace(name)
         });
       }
 
@@ -380,10 +387,12 @@ export function ManageMarketplaces({
         value: 'toggle-auto-update'
       });
     }
-    options.push({
-      label: 'Remove marketplace',
-      value: 'remove'
-    });
+    if (!marketplace.builtIn) {
+      options.push({
+        label: 'Remove marketplace',
+        value: 'remove'
+      });
+    }
     return options;
   };
 
@@ -481,7 +490,9 @@ export function ManageMarketplaces({
       } : state));
     } else if ((input === 'r' || input === 'R') && marketplaceIndex >= 0) {
       const marketplace = marketplaceStates[marketplaceIndex];
-      if (marketplace) {
+      if (marketplace?.builtIn) {
+        setProcessError(`Marketplace '${marketplace.name}' is built in and cannot be removed.`);
+      } else if (marketplace) {
         setSelectedMarketplace(marketplace);
         setInternalView('confirm-remove');
       }
@@ -756,18 +767,27 @@ export function ManageMarketplaces({
           <Text color="error">{processError}</Text>
         </Box>}
 
-      <ManageMarketplacesKeyHints exitState={exitState} hasPendingActions={hasPendingChanges()} />
+      <ManageMarketplacesKeyHints
+        exitState={exitState}
+        hasPendingActions={hasPendingChanges()}
+        canRemoveSelected={
+          selectedIndex > 0 &&
+          !marketplaceStates[selectedIndex - 1]?.builtIn
+        }
+      />
     </Box>;
 }
 type ManageMarketplacesKeyHintsProps = {
   exitState: Props['exitState'];
   hasPendingActions: boolean;
+  canRemoveSelected: boolean;
 };
 function ManageMarketplacesKeyHints(t0) {
-  const $ = _c(18);
+  const $ = _c(19);
   const {
     exitState,
-    hasPendingActions
+    hasPendingActions,
+    canRemoveSelected
   } = t0;
   if (exitState.pending) {
     let t1;
@@ -805,9 +825,10 @@ function ManageMarketplacesKeyHints(t0) {
     t3 = $[7];
   }
   let t4;
-  if ($[8] !== hasPendingActions) {
-    t4 = !hasPendingActions && <KeyboardShortcutHint shortcut="r" action="remove" />;
+  if ($[8] !== hasPendingActions || $[18] !== canRemoveSelected) {
+    t4 = !hasPendingActions && canRemoveSelected && <KeyboardShortcutHint shortcut="r" action="remove" />;
     $[8] = hasPendingActions;
+    $[18] = canRemoveSelected;
     $[9] = t4;
   } else {
     t4 = $[9];
