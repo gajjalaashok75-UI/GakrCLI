@@ -737,9 +737,16 @@ export const getSkillDirCommands = memoize(
       const npmConfigResult = await execa('npm', ['config', 'get', 'prefix'], {
         reject: false,
       })
-      if (npmConfigResult.exitCode === 0) {
+      if (!process.env.GAKR_CONFIG_DIR && npmConfigResult.exitCode === 0) {
         const npmPrefix = npmConfigResult.stdout.trim()
-        npmGlobalSkillsDir = join(npmPrefix, 'node_modules', '@gakrcli-gakrcli', 'gakrcli', '.gakrcli', 'skills')
+        npmGlobalSkillsDir = join(
+          npmPrefix,
+          'node_modules',
+          '@gakr-gakr',
+          'gakrcli',
+          'assets',
+          'skills',
+        )
       }
     } catch (error) {
       // Ignore errors when checking npm global location

@@ -27,6 +27,7 @@ import { logForDiagnosticsNoPII } from '../utils/diagLogs.js'
 import { initJetBrainsDetection } from '../utils/envDynamic.js'
 import { isEnvTruthy } from '../utils/envUtils.js'
 import { ConfigParseError, errorMessage } from '../utils/errors.js'
+import { initUserDirs } from '../utils/initUserDirs.js'
 // showInvalidConfigDialog is dynamically imported in the error path to avoid loading React at init
 import {
   gracefulShutdownSync,
@@ -67,6 +68,18 @@ export const init = memoize(async (): Promise<void> => {
       duration_ms: Date.now() - configsStart,
     })
     profileCheckpoint('init_configs_enabled')
+
+    const userDirsStart = Date.now()
+    const userDirsResult = initUserDirs()
+    logForDiagnosticsNoPII('info', 'init_user_dirs_ready', {
+      duration_ms: Date.now() - userDirsStart,
+      created_dirs: userDirsResult.createdDirs.length,
+      synced_agents: userDirsResult.syncedAssets.agents,
+      synced_rules: userDirsResult.syncedAssets.rules,
+      synced_skills: userDirsResult.syncedAssets.skills,
+      missing_asset_dirs: userDirsResult.missingAssetDirs.length,
+    })
+    profileCheckpoint('init_user_dirs_ready')
 
     // Apply only safe environment variables before trust dialog
     // Full environment variables are applied after trust is established

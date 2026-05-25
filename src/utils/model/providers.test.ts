@@ -66,12 +66,12 @@ function clearProviderEnv(): void {
   delete process.env.OPENAI_API_KEY
 }
 
-test('first-party provider keeps Anthropic account setup flow enabled', () => {
+test('first-party provider keeps hosted GakrCLI auth flow enabled', () => {
   clearProviderEnv()
   return importFreshProvidersModule().then(
-    ({ getAPIProvider, usesAnthropicAccountFlow }) => {
+    ({ getAPIProvider, usesGakrcliHostedAuthFlow }) => {
       expect(getAPIProvider()).toBe('firstParty')
-      expect(usesAnthropicAccountFlow()).toBe(true)
+      expect(usesGakrcliHostedAuthFlow()).toBe(true)
     },
   )
 })
@@ -84,15 +84,15 @@ test.each([
   ['GAKR_CODE_USE_VERTEX', 'vertex'],
   ['GAKR_CODE_USE_FOUNDRY', 'foundry'],
 ] as const)(
-  '%s disables Anthropic account setup flow',
+  '%s disables hosted GakrCLI auth flow',
   async (envKey, provider) => {
     clearProviderEnv()
     process.env[envKey] = '1'
-    const { getAPIProvider, usesAnthropicAccountFlow } =
+    const { getAPIProvider, usesGakrcliHostedAuthFlow } =
       await importFreshProvidersModule()
 
     expect(getAPIProvider()).toBe(provider)
-    expect(usesAnthropicAccountFlow()).toBe(false)
+    expect(usesGakrcliHostedAuthFlow()).toBe(false)
   },
 )
 

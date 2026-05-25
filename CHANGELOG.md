@@ -5,6 +5,17 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-05-25 18:24:27 +05:30
+
+### Added
+- **Fresh Install User Directory Bootstrap**: Initialized `~/.gakrcli` during CLI startup with required runtime directories and synced packaged `agents`, `rules`, and `skills` defaults without overwriting user files.
+- **First-Run Provider Setup**: Added provider selection to the first-run GakrCLI setup flow so new users can choose and configure a provider before the REPL starts.
+
+### Fixed
+- **Global npm Install Asset Discovery**: Resolved packaged asset lookup from the installed package root and corrected global skills fallback paths for `@gakr-gakr/gakrcli`.
+- **GakrCLI Setup Naming**: Reframed onboarding, auth flow helpers, tests, and command copy away from old setup/account wording so the first-run experience is presented as GakrCLI setup.
+- **Startup Provider Environment Refresh**: Reapplied selected provider profile environment after onboarding so first-run provider choices are available before validation.
+
 ## [0.5.3] - 2026-05-22
 
 ### Added

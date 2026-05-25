@@ -27,7 +27,7 @@ import { isEnvTruthy, isRunningOnHomespace } from './utils/envUtils.js';
 import { type FpsMetrics, FpsTracker } from './utils/fpsTracker.js';
 import { updateGithubRepoPathMapping } from './utils/githubRepoPathMapping.js';
 import { applyConfigEnvironmentVariables } from './utils/managedEnv.js';
-import { usesAnthropicAccountFlow } from './utils/model/providers.js';
+import { usesGakrcliHostedAuthFlow } from './utils/model/providers.js';
 import type { PermissionMode } from './utils/permissions/PermissionMode.js';
 import { getBaseRenderOptions } from './utils/renderOptions.js';
 import { getSettingsWithAllErrors } from './utils/settings/allErrors.js';
@@ -110,12 +110,13 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
     return false;
   }
 
-  const usesAnthropicSetup = usesAnthropicAccountFlow();
+  const usesGakrcliHostedAuth = usesGakrcliHostedAuthFlow();
   const config = getGlobalConfig();
   let onboardingShown = false;
 
-  // Skip onboarding dialog for third-party providers (no Anthropic account needed)
-  if (usesAnthropicSetup && (!config.theme || !config.hasCompletedOnboarding) // always show onboarding at least once
+  // Always show GakrCLI setup at least once. Provider-specific auth steps inside
+  // Onboarding are gated, so every first-time user gets theme/provider setup.
+  if (!config.theme || !config.hasCompletedOnboarding
   ) {
     onboardingShown = true;
     const {
@@ -136,9 +137,9 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
   // Note: non-interactive sessions (CI/CD with -p) never reach showSetupScreens at all.
   // Skip permission checks in claubbit
   if (!isEnvTruthy(process.env.CLAUBBIT)) {
-    // Skip trust dialog UI for third-party providers (no Anthropic auth), but still
+    // Skip trust dialog UI for providers that do not use hosted GakrCLI auth, but still
     // run trust state initialization below so the REPL mounts correctly.
-    if (usesAnthropicSetup && !checkHasTrustDialogAccepted()) {
+    if (usesGakrcliHostedAuth && !checkHasTrustDialogAccepted()) {
       const {
         TrustDialog
       } = await import('./components/TrustDialog/TrustDialog.js');
@@ -147,7 +148,7 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
 
     // Signal that trust has been verified for this session.
     // GrowthBook checks this to decide whether to include auth headers.
-    // Critical for third-party providers: without this, downstream config lookups
+    // Critical for non-hosted providers: without this, downstream config lookups
     // may fail silently, preventing the REPL from mounting (frozen terminal).
     setSessionTrustAccepted(true);
 
@@ -160,8 +161,8 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
     // Now that trust is established, prefetch system context if it wasn't already
     void getSystemContext();
 
-    // Skip MCP approval dialogs for third-party providers (no interactive auth prompts)
-    if (usesAnthropicSetup) {
+    // Skip MCP approval dialogs for providers that do not use hosted auth.
+    if (usesGakrcliHostedAuth) {
       // If settings are valid, check for any mcp.json servers that need approval.
       // This must run AFTER trust is established — otherwise third-party providers
       // (which skip the trust dialog) would never reach this point, and any
@@ -198,6 +199,10 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
   // In normal mode, this happens after the trust dialog is accepted
   // This includes potentially dangerous environment variables from untrusted sources
   applyConfigEnvironmentVariables();
+  if (onboardingShown) {
+    const startupEnv = await buildStartupEnvFromProfile({ processEnv: process.env });
+    applyProfileEnvToProcessEnv(process.env, startupEnv);
+  }
 
   // Check if a provider is properly configured; if not, launch the provider wizard
   if (await getProviderValidationError()) {

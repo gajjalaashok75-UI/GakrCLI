@@ -1,161 +1,184 @@
-import { existsSync, readdirSync, mkdirSync, cpSync, statSync } from 'fs'
-import { join, dirname, resolve } from 'path'
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from 'fs'
+import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 
 import { getGakrcliConfigHomeDir } from './envUtils.js'
 
 declare const MACRO: { VERSION: string; DISPLAY_VERSION?: string }
 
-// Determine package root at runtime, works for both development and global installs
-function getPackageRoot(): string {
+export function getPackageRoot(startUrl: string = import.meta.url): string {
   try {
-    // Use import.meta.url to get the location of the bundle (dist/cli.mjs)
-    if (typeof import.meta !== 'undefined' && import.meta.url) {
-      const url = import.meta.url
-      if (typeof url === 'string' && url.startsWith('file://')) {
-        const thisPath = fileURLToPath(url)
-        const dir = dirname(thisPath)
-        // If this file is bundled into dist/cli.mjs, its directory is the 'dist' folder
-        // Package root is the parent of 'dist'
-        return resolve(dir, '..')
+    if (startUrl.startsWith('file://')) {
+      let dir = dirname(fileURLToPath(startUrl))
+
+      // In the bundled npm package this starts from dist/cli.mjs. In tests and
+      // source runs it starts under src/utils. Walk upward until we find the
+      // package root that owns the shipped assets.
+      while (true) {
+        if (
+          existsSync(join(dir, 'package.json')) &&
+          existsSync(join(dir, 'assets'))
+        ) {
+          return dir
+        }
+
+        const parent = dirname(dir)
+        if (parent === dir) break
+        dir = parent
       }
     }
-  } catch (e) {
-    // ignore and fall back
+  } catch {
+    // Ignore and fall back below.
   }
-  // Fallback to current working directory (dev may work if run from project root)
+
   return process.cwd()
 }
 
-const PACKAGE_ROOT = getPackageRoot()
+const REQUIRED_DIRS = [
+  'agents',
+  'cache',
+  'commands',
+  'logs',
+  'memory',
+  'output-styles',
+  'projects',
+  'rules',
+  'sessions',
+  'skills',
+  'workflows',
+]
 
-const REQUIRED_DIRS = ['skills', 'sessions', 'projects', 'rules', 'agents', 'memory', 'cache', 'logs']
+export type InitUserDirsResult = {
+  configHome: string
+  createdDirs: string[]
+  createdConfigFile: boolean
+  syncedAssets: Record<'agents' | 'rules' | 'skills', number>
+  missingAssetDirs: string[]
+}
 
-/**
- * Recursively copy files from src to dest, but only if the destination file does not already exist.
- * Directories are created as needed. Skips entries that cause errors.
- */
-function syncMissingDir(src: string, dest: string): void {
+type InitUserDirsOptions = {
+  configHome?: string
+  packageRoot?: string
+}
+
+function countFiles(dir: string): number {
+  let count = 0
+
   try {
-    const entries = readdirSync(src)
-    for (const entry of entries) {
+    for (const entry of readdirSync(dir)) {
+      const entryPath = join(dir, entry)
+      const stat = statSync(entryPath)
+      if (stat.isDirectory()) {
+        count += countFiles(entryPath)
+      } else {
+        count += 1
+      }
+    }
+  } catch {
+    // Ignore inaccessible copied entries.
+  }
+
+  return count
+}
+
+function syncMissingDir(src: string, dest: string): number {
+  let copied = 0
+
+  try {
+    for (const entry of readdirSync(src)) {
       const srcPath = join(src, entry)
       const destPath = join(dest, entry)
+
       try {
         const stat = statSync(srcPath)
         if (stat.isDirectory()) {
           if (!existsSync(destPath)) {
             cpSync(srcPath, destPath, { recursive: true })
+            copied += countFiles(destPath)
           } else {
-            // Destination exists; recurse to sync its contents
-            syncMissingDir(srcPath, destPath)
+            copied += syncMissingDir(srcPath, destPath)
           }
-        } else {
-          if (!existsSync(destPath)) {
-            mkdirSync(dirname(destPath), { recursive: true })
-            cpSync(srcPath, destPath)
-          }
+        } else if (!existsSync(destPath)) {
+          mkdirSync(dirname(destPath), { recursive: true })
+          cpSync(srcPath, destPath)
+          copied += 1
         }
-      } catch (e) {
-        // Ignore individual entry errors and continue
+      } catch {
+        // Ignore individual entry errors and continue.
       }
     }
-  } catch (e) {
-    // src may not exist or be inaccessible; ignore
+  } catch {
+    // Source may not exist or be inaccessible.
   }
+
+  return copied
 }
 
-/**
- * Initializes user directories on first run.
- * Creates ~/.gakrcli (or legacy ~/.gakrcli or ~/.opengakrcli) with required subdirectories.
- * Syncs default skills, rules, and agents from package assets, adding missing files/directories.
- */
-export function initUserDirs(): void {
-  const configHome = getGakrcliConfigHomeDir()
-
-  // Create config home if it doesn't exist
-  if (!existsSync(configHome)) {
-    mkdirSync(configHome, { recursive: true })
-    console.log(`✓ Created config directory: ${configHome}`)
+export function initUserDirs(
+  options?: InitUserDirsOptions,
+): InitUserDirsResult {
+  const configHome = options?.configHome ?? getGakrcliConfigHomeDir()
+  const packageRoot = options?.packageRoot ?? getPackageRoot()
+  const result: InitUserDirsResult = {
+    configHome,
+    createdDirs: [],
+    createdConfigFile: false,
+    syncedAssets: {
+      agents: 0,
+      rules: 0,
+      skills: 0,
+    },
+    missingAssetDirs: [],
   }
 
-  // Create required subdirectories
-  const createdDirs: string[] = []
+  if (!existsSync(configHome)) {
+    mkdirSync(configHome, { recursive: true })
+  }
+
   for (const dir of REQUIRED_DIRS) {
     const fullPath = join(configHome, dir)
     if (!existsSync(fullPath)) {
       mkdirSync(fullPath, { recursive: true })
-      createdDirs.push(dir)
+      result.createdDirs.push(dir)
     }
   }
-  if (createdDirs.length > 0) {
-    console.log(`✓ Created directories: ${createdDirs.join(', ')}`)
-  }
 
-  // Initialize config.json if it doesn't exist
   const configFile = join(configHome, 'config.json')
   if (!existsSync(configFile)) {
-    // MACRO.VERSION is inlined at build time by scripts/build.ts
-    const version = MACRO.VERSION
-    const configContent = JSON.stringify({ version, createdAt: new Date().toISOString() }, null, 2)
-    require('fs').writeFileSync(configFile, configContent)
-    console.log(`✓ Created config file: ${configFile}`)
+    const version =
+      typeof MACRO !== 'undefined'
+        ? (MACRO.DISPLAY_VERSION ?? MACRO.VERSION)
+        : '0.0.0'
+    const configContent = JSON.stringify(
+      { version, createdAt: new Date().toISOString() },
+      null,
+      2,
+    )
+    writeFileSync(configFile, configContent)
+    result.createdConfigFile = true
   }
 
-  // Sync default skills from assets (add missing only)
-  const skillsDir = join(configHome, 'skills')
-  const assetsSkillsDir = join(PACKAGE_ROOT, 'assets', 'skills')
+  for (const dir of ['agents', 'rules', 'skills'] as const) {
+    const destDir = join(configHome, dir)
+    const assetDir = join(packageRoot, 'assets', dir)
 
-  // Ensure skills directory exists
-  if (!existsSync(skillsDir)) {
-    mkdirSync(skillsDir, { recursive: true })
-  }
-
-  if (existsSync(assetsSkillsDir)) {
-    try {
-      syncMissingDir(assetsSkillsDir, skillsDir)
-    } catch (error) {
-      console.warn(`⚠ Could not sync default skills: ${error}`)
+    if (!existsSync(destDir)) {
+      mkdirSync(destDir, { recursive: true })
     }
-  } else {
-    console.warn(`⚠ Default skills not found at: ${assetsSkillsDir}`)
-  }
 
-  // Sync default rules from assets (add missing only)
-  const rulesDir = join(configHome, 'rules')
-  const assetsRulesDir = join(PACKAGE_ROOT, 'assets', 'rules')
-
-  // Ensure rules directory exists
-  if (!existsSync(rulesDir)) {
-    mkdirSync(rulesDir, { recursive: true })
-  }
-
-  if (existsSync(assetsRulesDir)) {
-    try {
-      syncMissingDir(assetsRulesDir, rulesDir)
-    } catch (error) {
-      console.warn(`⚠ Could not sync default rules: ${error}`)
+    if (existsSync(assetDir)) {
+      result.syncedAssets[dir] = syncMissingDir(assetDir, destDir)
+    } else {
+      result.missingAssetDirs.push(assetDir)
     }
-  } else {
-    console.warn(`⚠ Default rules not found at: ${assetsRulesDir}`)
   }
 
-  // Sync default agents from assets (add missing only)
-  const agentsDir = join(configHome, 'agents')
-  const assetsAgentsDir = join(PACKAGE_ROOT, 'assets', 'agents')
-
-  // Ensure agents directory exists
-  if (!existsSync(agentsDir)) {
-    mkdirSync(agentsDir, { recursive: true })
-  }
-
-  if (existsSync(assetsAgentsDir)) {
-    try {
-      syncMissingDir(assetsAgentsDir, agentsDir)
-    } catch (error) {
-      console.warn(`⚠ Could not sync default agents: ${error}`)
-    }
-  } else {
-    console.warn(`⚠ Default agents not found at: ${assetsAgentsDir}`)
-  }
+  return result
 }

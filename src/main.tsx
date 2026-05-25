@@ -3715,7 +3715,7 @@ async function run() {
         const { authStatus } = await import('./cli/handlers/auth.js');
         await authStatus(opts);
     });
-    auth.command('logout').description('Log out from your Anthropic account').action(async () => {
+    auth.command('logout').description('Log out from your Gakr account').action(async () => {
         const { authLogout } = await import('./cli/handlers/auth.js');
         await authLogout();
     });

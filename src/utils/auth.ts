@@ -159,6 +159,8 @@ export function isAnthropicAuthEnabled(): boolean {
   return !shouldDisableAuth
 }
 
+export const isGakrcliOAuthEnabled = isAnthropicAuthEnabled
+
 /** Where the auth token is being sourced from, if any. */
 // this code is closely related to isAnthropicAuthEnabled
 export function getAuthTokenSource() {
