@@ -84,6 +84,8 @@ export function usesAnthropicAccountFlow(): boolean {
   return getAPIProvider() === 'firstParty'
 }
 
+export const usesGakrcliHostedAuthFlow = usesAnthropicAccountFlow
+
 /**
  * Returns true when the GitHub provider should use Anthropic's native API
  * format instead of the OpenAI-compatible shim.
