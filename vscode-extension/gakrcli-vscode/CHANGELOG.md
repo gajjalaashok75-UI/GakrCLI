@@ -2,6 +2,14 @@
 
 All notable changes to the "GakrCLI" extension will be documented in this file.
 
+## [0.2.1] - 2026-05-26
+
+### Fixed
+- Updated Control Center provider status detection for current GakrCLI profiles including xAI OAuth, MiniMax, Mistral, GitHub Models, Bedrock, Vertex, Foundry, and hosted OpenAI-compatible gateways.
+- Made chat launches use the same active-workspace selection as the Control Center.
+- Added global profile fallback detection for `~/.gakrcli/.gakrcli-profile.json` and `GAKR_CONFIG_DIR/.gakrcli-profile.json` when the workspace profile is absent.
+- Updated repository and setup links to the current GakrCLI repository.
+
 ## [0.2.0] - 2026-04-21
 
 ### Added

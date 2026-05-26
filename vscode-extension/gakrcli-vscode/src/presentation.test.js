@@ -64,11 +64,30 @@ test('buildActionModel includes workspace-profile action when a profile exists',
   const model = buildActionModel({
     canLaunchInWorkspaceRoot: true,
     workspaceProfilePath: 'C:\\Users\\example\\gakr\\workspace\\.gakrcli-profile.json',
+    profileSourceLabel: 'workspace profile',
   });
 
   assert.deepEqual(model.openProfile, {
     id: 'openProfile',
     label: 'Open Workspace Profile',
+    detail: 'Inspect ...\\.gakrcli-profile.json',
+    tone: 'neutral',
+    disabled: false,
+  });
+});
+
+test('buildActionModel labels global profiles clearly', () => {
+  const { buildActionModel } = loadPresentation();
+
+  const model = buildActionModel({
+    canLaunchInWorkspaceRoot: true,
+    workspaceProfilePath: 'C:\\Users\\example\\.gakrcli\\.gakrcli-profile.json',
+    profileSourceLabel: 'global profile',
+  });
+
+  assert.deepEqual(model.openProfile, {
+    id: 'openProfile',
+    label: 'Open Global Profile',
     detail: 'Inspect ...\\.gakrcli-profile.json',
     tone: 'neutral',
     disabled: false,
@@ -90,6 +109,7 @@ function createStatus(overrides = {}) {
     profileStatusLabel: 'Found',
     profileStatusHint: '/workspace/gakr/.gakrcli-profile.json',
     workspaceProfilePath: '/workspace/gakr/.gakrcli-profile.json',
+    profileSourceLabel: 'workspace profile',
     providerState: {
       label: 'Codex',
       detail: 'gpt-5.4',
@@ -171,7 +191,7 @@ test('buildControlCenterViewModel uses a concise project summary before full pat
         },
         {
           key: 'profileStatus',
-          label: 'Workspace profile',
+          label: 'Provider profile',
           summary: 'Found',
           detail: '/workspace/gakr/.gakrcli-profile.json',
           tone: 'neutral',
@@ -184,7 +204,7 @@ test('buildControlCenterViewModel uses a concise project summary before full pat
         {
           key: 'runtime',
           label: 'Gakr executable',
-          summary: 'Installed',
+          summary: 'Available',
           detail: 'gakrcli',
           tone: 'positive',
         },

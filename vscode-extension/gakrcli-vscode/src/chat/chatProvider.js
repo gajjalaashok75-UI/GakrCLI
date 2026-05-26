@@ -6,6 +6,7 @@
 const vscode = require('vscode');
 const crypto = require('crypto');
 const { ProcessManager } = require('./processManager');
+const { chooseLaunchWorkspace } = require('../state');
 const { toViewModel } = require('./messageParser');
 const { renderChatHtml } = require('./chatRenderer');
 const { isAssistantMessage, isPartialMessage, isStreamEvent,
@@ -24,6 +25,16 @@ async function openFileInEditor(filePath) {
   }
 }
 
+function getActiveWorkspacePath() {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor || editor.document.uri.scheme !== 'file') {
+    return null;
+  }
+
+  const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+  return workspaceFolder ? workspaceFolder.uri.fsPath : null;
+}
+
 function getLaunchConfig() {
   const cfg = vscode.workspace.getConfiguration('gakrcli');
   const command = cfg.get('launchCommand', 'gakrcli');
@@ -31,8 +42,12 @@ function getLaunchConfig() {
   const permissionMode = cfg.get('permissionMode', 'acceptEdits');
   const env = {};
   if (shimEnabled) env.GAKR_CODE_USE_OPENAI = '1';
-  const folders = vscode.workspace.workspaceFolders;
-  const cwd = folders && folders.length > 0 ? folders[0].uri.fsPath : undefined;
+  const workspacePaths = (vscode.workspace.workspaceFolders || []).map(folder => folder.uri.fsPath);
+  const launchWorkspace = chooseLaunchWorkspace({
+    activeWorkspacePath: getActiveWorkspacePath(),
+    workspacePaths,
+  });
+  const cwd = launchWorkspace.workspacePath || undefined;
   return { command, cwd, env, permissionMode };
 }
 

@@ -1,5 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { mock } = require('bun:test');
 const {
   acquireEnvMutex,
@@ -36,6 +39,7 @@ function createStatus(overrides = {}) {
     profileStatusLabel: 'Found',
     profileStatusHint: '/workspace/gakrcli/very/long/path/example-project/.gakrcli-profile.json',
     workspaceProfilePath: '/workspace/gakrcli/very/long/path/example-project/.gakrcli-profile.json',
+    profileSourceLabel: 'workspace profile',
     providerState: {
       label: 'Codex',
       detail: 'gpt-5.4',
@@ -92,6 +96,88 @@ test('renderControlCenterHtml uses the gakrCLI wordmark, status rail, and warm a
   );
 });
 
+test('readProfileState prefers the workspace profile before the global fallback', () => {
+  const { readProfileState } = loadExtension();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gakrcli-vscode-profile-'));
+  const workspace = path.join(root, 'workspace');
+  const home = path.join(root, 'home');
+  fs.mkdirSync(workspace, { recursive: true });
+  fs.mkdirSync(path.join(home, '.gakrcli'), { recursive: true });
+  fs.writeFileSync(
+    path.join(workspace, '.gakrcli-profile.json'),
+    JSON.stringify({ profile: 'xai', env: { OPENAI_MODEL: 'workspace-model' } }),
+  );
+  fs.writeFileSync(
+    path.join(home, '.gakrcli', '.gakrcli-profile.json'),
+    JSON.stringify({ profile: 'minimax', env: { OPENAI_MODEL: 'global-model' } }),
+  );
+
+  try {
+    const state = readProfileState({ workspaceFolder: workspace, env: {}, homeDir: home });
+
+    assert.equal(state.statusLabel, 'Found');
+    assert.equal(state.sourceLabel, 'workspace profile');
+    assert.equal(state.profile.profile, 'xai');
+    assert.match(state.statusHint, /Workspace profile:/);
+    assert.equal(state.filePath, path.join(workspace, '.gakrcli-profile.json'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('readProfileState falls back to ~/.gakrcli profile when workspace profile is absent', () => {
+  const { readProfileState } = loadExtension();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gakrcli-vscode-global-profile-'));
+  const workspace = path.join(root, 'workspace');
+  const home = path.join(root, 'home');
+  fs.mkdirSync(workspace, { recursive: true });
+  fs.mkdirSync(path.join(home, '.gakrcli'), { recursive: true });
+  fs.writeFileSync(
+    path.join(home, '.gakrcli', '.gakrcli-profile.json'),
+    JSON.stringify({ profile: 'xai', env: { OPENAI_MODEL: 'grok-4.3' } }),
+  );
+
+  try {
+    const state = readProfileState({ workspaceFolder: workspace, env: {}, homeDir: home });
+
+    assert.equal(state.statusLabel, 'Found');
+    assert.equal(state.sourceLabel, 'global profile');
+    assert.equal(state.profile.profile, 'xai');
+    assert.match(state.statusHint, /Global profile:/);
+    assert.equal(state.filePath, path.join(home, '.gakrcli', '.gakrcli-profile.json'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('readProfileState honors GAKR_CONFIG_DIR for the global profile fallback', () => {
+  const { readProfileState } = loadExtension();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gakrcli-vscode-config-dir-profile-'));
+  const workspace = path.join(root, 'workspace');
+  const configDir = path.join(root, 'custom-config');
+  fs.mkdirSync(workspace, { recursive: true });
+  fs.mkdirSync(configDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(configDir, '.gakrcli-profile.json'),
+    JSON.stringify({ profile: 'nvidia-nim', env: { OPENAI_MODEL: 'z-ai/glm-5.1' } }),
+  );
+
+  try {
+    const state = readProfileState({
+      workspaceFolder: workspace,
+      env: { GAKR_CONFIG_DIR: configDir },
+      homeDir: path.join(root, 'home'),
+    });
+
+    assert.equal(state.statusLabel, 'Found');
+    assert.equal(state.sourceLabel, 'global profile');
+    assert.equal(state.profile.profile, 'nvidia-nim');
+    assert.equal(state.filePath, path.join(configDir, '.gakrcli-profile.json'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('renderControlCenterHtml shows explicit disabled and empty states when workspace data is missing', () => {
   const { renderControlCenterHtml } = loadExtension();
   const html = renderControlCenterHtml(
@@ -101,8 +187,8 @@ test('renderControlCenterHtml shows explicit disabled and empty states when work
       launchCwd: null,
       launchCwdLabel: 'VS Code default terminal cwd',
       canLaunchInWorkspaceRoot: false,
-      profileStatusLabel: 'No workspace',
-      profileStatusHint: 'Open a workspace folder to detect a saved profile',
+      profileStatusLabel: 'Missing',
+      profileStatusHint: '.gakrcli-profile.json not found at ~/.gakrcli/.gakrcli-profile.json',
       workspaceProfilePath: null,
     }),
     { nonce: 'test-nonce', platform: 'linux' },
@@ -112,8 +198,8 @@ test('renderControlCenterHtml shows explicit disabled and empty states when work
     html,
     /class="action-button secondary" id="launchRoot"[^>]*disabled[^>]*>[\s\S]*Open a workspace folder to enable workspace-root launch/,
   );
-  assert.match(html, /No workspace profile yet/);
-  assert.match(html, /Open a workspace folder to detect a saved profile/);
+  assert.match(html, /No provider profile found/);
+  assert.match(html, /\.gakrcli-profile\.json not found at ~\/\.gakrcli\/\.gakrcli-profile\.json/);
   assert.doesNotMatch(html, /id="openProfile"/);
 });
 
