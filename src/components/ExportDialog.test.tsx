@@ -10,9 +10,15 @@ import stripAnsi from 'strip-ansi'
 import { createRoot } from '../ink.js'
 import { KeybindingSetup } from '../keybindings/KeybindingProviderSetup.js'
 import { AppStateProvider } from '../state/AppState.js'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../test/sharedMutationLock.js'
 import type { ExportFormat } from '../utils/exportFormats.js'
 
 const setClipboard = mock(async (_content: string) => '')
+
+await acquireSharedMutationLock('components/ExportDialog.test.tsx')
 
 mock.module('../ink/termio/osc.js', () => ({
   setClipboard,
@@ -71,7 +77,11 @@ afterEach(() => {
 })
 
 afterAll(() => {
-  mock.restore()
+  try {
+    mock.restore()
+  } finally {
+    releaseSharedMutationLock()
+  }
 })
 
 test('shows export format choices before export method choices', async () => {

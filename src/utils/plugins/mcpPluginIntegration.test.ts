@@ -4,21 +4,35 @@ import { join } from 'path'
 import { afterEach, describe, expect, test } from 'bun:test'
 
 import type { PluginError } from '../../types/plugin.js'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../../test/sharedMutationLock.js'
 import { resolvePluginMcpEnvironment } from './mcpPluginIntegration.js'
 
 const originalPluginCacheDir = process.env.GAKR_CODE_PLUGIN_CACHE_DIR
 let tempDir: string | undefined
+let lockAcquired = false
 
 afterEach(async () => {
-  process.env.GAKR_CODE_PLUGIN_CACHE_DIR = originalPluginCacheDir
-  if (tempDir) {
-    await rm(tempDir, { recursive: true, force: true })
-    tempDir = undefined
+  try {
+    process.env.GAKR_CODE_PLUGIN_CACHE_DIR = originalPluginCacheDir
+    if (tempDir) {
+      await rm(tempDir, { recursive: true, force: true })
+      tempDir = undefined
+    }
+  } finally {
+    if (lockAcquired) {
+      releaseSharedMutationLock()
+      lockAcquired = false
+    }
   }
 })
 
 describe('resolvePluginMcpEnvironment', () => {
   test('sets plugin cwd for stdio MCP servers and resolves plugin variable aliases', async () => {
+    await acquireSharedMutationLock('utils/plugins/mcpPluginIntegration.test.ts')
+    lockAcquired = true
     tempDir = await mkdtemp(join(tmpdir(), 'gakrcli-plugin-mcp-'))
     process.env.GAKR_CODE_PLUGIN_CACHE_DIR = join(tempDir, 'plugins')
 

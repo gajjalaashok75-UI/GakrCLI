@@ -12,7 +12,10 @@ import {
 import { mkdtempSync, rmSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { acquireEnvMutex, releaseEnvMutex } from '../entrypoints/sdk/shared.js'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../test/sharedMutationLock.js'
 import { getProjectsDir, setGakrcliConfigHomeDirForTesting } from './envUtils.js'
 import { sanitizePath } from './sessionStoragePortable.js'
 
@@ -46,7 +49,7 @@ describe('KnowledgeGraph Global Persistence & RAG', () => {
   }
 
   beforeEach(async () => {
-    await acquireEnvMutex()
+    await acquireSharedMutationLock('utils/knowledgeGraph.test.ts')
     configDir = mkdtempSync(join(tmpdir(), 'gakrcli-test-'))
     process.env.GAKR_CONFIG_DIR = configDir
     setGakrcliConfigHomeDirForTesting(configDir)
@@ -71,7 +74,7 @@ describe('KnowledgeGraph Global Persistence & RAG', () => {
           removeDirWithRetry(dirToRemove)
         }
       } finally {
-        releaseEnvMutex()
+        releaseSharedMutationLock()
       }
     }
   })

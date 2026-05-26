@@ -19,7 +19,7 @@ describe('invalidateRemovedToolSchemas', () => {
     try {
       clearToolSchemaCache()
     } finally {
-      // // // releaseSharedMutationLock()
+      releaseSharedMutationLock()
     }
   })
 

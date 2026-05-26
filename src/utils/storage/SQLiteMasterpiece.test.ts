@@ -11,7 +11,10 @@ import {
 import { mkdtempSync, rmSync, existsSync, writeFileSync, mkdirSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { acquireEnvMutex, releaseEnvMutex } from '../../entrypoints/sdk/shared.js'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../../test/sharedMutationLock.js'
 import { getProjectsDir, setGakrcliConfigHomeDirForTesting } from '../envUtils.js'
 import { sanitizePath } from '../sessionStoragePortable.js'
 import { getFsImplementation } from '../fsOperations.js'
@@ -52,7 +55,7 @@ describe('SQLite Masterpiece: Edge Cases & Multi-Project Isolation', () => {
     }
   }
   beforeEach(async () => {
-    await acquireEnvMutex()
+    await acquireSharedMutationLock('utils/storage/SQLiteMasterpiece.test.ts')
     capturedConsoleErrors = []
     capturedConsoleWarnings = []
     expectRecoveryLogsForCurrentTest = false
@@ -113,7 +116,7 @@ describe('SQLite Masterpiece: Edge Cases & Multi-Project Isolation', () => {
       }
       console.error = originalConsoleError
       console.warn = originalConsoleWarn
-      releaseEnvMutex()
+      releaseSharedMutationLock()
     }
   })
 

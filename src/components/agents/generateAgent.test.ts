@@ -1,5 +1,10 @@
 import { afterAll, beforeEach, expect, mock, test } from 'bun:test'
 
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../../test/sharedMutationLock.js'
+
 let responseText = ''
 
 const queryModelWithoutStreaming = mock(async () => ({
@@ -7,6 +12,8 @@ const queryModelWithoutStreaming = mock(async () => ({
     content: [{ type: 'text', text: responseText }],
   },
 }))
+
+await acquireSharedMutationLock('components/agents/generateAgent.test.ts')
 
 mock.module('src/context.js', () => ({
   getUserContext: async () => ({}),
@@ -33,7 +40,11 @@ beforeEach(() => {
 })
 
 afterAll(() => {
-  mock.restore()
+  try {
+    mock.restore()
+  } finally {
+    releaseSharedMutationLock()
+  }
 })
 
 test('returns generated agents with string fields', async () => {
