@@ -5,6 +5,10 @@ import { join } from 'node:path'
 import test from 'node:test'
 
 import { DEFAULT_CODEX_BASE_URL } from '../services/api/providerConfig.js'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../test/sharedMutationLock.js'
 import { getProviderValidationError } from './providerValidation.js'
 import {
   applySavedProfileToCurrentSession,
@@ -49,6 +53,18 @@ function profile(profile: ProfileFile['profile'], env: ProfileFile['env']): Prof
 async function importFreshProviderProfileModule() {
   const nonce = `${Date.now()}-${Math.random()}`
   return import(`./providerProfile.js?ts=${nonce}`)
+}
+
+async function withSharedMutationLock<T>(
+  scope: string,
+  run: () => T | Promise<T>,
+): Promise<T> {
+  await acquireSharedMutationLock(scope)
+  try {
+    return await run()
+  } finally {
+    releaseSharedMutationLock()
+  }
 }
 
 const missingCodexAuthPath = join(tmpdir(), 'gakrcli-missing-codex-auth.json')
@@ -589,151 +605,155 @@ test('saveProfileFile writes a profile that loadProfileFile can read back', () =
   }
 })
 
-test('saveProfileFile defaults to user config instead of the working directory', () => {
-  const cwd = mkdtempSync(join(tmpdir(), 'gakrcli-workspace-profile-'))
-  const configRoot = mkdtempSync(join(tmpdir(), 'gakrcli-config-profile-'))
-  const configDir = join(configRoot, 'config')
-  const previousConfigDir = process.env.GAKR_CONFIG_DIR
-  const previousCwd = process.cwd()
+test('saveProfileFile defaults to user config instead of the working directory', () =>
+  withSharedMutationLock('utils/providerProfile.test.ts user config default', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'gakrcli-workspace-profile-'))
+    const configRoot = mkdtempSync(join(tmpdir(), 'gakrcli-config-profile-'))
+    const configDir = join(configRoot, 'config')
+    const previousConfigDir = process.env.GAKR_CONFIG_DIR
+    const previousCwd = process.cwd()
 
-  try {
-    process.env.GAKR_CONFIG_DIR = configDir
-    process.chdir(cwd)
+    try {
+      process.env.GAKR_CONFIG_DIR = configDir
+      process.chdir(cwd)
 
-    const persisted = createProfileFile('openai', {
-      OPENAI_API_KEY: 'sk-test',
-      OPENAI_MODEL: 'gpt-4o',
-    })
+      const persisted = createProfileFile('openai', {
+        OPENAI_API_KEY: 'sk-test',
+        OPENAI_MODEL: 'gpt-4o',
+      })
 
-    const filePath = saveProfileFile(persisted)
+      const filePath = saveProfileFile(persisted)
 
-    assert.equal(filePath, join(configDir, PROFILE_FILE_NAME))
-    assert.equal(getDefaultProfileFilePath(), join(configDir, PROFILE_FILE_NAME))
-    assert.equal(existsSync(join(cwd, PROFILE_FILE_NAME)), false)
-    if (platform() !== 'win32') {
-      assert.equal(statSync(configDir).mode & 0o777, 0o700)
+      assert.equal(filePath, join(configDir, PROFILE_FILE_NAME))
+      assert.equal(getDefaultProfileFilePath(), join(configDir, PROFILE_FILE_NAME))
+      assert.equal(existsSync(join(cwd, PROFILE_FILE_NAME)), false)
+      if (platform() !== 'win32') {
+        assert.equal(statSync(configDir).mode & 0o777, 0o700)
+      }
+      assert.deepEqual(loadProfileFile(), persisted)
+    } finally {
+      process.chdir(previousCwd)
+      if (previousConfigDir === undefined) {
+        delete process.env.GAKR_CONFIG_DIR
+      } else {
+        process.env.GAKR_CONFIG_DIR = previousConfigDir
+      }
+      rmSync(cwd, { recursive: true, force: true })
+      rmSync(configRoot, { recursive: true, force: true })
     }
-    assert.deepEqual(loadProfileFile(), persisted)
-  } finally {
-    process.chdir(previousCwd)
-    if (previousConfigDir === undefined) {
-      delete process.env.GAKR_CONFIG_DIR
-    } else {
-      process.env.GAKR_CONFIG_DIR = previousConfigDir
+  }))
+
+test('loadProfileFile keeps project-local files as a legacy fallback', () =>
+  withSharedMutationLock('utils/providerProfile.test.ts legacy fallback', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'gakrcli-legacy-profile-'))
+    const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-empty-config-profile-'))
+    const previousConfigDir = process.env.GAKR_CONFIG_DIR
+    const previousCwd = process.cwd()
+
+    try {
+      process.env.GAKR_CONFIG_DIR = configDir
+      process.chdir(cwd)
+
+      const legacyProfile = createProfileFile('gemini', {
+        GEMINI_API_KEY: 'gem-test',
+        GEMINI_MODEL: 'gemini-2.5-flash',
+      })
+      writeFileSync(
+        join(cwd, PROFILE_FILE_NAME),
+        JSON.stringify(legacyProfile, null, 2),
+        'utf8',
+      )
+
+      assert.deepEqual(loadProfileFile(), legacyProfile)
+    } finally {
+      process.chdir(previousCwd)
+      if (previousConfigDir === undefined) {
+        delete process.env.GAKR_CONFIG_DIR
+      } else {
+        process.env.GAKR_CONFIG_DIR = previousConfigDir
+      }
+      rmSync(cwd, { recursive: true, force: true })
+      rmSync(configDir, { recursive: true, force: true })
     }
-    rmSync(cwd, { recursive: true, force: true })
-    rmSync(configRoot, { recursive: true, force: true })
-  }
-})
+  }))
 
-test('loadProfileFile keeps project-local files as a legacy fallback', () => {
-  const cwd = mkdtempSync(join(tmpdir(), 'gakrcli-legacy-profile-'))
-  const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-empty-config-profile-'))
-  const previousConfigDir = process.env.GAKR_CONFIG_DIR
-  const previousCwd = process.cwd()
+test('loadProfileFile does not fall back when user config profile is invalid', () =>
+  withSharedMutationLock('utils/providerProfile.test.ts invalid config profile', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'gakrcli-invalid-profile-'))
+    const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-invalid-config-profile-'))
+    const previousConfigDir = process.env.GAKR_CONFIG_DIR
+    const previousCwd = process.cwd()
 
-  try {
-    process.env.GAKR_CONFIG_DIR = configDir
-    process.chdir(cwd)
+    try {
+      process.env.GAKR_CONFIG_DIR = configDir
+      process.chdir(cwd)
 
-    const legacyProfile = createProfileFile('gemini', {
-      GEMINI_API_KEY: 'gem-test',
-      GEMINI_MODEL: 'gemini-2.5-flash',
-    })
-    writeFileSync(
-      join(cwd, PROFILE_FILE_NAME),
-      JSON.stringify(legacyProfile, null, 2),
-      'utf8',
-    )
+      const legacyProfile = createProfileFile('gemini', {
+        GEMINI_API_KEY: 'gem-test',
+        GEMINI_MODEL: 'gemini-2.5-flash',
+      })
+      writeFileSync(join(configDir, PROFILE_FILE_NAME), '{', 'utf8')
+      writeFileSync(
+        join(cwd, PROFILE_FILE_NAME),
+        JSON.stringify(legacyProfile, null, 2),
+        'utf8',
+      )
 
-    assert.deepEqual(loadProfileFile(), legacyProfile)
-  } finally {
-    process.chdir(previousCwd)
-    if (previousConfigDir === undefined) {
-      delete process.env.GAKR_CONFIG_DIR
-    } else {
-      process.env.GAKR_CONFIG_DIR = previousConfigDir
+      assert.equal(loadProfileFile(), null)
+    } finally {
+      process.chdir(previousCwd)
+      if (previousConfigDir === undefined) {
+        delete process.env.GAKR_CONFIG_DIR
+      } else {
+        process.env.GAKR_CONFIG_DIR = previousConfigDir
+      }
+      rmSync(cwd, { recursive: true, force: true })
+      rmSync(configDir, { recursive: true, force: true })
     }
-    rmSync(cwd, { recursive: true, force: true })
-    rmSync(configDir, { recursive: true, force: true })
-  }
-})
+  }))
 
-test('loadProfileFile does not fall back when user config profile is invalid', () => {
-  const cwd = mkdtempSync(join(tmpdir(), 'gakrcli-invalid-profile-'))
-  const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-invalid-config-profile-'))
-  const previousConfigDir = process.env.GAKR_CONFIG_DIR
-  const previousCwd = process.cwd()
+test('deleteProfileFile clears the default profile and legacy workspace fallback', () =>
+  withSharedMutationLock('utils/providerProfile.test.ts delete profile', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'gakrcli-delete-profile-'))
+    const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-delete-config-profile-'))
+    const previousConfigDir = process.env.GAKR_CONFIG_DIR
+    const previousCwd = process.cwd()
 
-  try {
-    process.env.GAKR_CONFIG_DIR = configDir
-    process.chdir(cwd)
+    try {
+      process.env.GAKR_CONFIG_DIR = configDir
+      process.chdir(cwd)
 
-    const legacyProfile = createProfileFile('gemini', {
-      GEMINI_API_KEY: 'gem-test',
-      GEMINI_MODEL: 'gemini-2.5-flash',
-    })
-    writeFileSync(join(configDir, PROFILE_FILE_NAME), '{', 'utf8')
-    writeFileSync(
-      join(cwd, PROFILE_FILE_NAME),
-      JSON.stringify(legacyProfile, null, 2),
-      'utf8',
-    )
+      const configProfile = createProfileFile('openai', {
+        OPENAI_API_KEY: 'sk-test',
+      })
+      const legacyProfile = createProfileFile('ollama', {
+        OPENAI_BASE_URL: 'http://localhost:11434/v1',
+        OPENAI_MODEL: 'llama3.1:8b',
+      })
 
-    assert.equal(loadProfileFile(), null)
-  } finally {
-    process.chdir(previousCwd)
-    if (previousConfigDir === undefined) {
-      delete process.env.GAKR_CONFIG_DIR
-    } else {
-      process.env.GAKR_CONFIG_DIR = previousConfigDir
+      saveProfileFile(configProfile)
+      writeFileSync(
+        join(cwd, PROFILE_FILE_NAME),
+        JSON.stringify(legacyProfile, null, 2),
+        'utf8',
+      )
+
+      deleteProfileFile()
+
+      assert.equal(existsSync(join(configDir, PROFILE_FILE_NAME)), false)
+      assert.equal(existsSync(join(cwd, PROFILE_FILE_NAME)), false)
+      assert.equal(loadProfileFile(), null)
+    } finally {
+      process.chdir(previousCwd)
+      if (previousConfigDir === undefined) {
+        delete process.env.GAKR_CONFIG_DIR
+      } else {
+        process.env.GAKR_CONFIG_DIR = previousConfigDir
+      }
+      rmSync(cwd, { recursive: true, force: true })
+      rmSync(configDir, { recursive: true, force: true })
     }
-    rmSync(cwd, { recursive: true, force: true })
-    rmSync(configDir, { recursive: true, force: true })
-  }
-})
-
-test('deleteProfileFile clears the default profile and legacy workspace fallback', () => {
-  const cwd = mkdtempSync(join(tmpdir(), 'gakrcli-delete-profile-'))
-  const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-delete-config-profile-'))
-  const previousConfigDir = process.env.GAKR_CONFIG_DIR
-  const previousCwd = process.cwd()
-
-  try {
-    process.env.GAKR_CONFIG_DIR = configDir
-    process.chdir(cwd)
-
-    const configProfile = createProfileFile('openai', {
-      OPENAI_API_KEY: 'sk-test',
-    })
-    const legacyProfile = createProfileFile('ollama', {
-      OPENAI_BASE_URL: 'http://localhost:11434/v1',
-      OPENAI_MODEL: 'llama3.1:8b',
-    })
-
-    saveProfileFile(configProfile)
-    writeFileSync(
-      join(cwd, PROFILE_FILE_NAME),
-      JSON.stringify(legacyProfile, null, 2),
-      'utf8',
-    )
-
-    deleteProfileFile()
-
-    assert.equal(existsSync(join(configDir, PROFILE_FILE_NAME)), false)
-    assert.equal(existsSync(join(cwd, PROFILE_FILE_NAME)), false)
-    assert.equal(loadProfileFile(), null)
-  } finally {
-    process.chdir(previousCwd)
-    if (previousConfigDir === undefined) {
-      delete process.env.GAKR_CONFIG_DIR
-    } else {
-      process.env.GAKR_CONFIG_DIR = previousConfigDir
-    }
-    rmSync(cwd, { recursive: true, force: true })
-    rmSync(configDir, { recursive: true, force: true })
-  }
-})
+  }))
 
 test('deleteProfileFile with configDir and cwd clears both user config and legacy fallback', () => {
   const cwd = mkdtempSync(join(tmpdir(), 'gakrcli-delete-mixed-profile-'))
@@ -836,59 +856,60 @@ test('clearPersistedCodexOAuthProfile removes only persisted Codex OAuth profile
   }
 })
 
-test('clearPersistedCodexOAuthProfile clears both default and legacy OAuth profiles', async () => {
-  const cwd = mkdtempSync(join(tmpdir(), 'gakrcli-clear-oauth-profile-'))
-  const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-clear-oauth-config-'))
-  const previousConfigDir = process.env.GAKR_CONFIG_DIR
-  const previousCwd = process.cwd()
+test('clearPersistedCodexOAuthProfile clears both default and legacy OAuth profiles', () =>
+  withSharedMutationLock('utils/providerProfile.test.ts clear oauth profile', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'gakrcli-clear-oauth-profile-'))
+    const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-clear-oauth-config-'))
+    const previousConfigDir = process.env.GAKR_CONFIG_DIR
+    const previousCwd = process.cwd()
 
-  try {
-    const providerProfileModule = await import(
-      `./providerProfile.js?ts=${Date.now()}-${Math.random()}`
-    )
-    const {
-      PROFILE_FILE_NAME,
-      clearPersistedCodexOAuthProfile,
-      createProfileFile,
-      loadProfileFile,
-      saveProfileFile,
-    } = providerProfileModule
+    try {
+      const providerProfileModule = await import(
+        `./providerProfile.js?ts=${Date.now()}-${Math.random()}`
+      )
+      const {
+        PROFILE_FILE_NAME,
+        clearPersistedCodexOAuthProfile,
+        createProfileFile,
+        loadProfileFile,
+        saveProfileFile,
+      } = providerProfileModule
 
-    process.env.GAKR_CONFIG_DIR = configDir
-    process.chdir(cwd)
+      process.env.GAKR_CONFIG_DIR = configDir
+      process.chdir(cwd)
 
-    const oauthProfile = createProfileFile('codex', {
-      OPENAI_MODEL: 'codexplan',
-      OPENAI_BASE_URL: DEFAULT_CODEX_BASE_URL,
-      CHATGPT_ACCOUNT_ID: 'acct_oauth',
-      CODEX_CREDENTIAL_SOURCE: 'oauth',
-    })
+      const oauthProfile = createProfileFile('codex', {
+        OPENAI_MODEL: 'codexplan',
+        OPENAI_BASE_URL: DEFAULT_CODEX_BASE_URL,
+        CHATGPT_ACCOUNT_ID: 'acct_oauth',
+        CODEX_CREDENTIAL_SOURCE: 'oauth',
+      })
 
-    saveProfileFile(oauthProfile)
-    writeFileSync(
-      join(cwd, PROFILE_FILE_NAME),
-      JSON.stringify(oauthProfile, null, 2),
-      'utf8',
-    )
+      saveProfileFile(oauthProfile)
+      writeFileSync(
+        join(cwd, PROFILE_FILE_NAME),
+        JSON.stringify(oauthProfile, null, 2),
+        'utf8',
+      )
 
-    assert.equal(
-      clearPersistedCodexOAuthProfile(),
-      join(configDir, PROFILE_FILE_NAME),
-    )
-    assert.equal(existsSync(join(configDir, PROFILE_FILE_NAME)), false)
-    assert.equal(existsSync(join(cwd, PROFILE_FILE_NAME)), false)
-    assert.equal(loadProfileFile(), null)
-  } finally {
-    process.chdir(previousCwd)
-    if (previousConfigDir === undefined) {
-      delete process.env.GAKR_CONFIG_DIR
-    } else {
-      process.env.GAKR_CONFIG_DIR = previousConfigDir
+      assert.equal(
+        clearPersistedCodexOAuthProfile(),
+        join(configDir, PROFILE_FILE_NAME),
+      )
+      assert.equal(existsSync(join(configDir, PROFILE_FILE_NAME)), false)
+      assert.equal(existsSync(join(cwd, PROFILE_FILE_NAME)), false)
+      assert.equal(loadProfileFile(), null)
+    } finally {
+      process.chdir(previousCwd)
+      if (previousConfigDir === undefined) {
+        delete process.env.GAKR_CONFIG_DIR
+      } else {
+        process.env.GAKR_CONFIG_DIR = previousConfigDir
+      }
+      rmSync(cwd, { recursive: true, force: true })
+      rmSync(configDir, { recursive: true, force: true })
     }
-    rmSync(cwd, { recursive: true, force: true })
-    rmSync(configDir, { recursive: true, force: true })
-  }
-})
+  }))
 
 test('buildStartupEnvFromProfile applies persisted gemini settings when no provider is explicitly selected', async () => {
   const env = await buildStartupEnvFromProfile({

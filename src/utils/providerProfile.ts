@@ -671,13 +671,16 @@ export function buildCodexProfileEnv(options: {
   apiKey?: string | null
   credentialSource?: 'oauth' | 'existing'
   processEnv?: NodeJS.ProcessEnv
+  includeDefaultAuthJson?: boolean
 }): ProfileEnv | null {
   const processEnv = options.processEnv ?? process.env
   const key = sanitizeApiKey(options.apiKey ?? processEnv.CODEX_API_KEY)
   const credentialEnv = key
     ? ({ ...processEnv, CODEX_API_KEY: key } as NodeJS.ProcessEnv)
     : processEnv
-  const credentials = resolveCodexApiCredentials(credentialEnv)
+  const credentials = resolveCodexApiCredentials(credentialEnv, {
+    includeDefaultAuthJson: options.includeDefaultAuthJson,
+  })
   if (!credentials.apiKey || !credentials.accountId) {
     return null
   }
@@ -1536,7 +1539,9 @@ export async function buildStartupEnvFromProfile(options?: {
     // If Codex credentials are available (OAuth or existing), use Codex.
     // Otherwise inject the Codex env defaults so the provider picker
     // shows GPT 5.5 as the default model when the user lands on it.
-    const codexEnv = buildCodexProfileEnv({})
+    const codexEnv = buildCodexProfileEnv({
+      includeDefaultAuthJson: false,
+    })
     if (codexEnv) {
       return buildCompatibilityProcessEnv({
         processEnv,
