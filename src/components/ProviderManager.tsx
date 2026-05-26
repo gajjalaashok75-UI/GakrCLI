@@ -508,7 +508,7 @@ function XaiOAuthSetup({
   return (
     <Box flexDirection="column" gap={1}>
       <Text color="remember" bold>
-        xAI OAuth (Grok)
+        xAI OAuth
       </Text>
       <Text>
         Sign in with your xAI account in the browser. GakrCLI will store the
@@ -1909,9 +1909,9 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
     if (canUseXaiOAuth) {
       options.push({
         value: 'xai-oauth',
-        label: 'xAI OAuth (Grok)',
+        label: 'xAI OAuth',
         description:
-          'Sign in with your xAI account in the browser and store credentials securely',
+          'Sign in with your xAI account in the browser and store OAuth credentials securely',
       })
     }
 

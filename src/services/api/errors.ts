@@ -160,6 +160,38 @@ function mapOpenAICompatibilityFailureToAssistantMessage(options: {
   }
 }
 
+function isXaiEntitlementError(message: string): boolean {
+  const lower = message.toLowerCase()
+  return (
+    lower.includes('run out of credits') ||
+    lower.includes('grok subscription') ||
+    lower.includes('spending-limit') ||
+    lower.includes('personal-team-blocked')
+  )
+}
+
+function getThirdPartyAuthErrorMessage(error: APIError): string | null {
+  const provider = getAPIProvider()
+  if (
+    provider === 'firstParty' ||
+    provider === 'bedrock' ||
+    provider === 'vertex' ||
+    provider === 'foundry'
+  ) {
+    return null
+  }
+
+  if (provider === 'xai' || process.env.XAI_CREDENTIAL_SOURCE === 'oauth') {
+    if (isXaiEntitlementError(error.message)) {
+      return `${API_ERROR_MESSAGE_PREFIX}: xAI rejected the request because this account has no available Grok API credits or subscription access. Add credits at https://grok.com/?_s=usage, upgrade your Grok plan, or run /provider to switch providers. Details: ${error.message}`
+    }
+
+    return `${API_ERROR_MESSAGE_PREFIX}: xAI authentication failed. Run /provider and choose xAI OAuth again, run \`gakrcli auth xai login\`, or switch providers. Details: ${error.message}`
+  }
+
+  return `${API_ERROR_MESSAGE_PREFIX}: Authentication failed for ${provider}. Run /provider to update credentials or switch providers. Details: ${error.message}`
+}
+
 export function startsWithApiErrorPrefix(text: string): boolean {
   return (
     text.startsWith(API_ERROR_MESSAGE_PREFIX) ||
@@ -1004,6 +1036,14 @@ export function getAssistantMessageFromError(
       return createAssistantAPIErrorMessage({
         error: 'authentication_failed',
         content: CCR_AUTH_ERROR_MESSAGE,
+      })
+    }
+
+    const thirdPartyAuthErrorMessage = getThirdPartyAuthErrorMessage(error)
+    if (thirdPartyAuthErrorMessage) {
+      return createAssistantAPIErrorMessage({
+        error: 'authentication_failed',
+        content: thirdPartyAuthErrorMessage,
       })
     }
 
