@@ -185,7 +185,7 @@ export function getDefaultOpusModel(): ModelName {
   }
   // NVIDIA provider: use configured NVIDIA model
   if (getAPIProvider() === 'nvidia-nim') {
-    return process.env.OPENAI_MODEL || process.env.NVIDIA_MODEL || 'nvidia/llama-3.1-nemotron-70b-instruct'
+    return process.env.OPENAI_MODEL || process.env.NVIDIA_MODEL || DEFAULT_NVIDIA_MODEL
   }
   // Codex provider: use user-specified model or default to gpt-5.4
   if (getAPIProvider() === 'codex') {
@@ -231,7 +231,7 @@ export function getDefaultSonnetModel(): ModelName {
   }
   // NVIDIA provider
   if (getAPIProvider() === 'nvidia-nim') {
-    return process.env.OPENAI_MODEL || process.env.NVIDIA_MODEL || 'nvidia/llama-3.1-nemotron-70b-instruct'
+    return process.env.OPENAI_MODEL || process.env.NVIDIA_MODEL || DEFAULT_NVIDIA_MODEL
   }
   // Codex provider
   if (getAPIProvider() === 'codex') {

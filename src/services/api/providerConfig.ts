@@ -30,8 +30,8 @@ export const DEFAULT_MISTRAL_BASE_URL = 'https://api.mistral.ai/v1'
 /** Default GitHub Models API model when user selects copilot / github:copilot */
 export const DEFAULT_GITHUB_MODELS_API_MODEL = 'gpt-4o'
 /** Default NVIDIA model */
-export const DEFAULT_NVIDIA_MODEL = 'nvidia/llama-3.1-nemotron-70b-instruct'
-const LEGACY_INVALID_NVIDIA_MODEL = 'stepfun-ai/step-3.5-flash'
+export const DEFAULT_NVIDIA_MODEL = 'nvidia/stepfun-ai/step-3.5-flash'
+const LEGACY_UNPREFIXED_NVIDIA_MODEL = 'stepfun-ai/step-3.5-flash'
 const GITHUB_COPILOT_MODEL_ALIASES: Record<string, string> = {
   'claude-sonnet-4-6': 'claude-sonnet-4.6',
   'claude-opus-4-6': 'claude-opus-4.6',
@@ -228,7 +228,7 @@ function parseReasoningEffort(value: string | undefined): ReasoningEffort | unde
 }
 
 function normalizeNvidiaModel(value: string | undefined): string | undefined {
-  return value === LEGACY_INVALID_NVIDIA_MODEL ? DEFAULT_NVIDIA_MODEL : value
+  return value === LEGACY_UNPREFIXED_NVIDIA_MODEL ? DEFAULT_NVIDIA_MODEL : value
 }
 
 export function parseOpenAICompatibleApiFormat(

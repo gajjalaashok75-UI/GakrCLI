@@ -582,18 +582,24 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
   const [isActivating, setIsActivating] = React.useState(false)
   const isRefreshingRef = React.useRef(false)
 
+  function getDisplayedActiveProfileId(): string | undefined {
+    return isEnvTruthy(process.env.GAKR_CODE_USE_GITHUB)
+      ? undefined
+      : getActiveProviderProfile()?.id
+  }
+
   React.useEffect(() => {
     // Skip deferred initialization in test environment (mocks are synchronous)
     if (process.env.NODE_ENV === 'test') {
       setProfiles(getProviderProfiles())
-      setActiveProfileId(getActiveProviderProfile()?.id)
+      setActiveProfileId(getDisplayedActiveProfileId())
       setIsInitializing(false)
       return
     }
 
     queueMicrotask(() => {
       const profilesData = getProviderProfiles()
-      const activeId = getActiveProviderProfile()?.id
+      const activeId = getDisplayedActiveProfileId()
       setProfiles(profilesData)
       setActiveProfileId(activeId)
       setIsInitializing(false)
@@ -854,7 +860,7 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
     queueMicrotask(() => {
       const nextProfiles = getProviderProfiles()
       setProfiles(nextProfiles)
-      setActiveProfileId(getActiveProviderProfile()?.id)
+      setActiveProfileId(getDisplayedActiveProfileId())
       refreshGithubProviderState()
       refreshCodexOAuthCredentialState()
       isRefreshingRef.current = false
@@ -2350,7 +2356,12 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
               setErrorMessage(`Could not delete GitHub provider: ${githubDeleteError}`)
             } else {
               refreshProfiles()
-              setStatusMessage('GitHub provider deleted')
+              const remainingGithubCredentialSource = getGithubCredentialSourceFromEnv()
+              setStatusMessage(
+                remainingGithubCredentialSource === 'env'
+                  ? 'GitHub stored credentials deleted. GitHub Models is still visible because GITHUB_TOKEN or GH_TOKEN is set in this shell.'
+                  : 'GitHub provider deleted',
+              )
             }
             returnToMenu()
             return
