@@ -8,12 +8,25 @@
  * - src/ path aliases
  */
 
-import { readFileSync } from 'fs'
+import { mkdirSync, readFileSync, rmSync } from 'fs'
+import { basename, resolve } from 'path'
 import { noTelemetryPlugin } from './no-telemetry-plugin'
 import { CLI_EXTERNALS, SDK_EXTERNALS } from './externals.js'
 
 const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'))
 const version = pkg.version
+
+function cleanDistDirectory() {
+  const distDir = resolve('./dist')
+  if (basename(distDir) !== 'dist') {
+    throw new Error(`Refusing to clean unexpected build output path: ${distDir}`)
+  }
+
+  rmSync(distDir, { recursive: true, force: true })
+  mkdirSync(distDir, { recursive: true })
+}
+
+cleanDistDirectory()
 
 // Feature flags for the open build.
 // Most Anthropic-internal features stay off; open-build features can be

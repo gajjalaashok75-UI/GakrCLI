@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Global npm Install Asset Discovery**: Resolved packaged asset lookup from the installed package root and corrected global skills fallback paths for `@gakr-gakr/gakrcli`.
 - **xAI OAuth Error Guidance**: Reported xAI OAuth credit/subscription entitlement failures as provider-side access errors instead of incorrectly suggesting `/login`, and clarified the `/provider` OAuth option label.
+- **Build Output Cleanup**: Cleaned the old `dist/` directory at the start of `bun run build` so local build output only contains the current CLI and SDK bundles.
 - **GakrCLI Setup Naming**: Reframed onboarding, auth flow helpers, tests, and command copy away from old setup/account wording so the first-run experience is presented as GakrCLI setup.
 - **Startup Provider Environment Refresh**: Reapplied selected provider profile environment after onboarding so first-run provider choices are available before validation.
 - **Fresh Install Startup Order**: Created and synced `~/.gakrcli` before startup provider reads and stopped default `~/.codex/auth.json` discovery from silently selecting Codex before GakrCLI onboarding.
