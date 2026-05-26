@@ -222,19 +222,6 @@ function toDraft(profile: ProviderProfile): ProviderDraft {
   }
 }
 
-function getPresetLabel(preset: ProviderPreset, label: string): React.ReactNode {
-  if (preset === 'gitlawb-opengateway') {
-    return (
-      <Text>
-        <Text>{label} </Text>
-        <Text color="success" bold>[FREE]</Text>
-      </Text>
-    )
-  }
-
-  return label
-}
-
 function presetToDraft(preset: ProviderPreset): ProviderDraft {
   const defaults = getProviderPresetDefaults(preset)
   return {
@@ -1506,15 +1493,15 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
       const metadata = getProviderPresetUiMetadata(preset)
       return {
         value: preset,
-        label: getPresetLabel(preset, metadata.label),
+        label: metadata.label,
         description: metadata.description,
       }
     })
 
     if (canUseCodexOAuth) {
       // Insert after DeepSeek so Codex OAuth keeps its established position
-      // in the picker even with Gitlawb Opengateway pinned at the top.
-      options.splice(7, 0, {
+      // in the picker.
+      options.splice(6, 0, {
         value: 'codex-oauth',
         label: (
           <Text>

@@ -1117,7 +1117,7 @@ test('preserves Gemini tool call extra_content in follow-up requests', async () 
 })
 
 test('replays Gemini tool signatures for model-detected Gemini endpoints', async () => {
-  process.env.OPENAI_BASE_URL = 'https://opengateway.example.test/v1'
+  process.env.OPENAI_BASE_URL = 'https://gateway.example.test/v1'
   let requestBody: Record<string, unknown> | undefined
 
   globalThis.fetch = (async (_input, init) => {
@@ -1164,7 +1164,7 @@ test('replays Gemini tool signatures for model-detected Gemini endpoints', async
             id: 'call_1',
             name: 'Write',
             input: { file_path: 'todo.md', content: 'todo' },
-            signature: 'sig-opengateway',
+            signature: 'sig-gateway',
           },
         ],
       },
@@ -1191,7 +1191,7 @@ test('replays Gemini tool signatures for model-detected Gemini endpoints', async
     id: 'call_1',
     extra_content: {
       google: {
-        thought_signature: 'sig-opengateway',
+        thought_signature: 'sig-gateway',
       },
     },
   })
