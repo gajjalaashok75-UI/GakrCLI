@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Global npm Install Asset Discovery**: Resolved packaged asset lookup from the installed package root and corrected global skills fallback paths for `@gakr-gakr/gakrcli`.
 - **xAI OAuth Error Guidance**: Reported xAI OAuth credit/subscription entitlement failures as provider-side access errors instead of incorrectly suggesting `/login`, and clarified the `/provider` OAuth option label.
+- **VS Code Chat Rendering**: Made VS Code chat tool calls render as compact collapsed rows with structured expandable details and bounded tool output previews.
+- **SDK Query Lifecycle Isolation**: Isolated SDK resume lifecycle tests behind a temporary `GAKR_CONFIG_DIR` so full-suite runs no longer touch the real user config directory.
 - **Build Output Cleanup**: Cleaned the old `dist/` directory at the start of `bun run build` so local build output only contains the current CLI and SDK bundles.
 - **VS Code Extension Status**: Bumped the VS Code extension to 0.2.1, refreshed provider availability detection for current profiles, added global profile fallback detection, and aligned chat launches with the active workspace.
 - **GakrCLI Setup Naming**: Reframed onboarding, auth flow helpers, tests, and command copy away from old setup/account wording so the first-run experience is presented as GakrCLI setup.

@@ -2,7 +2,13 @@
 
 All notable changes to the "GakrCLI" extension will be documented in this file.
 
-## [0.2.1] - 2026-05-26
+## [0.2.1-unreleased] - 2026-05-26
+
+### Fixed
+- Made chat tool calls render as compact collapsed rows by default, with structured expandable input/output details for file reads, edits, terminal commands, and search-style tools.
+- Constrained large tool outputs in the expanded view and replaced noisy completed-tool labels with concise output summaries.
+
+## [0.2.1-unreleased] - 2026-05-26
 
 ### Fixed
 - Updated Control Center provider status detection for current GakrCLI profiles including xAI OAuth, MiniMax, Mistral, GitHub Models, Bedrock, Vertex, Foundry, and hosted OpenAI-compatible gateways.
