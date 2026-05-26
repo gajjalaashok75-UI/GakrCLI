@@ -2,12 +2,20 @@ const fs = require('fs');
 const path = require('path');
 
 const SAVED_PROFILES = new Set([
+  'anthropic',
   'openai',
   'ollama',
   'codex',
   'gemini',
+  'mistral',
+  'github',
+  'bedrock',
+  'vertex',
+  'foundry',
   'nvidia-nim',
+  'minimax',
   'atomic-chat',
+  'xai',
 ]);
 
 const CODEX_ALIAS_MODELS = new Set([
@@ -269,31 +277,51 @@ function getOpenAICompatibleLabel(baseUrl, model) {
     return 'LM Studio';
   }
 
-  if (normalizedBaseUrl.includes('deepseek') || normalizedModel.includes('deepseek')) {
+  if (hostname === 'api.x.ai' || normalizedModel.includes('grok')) {
+    return 'xAI';
+  }
+
+  if (hostname === 'api.minimax.io' || hostname === 'api.minimax.chat') {
+    return 'MiniMax';
+  }
+
+  if (hostname === 'api.venice.ai') {
+    return 'Venice';
+  }
+
+  if (hostname === 'api.xiaomimimo.com' || hostname === 'api.mimo-v2.com') {
+    return 'Xiaomi MiMo';
+  }
+
+  if (hostname === 'api.z.ai' || normalizedModel.includes('glm-')) {
+    return 'Z.AI';
+  }
+
+  if (hostname === 'api.deepseek.com' || normalizedModel.includes('deepseek')) {
     return 'DeepSeek';
   }
 
-  if (normalizedBaseUrl.includes('openrouter')) {
+  if (hostname === 'openrouter.ai') {
     return 'OpenRouter';
   }
 
-  if (normalizedBaseUrl.includes('together')) {
+  if (hostname === 'api.together.xyz' || hostname === 'api.together.ai') {
     return 'Together AI';
   }
 
-  if (normalizedBaseUrl.includes('groq')) {
+  if (hostname === 'api.groq.com') {
     return 'Groq';
   }
 
-  if (normalizedBaseUrl.includes('mistral') || normalizedModel.includes('mistral')) {
+  if (hostname === 'api.mistral.ai' || normalizedModel.includes('mistral')) {
     return 'Mistral';
   }
 
-  if (normalizedBaseUrl.includes('azure')) {
+  if (hostname && hostname.includes('.openai.azure.com')) {
     return 'Azure OpenAI';
   }
 
-  if (normalizedBaseUrl.includes('api.openai.com') || !normalizedBaseUrl) {
+  if (hostname === 'api.openai.com' || !normalizedBaseUrl) {
     return 'OpenAI';
   }
 
@@ -316,10 +344,14 @@ function getDetail(env, fallback) {
   return (
     asNonEmptyString(getEnvValue(env, 'OPENAI_MODEL')) ||
     asNonEmptyString(getEnvValue(env, 'GEMINI_MODEL')) ||
+    asNonEmptyString(getEnvValue(env, 'MISTRAL_MODEL')) ||
     asNonEmptyString(getEnvValue(env, 'NVIDIA_MODEL')) ||
+    asNonEmptyString(getEnvValue(env, 'MINIMAX_MODEL')) ||
     asNonEmptyString(getEnvValue(env, 'OPENAI_BASE_URL')) ||
     asNonEmptyString(getEnvValue(env, 'GEMINI_BASE_URL')) ||
+    asNonEmptyString(getEnvValue(env, 'MISTRAL_BASE_URL')) ||
     asNonEmptyString(getEnvValue(env, 'NVIDIA_BASE_URL')) ||
+    asNonEmptyString(getEnvValue(env, 'MINIMAX_BASE_URL')) ||
     fallback
   );
 }
@@ -338,16 +370,32 @@ function describeOpenAICompatible(env, source) {
 
 function describeSavedProfile(profile) {
   switch (profile.profile) {
+    case 'anthropic':
+      return buildProviderState('Anthropic', getDetail(profile.env, 'saved profile'), 'profile');
     case 'ollama':
       return buildProviderState('Ollama', getDetail(profile.env, 'saved profile'), 'profile');
     case 'gemini':
       return buildProviderState('Gemini', getDetail(profile.env, 'saved profile'), 'profile');
+    case 'mistral':
+      return buildProviderState('Mistral', getDetail(profile.env, 'saved profile'), 'profile');
+    case 'github':
+      return buildProviderState('GitHub Models', getDetail(profile.env, 'saved profile'), 'profile');
+    case 'bedrock':
+      return buildProviderState('Bedrock', getDetail(profile.env, 'saved profile'), 'profile');
+    case 'vertex':
+      return buildProviderState('Vertex AI', getDetail(profile.env, 'saved profile'), 'profile');
+    case 'foundry':
+      return buildProviderState('Foundry', getDetail(profile.env, 'saved profile'), 'profile');
     case 'codex':
       return buildProviderState('Codex', getDetail(profile.env, 'saved profile'), 'profile');
     case 'nvidia-nim':
-      return buildProviderState('NVIDIA NIMs', getDetail(profile.env, 'saved profile'), 'profile');
+      return buildProviderState('NVIDIA NIM', getDetail(profile.env, 'saved profile'), 'profile');
+    case 'minimax':
+      return buildProviderState('MiniMax', getDetail(profile.env, 'saved profile'), 'profile');
     case 'atomic-chat':
       return buildProviderState('Atomic Chat', getDetail(profile.env, 'saved profile'), 'profile');
+    case 'xai':
+      return buildProviderState('xAI', getDetail(profile.env, 'saved profile'), 'profile');
     case 'openai':
     default:
       return describeOpenAICompatible(profile.env, 'profile');
@@ -363,12 +411,16 @@ function describeProviderState({ shimEnabled, env, profile }) {
     return buildProviderState('Gemini', getDetail(env, 'from environment'), 'env');
   }
 
+  if (isEnvTruthy(getEnvValue(env, 'GAKR_CODE_USE_MISTRAL'))) {
+    return buildProviderState('Mistral', getDetail(env, 'from environment'), 'env');
+  }
+
   if (isEnvTruthy(getEnvValue(env, 'GAKR_CODE_USE_GITHUB'))) {
     return buildProviderState('GitHub Models', getDetail(env, 'from environment'), 'env');
   }
 
   if (isEnvTruthy(getEnvValue(env, 'GAKR_CODE_USE_NVIDIA'))) {
-    return buildProviderState('NVIDIA NIMs', getDetail(env, 'from environment'), 'env');
+    return buildProviderState('NVIDIA NIM', getDetail(env, 'from environment'), 'env');
   }
 
   if (isEnvTruthy(getEnvValue(env, 'GAKR_CODE_USE_BEDROCK'))) {
@@ -385,6 +437,22 @@ function describeProviderState({ shimEnabled, env, profile }) {
 
   if (isEnvTruthy(getEnvValue(env, 'GAKR_CODE_USE_OPENAI'))) {
     return describeOpenAICompatible(env, 'env');
+  }
+
+  if (asNonEmptyString(getEnvValue(env, 'XAI_API_KEY')) || getEnvValue(env, 'XAI_CREDENTIAL_SOURCE') === 'oauth') {
+    return buildProviderState('xAI', getDetail(env, 'from environment'), 'env');
+  }
+
+  if (asNonEmptyString(getEnvValue(env, 'MINIMAX_API_KEY'))) {
+    return buildProviderState('MiniMax', getDetail(env, 'from environment'), 'env');
+  }
+
+  if (asNonEmptyString(getEnvValue(env, 'MIMO_API_KEY'))) {
+    return buildProviderState('Xiaomi MiMo', getDetail(env, 'from environment'), 'env');
+  }
+
+  if (asNonEmptyString(getEnvValue(env, 'VENICE_API_KEY'))) {
+    return buildProviderState('Venice', getDetail(env, 'from environment'), 'env');
   }
 
   if (shimEnabled) {

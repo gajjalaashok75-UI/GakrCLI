@@ -1,6 +1,7 @@
 const vscode = require('vscode');
 const crypto = require('crypto');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const {
@@ -16,9 +17,10 @@ const { ChatController, gakrcliChatViewProvider, gakrcliChatPanelManager } = req
 const { SessionManager } = require('./chat/sessionManager');
 const { DiffContentProvider, SCHEME: DIFF_SCHEME } = require('./chat/diffController');
 
-const GAKRCLI_REPO_URL = 'https://github.com/Gakrcli/gakrcli';
-const GAKRCLI_SETUP_URL = 'https://github.com/Gakrcli/gakrcli/blob/main/README.md#quick-start';
+const GAKRCLI_REPO_URL = 'https://github.com/gajjalaashok75-UI/GakrCLI';
+const GAKRCLI_SETUP_URL = 'https://github.com/gajjalaashok75-UI/GakrCLI/blob/main/README.md#quick-start';
 const PROFILE_FILE_NAME = '.gakrcli-profile.json';
+const DEFAULT_CONFIG_DIR_NAME = '.gakrcli';
 
 function escapeHtml(value) {
   return String(value)
@@ -165,12 +167,21 @@ function getProviderSourceLabel(source) {
   }
 }
 
-function readWorkspaceProfile(profilePath) {
+function getGlobalProfilePath(env = process.env, homeDir = os.homedir()) {
+  const configuredDir = typeof env.GAKR_CONFIG_DIR === 'string' && env.GAKR_CONFIG_DIR.trim()
+    ? env.GAKR_CONFIG_DIR.trim()
+    : null;
+  const configDir = configuredDir || path.join(homeDir, DEFAULT_CONFIG_DIR_NAME);
+
+  return path.join(configDir, PROFILE_FILE_NAME);
+}
+
+function readProfileFile(profilePath, missingHint) {
   if (!profilePath || !fs.existsSync(profilePath)) {
     return {
       profile: null,
       statusLabel: 'Missing',
-      statusHint: `${PROFILE_FILE_NAME} not found in the workspace root`,
+      statusHint: missingHint || `${PROFILE_FILE_NAME} not found`,
       filePath: null,
     };
   }
@@ -203,6 +214,47 @@ function readWorkspaceProfile(profilePath) {
   }
 }
 
+function readProfileState({ workspaceFolder, env = process.env, homeDir = os.homedir() } = {}) {
+  const workspaceProfilePath = workspaceFolder
+    ? path.join(workspaceFolder, PROFILE_FILE_NAME)
+    : null;
+  const globalProfilePath = getGlobalProfilePath(env, homeDir);
+  const searchHint = workspaceFolder
+    ? `${PROFILE_FILE_NAME} not found in the workspace root or ${globalProfilePath}`
+    : `${PROFILE_FILE_NAME} not found at ${globalProfilePath}`;
+
+  if (workspaceProfilePath && fs.existsSync(workspaceProfilePath)) {
+    const profileState = readProfileFile(workspaceProfilePath, searchHint);
+    return {
+      ...profileState,
+      statusHint: profileState.filePath
+        ? `Workspace profile: ${profileState.filePath}`
+        : profileState.statusHint,
+      sourceLabel: 'workspace profile',
+      workspaceProfilePath,
+      globalProfilePath,
+    };
+  }
+
+  const globalProfileState = readProfileFile(globalProfilePath, searchHint);
+  if (globalProfileState.filePath) {
+    return {
+      ...globalProfileState,
+      statusHint: `Global profile: ${globalProfileState.filePath}`,
+      sourceLabel: 'global profile',
+      workspaceProfilePath,
+      globalProfilePath,
+    };
+  }
+
+  return {
+    ...globalProfileState,
+    sourceLabel: workspaceFolder ? 'searched workspace and global profiles' : 'searched global profile',
+    workspaceProfilePath,
+    globalProfilePath,
+  };
+}
+
 async function collectControlCenterState() {
   const configured = vscode.workspace.getConfiguration('gakrcli');
   const launchCommand = configured.get('launchCommand', 'gakrcli');
@@ -219,18 +271,7 @@ async function collectControlCenterState() {
     executable,
   });
   const installed = await isCommandAvailable(executable, launchTargets.projectAwareCwd);
-  const profilePath = workspaceFolder
-    ? path.join(workspaceFolder, PROFILE_FILE_NAME)
-    : null;
-
-  const profileState = workspaceFolder
-    ? readWorkspaceProfile(profilePath)
-    : {
-        profile: null,
-        statusLabel: 'No workspace',
-        statusHint: 'Open a workspace folder to detect a saved profile',
-        filePath: null,
-      };
+  const profileState = readProfileState({ workspaceFolder });
 
   const providerState = describeProviderState({
     shimEnabled,
@@ -257,6 +298,7 @@ async function collectControlCenterState() {
     profileStatusLabel: profileState.statusLabel,
     profileStatusHint: profileState.statusHint,
     workspaceProfilePath: profileState.filePath,
+    profileSourceLabel: profileState.sourceLabel,
     providerState,
     providerSourceLabel: getProviderSourceLabel(providerState.source),
   };
@@ -329,7 +371,7 @@ async function openWorkspaceProfile() {
 
   if (!state.workspaceProfilePath) {
     await vscode.window.showInformationMessage(
-      `No ${PROFILE_FILE_NAME} file was found for the current workspace.`,
+      `No ${PROFILE_FILE_NAME} file was found in the current workspace or global GakrCLI config directory.`,
     );
     return;
   }
@@ -396,7 +438,7 @@ function renderActionButton(action, variant = 'secondary') {
 
 function renderProfileEmptyState(detail) {
   return `<div class="action-empty" role="status" aria-live="polite">
-    <div class="action-empty-title">No workspace profile yet</div>
+    <div class="action-empty-title">No provider profile found</div>
     <div class="action-empty-detail">${escapeHtml(detail)}</div>
   </div>`;
 }
@@ -1230,6 +1272,8 @@ module.exports = {
   gakrcliControlCenterProvider,
   renderControlCenterHtml,
   resolveLaunchTargets,
+  getGlobalProfilePath,
+  readProfileState,
   ChatController,
   gakrcliChatViewProvider,
   gakrcliChatPanelManager,

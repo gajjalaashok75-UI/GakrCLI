@@ -29,7 +29,13 @@ function getPathTail(value) {
   return text.split(/[\\/]/).filter(Boolean).pop() || text;
 }
 
-function buildActionModel({ canLaunchInWorkspaceRoot, workspaceProfilePath } = {}) {
+function buildActionModel({ canLaunchInWorkspaceRoot, workspaceProfilePath, profileSourceLabel } = {}) {
+  const openProfileLabel = profileSourceLabel === 'global profile'
+    ? 'Open Global Profile'
+    : profileSourceLabel === 'workspace profile'
+      ? 'Open Workspace Profile'
+      : 'Open Profile';
+
   return {
     primary: {
       id: 'launch',
@@ -50,7 +56,7 @@ function buildActionModel({ canLaunchInWorkspaceRoot, workspaceProfilePath } = {
     openProfile: workspaceProfilePath
       ? {
           id: 'openProfile',
-          label: 'Open Workspace Profile',
+          label: openProfileLabel,
           detail: `Inspect ${truncateMiddle(workspaceProfilePath, 40)}`,
           tone: 'neutral',
           disabled: false,
@@ -97,7 +103,7 @@ function getProviderDetail(providerState, providerSourceLabel) {
 }
 
 function buildControlCenterViewModel(status = {}) {
-  const runtimeSummary = status.installed ? 'Installed' : 'Missing';
+  const runtimeSummary = status.installed ? 'Available' : 'Missing';
   const runtimeDetail = status.executable || 'Unknown command';
   const providerDetail = getProviderDetail(status.providerState, status.providerSourceLabel);
   const providerTone = getProviderTone(status.providerState);
@@ -164,7 +170,7 @@ function buildControlCenterViewModel(status = {}) {
           },
           {
             key: 'profileStatus',
-            label: 'Workspace profile',
+            label: 'Provider profile',
             summary: status.profileStatusLabel || 'Unknown',
             detail: status.profileStatusHint || '',
             tone: getProfileTone(status.profileStatusLabel),

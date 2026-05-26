@@ -2,7 +2,7 @@
   "name": "gakrcli-vscode",
   "displayName": "GakrCLI",
   "description": "Practical VS Code companion for GakrCLI with project-aware launch behavior and a real Control Center.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "gakr-gakr",
   "icon": "media/download.jpeg",
   "engines": {

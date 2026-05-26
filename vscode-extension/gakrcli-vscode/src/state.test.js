@@ -74,6 +74,29 @@ test('parseProfileFile returns null when env is not an object', () => {
   );
 });
 
+test('parseProfileFile accepts current provider profiles', () => {
+  assert.deepEqual(
+    parseProfileFile(
+      JSON.stringify({
+        profile: 'xai',
+        env: {
+          XAI_CREDENTIAL_SOURCE: 'oauth',
+          OPENAI_MODEL: 'grok-4.3',
+        },
+        createdAt: '2026-05-26T00:00:00.000Z',
+      }),
+    ),
+    {
+      profile: 'xai',
+      env: {
+        XAI_CREDENTIAL_SOURCE: 'oauth',
+        OPENAI_MODEL: 'grok-4.3',
+      },
+      createdAt: '2026-05-26T00:00:00.000Z',
+    },
+  );
+});
+
 test('resolveCommandCheckPath resolves workspace-relative executables', () => {
   assert.equal(
     resolveCommandCheckPath('./node_modules/.bin/gakrcli', '/repo'),
@@ -158,6 +181,89 @@ test('describeProviderState reports LM Studio from openai profile base url', () 
   );
 });
 
+test('describeProviderState reports current descriptor-backed profiles', () => {
+  assert.deepEqual(
+    describeProviderState({
+      shimEnabled: false,
+      env: {},
+      profile: {
+        profile: 'xai',
+        env: {
+          XAI_CREDENTIAL_SOURCE: 'oauth',
+          OPENAI_MODEL: 'grok-4.3',
+        },
+        createdAt: '2026-05-26T00:00:00.000Z',
+      },
+    }),
+    {
+      label: 'xAI',
+      detail: 'grok-4.3',
+      source: 'profile',
+    },
+  );
+
+  assert.deepEqual(
+    describeProviderState({
+      shimEnabled: false,
+      env: {},
+      profile: {
+        profile: 'minimax',
+        env: {
+          MINIMAX_MODEL: 'MiniMax-M2.7',
+        },
+        createdAt: '2026-05-26T00:00:00.000Z',
+      },
+    }),
+    {
+      label: 'MiniMax',
+      detail: 'MiniMax-M2.7',
+      source: 'profile',
+    },
+  );
+});
+
+test('describeProviderState reports aggregator hosts without substring false positives', () => {
+  assert.deepEqual(
+    describeProviderState({
+      shimEnabled: false,
+      env: {},
+      profile: {
+        profile: 'openai',
+        env: {
+          OPENAI_BASE_URL: 'https://api.groq.com/openai/v1',
+          OPENAI_MODEL: 'llama-3.3-70b-versatile',
+        },
+        createdAt: '2026-05-26T00:00:00.000Z',
+      },
+    }),
+    {
+      label: 'Groq',
+      detail: 'llama-3.3-70b-versatile',
+      source: 'profile',
+    },
+  );
+
+  assert.deepEqual(
+    describeProviderState({
+      shimEnabled: false,
+      env: {},
+      profile: {
+        profile: 'openai',
+        env: {
+          OPENAI_BASE_URL: 'https://not-api.openai.com.example/v1',
+          OPENAI_MODEL: 'gpt-4o',
+        },
+        createdAt: '2026-05-26T00:00:00.000Z',
+      },
+    }),
+    {
+      label: 'OpenAI-compatible',
+      detail: 'gpt-4o',
+      source: 'profile',
+    },
+  );
+});
+
 test('describeProviderState reports environment-backed provider details', () => {
   assert.deepEqual(
     describeProviderState({
@@ -172,6 +278,24 @@ test('describeProviderState reports environment-backed provider details', () => 
     {
       label: 'Ollama',
       detail: 'llama3.2:3b',
+      source: 'env',
+    },
+  );
+});
+
+test('describeProviderState reports env-only xAI OAuth status', () => {
+  assert.deepEqual(
+    describeProviderState({
+      shimEnabled: false,
+      env: {
+        XAI_CREDENTIAL_SOURCE: 'oauth',
+        OPENAI_MODEL: 'grok-4.3',
+      },
+      profile: null,
+    }),
+    {
+      label: 'xAI',
+      detail: 'grok-4.3',
       source: 'env',
     },
   );

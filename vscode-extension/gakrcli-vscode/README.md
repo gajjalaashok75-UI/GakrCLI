@@ -10,8 +10,8 @@ A practical VS Code companion for GakrCLI with a project-aware **Control Center*
   - whether the launch shim injects `GAKR_CODE_USE_OPENAI=1`
   - the current workspace folder
   - the launch cwd that will be used for terminal sessions
-  - whether `.gakrcli-profile.json` exists in the current workspace root
-  - a conservative provider summary derived from the workspace profile or known environment flags
+  - whether `.gakrcli-profile.json` exists in the current workspace root or global GakrCLI config directory
+  - a conservative provider summary derived from the workspace profile, global profile, or known environment flags
 - **Project-aware launch behavior**:
   - `Launch GakrCLI` launches from the active editor's workspace when possible
   - falls back to the first workspace folder when needed
@@ -19,7 +19,7 @@ A practical VS Code companion for GakrCLI with a project-aware **Control Center*
 - **Practical sidebar actions**:
   - Launch GakrCLI
   - Launch in Workspace Root
-  - Open Workspace Profile
+  - Open Profile
   - Open Repository
   - Open Setup Guide
   - Open Command Palette
@@ -49,8 +49,9 @@ A practical VS Code companion for GakrCLI with a project-aware **Control Center*
 
 ## Notes on Status Detection
 
-- Provider status prefers the real workspace `.gakrcli-profile.json` file when present.
+- Provider status prefers the real workspace `.gakrcli-profile.json` file when present, then falls back to the global profile at `~/.gakrcli/.gakrcli-profile.json` or `GAKR_CONFIG_DIR/.gakrcli-profile.json`.
 - If no saved profile exists, the extension falls back to known environment flags available to the VS Code extension host.
+- Current GakrCLI profiles such as xAI OAuth, MiniMax, Mistral, GitHub Models, NVIDIA NIM, and OpenAI-compatible gateway routes are displayed with provider-specific labels when enough profile or environment metadata is available.
 - If the source of truth is unclear, the extension shows `unknown` instead of guessing.
 
 ## Development
