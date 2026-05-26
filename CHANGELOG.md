@@ -5,7 +5,7 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2026-05-26 10:29:14 +05:30
+## [Unreleased] - 2026-05-26 10:46:35 +05:30
 
 ### Added
 - **Fresh Install User Directory Bootstrap**: Initialized `~/.gakrcli` during CLI startup with required runtime directories and synced packaged `agents`, `rules`, and `skills` defaults without overwriting user files.
@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - **Promotional Spinner Tips**: Removed the partner-tip catalog, scheduling controls, history tracking, settings schema, tests, and provider badge copy so spinner tips are only regular product tips.
+- **Gitlawb Opengateway Provider**: Removed the Gitlawb Opengateway provider preset, zero-key auto-detect fallback, generated integration metadata, and legacy route normalization coverage.
 
 ## [0.5.3] - 2026-05-22
 
@@ -78,7 +79,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Gemini Tool Signatures**: Replayed real Gemini `thought_signature` metadata by model or base URL and preserved signatures from streaming and non-streaming OpenAI-compatible responses.
 - **OpenAI Shim Stream Resilience**: Converted Gemini raw tool-call text into tool-use blocks, surfaced structured in-stream errors, and annotated length-truncated streams.
 - **GitHub Native Claude Mode**: Routed GitHub Claude-family models through Anthropic-native requests so prompt caching and `cache_control` blocks remain available.
-- **Opengateway Smart Route**: Moved Gitlawb Opengateway defaults to the shared `/v1` endpoint, added the Gemini Flash Lite partner model, and normalized older hosted route URLs.
 - **OpenAI Shim Compatibility**: Redacted credentials from transport-error URLs and stripped unsupported `store` fields for Cerebras chat-completion requests.
 - **API Context Overflow Handling**: Removed a duplicate 500-context-overflow error branch while keeping regression coverage for the friendly new-session guidance.
 - **VS Code Extension Packaging**: Added explicit activation events, packaged-file allowlists, and isolated extension module mocks during tests.
@@ -95,7 +95,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Plugin Component Path Hardening**: Rejected plugin command, agent, skill, output-style, and hooks paths that traverse or symlink outside the plugin directory, including nested skill discovery.
 - **Tool Error Handling**: Surfaced Web Search adapter failures with actionable provider guidance and normalized single-question AskUserQuestion payloads before schema validation.
 - **Provider Diagnostic Coverage**: Added regression coverage for Venice and Xiaomi MiMo route defaults, Xiaomi MiMo credential validation, and shared URL credential-parameter redaction.
-- **Provider Route Compatibility**: Restored the Copilot Claude cache metrics bucket name and added coverage for Xiaomi MiMo auth headers, max-token shaping, and Gitlawb Opengateway smart-route normalization.
 - **Command and Plugin Hook Safety**: Filtered generated command stubs out of the slash-command registry and deduplicated repeated plugin hook registrations.
 - **Provider Profile Coverage**: Added Venice and Xiaomi MiMo regression coverage for provider flags, saved profile env mirroring, startup profile persistence, `/provider` summaries, and OpenAI-shim model defaults.
 - **Config Directory Cleanup**: Hard-cut default config paths to `~/.gakrcli` and kept explicit `GAKR_CONFIG_DIR` overrides as the only config-directory override.
