@@ -62,14 +62,14 @@ test('buildAPIProviderProperties labels NVIDIA NIM sessions', async () => {
   process.env.GAKR_CODE_USE_OPENAI = '1'
   process.env.NVIDIA_NIM = '1'
   process.env.OPENAI_BASE_URL = 'https://integrate.api.nvidia.com/v1'
-  process.env.OPENAI_MODEL = 'nvidia/llama-3.1-nemotron-70b-instruct'
+  process.env.OPENAI_MODEL = 'nvidia/stepfun-ai/step-3.5-flash'
 
   expect(await readPropertyValue('API provider', 'nvidia-nim')).toBe('NVIDIA NIM')
   expect(await readPropertyValue('NVIDIA NIM base URL', 'nvidia-nim')).toBe(
     'https://integrate.api.nvidia.com/v1',
   )
   expect(await readPropertyValue('Model', 'nvidia-nim')).toBe(
-    'nvidia/llama-3.1-nemotron-70b-instruct',
+    'nvidia/stepfun-ai/step-3.5-flash',
   )
 })
 

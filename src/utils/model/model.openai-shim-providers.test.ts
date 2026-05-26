@@ -240,13 +240,13 @@ test('getDefaultSonnetModel returns OPENAI_MODEL for NVIDIA NIM', async () => {
   expect(getDefaultSonnetModel()).toBe('nvidia/llama-3.1-nemotron-70b-instruct')
 })
 
-test('getDefaultMainLoopModelSetting returns NVIDIA NIM default instead of stale legacy model', async () => {
+test('getDefaultMainLoopModelSetting returns the NVIDIA NIM default model', async () => {
   process.env.NVIDIA_NIM = '1'
   process.env.GAKR_CODE_USE_OPENAI = '1'
 
   const { getDefaultMainLoopModelSetting } = await importFreshModelModule()
   expect(getDefaultMainLoopModelSetting()).toBe(
-    'nvidia/llama-3.1-nemotron-70b-instruct',
+    'nvidia/stepfun-ai/step-3.5-flash',
   )
 })
 

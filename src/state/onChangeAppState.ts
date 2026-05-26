@@ -6,7 +6,12 @@ import {
   clearGcpCredentialsCache,
 } from '../utils/auth.js'
 import { getGlobalConfig, saveGlobalConfig } from '../utils/config.js'
+import { isEnvTruthy } from '../utils/envUtils.js'
 import { toError } from '../utils/errors.js'
+import {
+  applyGithubProviderProcessEnv,
+  buildGithubProviderSettingsEnv,
+} from '../utils/githubProviderMode.js'
 import { logError } from '../utils/log.js'
 import { applyConfigEnvironmentVariables } from '../utils/managedEnv.js'
 import {
@@ -108,9 +113,23 @@ export function onChangeAppState({
     newState.mainLoopModel !== oldState.mainLoopModel &&
     newState.mainLoopModel !== null
   ) {
+    const isGithubProviderActive = isEnvTruthy(process.env.GAKR_CODE_USE_GITHUB)
+
     // Save to settings
-    updateSettingsForSource('userSettings', { model: newState.mainLoopModel })
-    persistActiveProviderProfileModel(newState.mainLoopModel)
+    updateSettingsForSource(
+      'userSettings',
+      isGithubProviderActive
+        ? {
+            model: newState.mainLoopModel,
+            env: buildGithubProviderSettingsEnv(newState.mainLoopModel),
+          }
+        : { model: newState.mainLoopModel },
+    )
+    if (isGithubProviderActive) {
+      applyGithubProviderProcessEnv(newState.mainLoopModel)
+    } else {
+      persistActiveProviderProfileModel(newState.mainLoopModel)
+    }
     setMainLoopModelOverride(newState.mainLoopModel)
   }
 

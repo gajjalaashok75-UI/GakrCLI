@@ -45,6 +45,7 @@ import {
   type ProviderPreset,
 } from '../integrations/index.js'
 import { logForDebugging } from './debug.js'
+import { isEnvTruthy } from './envUtils.js'
 import {
   sanitizeProfileCustomHeaders,
   serializeProfileCustomHeaders,
@@ -72,8 +73,8 @@ export type ProviderPresetDefaults = Omit<ProviderProfileInput, 'provider'> & {
 
 const PROFILE_ENV_APPLIED_FLAG = 'GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED'
 const PROFILE_ENV_APPLIED_ID = 'GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID'
-const DEFAULT_NVIDIA_NIM_MODEL = 'nvidia/llama-3.1-nemotron-70b-instruct'
-const LEGACY_INVALID_NVIDIA_NIM_MODEL = 'stepfun-ai/step-3.5-flash'
+const DEFAULT_NVIDIA_NIM_MODEL = 'nvidia/stepfun-ai/step-3.5-flash'
+const LEGACY_UNPREFIXED_NVIDIA_NIM_MODEL = 'stepfun-ai/step-3.5-flash'
 
 type ProfileCompatibilityMode =
   | 'anthropic'
@@ -186,7 +187,7 @@ function sanitizeProfile(profile: ProviderProfile): ProviderProfile | null {
   const capabilityRouteId = resolveProfileCapabilityRouteId(provider, baseUrl)
   if (
     capabilityRouteId === 'nvidia-nim' &&
-    model === LEGACY_INVALID_NVIDIA_NIM_MODEL
+    model === LEGACY_UNPREFIXED_NVIDIA_NIM_MODEL
   ) {
     model = DEFAULT_NVIDIA_NIM_MODEL
   }
@@ -867,6 +868,10 @@ export function persistActiveProviderProfileModel(
 ): ProviderProfile | null {
   const nextModel = trimOrUndefined(model)
   if (!nextModel) {
+    return null
+  }
+
+  if (isEnvTruthy(process.env.GAKR_CODE_USE_GITHUB)) {
     return null
   }
 

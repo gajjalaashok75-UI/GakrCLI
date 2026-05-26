@@ -5,7 +5,7 @@ export default defineGateway({
   label: 'NVIDIA NIM',
   category: 'hosted',
   defaultBaseUrl: 'https://integrate.api.nvidia.com/v1',
-  defaultModel: 'nvidia/llama-3.1-nemotron-70b-instruct',
+  defaultModel: 'nvidia/stepfun-ai/step-3.5-flash',
   supportsModelRouting: true,
   setup: {
     requiresAuth: true,
@@ -45,6 +45,7 @@ export default defineGateway({
     discoveryRefreshMode: 'background-if-stale',
     allowManualRefresh: true,
     models: [
+      { id: 'nvidia-stepfun-ai-step-3.5-flash', apiName: 'nvidia/stepfun-ai/step-3.5-flash', label: 'StepFun Step 3.5 Flash', modelDescriptorId: 'nvidia/stepfun-ai/step-3.5-flash' },
       { id: 'nvidia-llama-3.1-nemotron-70b', apiName: 'nvidia/llama-3.1-nemotron-70b-instruct', label: 'Llama 3.1 Nemotron 70B', modelDescriptorId: 'nvidia/llama-3.1-nemotron-70b-instruct' },
     ],
   },

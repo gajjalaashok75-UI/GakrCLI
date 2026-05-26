@@ -22,6 +22,8 @@ export function isNvidiaNimProvider(): boolean {
 
 function getNvidiaNimModels(): ModelOption[] {
   return [
+    // DEFAULT
+    { value: 'nvidia/stepfun-ai/step-3.5-flash', label: 'StepFun Step 3.5 Flash', description: 'Default' },
     // AGENTIC REASONING MODELS
     { value: 'nvidia/cosmos-reason2-8b', label: 'Cosmos Reason 2 8B', description: 'Reasoning' },
     { value: 'microsoft/phi-4-mini-flash-reasoning', label: 'Phi 4 Mini Flash Reasoning', description: 'Reasoning' },

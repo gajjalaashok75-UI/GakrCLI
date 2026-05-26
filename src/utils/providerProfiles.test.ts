@@ -767,7 +767,7 @@ describe('getProviderProfiles', () => {
     ])
   })
 
-  test('normalizes NVIDIA profiles saved with the old invalid default model', async () => {
+  test('normalizes NVIDIA profiles saved with the old unprefixed default model', async () => {
     const { getProviderProfiles } = await importFreshProviderProfileModules()
 
     saveMockGlobalConfig(current => ({
@@ -785,9 +785,7 @@ describe('getProviderProfiles', () => {
 
     const profiles = getProviderProfiles()
 
-    expect(profiles[0]?.model).toBe(
-      'nvidia/llama-3.1-nemotron-70b-instruct',
-    )
+    expect(profiles[0]?.model).toBe('nvidia/stepfun-ai/step-3.5-flash')
   })
 })
 
@@ -1099,7 +1097,7 @@ describe('persistActiveProviderProfileModel', () => {
     expect(saved?.model).toBe('minimax-m2.5:cloud')
   })
 
-  test('updates restart startup profile when active profile model changes', async () => {
+  test('updates restart startup profile when active NVIDIA profile model changes', async () => {
     const {
       applyProviderProfileToProcessEnv,
       persistActiveProviderProfileModel,
@@ -1120,21 +1118,19 @@ describe('persistActiveProviderProfileModel', () => {
     }))
     applyProviderProfileToProcessEnv(activeProfile)
 
-    const updated = persistActiveProviderProfileModel(
-      'nvidia/llama-3.1-nemotron-70b-instruct',
-    )
+    const updated = persistActiveProviderProfileModel('stepfun-ai/step-3.5-flash')
     const persisted = JSON.parse(
       readFileSync(join(testConfigDir!, '.gakrcli-profile.json'), 'utf8'),
     )
 
-    expect(updated?.model).toBe('nvidia/llama-3.1-nemotron-70b-instruct')
+    expect(updated?.model).toBe('nvidia/stepfun-ai/step-3.5-flash')
     expect(process.env.OPENAI_MODEL).toBe(
-      'nvidia/llama-3.1-nemotron-70b-instruct',
+      'nvidia/stepfun-ai/step-3.5-flash',
     )
     expect(persisted.profile).toBe('nvidia-nim')
     expect(persisted.env).toMatchObject({
       OPENAI_BASE_URL: 'https://integrate.api.nvidia.com/v1',
-      OPENAI_MODEL: 'nvidia/llama-3.1-nemotron-70b-instruct',
+      OPENAI_MODEL: 'nvidia/stepfun-ai/step-3.5-flash',
       OPENAI_API_KEY: 'nvapi-test-key',
       NVIDIA_API_KEY: 'nvapi-test-key',
       NVIDIA_NIM: '1',
@@ -1201,6 +1197,39 @@ describe('persistActiveProviderProfileModel', () => {
       (profile: ProviderProfile) => profile.id === activeProfile.id,
     )
     expect(saved?.model).toBe('minimax-m2.5:cloud')
+  })
+
+  test('does not rewrite saved provider profile while GitHub provider mode is active', async () => {
+    const {
+      getProviderProfiles,
+      persistActiveProviderProfileModel,
+    } = await importFreshProviderProfileModules()
+    const activeProfile = buildProfile({
+      id: 'nvidia_prof',
+      name: 'NVIDIA NIM',
+      provider: 'nvidia-nim',
+      baseUrl: 'https://integrate.api.nvidia.com/v1',
+      model: 'nvidia/llama-3.1-nemotron-70b-instruct',
+      apiKey: 'nvapi-test-key',
+    })
+
+    saveMockGlobalConfig(current => ({
+      ...current,
+      providerProfiles: [activeProfile],
+      activeProviderProfileId: activeProfile.id,
+    }))
+
+    process.env.GAKR_CODE_USE_GITHUB = '1'
+    process.env.OPENAI_MODEL = 'github:copilot'
+
+    const updated = persistActiveProviderProfileModel('gpt-4o')
+
+    expect(updated).toBeNull()
+    expect(process.env.OPENAI_MODEL).toBe('github:copilot')
+    const saved = getProviderProfiles().find(
+      (profile: ProviderProfile) => profile.id === activeProfile.id,
+    )
+    expect(saved?.model).toBe('nvidia/llama-3.1-nemotron-70b-instruct')
   })
 })
 

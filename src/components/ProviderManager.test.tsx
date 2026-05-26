@@ -557,6 +557,48 @@ test('ProviderManager resolves GitHub virtual provider from async storage withou
   expect(asyncRead).toHaveBeenCalled()
 })
 
+test('ProviderManager shows only GitHub active when GitHub mode overlays a saved profile', async () => {
+  process.env.GAKR_CODE_USE_GITHUB = '1'
+  process.env.OPENAI_MODEL = 'gpt-4o'
+  process.env.GITHUB_TOKEN = 'gh-test-token'
+  delete process.env.GH_TOKEN
+
+  const nvidiaProfile = {
+    id: 'provider_nvidia',
+    provider: 'nvidia-nim',
+    name: 'NVIDIA NIM',
+    baseUrl: 'https://integrate.api.nvidia.com/v1',
+    model: 'nvidia/llama-3.1-nemotron-70b-instruct',
+    apiKey: 'nvapi-test-key',
+  }
+
+  mockProviderManagerDependencies(
+    () => undefined,
+    async () => undefined,
+    {
+      getProviderProfiles: () => [nvidiaProfile],
+      getActiveProviderProfile: () => nvidiaProfile,
+    },
+  )
+
+  const nonce = `${Date.now()}-${Math.random()}`
+  const { ProviderManager } = await import(`./ProviderManager.js?ts=${nonce}`)
+  const output = await renderProviderManagerFrame(ProviderManager, {
+    waitForOutput: frame =>
+      frame.includes('Provider manager') &&
+      frame.includes('NVIDIA NIM') &&
+      frame.includes('GitHub Models') &&
+      frame.includes('gpt-4o'),
+  })
+
+  expect(output).toContain('NVIDIA NIM')
+  expect(output).toContain('nvidia/llama-3.1-nemotron-70b-instruct')
+  expect(output).not.toContain('key set (active)')
+  expect(output).toContain('GitHub Models')
+  expect(output).toContain('gpt-4o')
+  expect(output).toContain('token via env (active)')
+})
+
 test('ProviderManager avoids first-frame false negative while stored-token lookup is pending', async () => {
   delete process.env.GAKR_CODE_USE_GITHUB
   delete process.env.GITHUB_TOKEN
