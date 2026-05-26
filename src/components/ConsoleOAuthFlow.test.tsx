@@ -8,6 +8,10 @@ import { AppStateProvider } from '../state/AppState.js'
 import { createRoot } from '../ink.js'
 import { KeybindingSetup } from '../keybindings/KeybindingProviderSetup.js'
 import { ConsoleOAuthFlow } from './ConsoleOAuthFlow.js'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../test/sharedMutationLock.js'
 
 const SYNC_START = '\x1B[?2026h'
 const SYNC_END = '\x1B[?2026l'
@@ -104,48 +108,52 @@ test('login picker shows the third-party platform option', async () => {
 })
 
 test('third-party provider branch opens the first-run provider manager', async () => {
+  await acquireSharedMutationLock('components/ConsoleOAuthFlow.test.tsx')
   const previousNvidiaMode = process.env.GAKR_CODE_USE_NVIDIA
   const previousNvidiaModel = process.env.NVIDIA_MODEL
   const previousNvidiaBaseUrl = process.env.NVIDIA_BASE_URL
-  delete process.env.GAKR_CODE_USE_NVIDIA
-  delete process.env.NVIDIA_MODEL
-  delete process.env.NVIDIA_BASE_URL
-
-  const output = await renderFrame(
-    <ConsoleOAuthFlow
-      initialStatus={{ state: 'platform_setup' }}
-      onDone={() => {}}
-    />,
-  )
-
-  if (previousNvidiaMode === undefined) {
+  try {
     delete process.env.GAKR_CODE_USE_NVIDIA
-  } else {
-    process.env.GAKR_CODE_USE_NVIDIA = previousNvidiaMode
-  }
-  if (previousNvidiaModel === undefined) {
     delete process.env.NVIDIA_MODEL
-  } else {
-    process.env.NVIDIA_MODEL = previousNvidiaModel
-  }
-  if (previousNvidiaBaseUrl === undefined) {
     delete process.env.NVIDIA_BASE_URL
-  } else {
-    process.env.NVIDIA_BASE_URL = previousNvidiaBaseUrl
-  }
 
-  expect(output).toContain('Set up provider')
-  expect(output).toContain('Anthropic')
-  expect(output).toContain('Alibaba Coding Plan (China)')
-  expect(output).toContain('Alibaba Coding Plan')
-  expect(output).toContain('Azure OpenAI')
-  expect(output).toContain('Bankr')
-  expect(output).toContain('DeepSeek')
-  expect(output).toContain('Codex OAuth')
-  expect(output).toContain('Groq')
-  expect(output).toContain('Hicap')
-  expect(output).toContain('LM Studio')
-  expect(output).toContain('Atomic Chat')
-  expect(output).toContain('Ollama')
-  expect(output).not.toContain('Set up a provider profile')
+    const output = await renderFrame(
+      <ConsoleOAuthFlow
+        initialStatus={{ state: 'platform_setup' }}
+        onDone={() => {}}
+      />,
+    )
+
+    expect(output).toContain('Set up provider')
+    expect(output).toContain('Anthropic')
+    expect(output).toContain('Alibaba Coding Plan (China)')
+    expect(output).toContain('Alibaba Coding Plan')
+    expect(output).toContain('Azure OpenAI')
+    expect(output).toContain('Bankr')
+    expect(output).toContain('DeepSeek')
+    expect(output).toContain('Codex OAuth')
+    expect(output).toContain('GitHub Models')
+    expect(output).toContain('Groq')
+    expect(output).toContain('Hicap')
+    expect(output).toContain('LM Studio')
+    expect(output).toContain('Atomic Chat')
+    expect(output).not.toContain('Set up a provider profile')
+  } finally {
+    if (previousNvidiaMode === undefined) {
+      delete process.env.GAKR_CODE_USE_NVIDIA
+    } else {
+      process.env.GAKR_CODE_USE_NVIDIA = previousNvidiaMode
+    }
+    if (previousNvidiaModel === undefined) {
+      delete process.env.NVIDIA_MODEL
+    } else {
+      process.env.NVIDIA_MODEL = previousNvidiaModel
+    }
+    if (previousNvidiaBaseUrl === undefined) {
+      delete process.env.NVIDIA_BASE_URL
+    } else {
+      process.env.NVIDIA_BASE_URL = previousNvidiaBaseUrl
+    }
+    releaseSharedMutationLock()
+  }
 })

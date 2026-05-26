@@ -5,7 +5,7 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2026-05-26 11:38:21 +05:30
+## [Unreleased] - 2026-05-26 12:29:55 +05:30
 
 ### Added
 - **Fresh Install User Directory Bootstrap**: Initialized `~/.gakrcli` during CLI startup with required runtime directories and synced packaged `agents`, `rules`, and `skills` defaults without overwriting user files.
@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Global npm Install Asset Discovery**: Resolved packaged asset lookup from the installed package root and corrected global skills fallback paths for `@gakr-gakr/gakrcli`.
 - **GakrCLI Setup Naming**: Reframed onboarding, auth flow helpers, tests, and command copy away from old setup/account wording so the first-run experience is presented as GakrCLI setup.
 - **Startup Provider Environment Refresh**: Reapplied selected provider profile environment after onboarding so first-run provider choices are available before validation.
+- **Fresh Install Startup Order**: Created and synced `~/.gakrcli` before startup provider reads and stopped default `~/.codex/auth.json` discovery from silently selecting Codex before GakrCLI onboarding.
 - **Provider Model Persistence**: Kept GitHub provider model switches scoped to GitHub mode so `/model` no longer rewrites the saved active provider profile or shows two active providers in `/provider`.
 - **NVIDIA NIM Default Model**: Changed the NVIDIA NIM default to `stepfun-ai/step-3.5-flash` and preserved that selected model across restarts.
 

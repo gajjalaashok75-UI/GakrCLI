@@ -9,6 +9,7 @@ import {
 } from 'fs'
 import { tmpdir } from 'os'
 import { dirname, join } from 'path'
+import { pathToFileURL } from 'url'
 
 import { getPackageRoot, initUserDirs } from './initUserDirs.js'
 import {
@@ -122,5 +123,16 @@ describe('initUserDirs', () => {
 
     expect(existsSync(join(root, 'package.json'))).toBe(true)
     expect(existsSync(join(root, 'assets'))).toBe(true)
+  })
+
+  test('finds the package root from a bundled dist file URL', () => {
+    const packageRoot = makeTempDir('gakrcli-global-package-')
+    const distEntrypoint = join(packageRoot, 'dist', 'cli.mjs')
+
+    writeFile(join(packageRoot, 'package.json'), '{"name":"@gakr-gakr/gakrcli"}')
+    writeFile(join(packageRoot, 'assets', 'agents', 'reviewer.md'), 'agent')
+    writeFile(distEntrypoint, '')
+
+    expect(getPackageRoot(pathToFileURL(distEntrypoint).href)).toBe(packageRoot)
   })
 })

@@ -918,6 +918,7 @@ function resolveEnvOrAuthJsonCodexCredentials(
   env: NodeJS.ProcessEnv,
   options?: {
     explicitAuthPathOnly?: boolean
+    includeDefaultAuthJson?: boolean
   },
 ): ResolvedCodexCredentials {
   const envApiKey = asTrimmedString(env.CODEX_API_KEY)
@@ -937,7 +938,10 @@ function resolveEnvOrAuthJsonCodexCredentials(
     asTrimmedString(env.CODEX_AUTH_JSON_PATH) ?? asTrimmedString(env.CODEX_HOME),
   )
 
-  if (!explicitAuthPathConfigured && options?.explicitAuthPathOnly) {
+  if (
+    !explicitAuthPathConfigured &&
+    (options?.explicitAuthPathOnly || options?.includeDefaultAuthJson === false)
+  ) {
     return {
       apiKey: '',
       accountId: envAccountId,
@@ -999,6 +1003,9 @@ export function resolveRuntimeCodexCredentials(options?: {
 
 export function resolveCodexApiCredentials(
   env: NodeJS.ProcessEnv = process.env,
+  options?: {
+    includeDefaultAuthJson?: boolean
+  },
 ): ResolvedCodexCredentials {
   const envAccountId =
     asTrimmedString(env.CODEX_ACCOUNT_ID) ??
@@ -1026,22 +1033,23 @@ export function resolveCodexApiCredentials(
     })
 
     const shouldCheckDefaultAuthJson =
-      !resolvedStoredCredentials.accountId ||
-      isCodexRefreshFailureCoolingDown(storedCredentials)
+      options?.includeDefaultAuthJson !== false &&
+      (!resolvedStoredCredentials.accountId ||
+        isCodexRefreshFailureCoolingDown(storedCredentials))
 
     if (!shouldCheckDefaultAuthJson) {
       return resolvedStoredCredentials
     }
 
-  const authPath = resolveCodexAuthPath(env)
-  const authJson = loadCodexAuthJson(authPath)
-  const resolvedAuthJsonCredentials = resolveCodexAuthJsonCredentials({
+    const authPath = resolveCodexAuthPath(env)
+    const authJson = loadCodexAuthJson(authPath)
+    const resolvedAuthJsonCredentials = resolveCodexAuthJsonCredentials({
       authJson,
       authPath,
       envAccountId,
     })
 
-  if (resolvedAuthJsonCredentials.apiKey) {
+    if (resolvedAuthJsonCredentials.apiKey) {
       return {
         ...resolvedAuthJsonCredentials,
         accountId:
@@ -1053,7 +1061,9 @@ export function resolveCodexApiCredentials(
     return resolvedStoredCredentials
   }
 
-  return resolveEnvOrAuthJsonCodexCredentials(env)
+  return resolveEnvOrAuthJsonCodexCredentials(env, {
+    includeDefaultAuthJson: options?.includeDefaultAuthJson,
+  })
 }
 
 export function getReasoningEffortForModel(model: string): ReasoningEffort | undefined {

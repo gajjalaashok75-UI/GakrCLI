@@ -1,5 +1,9 @@
-import { afterEach, expect, test } from 'bun:test'
+import { afterEach, beforeEach, expect, test } from 'bun:test'
 
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../../test/sharedMutationLock.js'
 import {
   DEFAULT_CODEX_BASE_URL,
   DEFAULT_NVIDIA_BASE_URL,
@@ -25,6 +29,13 @@ for (const key of ENV_KEYS) {
   originalEnv[key] = process.env[key]
 }
 
+let lockAcquired = false
+
+beforeEach(async () => {
+  await acquireSharedMutationLock('services/api/providerConfig.nvidia.test.ts')
+  lockAcquired = true
+})
+
 test('default NVIDIA model is a NVIDIA NIM model id', () => {
   expect(DEFAULT_NVIDIA_MODEL).toBe('stepfun-ai/step-3.5-flash')
 })
@@ -44,8 +55,15 @@ function clearProviderEnv(): void {
 }
 
 afterEach(() => {
-  for (const key of ENV_KEYS) {
-    restoreEnv(key, originalEnv[key])
+  try {
+    for (const key of ENV_KEYS) {
+      restoreEnv(key, originalEnv[key])
+    }
+  } finally {
+    if (lockAcquired) {
+      releaseSharedMutationLock()
+      lockAcquired = false
+    }
   }
 })
 

@@ -96,7 +96,13 @@ async function main(): Promise<void> {
     }
   }
 
-  // Enable configs first so we can read settings
+  // Create ~/.gakrcli before any config, provider, or onboarding reads.
+  {
+    const { initUserDirs } = await import('../utils/initUserDirs.js')
+    initUserDirs()
+  }
+
+  // Enable configs first so we can read settings.
   {
     const { enableConfigs } = await import('../utils/config.js')
     enableConfigs()
