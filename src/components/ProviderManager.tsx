@@ -232,15 +232,6 @@ function getPresetLabel(preset: ProviderPreset, label: string): React.ReactNode 
     )
   }
 
-  if (preset === 'xiaomi-mimo') {
-    return (
-      <Text>
-        <Text>{label} </Text>
-        <Text color="success" bold>[Sponsor]</Text>
-      </Text>
-    )
-  }
-
   return label
 }
 

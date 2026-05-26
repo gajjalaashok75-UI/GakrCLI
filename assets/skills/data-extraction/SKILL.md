@@ -382,7 +382,7 @@ except Exception as e:
 - Always use `new_tab()` on first visit
 - Wait 2s after `wait_for_load()` for dynamic content
 - Use `data-asin` attribute for product IDs
-- First 2-3 results are usually sponsored
+- First 2-3 results are usually paid placements
 
 ### GitHub
 - Use REST API for repo data (60 req/hour unauthenticated)

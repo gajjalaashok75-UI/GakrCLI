@@ -7,16 +7,9 @@ export type TipContext = {
   bashTools?: Set<string>
 }
 
-export type TipSponsor = {
-  name: string
-  url?: string
-  label?: string
-}
-
 export type Tip = {
   id: string
   content: (ctx: TipContext) => Promise<string>
   cooldownSessions: number
   isRelevant: (ctx?: TipContext) => Promise<boolean>
-  sponsor?: TipSponsor
 }
