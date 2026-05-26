@@ -1423,7 +1423,7 @@ test('nvidia nim profiles persist the dedicated NVIDIA credential alias', () => 
   })
 })
 
-test('nvidia nim profiles normalize the legacy unprefixed default model', () => {
+test('nvidia nim profiles preserve the default model', () => {
   const env = buildNvidiaNimProfileEnv({
     apiKey: 'nvapi-live',
     model: 'stepfun-ai/step-3.5-flash',
@@ -1431,7 +1431,7 @@ test('nvidia nim profiles normalize the legacy unprefixed default model', () => 
     processEnv: {},
   })
 
-  assert.equal(env?.OPENAI_MODEL, 'nvidia/stepfun-ai/step-3.5-flash')
+  assert.equal(env?.OPENAI_MODEL, 'stepfun-ai/step-3.5-flash')
 })
 
 test('startup env restores legacy nvidia nim profiles saved with only OPENAI_API_KEY', async () => {
@@ -1452,7 +1452,7 @@ test('startup env restores legacy nvidia nim profiles saved with only OPENAI_API
   assert.equal(await getProviderValidationError(env), null)
 })
 
-test('startup env heals legacy nvidia nim profiles saved with the old unprefixed default model', async () => {
+test('startup env preserves nvidia nim profiles saved with the default model', async () => {
   const env = await buildStartupEnvFromProfile({
     persisted: profile('nvidia-nim', {
       OPENAI_API_KEY: 'nvapi-legacy',
@@ -1463,7 +1463,7 @@ test('startup env heals legacy nvidia nim profiles saved with the old unprefixed
     processEnv: {},
   })
 
-  assert.equal(env.OPENAI_MODEL, 'nvidia/stepfun-ai/step-3.5-flash')
+  assert.equal(env.OPENAI_MODEL, 'stepfun-ai/step-3.5-flash')
   assert.equal(env.OPENAI_API_KEY, 'nvapi-legacy')
   assert.equal(await getProviderValidationError(env), null)
 })
