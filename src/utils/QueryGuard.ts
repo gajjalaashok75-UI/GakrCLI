@@ -11,7 +11,7 @@
  *   idle → dispatching  (reserve)
  *   dispatching → running  (tryStart)
  *   idle → running  (tryStart, for direct user submissions)
- *   running → idle  (end / forceEnd)
+ *   running → idle  (end / forceEnd / timeout)
  *   dispatching → idle  (cancelReservation, when processQueueIfReady fails)
  *
  * `isActive` returns true for both dispatching and running, preventing
@@ -26,10 +26,13 @@
  */
 import { createSignal } from './signal.js'
 
+const QUERY_TIMEOUT_MS = 5 * 60 * 1000
+
 export class QueryGuard {
   private _status: 'idle' | 'dispatching' | 'running' = 'idle'
   private _generation = 0
   private _changed = createSignal()
+  private _timeoutId: ReturnType<typeof setTimeout> | null = null
 
   /**
    * Reserve the guard for queue processing. Transitions idle → dispatching.
@@ -62,6 +65,7 @@ export class QueryGuard {
     if (this._status === 'running') return null
     this._status = 'running'
     ++this._generation
+    this._startTimeout()
     this._notify()
     return this._generation
   }
@@ -74,6 +78,7 @@ export class QueryGuard {
   end(generation: number): boolean {
     if (this._generation !== generation) return false
     if (this._status !== 'running') return false
+    this._clearTimeout()
     this._status = 'idle'
     this._notify()
     return true
@@ -87,6 +92,7 @@ export class QueryGuard {
    */
   forceEnd(): void {
     if (this._status === 'idle') return
+    this._clearTimeout()
     this._status = 'idle'
     ++this._generation
     this._notify()
@@ -117,5 +123,24 @@ export class QueryGuard {
 
   private _notify(): void {
     this._changed.emit()
+  }
+
+  private _startTimeout(): void {
+    this._clearTimeout()
+    this._timeoutId = setTimeout(() => {
+      if (this._status === 'running') {
+        console.error(
+          `[QueryGuard] Query timeout after ${QUERY_TIMEOUT_MS}ms; force-ending`,
+        )
+        this.forceEnd()
+      }
+    }, QUERY_TIMEOUT_MS)
+  }
+
+  private _clearTimeout(): void {
+    if (this._timeoutId !== null) {
+      clearTimeout(this._timeoutId)
+      this._timeoutId = null
+    }
   }
 }

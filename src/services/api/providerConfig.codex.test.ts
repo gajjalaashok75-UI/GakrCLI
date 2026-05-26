@@ -1,10 +1,9 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test'
+import { afterEach, beforeEach, expect, mock, test } from 'bun:test'
 
 import {
   acquireSharedMutationLock,
   releaseSharedMutationLock,
 } from '../../test/sharedMutationLock.js'
-import { resolveCodexApiCredentials } from './providerConfig.js'
 
 const ENV_KEYS = [
   'CODEX_API_KEY',
@@ -20,10 +19,19 @@ for (const key of ENV_KEYS) {
 }
 
 let lockAcquired = false
+let resolveCodexApiCredentials: typeof import('./providerConfig.js')['resolveCodexApiCredentials']
 
 beforeEach(async () => {
   await acquireSharedMutationLock('services/api/providerConfig.codex.test.ts')
   lockAcquired = true
+  mock.restore()
+  mock.module('../../utils/codexCredentials.js', () => ({
+    isCodexRefreshFailureCoolingDown: () => false,
+    readCodexCredentials: () => undefined,
+  }))
+  resolveCodexApiCredentials = (await import(
+    `./providerConfig.js?codex-no-secure-storage=${Date.now()}-${Math.random()}`
+  )).resolveCodexApiCredentials
 })
 
 afterEach(() => {
@@ -37,6 +45,7 @@ afterEach(() => {
       }
     }
   } finally {
+    mock.restore()
     if (lockAcquired) {
       releaseSharedMutationLock()
       lockAcquired = false

@@ -37,6 +37,8 @@ const ENV_KEYS = [
   'GEMINI_ACCESS_TOKEN',
   'GEMINI_AUTH_MODE',
   'GOOGLE_APPLICATION_CREDENTIALS',
+  'XAI_API_KEY',
+  'XAI_CREDENTIAL_SOURCE',
 ] as const
 
 const originalEnv: Record<string, string | undefined> = {}
@@ -251,6 +253,72 @@ test('xiaomi mimo validation accepts MIMO_API_KEY without OPENAI_API_KEY', async
   delete process.env.OPENAI_API_KEY
 
   await expect(getProviderValidationError(process.env)).resolves.toBeNull()
+})
+
+test('xai validation accepts XAI_API_KEY without OPENAI_API_KEY', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://api.x.ai/v1'
+  process.env.OPENAI_MODEL = 'grok-4.3'
+  process.env.XAI_API_KEY = 'xai-live-key'
+  delete process.env.OPENAI_API_KEY
+
+  await expect(getProviderValidationError(process.env)).resolves.toBeNull()
+})
+
+test('xai validation accepts XAI_CREDENTIAL_SOURCE=oauth without an API key', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://api.x.ai/v1'
+  process.env.OPENAI_MODEL = 'grok-4.3'
+  process.env.XAI_CREDENTIAL_SOURCE = 'oauth'
+  delete process.env.XAI_API_KEY
+  delete process.env.OPENAI_API_KEY
+
+  await expect(getProviderValidationError(process.env)).resolves.toBeNull()
+})
+
+test('xai validation surfaces sign-in guidance when no credential source is set', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://api.x.ai/v1'
+  process.env.OPENAI_MODEL = 'grok-4.3'
+  delete process.env.XAI_API_KEY
+  delete process.env.XAI_CREDENTIAL_SOURCE
+  delete process.env.OPENAI_API_KEY
+
+  const error = await getProviderValidationError(process.env, {
+    hasStoredXaiOAuthCredentials: async () => false,
+  })
+  expect(error).not.toBeNull()
+  expect(error!).toContain('XAI_API_KEY is required')
+  expect(error!).toContain('gakrcli auth xai login')
+})
+
+test('xai validation accepts stored OAuth credentials even without an env marker', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://api.x.ai/v1'
+  process.env.OPENAI_MODEL = 'grok-4.3'
+  delete process.env.XAI_API_KEY
+  delete process.env.XAI_CREDENTIAL_SOURCE
+  delete process.env.OPENAI_API_KEY
+
+  await expect(
+    getProviderValidationError(process.env, {
+      hasStoredXaiOAuthCredentials: async () => true,
+    }),
+  ).resolves.toBeNull()
+})
+
+test('xai validation ignores unrelated XAI_CREDENTIAL_SOURCE values', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://api.x.ai/v1'
+  process.env.OPENAI_MODEL = 'grok-4.3'
+  process.env.XAI_CREDENTIAL_SOURCE = 'something-else'
+  delete process.env.XAI_API_KEY
+  delete process.env.OPENAI_API_KEY
+
+  const error = await getProviderValidationError(process.env, {
+    hasStoredXaiOAuthCredentials: async () => false,
+  })
+  expect(error).not.toBeNull()
 })
 
 test('github validation stays descriptor-selected and reports missing auth', async () => {

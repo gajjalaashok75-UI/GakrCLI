@@ -1,5 +1,6 @@
 import { feature } from 'bun:bundle';
 import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs';
+import { readFileSync } from 'fs';
 import { copyFile, stat as fsStat, truncate as fsTruncate, link } from 'fs/promises';
 import * as React from 'react';
 import type { CanUseToolFn } from 'src/hooks/useCanUseTool.js';
@@ -702,12 +703,6 @@ export const BashTool = buildTool({
       if (result.stdout && result.stdout.includes(".git/index.lock': File exists")) {
         logEvent('tengu_git_index_lock_error', {});
       }
-      if (interpretationResult.isError && !isInterrupt) {
-        // Only add exit code if it's actually an error
-        if (result.code !== 0) {
-          stdoutAccumulator.append(`Exit code ${result.code}`);
-        }
-      }
       if (!preventCwdChanges) {
         const appState = getAppState();
         if (resetCwdIfOutsideProject(appState.toolPermissionContext)) {
@@ -721,10 +716,18 @@ export const BashTool = buildTool({
         throw new Error(result.preSpawnError);
       }
       if (interpretationResult.isError && !isInterrupt) {
-        // stderr is merged into stdout (merged fd); outputWithSbFailures
-        // already has the full output. Pass '' for stdout to avoid
-        // duplication in getErrorParts() and processBashCommand.
-        throw new ShellError('', outputWithSbFailures, result.code, result.interrupted);
+        // Keep captured output on ShellError.stdout so formatted errors show
+        // the command output alongside the exit code.
+        let capturedOutput =
+          outputWithSbFailures || result.stdout || result.stderr || ''
+        if (!capturedOutput && result.outputFilePath) {
+          try {
+            capturedOutput = readFileSync(result.outputFilePath, 'utf8')
+          } catch {
+            // Keep the exit-code-only error if the temp output file vanished.
+          }
+        }
+        throw new ShellError(capturedOutput, '', result.code, result.interrupted);
       }
       wasInterrupted = result.interrupted;
     } finally {

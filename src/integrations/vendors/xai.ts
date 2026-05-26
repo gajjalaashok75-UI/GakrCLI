@@ -22,14 +22,17 @@ export default defineVendor({
     modelEnvVars: ['OPENAI_MODEL'],
   },
   validation: {
-    kind: 'credential-env',
+    kind: 'xai-credential',
     routing: {
       matchDefaultBaseUrl: true,
       matchBaseUrlHosts: ['api.x.ai'],
     },
     credentialEnvVars: ['XAI_API_KEY'],
+    credentialSourceEnvMarkers: {
+      XAI_CREDENTIAL_SOURCE: ['oauth'],
+    },
     missingCredentialMessage:
-      'XAI_API_KEY is required for the xAI provider.',
+      'XAI_API_KEY is required, or sign in with `gakrcli auth xai login` (browser OAuth) or `gakrcli auth xai device-code` (remote hosts).',
   },
   catalog: {
     source: 'hybrid',

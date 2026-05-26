@@ -48,22 +48,36 @@ export type ShellConfig = {
 }
 
 function isExecutable(shellPath: string): boolean {
-  try {
-    accessSync(shellPath, fsConstants.X_OK)
-    return true
-  } catch (_err) {
-    // Fallback for Nix and other environments where X_OK check might fail
+  const probeShell = (): boolean => {
     try {
-      // Try to execute the shell with --version, which should exit quickly
-      // Use execFileSync to avoid shell injection vulnerabilities
-      execFileSync(shellPath, ['--version'], {
-        timeout: 1000,
-        stdio: 'ignore',
-      })
-      return true
+      const output = execFileSync(
+        shellPath,
+        ['-c', 'printf __gakrcli_shell_probe__'],
+        {
+          timeout: 1000,
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+        },
+      )
+      return output === '__gakrcli_shell_probe__'
     } catch {
       return false
     }
+  }
+
+  // On Windows, access(X_OK) can succeed for the WSL launcher
+  // (C:\Windows\System32\bash.exe) even when no distro is installed. Probe the
+  // shell directly so we only accept one that can execute POSIX commands.
+  if (getPlatform() === 'windows') {
+    return probeShell()
+  }
+
+  try {
+    accessSync(shellPath, fsConstants.X_OK)
+    return probeShell()
+  } catch (_err) {
+    // Fallback for Nix and other environments where X_OK check might fail
+    return probeShell()
   }
 }
 
@@ -99,7 +113,14 @@ export async function findSuitableShell(): Promise<string> {
   const [zshPath, bashPath] = await Promise.all([which('zsh'), which('bash')])
 
   // Populate shell paths from which results and fallback locations
-  const shellPaths = ['/bin', '/usr/bin', '/usr/local/bin', '/opt/homebrew/bin']
+  const shellPaths =
+    getPlatform() === 'windows'
+      ? [
+          'C:\\Program Files\\Git\\bin',
+          'C:\\Program Files\\Git\\usr\\bin',
+          'C:\\msys64\\usr\\bin',
+        ]
+      : ['/bin', '/usr/bin', '/usr/local/bin', '/opt/homebrew/bin']
 
   // Order shells based on user preference
   const shellOrder = preferBash ? ['bash', 'zsh'] : ['zsh', 'bash']
@@ -344,17 +365,18 @@ export async function exec(
       shouldAutoBackground,
     )
 
-    // Close our copy of the fd — the child has its own dup.
-    // Must happen after wrapSpawn attaches 'error' listener, since the await
-    // yields and the child's ENOENT 'error' event can fire in that window.
-    // Wrapped in its own try/catch so a close failure (e.g. EIO) doesn't fall
-    // through to the spawn-failure catch block, which would orphan the child.
+    // Keep our copy of the fd alive until the command exits. Node normally
+    // duplicates stdio handles during spawn, but Bun on Windows can race if the
+    // parent handle closes immediately, leaving Git Bash with an empty output
+    // file for fast-failing commands.
     if (outputHandle !== undefined) {
-      try {
-        await outputHandle.close()
-      } catch {
-        // fd may already be closed by the child; safe to ignore
-      }
+      void shellCommand.result.finally(async () => {
+        try {
+          await outputHandle.close()
+        } catch {
+          // fd may already be closed by the child; safe to ignore
+        }
+      })
     }
 
     // In pipe mode, attach the caller's callbacks alongside StreamWrapper.

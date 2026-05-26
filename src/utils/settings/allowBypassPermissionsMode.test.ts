@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -21,6 +21,7 @@ let testDir: string | undefined
 
 beforeEach(async () => {
   await acquireSharedMutationLock('utils/settings/allowBypassPermissionsMode.test.ts')
+  mock.restore()
   originalConfigDir = process.env.GAKR_CONFIG_DIR
   originalCwd = getOriginalCwd()
   originalFlagSettings = getFlagSettingsInline()
@@ -46,6 +47,7 @@ afterEach(async () => {
       testDir = undefined
     }
   } finally {
+    mock.restore()
     releaseSharedMutationLock()
   }
 })
@@ -94,7 +96,9 @@ describe('hasAllowBypassPermissionsMode', () => {
     })
     resetSettingsCache()
 
-    const { hasAllowBypassPermissionsMode } = await import('./settings.js')
+    const { hasAllowBypassPermissionsMode } = await import(
+      `./settings.js?allow-bypass=${Date.now()}-${Math.random()}`
+    )
 
     expect(hasAllowBypassPermissionsMode()).toBe(true)
   })
@@ -109,7 +113,9 @@ describe('hasAllowBypassPermissionsMode', () => {
     )
     resetSettingsCache()
 
-    const { hasAllowBypassPermissionsMode } = await import('./settings.js')
+    const { hasAllowBypassPermissionsMode } = await import(
+      `./settings.js?allow-bypass=${Date.now()}-${Math.random()}`
+    )
 
     expect(hasAllowBypassPermissionsMode()).toBe(false)
   })
@@ -122,8 +128,16 @@ describe('initializeToolPermissionContext allowBypassPermissionsMode', () => {
     })
     resetSettingsCache()
 
+    const realSettings = await import(
+      `./settings.js?allow-bypass-real=${Date.now()}-${Math.random()}`
+    )
+    mock.module('../settings/settings.js', () => ({
+      ...realSettings,
+      hasAllowBypassPermissionsMode: () => true,
+    }))
+
     const { initializeToolPermissionContext } = await import(
-      '../permissions/permissionSetup.js'
+      `../permissions/permissionSetup.js?allow-bypass=${Date.now()}-${Math.random()}`
     )
     const { toolPermissionContext } = await initializeToolPermissionContext({
       allowedToolsCli: [],

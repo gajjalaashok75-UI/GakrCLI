@@ -203,6 +203,13 @@ export type ValidationMetadata =
       expiredCredentialMessage: string
       invalidCredentialMessage: string
     }
+  | {
+      routing?: ValidationRoutingMetadata
+      kind: 'xai-credential'
+      credentialEnvVars: string[]
+      credentialSourceEnvMarkers?: Record<string, string[]>
+      missingCredentialMessage: string
+    }
 
 export interface VendorDescriptor {
   id: string
