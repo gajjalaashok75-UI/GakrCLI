@@ -1,6 +1,6 @@
 ---
 name: amazon-product-search
-description: Extract Amazon product search results, prices, ratings, reviews, and Best Sellers using browser automation. Handles dynamic content loading, ASIN-based identification, sponsored vs organic results. Field-tested selectors with 2s wait requirement. Use for price monitoring, competitive analysis, product catalog extraction, and review sentiment analysis.
+description: Extract Amazon product search results, prices, ratings, reviews, and Best Sellers using browser automation. Handles dynamic content loading, ASIN-based identification, paid vs organic results. Field-tested selectors with 2s wait requirement. Use for price monitoring, competitive analysis, product catalog extraction, and review sentiment analysis.
 ---
 
 # Amazon — Product Search & Data Extraction
@@ -69,7 +69,7 @@ results = js("""
     list_price: el.querySelector('.a-text-price .a-offscreen')?.innerText,
     rating: el.querySelector('[aria-label*="out of 5 stars"]')?.getAttribute('aria-label')?.split(' ')[0],
     reviews: el.querySelector('[aria-label*="ratings"]')?.getAttribute('aria-label'),
-    is_sponsored: !!el.querySelector('.puis-sponsored-label-text'),
+    is_paid_placement: !!el.querySelector('[aria-label*="Ad"]'),
     url: el.querySelector('h2 a')?.href
   }))
 """)
@@ -81,8 +81,8 @@ results = js("""
 - **`price`**: `.a-price .a-offscreen` returns the formatted string e.g. `"$69.99"`. Use this, not `.a-price-whole`.
 - **`list_price`**: `.a-text-price .a-offscreen` — only present when item is on sale (was/now pricing).
 - **`rating`**: Use `aria-label` on `[aria-label*="out of 5 stars"]` — gives `"4.5 out of 5 stars, rating details"`, split on space for the number.
-- **`reviews`**: Use `[aria-label*="ratings"]` attribute — gives `"1,514 ratings"`. Do NOT use `.a-size-base.s-underline-text` — that element exists on sponsored results and shows "Xbox" (a cross-sell widget text).
-- **`is_sponsored`**: `.puis-sponsored-label-text` is present on sponsored listings; first 2-3 results are usually sponsored.
+- **`reviews`**: Use `[aria-label*="ratings"]` attribute — gives `"1,514 ratings"`. Do NOT use `.a-size-base.s-underline-text` — that element exists on paid placements and shows "Xbox" (a cross-sell widget text).
+- **`is_paid_placement`**: ad-label markup is present on paid listings; first 2-3 results are usually paid placements.
 - **`url`**: `h2 a` href — contains the full `/dp/{ASIN}/...` URL.
 
 ## Product Detail Page Extraction
@@ -193,9 +193,9 @@ Amazon may serve a CAPTCHA on fresh/anonymous sessions. Using the browser's exis
 
 - **`goto()` silent failure**: On first visit, use `new_tab(url)` instead. After the tab is on Amazon, `goto()` works.
 - **`.zg-item-immersion` is gone**: Best Sellers page uses CSS module classes (obfuscated). Use `[data-asin]` + `img[alt]` for title.
-- **`.a-size-base.s-underline-text` is unreliable for review count**: On sponsored results it shows unrelated text (e.g. "Xbox"). Use `[aria-label*="ratings"]` instead.
+- **`.a-size-base.s-underline-text` is unreliable for review count**: On paid placements it shows unrelated text (e.g. "Xbox"). Use `[aria-label*="ratings"]` instead.
 - **`#priceblock_ourprice` is legacy**: Returns `null` on modern pages. Construct from `.a-price-whole` + `.a-price-fraction`.
-- **Sponsored results appear first**: First 2-3 results are almost always `is_sponsored: true`. Filter them out with `!el.querySelector('.puis-sponsored-label-text')` when you need organic results.
+- **Paid results appear first**: First 2-3 results are almost always `is_paid_placement: true`. Filter ad-labeled rows out when you need organic results.
 - **`data-asin` can be empty string on non-product rows**: Filter with `.filter(r => r.asin)`.
 - **Price split DOM**: `.a-price-whole` innerText includes a trailing `\n.` — strip it: `.replace(/[\n.]/g,'')`.
 - **ASIN from URL**: Use `/dp/([A-Z0-9]{10})/` regex on the product URL. `data-asin` on search results is always the canonical ASIN.

@@ -5,7 +5,7 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2026-05-25 18:24:27 +05:30
+## [Unreleased] - 2026-05-26 10:29:14 +05:30
 
 ### Added
 - **Fresh Install User Directory Bootstrap**: Initialized `~/.gakrcli` during CLI startup with required runtime directories and synced packaged `agents`, `rules`, and `skills` defaults without overwriting user files.
@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Global npm Install Asset Discovery**: Resolved packaged asset lookup from the installed package root and corrected global skills fallback paths for `@gakr-gakr/gakrcli`.
 - **GakrCLI Setup Naming**: Reframed onboarding, auth flow helpers, tests, and command copy away from old setup/account wording so the first-run experience is presented as GakrCLI setup.
 - **Startup Provider Environment Refresh**: Reapplied selected provider profile environment after onboarding so first-run provider choices are available before validation.
+
+### Removed
+- **Promotional Spinner Tips**: Removed the partner-tip catalog, scheduling controls, history tracking, settings schema, tests, and provider badge copy so spinner tips are only regular product tips.
 
 ## [0.5.3] - 2026-05-22
 
@@ -38,7 +41,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Multi-Format Conversation Exports**: Added export format helpers and coverage for text, Markdown, and JSON transcript exports, including direct filenames, explicit format flags, dialog selection, clipboard export, and file-save flows.
-- **Sponsored Spinner Tips**: Added sponsored tip metadata, Atomic Chat and Xiaomi MiMo sponsored tips, frequency settings, scheduler partitioning, and history coverage.
 - **Xiaomi MiMo Model Picker**: Added cached Xiaomi MiMo model options with provider detection coverage for MiMo credentials and base URLs.
 - **Command and Buddy Runtime Wiring**: Exposed the existing `/commit-message` command in the slash-command registry, registered `/loop` through its runtime visibility gate, and routed Buddy UI surfaces through the shared runtime feature helper.
 - **Config and Tool Reminder Controls**: Added the tool-history compression toggle to `/config`, memoized model picker options by fast-mode state, and let `GAKR_DISABLE_TOOL_REMINDERS` suppress FileRead mitigation reminders.
@@ -106,7 +108,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Provider Env Docs Alignment**: Pointed the strict OpenAI-compatible tool-schema kill switch at the documented `GAKR_DISABLE_STRICT_TOOLS` variable and added the Mistral API-key signup hint to provider bootstrap failures.
 - **Maintainer PR Template**: Added a GitHub pull request template for GakrCLI changes and pointed contributor docs at the shared checklist.
 - **Bypass Permission Settings**: Honored trusted `permissions.allowBypassPermissionsMode` settings when initializing tool permissions while keeping project settings excluded from enabling bypass mode.
-- **Sponsored Tip Scheduling**: Completed sponsored spinner-tip wiring with settings validation, persisted throttling history, scheduler partitioning, and registry inclusion.
 - **Settings Runtime Guards**: Moved recursive settings-load and MDM cache state onto GakrCLI global guards and kept the deprecated settings accessor callable during cyclic imports.
 - **Tool Failure Loop Guard**: Added a query-loop guard that stops repeated failing tool calls by signature, error category, or path before optional follow-up work runs.
 - **Bridge Session Diagnostics**: Logged bridge session fetch failures with status, method, URL, timeout, and error-code context, allowed `GAKR_BRIDGE_SESSION_INGRESS_URL` to override session ingress outside internal-only shells, and kept bridge pointer project discovery on the shared config-home resolver.

@@ -519,4 +519,4 @@ See [LICENSE](LICENSE).
 
 ## Project Note
 
-GakrCLI is an independent community project and is not affiliated with, endorsed by, or sponsored by Anthropic, OpenAI, or any other AI provider.
+GakrCLI is an independent community project and is not affiliated with or endorsed by Anthropic, OpenAI, or any other AI provider.

@@ -210,7 +210,7 @@ results = js("""
     shop: el.querySelector('[class*="shop-name"], [data-shop-name]')?.innerText?.trim(),
     url: el.querySelector('a[href*="/listing/"]')?.href,
     thumbnail: el.querySelector('img[src*="etsystatic"]')?.src,
-    is_ad: !!el.querySelector('[class*="ad-label"], [class*="sponsored"]')
+    is_ad: !!el.querySelector('[class*="ad-label"], [class*="promoted"]')
   })).filter(r => r.listing_id)
 """)
 ```
