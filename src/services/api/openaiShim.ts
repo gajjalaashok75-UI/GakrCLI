@@ -1751,7 +1751,7 @@ class OpenAIShimMessages {
       const apiKey = this.providerOverride?.apiKey ?? process.env.OPENAI_API_KEY ?? ''
       if (!apiKey) {
         throw new Error(
-          'GitHub Copilot auth is required. Run /onboard-github to sign in.',
+          'GitHub Copilot auth is required. Run /provider and choose GitHub Models to sign in.',
         )
       }
 

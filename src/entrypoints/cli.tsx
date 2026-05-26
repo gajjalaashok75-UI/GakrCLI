@@ -102,7 +102,7 @@ async function main(): Promise<void> {
     enableConfigs()
   }
 
-  // Apply settings.env from user settings (includes GitHub provider settings from /onboard-github)
+  // Apply settings.env from user settings (includes GitHub provider settings from /provider)
   {
     const { applySafeConfigEnvironmentVariables } = await import('../utils/managedEnv.js')
     applySafeConfigEnvironmentVariables()

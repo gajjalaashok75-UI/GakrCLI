@@ -15,7 +15,7 @@ The packaged command is `gakrcli`.
 | **Anthropic** | `ANTHROPIC_API_KEY` or `/login` inside GakrCLI | Native Claude models with full tool support |
 | **OpenAI-compatible** | `OPENAI_API_KEY` | Works with OpenAI, OpenRouter, DeepSeek, Groq, Mistral, Together AI, Azure OpenAI, LM Studio, and any OpenAI-compatible local server |
 | **Gemini** | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | Google Gemini 2.0+ models with native integration |
-| **GitHub Models** | `GITHUB_TOKEN` / `GH_TOKEN` | Free tier access via GitHub's model marketplace |
+| **GitHub Models** | `/provider`, `GITHUB_TOKEN`, or `GH_TOKEN` | GitHub model marketplace access |
 | **NVIDIA NIMs** | `NVIDIA_API_KEY` | Enterprise-grade models via NVIDIA's inference microservices |
 | **DeepSeek** | `OPENAI_API_KEY` + `OPENAI_BASE_URL` | DeepSeek chat and reasoning models through the OpenAI-compatible route |
 | **Ollama** | No API key | Local inference with complete privacy |

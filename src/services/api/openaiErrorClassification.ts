@@ -282,7 +282,7 @@ export function classifyOpenAIHttpFailure(options: {
       status: options.status,
       message: body,
       hint: isExpiredOAuthToken
-        ? 'OAuth token expired. Re-authenticate with /onboard-github (GitHub Models) or /login (Codex OAuth) and try again.'
+        ? 'OAuth token expired. Re-authenticate with /provider (GitHub Models) or /login (Codex OAuth) and try again.'
         : 'Authentication failed. Verify API key, token source, and endpoint-specific auth headers.',
     }
   }

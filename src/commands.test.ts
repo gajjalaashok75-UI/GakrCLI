@@ -10,6 +10,10 @@ describe('builtInCommandNames', () => {
   test('includes the commit attribution command', () => {
     expect(builtInCommandNames()).toContain('commit-message')
   })
+
+  test('does not include removed GitHub Models onboarding command', () => {
+    expect(builtInCommandNames()).not.toContain('onboard-github')
+  })
 })
 
 describe('isCommand', () => {

@@ -119,11 +119,11 @@ export default defineGateway({
       skipWhenUseOpenAI: true,
     },
     missingCredentialMessage:
-      'GitHub Copilot authentication required.\nRun /onboard-github in the CLI to sign in with your GitHub account.\nThis will store your OAuth token securely and enable Copilot models.',
+      'GitHub Copilot authentication required.\nRun /provider in the CLI and choose GitHub Models to sign in with your GitHub account.\nThis will store your OAuth token securely and enable Copilot models.',
     expiredCredentialMessage:
-      'GitHub Copilot token has expired.\nRun /onboard-github to sign in again and get a fresh token.',
+      'GitHub Copilot token has expired.\nRun /provider and choose GitHub Models to sign in again and get a fresh token.',
     invalidCredentialMessage:
-      'GitHub Copilot token is invalid or corrupted.\nRun /onboard-github to sign in again with your GitHub account.',
+      'GitHub Copilot token is invalid or corrupted.\nRun /provider and choose GitHub Models to sign in again with your GitHub account.',
   },
   catalog: {
     source: 'hybrid',

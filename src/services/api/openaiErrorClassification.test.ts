@@ -77,7 +77,7 @@ test('401 "token expired" surfaces a re-auth hint, not the generic API-key hint'
   })
 
   expect(failure.category).toBe('auth_invalid')
-  expect(failure.hint).toContain('/onboard-github')
+  expect(failure.hint).toContain('/provider')
   expect(failure.hint).toContain('/login')
   expect(failure.hint).not.toContain('API key')
 })
@@ -90,7 +90,7 @@ test('401 without expired-token signal keeps the generic API-key hint', () => {
 
   expect(failure.category).toBe('auth_invalid')
   expect(failure.hint).toContain('API key')
-  expect(failure.hint).not.toContain('/onboard-github')
+  expect(failure.hint).not.toContain('GitHub Models')
 })
 
 test('classifies tool compatibility failures', () => {

@@ -5,11 +5,12 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2026-05-26 10:46:35 +05:30
+## [Unreleased] - 2026-05-26 10:55:21 +05:30
 
 ### Added
 - **Fresh Install User Directory Bootstrap**: Initialized `~/.gakrcli` during CLI startup with required runtime directories and synced packaged `agents`, `rules`, and `skills` defaults without overwriting user files.
 - **First-Run Provider Setup**: Added provider selection to the first-run GakrCLI setup flow so new users can choose and configure a provider before the REPL starts.
+- **GitHub Models Provider Setup**: Moved GitHub Models browser login and personal-token setup into `/provider`, including secure token storage and current-session activation.
 
 ### Fixed
 - **Global npm Install Asset Discovery**: Resolved packaged asset lookup from the installed package root and corrected global skills fallback paths for `@gakr-gakr/gakrcli`.
@@ -19,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - **Promotional Spinner Tips**: Removed the partner-tip catalog, scheduling controls, history tracking, settings schema, tests, and provider badge copy so spinner tips are only regular product tips.
 - **Gitlawb Opengateway Provider**: Removed the Gitlawb Opengateway provider preset, zero-key auto-detect fallback, generated integration metadata, and legacy route normalization coverage.
+- **Standalone GitHub Models Slash Command**: Removed `/onboard-github` from built-in slash commands now that GitHub Models setup lives in `/provider`.
 
 ## [0.5.3] - 2026-05-22
 
@@ -72,7 +74,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Build Feature Flags**: Switched build-time feature flag replacement to Bun load transforms so smoke/build no longer rewrites source files during bundling.
 - **Network Diagnostics Cleanup**: Shared URL query-secret redaction across diagnostics paths, delayed MCP OAuth timeout cleanup until error-body normalization completes, and used the product display name in Web Fetch permission prompts.
 - **SDK Test Isolation**: Added shared mutation locks and local TypeScript compiler execution across SDK tests that mutate env, session state, tool schema caches, or package-consumer fixtures.
-- **Expired OAuth Hints**: Pointed expired OAuth-token 401s toward `/onboard-github` or `/login` re-authentication instead of generic API-key troubleshooting.
+- **Expired OAuth Hints**: Pointed expired OAuth-token 401s toward `/provider` or `/login` re-authentication instead of generic API-key troubleshooting.
 - **Stable JSON Serialization**: Emitted compact sorted request bodies directly, added a strict JSON wrapper for API payloads, and isolated tool-history compression mocks with the shared mutation lock.
 - **Codex Strict Schemas**: Inferred missing JSON schema types for Codex Responses tools and dropped orphan required keys so untyped MCP schemas do not fail strict-mode validation.
 - **Local Provider Fast Path**: Wired `GAKR_LOCAL_FAST_PATH` into OpenAI-compatible requests so local endpoints can skip cloud-only stable serialization, strict tool rewrites, and tool-history compression.
@@ -102,7 +104,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SDK Package Identity**: Updated SDK consumer type tests, VS Code session discovery, and tool-concurrency tuning to use the GakrCLI package name and `GAKR_*` environment variables, documented the tuning knob in the sample environment file, and cleaned a stale upstream wording note from the landing-page setup guide.
 - **Provider Preset Setup Flow**: Restored the streamlined preset model/API-key setup for non-placeholder providers while keeping placeholder endpoints on the full setup form, with OpenAI, MiniMax, and Hicap regression coverage.
 - **Conversation Export Wiring**: Connected `/export`, the export dialog, and semantic Markdown/JSON rendering to the multi-format export helpers, including normalized filenames and duplicate-submit guards.
-- **Provider Mode Cleanup**: Shared GitHub provider activation cleanup across `/onboard-github` and the provider manager, and cleared stale Mistral, NVIDIA, Bankr, xAI, Venice, MiMo, and OpenAI-compatible auth overrides when provider profiles are saved.
+- **Provider Mode Cleanup**: Shared GitHub provider activation cleanup through the provider manager, and cleared stale Mistral, NVIDIA, Bankr, xAI, Venice, MiMo, and OpenAI-compatible auth overrides when provider profiles are saved.
 - **Tool Safety Checks**: Restored Bash command validation guards for nested heredoc substitutions and zsh `fc -e` detection, and aligned Web Search permission text with the GakrCLI product name.
 - **Provider Env Docs Alignment**: Pointed the strict OpenAI-compatible tool-schema kill switch at the documented `GAKR_DISABLE_STRICT_TOOLS` variable and added the Mistral API-key signup hint to provider bootstrap failures.
 - **Maintainer PR Template**: Added a GitHub pull request template for GakrCLI changes and pointed contributor docs at the shared checklist.
@@ -123,7 +125,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Hybrid Knowledge Graph Search**: Upgraded persistent project memory with serialized async mutations, JSON/SQLite storage, Orama-backed semantic indexing, recovery for corrupted indexes, and focused stress coverage for concurrent updates.
-- **Provider Spinner Tips**: Added rotating tips for `/provider` multi-provider setup and `/onboard-github` GitHub Models onboarding.
+- **Provider Spinner Tips**: Added rotating tips for `/provider` multi-provider setup and GitHub Models setup.
 
 ## [0.5.1] - 2026-05-16
 
@@ -138,12 +140,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **GitHub Copilot Model Discovery**: Added live Copilot model discovery with required integration headers, filtered disabled-policy/non-chat/internal entries from `/model`, deduplicated discovered API names, hid stale rejected aliases, and clarified labels for dated model variants.
-- **GitHub Copilot Session Activation**: Switched the active session model to `github:copilot` immediately after `/onboard-github` so successful onboarding no longer leaves the session on a stale provider model.
+- **GitHub Copilot Session Activation**: Switched the active session model to `github:copilot` immediately after GitHub Models setup so successful onboarding no longer leaves the session on a stale provider model.
 
 ## [0.5.1] - 2026-05-15 15:09:17 +05:30
 
 ### Fixed
-- **GitHub Copilot Onboarding**: Exchanged browser device-flow OAuth tokens for Copilot runtime tokens before saving credentials so GitHub Copilot requests authenticate after `/onboard-github`.
+- **GitHub Copilot Onboarding**: Exchanged browser device-flow OAuth tokens for Copilot runtime tokens before saving credentials so GitHub Copilot requests authenticate after setup.
 - **GitHub Model Picker**: Let `/model` use the full local Copilot model registry instead of the minimal GitHub gateway catalog so supported Copilot models are selectable.
 
 ## [0.5.1] - 2026-05-15 11:32:47 +05:30
@@ -324,7 +326,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Domain filtering and security guardrails
 - **Command Registry**: Restored missing reference commands
   - Added `/auto-fix`, `/benchmark`, `/cache-probe`, `/wiki` commands
-  - Enhanced GitHub onboarding with token reuse support
+  - Enhanced GitHub Models setup with token reuse support
 
 ## [0.4.6] - 2024-11-15
 

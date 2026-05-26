@@ -116,6 +116,7 @@ const PRESET_ORDER = [
   'Bankr',
   'DeepSeek',
   'Codex OAuth',
+  'GitHub Models',
   'Google Gemini',
   'Groq',
   'Hicap',
@@ -354,6 +355,7 @@ function mockProviderManagerDependencies(
     hydrateGithubModelsTokenFromSecureStorage: () => {},
     readGithubModelsToken: githubSyncRead,
     readGithubModelsTokenAsync: githubAsyncRead,
+    saveGithubModelsToken: () => ({ success: true }),
   }))
 
   mock.module('../utils/codexCredentials.js', () => ({
@@ -1984,4 +1986,27 @@ test('ProviderManager hides Codex OAuth setup in bare mode', async () => {
 
   expect(output).toContain('Set up provider')
   expect(output).not.toContain('Codex OAuth')
+})
+
+test('ProviderManager exposes GitHub Models setup in provider presets', async () => {
+  delete process.env.GAKR_CODE_SIMPLE
+  delete process.env.GAKR_CODE_USE_GITHUB
+  delete process.env.GITHUB_TOKEN
+  delete process.env.GH_TOKEN
+
+  const githubSyncRead = mock(() => undefined)
+  const githubAsyncRead = mock(async () => undefined)
+
+  mockProviderManagerDependencies(githubSyncRead, githubAsyncRead)
+
+  const nonce = `${Date.now()}-${Math.random()}`
+  const { ProviderManager } = await import(`./ProviderManager.js?ts=${nonce}`)
+  const output = await renderProviderManagerFrame(ProviderManager, {
+    mode: 'first-run',
+    waitForOutput: frame =>
+      frame.includes('Set up provider') && frame.includes('GitHub Models'),
+  })
+
+  expect(output).toContain('GitHub Models')
+  expect(output).toContain('Sign in with GitHub Models using browser login or a token')
 })
