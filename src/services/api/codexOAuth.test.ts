@@ -2,35 +2,52 @@ import { createServer } from 'node:http'
 
 import { afterEach, expect, mock, test } from 'bun:test'
 
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../../test/sharedMutationLock.js'
 import { CodexOAuthService } from './codexOAuth.js'
 
 const originalFetch = globalThis.fetch
 const originalCallbackPort = process.env.CODEX_OAUTH_CALLBACK_PORT
 const originalCallbackHost = process.env.CODEX_OAUTH_CALLBACK_HOST
 const originalClientId = process.env.CODEX_OAUTH_CLIENT_ID
+let lockAcquired = false
 
 afterEach(() => {
-  mock.restore()
-  globalThis.fetch = originalFetch
+  try {
+    mock.restore()
+    globalThis.fetch = originalFetch
 
-  if (originalCallbackPort === undefined) {
-    delete process.env.CODEX_OAUTH_CALLBACK_PORT
-  } else {
-    process.env.CODEX_OAUTH_CALLBACK_PORT = originalCallbackPort
-  }
+    if (originalCallbackPort === undefined) {
+      delete process.env.CODEX_OAUTH_CALLBACK_PORT
+    } else {
+      process.env.CODEX_OAUTH_CALLBACK_PORT = originalCallbackPort
+    }
 
-  if (originalCallbackHost === undefined) {
-    delete process.env.CODEX_OAUTH_CALLBACK_HOST
-  } else {
-    process.env.CODEX_OAUTH_CALLBACK_HOST = originalCallbackHost
-  }
+    if (originalCallbackHost === undefined) {
+      delete process.env.CODEX_OAUTH_CALLBACK_HOST
+    } else {
+      process.env.CODEX_OAUTH_CALLBACK_HOST = originalCallbackHost
+    }
 
-  if (originalClientId === undefined) {
-    delete process.env.CODEX_OAUTH_CLIENT_ID
-  } else {
-    process.env.CODEX_OAUTH_CLIENT_ID = originalClientId
+    if (originalClientId === undefined) {
+      delete process.env.CODEX_OAUTH_CLIENT_ID
+    } else {
+      process.env.CODEX_OAUTH_CLIENT_ID = originalClientId
+    }
+  } finally {
+    if (lockAcquired) {
+      releaseSharedMutationLock()
+      lockAcquired = false
+    }
   }
 })
+
+async function acquireCodexOAuthTestLock(): Promise<void> {
+  await acquireSharedMutationLock('services/api/codexOAuth.test.ts')
+  lockAcquired = true
+}
 
 async function getFreePort(): Promise<number> {
   return await new Promise((resolve, reject) => {
@@ -77,6 +94,7 @@ function isCallbackRequest(input: unknown): boolean {
 }
 
 test('serves updated success copy after a successful Codex OAuth flow', async () => {
+  await acquireCodexOAuthTestLock()
   const callbackPort = await getFreePort()
   process.env.CODEX_OAUTH_CALLBACK_PORT = String(callbackPort)
   process.env.CODEX_OAUTH_CLIENT_ID = 'test-client-id'
@@ -119,6 +137,7 @@ test('serves updated success copy after a successful Codex OAuth flow', async ()
 })
 
 test('cancellation during token exchange returns a cancelled page and rejects the flow', async () => {
+  await acquireCodexOAuthTestLock()
   const callbackPort = await getFreePort()
   process.env.CODEX_OAUTH_CALLBACK_PORT = String(callbackPort)
   process.env.CODEX_OAUTH_CLIENT_ID = 'test-client-id'
@@ -176,6 +195,7 @@ test('cancellation during token exchange returns a cancelled page and rejects th
 })
 
 test('binds Codex OAuth callback server to configured loopback host', async () => {
+  await acquireCodexOAuthTestLock()
   const callbackPort = await getFreePort()
   process.env.CODEX_OAUTH_CALLBACK_PORT = String(callbackPort)
   process.env.CODEX_OAUTH_CALLBACK_HOST = '127.0.0.1'

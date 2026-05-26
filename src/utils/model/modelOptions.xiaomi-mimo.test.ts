@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 
-import { acquireEnvMutex, releaseEnvMutex } from '../../entrypoints/sdk/shared.js'
 import { resetModelStringsForTestingOnly } from '../../bootstrap/state.js'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../../test/sharedMutationLock.js'
 import { saveGlobalConfig } from '../config.js'
 import {
   resetSettingsCache,
@@ -47,7 +50,7 @@ function restoreEnvValue(key: keyof typeof originalEnv): void {
 }
 
 beforeEach(async () => {
-  await acquireEnvMutex()
+  await acquireSharedMutationLock('utils/model/modelOptions.xiaomi-mimo.test.ts')
   setSessionSettingsCache({ settings: {}, errors: [] })
   for (const key of Object.keys(originalEnv) as (keyof typeof originalEnv)[]) {
     delete process.env[key]
@@ -72,7 +75,7 @@ afterEach(() => {
     }))
     resetModelStringsForTestingOnly()
   } finally {
-    releaseEnvMutex()
+    releaseSharedMutationLock()
   }
 })
 

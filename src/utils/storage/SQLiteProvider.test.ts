@@ -9,7 +9,10 @@ import {
 import { mkdtempSync, rmSync, existsSync, renameSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { acquireEnvMutex, releaseEnvMutex } from '../../entrypoints/sdk/shared.js'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../../test/sharedMutationLock.js'
 import { getProjectsDir, setGakrcliConfigHomeDirForTesting } from '../envUtils.js'
 import { getFsImplementation, setFsImplementation } from '../fsOperations.js'
 import { sanitizePath } from '../sessionStoragePortable.js'
@@ -82,7 +85,7 @@ describe('SQLite Storage Layer', () => {
   }
 
   beforeEach(async () => {
-    await acquireEnvMutex()
+    await acquireSharedMutationLock('utils/storage/SQLiteProvider.test.ts')
     workspaceDir = mkdtempSync(join(tmpdir(), 'gakrcli-sqlite-cwd-'))
     process.chdir(workspaceDir)
     setFsImplementation({
@@ -111,7 +114,7 @@ describe('SQLite Storage Layer', () => {
         workspaceDir = ''
       }
     } finally {
-      releaseEnvMutex()
+      releaseSharedMutationLock()
     }
   })
 

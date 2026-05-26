@@ -11,7 +11,10 @@ import {
 import { mkdtempSync, rmSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
 import { dirname, join } from 'path'
-import { acquireEnvMutex, releaseEnvMutex } from '../entrypoints/sdk/shared.js'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../test/sharedMutationLock.js'
 import { setGakrcliConfigHomeDirForTesting } from './envUtils.js'
 import { getFsImplementation } from './fsOperations.js'
 
@@ -45,7 +48,7 @@ describe('KnowledgeGraph Phase 1 Stress & Edge Cases', () => {
   }
 
   beforeEach(async () => {
-    await acquireEnvMutex()
+    await acquireSharedMutationLock('utils/knowledgeGraph.stress.test.ts')
     configDir = mkdtempSync(join(tmpdir(), 'gakrcli-stress-'))
     process.env.GAKR_CONFIG_DIR = configDir
     process.env.GAKRCLI_KNOWLEDGE_ORAMA = '1'
@@ -76,7 +79,7 @@ describe('KnowledgeGraph Phase 1 Stress & Edge Cases', () => {
           removeDirWithRetry(dirToRemove)
         }
       } finally {
-        releaseEnvMutex()
+        releaseSharedMutationLock()
       }
     }
   })

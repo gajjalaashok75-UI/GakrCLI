@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../../test/sharedMutationLock.js'
 import { getPromptCachingEnabled } from './gakrcli.js'
 
 const trackedEnvKeys = [
@@ -31,15 +35,26 @@ function restoreEnv(key: (typeof trackedEnvKeys)[number]): void {
   }
 }
 
-beforeEach(() => {
+let lockAcquired = false
+
+beforeEach(async () => {
+  await acquireSharedMutationLock('services/api/gakrcli.promptCaching.test.ts')
+  lockAcquired = true
   for (const key of trackedEnvKeys) {
     delete process.env[key]
   }
 })
 
 afterEach(() => {
-  for (const key of trackedEnvKeys) {
-    restoreEnv(key)
+  try {
+    for (const key of trackedEnvKeys) {
+      restoreEnv(key)
+    }
+  } finally {
+    if (lockAcquired) {
+      releaseSharedMutationLock()
+      lockAcquired = false
+    }
   }
 })
 

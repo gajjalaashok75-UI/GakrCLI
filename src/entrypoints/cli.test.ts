@@ -4,18 +4,33 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../test/sharedMutationLock.js'
+
 describe('cli.tsx — NODE_OPTIONS --max-old-space-size (issue #402)', () => {
   const originalNodeOptions = process.env.NODE_OPTIONS
+  let lockAcquired = false
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await acquireSharedMutationLock('entrypoints/cli.test.ts')
+    lockAcquired = true
     delete process.env.NODE_OPTIONS
   })
 
   afterEach(() => {
-    if (originalNodeOptions !== undefined) {
-      process.env.NODE_OPTIONS = originalNodeOptions
-    } else {
-      delete process.env.NODE_OPTIONS
+    try {
+      if (originalNodeOptions !== undefined) {
+        process.env.NODE_OPTIONS = originalNodeOptions
+      } else {
+        delete process.env.NODE_OPTIONS
+      }
+    } finally {
+      if (lockAcquired) {
+        releaseSharedMutationLock()
+        lockAcquired = false
+      }
     }
   })
 

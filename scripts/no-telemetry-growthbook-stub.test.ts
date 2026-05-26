@@ -2,6 +2,10 @@ import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../src/test/sharedMutationLock.js'
 
 // ---------------------------------------------------------------------------
 // Setup: extract the growthbook stub from no-telemetry-plugin.ts, write it to
@@ -20,6 +24,8 @@ const flagsFile = join(testDir, 'test-flags.json')
 mkdirSync(testDir, { recursive: true })
 writeFileSync(stubFile, stubMatch[1])
 
+await acquireSharedMutationLock('scripts/no-telemetry-growthbook-stub.test.ts')
+
 // Point the stub at our test flags file (checked by _loadFlags on first access)
 process.env.GAKR_FEATURE_FLAGS_FILE = flagsFile
 
@@ -36,8 +42,12 @@ describe('growthbook stub — local feature flag overrides', () => {
   })
 
   afterAll(() => {
-    rmSync(testDir, { recursive: true, force: true })
-    delete process.env.GAKR_FEATURE_FLAGS_FILE
+    try {
+      rmSync(testDir, { recursive: true, force: true })
+      delete process.env.GAKR_FEATURE_FLAGS_FILE
+    } finally {
+      releaseSharedMutationLock()
+    }
   })
 
   // ── File absent ──────────────────────────────────────────────────

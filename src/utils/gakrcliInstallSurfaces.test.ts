@@ -3,14 +3,32 @@ import * as fsPromises from 'fs/promises'
 import { homedir } from 'os'
 import { join } from 'path'
 
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../test/sharedMutationLock.js'
+
 const originalEnv = { ...process.env }
 const originalMacro = (globalThis as Record<string, unknown>).MACRO
+let lockAcquired = false
 
 afterEach(() => {
-  process.env = { ...originalEnv }
-  ;(globalThis as Record<string, unknown>).MACRO = originalMacro
-  mock.restore()
+  try {
+    process.env = { ...originalEnv }
+    ;(globalThis as Record<string, unknown>).MACRO = originalMacro
+    mock.restore()
+  } finally {
+    if (lockAcquired) {
+      releaseSharedMutationLock()
+      lockAcquired = false
+    }
+  }
 })
+
+async function acquireInstallSurfaceLock(): Promise<void> {
+  await acquireSharedMutationLock('utils/gakrcliInstallSurfaces.test.ts')
+  lockAcquired = true
+}
 
 async function importFreshInstallCommand() {
   return import(`../commands/install.tsx?ts=${Date.now()}-${Math.random()}`)
@@ -21,6 +39,7 @@ async function importFreshInstaller() {
 }
 
 test('install command displays ~/.local/bin/gakrcli on non-Windows', async () => {
+  await acquireInstallSurfaceLock()
   mock.module('../utils/env.js', () => ({
     env: { platform: 'darwin' },
     getGlobalGakrcliFile: () => join(homedir(), '.gakrcli.json'),
@@ -34,6 +53,7 @@ test('install command displays ~/.local/bin/gakrcli on non-Windows', async () =>
 })
 
 test('install command displays gakrcli.exe path on Windows', async () => {
+  await acquireInstallSurfaceLock()
   mock.module('../utils/env.js', () => ({
     env: { platform: 'win32' },
     getGlobalGakrcliFile: () => join(homedir(), '.gakrcli.json'),
@@ -49,6 +69,7 @@ test('install command displays gakrcli.exe path on Windows', async () => {
 })
 
 test('cleanupNpmInstallations removes the gakrcli local install dir', async () => {
+  await acquireInstallSurfaceLock()
   const removedPaths: string[] = []
   const uninstalledPackages: string[] = []
   ;(globalThis as Record<string, unknown>).MACRO = {

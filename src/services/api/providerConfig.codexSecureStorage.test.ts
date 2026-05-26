@@ -1,8 +1,13 @@
-import { afterEach, describe, expect, mock, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import * as realOs from 'node:os'
+
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../../test/sharedMutationLock.js'
 
 function makeJwt(payload: Record<string, unknown>): string {
   const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' }))
@@ -12,8 +17,24 @@ function makeJwt(payload: Record<string, unknown>): string {
 }
 
 describe('resolveCodexApiCredentials with secure storage', () => {
+  let lockAcquired = false
+
+  beforeEach(async () => {
+    await acquireSharedMutationLock(
+      'services/api/providerConfig.codexSecureStorage.test.ts',
+    )
+    lockAcquired = true
+  })
+
   afterEach(() => {
-    mock.restore()
+    try {
+      mock.restore()
+    } finally {
+      if (lockAcquired) {
+        releaseSharedMutationLock()
+        lockAcquired = false
+      }
+    }
   })
 
   test('loads Codex credentials from GakrCLI secure storage', async () => {
