@@ -92,6 +92,7 @@ const PROFILE_ENV_KEYS = [
   'BNKR_API_KEY',
   'BANKR_MODEL',
   'XAI_API_KEY',
+  'XAI_CREDENTIAL_SOURCE',
   'VENICE_API_KEY',
   'MIMO_API_KEY',
 ] as const
@@ -172,6 +173,7 @@ export type ProfileEnv = {
   BNKR_API_KEY?: string
   BANKR_MODEL?: string
   XAI_API_KEY?: string
+  XAI_CREDENTIAL_SOURCE?: 'oauth'
   VENICE_API_KEY?: string
   MIMO_API_KEY?: string
 }
@@ -893,6 +895,18 @@ export function buildCodexOAuthProfileEnv(
   }
 }
 
+const XAI_OAUTH_DEFAULT_BASE_URL = 'https://api.x.ai/v1'
+
+export function buildXaiOAuthProfileEnv(options: {
+  model?: string
+}): ProfileEnv {
+  return {
+    OPENAI_BASE_URL: XAI_OAUTH_DEFAULT_BASE_URL,
+    OPENAI_MODEL: options.model ?? 'grok-4.3',
+    XAI_CREDENTIAL_SOURCE: 'oauth',
+  }
+}
+
 export function createProfileFile(
   profile: ProviderProfile,
   env: ProfileEnv,
@@ -921,6 +935,31 @@ export function clearPersistedCodexOAuthProfile(
   for (const filePath of resolveProfileFileCleanupPaths(options)) {
     const persisted = readProfileFile(filePath)
     if (isPersistedCodexOAuthProfile(persisted)) {
+      rmSync(filePath, { force: true })
+      removedPath ??= filePath
+    }
+  }
+
+  return removedPath
+}
+
+export function isPersistedXaiOAuthProfile(
+  persisted: ProfileFile | null,
+): boolean {
+  return (
+    persisted?.profile === 'xai' &&
+    persisted.env.XAI_CREDENTIAL_SOURCE === 'oauth'
+  )
+}
+
+export function clearPersistedXaiOAuthProfile(
+  options?: ProfileFileLocation,
+): string | null {
+  let removedPath: string | null = null
+
+  for (const filePath of resolveProfileFileCleanupPaths(options)) {
+    const persisted = readProfileFile(filePath)
+    if (isPersistedXaiOAuthProfile(persisted)) {
       rmSync(filePath, { force: true })
       removedPath ??= filePath
     }
@@ -1315,28 +1354,40 @@ export async function buildLaunchEnv(options: {
   }
 
   if (options.profile === 'xai') {
-    const xaiKey =
-      sanitizeApiKey(processEnv.XAI_API_KEY) ||
-      sanitizeApiKey(persistedEnv.XAI_API_KEY) ||
-      sanitizeApiKey(processEnv.OPENAI_API_KEY) ||
-      sanitizeApiKey(persistedEnv.OPENAI_API_KEY)
+    const isOAuthProfile = persistedEnv.XAI_CREDENTIAL_SOURCE === 'oauth'
+    const xaiKey = isOAuthProfile
+      ? sanitizeApiKey(processEnv.XAI_API_KEY) ||
+        sanitizeApiKey(persistedEnv.XAI_API_KEY)
+      : sanitizeApiKey(processEnv.XAI_API_KEY) ||
+        sanitizeApiKey(persistedEnv.XAI_API_KEY) ||
+        sanitizeApiKey(processEnv.OPENAI_API_KEY) ||
+        sanitizeApiKey(persistedEnv.OPENAI_API_KEY)
 
     const env = buildXaiProfileEnv({
       model: shellOpenAIModel || persistedOpenAIModel,
       baseUrl: shellOpenAIBaseUrl || persistedOpenAIBaseUrl,
       apiKey: xaiKey,
-      processEnv,
+      processEnv: isOAuthProfile
+        ? { ...processEnv, OPENAI_API_KEY: undefined, XAI_API_KEY: undefined }
+        : processEnv,
     })
     const customHeaders = shellCustomHeaders || persistedCustomHeaders
     if (customHeaders) {
       env.ANTHROPIC_CUSTOM_HEADERS = customHeaders
     }
+    if (!env.XAI_API_KEY && isOAuthProfile) {
+      env.XAI_CREDENTIAL_SOURCE = 'oauth'
+    }
 
-    return buildCompatibilityProcessEnv({
+    const result = buildCompatibilityProcessEnv({
       processEnv,
       compatibilityMode: 'openai',
       profileEnv: env,
     })
+    if (isOAuthProfile && !env.XAI_API_KEY) {
+      delete result.OPENAI_API_KEY
+    }
+    return result
   }
 
   if (options.profile === 'ollama') {

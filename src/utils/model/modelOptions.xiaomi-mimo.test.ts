@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test'
+import { afterEach, beforeEach, expect, mock, test } from 'bun:test'
 
 import { resetModelStringsForTestingOnly } from '../../bootstrap/state.js'
 import {
@@ -10,11 +10,6 @@ import {
   resetSettingsCache,
   setSessionSettingsCache,
 } from '../settings/settingsCache.js'
-import {
-  getCachedXiaomiMimoModelOptions,
-  isXiaomiMimoProvider,
-} from './xiaomi-mimoModels.js'
-import { getModelOptions } from './modelOptions.js'
 
 const originalEnv = {
   GAKR_CODE_USE_OPENAI: process.env.GAKR_CODE_USE_OPENAI,
@@ -39,6 +34,31 @@ const originalEnv = {
   XAI_API_KEY: process.env.XAI_API_KEY,
   ANTHROPIC_CUSTOM_MODEL_OPTION: process.env.ANTHROPIC_CUSTOM_MODEL_OPTION,
 }
+let getCachedXiaomiMimoModelOptions: typeof import('./xiaomi-mimoModels.js')['getCachedXiaomiMimoModelOptions']
+let isXiaomiMimoProvider: typeof import('./xiaomi-mimoModels.js')['isXiaomiMimoProvider']
+let getModelOptions: typeof import('./modelOptions.js')['getModelOptions']
+
+function getTestAPIProvider(): string {
+  if (
+    process.env.GAKR_CODE_USE_OPENAI === '1' &&
+    (process.env.OPENAI_BASE_URL ?? process.env.OPENAI_API_BASE ?? '').includes(
+      'xiaomimimo.com',
+    )
+  ) {
+    return 'xiaomi-mimo'
+  }
+  if (process.env.GAKR_CODE_USE_OPENAI === '1') return 'openai'
+  if (process.env.MIMO_API_KEY) return 'xiaomi-mimo'
+  return 'firstParty'
+}
+
+function isFirstPartyAnthropicBaseUrl(): boolean {
+  return true
+}
+
+function isGithubNativeAnthropicMode(): boolean {
+  return false
+}
 
 function restoreEnvValue(key: keyof typeof originalEnv): void {
   const value = originalEnv[key]
@@ -51,11 +71,27 @@ function restoreEnvValue(key: keyof typeof originalEnv): void {
 
 beforeEach(async () => {
   await acquireSharedMutationLock('utils/model/modelOptions.xiaomi-mimo.test.ts')
+  mock.restore()
+  mock.module('./providers.js', () => ({
+    getAPIProvider: getTestAPIProvider,
+    getAPIProviderForStatsig: getTestAPIProvider,
+    isFirstPartyAnthropicBaseUrl,
+    isGithubNativeAnthropicMode,
+    usesAnthropicAccountFlow: () => getTestAPIProvider() === 'firstParty',
+    usesGakrcliHostedAuthFlow: () => getTestAPIProvider() === 'firstParty',
+  }))
   setSessionSettingsCache({ settings: {}, errors: [] })
   for (const key of Object.keys(originalEnv) as (keyof typeof originalEnv)[]) {
     delete process.env[key]
   }
   resetModelStringsForTestingOnly()
+  const nonce = `${Date.now()}-${Math.random()}`
+  const xiaomiMimoModels = await import(`./xiaomi-mimoModels.js?mimo=${nonce}`)
+  const modelOptions = await import(`./modelOptions.js?mimo=${nonce}`)
+  getCachedXiaomiMimoModelOptions =
+    xiaomiMimoModels.getCachedXiaomiMimoModelOptions
+  isXiaomiMimoProvider = xiaomiMimoModels.isXiaomiMimoProvider
+  getModelOptions = modelOptions.getModelOptions
 })
 
 afterEach(() => {
@@ -75,6 +111,7 @@ afterEach(() => {
     }))
     resetModelStringsForTestingOnly()
   } finally {
+    mock.restore()
     releaseSharedMutationLock()
   }
 })

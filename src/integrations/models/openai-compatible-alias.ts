@@ -79,6 +79,7 @@ const aliasModels: readonly AliasModel[] = [
   ['github_copilot/gemini-2.5-pro', 'GitHub Copilot Gemini 2.5 Pro', 128_000, 64_000],
   ['github_copilot/gemini-3-flash', 'GitHub Copilot Gemini 3 Flash', 128_000, 64_000],
   ['github_copilot/grok-code-fast-1', 'GitHub Copilot Grok Code Fast 1', 256_000, 64_000],
+  ['stepfun-ai/step-3.5-flash', 'StepFun Step 3.5 Flash', 128_000, 32_768],
   ['nvidia/llama-3.1-nemotron-ultra-253b-v1', 'NVIDIA Llama 3.1 Nemotron Ultra 253B', 128_000],
   ['nvidia/nemotron-mini-4b-instruct', 'NVIDIA Nemotron Mini 4B Instruct', 32_768, 8_192],
   ['google/gemma-2-27b-it', 'Google Gemma 2 27B IT', 8_192, 4_096],

@@ -5,12 +5,14 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2026-05-26 12:29:55 +05:30
+## [Unreleased] - 2026-05-26 15:06:42 +05:30
 
 ### Added
 - **Fresh Install User Directory Bootstrap**: Initialized `~/.gakrcli` during CLI startup with required runtime directories and synced packaged `agents`, `rules`, and `skills` defaults without overwriting user files.
 - **First-Run Provider Setup**: Added provider selection to the first-run GakrCLI setup flow so new users can choose and configure a provider before the REPL starts.
 - **GitHub Models Provider Setup**: Moved GitHub Models browser login and personal-token setup into `/provider`, including secure token storage and current-session activation.
+- **Request Size Command**: Added `/request-size` with transient interactive output and noninteractive text output so users can inspect context contributors without leaking request content or credentials.
+- **xAI OAuth Provider Setup**: Added xAI OAuth login, callback handling, credential storage, provider validation, `/provider` setup, and `gakrcli auth xai` command wiring.
 
 ### Fixed
 - **Global npm Install Asset Discovery**: Resolved packaged asset lookup from the installed package root and corrected global skills fallback paths for `@gakr-gakr/gakrcli`.
@@ -19,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Fresh Install Startup Order**: Created and synced `~/.gakrcli` before startup provider reads and stopped default `~/.codex/auth.json` discovery from silently selecting Codex before GakrCLI onboarding.
 - **Provider Model Persistence**: Kept GitHub provider model switches scoped to GitHub mode so `/model` no longer rewrites the saved active provider profile or shows two active providers in `/provider`.
 - **NVIDIA NIM Default Model**: Changed the NVIDIA NIM default to `stepfun-ai/step-3.5-flash` and preserved that selected model across restarts.
+- **Windows Bash Error Output**: Probed usable Bash shells before selection and kept captured command output available so non-zero exits surface stdout, stderr, and command-not-found details on Windows.
+- **Synthetic Output Schemas**: Wrapped non-object structured-output schemas so array and primitive synthetic outputs validate and unwrap correctly.
+- **Query Timeout Cleanup**: Ensured timed-out query guards force-end stale generations and clear timeout state reliably.
+- **Request Context Accounting**: Improved local context estimates for media, MCP tools, tool schemas, and request-size contributor rounding.
+- **Full Suite Test Isolation**: Strengthened shared-mutation-lock usage and isolated provider/settings mocks so the full Bun test suite runs cleanly in one pass.
 
 ### Removed
 - **Promotional Spinner Tips**: Removed the partner-tip catalog, scheduling controls, history tracking, settings schema, tests, and provider badge copy so spinner tips are only regular product tips.
