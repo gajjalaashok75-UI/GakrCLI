@@ -246,7 +246,7 @@ test('getDefaultMainLoopModelSetting returns the NVIDIA NIM default model', asyn
 
   const { getDefaultMainLoopModelSetting } = await importFreshModelModule()
   expect(getDefaultMainLoopModelSetting()).toBe(
-    'nvidia/stepfun-ai/step-3.5-flash',
+    'stepfun-ai/step-3.5-flash',
   )
 })
 

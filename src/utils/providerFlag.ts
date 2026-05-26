@@ -268,7 +268,7 @@ export function applyProviderFlag(
       if (process.env.NVIDIA_API_KEY && !process.env.OPENAI_API_KEY) {
         process.env.OPENAI_API_KEY = process.env.NVIDIA_API_KEY
       }
-      process.env.OPENAI_MODEL ??= 'nvidia/stepfun-ai/step-3.5-flash'
+      process.env.OPENAI_MODEL ??= 'stepfun-ai/step-3.5-flash'
       if (model) process.env.OPENAI_MODEL = model
       break
 

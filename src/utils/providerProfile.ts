@@ -45,8 +45,7 @@ export const DEFAULT_GEMINI_BASE_URL =
 export const DEFAULT_GEMINI_MODEL = 'gemini-3-flash-preview'
 export const DEFAULT_MISTRAL_BASE_URL = 'https://api.mistral.ai/v1'
 export const DEFAULT_MISTRAL_MODEL = 'devstral-latest'
-const DEFAULT_NVIDIA_NIM_MODEL = 'nvidia/stepfun-ai/step-3.5-flash'
-const LEGACY_UNPREFIXED_NVIDIA_NIM_MODEL = 'stepfun-ai/step-3.5-flash'
+const DEFAULT_NVIDIA_NIM_MODEL = 'stepfun-ai/step-3.5-flash'
 
 const PROFILE_ENV_KEYS = [
   'GAKR_CODE_USE_OPENAI',
@@ -297,15 +296,6 @@ function normalizeProfileModel(
   return primary.length > 0 ? primary : undefined
 }
 
-function normalizeNvidiaNimModel(
-  value: string | undefined,
-): string | undefined {
-  if (value === LEGACY_UNPREFIXED_NVIDIA_NIM_MODEL) {
-    return getRouteDefaultModel('nvidia-nim') ?? DEFAULT_NVIDIA_NIM_MODEL
-  }
-  return value
-}
-
 export function isProviderProfile(value: unknown): value is ProviderProfile {
   return (
     value === 'anthropic' ||
@@ -431,15 +421,11 @@ export function buildNvidiaNimProfileEnv(options: {
       sanitizeProviderConfigValue(processEnv.OPENAI_BASE_URL, secretSource) ||
       defaultBaseUrl,
     OPENAI_MODEL:
-      normalizeNvidiaNimModel(
-        normalizeProfileModel(
-          sanitizeProviderConfigValue(options.model, secretSource),
-        ),
+      normalizeProfileModel(
+        sanitizeProviderConfigValue(options.model, secretSource),
       ) ||
       normalizeProfileModel(
-        normalizeNvidiaNimModel(
-          sanitizeProviderConfigValue(processEnv.OPENAI_MODEL, secretSource),
-        ),
+        sanitizeProviderConfigValue(processEnv.OPENAI_MODEL, secretSource),
       ) ||
       DEFAULT_NVIDIA_NIM_MODEL,
     OPENAI_API_KEY: key,
@@ -1098,14 +1084,8 @@ export async function buildLaunchEnv(options: {
       processEnv as SecretValueSource,
     ),
   )
-  const persistedOpenAIModel =
-    options.profile === 'nvidia-nim'
-      ? normalizeNvidiaNimModel(rawPersistedOpenAIModel)
-      : rawPersistedOpenAIModel
-  const shellOpenAIModel =
-    options.profile === 'nvidia-nim'
-      ? normalizeNvidiaNimModel(rawShellOpenAIModel)
-      : rawShellOpenAIModel
+  const persistedOpenAIModel = rawPersistedOpenAIModel
+  const shellOpenAIModel = rawShellOpenAIModel
   const shellOpenAIBaseUrl = sanitizeProviderConfigValue(
     processEnv.OPENAI_BASE_URL,
     processEnv as SecretValueSource,

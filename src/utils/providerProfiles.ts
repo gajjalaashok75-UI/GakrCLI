@@ -73,8 +73,7 @@ export type ProviderPresetDefaults = Omit<ProviderProfileInput, 'provider'> & {
 
 const PROFILE_ENV_APPLIED_FLAG = 'GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED'
 const PROFILE_ENV_APPLIED_ID = 'GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID'
-const DEFAULT_NVIDIA_NIM_MODEL = 'nvidia/stepfun-ai/step-3.5-flash'
-const LEGACY_UNPREFIXED_NVIDIA_NIM_MODEL = 'stepfun-ai/step-3.5-flash'
+const DEFAULT_NVIDIA_NIM_MODEL = 'stepfun-ai/step-3.5-flash'
 
 type ProfileCompatibilityMode =
   | 'anthropic'
@@ -185,12 +184,6 @@ function sanitizeProfile(profile: ProviderProfile): ProviderProfile | null {
       : sanitizedAuthHeader
   const authScheme = sanitizeAuthScheme(profile.authScheme)
   const capabilityRouteId = resolveProfileCapabilityRouteId(provider, baseUrl)
-  if (
-    capabilityRouteId === 'nvidia-nim' &&
-    model === LEGACY_UNPREFIXED_NVIDIA_NIM_MODEL
-  ) {
-    model = DEFAULT_NVIDIA_NIM_MODEL
-  }
   const supportsApiFormat = routeSupportsApiFormatSelection(capabilityRouteId)
   const supportsAuthHeaders = routeSupportsAuthHeaders(capabilityRouteId)
   const customHeaders = routeSupportsCustomHeaders(capabilityRouteId)

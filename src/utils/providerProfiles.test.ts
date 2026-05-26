@@ -767,7 +767,7 @@ describe('getProviderProfiles', () => {
     ])
   })
 
-  test('normalizes NVIDIA profiles saved with the old unprefixed default model', async () => {
+  test('preserves NVIDIA profiles saved with the default model', async () => {
     const { getProviderProfiles } = await importFreshProviderProfileModules()
 
     saveMockGlobalConfig(current => ({
@@ -785,7 +785,7 @@ describe('getProviderProfiles', () => {
 
     const profiles = getProviderProfiles()
 
-    expect(profiles[0]?.model).toBe('nvidia/stepfun-ai/step-3.5-flash')
+    expect(profiles[0]?.model).toBe('stepfun-ai/step-3.5-flash')
   })
 })
 
@@ -1123,14 +1123,12 @@ describe('persistActiveProviderProfileModel', () => {
       readFileSync(join(testConfigDir!, '.gakrcli-profile.json'), 'utf8'),
     )
 
-    expect(updated?.model).toBe('nvidia/stepfun-ai/step-3.5-flash')
-    expect(process.env.OPENAI_MODEL).toBe(
-      'nvidia/stepfun-ai/step-3.5-flash',
-    )
+    expect(updated?.model).toBe('stepfun-ai/step-3.5-flash')
+    expect(process.env.OPENAI_MODEL).toBe('stepfun-ai/step-3.5-flash')
     expect(persisted.profile).toBe('nvidia-nim')
     expect(persisted.env).toMatchObject({
       OPENAI_BASE_URL: 'https://integrate.api.nvidia.com/v1',
-      OPENAI_MODEL: 'nvidia/stepfun-ai/step-3.5-flash',
+      OPENAI_MODEL: 'stepfun-ai/step-3.5-flash',
       OPENAI_API_KEY: 'nvapi-test-key',
       NVIDIA_API_KEY: 'nvapi-test-key',
       NVIDIA_NIM: '1',

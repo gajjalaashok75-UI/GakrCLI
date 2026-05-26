@@ -174,7 +174,7 @@ test.each([
   ['Xiaomi MiMo', 'https://api.xiaomimimo.com/v1', 'mimo-v2.5-pro', 'xiaomi-mimo'],
   ['Venice', 'https://api.venice.ai/api/v1', 'venice-uncensored', 'venice'],
   ['xAI', 'https://api.x.ai/v1', 'grok-4.3', 'xai'],
-  ['NVIDIA NIM', 'https://integrate.api.nvidia.com/v1', 'nvidia/stepfun-ai/step-3.5-flash', 'nvidia-nim'],
+  ['NVIDIA NIM', 'https://integrate.api.nvidia.com/v1', 'stepfun-ai/step-3.5-flash', 'nvidia-nim'],
   ['OpenRouter', 'https://openrouter.ai/api/v1', 'openai/gpt-5-mini', 'openrouter'],
   ['DeepSeek', 'https://api.deepseek.com/v1', 'deepseek-v4-pro', 'deepseek'],
   ['Hicap', 'https://api.hicap.ai/v1', 'claude-opus-4.7', 'hicap'],
