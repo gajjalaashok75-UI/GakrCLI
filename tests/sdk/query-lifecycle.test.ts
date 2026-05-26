@@ -1,7 +1,9 @@
 import { describe, test, expect, afterEach, beforeAll, afterAll } from 'bun:test'
 import { query, forkSession, getSessionMessages, unstable_v2_createSession } from '../../src/entrypoints/sdk/index.js'
 import { randomUUID } from 'crypto'
-import { rmSync } from 'fs'
+import { mkdtempSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 import {
   drainQuery,
   withTempDir,
@@ -19,10 +21,15 @@ import {
 // for auth credentials. Provide a stub key so init() succeeds without network.
 const AUTH_KEY = 'ANTHROPIC_API_KEY'
 let savedApiKey: string | undefined
+let savedConfigDir: string | undefined
+let testConfigDir: string | undefined
 
 beforeAll(async () => {
   await acquireSharedMutationLock('tests/sdk/query-lifecycle.test.ts')
   savedApiKey = process.env[AUTH_KEY]
+  savedConfigDir = process.env.GAKR_CONFIG_DIR
+  testConfigDir = mkdtempSync(join(tmpdir(), 'gakrcli-sdk-query-config-'))
+  process.env.GAKR_CONFIG_DIR = testConfigDir
   if (!savedApiKey) {
     process.env[AUTH_KEY] = 'sk-test-lifecycle-stub'
   }
@@ -34,6 +41,14 @@ afterAll(() => {
       delete process.env[AUTH_KEY]
     } else {
       process.env[AUTH_KEY] = savedApiKey
+    }
+    if (savedConfigDir === undefined) {
+      delete process.env.GAKR_CONFIG_DIR
+    } else {
+      process.env.GAKR_CONFIG_DIR = savedConfigDir
+    }
+    if (testConfigDir) {
+      try { rmSync(testConfigDir, { recursive: true, force: true }) } catch {}
     }
   } finally {
     releaseSharedMutationLock()

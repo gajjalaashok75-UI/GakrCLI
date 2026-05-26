@@ -178,15 +178,23 @@ function renderChatHtml({ nonce, platform }) {
 
     /* ── Assistant message ── */
     .msg-assistant {
-      align-self: flex-start;
-      max-width: 95%;
-      padding: 10px 14px;
-      border-radius: 4px 14px 14px 14px;
-      background: var(--oc-assistant-bg);
-      border: 1px solid var(--oc-assistant-border);
+      align-self: stretch;
+      width: 100%;
+      max-width: 100%;
+      padding: 0;
+      border-radius: 0;
+      background: transparent;
+      border: 0;
       word-break: break-word;
     }
-    .msg-assistant .md-content { line-height: 1.55; }
+    .msg-assistant .md-content {
+      line-height: 1.55;
+      max-width: 95%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: var(--oc-assistant-bg);
+      border: 1px solid var(--oc-assistant-border);
+    }
     .msg-assistant .md-content:empty { display: none; }
     .msg-assistant .md-content p { margin-bottom: 8px; }
     .msg-assistant .md-content p:last-child { margin-bottom: 0; }
@@ -280,23 +288,73 @@ function renderChatHtml({ nonce, platform }) {
 
     /* ── Tool use card ── */
     .tool-card {
-      margin: 8px 0;
-      border-radius: 8px;
-      border: 1px solid var(--oc-tool-border);
-      background: var(--oc-tool-bg);
+      width: 100%;
+      margin: 4px 0;
+      border-radius: 7px;
+      border: 1px solid rgba(220,195,170,0.12);
+      background: rgba(255,255,255,0.025);
       overflow: hidden;
+    }
+    .tool-card.running {
+      border-color: rgba(240,148,100,0.30);
+      background: rgba(240,148,100,0.055);
+    }
+    .tool-card.error {
+      border-color: rgba(255,138,108,0.38);
+      background: rgba(255,138,108,0.055);
     }
     .tool-header {
       display: flex;
       align-items: center;
-      gap: 6px;
-      padding: 8px 10px;
+      gap: 8px;
+      min-height: 34px;
+      padding: 6px 8px;
       cursor: pointer;
       user-select: none;
     }
-    .tool-icon { font-size: 14px; flex-shrink: 0; }
-    .tool-name { font-weight: 600; font-size: 12px; color: var(--oc-text); flex: 1; }
-    .tool-status { font-size: 11px; color: var(--oc-text-soft); }
+    .tool-icon {
+      width: 18px;
+      height: 18px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 5px;
+      background: rgba(255,255,255,0.045);
+      color: var(--oc-text-soft);
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+    .tool-main {
+      display: grid;
+      gap: 1px;
+      min-width: 0;
+      flex: 1;
+    }
+    .tool-title-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .tool-name {
+      font-weight: 650;
+      font-size: 12px;
+      color: var(--oc-text);
+      white-space: nowrap;
+    }
+    .tool-target {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 11px;
+      color: var(--oc-text-soft);
+    }
+    .tool-status {
+      flex-shrink: 0;
+      font-size: 11px;
+      color: var(--oc-text-soft);
+    }
     .tool-status.running { color: var(--oc-accent-bright); }
     .tool-status.error { color: var(--oc-critical); }
     .tool-status.complete { color: var(--oc-positive); }
@@ -308,31 +366,39 @@ function renderChatHtml({ nonce, platform }) {
     .tool-card.expanded .tool-chevron { transform: rotate(90deg); }
     .tool-body {
       display: none;
-      padding: 0 10px 10px;
+      padding: 8px;
       font-size: 12px;
-      border-top: 1px solid var(--oc-tool-border);
+      border-top: 1px solid rgba(220,195,170,0.10);
+      background: rgba(0,0,0,0.12);
     }
     .tool-card.expanded .tool-body { display: block; }
+    .tool-detail-grid {
+      display: grid;
+      gap: 8px;
+    }
     .tool-input-label,
     .tool-output-label {
       font-size: 10px;
       text-transform: uppercase;
       letter-spacing: 0.08em;
       color: var(--oc-text-soft);
-      margin: 8px 0 4px;
+      margin: 0 0 4px;
     }
     .tool-input-content,
     .tool-output-content {
-      padding: 6px 8px;
+      padding: 8px 9px;
       border-radius: 6px;
-      background: rgba(0,0,0,0.2);
+      background: rgba(0,0,0,0.24);
       font-family: var(--vscode-editor-font-family, Consolas, monospace);
       font-size: 11px;
       color: var(--oc-text-dim);
       white-space: pre-wrap;
-      word-break: break-all;
-      max-height: 200px;
-      overflow-y: auto;
+      overflow: auto;
+      overflow-wrap: anywhere;
+      max-height: 260px;
+    }
+    .tool-output-content {
+      max-height: 220px;
     }
     .tool-output-content.error { color: var(--oc-critical); }
     .tool-path {
@@ -351,6 +417,10 @@ function renderChatHtml({ nonce, platform }) {
     .file-link:hover {
       color: var(--oc-focus);
       border-bottom-color: var(--oc-focus);
+    }
+    .tool-empty {
+      color: var(--oc-text-soft);
+      font-style: italic;
     }
     .tool-input-content.tool-diff-old {
       border-left: 3px solid var(--oc-critical);
@@ -378,7 +448,8 @@ function renderChatHtml({ nonce, platform }) {
 
     /* ── Permission card ── */
     .perm-card {
-      margin: 8px 0;
+      align-self: stretch;
+      margin: 6px 0;
       padding: 10px 12px;
       border-radius: 8px;
       border: 1px solid var(--oc-perm-border);
@@ -798,6 +869,108 @@ function renderChatHtml({ nonce, platform }) {
     scrollToBottom();
   }
 
+  function toDisplayText(value) {
+    if (value === undefined || value === null || value === '') return '';
+    if (typeof value === 'string') return value;
+    try { return JSON.stringify(value, null, 2); } catch { return String(value); }
+  }
+
+  function truncateMiddleText(value, maxLength) {
+    const text = String(value || '');
+    if (text.length <= maxLength) return text;
+    const keep = Math.max(maxLength - 3, 0);
+    const start = Math.ceil(keep / 2);
+    const end = Math.floor(keep / 2);
+    return text.slice(0, start) + '...' + text.slice(text.length - end);
+  }
+
+  function basename(value) {
+    const text = String(value || '');
+    return text.split(/[\\/]/).filter(Boolean).pop() || text;
+  }
+
+  function getToolTarget(input, preview) {
+    if (input && typeof input === 'object') {
+      return input.file_path || input.path || input.command || input.query || input.pattern || input.url || preview || '';
+    }
+    return preview || toDisplayText(input);
+  }
+
+  function isFileLikeToolInput(input) {
+    return Boolean(input && typeof input === 'object' && (input.file_path || input.path));
+  }
+
+  function renderFileLink(filepath, label) {
+    return '<a class="file-link" data-filepath="' + escapeForMd(filepath) + '" title="' + escapeForMd(filepath) + '">' +
+      escapeForMd(label || basename(filepath)) +
+    '</a>';
+  }
+
+  function renderToolSection(label, value, options) {
+    const text = toDisplayText(value);
+    if (!text) return '';
+    const className = options && options.className ? ' ' + options.className : '';
+    const content = options && options.isPath
+      ? renderFileLink(text, text)
+      : escapeForMd(text);
+    return '<div>' +
+      '<div class="tool-input-label">' + escapeForMd(label) + '</div>' +
+      '<div class="tool-input-content' + className + '">' + content + '</div>' +
+    '</div>';
+  }
+
+  function renderToolDetails(input) {
+    if (!input || typeof input !== 'object') {
+      const text = toDisplayText(input);
+      return text ? renderToolSection('Input', text) : '<div class="tool-empty">No input</div>';
+    }
+
+    let html = '';
+    if (input.file_path || input.path) {
+      html += renderToolSection('Path', input.file_path || input.path, { isPath: true });
+    }
+    if (input.command) {
+      html += renderToolSection('Command', input.command);
+    }
+    if (input.query) {
+      html += renderToolSection('Query', input.query);
+    }
+    if (input.pattern) {
+      html += renderToolSection('Pattern', input.pattern);
+    }
+    if (input.old_string && input.new_string) {
+      html += renderToolSection('Replace', truncateToolContent(input.old_string, 1200), { className: 'tool-diff-old' });
+      html += renderToolSection('With', truncateToolContent(input.new_string, 1200), { className: 'tool-diff-new' });
+    } else if (input.content || input.new_string) {
+      html += renderToolSection('Content', truncateToolContent(input.content || input.new_string, 1600), { className: 'tool-diff-new' });
+    }
+
+    if (!html) {
+      html = renderToolSection('Input', truncateToolContent(toDisplayText(input), 1600));
+    }
+    return html;
+  }
+
+  function truncateToolContent(value, maxLength) {
+    const text = toDisplayText(value);
+    if (text.length <= maxLength) return text;
+    return text.slice(0, maxLength) + '\\n... truncated ' + (text.length - maxLength) + ' chars';
+  }
+
+  function formatOutputForDisplay(content) {
+    const text = toDisplayText(content) || '(done)';
+    if (text.length <= 5000) return text;
+    return text.slice(0, 5000) + '\\n... truncated ' + (text.length - 5000) + ' chars';
+  }
+
+  function outputSummary(content) {
+    const text = toDisplayText(content);
+    if (!text || text === '(done)') return 'Done';
+    const lines = text.split(/\\r?\\n/).length;
+    const size = text.length > 1024 ? (text.length / 1024).toFixed(1) + ' KB' : text.length + ' chars';
+    return lines > 1 ? lines + ' lines · ' + size : size;
+  }
+
   function getOrCreateAssistantEl() {
     if (!currentAssistantEl) {
       hideWelcome();
@@ -831,65 +1004,43 @@ function renderChatHtml({ nonce, platform }) {
   function appendToolCard(toolUse) {
     const { container } = getOrCreateAssistantEl();
     const card = document.createElement('div');
-    card.className = 'tool-card expanded';
-    card.dataset.toolId = toolUse.id || '';
     const statusClass = toolUse.status || 'running';
+    card.className = 'tool-card ' + statusClass;
+    card.dataset.toolId = toolUse.id || '';
     const statusLabel = statusClass === 'running' ? 'Running...'
       : statusClass === 'error' ? 'Error' : 'Done';
-
-    var inputSummary = '';
-    if (toolUse.input && typeof toolUse.input === 'object') {
-      if (toolUse.input.file_path || toolUse.input.path) {
-        inputSummary = (toolUse.input.file_path || toolUse.input.path);
-      }
-      if (toolUse.input.command) {
-        inputSummary = toolUse.input.command;
-      }
-    }
-    if (!inputSummary) inputSummary = toolUse.inputPreview || '';
-
-    var inputDetail = '';
-    if (toolUse.input && typeof toolUse.input === 'object') {
-      if (toolUse.input.new_string || toolUse.input.content) {
-        var content = toolUse.input.new_string || toolUse.input.content || '';
-        if (content.length > 500) content = content.slice(0, 500) + '... (truncated)';
-        inputDetail = '<div class="tool-input-label">Changes</div>' +
-          '<div class="tool-input-content">' + escapeForMd(content) + '</div>';
-      }
-      if (toolUse.input.old_string && toolUse.input.new_string) {
-        var oldStr = toolUse.input.old_string;
-        var newStr = toolUse.input.new_string;
-        if (oldStr.length > 300) oldStr = oldStr.slice(0, 300) + '...';
-        if (newStr.length > 300) newStr = newStr.slice(0, 300) + '...';
-        inputDetail = '<div class="tool-input-label">Replace</div>' +
-          '<div class="tool-input-content tool-diff-old">' + escapeForMd(oldStr) + '</div>' +
-          '<div class="tool-input-label">With</div>' +
-          '<div class="tool-input-content tool-diff-new">' + escapeForMd(newStr) + '</div>';
-      }
-    }
-
-    var isFileTool = inputSummary && !toolUse.input?.command;
-    var fileLink = isFileTool
-      ? '<a class="file-link" data-filepath="' + escapeForMd(inputSummary) + '" title="Open in editor">' + escapeForMd(inputSummary.split(/[\\/]/).pop() || inputSummary) + '</a>'
-      : (inputSummary ? escapeForMd(inputSummary.split(/[\\/]/).pop() || inputSummary) : '');
-    var pathDisplay = isFileTool
-      ? '<div class="tool-input-label">Path</div><div class="tool-input-content"><a class="file-link" data-filepath="' + escapeForMd(inputSummary) + '" title="Open in editor">' + escapeForMd(inputSummary) + '</a></div>'
-      : (inputSummary ? '<div class="tool-input-label">' + (toolUse.input?.command ? 'Command' : 'Path') + '</div><div class="tool-input-content">' + escapeForMd(inputSummary) + '</div>' : '');
+    const inputSummary = getToolTarget(toolUse.input, toolUse.inputPreview);
+    const targetLabel = isFileLikeToolInput(toolUse.input)
+      ? basename(inputSummary)
+      : truncateMiddleText(inputSummary, 84);
+    const targetHtml = inputSummary
+      ? (isFileLikeToolInput(toolUse.input)
+          ? renderFileLink(inputSummary, targetLabel)
+          : escapeForMd(targetLabel))
+      : '';
 
     card.innerHTML =
       '<div class="tool-header">' +
         '<span class="tool-icon">' + (toolUse.icon || '') + '</span>' +
-        '<span class="tool-name">' + escapeForMd(toolUse.displayName || toolUse.name || 'Tool') +
-          (fileLink ? ' <span class="tool-path">' + fileLink + '</span>' : '') +
+        '<span class="tool-main">' +
+          '<span class="tool-title-row">' +
+            '<span class="tool-name">' + escapeForMd(toolUse.displayName || toolUse.name || 'Tool') + '</span>' +
+          '</span>' +
+          '<span class="tool-target">' + targetHtml + '</span>' +
         '</span>' +
         '<span class="tool-status ' + statusClass + '">' + statusLabel + '</span>' +
         '<span class="tool-chevron">&#9654;</span>' +
       '</div>' +
       '<div class="tool-body">' +
-        pathDisplay +
-        inputDetail +
-        '<div class="tool-output-label">Output</div>' +
-        '<div class="tool-output-content" data-tool-output="' + (toolUse.id || '') + '">Running...</div>' +
+        '<div class="tool-detail-grid">' +
+          renderToolDetails(toolUse.input || toolUse.inputPreview) +
+          '<div>' +
+            '<div class="tool-output-label">Output</div>' +
+            '<div class="tool-output-content" data-tool-output="' + (toolUse.id || '') + '">' +
+              (statusClass === 'running' ? 'Running...' : 'Done') +
+            '</div>' +
+          '</div>' +
+        '</div>' +
       '</div>';
     card.querySelector('.tool-header').addEventListener('click', () => {
       card.classList.toggle('expanded');
@@ -902,16 +1053,19 @@ function renderChatHtml({ nonce, platform }) {
   function updateToolResult(toolUseId, content, isError) {
     const outputEl = document.querySelector('[data-tool-output="' + toolUseId + '"]');
     if (outputEl) {
-      outputEl.textContent = content || '(done)';
+      outputEl.textContent = formatOutputForDisplay(content);
       if (isError) outputEl.classList.add('error');
     }
     const card = document.querySelector('[data-tool-id="' + toolUseId + '"]');
     if (card) {
+      card.classList.remove('running', 'complete', 'error');
+      card.classList.add(isError ? 'error' : 'complete');
       const statusEl = card.querySelector('.tool-status');
       if (statusEl) {
         statusEl.className = 'tool-status ' + (isError ? 'error' : 'complete');
-        statusEl.textContent = isError ? 'Error' : 'Done';
+        statusEl.textContent = isError ? 'Error' : outputSummary(content);
       }
+      if (isError) card.classList.add('expanded');
     }
   }
 
@@ -930,53 +1084,22 @@ function renderChatHtml({ nonce, platform }) {
 
     if (!input || typeof input !== 'object') return;
 
-    // Update the header with clickable file path
-    const nameEl = card.querySelector('.tool-name');
-    if (nameEl && (input.file_path || input.path)) {
-      const fp = input.file_path || input.path;
-      const shortName = fp.split(/[\\/]/).pop() || fp;
-      if (!nameEl.querySelector('.tool-path')) {
-        nameEl.insertAdjacentHTML('beforeend', ' <span class="tool-path"><a class="file-link" data-filepath="' + escapeForMd(fp) + '" title="Open in editor">' + escapeForMd(shortName) + '</a></span>');
-      }
-    }
-
-    // Update path display
-    var pathHtml = '';
-    if (input.file_path || input.path) {
-      var fp = input.file_path || input.path;
-      pathHtml = '<div class="tool-input-label">Path</div><div class="tool-input-content">' +
-        '<a class="file-link" data-filepath="' + escapeForMd(fp) + '" title="Open in editor">' + escapeForMd(fp) + '</a></div>';
-    }
-    if (input.command) {
-      pathHtml = '<div class="tool-input-label">Command</div><div class="tool-input-content">' +
-        escapeForMd(input.command) + '</div>';
-    }
-
-    // Build diff display for edit operations
-    var diffHtml = '';
-    if (input.old_string && input.new_string) {
-      var oldStr = input.old_string;
-      var newStr = input.new_string;
-      if (oldStr.length > 500) oldStr = oldStr.slice(0, 500) + '... (truncated)';
-      if (newStr.length > 500) newStr = newStr.slice(0, 500) + '... (truncated)';
-      diffHtml = '<div class="tool-input-label">Replace</div>' +
-        '<div class="tool-input-content tool-diff-old">' + escapeForMd(oldStr) + '</div>' +
-        '<div class="tool-input-label">With</div>' +
-        '<div class="tool-input-content tool-diff-new">' + escapeForMd(newStr) + '</div>';
-    } else if (input.content || input.new_string) {
-      var content = input.content || input.new_string || '';
-      if (content.length > 800) content = content.slice(0, 800) + '... (truncated)';
-      diffHtml = '<div class="tool-input-label">Content</div>' +
-        '<div class="tool-input-content tool-diff-new">' + escapeForMd(content) + '</div>';
+    const inputSummary = getToolTarget(input, '');
+    const targetEl = card.querySelector('.tool-target');
+    if (targetEl && inputSummary) {
+      targetEl.innerHTML = isFileLikeToolInput(input)
+        ? renderFileLink(inputSummary, basename(inputSummary))
+        : escapeForMd(truncateMiddleText(inputSummary, 84));
     }
 
     // Keep the output element
     const outputEl = body.querySelector('[data-tool-output]');
     const outputHtml = outputEl ? outputEl.outerHTML : '';
-    const outputLabel = '<div class="tool-output-label">Output</div>';
 
-    body.innerHTML = pathHtml + diffHtml + outputLabel + outputHtml;
-    card.classList.add('expanded');
+    body.innerHTML = '<div class="tool-detail-grid">' +
+      renderToolDetails(input) +
+      '<div><div class="tool-output-label">Output</div>' + outputHtml + '</div>' +
+    '</div>';
     scrollToBottom();
   }
 

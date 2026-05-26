@@ -23,6 +23,10 @@ A practical VS Code companion for GakrCLI with a project-aware **Control Center*
   - Open Repository
   - Open Setup Guide
   - Open Command Palette
+- **Readable chat transcript**:
+  - compact tool-call rows that expand only when details are needed
+  - structured path, command, diff, and output sections for tool calls
+  - live streaming text updates without expanding every tool result into a large card
 - **Built-in dark theme**: `GakrCLI Terminal Black`
 
 ## Requirements
