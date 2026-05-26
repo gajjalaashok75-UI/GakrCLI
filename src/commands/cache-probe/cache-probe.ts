@@ -202,7 +202,7 @@ export const call: LocalCommandCall = async (args) => {
       type: 'text',
       value:
         'No API key found. Make sure you are in an active OpenAI-compatible or GitHub Copilot session.\n' +
-        'For GitHub Copilot: run /onboard-github first.\n' +
+        'For GitHub Copilot: run /provider and choose GitHub Models first.\n' +
         'For OpenAI-compatible: set OPENAI_API_KEY.',
     }
   }

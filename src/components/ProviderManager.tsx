@@ -1,6 +1,12 @@
 import figures from 'figures'
 import * as React from 'react'
 import { DEFAULT_CODEX_BASE_URL } from '../services/api/providerConfig.js'
+import {
+  exchangeForCopilotToken,
+  openVerificationUri,
+  pollAccessToken,
+  requestDeviceCode,
+} from '../services/github/deviceFlow.js'
 import { Box, Text } from '../ink.js'
 import { useTerminalSize } from '../hooks/useTerminalSize.js'
 import { useKeybinding } from '../keybindings/useKeybinding.js'
@@ -56,6 +62,7 @@ import {
   hydrateGithubModelsTokenFromSecureStorage,
   readGithubModelsToken,
   readGithubModelsTokenAsync,
+  saveGithubModelsToken,
 } from '../utils/githubModelsCredentials.js'
 import {
   applyGithubProviderProcessEnv,
@@ -78,6 +85,7 @@ import {
   Select,
 } from './CustomSelect/index.js'
 import { Pane } from './design-system/Pane.js'
+import { Spinner } from './Spinner.js'
 import TextInput from './TextInput.js'
 import { useCodexOAuthFlow } from './useCodexOAuthFlow.js'
 
@@ -100,6 +108,7 @@ type Screen =
   | 'select-ollama-model'
   | 'select-atomic-chat-model'
   | 'codex-oauth'
+  | 'github-setup'
   | 'form'
   | 'preset-model'
   | 'preset-api-key'
@@ -202,8 +211,11 @@ const FORM_STEPS: Array<{
 ]
 
 const GITHUB_PROVIDER_ID = '__github_models__'
+const GITHUB_SETUP_ID = '__github_models_setup__'
 const GITHUB_PROVIDER_LABEL = 'GitHub Models'
 const GITHUB_PROVIDER_DEFAULT_BASE_URL = 'https://models.github.ai/inference'
+
+type GithubSetupStep = 'menu' | 'device-busy' | 'pat' | 'error'
 const CODEX_OAUTH_PROVIDER_NAME = 'Codex OAuth'
 const CODEX_OAUTH_PROVIDER_MODEL = 'codexplan'
 
@@ -549,6 +561,17 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
   })
   const [atomicChatSelection, setAtomicChatSelection] =
     React.useState<AtomicChatSelectionState>({ state: 'idle' })
+  const [githubSetupStep, setGithubSetupStep] =
+    React.useState<GithubSetupStep>('menu')
+  const [githubSetupError, setGithubSetupError] = React.useState<string | null>(
+    null,
+  )
+  const [githubDeviceHint, setGithubDeviceHint] = React.useState<{
+    user_code: string
+    verification_uri: string
+  } | null>(null)
+  const [githubPatDraft, setGithubPatDraft] = React.useState('')
+  const [githubPatCursorOffset, setGithubPatCursorOffset] = React.useState(0)
   // Deferred initialization: useState initializers run synchronously during
   // render, so getProviderProfiles() and getActiveProviderProfile() would block
   // the UI (sync file I/O). Defer to queueMicrotask after first render.
@@ -1030,6 +1053,91 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
 
     hydrateGithubModelsTokenFromSecureStorage()
     return null
+  }
+
+  function finishGithubProviderSetup(successPrefix: string): void {
+    const githubError = activateGithubProvider()
+    if (githubError) {
+      setGithubSetupError(
+        `${successPrefix}, but provider activation failed: ${githubError}`,
+      )
+      setGithubSetupStep('error')
+      return
+    }
+
+    setAppState(prev => ({
+      ...prev,
+      mainLoopModel: GITHUB_PROVIDER_DEFAULT_MODEL,
+      mainLoopModelForSession: null,
+    }))
+    refreshProfiles()
+    refreshGithubProviderState()
+
+    const message =
+      `${successPrefix}. Token stored in secure storage; user settings updated; ` +
+      `this session switched to ${GITHUB_PROVIDER_DEFAULT_MODEL}.`
+
+    setGithubSetupStep('menu')
+    setGithubSetupError(null)
+    setGithubPatDraft('')
+    setStatusMessage(message)
+    setErrorMessage(undefined)
+
+    if (mode === 'first-run') {
+      onDone({
+        action: 'saved',
+        activeProviderName: GITHUB_PROVIDER_LABEL,
+        activeProviderModel: GITHUB_PROVIDER_DEFAULT_MODEL,
+        message,
+      })
+      return
+    }
+
+    returnToMenu()
+  }
+
+  async function saveGithubPatFromProvider(token: string): Promise<void> {
+    const saved = saveGithubModelsToken(token)
+    if (!saved.success) {
+      setGithubSetupError(saved.warning ?? 'Could not save token to secure storage.')
+      setGithubSetupStep('error')
+      return
+    }
+
+    finishGithubProviderSetup('GitHub Models setup complete')
+  }
+
+  async function runGithubDeviceFlowFromProvider(): Promise<void> {
+    setGithubSetupStep('device-busy')
+    setGithubSetupError(null)
+    setGithubDeviceHint(null)
+
+    try {
+      const device = await requestDeviceCode()
+      setGithubDeviceHint({
+        user_code: device.user_code,
+        verification_uri: device.verification_uri,
+      })
+      await openVerificationUri(device.verification_uri)
+      const oauthToken = await pollAccessToken(device.device_code, {
+        initialInterval: device.interval,
+        timeoutSeconds: device.expires_in,
+      })
+      const copilotToken = await exchangeForCopilotToken(oauthToken)
+      const saved = saveGithubModelsToken(copilotToken.token, oauthToken)
+      if (!saved.success) {
+        setGithubSetupError(
+          saved.warning ?? 'Could not save token to secure storage.',
+        )
+        setGithubSetupStep('error')
+        return
+      }
+
+      finishGithubProviderSetup('GitHub Models setup complete')
+    } catch (error) {
+      setGithubSetupError(error instanceof Error ? error.message : String(error))
+      setGithubSetupStep('error')
+    }
   }
 
   function deleteGithubProvider(): string | null {
@@ -1514,6 +1622,12 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
       })
     }
 
+    options.splice(7, 0, {
+      value: GITHUB_SETUP_ID,
+      label: GITHUB_PROVIDER_LABEL,
+      description: 'Sign in with GitHub Models using browser login or a token',
+    })
+
     if (mode === 'first-run') {
       options.push({
         value: 'skip',
@@ -1539,6 +1653,12 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
             }
             if (value === 'codex-oauth') {
               setScreen('codex-oauth')
+              return
+            }
+            if (value === GITHUB_SETUP_ID) {
+              setGithubSetupStep('menu')
+              setGithubSetupError(null)
+              setScreen('github-setup')
               return
             }
             startCreateFromPreset(value as ProviderPreset)
@@ -1761,6 +1881,160 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
         <Text dimColor>
           Press Enter to save. Press Esc to go back.
         </Text>
+      </Box>
+    )
+  }
+
+  function renderGithubSetup(): React.ReactNode {
+    if (githubSetupStep === 'error' && githubSetupError) {
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Text color="remember" bold>GitHub Models setup</Text>
+          <Text color="error">{githubSetupError}</Text>
+          <Select
+            options={[
+              {
+                value: 'back',
+                label: 'Back to GitHub setup',
+                description: 'Try another setup method',
+              },
+              {
+                value: 'preset',
+                label: 'Choose another provider',
+                description: 'Return to provider presets',
+              },
+            ]}
+            onChange={(value: string) => {
+              if (value === 'preset') {
+                setGithubSetupStep('menu')
+                setGithubSetupError(null)
+                setScreen('select-preset')
+                return
+              }
+              setGithubSetupStep('menu')
+              setGithubSetupError(null)
+            }}
+            onCancel={() => {
+              setGithubSetupStep('menu')
+              setGithubSetupError(null)
+            }}
+            visibleOptionCount={2}
+          />
+        </Box>
+      )
+    }
+
+    if (githubSetupStep === 'device-busy') {
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Text color="remember" bold>GitHub Models setup</Text>
+          <Text>GitHub device login</Text>
+          {githubDeviceHint ? (
+            <>
+              <Text>
+                Enter code <Text bold>{githubDeviceHint.user_code}</Text> at{' '}
+                {githubDeviceHint.verification_uri}
+              </Text>
+              <Text dimColor>
+                A browser window may have opened. Waiting for authorization...
+              </Text>
+            </>
+          ) : (
+            <Text dimColor>Requesting device code from GitHub...</Text>
+          )}
+          <Spinner />
+        </Box>
+      )
+    }
+
+    if (githubSetupStep === 'pat') {
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Text color="remember" bold>GitHub Models setup</Text>
+          <Text>
+            Paste a GitHub personal access token with access to GitHub Models.
+          </Text>
+          <Text dimColor>Input is masked. Enter to submit; Esc to go back.</Text>
+          <TextInput
+            value={githubPatDraft}
+            mask="*"
+            onChange={setGithubPatDraft}
+            onSubmit={value => {
+              const token = value.trim()
+              if (!token) {
+                return
+              }
+              void saveGithubPatFromProvider(token)
+            }}
+            onExit={() => {
+              setGithubSetupStep('menu')
+              setGithubPatDraft('')
+            }}
+            columns={inputColumns}
+            cursorOffset={githubPatCursorOffset}
+            onChangeCursorOffset={setGithubPatCursorOffset}
+          />
+        </Box>
+      )
+    }
+
+    const options: OptionWithDescription<string>[] = [
+      ...(githubProviderAvailable
+        ? [
+            {
+              value: 'existing',
+              label: 'Use existing token',
+              description: 'Activate GitHub Models with the token already available',
+            },
+          ]
+        : []),
+      {
+        value: 'device',
+        label: 'Sign in with browser',
+        description: 'Use GitHub device login and store the token securely',
+      },
+      {
+        value: 'pat',
+        label: 'Paste personal access token',
+        description: 'Store a GitHub token for GitHub Models',
+      },
+      {
+        value: 'back',
+        label: 'Back',
+        description: 'Return to provider presets',
+      },
+    ]
+
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Text color="remember" bold>GitHub Models setup</Text>
+        <Text dimColor>
+          Stores your token in the OS credential store and enables GitHub Models
+          in user settings.
+        </Text>
+        <Select
+          options={options}
+          onChange={(value: string) => {
+            setGithubSetupError(null)
+            if (value === 'back') {
+              setScreen('select-preset')
+              return
+            }
+            if (value === 'existing') {
+              finishGithubProviderSetup('GitHub Models activated')
+              return
+            }
+            if (value === 'pat') {
+              setGithubPatDraft('')
+              setGithubPatCursorOffset(0)
+              setGithubSetupStep('pat')
+              return
+            }
+            void runGithubDeviceFlowFromProvider()
+          }}
+          onCancel={() => setScreen('select-preset')}
+          visibleOptionCount={options.length}
+        />
       </Box>
     )
   }
@@ -2033,6 +2307,9 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
           }}
         />
       )
+      break
+    case 'github-setup':
+      content = renderGithubSetup()
       break
     case 'form':
       content = renderForm()

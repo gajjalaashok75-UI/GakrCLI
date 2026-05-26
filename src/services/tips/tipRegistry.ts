@@ -340,9 +340,9 @@ const externalTips: Tip[] = [
     },
   },
   {
-    id: 'onboard-github-models',
+    id: 'provider-github-models',
     content: async () =>
-      'Use /onboard-github to sign in to GitHub Models and switch GakrCLI to github:copilot',
+      'Use /provider to sign in to GitHub Models and switch GakrCLI to github:copilot',
     cooldownSessions: 15,
     isRelevant: async () =>
       !['1', 'true'].includes(

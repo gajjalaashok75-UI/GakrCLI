@@ -261,7 +261,7 @@ test('github validation stays descriptor-selected and reports missing auth', asy
 
   await expect(getProviderValidationError(process.env)).resolves.toBe(
     'GitHub Copilot authentication required.\n' +
-      'Run /onboard-github in the CLI to sign in with your GitHub account.\n' +
+      'Run /provider in the CLI and choose GitHub Models to sign in with your GitHub account.\n' +
       'This will store your OAuth token securely and enable Copilot models.',
   )
 })
