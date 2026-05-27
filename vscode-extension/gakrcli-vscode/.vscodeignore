@@ -13,6 +13,8 @@ docs/**
 .github/**
 .vscode/**
 .claude/**
+.gakrcli/**
+.gakrcli-profile.json
 .worktrees/**
 .eslintrc.json
 .prettierrc

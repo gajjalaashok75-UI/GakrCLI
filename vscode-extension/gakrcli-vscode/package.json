@@ -5,6 +5,10 @@
 	"version": "0.2.1",
 	"publisher": "gakr-gakr",
 	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/gajjalaashok75-UI/gakrcli-vscode.git"
+	},
 	"bugs": {
 		"url": "https://github.com/gajjalaashok75-UI/gakrcli-vscode/issues"
 	},
