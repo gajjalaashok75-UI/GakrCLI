@@ -6,6 +6,8 @@
 // Process transport for GakrCLI stream-json sessions.
 
 import { spawn, type ChildProcess } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import * as readline from 'node:readline';
 import { NdjsonTransport } from './ndjsonTransport';
@@ -132,6 +134,8 @@ export class ProcessManager {
   private router: ControlRouter | undefined;
   private stderrRl: readline.Interface | undefined;
   private keepAliveTimer: ReturnType<typeof setInterval> | undefined;
+  private tempMcpConfigDir: string | undefined;
+  private stderrTail: string[] = [];
 
   private _state: ProcessState = ProcessState.Idle;
   private _sessionId: string | undefined;
@@ -190,6 +194,7 @@ export class ProcessManager {
 
     this.setState(ProcessState.Spawning);
     this.intentionalShutdown = false;
+    this.stderrTail = [];
 
     const executable = (this.options.executable ?? 'gakrcli').trim() || 'gakrcli';
     const args = [...(this.options.executableArgs ?? []), ...this.buildArgs()];
@@ -206,6 +211,7 @@ export class ProcessManager {
       });
     } catch (err) {
       this.setState(ProcessState.Idle);
+      this.cleanupTempMcpConfig();
       const error =
         err instanceof Error ? err : new Error(String(err));
       this.emitError(error);
@@ -239,6 +245,7 @@ export class ProcessManager {
         input: this.process.stderr,
       });
       this.stderrRl.on('line', (line) => {
+        this.recordStderrLine(line);
         for (const cb of this.stderrCallbacks) {
           cb(line);
         }
@@ -257,7 +264,7 @@ export class ProcessManager {
         this.clearPendingInitialize();
       } else {
         this.rejectPendingInitialize(
-          new Error(`GakrCLI exited before initialize completed: code=${code}, signal=${signal}`),
+          new Error(this.formatEarlyExitError(code, signal)),
         );
       }
       this.cleanup();
@@ -357,6 +364,7 @@ export class ProcessManager {
     this.stderrCallbacks = [];
     this.stateCallbacks = [];
     this.controlHandlers.clear();
+    this.cleanupTempMcpConfig();
   }
 
   // ============================================================================
@@ -423,15 +431,7 @@ export class ProcessManager {
     }
 
     if (this.options.ideMcpServer) {
-      args.push('--mcp-config', JSON.stringify({
-        mcpServers: {
-          ide: {
-            type: 'sse-ide',
-            url: `http://127.0.0.1:${this.options.ideMcpServer.port}/sse`,
-            ideName: this.options.ideMcpServer.ideName ?? 'VS Code',
-          },
-        },
-      }));
+      args.push('--mcp-config', this.writeIdeMcpConfigFile());
     }
 
     return args;
@@ -625,6 +625,48 @@ export class ProcessManager {
     this.stderrRl?.close();
     this.stderrRl = undefined;
     this.process = undefined;
+    this.cleanupTempMcpConfig();
+  }
+
+  private writeIdeMcpConfigFile(): string {
+    this.cleanupTempMcpConfig();
+    const dir = mkdtempSync(path.join(tmpdir(), 'gakrcli-vscode-mcp-'));
+    const file = path.join(dir, 'mcp-config.json');
+    const config = {
+      mcpServers: {
+        ide: {
+          type: 'sse-ide',
+          url: `http://127.0.0.1:${this.options.ideMcpServer!.port}/sse`,
+          ideName: this.options.ideMcpServer!.ideName ?? 'VS Code',
+        },
+      },
+    };
+    writeFileSync(file, JSON.stringify(config), 'utf8');
+    this.tempMcpConfigDir = dir;
+    return file;
+  }
+
+  private cleanupTempMcpConfig(): void {
+    if (!this.tempMcpConfigDir) {
+      return;
+    }
+    rmSync(this.tempMcpConfigDir, { recursive: true, force: true });
+    this.tempMcpConfigDir = undefined;
+  }
+
+  private recordStderrLine(line: string): void {
+    this.stderrTail.push(line);
+    if (this.stderrTail.length > 20) {
+      this.stderrTail.shift();
+    }
+  }
+
+  private formatEarlyExitError(code: number | null, signal: string | null): string {
+    const base = `GakrCLI exited before initialize completed: code=${code}, signal=${signal}`;
+    if (this.stderrTail.length === 0) {
+      return base;
+    }
+    return `${base}. stderr:\n${this.stderrTail.join('\n')}`;
   }
 
   private setState(state: ProcessState): void {
