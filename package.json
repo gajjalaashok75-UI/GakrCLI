@@ -158,7 +158,7 @@
     "@types/react": "19.2.14",
     "@types/ws": "^8.18.1",
     "tsx": "^4.21.0",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.3"
   },
   "engines": {
     "node": ">=20.0.0"
