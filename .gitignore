@@ -4,7 +4,7 @@ package-lock.json
 bun.lockb
 cook/
 COOK.md
-
+compiled/
 # Build outputs
 dist/
 *.tsbuildinfo
@@ -26,7 +26,7 @@ web/*.tsbuildinfo
 .gakrcli/
 .gakrcli-profile.json
 .opengakrcli/
-.openclaude-profile.json
+.gakrcli-profile.json
 # IDE and editor files
 .vscode/
 .idea/
