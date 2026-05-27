@@ -45,6 +45,7 @@ export function ChatPanel() {
     setEffortLevel,
     toolActivity,
     sendMessage,
+    editMessage,
     interrupt,
   } = useChat();
 
@@ -159,7 +160,12 @@ export function ChatPanel() {
       </div>
 
       {/* Message list */}
-      <MessageList messages={messages} isStreaming={isStreaming} processState={processState} />
+      <MessageList
+        messages={messages}
+        isStreaming={isStreaming}
+        processState={processState}
+        onEditMessage={editMessage}
+      />
 
       {/* Onboarding checklist */}
       {showOnboarding && (

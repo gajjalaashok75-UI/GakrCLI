@@ -16,6 +16,7 @@ interface UseSlashCommandsReturn {
 /** GakrCLI-specific commands that are always available */
 const GAKRCLI_COMMANDS: SlashCommandDef[] = [
   { name: 'provider', description: 'Set up and save a third-party provider profile', argumentHint: '' },
+  { name: 'providers', description: 'Set up and save a third-party provider profile', argumentHint: '' },
 ];
 
 /** Merge GakrCLI-specific commands into the list (avoiding duplicates) */

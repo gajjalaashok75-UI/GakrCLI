@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { AuthManager, type ProviderUpdateInput } from '../../src/auth/authManager';
+import { describe, it, expect, vi } from 'vitest';
+import { AuthManager } from '../../src/auth/authManager';
 import type { SettingsSync } from '../../src/settings/settingsSync';
 
 function makeSettings(overrides: Partial<SettingsSync> = {}): SettingsSync {
@@ -19,19 +19,47 @@ function makeSettings(overrides: Partial<SettingsSync> = {}): SettingsSync {
 
 describe('AuthManager', () => {
   describe('getAvailableProviders', () => {
-    it('returns all supported providers', () => {
+    it('returns the root GakrCLI provider presets used by the picker', () => {
       const manager = new AuthManager(makeSettings());
-      const providers = manager.getAvailableProviders();
-      const ids = providers.map((p) => p.id);
-      expect(ids).toContain('anthropic');
-      expect(ids).toContain('openai');
-      expect(ids).toContain('ollama');
-      expect(ids).toContain('gemini');
-      expect(ids).toContain('custom');
+      const ids = manager.getAvailableProviders().map((p) => p.id);
+
+      for (const id of [
+        'anthropic',
+        'dashscope-cn',
+        'dashscope-intl',
+        'azure-openai',
+        'bankr',
+        'deepseek',
+        'gemini',
+        'groq',
+        'hicap',
+        'lmstudio',
+        'atomic-chat',
+        'ollama',
+        'minimax',
+        'mistral',
+        'moonshotai',
+        'kimi-code',
+        'nvidia-nim',
+        'openai',
+        'openrouter',
+        'together',
+        'venice',
+        'xai',
+        'xiaomi-mimo',
+        'zai',
+        'custom',
+        'bedrock',
+        'vertex',
+        'github',
+        'codex',
+      ]) {
+        expect(ids).toContain(id);
+      }
     });
   });
 
-  describe('buildProcessEnv — anthropic', () => {
+  describe('buildProcessEnv - anthropic', () => {
     it('sets ANTHROPIC_API_KEY', () => {
       const manager = new AuthManager(makeSettings({ selectedProvider: 'anthropic', apiKey: 'sk-ant-test' }));
       const env = manager.buildProcessEnv();
@@ -40,7 +68,7 @@ describe('AuthManager', () => {
     });
   });
 
-  describe('buildProcessEnv — openai', () => {
+  describe('buildProcessEnv - openai', () => {
     it('sets OPENAI_API_KEY and GAKR_CODE_USE_OPENAI', () => {
       const manager = new AuthManager(makeSettings({ selectedProvider: 'openai', apiKey: 'sk-openai-test' }));
       const env = manager.buildProcessEnv();
@@ -59,8 +87,8 @@ describe('AuthManager', () => {
     });
   });
 
-  describe('buildProcessEnv — ollama', () => {
-    it('uses default localhost base URL and ollama api key', () => {
+  describe('buildProcessEnv - local OpenAI-compatible providers', () => {
+    it('uses Ollama defaults', () => {
       const manager = new AuthManager(makeSettings({ selectedProvider: 'ollama' }));
       const env = manager.buildProcessEnv();
       expect(env['OPENAI_BASE_URL']).toBe('http://localhost:11434/v1');
@@ -68,14 +96,14 @@ describe('AuthManager', () => {
       expect(env['GAKR_CODE_USE_OPENAI']).toBe('1');
     });
 
-    it('allows custom base URL override', () => {
+    it('allows custom Ollama base URL override', () => {
       const manager = new AuthManager(makeSettings({ selectedProvider: 'ollama', baseUrl: 'http://myhost:11434/v1' }));
       const env = manager.buildProcessEnv();
       expect(env['OPENAI_BASE_URL']).toBe('http://myhost:11434/v1');
     });
   });
 
-  describe('buildProcessEnv — gemini', () => {
+  describe('buildProcessEnv - dedicated providers', () => {
     it('sets Gemini env and GAKR_CODE_USE_GEMINI', () => {
       const manager = new AuthManager(makeSettings({
         selectedProvider: 'gemini',
@@ -87,10 +115,22 @@ describe('AuthManager', () => {
       expect(env['GEMINI_BASE_URL']).toBe('https://generativelanguage.googleapis.com/v1beta/openai');
       expect(env['GAKR_CODE_USE_GEMINI']).toBe('1');
     });
+
+    it('sets dedicated Mistral routing instead of generic OpenAI routing', () => {
+      const manager = new AuthManager(makeSettings({
+        selectedProvider: 'mistral',
+        apiKey: 'mistral-key',
+      }));
+      const env = manager.buildProcessEnv();
+      expect(env['GAKR_CODE_USE_MISTRAL']).toBe('1');
+      expect(env['MISTRAL_API_KEY']).toBe('mistral-key');
+      expect(env['MISTRAL_BASE_URL']).toBe('https://api.mistral.ai/v1');
+      expect(env['GAKR_CODE_USE_OPENAI']).toBeUndefined();
+    });
   });
 
-  describe('buildProcessEnv — custom', () => {
-    it('sets OPENAI_API_KEY, OPENAI_BASE_URL, and GAKR_CODE_USE_OPENAI', () => {
+  describe('buildProcessEnv - descriptor-backed OpenAI-compatible presets', () => {
+    it('sets custom OpenAI-compatible routing', () => {
       const manager = new AuthManager(makeSettings({
         selectedProvider: 'custom',
         apiKey: 'custom-key',
@@ -101,9 +141,43 @@ describe('AuthManager', () => {
       expect(env['OPENAI_BASE_URL']).toBe('https://my-llm.example.com/v1');
       expect(env['GAKR_CODE_USE_OPENAI']).toBe('1');
     });
+
+    it('sets xAI route env without inventing a model so OAuth fallback can work', () => {
+      const manager = new AuthManager(makeSettings({ selectedProvider: 'xai' }));
+      const env = manager.buildProcessEnv();
+      expect(env['GAKR_CODE_USE_OPENAI']).toBe('1');
+      expect(env['OPENAI_BASE_URL']).toBe('https://api.x.ai/v1');
+      expect(env['OPENAI_MODEL']).toBeUndefined();
+      expect(env['OPENAI_API_KEY']).toBeUndefined();
+    });
+
+    it('mirrors provider credentials for providers whose runtime expects OPENAI_API_KEY', () => {
+      const manager = new AuthManager(makeSettings({
+        selectedProvider: 'xiaomi-mimo',
+        apiKey: 'mimo-key',
+      }));
+      const env = manager.buildProcessEnv();
+      expect(env['MIMO_API_KEY']).toBe('mimo-key');
+      expect(env['OPENAI_API_KEY']).toBe('mimo-key');
+      expect(env['OPENAI_BASE_URL']).toBe('https://api.xiaomimimo.com/v1');
+      expect(env['OPENAI_MODEL']).toBeUndefined();
+    });
+
+    it('sets NVIDIA NIM marker and route defaults', () => {
+      const manager = new AuthManager(makeSettings({
+        selectedProvider: 'nvidia-nim',
+        apiKey: 'nvidia-key',
+      }));
+      const env = manager.buildProcessEnv();
+      expect(env['GAKR_CODE_USE_OPENAI']).toBe('1');
+      expect(env['NVIDIA_NIM']).toBe('1');
+      expect(env['NVIDIA_API_KEY']).toBe('nvidia-key');
+      expect(env['OPENAI_API_KEY']).toBe('nvidia-key');
+      expect(env['OPENAI_BASE_URL']).toBe('https://integrate.api.nvidia.com/v1');
+    });
   });
 
-  describe('buildProcessEnv — merges user env vars', () => {
+  describe('buildProcessEnv - merges user env vars', () => {
     it('includes user-configured environment variables', () => {
       const manager = new AuthManager(makeSettings({
         selectedProvider: 'anthropic',
@@ -131,10 +205,12 @@ describe('AuthManager', () => {
       expect(result.errors.length).toBeGreaterThan(0);
     });
 
-    it('passes for ollama without api key (not required)', () => {
+    it('passes for providers that can use local or stored OAuth credentials', () => {
       const manager = new AuthManager(makeSettings());
-      const result = manager.validate({ providerId: 'ollama' });
-      expect(result.valid).toBe(true);
+      expect(manager.validate({ providerId: 'ollama' }).valid).toBe(true);
+      expect(manager.validate({ providerId: 'xai' }).valid).toBe(true);
+      expect(manager.validate({ providerId: 'github' }).valid).toBe(true);
+      expect(manager.validate({ providerId: 'codex' }).valid).toBe(true);
     });
 
     it('fails for custom without base URL', () => {

@@ -9,9 +9,10 @@ interface MessageListProps {
   messages: ChatMessage[];
   isStreaming: boolean;
   processState?: 'idle' | 'starting' | 'running' | 'stopped' | 'crashed';
+  onEditMessage?: (uuid: string, newContent: string) => void;
 }
 
-export function MessageList({ messages, isStreaming, processState }: MessageListProps) {
+export function MessageList({ messages, isStreaming, processState, onEditMessage }: MessageListProps) {
   const { containerRef, userScrolledUp, autoScroll, scrollToBottom } = useAutoScroll();
 
   // Auto-scroll when messages change or streaming content updates
@@ -43,7 +44,7 @@ export function MessageList({ messages, isStreaming, processState }: MessageList
           {messages.map((msg) => (
             <div key={msg.id} className="message">
               {msg.role === 'user' ? (
-                <UserMessage message={msg} />
+                <UserMessage message={msg} onEdit={onEditMessage} />
               ) : msg.role === 'system' ? (
                 <SystemMessage text={msg.text ?? ''} />
               ) : (

@@ -63,10 +63,19 @@ export function getProfileSearchPaths(options: ProfileSearchOptions = {}): strin
     process.env.GAKR_CONFIG_DIR ??
     path.join(options.homeDir ?? os.homedir(), '.gakrcli');
 
-  const candidates = [
-    path.resolve(cwd, PROFILE_FILE_NAME),
-    path.resolve(configDir, PROFILE_FILE_NAME),
-  ];
+  const candidates: string[] = [];
+  let current = path.resolve(cwd);
+  let reachedRoot = false;
+  while (!reachedRoot) {
+    candidates.push(path.join(current, PROFILE_FILE_NAME));
+    const parent = path.dirname(current);
+    if (parent === current) {
+      reachedRoot = true;
+    } else {
+      current = parent;
+    }
+  }
+  candidates.push(path.resolve(configDir, PROFILE_FILE_NAME));
 
   return [...new Set(candidates)];
 }
@@ -101,6 +110,14 @@ export function applyCompatibilityFlag(
     case 'ollama':
     case 'custom':
     case 'codex':
+    case 'dashscope-cn':
+    case 'dashscope-intl':
+    case 'azure-openai':
+    case 'bankr':
+    case 'groq':
+    case 'hicap':
+    case 'lmstudio':
+    case 'together':
     case 'nvidia-nim':
     case 'minimax':
     case 'xai':

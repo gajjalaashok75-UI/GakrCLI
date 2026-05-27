@@ -5,7 +5,9 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2026-05-26 15:06:42 +05:30
+## [Unreleased]
+
+## [0.5.4] - 2026-05-27
 
 ### Added
 - **Fresh Install User Directory Bootstrap**: Initialized `~/.gakrcli` during CLI startup with required runtime directories and synced packaged `agents`, `rules`, and `skills` defaults without overwriting user files.
@@ -23,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Build Output Cleanup**: Cleaned the old `dist/` directory at the start of `bun run build` so local build output only contains the current CLI and SDK bundles.
 - **VS Code Extension Status**: Bumped the VS Code extension to 0.2.1, refreshed provider availability detection for current profiles, added global profile fallback detection, and aligned chat launches with the active workspace.
 - **VS Code IDE Bridge**: Wired VS Code chat sessions to the root GakrCLI `sse-ide` MCP loader so `/ide`, workspace context, diagnostics, and terminal-backed IDE tools work from headless extension sessions.
+- **VS Code Dev Host Launch**: Switched source-checkout VS Code sessions to launch the real CLI with `node dist/cli.mjs`, allowed wrapper commands with inline arguments, and surfaced initialize timeouts or early exits instead of leaving the webview stuck on "Starting GakrCLI...".
+- **VS Code IDE Matching on Windows**: Normalized Windows workspace path comparisons for `/ide`, exported `GAKR_CODE_SSE_PORT` into VS Code terminals, and kept new terminals aligned with the active extension bridge.
+- **VS Code Provider/Profile Parity**: Expanded the extension wrapper to cover the root provider preset catalog, resolved workspace profiles through ancestor directories, and fell back to `~/.gakrcli/.gakrcli-profile.json` when no project profile is present.
+- **VS Code Chat Interaction Polish**: Right-aligned user messages in the webview and wired edited prompts back through the live CLI session so resend-after-edit works again.
 - **VS Code Command Wiring**: Registered real handlers for extension update, logout, and terminal-mode at-mention commands so contributed commands and keybindings no longer fall through to placeholder behavior.
 - **GakrCLI Setup Naming**: Reframed onboarding, auth flow helpers, tests, and command copy away from old setup/account wording so the first-run experience is presented as GakrCLI setup.
 - **Startup Provider Environment Refresh**: Reapplied selected provider profile environment after onboarding so first-run provider choices are available before validation.

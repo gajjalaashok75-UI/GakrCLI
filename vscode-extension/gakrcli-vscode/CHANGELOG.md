@@ -2,6 +2,15 @@
 
 All notable changes to GakrCLI VS Code are documented here.
 
+## [Unreleased]
+
+### Fixed
+
+- The dev-host/source-checkout launch path now starts the real CLI with `node dist/cli.mjs`, supports wrapper commands with inline arguments, and reports initialize timeouts or early exits instead of hanging on "Starting GakrCLI...".
+- VS Code terminals now receive `GAKR_CODE_SSE_PORT` from the extension MCP server, and Windows `/ide` matching now treats workspace paths case-insensitively so fresh terminals reconnect reliably.
+- Provider badges, provider selection, and profile loading now match the root GakrCLI provider catalog, search ancestor workspace profiles, and fall back to `~/.gakrcli/.gakrcli-profile.json` when no project profile exists.
+- User chat messages now render on the right side, and editing a user message sends the updated prompt back through the active CLI session.
+
 ## [0.2.1] - 2026-05-27
 
 ### Added

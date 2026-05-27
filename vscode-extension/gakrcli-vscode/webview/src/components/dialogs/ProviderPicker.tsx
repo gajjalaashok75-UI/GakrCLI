@@ -41,8 +41,9 @@ export function ProviderPicker({
   useEffect(() => {
     setApiKey('');
     setBaseUrl(selectedDef?.defaultBaseUrl ?? '');
+    setModel(selectedId === currentProviderId ? currentModel ?? '' : '');
     setErrors([]);
-  }, [selectedId, selectedDef]);
+  }, [selectedId, selectedDef, currentProviderId, currentModel]);
 
   const validate = useCallback((): string[] => {
     const errs: string[] = [];

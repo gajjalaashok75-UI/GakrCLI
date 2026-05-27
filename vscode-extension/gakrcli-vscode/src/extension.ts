@@ -16,7 +16,8 @@ import { CheckpointManager } from './checkpoint/checkpointManager';
 import type { RewindFilesResponse } from './checkpoint/checkpointManager';
 import { AuthManager } from './auth/authManager';
 import { SettingsSync } from './settings/settingsSync';
-import { resolveCliExecutable } from './settings/cliExecutable';
+import { loadProfileFile } from './settings/profileFile';
+import { resolveCliLaunchCommand } from './settings/cliExecutable';
 import { McpIdeServer } from './mcp/mcpIdeServer';
 import { buildToggleRequest, buildInstallCommand, buildReloadRequest } from './plugins/pluginBridge';
 import { WorktreeManager } from './worktree/worktreeManager';
@@ -143,15 +144,24 @@ export function activate(context: vscode.ExtensionContext) {
 
   // === Auth / provider manager (Story 11) ===
   const settingsSync = new SettingsSync();
-  const authManager = new AuthManager(settingsSync);
+  const extensionWorkspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
+  const authManager = new AuthManager(
+    settingsSync,
+    () => loadProfileFile({ cwd: extensionWorkspaceFolder }),
+  );
 
   // === MCP IDE Server (Story 12) ===
-  const mcpWorkspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
+  const mcpWorkspaceFolder = extensionWorkspaceFolder;
   const mcpIdeServer = new McpIdeServer(mcpWorkspaceFolder);
   mcpIdeServer.start().then(({ port }) => {
     output.info(`[GakrCLI] MCP IDE server running on port ${port}`);
+    context.environmentVariableCollection.replace('GAKR_CODE_SSE_PORT', String(port));
+    context.environmentVariableCollection.replace('GAKR_CODE_IDE_NAME', 'VS Code');
   }).catch((err: Error) => {
     output.warn(`[GakrCLI] Failed to start MCP IDE server: ${err.message}`);
+  });
+  context.subscriptions.push({
+    dispose: () => context.environmentVariableCollection.clear(),
   });
   context.subscriptions.push(mcpIdeServer);
 
@@ -255,7 +265,7 @@ export function activate(context: vscode.ExtensionContext) {
     webviewManager!.broadcast({ type: 'process_state', state: 'starting' });
 
     const config = vscode.workspace.getConfiguration('gakrcliCode');
-    const executable = resolveCliExecutable(config);
+    const launchCommand = resolveCliLaunchCommand(config, workspaceFolder.uri.fsPath);
     // Use the permission handler's current mode (reflects user's UI selection),
     // falling back to the config default only on first launch
     const handlerMode = permissionHandler.getMode();
@@ -271,7 +281,8 @@ export function activate(context: vscode.ExtensionContext) {
 
     processManager = new ProcessManager({
       cwd: workspaceFolder.uri.fsPath,
-      executable,
+      executable: launchCommand.executable,
+      executableArgs: launchCommand.args,
       model,
       permissionMode,
       sessionId: options.sessionId,
@@ -457,7 +468,7 @@ export function activate(context: vscode.ExtensionContext) {
             type: 'system',
             subtype: 'init',
             session_id: processManager.sessionId ?? '',
-            model: (models[0] as Record<string, unknown>)?.value ?? '',
+            model: typeof initData.model === 'string' ? initData.model : '',
             models: models,
             fast_mode_state: fastModeState,
             permissionMode: permMode,
@@ -486,7 +497,7 @@ export function activate(context: vscode.ExtensionContext) {
     output.info(`[Webview→CLI] send_prompt: ${message.text.substring(0, 100)}`);
 
     // GakrCLI-specific: /provider opens the provider picker dialog
-    if (message.text.trim() === '/provider') {
+    if (['/provider', '/providers'].includes(message.text.trim())) {
       webviewManager!.broadcast({ type: 'open_provider_picker' } as never);
       return;
     }
@@ -510,7 +521,7 @@ export function activate(context: vscode.ExtensionContext) {
     output.info(`[Webview→CLI] slash_command: /${msg.command}`);
 
     // GakrCLI-specific: /provider opens the provider picker dialog
-    if (msg.command === 'provider') {
+    if (msg.command === 'provider' || msg.command === 'providers') {
       webviewManager!.broadcast({ type: 'open_provider_picker' } as never);
       return;
     }
@@ -622,7 +633,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     const config = vscode.workspace.getConfiguration('gakrcliCode');
-    const executable = resolveCliExecutable(config);
+    const launchCommand = resolveCliLaunchCommand(config, workspaceFolder.uri.fsPath);
     const model = config.get<string>('selectedModel');
     const permissionMode = config.get<string>('initialPermissionMode') as
       | 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions' | 'dontAsk' | undefined;
@@ -646,7 +657,8 @@ export function activate(context: vscode.ExtensionContext) {
 
     processManager = new ProcessManager({
       cwd: workspaceFolder.uri.fsPath,
-      executable,
+      executable: launchCommand.executable,
+      executableArgs: launchCommand.args,
       model: model !== 'default' ? model : undefined,
       permissionMode,
       sessionId: message.sessionId,
@@ -807,12 +819,14 @@ export function activate(context: vscode.ExtensionContext) {
       const forkOptions = checkpointManager.buildForkOptions(msg.messageUuid);
       const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
       if (!workspaceFolder) return;
-      const executable = resolveCliExecutable(
+      const launchCommand = resolveCliLaunchCommand(
         vscode.workspace.getConfiguration('gakrcliCode'),
+        workspaceFolder.uri.fsPath,
       );
       const forkPm = new ProcessManager({
         cwd: workspaceFolder.uri.fsPath,
-        executable,
+        executable: launchCommand.executable,
+        executableArgs: launchCommand.args,
         sessionId: forkOptions.sessionId,
         forkSession: forkOptions.forkSession,
         env: authManager.buildProcessEnv(),
@@ -831,12 +845,14 @@ export function activate(context: vscode.ExtensionContext) {
       const forkOptions = checkpointManager.buildForkOptions(msg.messageUuid);
       const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
       if (!workspaceFolder) return;
-      const executable = resolveCliExecutable(
+      const launchCommand = resolveCliLaunchCommand(
         vscode.workspace.getConfiguration('gakrcliCode'),
+        workspaceFolder.uri.fsPath,
       );
       const forkPm = new ProcessManager({
         cwd: workspaceFolder.uri.fsPath,
-        executable,
+        executable: launchCommand.executable,
+        executableArgs: launchCommand.args,
         sessionId: forkOptions.sessionId,
         forkSession: forkOptions.forkSession,
         env: authManager.buildProcessEnv(),

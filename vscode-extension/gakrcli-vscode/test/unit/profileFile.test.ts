@@ -8,10 +8,14 @@ import {
 describe('profileFile', () => {
   it('searches workspace profile before user config fallback', () => {
     expect(getProfileSearchPaths({
-      cwd: 'C:\\workspace\\project',
+      cwd: 'C:\\workspace\\project\\packages\\app',
       configDir: 'C:\\Users\\test\\.gakrcli',
     })).toEqual([
+      'C:\\workspace\\project\\packages\\app\\.gakrcli-profile.json',
+      'C:\\workspace\\project\\packages\\.gakrcli-profile.json',
       'C:\\workspace\\project\\.gakrcli-profile.json',
+      'C:\\workspace\\.gakrcli-profile.json',
+      'C:\\.gakrcli-profile.json',
       'C:\\Users\\test\\.gakrcli\\.gakrcli-profile.json',
     ]);
   });
