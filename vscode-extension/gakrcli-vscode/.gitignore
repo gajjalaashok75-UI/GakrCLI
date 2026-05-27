@@ -5,3 +5,4 @@ dist/
 webview/node_modules/
 webview/dist/
 .worktrees/
+.gakrcli-profile.json
