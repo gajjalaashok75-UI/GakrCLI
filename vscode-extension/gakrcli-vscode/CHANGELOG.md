@@ -4,6 +4,14 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ## [Unreleased]
 
+### Fixed (2026-05-27 16:49:02 +05:30)
+
+- Headless wrapper launches now pass `--permission-prompt-tool stdio`, allowing WebSearch, Bash, and other tool approvals to appear in the VS Code permission dialog instead of being denied before the UI can respond.
+- Added `allow ToolName` and `/allow ToolName` fallback handling to register a tool as allowed and resolve matching pending permission requests.
+- Deduplicated streamed assistant responses from final payloads, hid internal local-command wrappers, stripped raw thinking tags, and moved copy actions to the latest assistant response.
+- Slash command search now deduplicates by command name, matches command names only, hides empty results, and no longer blocks unknown slash-style prompts.
+- Provider selection now scrolls inside a bounded dialog so all provider options remain reachable in narrow VS Code panes.
+
 ## [0.2.2] - 2026-05-27
 
 ### Fixed

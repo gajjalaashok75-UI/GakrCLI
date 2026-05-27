@@ -241,7 +241,7 @@ export function useChat() {
         if (lastSignature === finalSignature) {
           return prev.map((m, index) =>
             index === lastAssistantIndex
-              ? { ...m, isStreaming: false, model: chatMsg.model ?? m.model }
+              ? { ...m, blocks, isStreaming: false, model: chatMsg.model ?? m.model }
               : m,
           );
         }
@@ -472,6 +472,11 @@ export function useChat() {
               }
               case 'compact_boundary':
                 addSystemMessage('Context compacted to fit within limits.', `compact-${Date.now()}`);
+                break;
+              case 'permission_rule_added':
+                if (typeof msgAny.text === 'string') {
+                  addSystemMessage(msgAny.text, `permission-${Date.now()}`);
+                }
                 break;
               // hook_started, hook_response, session_state_changed, files_persisted
               // — handled by extension host, ignore in webview
@@ -740,6 +745,22 @@ function normalizeBlockForSignature(block: unknown): unknown {
     };
   }
 
+  if (record.type === 'tool_use' || record.type === 'server_tool_use') {
+    return {
+      type: record.type,
+      id: record.id,
+      name: record.name,
+    };
+  }
+
+  if (record.type === 'tool_result') {
+    return {
+      type: record.type,
+      tool_use_id: record.tool_use_id,
+      is_error: record.is_error,
+    };
+  }
+
   return record;
 }
 
@@ -806,6 +827,7 @@ function stripThinkTagsFromText(text: string): string {
   return text
     .replace(/<(think|thinking|reasoning)(?:\s[^>]*)?>[\s\S]*?<\/\1>/gi, '')
     .replace(/<(think|thinking|reasoning)(?:\s[^>]*)?>[\s\S]*$/gi, '')
+    .replace(/^[\s\S]*?<\/(think|thinking|reasoning)>\s*/i, '')
     .replace(/<\/(think|thinking|reasoning)>/gi, '')
     .trim();
 }

@@ -36,6 +36,7 @@ function stripThinkTags(content: string): string {
   return content
     .replace(/<(think|thinking|reasoning)(?:\s[^>]*)?>[\s\S]*?<\/\1>/gi, '')
     .replace(/<(think|thinking|reasoning)(?:\s[^>]*)?>[\s\S]*$/gi, '')
+    .replace(/^[\s\S]*?<\/(think|thinking|reasoning)>\s*/i, '')
     .replace(/<\/(think|thinking|reasoning)>/gi, '')
     .trim();
 }

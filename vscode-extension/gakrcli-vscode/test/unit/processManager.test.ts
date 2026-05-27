@@ -117,6 +117,8 @@ describe('ProcessManager', () => {
           '--verbose',
           '--print',
           '--include-partial-messages',
+          '--permission-prompt-tool',
+          'stdio',
         ]),
         expect.objectContaining({
           cwd: '/tmp/test-project',
@@ -300,6 +302,8 @@ describe('ProcessManager', () => {
       expect(commandLine).toContain('--input-format');
       expect(commandLine).toContain('--verbose');
       expect(commandLine).toContain('--include-partial-messages');
+      expect(commandLine).toContain('--permission-prompt-tool');
+      expect(commandLine).toContain('stdio');
       expect(commandLine).toContain('--model');
       expect(commandLine).toContain('gpt-4o');
       expect(commandLine).toContain('--permission-mode');
@@ -327,7 +331,7 @@ describe('ProcessManager', () => {
           '/d',
           '/s',
           '/c',
-          '"C:\\Users\\Test User\\AppData\\Roaming\\npm\\gakrcli.cmd" --print --output-format stream-json --verbose --input-format stream-json --include-partial-messages',
+          '"C:\\Users\\Test User\\AppData\\Roaming\\npm\\gakrcli.cmd" --print --output-format stream-json --verbose --input-format stream-json --include-partial-messages --permission-prompt-tool stdio',
         ],
         expect.objectContaining({
           cwd: 'C:\\work\\project',

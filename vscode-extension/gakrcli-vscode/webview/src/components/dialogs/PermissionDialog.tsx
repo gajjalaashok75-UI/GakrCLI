@@ -106,7 +106,10 @@ export function PermissionDialog({
   const formattedInput = formatToolInput(request.toolName, request.toolInput);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div
+      className="fixed inset-0 flex items-center justify-center bg-black/50"
+      style={{ zIndex: 1000 }}
+    >
       <div
         className={`w-full max-w-lg mx-4 rounded-lg border ${colors.border} bg-[var(--vscode-editor-background)] shadow-xl`}
       >

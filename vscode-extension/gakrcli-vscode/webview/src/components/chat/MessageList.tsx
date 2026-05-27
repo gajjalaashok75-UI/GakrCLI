@@ -14,6 +14,7 @@ interface MessageListProps {
 
 export function MessageList({ messages, isStreaming, processState, onEditMessage }: MessageListProps) {
   const { containerRef, userScrolledUp, autoScroll, scrollToBottom } = useAutoScroll();
+  const latestAssistantIndex = findLatestAssistantIndex(messages);
 
   // Auto-scroll when messages change or streaming content updates
   useEffect(() => {
@@ -41,14 +42,18 @@ export function MessageList({ messages, isStreaming, processState, onEditMessage
       >
         {/* Message list */}
         <div>
-          {messages.map((msg) => (
+          {messages.map((msg, index) => (
             <div key={msg.id} className="message">
               {msg.role === 'user' ? (
                 <UserMessage message={msg} onEdit={onEditMessage} />
               ) : msg.role === 'system' ? (
                 <SystemMessage text={msg.text ?? ''} />
               ) : (
-                <AssistantMessage message={msg} />
+                <AssistantMessage
+                  message={msg}
+                  isLatest={index === latestAssistantIndex}
+                  isStreaming={isStreaming && index === latestAssistantIndex}
+                />
               )}
             </div>
           ))}
@@ -89,6 +94,15 @@ function hasStreamingBlocks(messages: ChatMessage[]): boolean {
   const last = messages[messages.length - 1];
   if (!last || last.role !== 'assistant') return false;
   return (last.blocks?.length ?? 0) > 0;
+}
+
+function findLatestAssistantIndex(messages: ChatMessage[]): number {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    if (messages[index]?.role === 'assistant') {
+      return index;
+    }
+  }
+  return -1;
 }
 
 function EmptyState() {

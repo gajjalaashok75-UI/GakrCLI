@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react';
-import { fuzzySearch } from '../utils/fuzzySearch';
 
 export interface SlashCommandDef {
   name: string;
@@ -21,9 +20,22 @@ const GAKRCLI_COMMANDS: SlashCommandDef[] = [
 
 /** Merge GakrCLI-specific commands into the list (avoiding duplicates) */
 function mergeGakrCLICommands(cmds: SlashCommandDef[]): SlashCommandDef[] {
-  const existing = new Set(cmds.map((c) => c.name));
-  const toAdd = GAKRCLI_COMMANDS.filter((c) => !existing.has(c.name));
-  return [...cmds, ...toAdd].sort((a, b) => a.name.localeCompare(b.name));
+  const byName = new Map<string, SlashCommandDef>();
+  for (const command of cmds) {
+    const name = command.name.trim().replace(/^\//, '');
+    if (!name || byName.has(name)) {
+      continue;
+    }
+    byName.set(name, { ...command, name });
+  }
+
+  for (const command of GAKRCLI_COMMANDS) {
+    if (!byName.has(command.name)) {
+      byName.set(command.name, command);
+    }
+  }
+
+  return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /**
@@ -76,13 +88,9 @@ export function useSlashCommands(): UseSlashCommandsReturn {
       const q = (query.startsWith('/') ? query.slice(1) : query).trim().toLowerCase();
       const prefixMatches = commands.filter((cmd) => cmd.name.toLowerCase().startsWith(q));
       const includesMatches = commands.filter((cmd) =>
-        !prefixMatches.includes(cmd) &&
-        (cmd.name.toLowerCase().includes(q) || cmd.description.toLowerCase().includes(q)),
+        !prefixMatches.includes(cmd) && cmd.name.toLowerCase().includes(q),
       );
-      const fuzzyMatches = fuzzySearch(q, commands, (cmd) => cmd.name)
-        .map((m) => m.item)
-        .filter((cmd) => !prefixMatches.includes(cmd) && !includesMatches.includes(cmd));
-      return [...prefixMatches, ...includesMatches, ...fuzzyMatches].slice(0, 50);
+      return [...prefixMatches, ...includesMatches].slice(0, 50);
     };
   }, [commands]);
 
