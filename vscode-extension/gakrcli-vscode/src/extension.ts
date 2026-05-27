@@ -187,6 +187,44 @@ export function activate(context: vscode.ExtensionContext) {
     }
   }
 
+  function getActiveEditorMention(): string | undefined {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) return undefined;
+
+    const doc = editor.document;
+    const relativePath = vscode.workspace.asRelativePath(doc.fileName);
+    const selection = editor.selection;
+    if (selection.isEmpty) {
+      return `@${relativePath}`;
+    }
+
+    const startLine = selection.start.line + 1;
+    const endLine = selection.end.line + 1;
+    return startLine !== endLine
+      ? `@${relativePath}#${startLine}-${endLine}`
+      : `@${relativePath}#${startLine}`;
+  }
+
+  function providerStatePayload(error?: string) {
+    const providers = authManager.getAvailableProviders();
+    const current = authManager.getCurrentProvider();
+    return {
+      type: 'provider_state',
+      providers: providers.map((p) => ({
+        id: p.id,
+        label: p.label,
+        requiresApiKey: p.requiresApiKey,
+        requiresBaseUrl: p.requiresBaseUrl,
+        supportsModel: p.supportsModel,
+        defaultBaseUrl: p.defaultBaseUrl,
+      })),
+      currentProviderId: current.id,
+      currentModel: current.model,
+      currentBaseUrl: settingsSync.baseUrl,
+      ...(error ? { error } : {}),
+    };
+  }
+
   /**
    * Ensure the CLI process is running. Spawns it if not already started.
    * Returns the ProcessManager instance.
@@ -828,22 +866,7 @@ export function activate(context: vscode.ExtensionContext) {
   // ==========================================
 
   webviewManager.onMessage('get_provider_state', async (_message, panelId) => {
-    const providers = authManager.getAvailableProviders();
-    const current = authManager.getCurrentProvider();
-    webviewManager!.sendToPanel(panelId, {
-      type: 'provider_state',
-      providers: providers.map((p) => ({
-        id: p.id,
-        label: p.label,
-        requiresApiKey: p.requiresApiKey,
-        requiresBaseUrl: p.requiresBaseUrl,
-        supportsModel: p.supportsModel,
-        defaultBaseUrl: p.defaultBaseUrl,
-      })),
-      currentProviderId: current.id,
-      currentModel: current.model,
-      currentBaseUrl: settingsSync.baseUrl,
-    } as never);
+    webviewManager!.sendToPanel(panelId, providerStatePayload() as never);
   });
 
   webviewManager.onMessage('set_provider', async (message) => {
@@ -859,12 +882,7 @@ export function activate(context: vscode.ExtensionContext) {
       baseUrl: msg.baseUrl,
     });
     if (!validation.valid) {
-      webviewManager!.broadcast({
-        type: 'provider_state',
-        providers: authManager.getAvailableProviders(),
-        currentProviderId: settingsSync.selectedProvider,
-        error: validation.errors.join('; '),
-      } as never);
+      webviewManager!.broadcast(providerStatePayload(validation.errors.join('; ')) as never);
       return;
     }
     await authManager.updateProvider({
@@ -873,23 +891,7 @@ export function activate(context: vscode.ExtensionContext) {
       baseUrl: msg.baseUrl,
       model: msg.model,
     });
-    // Broadcast updated state to all panels
-    const providers = authManager.getAvailableProviders();
-    const current = authManager.getCurrentProvider();
-    webviewManager!.broadcast({
-      type: 'provider_state',
-      providers: providers.map((p) => ({
-        id: p.id,
-        label: p.label,
-        requiresApiKey: p.requiresApiKey,
-        requiresBaseUrl: p.requiresBaseUrl,
-        supportsModel: p.supportsModel,
-        defaultBaseUrl: p.defaultBaseUrl,
-      })),
-      currentProviderId: current.id,
-      currentModel: current.model,
-      currentBaseUrl: settingsSync.baseUrl,
-    } as never);
+    webviewManager!.broadcast(providerStatePayload() as never);
   });
 
   // ==========================================
@@ -1057,22 +1059,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (!webviewManager!.hasVisibleWebview()) {
         await vscode.commands.executeCommand('gakrcli.editor.openLast');
       }
-      const editor = vscode.window.activeTextEditor;
-      if (editor) {
-        const doc = editor.document;
-        const relativePath = vscode.workspace.asRelativePath(doc.fileName);
-        const selection = editor.selection;
-        if (!selection.isEmpty) {
-          const startLine = selection.start.line + 1;
-          const endLine = selection.end.line + 1;
-          const mention = startLine !== endLine
-            ? `@${relativePath}#${startLine}-${endLine}`
-            : `@${relativePath}#${startLine}`;
-          webviewManager!.broadcast({ type: 'at_mention_inserted', text: mention });
-        } else {
-          webviewManager!.broadcast({ type: 'at_mention_inserted', text: '' });
-        }
-      }
+      webviewManager!.broadcast({ type: 'at_mention_inserted', text: getActiveEditorMention() ?? '' });
     }),
   );
 
@@ -1086,21 +1073,8 @@ export function activate(context: vscode.ExtensionContext) {
   // Insert @-mention
   context.subscriptions.push(
     vscode.commands.registerCommand('gakrcli.insertAtMention', async () => {
-      const editor = vscode.window.activeTextEditor;
-      if (!editor) return;
-      const doc = editor.document;
-      const relativePath = vscode.workspace.asRelativePath(doc.fileName);
-      const selection = editor.selection;
-      let mention: string;
-      if (selection.isEmpty) {
-        mention = `@${relativePath}`;
-      } else {
-        const startLine = selection.start.line + 1;
-        const endLine = selection.end.line + 1;
-        mention = startLine !== endLine
-          ? `@${relativePath}#${startLine}-${endLine}`
-          : `@${relativePath}#${startLine}`;
-      }
+      const mention = getActiveEditorMention();
+      if (!mention) return;
       webviewManager!.broadcast({ type: 'at_mention_inserted', text: mention });
     }),
   );
@@ -1193,19 +1167,38 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.executeCommand('workbench.action.openSettingsJson');
   });
 
-  // Remaining commands (not yet implemented)
-  const noopCommands = [
-    'gakrcli.update',
-    'gakrcli.logout',
-    'gakrcli.insertAtMentioned',
-  ];
-  for (const id of noopCommands) {
-    context.subscriptions.push(
-      vscode.commands.registerCommand(id, () => {
-        vscode.window.showInformationMessage('GakrCLI: Coming soon!');
-      }),
-    );
-  }
+  context.subscriptions.push(
+    vscode.commands.registerCommand('gakrcli.update', () => {
+      terminalManager.runCommand(['update'], 'GakrCLI Update');
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('gakrcli.logout', async () => {
+      const choice = await vscode.window.showWarningMessage(
+        'Remove GakrCLI credentials saved in VS Code settings?',
+        { modal: true },
+        'Logout',
+      );
+      if (choice !== 'Logout') return;
+
+      await settingsSync.setApiKey(undefined);
+      await settingsSync.setBaseUrl(undefined);
+      if (processManager) {
+        processManager.write({ type: 'user', message: { role: 'user', content: '/logout' } });
+      }
+      webviewManager!.broadcast(providerStatePayload() as never);
+      vscode.window.showInformationMessage('GakrCLI: VS Code provider credentials cleared.');
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('gakrcli.insertAtMentioned', () => {
+      const mention = getActiveEditorMention();
+      if (!mention) return;
+      terminalManager.sendText(mention);
+    }),
+  );
 
   // Create Worktree (Story 14)
   context.subscriptions.push(

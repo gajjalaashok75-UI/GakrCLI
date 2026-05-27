@@ -60,8 +60,32 @@ export class TerminalManager implements vscode.Disposable {
       flags.push('--permission-mode', permMode);
     }
 
-    this.terminal.sendText([cliCommand, ...flags].join(' '));
+    this.terminal.sendText([quoteShellToken(cliCommand), ...flags.map(quoteShellToken)].join(' '));
     this.terminal.show();
+  }
+
+  /**
+   * Run a one-off GakrCLI command in its own terminal.
+   */
+  runCommand(args: string[], name = 'GakrCLI'): void {
+    const config = vscode.workspace.getConfiguration('gakrcliCode');
+    const cliCommand = resolveCliExecutable(config);
+    const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const terminal = vscode.window.createTerminal({
+      name,
+      cwd,
+      iconPath: new vscode.ThemeIcon('sparkle'),
+    });
+    terminal.sendText([quoteShellToken(cliCommand), ...args.map(quoteShellToken)].join(' '));
+    terminal.show();
+  }
+
+  /**
+   * Send text to the managed GakrCLI terminal without submitting it.
+   */
+  sendText(text: string): void {
+    this.open();
+    this.terminal?.sendText(text, false);
   }
 
   dispose(): void {
@@ -70,4 +94,10 @@ export class TerminalManager implements vscode.Disposable {
       d.dispose();
     }
   }
+}
+
+function quoteShellToken(value: string): string {
+  if (!value) return '""';
+  if (!/[\s"'&()<>^|]/.test(value)) return value;
+  return `"${value.replace(/"/g, '\\"')}"`;
 }

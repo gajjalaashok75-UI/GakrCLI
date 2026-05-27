@@ -11,7 +11,7 @@
 
 ## 1. Overview
 
-A VS Code extension that provides a full-featured AI coding assistant UI by wrapping the GakrCLI CLI (`@gitlawb/gakrcli`). The extension replicates 100% of the Claude Code VS Code extension's features — chat interface, diff viewer, @-mentions, slash commands, session management, provider switching, MCP support, plugins, worktrees, and all other capabilities.
+A VS Code extension that provides a full-featured AI coding assistant UI by wrapping the GakrCLI CLI (`@gakr-gakr/gakrcli`). The extension replicates 100% of the Claude Code VS Code extension's features — chat interface, diff viewer, @-mentions, slash commands, session management, provider switching, MCP support, plugins, worktrees, and all other capabilities.
 
 **Core principle:** The extension is a thin UI + process wrapper. ALL intelligence (tools, providers, slash commands, MCP, plugins) lives in the CLI. The extension renders what the CLI sends and relays user input back.
 

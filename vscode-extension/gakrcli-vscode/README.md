@@ -27,7 +27,7 @@ Modern AI coding assistants are powerful — but they lock you into one provider
 - On an enterprise plan with AWS Bedrock or Vertex AI? Use it.
 - Hitting rate limits? Switch providers mid-session with `/provider`.
 
-GakrCLI is a full-featured **VS Code extension** that wraps the open-source [GakrCLI CLI](https://www.npmjs.com/package/@gitlawb/gakrcli). The CLI is where all the intelligence lives — tool use, provider routing, MCP, slash commands. The extension gives you a first-class editor experience on top: streaming chat panel, native diff viewer, @-mentions, session history, checkpoints, and more.
+GakrCLI is a full-featured **VS Code extension** that wraps the open-source [GakrCLI CLI](https://www.npmjs.com/package/@gakr-gakr/gakrcli). The CLI is where all the intelligence lives — tool use, provider routing, MCP, slash commands. The extension gives you a first-class editor experience on top: streaming chat panel, native diff viewer, @-mentions, session history, checkpoints, and more.
 
 ---
 
@@ -111,7 +111,7 @@ code --install-extension gakrcli-vscode-0.2.5.vsix
 GakrCLI requires the underlying CLI:
 
 ```bash
-npm install -g @gitlawb/gakrcli
+npm install -g @gakr-gakr/gakrcli
 ```
 
 (The extension is a thin UI wrapper — all AI intelligence lives in the CLI.)
@@ -123,7 +123,7 @@ npm install -g @gitlawb/gakrcli
 ### 1. Install the CLI
 
 ```bash
-npm install -g @gitlawb/gakrcli
+npm install -g @gakr-gakr/gakrcli
 ```
 
 ### 2. Configure a provider
@@ -255,7 +255,7 @@ All settings live under `gakrcliCode.*` in VS Code settings:
 └─────────────────────────────────┘
 ```
 
-The extension is deliberately thin. All provider logic, tool execution, MCP server plumbing, and slash-command handling happens inside the CLI — so upgrading the brain means `npm install -g @gitlawb/gakrcli@latest` with no VS Code reinstall needed.
+The extension is deliberately thin. All provider logic, tool execution, MCP server plumbing, and slash-command handling happens inside the CLI — so upgrading the brain means `npm install -g @gakr-gakr/gakrcli@latest` with no VS Code reinstall needed.
 
 ---
 
