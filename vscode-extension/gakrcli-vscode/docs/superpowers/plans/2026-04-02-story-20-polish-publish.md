@@ -563,7 +563,7 @@ AI coding assistant for VS Code powered by any LLM — GPT-4o, Gemini, DeepSeek,
 Install the GakrCLI CLI:
 
 ```bash
-npm install -g @gitlawb/gakrcli
+npm install -g @gakr-gakr/gakrcli
 ```
 
 ## Provider Setup

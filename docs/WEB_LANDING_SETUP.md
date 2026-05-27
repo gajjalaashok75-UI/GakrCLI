@@ -29,11 +29,11 @@ Created a complete Vite + React 19 landing page with:
     - Hero section with pill, wordmark, install command
     - Features section (6 rows in hermes-style format)
     - Install block with copyable command + 3 steps
-    - Footer with brand, version, gitlawb link, license
+    - Footer with brand, version, github link, license
   - `content.ts` - Content configuration:
     - Install command: `npm install -g @gakr-gakr/gakrcli`
     - 6 feature descriptions
-    - Navigation links (features, install, github, gitlawb)
+    - Navigation links (features, install, github, )
   - `styles.css` - Complete styling with:
     - Light theme (default) and dark theme
     - Orange accent colors (#ff7a1a)
@@ -91,13 +91,13 @@ Created GitHub Actions workflow with two jobs:
 ## Design Features
 
 ### Visual Design
-- **Typography:** Monospace (SF Mono / Fira Code) with gitlawb aesthetic
+- **Typography:** Monospace (SF Mono / Fira Code) with github aesthetic
 - **Color Scheme:** Orange accent (#ff7a1a) with dual theme support
 - **Layout:** Clean, terminal-inspired with hairline dividers
 - **Background:** Dual radial gradients for warmth on both themes
 
 ### Hero Section
-- Pill badge: "open source · gitlawb-aligned · model-neutral"
+- Pill badge: "open source · github-aligned · model-neutral"
 - Two-line wordmark: "runs anywhere. / uses anything."
 - Copy-to-clipboard install command
 - GitHub CTA button
@@ -142,7 +142,7 @@ All changes follow the reference implementation from `references/` and are adapt
 - ✅ web typecheck + build added to pr-checks workflow
 - ✅ web/dist/ and web/*.tsbuildinfo ignored in .gitignore
 - ✅ All upstream project-name references replaced with "gakrcli"
-- ✅ All gitlawb links and branding preserved
+- ✅ All github links and branding preserved
 - ✅ Version numbers updated to match current package (v0.5.3)
 
 ## Impact Assessment

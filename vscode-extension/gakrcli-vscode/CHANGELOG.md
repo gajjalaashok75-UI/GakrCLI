@@ -13,6 +13,7 @@ All notable changes to GakrCLI VS Code are documented here.
 
 - Wired extension chat launches to the real GakrCLI stream-json runtime with the IDE MCP server passed through `--mcp-config`, so root `/ide` and headless extension sessions share the same `sse-ide` connection path.
 - Added `~/.gakrcli/.gakrcli-profile.json` fallback discovery when no workspace profile exists, keeping provider/model status aligned with the active GakrCLI profile.
+- Registered real handlers for the update, logout, and terminal-mode at-mention commands so all contributed command and keybinding entries are wired.
 - Removed legacy non-provider Claude naming from the extension runtime, packaged bundle, settings, and generated webview surfaces.
 
 ## [0.2.0] — 2026-04-02
