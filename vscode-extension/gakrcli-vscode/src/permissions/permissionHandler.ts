@@ -11,6 +11,7 @@ import type { WebviewManager } from '../webview/webviewManager';
 import type { PermissionRules } from './permissionRules';
 import type { ControlRequestPermission, ControlRequestSetPermissionMode } from '../types/messages';
 import type { PermissionMode, PermissionResult } from '../types/session';
+import { SELF_HANDLED } from '../process/controlRouter';
 
 /** File edit tool names that are handled by DiffManager, not PermissionHandler */
 const FILE_EDIT_TOOLS = new Set([
@@ -157,7 +158,6 @@ export class PermissionHandler implements vscode.Disposable {
 
     // Response is handled asynchronously via handlePermissionResponse
     // Return a sentinel so ControlRouter knows not to send an automatic response
-    const { SELF_HANDLED } = await import('../process/controlRouter');
     return SELF_HANDLED;
   }
 

@@ -4,6 +4,24 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as readline from 'readline';
 
+const MAX_SANITIZED_LENGTH = 200;
+
+export function sanitizeProjectPathForSessions(cwd: string): string {
+  const sanitized = cwd.replace(/[^a-zA-Z0-9]/g, '-');
+  if (sanitized.length <= MAX_SANITIZED_LENGTH) {
+    return sanitized;
+  }
+  return `${sanitized.slice(0, MAX_SANITIZED_LENGTH)}-${simpleHash(cwd)}`;
+}
+
+function simpleHash(str: string): string {
+  let hash = 0;
+  for (let index = 0; index < str.length; index++) {
+    hash = ((hash << 5) - hash + str.charCodeAt(index)) | 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
 export interface SessionInfo {
   /** UUID — matches the JSONL filename without extension */
   id: string;
@@ -58,7 +76,7 @@ export class SessionTracker implements vscode.Disposable {
 
   /**
    * Derive the project directory name for the current workspace.
-   * Convention: absolute path with all / replaced by - .
+   * This mirrors the root CLI session storage sanitizer.
    * Example: /Users/harsh/workspace/myproject -> -Users-harsh-workspace-myproject
    */
   getProjectDirForWorkspace(): string | undefined {
@@ -66,7 +84,7 @@ export class SessionTracker implements vscode.Disposable {
     if (!folders || folders.length === 0) {
       return undefined;
     }
-    return folders[0].uri.fsPath.replace(/\//g, '-');
+    return sanitizeProjectPathForSessions(folders[0].uri.fsPath);
   }
 
   /** Scan all JSONL files in the current workspace's project directory. */

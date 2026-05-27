@@ -21,6 +21,13 @@ const EMPTY_COST: SessionCost = {
   durationMs: 0,
 };
 
+interface NormalizedUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+}
+
 export interface RateLimitInfo {
   resetsAt: number;       // Unix timestamp seconds
   rateLimitType: string;
@@ -107,10 +114,11 @@ export function useChat() {
 
   const handleUserMessage = useCallback((msg: UserMessage) => {
     const id = msg.uuid || `user-${Date.now()}`;
-    const text =
-      typeof msg.message.content === 'string'
-        ? msg.message.content
-        : '[complex content]';
+    const text = extractUserVisibleText(msg.message.content);
+
+    if (!text) {
+      return;
+    }
 
     const chatMsg: ChatMessage = {
       id,
@@ -220,10 +228,31 @@ export function useChat() {
       model: msg.message.model,
     };
     setMessages((prev) => {
-      // Skip if this message was already loaded from session history
-      if (msg.uuid && prev.some((m) => m.id === msg.uuid)) return prev;
+      const existingIndex = msg.uuid ? prev.findIndex((m) => m.id === msg.uuid) : -1;
+      if (existingIndex >= 0) {
+        return prev.map((m, index) => (index === existingIndex ? { ...m, ...chatMsg } : m));
+      }
+
+      const finalSignature = blocksSignature(blocks);
+      const lastAssistantIndex = findLastAssistantIndex(prev);
+      if (lastAssistantIndex >= 0) {
+        const lastAssistant = prev[lastAssistantIndex]!;
+        const lastSignature = blocksSignature(lastAssistant.blocks ?? []);
+        if (lastSignature === finalSignature) {
+          return prev.map((m, index) =>
+            index === lastAssistantIndex
+              ? { ...m, isStreaming: false, model: chatMsg.model ?? m.model }
+              : m,
+          );
+        }
+      }
+
       return [...prev, chatMsg];
     });
+    if (!streamingUuidRef.current) {
+      setIsStreaming(false);
+      setToolActivity(null);
+    }
   }, []);
 
   const handleResultMessage = useCallback((msg: ResultMessage) => {
@@ -231,15 +260,17 @@ export function useChat() {
     setToolActivity(null);
     streamingUuidRef.current = null;
     resetStream();
+    const usage = normalizeUsage(msg);
+    const msgAny = msg as unknown as Record<string, unknown>;
 
     setCost({
-      totalCostUSD: msg.total_cost_usd,
-      inputTokens: msg.usage?.inputTokens ?? 0,
-      outputTokens: msg.usage?.outputTokens ?? 0,
-      cacheReadTokens: msg.usage?.cacheReadInputTokens ?? 0,
-      cacheCreationTokens: msg.usage?.cacheCreationInputTokens ?? 0,
-      numTurns: msg.num_turns,
-      durationMs: msg.duration_ms,
+      totalCostUSD: readNumber(msgAny, 'total_cost_usd', 'totalCostUsd', 'totalCostUSD') ?? 0,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cacheReadTokens: usage.cacheReadTokens,
+      cacheCreationTokens: usage.cacheCreationTokens,
+      numTurns: readNumber(msgAny, 'num_turns', 'numTurns') ?? 0,
+      durationMs: readNumber(msgAny, 'duration_ms', 'durationMs') ?? 0,
     });
 
     if (msg.is_error) {
@@ -485,7 +516,7 @@ export function useChat() {
               const content = msg?.content ?? entry.content;
               let text = '';
               if (typeof content === 'string') {
-                text = content;
+                text = stripInternalTextWrappers(content);
               } else if (Array.isArray(content)) {
                 // Collect all text blocks (not just the first)
                 const texts: string[] = [];
@@ -494,9 +525,9 @@ export function useChat() {
                     texts.push(b.text);
                   }
                 }
-                text = texts.join('\n') || '[tool interaction]';
+                text = stripInternalTextWrappers(texts.join('\n')) || '[tool interaction]';
               }
-              if (!text) text = '[message]';
+              if (!text) continue;
               historyMsgs.push({
                 id: (entry.uuid as string) || `user-hist-${historyMsgs.length}`,
                 role: 'user',
@@ -569,6 +600,9 @@ export function useChat() {
     setError(null);
     setRateLimitInfo(null);
     setPromptSuggestions([]);
+    setToolActivity(null);
+    setIsStreaming(!isLocalUiCommand(text));
+    streamingUuidRef.current = null;
 
     vscode.postMessage({ type: 'send_prompt', text });
   }, []);
@@ -594,6 +628,8 @@ export function useChat() {
     setRateLimitInfo(null);
     setPromptSuggestions([]);
     setToolActivity(null);
+    setIsStreaming(!isLocalUiCommand(text));
+    streamingUuidRef.current = null;
     resetStream();
 
     vscode.postMessage({ type: 'send_prompt', text });
@@ -639,4 +675,137 @@ export function useChat() {
     clearMessages,
     interrupt,
   };
+}
+
+function isLocalUiCommand(text: string): boolean {
+  return /^\/providers?\s*$/i.test(text.trim());
+}
+
+function extractUserVisibleText(content: UserMessage['message']['content']): string {
+  if (typeof content === 'string') {
+    return stripInternalTextWrappers(content);
+  }
+  if (!Array.isArray(content)) {
+    return '';
+  }
+
+  const text = content
+    .filter((block): block is { type: 'text'; text: string } =>
+      typeof block === 'object' &&
+      block !== null &&
+      (block as Record<string, unknown>).type === 'text' &&
+      typeof (block as Record<string, unknown>).text === 'string',
+    )
+    .map((block) => block.text)
+    .join('\n')
+    .trim();
+
+  return stripInternalTextWrappers(text);
+}
+
+function stripInternalTextWrappers(text: string): string {
+  const trimmed = text.trim();
+  if (/^<local-command-(stdout|stderr)>[\s\S]*<\/local-command-(stdout|stderr)>$/.test(trimmed)) {
+    return '';
+  }
+
+  return trimmed
+    .replace(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/g, '$1')
+    .replace(/<local-command-stderr>([\s\S]*?)<\/local-command-stderr>/g, '$1')
+    .trim();
+}
+
+function blocksSignature(blocks: Array<{ block: unknown }>): string {
+  return JSON.stringify(
+    blocks
+      .map((block) => normalizeBlockForSignature(block.block))
+      .filter((block) => block !== null),
+  );
+}
+
+function normalizeBlockForSignature(block: unknown): unknown {
+  if (!block || typeof block !== 'object') {
+    return block;
+  }
+
+  const record = block as Record<string, unknown>;
+  if (record.type === 'thinking' || record.type === 'redacted_thinking') {
+    return null;
+  }
+
+  if (record.type === 'text' && typeof record.text === 'string') {
+    return {
+      type: 'text',
+      text: stripThinkTagsFromText(record.text),
+    };
+  }
+
+  return record;
+}
+
+function findLastAssistantIndex(messages: ChatMessage[]): number {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    if (messages[index]?.role === 'assistant') {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function normalizeUsage(msg: ResultMessage): NormalizedUsage {
+  const usage = (msg.usage ?? {}) as Record<string, unknown>;
+  const modelUsage = ((msg as unknown as { modelUsage?: unknown; model_usage?: unknown }).modelUsage ??
+    (msg as unknown as { model_usage?: unknown }).model_usage) as Record<string, Record<string, unknown>> | undefined;
+  const aggregate = aggregateModelUsage(modelUsage);
+
+  return {
+    inputTokens: readNumber(usage, 'inputTokens', 'input_tokens') ?? aggregate.inputTokens,
+    outputTokens: readNumber(usage, 'outputTokens', 'output_tokens') ?? aggregate.outputTokens,
+    cacheReadTokens:
+      readNumber(usage, 'cacheReadInputTokens', 'cache_read_input_tokens') ?? aggregate.cacheReadTokens,
+    cacheCreationTokens:
+      readNumber(usage, 'cacheCreationInputTokens', 'cache_creation_input_tokens') ??
+      aggregate.cacheCreationTokens,
+  };
+}
+
+function aggregateModelUsage(modelUsage: Record<string, Record<string, unknown>> | undefined): NormalizedUsage {
+  const total: NormalizedUsage = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheCreationTokens: 0,
+  };
+
+  if (!modelUsage || typeof modelUsage !== 'object') {
+    return total;
+  }
+
+  for (const usage of Object.values(modelUsage)) {
+    total.inputTokens += readNumber(usage, 'inputTokens', 'input_tokens') ?? 0;
+    total.outputTokens += readNumber(usage, 'outputTokens', 'output_tokens') ?? 0;
+    total.cacheReadTokens += readNumber(usage, 'cacheReadInputTokens', 'cache_read_input_tokens') ?? 0;
+    total.cacheCreationTokens +=
+      readNumber(usage, 'cacheCreationInputTokens', 'cache_creation_input_tokens') ?? 0;
+  }
+
+  return total;
+}
+
+function readNumber(record: Record<string, unknown>, ...keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function stripThinkTagsFromText(text: string): string {
+  return text
+    .replace(/<(think|thinking|reasoning)(?:\s[^>]*)?>[\s\S]*?<\/\1>/gi, '')
+    .replace(/<(think|thinking|reasoning)(?:\s[^>]*)?>[\s\S]*$/gi, '')
+    .replace(/<\/(think|thinking|reasoning)>/gi, '')
+    .trim();
 }

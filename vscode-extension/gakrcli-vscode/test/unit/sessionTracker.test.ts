@@ -2,6 +2,19 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { sanitizeProjectPathForSessions } from '../../src/session/sessionTracker';
+
+describe('SessionTracker project path sanitizer', () => {
+  it('matches the root CLI sanitizer for Windows workspace paths', () => {
+    expect(sanitizeProjectPathForSessions('C:\\Users\\gajja\\Downloads\\temp'))
+      .toBe('C--Users-gajja-Downloads-temp');
+  });
+
+  it('matches the root CLI sanitizer for POSIX workspace paths', () => {
+    expect(sanitizeProjectPathForSessions('/Users/gajja/project'))
+      .toBe('-Users-gajja-project');
+  });
+});
 
 /**
  * Tests for SessionTracker parsing and grouping logic.

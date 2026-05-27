@@ -134,7 +134,7 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
       )}
 
       {/* Copy button — on all assistant messages */}
-      {messageRole === 'assistant' && (
+      {(messageRole === 'assistant' || messageRole === 'user') && content && (
         <ActionButton
           label={showCopied ? 'Copied!' : 'Copy message'}
           icon={

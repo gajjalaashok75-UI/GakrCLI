@@ -241,6 +241,76 @@ textarea.input {
   margin: 0 auto;
 }
 
+.composer-shell {
+  flex-shrink: 0;
+  min-width: 0;
+  padding: 12px 16px;
+}
+
+.composer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  width: 100%;
+  max-width: 680px;
+  min-width: 0;
+  margin: 6px auto 0;
+  padding: 0 4px;
+  overflow: visible;
+}
+
+.composer-footer-left,
+.composer-footer-right {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.composer-footer-left {
+  flex: 1 1 260px;
+}
+
+.composer-footer-right {
+  flex: 0 1 auto;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.composer-footer button {
+  max-width: 100%;
+}
+
+.composer-footer button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 520px) {
+  .composer-shell {
+    padding: 8px 10px 10px;
+  }
+
+  .composer-footer {
+    align-items: flex-start;
+    padding: 0;
+  }
+
+  .composer-footer-left,
+  .composer-footer-right {
+    width: 100%;
+  }
+
+  .composer-footer-right {
+    justify-content: flex-start;
+    margin-left: 0;
+  }
+}
+
 /* Focus ring — orange by default, changes per permission mode */
 .input-container:focus-within {
   --focus-ring-color: var(--app-brand-accent);
@@ -429,6 +499,11 @@ details[open] .thinking-toggle {
   40% { opacity: 1; }
 }
 
+@keyframes caretBlink {
+  0%, 45% { opacity: 0.75; }
+  46%, 100% { opacity: 0; }
+}
+
 /* Error banner slide-down */
 @keyframes slideDown {
   0% { opacity: 0; transform: translateY(-4px); }
@@ -468,6 +543,20 @@ details[open] .thinking-toggle {
 
 .messages-container:focus {
   outline: none;
+}
+
+.message-actions-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 2px;
+  min-height: 22px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.group:hover .message-actions-row,
+.group:focus-within .message-actions-row {
+  opacity: 1;
 }
 
 /* ============================================================
@@ -740,6 +829,18 @@ details[open] .thinking-toggle {
   white-space: pre-wrap;
   margin-top: 0.1em;
   margin-bottom: 0.2em;
+}
+
+.streaming-caret {
+  display: inline-block;
+  width: 7px;
+  height: 1.15em;
+  margin-left: 2px;
+  vertical-align: -0.18em;
+  border-radius: 1px;
+  background: var(--app-primary-foreground);
+  opacity: 0.75;
+  animation: caretBlink 1s steps(2, start) infinite;
 }
 
 .markdown-body h1, .markdown-body h2, .markdown-body h3,

@@ -228,7 +228,7 @@ export function ChatPanel() {
       />
 
       {/* Input area */}
-      <div style={{ padding: '12px 16px', flexShrink: 0 }}>
+      <div className="composer-shell">
         <div className="input-wrapper">
           <div
             className="input-container"
@@ -248,8 +248,8 @@ export function ChatPanel() {
         </div>
 
         {/* Footer: permission mode + cost + provider */}
-        <div style={{ marginTop: 6, paddingLeft: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className="composer-footer">
+          <div className="composer-footer-left">
             <PermissionModeIndicator
               currentMode={permissionMode}
               onModeChange={handleModeChange}
@@ -266,7 +266,7 @@ export function ChatPanel() {
               }}
             />
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div className="composer-footer-right">
             <button
               onClick={() => setShowMcpManager(true)}
               title="MCP Servers"
@@ -327,6 +327,8 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
   const { filteredCommands, isLoaded: slashCommandsLoaded } = useSlashCommands();
   const [slashMenuVisible, setSlashMenuVisible] = useState(false);
   const [slashQuery, setSlashQuery] = useState('');
+  const slashCommands = filteredCommands(slashQuery);
+  const hasVisibleSlashMenu = slashMenuVisible && (!slashCommandsLoaded || slashCommands.length > 0);
   const { results: atResults, isLoading: atLoading, query: queryAtMentions, clear: clearAtMentions } = useAtMentions();
   const [atPickerVisible, setAtPickerVisible] = useState(false);
   const atStartPosRef = useRef(-1);
@@ -368,7 +370,7 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // If a picker is open, let it handle arrow keys / enter
-    if (atPickerVisible || slashMenuVisible) {
+    if (atPickerVisible || hasVisibleSlashMenu) {
       if (['ArrowUp', 'ArrowDown', 'Enter', 'Tab'].includes(e.key)) {
         return; // pickers handle these via capture listener
       }
@@ -549,8 +551,8 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
         onDismiss={() => { setAtPickerVisible(false); clearAtMentions(); }}
       />
       <SlashCommandMenu
-        commands={filteredCommands(slashQuery)}
-        isVisible={slashMenuVisible}
+        commands={slashCommands}
+        isVisible={hasVisibleSlashMenu}
         isLoaded={slashCommandsLoaded}
         query={slashQuery}
         onSelect={handleSlashSelect}

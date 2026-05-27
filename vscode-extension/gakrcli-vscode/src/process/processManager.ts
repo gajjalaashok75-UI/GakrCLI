@@ -403,6 +403,7 @@ export class ProcessManager {
       '--verbose',
       '--input-format',
       'stream-json',
+      '--include-partial-messages',
     ];
 
     if (this.options.model) {
@@ -534,12 +535,18 @@ export class ProcessManager {
 
     // Handle incoming control_request from CLI (permission, elicitation, etc.)
     if (message.type === 'control_request') {
+      for (const cb of this.messageCallbacks) {
+        cb(message);
+      }
       this.router?.handleControlRequest(message as SDKControlRequest);
       return;
     }
 
     // Handle cancel requests
     if (message.type === 'control_cancel_request') {
+      for (const cb of this.messageCallbacks) {
+        cb(message);
+      }
       this.router?.handleControlCancelRequest(
         message as SDKControlCancelRequest,
       );
