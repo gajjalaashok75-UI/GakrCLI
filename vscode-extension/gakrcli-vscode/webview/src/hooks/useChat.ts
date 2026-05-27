@@ -573,6 +573,32 @@ export function useChat() {
     vscode.postMessage({ type: 'send_prompt', text });
   }, []);
 
+  const editMessage = useCallback((uuid: string, newContent: string) => {
+    const text = newContent.trim();
+    if (!text) return;
+
+    setMessages((prev) => {
+      const index = prev.findIndex((message) => message.id === uuid);
+      if (index === -1) return prev;
+
+      return [
+        ...prev.slice(0, index),
+        {
+          ...prev[index]!,
+          text,
+          timestamp: Date.now(),
+        },
+      ];
+    });
+    setError(null);
+    setRateLimitInfo(null);
+    setPromptSuggestions([]);
+    setToolActivity(null);
+    resetStream();
+
+    vscode.postMessage({ type: 'send_prompt', text });
+  }, [resetStream]);
+
   const clearMessages = useCallback(() => {
     setMessages([]);
     setSessionTitle(null);
@@ -609,6 +635,7 @@ export function useChat() {
     setEffortLevel,
     toolActivity,
     sendMessage,
+    editMessage,
     clearMessages,
     interrupt,
   };

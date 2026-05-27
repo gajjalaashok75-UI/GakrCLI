@@ -70,6 +70,20 @@ function makeAncestorPidLookup(): () => Promise<Set<number>> {
   }
 }
 
+function normalizeIdePathForComparison(path: string): string {
+  const normalized = resolve(path).normalize('NFC')
+  return getPlatform() === 'windows' ? normalized.toLowerCase() : normalized
+}
+
+function pathContainsWorkspace(cwd: string, workspacePath: string): boolean {
+  const normalizedCwd = normalizeIdePathForComparison(cwd)
+  const normalizedWorkspacePath = normalizeIdePathForComparison(workspacePath)
+  return (
+    normalizedCwd === normalizedWorkspacePath ||
+    normalizedCwd.startsWith(normalizedWorkspacePath + pathSeparator)
+  )
+}
+
 type LockfileJsonContent = {
   workspaceFolders?: string[]
   pid?: number
@@ -719,11 +733,7 @@ export async function detectIDEs(
 
             // Try both the original path and the converted path
             // This handles cases where the IDE might report either format
-            const resolvedOriginal = resolve(localPath).normalize('NFC')
-            if (
-              cwd === resolvedOriginal ||
-              cwd.startsWith(resolvedOriginal + pathSeparator)
-            ) {
+            if (pathContainsWorkspace(cwd, localPath)) {
               return true
             }
 
@@ -734,26 +744,7 @@ export async function detectIDEs(
             localPath = converter.toLocalPath(idePath)
           }
 
-          const resolvedPath = resolve(localPath).normalize('NFC')
-
-          // On Windows, normalize paths for case-insensitive drive letter comparison
-          if (getPlatform() === 'windows') {
-            const normalizedCwd = cwd.replace(/^[a-zA-Z]:/, match =>
-              match.toUpperCase(),
-            )
-            const normalizedResolvedPath = resolvedPath.replace(
-              /^[a-zA-Z]:/,
-              match => match.toUpperCase(),
-            )
-            return (
-              normalizedCwd === normalizedResolvedPath ||
-              normalizedCwd.startsWith(normalizedResolvedPath + pathSeparator)
-            )
-          }
-
-          return (
-            cwd === resolvedPath || cwd.startsWith(resolvedPath + pathSeparator)
-          )
+          return pathContainsWorkspace(cwd, localPath)
         })
       }
 

@@ -19,6 +19,12 @@ export interface ProviderDefinition {
   requiresBaseUrl: boolean;
   supportsModel: boolean;
   defaultBaseUrl?: string;
+  credentialEnvVar?: string;
+  modelEnvVar?: string;
+  mode?: 'anthropic' | 'openai-compatible' | 'gemini' | 'mistral' | 'github' | 'bedrock' | 'vertex' | 'codex';
+  extraEnv?: Record<string, string>;
+  mirrorApiKeyToOpenAI?: boolean;
+  localApiKeyFallback?: string;
 }
 
 export interface ProviderConfig {
@@ -51,13 +57,110 @@ const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
     requiresApiKey: true,
     requiresBaseUrl: false,
     supportsModel: true,
+    credentialEnvVar: 'ANTHROPIC_API_KEY',
+    modelEnvVar: 'ANTHROPIC_MODEL',
+    mode: 'anthropic',
   },
   {
-    id: 'openai',
-    label: 'OpenAI',
+    id: 'dashscope-cn',
+    label: 'Alibaba Coding Plan (China)',
     requiresApiKey: true,
     requiresBaseUrl: false,
     supportsModel: true,
+    defaultBaseUrl: 'https://coding.dashscope.aliyuncs.com/v1',
+    credentialEnvVar: 'DASHSCOPE_API_KEY',
+    mode: 'openai-compatible',
+  },
+  {
+    id: 'dashscope-intl',
+    label: 'Alibaba Coding Plan',
+    requiresApiKey: true,
+    requiresBaseUrl: false,
+    supportsModel: true,
+    defaultBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/v1',
+    credentialEnvVar: 'DASHSCOPE_API_KEY',
+    mode: 'openai-compatible',
+  },
+  {
+    id: 'azure-openai',
+    label: 'Azure OpenAI',
+    requiresApiKey: true,
+    requiresBaseUrl: true,
+    supportsModel: true,
+    defaultBaseUrl: 'https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1',
+    credentialEnvVar: 'AZURE_OPENAI_API_KEY',
+    mode: 'openai-compatible',
+  },
+  {
+    id: 'bankr',
+    label: 'Bankr',
+    requiresApiKey: true,
+    requiresBaseUrl: false,
+    supportsModel: true,
+    defaultBaseUrl: 'https://llm.bankr.bot/v1',
+    credentialEnvVar: 'BNKR_API_KEY',
+    mode: 'openai-compatible',
+    mirrorApiKeyToOpenAI: true,
+  },
+  {
+    id: 'deepseek',
+    label: 'DeepSeek',
+    requiresApiKey: true,
+    requiresBaseUrl: false,
+    supportsModel: true,
+    defaultBaseUrl: 'https://api.deepseek.com/v1',
+    credentialEnvVar: 'DEEPSEEK_API_KEY',
+    mode: 'openai-compatible',
+  },
+  {
+    id: 'gemini',
+    label: 'Google Gemini',
+    requiresApiKey: true,
+    requiresBaseUrl: false,
+    supportsModel: true,
+    credentialEnvVar: 'GEMINI_API_KEY',
+    modelEnvVar: 'GEMINI_MODEL',
+    mode: 'gemini',
+  },
+  {
+    id: 'groq',
+    label: 'Groq',
+    requiresApiKey: true,
+    requiresBaseUrl: false,
+    supportsModel: true,
+    defaultBaseUrl: 'https://api.groq.com/openai/v1',
+    credentialEnvVar: 'GROQ_API_KEY',
+    mode: 'openai-compatible',
+  },
+  {
+    id: 'hicap',
+    label: 'Hicap',
+    requiresApiKey: true,
+    requiresBaseUrl: false,
+    supportsModel: true,
+    defaultBaseUrl: 'https://api.hicap.ai/v1',
+    credentialEnvVar: 'HICAP_API_KEY',
+    mode: 'openai-compatible',
+  },
+  {
+    id: 'lmstudio',
+    label: 'LM Studio',
+    requiresApiKey: false,
+    requiresBaseUrl: false,
+    supportsModel: true,
+    defaultBaseUrl: 'http://localhost:1234/v1',
+    mode: 'openai-compatible',
+    localApiKeyFallback: 'lmstudio',
+  },
+  {
+    id: 'atomic-chat',
+    label: 'Atomic Chat',
+    requiresApiKey: false,
+    requiresBaseUrl: false,
+    supportsModel: true,
+    defaultBaseUrl: 'http://127.0.0.1:1337/v1',
+    mode: 'openai-compatible',
+    localApiKeyFallback: 'atomic-chat',
   },
   {
     id: 'ollama',
@@ -66,21 +169,143 @@ const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
     requiresBaseUrl: false,
     supportsModel: true,
     defaultBaseUrl: 'http://localhost:11434/v1',
+    mode: 'openai-compatible',
+    localApiKeyFallback: 'ollama',
   },
   {
-    id: 'gemini',
-    label: 'Google Gemini',
-    requiresApiKey: true,
-    requiresBaseUrl: true,
-    supportsModel: true,
-  },
-  {
-    id: 'codex',
-    label: 'Codex (ChatGPT)',
+    id: 'minimax',
+    label: 'MiniMax',
     requiresApiKey: true,
     requiresBaseUrl: false,
     supportsModel: true,
-    defaultBaseUrl: 'https://api.codex.openai.com/v1',
+    defaultBaseUrl: 'https://api.minimax.io/v1',
+    credentialEnvVar: 'MINIMAX_API_KEY',
+    mode: 'openai-compatible',
+    mirrorApiKeyToOpenAI: true,
+  },
+  {
+    id: 'mistral',
+    label: 'Mistral AI',
+    requiresApiKey: true,
+    requiresBaseUrl: false,
+    supportsModel: true,
+    defaultBaseUrl: 'https://api.mistral.ai/v1',
+    credentialEnvVar: 'MISTRAL_API_KEY',
+    modelEnvVar: 'MISTRAL_MODEL',
+    mode: 'mistral',
+  },
+  {
+    id: 'moonshotai',
+    label: 'Moonshot AI - API',
+    requiresApiKey: true,
+    requiresBaseUrl: false,
+    supportsModel: true,
+    defaultBaseUrl: 'https://api.moonshot.ai/v1',
+    credentialEnvVar: 'MOONSHOT_API_KEY',
+    mode: 'openai-compatible',
+  },
+  {
+    id: 'kimi-code',
+    label: 'Moonshot AI - Kimi Code',
+    requiresApiKey: true,
+    requiresBaseUrl: false,
+    supportsModel: true,
+    defaultBaseUrl: 'https://api.kimi.com/coding/v1',
+    credentialEnvVar: 'KIMI_API_KEY',
+    mode: 'openai-compatible',
+  },
+  {
+    id: 'nvidia-nim',
+    label: 'NVIDIA NIM',
+    requiresApiKey: true,
+    requiresBaseUrl: false,
+    supportsModel: true,
+    defaultBaseUrl: 'https://integrate.api.nvidia.com/v1',
+    credentialEnvVar: 'NVIDIA_API_KEY',
+    mode: 'openai-compatible',
+    extraEnv: { NVIDIA_NIM: '1' },
+    mirrorApiKeyToOpenAI: true,
+  },
+  {
+    id: 'openai',
+    label: 'OpenAI',
+    requiresApiKey: true,
+    requiresBaseUrl: false,
+    supportsModel: true,
+    credentialEnvVar: 'OPENAI_API_KEY',
+    mode: 'openai-compatible',
+  },
+  {
+    id: 'openrouter',
+    label: 'OpenRouter',
+    requiresApiKey: true,
+    requiresBaseUrl: false,
+    supportsModel: true,
+    defaultBaseUrl: 'https://openrouter.ai/api/v1',
+    credentialEnvVar: 'OPENROUTER_API_KEY',
+    mode: 'openai-compatible',
+  },
+  {
+    id: 'together',
+    label: 'Together AI',
+    requiresApiKey: true,
+    requiresBaseUrl: false,
+    supportsModel: true,
+    defaultBaseUrl: 'https://api.together.xyz/v1',
+    credentialEnvVar: 'TOGETHER_API_KEY',
+    mode: 'openai-compatible',
+  },
+  {
+    id: 'venice',
+    label: 'Venice',
+    requiresApiKey: true,
+    requiresBaseUrl: false,
+    supportsModel: true,
+    defaultBaseUrl: 'https://api.venice.ai/api/v1',
+    credentialEnvVar: 'VENICE_API_KEY',
+    mode: 'openai-compatible',
+    mirrorApiKeyToOpenAI: true,
+  },
+  {
+    id: 'xai',
+    label: 'xAI',
+    requiresApiKey: false,
+    requiresBaseUrl: false,
+    supportsModel: true,
+    defaultBaseUrl: 'https://api.x.ai/v1',
+    credentialEnvVar: 'XAI_API_KEY',
+    mode: 'openai-compatible',
+    mirrorApiKeyToOpenAI: true,
+  },
+  {
+    id: 'xiaomi-mimo',
+    label: 'Xiaomi MiMo',
+    requiresApiKey: true,
+    requiresBaseUrl: false,
+    supportsModel: true,
+    defaultBaseUrl: 'https://api.xiaomimimo.com/v1',
+    credentialEnvVar: 'MIMO_API_KEY',
+    mode: 'openai-compatible',
+    mirrorApiKeyToOpenAI: true,
+  },
+  {
+    id: 'zai',
+    label: 'Z.AI',
+    requiresApiKey: true,
+    requiresBaseUrl: false,
+    supportsModel: true,
+    defaultBaseUrl: 'https://api.z.ai/api/coding/paas/v4',
+    credentialEnvVar: 'OPENAI_API_KEY',
+    mode: 'openai-compatible',
+  },
+  {
+    id: 'custom',
+    label: 'Custom OpenAI-compatible',
+    requiresApiKey: false,
+    requiresBaseUrl: true,
+    supportsModel: true,
+    credentialEnvVar: 'OPENAI_API_KEY',
+    mode: 'openai-compatible',
   },
   {
     id: 'bedrock',
@@ -88,6 +313,7 @@ const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
     requiresApiKey: false,
     requiresBaseUrl: false,
     supportsModel: true,
+    mode: 'bedrock',
   },
   {
     id: 'vertex',
@@ -95,20 +321,27 @@ const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
     requiresApiKey: false,
     requiresBaseUrl: false,
     supportsModel: true,
+    mode: 'vertex',
   },
   {
     id: 'github',
-    label: 'GitHub Models',
-    requiresApiKey: true,
+    label: 'GitHub Copilot',
+    requiresApiKey: false,
     requiresBaseUrl: false,
     supportsModel: true,
+    defaultBaseUrl: 'https://api.githubcopilot.com',
+    credentialEnvVar: 'GITHUB_TOKEN',
+    mode: 'github',
   },
   {
-    id: 'custom',
-    label: 'Custom (OpenAI-compatible)',
-    requiresApiKey: true,
-    requiresBaseUrl: true,
+    id: 'codex',
+    label: 'Codex (ChatGPT)',
+    requiresApiKey: false,
+    requiresBaseUrl: false,
     supportsModel: true,
+    defaultBaseUrl: 'https://api.codex.openai.com/v1',
+    credentialEnvVar: 'CODEX_API_KEY',
+    mode: 'codex',
   },
 ];
 
@@ -225,40 +458,57 @@ export class AuthManager {
   ): Record<string, string> {
     const env: Record<string, string> = {};
 
-    switch (def.id) {
+    switch (def.mode ?? def.id) {
       case 'anthropic':
-        if (apiKey) env['ANTHROPIC_API_KEY'] = apiKey;
+        if (apiKey && def.credentialEnvVar) env[def.credentialEnvVar] = apiKey;
         break;
 
-      case 'openai':
-        if (apiKey) env['OPENAI_API_KEY'] = apiKey;
-        if (baseUrl) env['OPENAI_BASE_URL'] = baseUrl;
-        env['GAKR_CODE_USE_OPENAI'] = '1';
+      case 'bedrock':
+        env['GAKR_CODE_USE_BEDROCK'] = '1';
         break;
 
-      case 'ollama':
-        env['OPENAI_BASE_URL'] = baseUrl || def.defaultBaseUrl!;
-        env['OPENAI_API_KEY'] = 'ollama';
-        env['GAKR_CODE_USE_OPENAI'] = '1';
+      case 'vertex':
+        env['GAKR_CODE_USE_VERTEX'] = '1';
         break;
 
       case 'gemini':
-        if (apiKey) env['GEMINI_API_KEY'] = apiKey;
+        if (apiKey && def.credentialEnvVar) env[def.credentialEnvVar] = apiKey;
         if (baseUrl) env['GEMINI_BASE_URL'] = baseUrl;
         env['GAKR_CODE_USE_GEMINI'] = '1';
         break;
 
+      case 'mistral':
+        if (apiKey && def.credentialEnvVar) env[def.credentialEnvVar] = apiKey;
+        if (baseUrl || def.defaultBaseUrl) env['MISTRAL_BASE_URL'] = baseUrl || def.defaultBaseUrl!;
+        env['GAKR_CODE_USE_MISTRAL'] = '1';
+        break;
+
+      case 'github':
+        if (apiKey && def.credentialEnvVar) env[def.credentialEnvVar] = apiKey;
+        env['GAKR_CODE_USE_GITHUB'] = '1';
+        break;
+
       case 'codex':
-        if (apiKey) env['CODEX_API_KEY'] = apiKey;
-        if (baseUrl) env['OPENAI_BASE_URL'] = baseUrl;
-        else if (def.defaultBaseUrl) env['OPENAI_BASE_URL'] = def.defaultBaseUrl;
+        if (apiKey && def.credentialEnvVar) env[def.credentialEnvVar] = apiKey;
+        if (baseUrl || def.defaultBaseUrl) env['OPENAI_BASE_URL'] = baseUrl || def.defaultBaseUrl!;
         env['GAKR_CODE_USE_OPENAI'] = '1';
         break;
 
-      case 'custom':
-        if (apiKey) env['OPENAI_API_KEY'] = apiKey;
-        if (baseUrl) env['OPENAI_BASE_URL'] = baseUrl;
+      case 'openai-compatible':
+        if (apiKey && def.credentialEnvVar) {
+          env[def.credentialEnvVar] = apiKey;
+        }
+        if (apiKey && (def.mirrorApiKeyToOpenAI || def.credentialEnvVar === 'OPENAI_API_KEY')) {
+          env['OPENAI_API_KEY'] = apiKey;
+        }
+        if (!apiKey && def.localApiKeyFallback) {
+          env['OPENAI_API_KEY'] = def.localApiKeyFallback;
+        }
+        if (baseUrl || def.defaultBaseUrl) {
+          env['OPENAI_BASE_URL'] = baseUrl || def.defaultBaseUrl!;
+        }
         env['GAKR_CODE_USE_OPENAI'] = '1';
+        Object.assign(env, def.extraEnv);
         break;
     }
 
@@ -296,8 +546,16 @@ function labelForProfile(profile: string): string {
     openai: 'OpenAI',
     ollama: 'Ollama',
     gemini: 'Google Gemini',
-    mistral: 'Mistral',
-    github: 'GitHub Models',
+    'dashscope-cn': 'Alibaba Coding Plan (China)',
+    'dashscope-intl': 'Alibaba Coding Plan',
+    'azure-openai': 'Azure OpenAI',
+    bankr: 'Bankr',
+    groq: 'Groq',
+    hicap: 'Hicap',
+    lmstudio: 'LM Studio',
+    'atomic-chat': 'Atomic Chat',
+    mistral: 'Mistral AI',
+    github: 'GitHub Copilot',
     bedrock: 'AWS Bedrock',
     vertex: 'Google Vertex AI',
     foundry: 'Foundry',
@@ -312,7 +570,7 @@ function labelForProfile(profile: string): string {
     'kimi-code': 'Moonshot AI - Kimi Code',
     deepseek: 'DeepSeek',
     openrouter: 'OpenRouter',
-    'atomic-chat': 'Atomic Chat',
+    together: 'Together AI',
   };
   return labels[profile] ?? profile;
 }

@@ -14,8 +14,8 @@ interface UserMessageProps {
  */
 export function UserMessage({ message, onEdit }: UserMessageProps) {
   return (
-    <div style={{ textAlign: 'left', position: 'relative', width: '100%' }}>
-      <div className="group" style={{ display: 'inline-block', position: 'relative', margin: '4px 0' }}>
+    <div style={{ display: 'flex', justifyContent: 'flex-end', position: 'relative', width: '100%' }}>
+      <div className="group" style={{ display: 'inline-block', position: 'relative', margin: '4px 0', maxWidth: '88%' }}>
         <div className="user-message-bubble">
           {message.text || ''}
         </div>
