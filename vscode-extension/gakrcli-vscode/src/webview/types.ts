@@ -20,6 +20,8 @@ export interface ReadyMessage {
 export interface SendPromptMessage {
   type: 'send_prompt';
   text: string;
+  uuid?: string;
+  priority?: 'now' | 'next' | 'later';
   attachments?: Attachment[];
   mentions?: Mention[];
 }

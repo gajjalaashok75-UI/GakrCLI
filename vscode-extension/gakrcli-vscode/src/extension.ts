@@ -344,6 +344,10 @@ export function activate(context: vscode.ExtensionContext) {
           statusBarManager.setPendingPermission(true);
         }
       }
+      if (msgObj.type === 'control_cancel_request' && typeof msgObj.request_id === 'string') {
+        permissionHandler.handleCancel(msgObj.request_id);
+        statusBarManager.setPendingPermission(false);
+      }
 
       // StatusBar: detect result while panel is hidden → orange dot
       if (msgObj.type === 'result' || msgObj.subtype === 'result') {
@@ -540,6 +544,8 @@ export function activate(context: vscode.ExtensionContext) {
         role: 'user',
         content: message.text,
       },
+      uuid: typeof message.uuid === 'string' ? message.uuid : undefined,
+      priority: message.priority,
     });
   });
 
@@ -740,6 +746,10 @@ export function activate(context: vscode.ExtensionContext) {
           statusBarManager.setPendingPermission(true);
         }
       }
+      if (msgObj.type === 'control_cancel_request' && typeof msgObj.request_id === 'string') {
+        permissionHandler.handleCancel(msgObj.request_id);
+        statusBarManager.setPendingPermission(false);
+      }
 
       // StatusBar: detect result while panel is hidden → orange dot
       if (msgObj.type === 'result' || msgObj.subtype === 'result') {
@@ -794,6 +804,25 @@ export function activate(context: vscode.ExtensionContext) {
       sessionId: message.sessionId,
       success: ok,
     } as never);
+    if (ok) {
+      const grouped = sessionTracker.getGroupedSessions();
+      webviewManager!.broadcast({
+        type: 'sessionsData',
+        grouped: grouped.map((g) => ({
+          group: g.group,
+          sessions: g.sessions.map((s) => ({
+            id: s.id,
+            title: s.title,
+            model: s.model,
+            timestamp: s.timestamp.toISOString(),
+            createdAt: s.createdAt.toISOString(),
+            messageCount: s.messageCount,
+            cwd: s.cwd,
+            gitBranch: s.gitBranch,
+          })),
+        })),
+      } as never);
+    }
   });
 
   // ==========================================

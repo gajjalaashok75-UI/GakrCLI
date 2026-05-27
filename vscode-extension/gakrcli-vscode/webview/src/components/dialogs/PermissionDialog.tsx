@@ -107,11 +107,24 @@ export function PermissionDialog({
 
   return (
     <div
-      className="fixed inset-0 flex items-center justify-center bg-black/50"
-      style={{ zIndex: 1000 }}
+      className="fixed flex justify-center"
+      style={{
+        zIndex: 1000,
+        left: 10,
+        right: 10,
+        bottom: 112,
+        pointerEvents: 'none',
+      }}
     >
       <div
-        className={`w-full max-w-lg mx-4 rounded-lg border ${colors.border} bg-[var(--vscode-editor-background)] shadow-xl`}
+        className={`w-full max-w-2xl rounded-lg border ${colors.border} bg-[var(--vscode-editor-background)] shadow-xl`}
+        style={{
+          pointerEvents: 'auto',
+          maxHeight: 'min(48vh, 420px)',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
       >
         {/* Header */}
         <div className={`px-4 py-3 rounded-t-lg ${colors.bg} border-b ${colors.border}`}>
@@ -141,7 +154,7 @@ export function PermissionDialog({
         </div>
 
         {/* Body */}
-        <div className="px-4 py-3 max-h-64 overflow-y-auto">
+        <div className="px-4 py-3 overflow-y-auto" style={{ minHeight: 0 }}>
           {/* Decision reason */}
           {request.decisionReason && (
             <div className="mb-2 text-xs text-[var(--vscode-descriptionForeground)] italic">

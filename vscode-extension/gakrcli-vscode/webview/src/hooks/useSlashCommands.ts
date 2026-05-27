@@ -13,13 +13,13 @@ interface UseSlashCommandsReturn {
 }
 
 /** GakrCLI-specific commands that are always available */
-const GAKRCLI_COMMANDS: SlashCommandDef[] = [
+export const GAKRCLI_COMMANDS: SlashCommandDef[] = [
   { name: 'provider', description: 'Set up and save a third-party provider profile', argumentHint: '' },
   { name: 'providers', description: 'Set up and save a third-party provider profile', argumentHint: '' },
 ];
 
 /** Merge GakrCLI-specific commands into the list (avoiding duplicates) */
-function mergeGakrCLICommands(cmds: SlashCommandDef[]): SlashCommandDef[] {
+export function mergeGakrCLICommands(cmds: SlashCommandDef[]): SlashCommandDef[] {
   const byName = new Map<string, SlashCommandDef>();
   for (const command of cmds) {
     const name = command.name.trim().replace(/^\//, '');
@@ -36,6 +36,15 @@ function mergeGakrCLICommands(cmds: SlashCommandDef[]): SlashCommandDef[] {
   }
 
   return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function filterSlashCommands(commands: SlashCommandDef[], query: string): SlashCommandDef[] {
+  if (!query) return commands;
+
+  const q = (query.startsWith('/') ? query.slice(1) : query).trim().toLowerCase();
+  return commands
+    .filter((cmd) => cmd.name.toLowerCase().startsWith(q))
+    .slice(0, 50);
 }
 
 /**
@@ -82,22 +91,14 @@ export function useSlashCommands(): UseSlashCommandsReturn {
 
   const filteredCommands = useMemo(() => {
     return (query: string): SlashCommandDef[] => {
-      if (!query) return commands;
-
-      // Strip leading / if present
-      const q = (query.startsWith('/') ? query.slice(1) : query).trim().toLowerCase();
-      const prefixMatches = commands.filter((cmd) => cmd.name.toLowerCase().startsWith(q));
-      const includesMatches = commands.filter((cmd) =>
-        !prefixMatches.includes(cmd) && cmd.name.toLowerCase().includes(q),
-      );
-      return [...prefixMatches, ...includesMatches].slice(0, 50);
+      return filterSlashCommands(commands, query);
     };
   }, [commands]);
 
   return { commands, filteredCommands, isLoaded };
 }
 
-function normalizeCommands(value: unknown): SlashCommandDef[] {
+export function normalizeCommands(value: unknown): SlashCommandDef[] {
   if (!Array.isArray(value)) {
     return [];
   }

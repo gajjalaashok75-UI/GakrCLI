@@ -1,5 +1,5 @@
 import type { ChatMessage, RenderableBlock } from '../../types/chat';
-import type { TextBlock, ToolUseBlock, ServerToolUseBlock } from '../../types/messages';
+import type { TextBlock, ToolUseBlock, ServerToolUseBlock, ToolResultBlock as ToolResultContentBlock } from '../../types/messages';
 import { MarkdownRenderer } from '../shared/MarkdownRenderer';
 import { ToolCallBlock } from './ToolCallBlock';
 import { ContentBlockRouter } from '../blocks/ContentBlockRouter';
@@ -85,6 +85,13 @@ function BlockRenderer({ renderableBlock, isMessageStreaming: _isMessageStreamin
         />
       );
 
+    case 'tool_result':
+      return (
+        <ToolResultBlock
+          block={block as ToolResultContentBlock}
+        />
+      );
+
     case 'thinking':
     case 'redacted_thinking':
     case 'image':
@@ -105,6 +112,35 @@ function BlockRenderer({ renderableBlock, isMessageStreaming: _isMessageStreamin
           <pre>{JSON.stringify(block, null, 2)}</pre>
         </div>
       );
+  }
+}
+
+function ToolResultBlock({ block }: { block: ToolResultContentBlock }) {
+  const content = formatToolResultContent(block.content);
+  const preview = content.length > 160 ? `${content.slice(0, 157)}...` : content;
+
+  return (
+    <details className={`my-1 rounded border border-vscode-border overflow-hidden ${block.is_error ? 'border-red-500/40' : ''}`}>
+      <summary className="flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer bg-[var(--vscode-editorGroupHeader-tabsBackground)] hover:bg-[var(--vscode-list-hoverBackground)]">
+        <span className="opacity-60">Result</span>
+        {block.is_error && <span className="text-red-400">Error</span>}
+        {!block.is_error && <span className="ml-auto opacity-40">{preview || 'No output'}</span>}
+      </summary>
+      <pre className="m-0 px-3 py-2 text-xs font-mono whitespace-pre-wrap break-words bg-[var(--vscode-editor-background)] max-h-56 overflow-auto">
+        {content || 'No output'}
+      </pre>
+    </details>
+  );
+}
+
+function formatToolResultContent(content: ToolResultContentBlock['content']): string {
+  if (typeof content === 'string') {
+    return content;
+  }
+  try {
+    return JSON.stringify(content, null, 2);
+  } catch {
+    return String(content);
   }
 }
 

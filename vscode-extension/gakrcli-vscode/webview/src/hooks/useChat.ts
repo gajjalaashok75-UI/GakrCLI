@@ -10,6 +10,19 @@ import type {
   ResultMessage,
   SystemInitMessage,
 } from '../types/messages';
+import {
+  attachToolResults,
+  blocksSignature,
+  blocksSoftSignature,
+  extractToolResultBlocks,
+  extractUserVisibleText,
+  formatFilesPersistedMessage,
+  isToolUseBlock,
+  mergeExistingToolResults,
+  normalizeRenderableBlocks,
+  normalizeTextContentBlock,
+  stripInternalTextWrappers,
+} from '../utils/chatMessageTransforms';
 
 const EMPTY_COST: SessionCost = {
   totalCostUSD: 0,
@@ -111,9 +124,22 @@ export function useChat() {
 
   const { processStreamEvent, resetStream } = useStream();
   const streamingUuidRef = useRef<string | null>(null);
+  const activeToolUseIdsRef = useRef<Set<string>>(new Set());
 
   const handleUserMessage = useCallback((msg: UserMessage) => {
     const id = msg.uuid || `user-${Date.now()}`;
+    const toolResults = extractToolResultBlocks(msg.message.content);
+    if (toolResults.length > 0) {
+      setMessages((prev) => attachToolResults(prev, toolResults));
+      for (const result of toolResults) {
+        activeToolUseIdsRef.current.delete(result.tool_use_id);
+      }
+      if (activeToolUseIdsRef.current.size === 0) {
+        setToolActivity(null);
+      }
+      return;
+    }
+
     const text = extractUserVisibleText(msg.message.content);
 
     if (!text) {
@@ -163,18 +189,22 @@ export function useChat() {
         case 'block_stop': {
           const uuid = streamingUuidRef.current;
           if (!uuid) break;
+          const displayBlocks = normalizeRenderableBlocks(update.blocks);
           setMessages((prev) =>
             prev.map((msg) =>
-              msg.id === uuid ? { ...msg, blocks: update.blocks } : msg,
+              msg.id === uuid ? { ...msg, blocks: displayBlocks } : msg,
             ),
           );
           // Extract tool activity from tool_use blocks
-          if (update.type === 'block_start' && update.blocks) {
-            const latestBlock = update.blocks[update.blocks.length - 1];
+          if (update.type === 'block_start' && displayBlocks) {
+            const latestBlock = displayBlocks[displayBlocks.length - 1];
             if (latestBlock) {
               const block = latestBlock.block;
               if (block.type === 'tool_use' || block.type === 'server_tool_use') {
                 const toolInput = (block as { input?: Record<string, unknown> }).input;
+                if (typeof block.id === 'string') {
+                  activeToolUseIdsRef.current.add(block.id);
+                }
                 setToolActivity({
                   toolName: block.name,
                   description: formatToolActivity(block.name, undefined, toolInput),
@@ -187,34 +217,50 @@ export function useChat() {
 
         case 'message_stop': {
           const uuid = streamingUuidRef.current;
+          const stoppedBlocks = normalizeRenderableBlocks(update.blocks ?? []);
           if (uuid) {
             setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === uuid
-                  ? {
-                      ...msg,
-                      isStreaming: false,
-                      blocks: msg.blocks?.map((b) => ({ ...b, isStreaming: false })),
-                    }
-                  : msg,
-              ),
+              prev.map((msg) => {
+                if (msg.id === uuid) {
+                  return {
+                    ...msg,
+                    isStreaming: false,
+                    blocks: msg.blocks?.map((b) => ({ ...b, isStreaming: false })),
+                  };
+                }
+                return msg;
+              }),
             );
           }
-          setIsStreaming(false);
-          setToolActivity(null);
+          const waitingForTools =
+            activeToolUseIdsRef.current.size > 0 ||
+            stoppedBlocks.some((b) => isToolUseBlock(b.block));
+
+          if (waitingForTools) {
+            setIsStreaming(true);
+            if (!toolActivity) {
+              setToolActivity({
+                toolName: 'Tool',
+                description: 'Waiting for tool result...',
+              });
+            }
+          } else {
+            setIsStreaming(false);
+            setToolActivity(null);
+          }
           streamingUuidRef.current = null;
           resetStream();
           break;
         }
       }
     },
-    [processStreamEvent, resetStream],
+    [processStreamEvent, resetStream, toolActivity],
   );
 
   const handleAssistantMessage = useCallback((msg: AssistantMessage) => {
     const blocks = (msg.message.content || []).map((block, index) => ({
       index,
-      block,
+      block: normalizeTextContentBlock(block),
       isStreaming: false,
     }));
 
@@ -230,18 +276,32 @@ export function useChat() {
     setMessages((prev) => {
       const existingIndex = msg.uuid ? prev.findIndex((m) => m.id === msg.uuid) : -1;
       if (existingIndex >= 0) {
-        return prev.map((m, index) => (index === existingIndex ? { ...m, ...chatMsg } : m));
+        return prev.map((m, index) =>
+          index === existingIndex
+            ? { ...m, ...chatMsg, blocks: mergeExistingToolResults(blocks, m.blocks ?? []) }
+            : m,
+        );
       }
 
       const finalSignature = blocksSignature(blocks);
-      const lastAssistantIndex = findLastAssistantIndex(prev);
-      if (lastAssistantIndex >= 0) {
-        const lastAssistant = prev[lastAssistantIndex]!;
-        const lastSignature = blocksSignature(lastAssistant.blocks ?? []);
-        if (lastSignature === finalSignature) {
-          return prev.map((m, index) =>
-            index === lastAssistantIndex
-              ? { ...m, blocks, isStreaming: false, model: chatMsg.model ?? m.model }
+      const finalSoftSignature = blocksSoftSignature(blocks);
+      for (let index = prev.length - 1, checked = 0; index >= 0 && checked < 8; index--) {
+        const candidate = prev[index];
+        if (!candidate || candidate.role !== 'assistant') continue;
+        checked++;
+        const candidateBlocks = candidate.blocks ?? [];
+        if (
+          blocksSignature(candidateBlocks) === finalSignature ||
+          (finalSoftSignature && blocksSoftSignature(candidateBlocks) === finalSoftSignature)
+        ) {
+          return prev.map((m, msgIndex) =>
+            msgIndex === index
+              ? {
+                  ...m,
+                  blocks: mergeExistingToolResults(blocks, candidateBlocks),
+                  isStreaming: false,
+                  model: chatMsg.model ?? m.model,
+                }
               : m,
           );
         }
@@ -249,7 +309,7 @@ export function useChat() {
 
       return [...prev, chatMsg];
     });
-    if (!streamingUuidRef.current) {
+    if (!streamingUuidRef.current && activeToolUseIdsRef.current.size === 0) {
       setIsStreaming(false);
       setToolActivity(null);
     }
@@ -258,6 +318,7 @@ export function useChat() {
   const handleResultMessage = useCallback((msg: ResultMessage) => {
     setIsStreaming(false);
     setToolActivity(null);
+    activeToolUseIdsRef.current.clear();
     streamingUuidRef.current = null;
     resetStream();
     const usage = normalizeUsage(msg);
@@ -274,7 +335,6 @@ export function useChat() {
     });
 
     if (msg.is_error) {
-      // Parse rate limit from result text e.g. "You've hit your limit · resets 3am (America/New_York)"
       const resultText = (msg as unknown as Record<string, unknown>).result as string | undefined;
       if (resultText) {
         setError(resultText);
@@ -309,7 +369,6 @@ export function useChat() {
       },
     ]);
   }, []);
-
   useEffect(() => {
     const handler = (event: MessageEvent) => {
       const data = event.data;
@@ -396,6 +455,7 @@ export function useChat() {
                 toolName,
                 description: formatToolActivity(toolName, progress, undefined),
               });
+              setIsStreaming(true);
             }
             // Don't add a message for every progress tick — just update streaming state
             if (progress) {
@@ -478,8 +538,10 @@ export function useChat() {
                   addSystemMessage(msgAny.text, `permission-${Date.now()}`);
                 }
                 break;
-              // hook_started, hook_response, session_state_changed, files_persisted
-              // — handled by extension host, ignore in webview
+              case 'files_persisted':
+                addSystemMessage(formatFilesPersistedMessage(msgAny), `files-${Date.now()}`);
+                break;
+              // Other system events are handled by the extension host.
               default:
                 break;
             }
@@ -519,6 +581,13 @@ export function useChat() {
                 ? entry.message as Record<string, unknown>
                 : null;
               const content = msg?.content ?? entry.content;
+              const toolResults = extractToolResultBlocks(content as UserMessage['message']['content']);
+              if (toolResults.length > 0) {
+                const attachedMessages = attachToolResults(historyMsgs, toolResults);
+                historyMsgs.splice(0, historyMsgs.length, ...attachedMessages);
+                continue;
+              }
+
               let text = '';
               if (typeof content === 'string') {
                 text = stripInternalTextWrappers(content);
@@ -530,7 +599,7 @@ export function useChat() {
                     texts.push(b.text);
                   }
                 }
-                text = stripInternalTextWrappers(texts.join('\n')) || '[tool interaction]';
+                text = stripInternalTextWrappers(texts.join('\n'));
               }
               if (!text) continue;
               historyMsgs.push({
@@ -590,7 +659,7 @@ export function useChat() {
     if (!text.trim()) return;
 
     // Optimistically add user message
-    const id = `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const id = createUserMessageId();
     setMessages((prev) => [
       ...prev,
       {
@@ -605,16 +674,24 @@ export function useChat() {
     setError(null);
     setRateLimitInfo(null);
     setPromptSuggestions([]);
-    setToolActivity(null);
+    if (!isStreaming) {
+      setToolActivity(null);
+    }
     setIsStreaming(!isLocalUiCommand(text));
     streamingUuidRef.current = null;
 
-    vscode.postMessage({ type: 'send_prompt', text });
-  }, []);
+    vscode.postMessage({
+      type: 'send_prompt',
+      text,
+      uuid: id,
+      priority: isStreaming ? 'next' : undefined,
+    });
+  }, [isStreaming]);
 
   const editMessage = useCallback((uuid: string, newContent: string) => {
     const text = newContent.trim();
     if (!text) return;
+    const newId = isUuid(uuid) ? uuid : createUserMessageId();
 
     setMessages((prev) => {
       const index = prev.findIndex((message) => message.id === uuid);
@@ -624,6 +701,7 @@ export function useChat() {
         ...prev.slice(0, index),
         {
           ...prev[index]!,
+          id: newId,
           text,
           timestamp: Date.now(),
         },
@@ -637,8 +715,13 @@ export function useChat() {
     streamingUuidRef.current = null;
     resetStream();
 
-    vscode.postMessage({ type: 'send_prompt', text });
-  }, [resetStream]);
+    vscode.postMessage({
+      type: 'send_prompt',
+      text,
+      uuid: newId,
+      priority: isStreaming ? 'next' : undefined,
+    });
+  }, [isStreaming, resetStream]);
 
   const clearMessages = useCallback(() => {
     setMessages([]);
@@ -686,91 +769,19 @@ function isLocalUiCommand(text: string): boolean {
   return /^\/providers?\s*$/i.test(text.trim());
 }
 
-function extractUserVisibleText(content: UserMessage['message']['content']): string {
-  if (typeof content === 'string') {
-    return stripInternalTextWrappers(content);
+function createUserMessageId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
   }
-  if (!Array.isArray(content)) {
-    return '';
-  }
-
-  const text = content
-    .filter((block): block is { type: 'text'; text: string } =>
-      typeof block === 'object' &&
-      block !== null &&
-      (block as Record<string, unknown>).type === 'text' &&
-      typeof (block as Record<string, unknown>).text === 'string',
-    )
-    .map((block) => block.text)
-    .join('\n')
-    .trim();
-
-  return stripInternalTextWrappers(text);
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    const random = Math.floor(Math.random() * 16);
+    const value = char === 'x' ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
 }
 
-function stripInternalTextWrappers(text: string): string {
-  const trimmed = text.trim();
-  if (/^<local-command-(stdout|stderr)>[\s\S]*<\/local-command-(stdout|stderr)>$/.test(trimmed)) {
-    return '';
-  }
-
-  return trimmed
-    .replace(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/g, '$1')
-    .replace(/<local-command-stderr>([\s\S]*?)<\/local-command-stderr>/g, '$1')
-    .trim();
-}
-
-function blocksSignature(blocks: Array<{ block: unknown }>): string {
-  return JSON.stringify(
-    blocks
-      .map((block) => normalizeBlockForSignature(block.block))
-      .filter((block) => block !== null),
-  );
-}
-
-function normalizeBlockForSignature(block: unknown): unknown {
-  if (!block || typeof block !== 'object') {
-    return block;
-  }
-
-  const record = block as Record<string, unknown>;
-  if (record.type === 'thinking' || record.type === 'redacted_thinking') {
-    return null;
-  }
-
-  if (record.type === 'text' && typeof record.text === 'string') {
-    return {
-      type: 'text',
-      text: stripThinkTagsFromText(record.text),
-    };
-  }
-
-  if (record.type === 'tool_use' || record.type === 'server_tool_use') {
-    return {
-      type: record.type,
-      id: record.id,
-      name: record.name,
-    };
-  }
-
-  if (record.type === 'tool_result') {
-    return {
-      type: record.type,
-      tool_use_id: record.tool_use_id,
-      is_error: record.is_error,
-    };
-  }
-
-  return record;
-}
-
-function findLastAssistantIndex(messages: ChatMessage[]): number {
-  for (let index = messages.length - 1; index >= 0; index--) {
-    if (messages[index]?.role === 'assistant') {
-      return index;
-    }
-  }
-  return -1;
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function normalizeUsage(msg: ResultMessage): NormalizedUsage {
@@ -821,13 +832,4 @@ function readNumber(record: Record<string, unknown>, ...keys: string[]): number 
     }
   }
   return undefined;
-}
-
-function stripThinkTagsFromText(text: string): string {
-  return text
-    .replace(/<(think|thinking|reasoning)(?:\s[^>]*)?>[\s\S]*?<\/\1>/gi, '')
-    .replace(/<(think|thinking|reasoning)(?:\s[^>]*)?>[\s\S]*$/gi, '')
-    .replace(/^[\s\S]*?<\/(think|thinking|reasoning)>\s*/i, '')
-    .replace(/<\/(think|thinking|reasoning)>/gi, '')
-    .trim();
 }

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { sanitizeProjectPathForSessions } from '../../src/session/sessionTracker';
+import { SessionTracker, sanitizeProjectPathForSessions } from '../../src/session/sessionTracker';
 
 describe('SessionTracker project path sanitizer', () => {
   it('matches the root CLI sanitizer for Windows workspace paths', () => {
@@ -108,6 +108,51 @@ describe('SessionTracker — JSONL parsing', () => {
       .map((l) => JSON.parse(l));
     const countable = lines.filter((l) => l.type === 'user' && !l.isMeta);
     expect(countable).toHaveLength(1);
+  });
+
+  it('does not count tool_result user entries as chat messages but keeps them for history replay', async () => {
+    const tracker = new SessionTracker();
+    const filePath = writeJsonl('session-tool-results', [
+      {
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          model: 'gpt-5.4',
+          content: [
+            { type: 'tool_use', id: 'toolu_1', name: 'WebSearch', input: { query: 'india news' } },
+          ],
+        },
+        timestamp: '2026-05-27T10:00:00.000Z',
+      },
+      {
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [
+            { type: 'tool_result', tool_use_id: 'toolu_1', content: 'search results' },
+          ],
+        },
+        timestamp: '2026-05-27T10:00:01.000Z',
+        isMeta: false,
+      },
+      {
+        type: 'user',
+        message: { role: 'user', content: 'Tell me the latest news' },
+        timestamp: '2026-05-27T10:00:02.000Z',
+        isMeta: false,
+      },
+    ]);
+
+    await tracker.parseSessionFile(filePath);
+
+    const session = tracker.getSession('session-tool-results');
+    expect(session?.messageCount).toBe(2);
+    expect(session?.title).toBe('Tell me the latest news');
+
+    const replayMessages = await tracker.loadSessionMessages('session-tool-results');
+    expect(replayMessages.map((entry) => entry.type)).toEqual(['assistant', 'user', 'user']);
+    expect(JSON.stringify(replayMessages[1])).toContain('tool_result');
+    tracker.dispose();
   });
 
   it('should prefer ai-title over first user message for session title', () => {

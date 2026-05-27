@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { vscode } from '../vscode';
+import { removeDeletedSessionFromGroups, removeDeletedSessionFromList } from '../utils/sessionState';
 
 export interface SessionData {
   id: string;
@@ -64,6 +65,10 @@ export function useSession(): UseSessionReturn {
           break;
         }
         case 'sessionDeleted': {
+          if (msg.success && typeof msg.sessionId === 'string') {
+            setAllSessions((prev) => removeDeletedSessionFromList(prev, msg.sessionId as string));
+            setGroupedSessions((prev) => removeDeletedSessionFromGroups(prev, msg.sessionId as string));
+          }
           if (msg.success && msg.sessionId === activeSessionId) {
             setActiveSessionId(null);
             setSessionTitle('New Conversation');

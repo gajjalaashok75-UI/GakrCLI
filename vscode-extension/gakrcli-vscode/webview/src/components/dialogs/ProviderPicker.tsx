@@ -111,13 +111,13 @@ export function ProviderPicker({
           border: '1px solid var(--vscode-panel-border)',
           borderRadius: 6,
           padding: 20,
-          width: 360,
+          width: 'min(560px, 92vw)',
           maxWidth: '90vw',
           maxHeight: '88vh',
           display: 'flex',
           flexDirection: 'column',
           gap: 14,
-          overflow: 'hidden',
+          overflowY: 'auto',
         }}
       >
         <div style={{ fontSize: 13, fontWeight: 600 }}>Select Provider</div>
@@ -130,6 +130,7 @@ export function ProviderPicker({
             gap: 4,
             flex: '1 1 auto',
             minHeight: 0,
+            maxHeight: '42vh',
             overflowY: 'auto',
             paddingRight: 2,
           }}
