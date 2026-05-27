@@ -103,7 +103,7 @@ code --install-extension gakr-gakr.gakrcli-vscode
 Download the latest `.vsix` from [Releases](https://github.com/gajjalaashok75-UI/gakrcli-vscode/releases), then:
 
 ```bash
-code --install-extension gakrcli-vscode-0.2.1.vsix
+code --install-extension gakrcli-vscode-0.2.2.vsix
 ```
 
 ### Prerequisites
