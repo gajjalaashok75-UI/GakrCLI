@@ -6,7 +6,7 @@
 	"publisher": "gakr-gakr",
 	"license": "MIT",
 	"bugs": {
-		"url": "https://github.com/gakr-gakr/gakrcli/issues"
+		"url": "https://github.com/gajjalaashok75-UI/gakrcli-vscode/issues"
 	},
 	"engines": {
 		"vscode": "^1.94.0"

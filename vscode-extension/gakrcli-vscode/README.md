@@ -100,7 +100,7 @@ code --install-extension gakr-gakr.gakrcli-vscode
 
 ### From a `.vsix` file (latest dev build)
 
-Download the latest `.vsix` from [Releases](https://github.com/gakr-gakr/gakrcli/releases), then:
+Download the latest `.vsix` from [Releases](https://github.com/gajjalaashok75-UI/gakrcli-vscode/releases), then:
 
 ```bash
 code --install-extension gakrcli-vscode-0.2.1.vsix
@@ -262,8 +262,8 @@ The extension is deliberately thin. All provider logic, tool execution, MCP serv
 ## Contributing
 
 ```bash
-git clone https://github.com/gakr-gakr/gakrcli
-cd gakrcli/vscode-extension/gakrcli-vscode
+git clone https://github.com/gajjalaashok75-UI/gakrcli-vscode
+cd gakrcli-vscode
 npm install
 cd webview && npm install && cd ..
 npm run build
@@ -291,7 +291,7 @@ npx @vscode/vsce login gakr-gakr
 npx @vscode/vsce publish
 ```
 
-Issues and PRs welcome — see the [issue tracker](https://github.com/gakr-gakr/gakrcli/issues).
+Issues and PRs welcome — see the [issue tracker](https://github.com/gajjalaashok75-UI/gakrcli-vscode/issues).
 
 ---
 
