@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter as NodeEventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
+import { readFileSync } from 'node:fs';
 
 // Mock child_process.spawn before importing ProcessManager
 const mockSpawn = vi.fn();
@@ -241,7 +242,9 @@ describe('ProcessManager', () => {
       const args = mockSpawn.mock.calls[0]?.[1] as string[];
       const configIndex = args.indexOf('--mcp-config');
       expect(configIndex).toBeGreaterThanOrEqual(0);
-      const config = JSON.parse(args[configIndex + 1] ?? '{}');
+      const configPath = args[configIndex + 1];
+      expect(configPath).toContain('mcp-config.json');
+      const config = JSON.parse(readFileSync(configPath!, 'utf8'));
       expect(config).toEqual({
         mcpServers: {
           ide: {
@@ -332,7 +335,7 @@ describe('ProcessManager', () => {
       );
     });
 
-    it('should quote inline IDE MCP config when launching through cmd.exe', () => {
+    it('should pass an IDE MCP config file when launching through cmd.exe', () => {
       setPlatform('win32');
       process.env.ComSpec = 'C:\\Windows\\System32\\cmd.exe';
 
@@ -346,8 +349,8 @@ describe('ProcessManager', () => {
 
       const commandLine = mockSpawn.mock.calls[0]?.[1]?.[3] as string;
       expect(commandLine).toContain('--mcp-config');
-      expect(commandLine).toContain('{""mcpServers"":{""ide"":{""type"":""sse-ide""');
-      expect(commandLine).toContain('http://127.0.0.1:49152/sse');
+      expect(commandLine).toContain('mcp-config.json');
+      expect(commandLine).not.toContain('{""mcpServers""');
     });
   });
 
@@ -396,6 +399,17 @@ describe('ProcessManager', () => {
 
       await expect(spawnPromise).rejects.toThrow(
         'GakrCLI exited before initialize completed',
+      );
+    });
+
+    it('includes stderr tail when initialize exits early', async () => {
+      const spawnPromise = manager.spawn() as Promise<unknown>;
+      mockProc.stderr.write('Cannot find module dist/cli.mjs\n');
+      await new Promise((r) => setTimeout(r, 10));
+      mockProc.emit('exit', 1, null);
+
+      await expect(spawnPromise).rejects.toThrow(
+        'Cannot find module dist/cli.mjs',
       );
     });
 

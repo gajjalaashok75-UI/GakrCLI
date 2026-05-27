@@ -136,7 +136,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(statusBarManager);
 
   // Terminal manager for terminal mode
-  const terminalManager = new TerminalManager();
+  const terminalManager = new TerminalManager(context.extensionPath);
   context.subscriptions.push(terminalManager);
 
   // === Checkpoint manager (Story 10) ===
@@ -265,7 +265,10 @@ export function activate(context: vscode.ExtensionContext) {
     webviewManager!.broadcast({ type: 'process_state', state: 'starting' });
 
     const config = vscode.workspace.getConfiguration('gakrcliCode');
-    const launchCommand = resolveCliLaunchCommand(config, workspaceFolder.uri.fsPath);
+    const launchCommand = resolveCliLaunchCommand(config, {
+      workspaceFolder: workspaceFolder.uri.fsPath,
+      extensionPath: context.extensionPath,
+    });
     // Use the permission handler's current mode (reflects user's UI selection),
     // falling back to the config default only on first launch
     const handlerMode = permissionHandler.getMode();
@@ -633,7 +636,10 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     const config = vscode.workspace.getConfiguration('gakrcliCode');
-    const launchCommand = resolveCliLaunchCommand(config, workspaceFolder.uri.fsPath);
+    const launchCommand = resolveCliLaunchCommand(config, {
+      workspaceFolder: workspaceFolder.uri.fsPath,
+      extensionPath: context.extensionPath,
+    });
     const model = config.get<string>('selectedModel');
     const permissionMode = config.get<string>('initialPermissionMode') as
       | 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions' | 'dontAsk' | undefined;
@@ -821,7 +827,10 @@ export function activate(context: vscode.ExtensionContext) {
       if (!workspaceFolder) return;
       const launchCommand = resolveCliLaunchCommand(
         vscode.workspace.getConfiguration('gakrcliCode'),
-        workspaceFolder.uri.fsPath,
+        {
+          workspaceFolder: workspaceFolder.uri.fsPath,
+          extensionPath: context.extensionPath,
+        },
       );
       const forkPm = new ProcessManager({
         cwd: workspaceFolder.uri.fsPath,
@@ -847,7 +856,10 @@ export function activate(context: vscode.ExtensionContext) {
       if (!workspaceFolder) return;
       const launchCommand = resolveCliLaunchCommand(
         vscode.workspace.getConfiguration('gakrcliCode'),
-        workspaceFolder.uri.fsPath,
+        {
+          workspaceFolder: workspaceFolder.uri.fsPath,
+          extensionPath: context.extensionPath,
+        },
       );
       const forkPm = new ProcessManager({
         cwd: workspaceFolder.uri.fsPath,
