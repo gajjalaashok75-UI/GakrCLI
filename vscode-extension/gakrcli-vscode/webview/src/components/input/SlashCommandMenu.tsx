@@ -34,7 +34,7 @@ export function SlashCommandMenu({
   }, [selectedIndex]);
 
   useEffect(() => {
-    if (!isVisible) return;
+    if (!isVisible || (isLoaded && commands.length === 0)) return;
     const handler = (e: KeyboardEvent) => {
       switch (e.key) {
         case 'ArrowDown':
@@ -70,8 +70,8 @@ export function SlashCommandMenu({
   if (!isLoaded) {
     return (
       <div style={{
-        position: 'absolute', bottom: '100%', left: 0, marginBottom: 4,
-        width: 384, borderRadius: 'var(--corner-radius-medium)',
+        position: 'absolute', bottom: '100%', left: 0, right: 0, marginBottom: 4,
+        borderRadius: 'var(--corner-radius-medium)',
         border: '1px solid var(--app-input-border)',
         background: 'var(--app-menu-background)',
         boxShadow: '0 4px 12px rgba(0,0,0,0.3)', zIndex: 50,
@@ -83,29 +83,16 @@ export function SlashCommandMenu({
     );
   }
 
-  // No commands matched
   if (commands.length === 0) {
-    return (
-      <div style={{
-        position: 'absolute', bottom: '100%', left: 0, marginBottom: 4,
-        width: 384, borderRadius: 'var(--corner-radius-medium)',
-        border: '1px solid var(--app-input-border)',
-        background: 'var(--app-menu-background)',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.3)', zIndex: 50,
-        padding: '12px 16px',
-        fontSize: 12, color: 'var(--app-secondary-foreground)',
-      }}>
-        No commands found{query ? ` for "${query}"` : ''}.
-      </div>
-    );
+    return null;
   }
 
   return (
     <div
       ref={listRef}
       style={{
-        position: 'absolute', bottom: '100%', left: 0, marginBottom: 4,
-        width: 384, maxHeight: 288, overflowY: 'auto',
+        position: 'absolute', bottom: '100%', left: 0, right: 0, marginBottom: 4,
+        maxHeight: 288, overflowY: 'auto',
         borderRadius: 'var(--corner-radius-medium)',
         border: '1px solid var(--app-input-border)',
         background: 'var(--app-menu-background)',

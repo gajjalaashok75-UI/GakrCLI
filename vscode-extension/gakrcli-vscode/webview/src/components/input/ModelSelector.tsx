@@ -25,7 +25,7 @@ export function ModelSelector({ currentModel, availableModels }: ModelSelectorPr
   if (availableModels.length === 0) return null;
 
   return (
-    <div ref={ref} style={{ position: 'relative', display: 'inline-flex' }}>
+    <div ref={ref} style={{ position: 'relative', display: 'inline-flex', minWidth: 0 }}>
       <button
         onClick={() => setIsOpen(!isOpen)}
         title={`Model: ${displayName}`}
@@ -36,13 +36,16 @@ export function ModelSelector({ currentModel, availableModels }: ModelSelectorPr
           border: '1px solid var(--app-input-border)',
           borderRadius: 'var(--corner-radius-small)',
           color: 'var(--app-secondary-foreground)',
-          cursor: 'pointer', whiteSpace: 'nowrap',
+          cursor: 'pointer',
+          whiteSpace: 'nowrap',
+          minWidth: 0,
+          maxWidth: 210,
         }}
       >
         <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" style={{ opacity: 0.6 }}>
           <path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 1.5a5.5 5.5 0 110 11 5.5 5.5 0 010-11zM7 5v4.5l.5.5H11v-1H8V5H7z"/>
         </svg>
-        <span>{shortName}</span>
+        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{shortName}</span>
         <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor" style={{ opacity: 0.6 }}>
           <path d="M1 2.5l3 3 3-3" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/>
         </svg>

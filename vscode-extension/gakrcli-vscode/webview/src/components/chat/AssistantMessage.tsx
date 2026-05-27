@@ -26,19 +26,6 @@ export function AssistantMessage({ message, isLatest = false, isStreaming = fals
   return (
     <div className="group relative" style={{ width: '100%' }}>
       {/* Message actions (hover) */}
-      <div className="absolute top-2 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
-        <MessageActions
-          messageRole="assistant"
-          content={plainTextContent}
-          uuid={message.id}
-          isFailed={false}
-          isStreaming={isStreaming || message.isStreaming}
-          isLatest={isLatest}
-          onRetry={onRetry}
-          onStop={onStop}
-        />
-      </div>
-
       {/* Content blocks — no header/label, just content */}
       <div>
         {blocks.map((renderableBlock) => (
@@ -49,6 +36,21 @@ export function AssistantMessage({ message, isLatest = false, isStreaming = fals
           />
         ))}
       </div>
+
+      {plainTextContent && (
+        <div className="message-actions-row">
+          <MessageActions
+            messageRole="assistant"
+            content={plainTextContent}
+            uuid={message.id}
+            isFailed={false}
+            isStreaming={isStreaming || message.isStreaming}
+            isLatest={isLatest}
+            onRetry={onRetry}
+            onStop={onStop}
+          />
+        </div>
+      )}
     </div>
   );
 }

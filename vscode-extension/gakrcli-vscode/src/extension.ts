@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { WebviewManager } from './webview/webviewManager';
 import { GakrCLIWebviewProvider, GakrCLIPanelSerializer } from './webview/webviewProvider';
 import { ProcessManager, ProcessState } from './process/processManager';
+import { SELF_HANDLED } from './process/controlRouter';
 import { createDiffContentProviders } from './diff/diffContentProvider';
 import { DiffManager } from './diff/diffManager';
 import { createCanUseToolHandler } from './diff/diffHandler';
@@ -324,7 +325,6 @@ export function activate(context: vscode.ExtensionContext) {
           fields: (req.fields as unknown[]) ?? [],
         } as never);
         // Response is sent asynchronously when user submits/cancels the dialog
-        const { SELF_HANDLED } = await import('./process/controlRouter');
         return SELF_HANDLED;
       },
     );
@@ -337,14 +337,7 @@ export function activate(context: vscode.ExtensionContext) {
       output.info(`[CLI→Webview] ${JSON.stringify(msg).substring(0, 300)}`);
       webviewManager!.broadcast({ type: 'cli_output', data: msg });
 
-      // StatusBar: set pending permission on permission_request, clear on response
       const msgObj = msg as Record<string, unknown>;
-      if (msgObj.type === 'control_request') {
-        const req = msgObj.request as Record<string, unknown> | undefined;
-        if (req?.subtype === 'can_use_tool') {
-          statusBarManager.setPendingPermission(true);
-        }
-      }
 
       // StatusBar: detect result while panel is hidden → orange dot
       if (msgObj.type === 'result' || msgObj.subtype === 'result') {
@@ -449,13 +442,20 @@ export function activate(context: vscode.ExtensionContext) {
         output.info(`[GakrCLI] Connected! Init response keys: ${Object.keys(initData).join(', ')}`);
 
         // Broadcast slash commands to webview — ALWAYS broadcast (even if empty, for debugging)
-        const commands = Array.isArray(initData.commands) ? initData.commands : [];
+        const commands = Array.isArray(initData.commands)
+          ? initData.commands
+          : Array.isArray(initData.slash_commands)
+            ? initData.slash_commands
+            : [];
         webviewManager!.broadcast({
           type: 'slash_commands_available',
-          commands: commands.map((c: Record<string, unknown>) => ({
-            name: (c.name as string) || (c.command as string) || '',
-            description: (c.description as string) || '',
-            argumentHint: (c.argument_hint as string) || (c.argumentHint as string) || (c.args as string) || '',
+          commands: commands.map((c: string | Record<string, unknown>) => ({
+            name: typeof c === 'string' ? c : (c.name as string) || (c.command as string) || '',
+            description: typeof c === 'string' ? '' : (c.description as string) || '',
+            argumentHint:
+              typeof c === 'string'
+                ? ''
+                : (c.argument_hint as string) || (c.argumentHint as string) || (c.args as string) || '',
           })),
         } as never);
         output.info(`[GakrCLI] Broadcast ${commands.length} slash commands`);
@@ -464,7 +464,7 @@ export function activate(context: vscode.ExtensionContext) {
         const models = Array.isArray(initData.models) ? initData.models : [];
         const fastModeState = initData.fast_mode_state ?? { enabled: false, canToggle: true };
         const account = initData.account as Record<string, unknown> | undefined;
-        const permMode = initData.permission_mode ?? initData.permissionMode ?? permissionHandler.currentMode;
+        const permMode = initData.permission_mode ?? initData.permissionMode ?? permissionHandler.getMode();
         webviewManager!.broadcast({
           type: 'cli_output',
           data: {
@@ -699,7 +699,6 @@ export function activate(context: vscode.ExtensionContext) {
           message: req.message,
           fields: (req.fields as unknown[]) ?? [],
         } as never);
-        const { SELF_HANDLED } = await import('./process/controlRouter');
         return SELF_HANDLED;
       },
     );
@@ -709,14 +708,7 @@ export function activate(context: vscode.ExtensionContext) {
       output.info(`[CLI→Webview] ${JSON.stringify(msg).substring(0, 300)}`);
       webviewManager!.broadcast({ type: 'cli_output', data: msg });
 
-      // StatusBar: set pending permission on permission_request, clear on response
       const msgObj = msg as Record<string, unknown>;
-      if (msgObj.type === 'control_request') {
-        const req = msgObj.request as Record<string, unknown> | undefined;
-        if (req?.subtype === 'can_use_tool') {
-          statusBarManager.setPendingPermission(true);
-        }
-      }
 
       // StatusBar: detect result while panel is hidden → orange dot
       if (msgObj.type === 'result' || msgObj.subtype === 'result') {

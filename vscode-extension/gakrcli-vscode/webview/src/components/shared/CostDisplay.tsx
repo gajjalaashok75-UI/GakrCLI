@@ -12,7 +12,7 @@ export function CostDisplay({ cost, className = '' }: CostDisplayProps) {
 
   return (
     <div
-      className={`flex items-center gap-3 text-xs opacity-60 ${className}`}
+      className={`flex items-center gap-2 text-xs opacity-60 flex-wrap min-w-0 ${className}`}
       title={buildTooltip(cost)}
     >
       <span>{formatCost(cost.totalCostUSD)}</span>

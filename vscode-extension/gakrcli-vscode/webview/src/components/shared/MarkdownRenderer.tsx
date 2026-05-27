@@ -11,7 +11,13 @@ interface MarkdownRendererProps {
   isStreaming?: boolean;
 }
 
-export function MarkdownRenderer({ content }: MarkdownRendererProps) {
+export function MarkdownRenderer({ content, isStreaming = false }: MarkdownRendererProps) {
+  const visibleContent = stripThinkTags(content);
+
+  if (!visibleContent.trim() && !isStreaming) {
+    return null;
+  }
+
   return (
     <div className="markdown-body prose prose-sm max-w-none text-vscode-fg">
       <ReactMarkdown
@@ -19,10 +25,19 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
         rehypePlugins={[rehypeHighlight]}
         components={markdownComponents}
       >
-        {content}
+        {visibleContent}
       </ReactMarkdown>
+      {isStreaming && <span className="streaming-caret" aria-hidden="true" />}
     </div>
   );
+}
+
+function stripThinkTags(content: string): string {
+  return content
+    .replace(/<(think|thinking|reasoning)(?:\s[^>]*)?>[\s\S]*?<\/\1>/gi, '')
+    .replace(/<(think|thinking|reasoning)(?:\s[^>]*)?>[\s\S]*$/gi, '')
+    .replace(/<\/(think|thinking|reasoning)>/gi, '')
+    .trim();
 }
 
 /**

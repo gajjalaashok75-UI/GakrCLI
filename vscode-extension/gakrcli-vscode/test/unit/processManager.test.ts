@@ -116,6 +116,7 @@ describe('ProcessManager', () => {
           'stream-json',
           '--verbose',
           '--print',
+          '--include-partial-messages',
         ]),
         expect.objectContaining({
           cwd: '/tmp/test-project',
@@ -298,6 +299,7 @@ describe('ProcessManager', () => {
       expect(commandLine).toContain('stream-json');
       expect(commandLine).toContain('--input-format');
       expect(commandLine).toContain('--verbose');
+      expect(commandLine).toContain('--include-partial-messages');
       expect(commandLine).toContain('--model');
       expect(commandLine).toContain('gpt-4o');
       expect(commandLine).toContain('--permission-mode');
@@ -325,7 +327,7 @@ describe('ProcessManager', () => {
           '/d',
           '/s',
           '/c',
-          '"C:\\Users\\Test User\\AppData\\Roaming\\npm\\gakrcli.cmd" --print --output-format stream-json --verbose --input-format stream-json',
+          '"C:\\Users\\Test User\\AppData\\Roaming\\npm\\gakrcli.cmd" --print --output-format stream-json --verbose --input-format stream-json --include-partial-messages',
         ],
         expect.objectContaining({
           cwd: 'C:\\work\\project',
@@ -443,7 +445,9 @@ describe('ProcessManager', () => {
   describe('control handlers', () => {
     it('keeps handlers registered before spawn and dispatches incoming control requests', async () => {
       const handler = vi.fn().mockResolvedValue({ ok: true });
+      const onMessage = vi.fn();
       manager.registerControlHandler('can_use_tool', handler);
+      manager.onMessage(onMessage);
 
       manager.spawn();
       mockProc.stdout.write(
@@ -464,6 +468,12 @@ describe('ProcessManager', () => {
         expect.objectContaining({ subtype: 'can_use_tool' }),
         expect.any(AbortSignal),
         'req-1',
+      );
+      expect(onMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'control_request',
+          request_id: 'req-1',
+        }),
       );
     });
   });

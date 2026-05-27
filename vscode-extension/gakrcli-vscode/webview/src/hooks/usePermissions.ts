@@ -22,6 +22,14 @@ export function usePermissions() {
   const [queue, setQueue] = useState<PermissionRequest[]>([]);
 
   useEffect(() => {
+    const enqueue = (req: PermissionRequest) => {
+      setQueue((prev) =>
+        prev.some((existing) => existing.requestId === req.requestId)
+          ? prev
+          : [...prev, req],
+      );
+    };
+
     // Listen for permission_request messages
     const unsubPermission = vscode.onMessage('permission_request', (message) => {
       const req: PermissionRequest = {
@@ -36,7 +44,43 @@ export function usePermissions() {
         permissionSuggestions: message.permissionSuggestions as unknown[] | undefined,
         agentId: message.agentId as string | undefined,
       };
-      setQueue((prev) => [...prev, req]);
+      enqueue(req);
+    });
+
+    const unsubCliOutput = vscode.onMessage('cli_output', (message) => {
+      const data = message.data as Record<string, unknown> | undefined;
+      if (data?.type === 'control_cancel_request') {
+        const cancelId = data.request_id as string;
+        setQueue((prev) => prev.filter((r) => r.requestId !== cancelId));
+        return;
+      }
+
+      if (data?.type !== 'control_request') {
+        return;
+      }
+
+      const request = data.request as Record<string, unknown> | undefined;
+      if (request?.subtype !== 'can_use_tool') {
+        return;
+      }
+
+      const toolName = String(request.tool_name ?? '');
+      if (!toolName || isFileEditTool(toolName)) {
+        return;
+      }
+
+      enqueue({
+        requestId: data.request_id as string,
+        toolName,
+        toolInput: (request.input as Record<string, unknown>) ?? {},
+        riskLevel: classifyRisk(toolName),
+        title: (request.title as string | undefined) ?? (request.display_name as string | undefined),
+        description: request.description as string | undefined,
+        decisionReason: request.decision_reason as string | undefined,
+        blockedPath: request.blocked_path as string | undefined,
+        permissionSuggestions: request.permission_suggestions as unknown[] | undefined,
+        agentId: request.agent_id as string | undefined,
+      });
     });
 
     // Listen for cancel_request messages
@@ -47,6 +91,7 @@ export function usePermissions() {
 
     return () => {
       unsubPermission();
+      unsubCliOutput();
       unsubCancel();
     };
   }, []);
@@ -83,4 +128,20 @@ export function usePermissions() {
     respond,
     dismissRequest,
   };
+}
+
+function classifyRisk(toolName: string): string {
+  const normalized = toolName.toLowerCase();
+  if (normalized.includes('bash') || normalized.includes('shell') || normalized.includes('execute')) {
+    return 'high';
+  }
+  if (normalized.includes('edit') || normalized.includes('write')) {
+    return 'medium';
+  }
+  return 'low';
+}
+
+function isFileEditTool(toolName: string): boolean {
+  return ['write', 'edit', 'multiedit', 'fileedittool', 'filewritetool', 'notebookedittool']
+    .some((name) => toolName.toLowerCase().includes(name));
 }

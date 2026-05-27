@@ -113,10 +113,12 @@ export function ProviderBadge() {
           color: 'var(--app-secondary-foreground)',
           cursor: 'pointer',
           whiteSpace: 'nowrap',
+          minWidth: 0,
+          maxWidth: 260,
         }}
       >
         <ProviderIcon providerId={currentProviderId} />
-        <span>{currentLabel}{modelLabel}</span>
+        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{currentLabel}{modelLabel}</span>
         <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor" style={{ opacity: 0.6 }}>
           <path d="M1 2.5l3 3 3-3" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" />
         </svg>
