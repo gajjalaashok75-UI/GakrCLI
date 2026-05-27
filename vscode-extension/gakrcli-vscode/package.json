@@ -3,10 +3,10 @@
 	"displayName": "GakrCLI VS Code",
 	"description": "GakrCLI VS Code: AI coding assistant powered by any LLM",
 	"version": "0.2.1",
-	"publisher": "gajjalaashok75-UI",
+	"publisher": "gakr-gakr",
 	"license": "MIT",
 	"bugs": {
-		"url": "https://github.com/gajjalaashok75-UI/gakrcli-vscode/issues"
+		"url": "https://github.com/gakr-gakr/gakrcli/issues"
 	},
 	"engines": {
 		"vscode": "^1.94.0"
