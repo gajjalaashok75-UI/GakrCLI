@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="resources/gakrcli-logo.png" alt="GakrCLI VS Code" width="128" height="128">
+<img src="resources/gakrcli-logo.png" alt="GakrCLI VS Code" width="400" height="400">
 
 # GakrCLI VS Code
 
