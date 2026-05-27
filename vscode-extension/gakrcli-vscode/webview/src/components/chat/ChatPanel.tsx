@@ -356,7 +356,7 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
   const doSend = useCallback(() => {
     const text = inputValue.trim();
     if (!text && attachments.length === 0) return;
-    if (isStreaming || isStarting) return;
+    if (isStarting) return;
     onSend(text);
     setInputValue('');
     setAttachments([]);
@@ -366,7 +366,7 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [inputValue, attachments, isStreaming, isStarting, onSend, clearAtMentions]);
+  }, [inputValue, attachments, isStarting, onSend, clearAtMentions]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // If a picker is open, let it handle arrow keys / enter
@@ -384,7 +384,7 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
 
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (isStreaming) {
+      if (isStreaming && !inputValue.trim() && attachments.length === 0) {
         // Enter during streaming interrupts the current turn.
         onInterrupt();
       } else {
@@ -602,17 +602,17 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
           className="sendButton"
           disabled={sendDisabled}
           onClick={() => {
-            if (isStreaming) {
+            if (isStreaming && !inputValue.trim() && attachments.length === 0) {
               onInterrupt();
             } else {
               doSend();
             }
           }}
-          title={isStreaming ? 'Stop generation (Escape)' : 'Send message (Enter)'}
+          title={isStreaming && !inputValue.trim() && attachments.length === 0 ? 'Stop generation (Escape)' : 'Send message (Enter)'}
           data-permission-mode={permissionMode}
           style={{ flexShrink: 0, margin: '0 6px 8px 0' }}
         >
-          {isStreaming ? (
+          {isStreaming && !inputValue.trim() && attachments.length === 0 ? (
             /* Stop icon */
             <svg className="stopIcon" viewBox="0 0 16 16" fill="currentColor">
               <rect x="3" y="3" width="10" height="10" rx="2" />

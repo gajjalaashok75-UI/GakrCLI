@@ -1,4 +1,9 @@
+<div align="center">
+
+<img src="src/assets/gakrcli-logo.png" alt="GakrCLI VS Code" width="400" height="400">
+
 # GakrCLI
+</div>
 
 **Version 0.5.4** — Any model. Every tool. Zero limits.
 

@@ -158,7 +158,7 @@ export class SessionTracker implements vscode.Disposable {
         }
 
         // Count user messages (skip meta messages)
-        if (entry.type === 'user' && !entry.isMeta) {
+        if (entry.type === 'user' && !entry.isMeta && !isToolResultUserMessage(entry)) {
           messageCount++;
           // Extract fallback title from first non-meta user message
           if (!fallbackTitle) {
@@ -417,4 +417,16 @@ export class SessionTracker implements vscode.Disposable {
     this.disposables = [];
     this.sessions.clear();
   }
+}
+
+function isToolResultUserMessage(entry: Record<string, unknown>): boolean {
+  const message = entry.message as Record<string, unknown> | undefined;
+  const content = message?.content;
+  return Array.isArray(content) && content.some((block) =>
+    Boolean(
+      block &&
+      typeof block === 'object' &&
+      (block as Record<string, unknown>).type === 'tool_result',
+    ),
+  );
 }

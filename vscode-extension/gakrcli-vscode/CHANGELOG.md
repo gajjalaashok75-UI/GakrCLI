@@ -4,6 +4,18 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ## [Unreleased]
 
+### Added (2026-05-27 19:09:20 +05:30)
+
+- Added focused regression tests for VS Code chat message cleanup, tool-result replay, permission request normalization, slash command filtering, session deletion state, and session history parsing.
+- Extracted chat message transforms, permission request normalization, and session deletion updates into tested webview utility modules.
+
+### Fixed (2026-05-27 19:09:20 +05:30)
+
+- Permission approvals now stay bound to host-confirmed pending requests, preventing raw CLI control events from creating stale approval cards that cannot resolve.
+- Tool results now remain attached under their matching tool calls during live streaming and resumed history, avoiding `[tool interaction]`, `[complex content]`, and duplicated final-answer output.
+- Queued prompts sent while GakrCLI is still running keep their UUID/priority metadata so steering messages remain in the same conversation.
+- Session history delete responses now update the visible grouped history immediately after a successful delete.
+
 ### Fixed (2026-05-27 16:49:02 +05:30)
 
 - Headless wrapper launches now pass `--permission-prompt-tool stdio`, allowing WebSearch, Bash, and other tool approvals to appear in the VS Code permission dialog instead of being denied before the UI can respond.
