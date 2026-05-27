@@ -404,6 +404,8 @@ export class ProcessManager {
       '--input-format',
       'stream-json',
       '--include-partial-messages',
+      '--permission-prompt-tool',
+      'stdio',
     ];
 
     if (this.options.model) {

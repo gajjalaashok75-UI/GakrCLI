@@ -180,6 +180,25 @@ export class PermissionHandler implements vscode.Disposable {
     });
   }
 
+  allowTool(toolName: string): number {
+    const normalized = toolName.trim();
+    if (!normalized) {
+      return 0;
+    }
+
+    this.rules.add(normalized);
+    let resolved = 0;
+
+    for (const pending of Array.from(this.pendingRequests.values())) {
+      if (pending.request.tool_name.toLowerCase() === normalized.toLowerCase()) {
+        this.handlePermissionResponse(pending.requestId, true, true);
+        resolved++;
+      }
+    }
+
+    return resolved;
+  }
+
   private checkAutoApprove(request: ControlRequestPermission): PermissionResult | null {
     const { tool_name } = request;
 

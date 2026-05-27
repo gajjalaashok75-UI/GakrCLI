@@ -37,7 +37,7 @@ export function AssistantMessage({ message, isLatest = false, isStreaming = fals
         ))}
       </div>
 
-      {plainTextContent && (
+      {plainTextContent && isLatest && (
         <div className="message-actions-row">
           <MessageActions
             messageRole="assistant"

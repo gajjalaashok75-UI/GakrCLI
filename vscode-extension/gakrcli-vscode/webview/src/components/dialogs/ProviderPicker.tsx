@@ -113,15 +113,27 @@ export function ProviderPicker({
           padding: 20,
           width: 360,
           maxWidth: '90vw',
+          maxHeight: '88vh',
           display: 'flex',
           flexDirection: 'column',
           gap: 14,
+          overflow: 'hidden',
         }}
       >
         <div style={{ fontSize: 13, fontWeight: 600 }}>Select Provider</div>
 
         {/* Provider list */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+            flex: '1 1 auto',
+            minHeight: 0,
+            overflowY: 'auto',
+            paddingRight: 2,
+          }}
+        >
           {providers.map((p) => (
             <button
               key={p.id}

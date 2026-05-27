@@ -338,6 +338,12 @@ export function activate(context: vscode.ExtensionContext) {
       webviewManager!.broadcast({ type: 'cli_output', data: msg });
 
       const msgObj = msg as Record<string, unknown>;
+      if (msgObj.type === 'control_request') {
+        const req = msgObj.request as Record<string, unknown> | undefined;
+        if (req?.subtype === 'can_use_tool') {
+          statusBarManager.setPendingPermission(true);
+        }
+      }
 
       // StatusBar: detect result while panel is hidden → orange dot
       if (msgObj.type === 'result' || msgObj.subtype === 'result') {
@@ -498,10 +504,29 @@ export function activate(context: vscode.ExtensionContext) {
   // Handle user sending a prompt
   webviewManager.onMessage('send_prompt', async (message) => {
     output.info(`[Webview→CLI] send_prompt: ${message.text.substring(0, 100)}`);
+    const trimmedPrompt = message.text.trim();
 
     // GakrCLI-specific: /provider opens the provider picker dialog
-    if (['/provider', '/providers'].includes(message.text.trim())) {
+    if (['/provider', '/providers'].includes(trimmedPrompt)) {
       webviewManager!.broadcast({ type: 'open_provider_picker' } as never);
+      return;
+    }
+
+    const allowMatch = /^(?:\/allow|allow)\s+([A-Za-z][\w.-]*)$/i.exec(trimmedPrompt);
+    if (allowMatch) {
+      const toolName = allowMatch[1]!;
+      const resolved = permissionHandler.allowTool(toolName);
+      webviewManager!.broadcast({
+        type: 'cli_output',
+        data: {
+          type: 'system',
+          subtype: 'permission_rule_added',
+          text: resolved > 0
+            ? `Allowed ${toolName} and approved ${resolved} pending request${resolved === 1 ? '' : 's'}.`
+            : `Allowed ${toolName} for future requests.`,
+        },
+      } as never);
+      statusBarManager.setPendingPermission(false);
       return;
     }
 
@@ -709,6 +734,12 @@ export function activate(context: vscode.ExtensionContext) {
       webviewManager!.broadcast({ type: 'cli_output', data: msg });
 
       const msgObj = msg as Record<string, unknown>;
+      if (msgObj.type === 'control_request') {
+        const req = msgObj.request as Record<string, unknown> | undefined;
+        if (req?.subtype === 'can_use_tool') {
+          statusBarManager.setPendingPermission(true);
+        }
+      }
 
       // StatusBar: detect result while panel is hidden → orange dot
       if (msgObj.type === 'result' || msgObj.subtype === 'result') {
