@@ -8,8 +8,8 @@
 
 OpenAI · Anthropic · Google Gemini · DeepSeek · Ollama · AWS Bedrock · Vertex AI · GitHub Models · 200+ OpenAI-compatible endpoints.
 
-[![VS Code Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/HarshAgarwal1012.gakrcli-vscode?label=marketplace&color=007ACC)](https://marketplace.visualstudio.com/items?itemName=HarshAgarwal1012.gakrcli-vscode)
-[![Installs](https://img.shields.io/visual-studio-marketplace/i/HarshAgarwal1012.gakrcli-vscode)](https://marketplace.visualstudio.com/items?itemName=HarshAgarwal1012.gakrcli-vscode)
+[![VS Code Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/gakr-gakr.gakrcli-vscode?label=marketplace&color=007ACC)](https://marketplace.visualstudio.com/items?itemName=gakr-gakr.gakrcli-vscode)
+[![Installs](https://img.shields.io/visual-studio-marketplace/i/gakr-gakr.gakrcli-vscode)](https://marketplace.visualstudio.com/items?itemName=gakr-gakr.gakrcli-vscode)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![GakrCLI compatible](https://img.shields.io/badge/GakrCLI-compatible-8a63d2.svg)](#multi-provider-support)
 
@@ -95,15 +95,15 @@ Switch between LLM providers on the fly via `/provider`, the provider badge, or 
 Search for **GakrCLI** in the Extensions panel (`Ctrl+Shift+X` / `Cmd+Shift+X`) and click **Install**, or:
 
 ```bash
-code --install-extension HarshAgarwal1012.gakrcli-vscode
+code --install-extension gakr-gakr.gakrcli-vscode
 ```
 
 ### From a `.vsix` file (latest dev build)
 
-Download the latest `.vsix` from [Releases](https://github.com/Harsh1210/gakrcli-vscode/releases), then:
+Download the latest `.vsix` from [Releases](https://github.com/gakr-gakr/gakrcli/releases), then:
 
 ```bash
-code --install-extension gakrcli-vscode-0.2.5.vsix
+code --install-extension gakrcli-vscode-0.2.1.vsix
 ```
 
 ### Prerequisites
@@ -262,8 +262,8 @@ The extension is deliberately thin. All provider logic, tool execution, MCP serv
 ## Contributing
 
 ```bash
-git clone https://github.com/Harsh1210/gakrcli-vscode
-cd gakrcli-vscode
+git clone https://github.com/gakr-gakr/gakrcli
+cd gakrcli/vscode-extension/gakrcli-vscode
 npm install
 cd webview && npm install && cd ..
 npm run build
@@ -285,7 +285,13 @@ npm test
 npx @vscode/vsce package --no-dependencies --allow-missing-repository
 ```
 
-Issues and PRs welcome — see the [issue tracker](https://github.com/Harsh1210/gakrcli-vscode/issues).
+**Publish to the VS Code Marketplace:**
+```bash
+npx @vscode/vsce login gakr-gakr
+npx @vscode/vsce publish
+```
+
+Issues and PRs welcome — see the [issue tracker](https://github.com/gakr-gakr/gakrcli/issues).
 
 ---
 
