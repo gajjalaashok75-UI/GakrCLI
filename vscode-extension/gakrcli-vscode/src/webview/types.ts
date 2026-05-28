@@ -502,6 +502,13 @@ export interface ProviderStateMessage {
   error?: string;
 }
 
+/** Host -> Webview: effective permission mode after validation */
+export interface PermissionModeStateMessage {
+  type: 'permission_mode_state';
+  mode: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk';
+  rejectedMode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk';
+}
+
 /** All messages the extension host can send to the webview */
 export type HostToWebviewMessage =
   | InitStateMessage
@@ -520,6 +527,7 @@ export type HostToWebviewMessage =
   | RewindPreviewMessage
   | RewindResultMessage
   | ProviderStateMessage
+  | PermissionModeStateMessage
   | AtMentionResultsMessage
   | FilePickerResultMessage
   | ActiveFileChangedMessage

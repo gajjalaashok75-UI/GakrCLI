@@ -260,6 +260,8 @@ textarea.input {
 
 .gakr-shell {
   isolation: isolate;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 78%, transparent);
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--app-glass-highlight) 54%, transparent), transparent 150px),
     linear-gradient(135deg, color-mix(in srgb, var(--app-glass-blue) 7%, transparent), transparent 36%),

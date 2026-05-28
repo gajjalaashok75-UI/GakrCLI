@@ -85,7 +85,7 @@ export class PermissionHandler implements vscode.Disposable {
   /**
    * Set the permission mode. Called from CLI (set_permission_mode) or webview.
    */
-  setMode(mode: PermissionMode): void {
+  setMode(mode: PermissionMode): PermissionMode {
     // Bypass mode is gated behind the allowDangerouslySkipPermissions setting
     if (mode === 'bypassPermissions') {
       const config = vscode.workspace.getConfiguration('gakrcliCode');
@@ -97,12 +97,15 @@ export class PermissionHandler implements vscode.Disposable {
         vscode.window.showWarningMessage(
           'GakrCLI: Bypass permissions mode is disabled. Enable "gakrcliCode.allowDangerouslySkipPermissions" in settings first.',
         );
-        return;
+        this.broadcastModeState(mode);
+        return this.currentMode;
       }
     }
 
     this.output.appendLine(`[PermissionHandler] Mode changed: ${this.currentMode} → ${mode}`);
     this.currentMode = mode;
+    this.broadcastModeState();
+    return this.currentMode;
   }
 
   /**
@@ -165,8 +168,15 @@ export class PermissionHandler implements vscode.Disposable {
    * Handle a set_permission_mode control_request from the CLI.
    */
   handleSetPermissionMode(request: ControlRequestSetPermissionMode): Record<string, unknown> {
-    this.setMode(request.mode);
-    return { mode: request.mode };
+    return { mode: this.setMode(request.mode) };
+  }
+
+  private broadcastModeState(rejectedMode?: PermissionMode): void {
+    this.webviewManager.broadcast({
+      type: 'permission_mode_state',
+      mode: this.currentMode,
+      rejectedMode,
+    });
   }
 
   /**
