@@ -87,7 +87,8 @@
 						"default",
 						"acceptEdits",
 						"plan",
-						"bypassPermissions"
+						"bypassPermissions",
+						"dontAsk"
 					],
 					"default": "default",
 					"description": "Initial permission mode for new conversations."

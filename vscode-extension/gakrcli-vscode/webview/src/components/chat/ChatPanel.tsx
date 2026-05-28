@@ -72,6 +72,7 @@ export function ChatPanel() {
   const [announcements, setAnnouncements] = useState<Array<{ id: string; message: string; severity?: 'info' | 'warning' | 'error'; dismissible?: boolean }>>([]);
   const [showMcpManager, setShowMcpManager] = useState(false);
   const [showPluginManager, setShowPluginManager] = useState(false);
+  const [providerModel, setProviderModel] = useState<string | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(() => {
     return !localStorage.getItem('gakrcli.onboarding.dismissed');
   });
@@ -102,6 +103,13 @@ export function ChatPanel() {
       if (typeof message.mode === 'string') {
         setPermissionMode(message.mode as PermissionModeValue);
       }
+    });
+  }, []);
+
+  useEffect(() => {
+    vscode.postMessage({ type: 'get_provider_state' });
+    return vscode.onMessage('provider_state', (message) => {
+      setProviderModel(typeof message.currentModel === 'string' ? message.currentModel : null);
     });
   }, []);
 
@@ -253,7 +261,7 @@ export function ChatPanel() {
               onOpenMcpManager={() => setShowMcpManager(true)}
               onOpenPluginManager={() => setShowPluginManager(true)}
               footerControls={(
-                <ModelSelector currentModel={model} availableModels={availableModels} />
+                <ModelSelector currentModel={model ?? providerModel} availableModels={availableModels} />
               )}
             />
           </div>
@@ -344,7 +352,7 @@ function InputArea({
           name: f.name,
           content: f.content,
         }));
-        setAttachments((prev) => [...prev, ...newAttachments]);
+        setAttachments((prev) => mergeAttachments(prev, newAttachments));
       }
     };
     window.addEventListener('message', handler);
@@ -787,7 +795,7 @@ function InputArea({
 }
 
 function buildMessageText(text: string, attachments: AttachmentItem[]): string {
-  const attachmentRefs = attachments
+  const attachmentRefs = uniqueAttachments(attachments)
     .map(formatAttachmentReference)
     .filter((ref): ref is string => Boolean(ref));
 
@@ -797,6 +805,30 @@ function buildMessageText(text: string, attachments: AttachmentItem[]): string {
 
   const prefix = attachmentRefs.join(' ');
   return text ? `${prefix}\n${text}` : prefix;
+}
+
+function mergeAttachments(prev: AttachmentItem[], incoming: AttachmentItem[]): AttachmentItem[] {
+  const seen = new Set(prev.map(attachmentKey));
+  const next = [...prev];
+
+  for (const attachment of incoming) {
+    const key = attachmentKey(attachment);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    next.push(attachment);
+  }
+
+  return next;
+}
+
+function uniqueAttachments(attachments: AttachmentItem[]): AttachmentItem[] {
+  return mergeAttachments([], attachments);
+}
+
+function attachmentKey(attachment: AttachmentItem): string {
+  return `${attachment.type}:${attachment.content || attachment.name}`.toLowerCase();
 }
 
 function formatAttachmentReference(attachment: AttachmentItem): string | null {

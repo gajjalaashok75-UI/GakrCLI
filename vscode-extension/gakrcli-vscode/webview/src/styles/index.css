@@ -262,6 +262,7 @@ textarea.input {
   isolation: isolate;
   box-sizing: border-box;
   border: 1px solid color-mix(in srgb, var(--app-glass-border) 78%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-glass-border-strong) 36%, transparent);
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--app-glass-highlight) 54%, transparent), transparent 150px),
     linear-gradient(135deg, color-mix(in srgb, var(--app-glass-blue) 7%, transparent), transparent 36%),

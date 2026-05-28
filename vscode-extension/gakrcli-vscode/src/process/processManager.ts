@@ -44,6 +44,8 @@ export interface ProcessManagerOptions {
   model?: string;
   /** Permission mode */
   permissionMode?: PermissionMode;
+  /** Allow switching into bypassPermissions mode during the session. */
+  allowDangerouslySkipPermissions?: boolean;
   /** Session ID to resume */
   sessionId?: string;
   /** Continue last session */
@@ -414,6 +416,10 @@ export class ProcessManager {
 
     if (this.options.permissionMode) {
       args.push('--permission-mode', this.options.permissionMode);
+    }
+
+    if (this.options.allowDangerouslySkipPermissions) {
+      args.push('--allow-dangerously-skip-permissions');
     }
 
     if (this.options.sessionId) {

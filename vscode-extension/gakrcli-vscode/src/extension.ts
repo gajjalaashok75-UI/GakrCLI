@@ -282,6 +282,9 @@ export function activate(context: vscode.ExtensionContext) {
       ? handlerMode
       : config.get<string>('initialPermissionMode')) as
       | 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions' | 'dontAsk' | undefined;
+    const allowDangerouslySkipPermissions =
+      config.get<boolean>('allowDangerouslySkipPermissions', false) ||
+      permissionMode === 'bypassPermissions';
 
     // Use AuthManager to build env vars (merges provider env + user env vars)
     const env = authManager.buildProcessEnv();
@@ -294,6 +297,7 @@ export function activate(context: vscode.ExtensionContext) {
       executableArgs: launchCommand.args,
       model,
       permissionMode,
+      allowDangerouslySkipPermissions,
       sessionId: options.sessionId,
       env,
       ideMcpServer: ideServerMeta ? { port: ideServerMeta.port, ideName: 'VS Code' } : undefined,
@@ -681,6 +685,10 @@ export function activate(context: vscode.ExtensionContext) {
     const model = authManager.getCurrentProvider().model;
     const permissionMode = config.get<string>('initialPermissionMode') as
       | 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions' | 'dontAsk' | undefined;
+    const allowDangerouslySkipPermissions =
+      config.get<boolean>('allowDangerouslySkipPermissions', false) ||
+      permissionMode === 'bypassPermissions' ||
+      permissionHandler.getMode() === 'bypassPermissions';
 
     const env = authManager.buildProcessEnv();
 
@@ -705,6 +713,7 @@ export function activate(context: vscode.ExtensionContext) {
       executableArgs: launchCommand.args,
       model,
       permissionMode,
+      allowDangerouslySkipPermissions,
       sessionId: message.sessionId,
       env,
       ideMcpServer: ideServerMeta ? { port: ideServerMeta.port, ideName: 'VS Code' } : undefined,
@@ -1523,7 +1532,15 @@ export function activate(context: vscode.ExtensionContext) {
       openLabel: 'Attach',
     });
     if (!uris || uris.length === 0) return;
-    const files = uris.map((uri) => ({
+    const seenPaths = new Set<string>();
+    const files = uris.filter((uri) => {
+      const key = uri.fsPath.toLowerCase();
+      if (seenPaths.has(key)) {
+        return false;
+      }
+      seenPaths.add(key);
+      return true;
+    }).map((uri) => ({
       type: 'file' as const,
       name: path.basename(uri.fsPath) || uri.fsPath,
       content: uri.fsPath,
