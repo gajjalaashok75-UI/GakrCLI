@@ -16,14 +16,11 @@ export function ToolCallBlock({ block, isStreaming }: ToolCallBlockProps) {
   const hasInput = Object.keys(input).length > 0;
 
   return (
-    <div className="my-1 rounded-md border border-vscode-border overflow-hidden">
+    <div className="tool-call-card my-1 rounded-md overflow-hidden">
       {/* Collapsible header */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center gap-2 w-full px-3 py-1.5 text-left text-sm
-          bg-[var(--vscode-editorGroupHeader-tabsBackground)]
-          hover:bg-[var(--vscode-list-hoverBackground)]
-          transition-colors"
+        className="tool-call-header flex items-center gap-2 w-full px-3 py-1.5 text-left text-sm transition-colors"
       >
         {/* Chevron */}
         <svg
@@ -60,11 +57,11 @@ export function ToolCallBlock({ block, isStreaming }: ToolCallBlockProps) {
 
       {/* Expandable content */}
       {isExpanded && (
-        <div className="px-3 py-1.5 border-t border-vscode-border">
+        <div className="tool-call-body px-3 py-1.5">
           {hasInput ? (
             <div>
               <div className="text-xs opacity-50 mb-1 font-semibold">Input</div>
-              <pre className="text-xs font-mono overflow-x-auto p-2 rounded bg-[var(--vscode-editor-background)] whitespace-pre-wrap break-all">
+              <pre className="tool-input-pre text-xs font-mono overflow-x-auto p-2 rounded whitespace-pre-wrap break-all">
                 {formatToolInput(input)}
               </pre>
             </div>

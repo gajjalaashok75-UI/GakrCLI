@@ -16,15 +16,13 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   return (
     <div style={{
       display: 'flex',
-      borderBottom: '1px solid var(--app-primary-border-color)',
-      backgroundColor: 'var(--app-header-background)',
       userSelect: 'none',
       justifyContent: 'flex-start',
       gap: 4,
       padding: 6,
       alignItems: 'center',
       minHeight: 40,
-    }}>
+    }} className="gakr-chat-header">
       {/* History button */}
       <button
         onClick={onToggleSessionList}

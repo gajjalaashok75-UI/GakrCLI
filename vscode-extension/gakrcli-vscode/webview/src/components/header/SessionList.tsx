@@ -62,7 +62,7 @@ export const SessionList: React.FC<SessionListProps> = ({
   return (
     <div
       ref={panelRef}
-      className="absolute top-[40px] left-0 right-0 z-50 bg-[var(--vscode-sideBar-background)] border border-vscode-border rounded-b shadow-lg max-h-[400px] flex flex-col"
+      className="session-list-glass absolute top-[40px] left-0 right-0 z-50 rounded-b max-h-[400px] flex flex-col"
     >
       {/* Search */}
       <div className="px-3 py-2 border-b border-vscode-border">
@@ -79,7 +79,7 @@ export const SessionList: React.FC<SessionListProps> = ({
             placeholder="Search past conversations..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full pl-7 pr-7 py-1.5 text-xs bg-vscode-input-bg text-vscode-input-fg border border-vscode-input-border rounded focus:outline-none focus:border-[var(--vscode-focusBorder)]"
+            className="session-search-input w-full pl-7 pr-7 py-1.5 text-xs rounded focus:outline-none"
           />
           {searchQuery && (
             <button

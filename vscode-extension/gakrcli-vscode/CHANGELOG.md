@@ -4,6 +4,10 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ## [Unreleased]
 
+### Changed (2026-05-28)
+
+- Refined the VS Code webview styling with a darker black-glass theme, lower-brightness sky-blue highlights, and consistent glass treatments across chat, sessions, tool output, provider/model selectors, MCP, plugin, permission, and onboarding surfaces.
+
 ### Added (2026-05-27 19:09:20 +05:30)
 
 - Added focused regression tests for VS Code chat message cleanup, tool-result replay, permission request normalization, slash command filtering, session deletion state, and session history parsing.

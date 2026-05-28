@@ -123,6 +123,7 @@ export function ChatPanel() {
 
   return (
     <div
+      className="gakr-shell"
       style={{
         display: 'flex',
         overflow: 'hidden',
@@ -131,12 +132,11 @@ export function ChatPanel() {
         flex: 1,
         lineHeight: 1.5,
         height: '100vh',
-        backgroundColor: 'var(--app-root-background)',
         color: 'var(--app-primary-foreground)',
       }}
     >
       {/* Header + Session list overlay wrapper */}
-      <div style={{ position: 'relative', flexShrink: 0, zIndex: 10 }}>
+      <div className="gakr-header-shell" style={{ position: 'relative', flexShrink: 0, zIndex: 10 }}>
         <ChatHeader
           sessionTitle={sessionTitle}
           isSessionListOpen={isSessionListOpen}
@@ -202,13 +202,12 @@ export function ChatPanel() {
           {promptSuggestions.map((s, i) => (
             <button
               key={i}
+              className="prompt-suggestion-chip"
               onClick={() => sendMessage(s)}
               style={{
                 padding: '2px 10px',
                 fontSize: 11,
                 borderRadius: 'var(--corner-radius-small)',
-                border: '1px solid var(--app-input-border)',
-                background: 'transparent',
                 color: 'var(--app-secondary-foreground)',
                 cursor: 'pointer',
               }}
@@ -268,11 +267,11 @@ export function ChatPanel() {
           </div>
           <div className="composer-footer-right">
             <button
+              className="composer-utility-button"
               onClick={() => setShowMcpManager(true)}
               title="MCP Servers"
               style={{
                 fontSize: 10, padding: '1px 5px', cursor: 'pointer',
-                background: 'transparent', border: '1px solid var(--app-input-border)',
                 borderRadius: 'var(--corner-radius-small)',
                 color: 'var(--app-secondary-foreground)',
               }}
@@ -280,11 +279,11 @@ export function ChatPanel() {
               MCP
             </button>
             <button
+              className="composer-utility-button"
               onClick={() => setShowPluginManager(true)}
               title="Plugins"
               style={{
                 fontSize: 10, padding: '1px 5px', cursor: 'pointer',
-                background: 'transparent', border: '1px solid var(--app-input-border)',
                 borderRadius: 'var(--corner-radius-small)',
                 color: 'var(--app-secondary-foreground)',
               }}
@@ -806,6 +805,7 @@ function ToolbarIconButton({
 }) {
   return (
     <button
+      className="toolbar-icon-button"
       onClick={onClick}
       disabled={disabled}
       title={title}
@@ -818,7 +818,6 @@ function ToolbarIconButton({
         height: 26,
         borderRadius: 'var(--corner-radius-small)',
         border: 'none',
-        background: 'transparent',
         cursor: disabled ? 'not-allowed' : 'pointer',
         color: 'var(--app-secondary-foreground)',
         opacity: disabled ? 0.4 : 1,
@@ -847,6 +846,7 @@ function AddContentMenuItem({
 }) {
   return (
     <button
+      className="add-content-menu-item"
       onClick={onClick}
       style={{
         display: 'flex',
@@ -855,7 +855,6 @@ function AddContentMenuItem({
         width: '100%',
         padding: '6px 12px',
         border: 'none',
-        background: 'transparent',
         color: 'var(--app-primary-foreground)',
         fontSize: 12,
         cursor: 'pointer',

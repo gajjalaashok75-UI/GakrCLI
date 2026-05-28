@@ -27,13 +27,12 @@ export function ModelSelector({ currentModel, availableModels }: ModelSelectorPr
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-flex', minWidth: 0 }}>
       <button
+        className="glass-control"
         onClick={() => setIsOpen(!isOpen)}
         title={`Model: ${displayName}`}
         style={{
           display: 'flex', alignItems: 'center', gap: 4,
           padding: '2px 6px', fontSize: 11,
-          background: 'transparent',
-          border: '1px solid var(--app-input-border)',
           borderRadius: 'var(--corner-radius-small)',
           color: 'var(--app-secondary-foreground)',
           cursor: 'pointer',
@@ -51,15 +50,13 @@ export function ModelSelector({ currentModel, availableModels }: ModelSelectorPr
         </svg>
       </button>
       {isOpen && (
-        <div style={{
+        <div className="glass-menu" style={{
           position: 'absolute', bottom: '100%', left: 0, marginBottom: 4,
           minWidth: 200, maxHeight: 300, overflowY: 'auto',
-          background: 'var(--app-menu-background)',
-          border: '1px solid var(--app-input-border)',
           borderRadius: 'var(--corner-radius-medium)',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.3)', zIndex: 50,
+          zIndex: 50,
         }}>
-          <div style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, color: 'var(--app-secondary-foreground)', borderBottom: '1px solid var(--app-input-border)' }}>
+          <div className="glass-menu-header" style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, color: 'var(--app-secondary-foreground)' }}>
             Select Model
           </div>
           {availableModels.map((m) => (
@@ -69,6 +66,7 @@ export function ModelSelector({ currentModel, availableModels }: ModelSelectorPr
                 vscode.postMessage({ type: 'set_model', model: m.value });
                 setIsOpen(false);
               }}
+              className={m.value === currentModel ? 'glass-list-row-active' : 'glass-list-row'}
               style={{
                 display: 'block', width: '100%', textAlign: 'left',
                 padding: '8px 12px', fontSize: 12,

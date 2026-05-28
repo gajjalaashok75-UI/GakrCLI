@@ -43,10 +43,10 @@ export const SessionCard: React.FC<SessionCardProps> = ({
 
   return (
     <div
-      className={`group flex items-start gap-2 px-3 py-2 cursor-pointer rounded transition-colors ${
+      className={`session-card group flex items-start gap-2 px-3 py-2 cursor-pointer rounded transition-colors ${
         isActive
-          ? 'bg-[var(--vscode-list-activeSelectionBackground)] text-[var(--vscode-list-activeSelectionForeground)]'
-          : 'hover:bg-[var(--vscode-list-hoverBackground)]'
+          ? 'session-card-active text-[var(--app-list-active-foreground)]'
+          : ''
       }`}
       onClick={() => onResume(session.id)}
       role="button"

@@ -21,11 +21,9 @@ export function CodeBlock({ children, language, className }: CodeBlockProps) {
   return (
     <div className="code-block-wrapper group">
       {lang && (
-        <div style={{
+        <div className="code-block-header" style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '2px 8px', fontSize: 11,
-          background: 'var(--vscode-editorGroupHeader-tabsBackground)',
-          borderBottom: '1px solid var(--app-input-border)',
           color: 'var(--app-secondary-foreground)',
         }}>
           <span style={{ fontFamily: 'var(--app-monospace-font-family)' }}>{lang}</span>

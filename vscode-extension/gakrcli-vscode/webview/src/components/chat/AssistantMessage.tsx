@@ -108,7 +108,7 @@ function BlockRenderer({ renderableBlock, isMessageStreaming: _isMessageStreamin
     default:
       // Unknown block type — show raw JSON as fallback
       return (
-        <div className="my-2 text-xs font-mono opacity-40 px-3 py-1.5 rounded border border-vscode-border overflow-x-auto">
+        <div className="tool-call-card my-2 text-xs font-mono opacity-80 px-3 py-1.5 rounded overflow-x-auto">
           <pre>{JSON.stringify(block, null, 2)}</pre>
         </div>
       );
@@ -120,13 +120,13 @@ function ToolResultBlock({ block }: { block: ToolResultContentBlock }) {
   const preview = content.length > 160 ? `${content.slice(0, 157)}...` : content;
 
   return (
-    <details className={`my-1 rounded border border-vscode-border overflow-hidden ${block.is_error ? 'border-red-500/40' : ''}`}>
-      <summary className="flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer bg-[var(--vscode-editorGroupHeader-tabsBackground)] hover:bg-[var(--vscode-list-hoverBackground)]">
+    <details className={`tool-result-card my-1 rounded overflow-hidden ${block.is_error ? 'tool-result-error' : ''}`}>
+      <summary className="tool-result-summary flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer">
         <span className="opacity-60">Result</span>
         {block.is_error && <span className="text-red-400">Error</span>}
         {!block.is_error && <span className="ml-auto opacity-40">{preview || 'No output'}</span>}
       </summary>
-      <pre className="m-0 px-3 py-2 text-xs font-mono whitespace-pre-wrap break-words bg-[var(--vscode-editor-background)] max-h-56 overflow-auto">
+      <pre className="tool-result-pre m-0 px-3 py-2 text-xs font-mono whitespace-pre-wrap break-words max-h-56 overflow-auto">
         {content || 'No output'}
       </pre>
     </details>

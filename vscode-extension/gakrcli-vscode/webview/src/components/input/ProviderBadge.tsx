@@ -99,6 +99,7 @@ export function ProviderBadge() {
   return (
     <>
       <button
+        className="glass-control"
         onClick={() => setPickerOpen(true)}
         title="Change provider"
         style={{
@@ -107,8 +108,6 @@ export function ProviderBadge() {
           gap: 4,
           padding: '2px 6px',
           fontSize: 11,
-          background: 'transparent',
-          border: '1px solid var(--app-input-border)',
           borderRadius: 'var(--corner-radius-small)',
           color: 'var(--app-secondary-foreground)',
           cursor: 'pointer',
