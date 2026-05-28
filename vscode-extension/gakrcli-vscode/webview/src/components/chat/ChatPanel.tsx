@@ -97,6 +97,14 @@ export function ChatPanel() {
     return unsub;
   }, []);
 
+  useEffect(() => {
+    return vscode.onMessage('permission_mode_state', (message) => {
+      if (typeof message.mode === 'string') {
+        setPermissionMode(message.mode as PermissionModeValue);
+      }
+    });
+  }, []);
+
   // Listen for open_plugin_manager and hide_onboarding messages
   useEffect(() => {
     const handler = (e: MessageEvent) => {
@@ -476,10 +484,6 @@ function InputArea({
     }
   }, [onSend]);
 
-  const handlePaperclipClick = useCallback(() => {
-    vscode.postMessage({ type: 'file_picker_request' });
-  }, []);
-
   const [addMenuVisible, setAddMenuVisible] = useState(false);
   const addMenuRef = useRef<HTMLDivElement>(null);
 
@@ -703,12 +707,6 @@ function InputArea({
             </div>
           )}
         </div>
-
-        <ToolbarIconButton onClick={handlePaperclipClick} title="Attach file" disabled={textareaDisabled}>
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M13.5 7.5l-6 6a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" />
-          </svg>
-        </ToolbarIconButton>
 
         {footerControls}
 

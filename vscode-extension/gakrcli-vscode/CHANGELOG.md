@@ -9,10 +9,14 @@ All notable changes to GakrCLI VS Code are documented here.
 - Refined the VS Code webview styling with a darker black-glass theme, lower-brightness sky-blue highlights, and consistent glass treatments across chat, sessions, tool output, provider/model selectors, MCP, plugin, permission, and onboarding surfaces.
 - Reworked the chat composer footer so the input row starts with add and attachment controls, the add menu contains MCP and Plugins, and only permission mode, provider, and Fast remain in the outside footer row.
 - Moved conversation runtime usage stats to the end of the chat and expanded them to show cost, input/output tokens, cache tokens, turns, and duration.
+- Added a subtle full-shell webview border and removed the duplicate standalone attach button now that file/photo upload lives in the add menu.
 
 ### Fixed (2026-05-28)
 
 - Kept provider and model picker popups bounded above the composer in narrow VS Code panes and preserved provider selection behavior after the footer layout change.
+- Clamped the model picker to the webview viewport so it stays visible in narrow panes.
+- Kept startup, resume, and provider display aligned with the active `.gakrcli-profile.json` fallback model and base URL when extension provider settings are not explicitly set.
+- Synced the effective permission mode back to the webview so blocked Bypass attempts snap back to the active mode.
 
 ### Added (2026-05-27 19:09:20 +05:30)
 

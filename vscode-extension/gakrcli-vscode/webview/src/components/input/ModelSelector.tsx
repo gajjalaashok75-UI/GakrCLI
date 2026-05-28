@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { vscode } from '../../vscode';
 
 interface ModelSelectorProps {
@@ -8,7 +8,26 @@ interface ModelSelectorProps {
 
 export function ModelSelector({ currentModel, availableModels }: ModelSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [menuRect, setMenuRect] = useState<{ left: number; top: number; width: number; maxHeight: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+
+  const updateMenuRect = useCallback(() => {
+    const anchor = ref.current;
+    if (!anchor) return;
+
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+    const anchorRect = anchor.getBoundingClientRect();
+    const padding = 12;
+    const width = Math.min(320, Math.max(200, viewportWidth - padding * 2));
+    const left = Math.min(
+      Math.max(anchorRect.left, padding),
+      Math.max(padding, viewportWidth - width - padding),
+    );
+    const maxHeight = Math.min(300, Math.max(180, anchorRect.top - padding * 2));
+    const top = Math.max(padding, anchorRect.top - maxHeight - 4);
+
+    setMenuRect({ left, top, width, maxHeight });
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -19,6 +38,17 @@ export function ModelSelector({ currentModel, availableModels }: ModelSelectorPr
     return () => document.removeEventListener('mousedown', handler);
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    updateMenuRect();
+    window.addEventListener('resize', updateMenuRect);
+    window.addEventListener('scroll', updateMenuRect, true);
+    return () => {
+      window.removeEventListener('resize', updateMenuRect);
+      window.removeEventListener('scroll', updateMenuRect, true);
+    };
+  }, [isOpen, updateMenuRect]);
+
   const displayName = availableModels.find((m) => m.value === currentModel)?.displayName || currentModel || 'Model';
   const shortName = displayName.length > 20 ? displayName.slice(0, 18) + '…' : displayName;
 
@@ -28,7 +58,11 @@ export function ModelSelector({ currentModel, availableModels }: ModelSelectorPr
     <div ref={ref} style={{ position: 'relative', display: 'inline-flex', minWidth: 0 }}>
       <button
         className="glass-control"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          const nextOpen = !isOpen;
+          setIsOpen(nextOpen);
+          if (nextOpen) requestAnimationFrame(updateMenuRect);
+        }}
         title={`Model: ${displayName}`}
         style={{
           display: 'flex', alignItems: 'center', gap: 4,
@@ -49,12 +83,16 @@ export function ModelSelector({ currentModel, availableModels }: ModelSelectorPr
           <path d="M1 2.5l3 3 3-3" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/>
         </svg>
       </button>
-      {isOpen && (
+      {isOpen && menuRect && (
         <div className="glass-menu" style={{
-          position: 'absolute', bottom: '100%', right: 0, marginBottom: 4,
-          minWidth: 200, width: 'min(320px, calc(100vw - 32px))', maxHeight: 300, overflowY: 'auto',
+          position: 'fixed',
+          left: menuRect.left,
+          top: menuRect.top,
+          width: menuRect.width,
+          maxHeight: menuRect.maxHeight,
+          overflowY: 'auto',
           borderRadius: 'var(--corner-radius-medium)',
-          zIndex: 80,
+          zIndex: 1000,
         }}>
           <div className="glass-menu-header" style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, color: 'var(--app-secondary-foreground)' }}>
             Select Model

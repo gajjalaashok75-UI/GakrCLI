@@ -231,7 +231,12 @@ export function activate(context: vscode.ExtensionContext) {
       })),
       currentProviderId: current.id,
       currentModel: current.model,
-      currentBaseUrl: settingsSync.baseUrl,
+      currentBaseUrl:
+        settingsSync.baseUrl ??
+        current.env.OPENAI_BASE_URL ??
+        current.env.ANTHROPIC_BASE_URL ??
+        current.env.GEMINI_BASE_URL ??
+        current.env.MISTRAL_BASE_URL,
       ...(error ? { error } : {}),
     };
   }
@@ -280,7 +285,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Use AuthManager to build env vars (merges provider env + user env vars)
     const env = authManager.buildProcessEnv();
-    const model = settingsSync.selectedModel;
+    const model = authManager.getCurrentProvider().model;
     const ideServerMeta = mcpIdeServer.getServerMetadata();
 
     processManager = new ProcessManager({
@@ -570,6 +575,8 @@ export function activate(context: vscode.ExtensionContext) {
   webviewManager.onMessage('set_model', async (message) => {
     const msg = message as unknown as { model: string };
     output.info(`[Webview→CLI] set_model: ${msg.model}`);
+    await settingsSync.setModel(msg.model);
+    webviewManager!.broadcast(providerStatePayload() as never);
     if (processManager) {
       processManager.write({
         type: 'control_request',
@@ -671,7 +678,7 @@ export function activate(context: vscode.ExtensionContext) {
       workspaceFolder: workspaceFolder.uri.fsPath,
       extensionPath: context.extensionPath,
     });
-    const model = config.get<string>('selectedModel');
+    const model = authManager.getCurrentProvider().model;
     const permissionMode = config.get<string>('initialPermissionMode') as
       | 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions' | 'dontAsk' | undefined;
 
@@ -696,7 +703,7 @@ export function activate(context: vscode.ExtensionContext) {
       cwd: workspaceFolder.uri.fsPath,
       executable: launchCommand.executable,
       executableArgs: launchCommand.args,
-      model: model !== 'default' ? model : undefined,
+      model,
       permissionMode,
       sessionId: message.sessionId,
       env,
