@@ -28,12 +28,12 @@ export function PermissionModeIndicator({ currentMode, onModeChange }: Permissio
   return (
     <div style={{ position: 'relative', display: 'inline-flex' }}>
       <button
+        className="glass-control"
         onClick={() => setIsOpen(!isOpen)}
         title="Change permission mode"
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 4,
           padding: '2px 6px', fontSize: 11,
-          background: 'transparent', border: 'none',
           borderRadius: 'var(--corner-radius-small)',
           cursor: 'pointer',
           color: cfg.color,

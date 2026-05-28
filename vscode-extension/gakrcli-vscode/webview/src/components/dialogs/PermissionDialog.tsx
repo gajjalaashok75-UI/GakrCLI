@@ -117,7 +117,7 @@ export function PermissionDialog({
       }}
     >
       <div
-        className={`w-full max-w-2xl rounded-lg border ${colors.border} bg-[var(--vscode-editor-background)] shadow-xl`}
+        className={`permission-glass-dialog w-full max-w-2xl rounded-lg border ${colors.border}`}
         style={{
           pointerEvents: 'auto',
           maxHeight: 'min(48vh, 420px)',

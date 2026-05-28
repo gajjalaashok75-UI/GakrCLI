@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (2026-05-28)
+- **VS Code Webview Glass Theme**: Tuned the extension webview toward a darker black-glass look with low-brightness sky-blue shine, covering chat, sessions, tool output, provider/model selectors, MCP and plugin dialogs, permission prompts, and onboarding panels.
+
 ### Fixed (2026-05-27 16:49:02 +05:30)
 - **VS Code Permission Prompts**: Launched headless VS Code wrapper sessions with the stdio permission prompt tool so WebSearch, Bash, and other gated tools surface approval dialogs in the webview, with `/allow ToolName` and `allow ToolName` fallback handling for pending and future requests.
 - **VS Code Chat Rendering**: Deduplicated streamed and final assistant payloads, filtered internal command wrappers and raw thinking tags, limited copy actions to the latest assistant response, and kept thinking output readable without horizontal truncation.

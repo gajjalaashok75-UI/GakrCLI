@@ -77,9 +77,6 @@ export function ProviderPicker({
     width: '100%',
     padding: '4px 8px',
     fontSize: 12,
-    background: 'var(--vscode-input-background)',
-    color: 'var(--vscode-input-foreground)',
-    border: '1px solid var(--vscode-input-border)',
     borderRadius: 3,
     outline: 'none',
     boxSizing: 'border-box',
@@ -94,6 +91,7 @@ export function ProviderPicker({
 
   return (
     <div
+      className="glass-dialog-backdrop"
       style={{
         position: 'fixed',
         inset: 0,
@@ -101,14 +99,12 @@ export function ProviderPicker({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'rgba(0,0,0,0.4)',
       }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
+        className="glass-dialog"
         style={{
-          background: 'var(--vscode-editor-background)',
-          border: '1px solid var(--vscode-panel-border)',
           borderRadius: 6,
           padding: 20,
           width: 'min(560px, 92vw)',
@@ -138,6 +134,7 @@ export function ProviderPicker({
           {providers.map((p) => (
             <button
               key={p.id}
+              className={selectedId === p.id ? 'glass-list-row-active' : 'glass-list-row'}
               onClick={() => setSelectedId(p.id)}
               style={{
                 textAlign: 'left',
@@ -147,7 +144,7 @@ export function ProviderPicker({
                   ? '1px solid var(--vscode-focusBorder)'
                   : '1px solid transparent',
                 background: selectedId === p.id
-                  ? 'var(--vscode-list-activeSelectionBackground)'
+                  ? 'var(--app-list-active-background)'
                   : 'transparent',
                 color: selectedId === p.id
                   ? 'var(--vscode-list-activeSelectionForeground)'
@@ -166,6 +163,7 @@ export function ProviderPicker({
           <div>
             <label style={labelStyle}>API Key</label>
             <input
+              className="glass-input"
               type="password"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
@@ -179,6 +177,7 @@ export function ProviderPicker({
           <div>
             <label style={labelStyle}>Base URL{selectedDef.requiresBaseUrl ? '' : ' (optional)'}</label>
             <input
+              className="glass-input"
               type="text"
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
@@ -192,6 +191,7 @@ export function ProviderPicker({
           <div>
             <label style={labelStyle}>Model (optional)</label>
             <input
+              className="glass-input"
               type="text"
               value={model}
               onChange={(e) => setModel(e.target.value)}
@@ -211,12 +211,11 @@ export function ProviderPicker({
         {/* Actions */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button
+            className="glass-control"
             onClick={onClose}
             style={{
               padding: '4px 12px',
               fontSize: 12,
-              background: 'transparent',
-              border: '1px solid var(--vscode-button-border, var(--vscode-panel-border))',
               color: 'var(--vscode-foreground)',
               borderRadius: 3,
               cursor: 'pointer',
@@ -225,14 +224,13 @@ export function ProviderPicker({
             Cancel
           </button>
           <button
+            className="glass-control"
             onClick={handleSubmit}
             disabled={isSaving}
             style={{
               padding: '4px 12px',
               fontSize: 12,
-              background: 'var(--vscode-button-background)',
               color: 'var(--vscode-button-foreground)',
-              border: 'none',
               borderRadius: 3,
               cursor: isSaving ? 'not-allowed' : 'pointer',
               opacity: isSaving ? 0.6 : 1,
