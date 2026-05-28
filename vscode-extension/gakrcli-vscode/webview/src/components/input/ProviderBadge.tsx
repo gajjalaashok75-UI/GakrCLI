@@ -39,7 +39,11 @@ const BUILTIN_PROVIDERS = [
   { id: 'codex', label: 'Codex (ChatGPT)', requiresApiKey: false, requiresBaseUrl: false, supportsModel: true, defaultBaseUrl: 'https://api.codex.openai.com/v1' },
 ];
 
-export function ProviderBadge() {
+interface ProviderBadgeProps {
+  showModel?: boolean;
+}
+
+export function ProviderBadge({ showModel = true }: ProviderBadgeProps) {
   const [currentProviderId, setCurrentProviderId] = useState('anthropic');
   const [currentLabel, setCurrentLabel] = useState('Anthropic');
   const [currentModel, setCurrentModel] = useState<string | undefined>();
@@ -94,14 +98,14 @@ export function ProviderBadge() {
     vscode.postMessage({ type: 'get_provider_state' });
   };
 
-  const modelLabel = currentModel ? ` · ${currentModel}` : '';
+  const modelLabel = showModel && currentModel ? ` - ${currentModel}` : '';
 
   return (
     <>
       <button
         className="glass-control"
         onClick={() => setPickerOpen(true)}
-        title="Change provider"
+        title={showModel && currentModel ? `Change provider - ${currentModel}` : 'Change provider'}
         style={{
           display: 'flex',
           alignItems: 'center',

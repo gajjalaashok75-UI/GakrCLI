@@ -1,18 +1,20 @@
 import { useEffect } from 'react';
-import type { ChatMessage } from '../../types/chat';
+import type { ChatMessage, SessionCost } from '../../types/chat';
 import { useAutoScroll } from '../../hooks/useAutoScroll';
 import { UserMessage } from './UserMessage';
 import { AssistantMessage } from './AssistantMessage';
 import { StreamingIndicator } from './StreamingIndicator';
+import { CostDisplay } from '../shared/CostDisplay';
 
 interface MessageListProps {
   messages: ChatMessage[];
+  cost: SessionCost;
   isStreaming: boolean;
   processState?: 'idle' | 'starting' | 'running' | 'stopped' | 'crashed';
   onEditMessage?: (uuid: string, newContent: string) => void;
 }
 
-export function MessageList({ messages, isStreaming, processState, onEditMessage }: MessageListProps) {
+export function MessageList({ messages, cost, isStreaming, processState, onEditMessage }: MessageListProps) {
   const { containerRef, userScrolledUp, autoScroll, scrollToBottom } = useAutoScroll();
   const latestAssistantIndex = findLatestAssistantIndex(messages);
 
@@ -62,6 +64,12 @@ export function MessageList({ messages, isStreaming, processState, onEditMessage
           <StreamingIndicator
             visible={isStreaming && !hasStreamingBlocks(messages)}
           />
+
+          {!isStreaming && (
+            <div className="conversation-stats">
+              <CostDisplay cost={cost} />
+            </div>
+          )}
         </div>
       </div>
 

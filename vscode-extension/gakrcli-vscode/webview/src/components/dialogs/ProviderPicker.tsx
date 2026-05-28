@@ -95,10 +95,12 @@ export function ProviderPicker({
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 100,
+        zIndex: 1000,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
+        padding: 16,
+        boxSizing: 'border-box',
       }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
@@ -109,7 +111,7 @@ export function ProviderPicker({
           padding: 20,
           width: 'min(560px, 92vw)',
           maxWidth: '90vw',
-          maxHeight: '88vh',
+          maxHeight: 'calc(100vh - 32px)',
           display: 'flex',
           flexDirection: 'column',
           gap: 14,
