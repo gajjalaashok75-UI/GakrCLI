@@ -362,14 +362,16 @@ export class AuthManager {
   getCurrentProvider(): ProviderConfig {
     const profile = this.getProfileFallback();
     if (profile) {
+      const model = this.settings.selectedModel ??
+        profile.profile.env.OPENAI_MODEL ??
+        profile.profile.env.ANTHROPIC_MODEL ??
+        profile.profile.env.GEMINI_MODEL ??
+        profile.profile.env.MISTRAL_MODEL;
       return {
         id: profile.profile.profile,
         label: labelForProfile(profile.profile.profile),
         env: applyCompatibilityFlag(profile.profile.profile, profile.profile.env),
-        model: profile.profile.env.OPENAI_MODEL ??
-          profile.profile.env.ANTHROPIC_MODEL ??
-          profile.profile.env.GEMINI_MODEL ??
-          profile.profile.env.MISTRAL_MODEL,
+        model,
       };
     }
 

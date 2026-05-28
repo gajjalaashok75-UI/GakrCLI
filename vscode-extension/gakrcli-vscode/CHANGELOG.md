@@ -13,6 +13,9 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ### Fixed (2026-05-28)
 
+- Wired Bypass mode through the wrapper launch flags by enabling the required GakrCLI allow flag when selected and passing `--allow-dangerously-skip-permissions` into new and resumed processes.
+- Rendered the model menu through a bounded webview portal, kept the active model label populated from provider/profile state, and allowed explicit model selections to override the `.gakrcli-profile.json` fallback model.
+- Deduplicated attached files from the picker through send-time prompt construction and compacted the attachment bar for larger file sets.
 - Kept provider and model picker popups bounded above the composer in narrow VS Code panes and preserved provider selection behavior after the footer layout change.
 - Clamped the model picker to the webview viewport so it stays visible in narrow panes.
 - Kept startup, resume, and provider display aligned with the active `.gakrcli-profile.json` fallback model and base URL when extension provider settings are not explicitly set.

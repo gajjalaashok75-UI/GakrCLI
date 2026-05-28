@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **VS Code Webview Boundary**: Added a subtle full-shell border and removed the duplicate standalone attach button now that file/photo upload lives in the add menu.
 
 ### Fixed (2026-05-28)
+- **VS Code Bypass Permission Mode**: Wired Bypass mode through the wrapper launch flags by enabling the required GakrCLI allow flag when selected and passing `--allow-dangerously-skip-permissions` into new and resumed processes.
+- **VS Code Model Selector**: Rendered the model menu through a bounded webview portal, kept the active model label populated from the provider/profile state, and allowed explicit model selections to override the `.gakrcli-profile.json` fallback model.
+- **VS Code File Attachments**: Deduplicated attached files from the picker through send-time prompt construction and compacted the attachment bar for larger file sets.
 - **VS Code Model Picker Bounds**: Clamped the model picker to the webview viewport so it stays visible in narrow panes.
 - **VS Code Provider Profile State**: Kept startup, resume, and provider display aligned with the active `.gakrcli-profile.json` fallback model and base URL when extension provider settings are not explicitly set.
 - **VS Code Permission Mode Sync**: Reported the effective permission mode back to the webview so blocked Bypass attempts snap back to the active mode.
