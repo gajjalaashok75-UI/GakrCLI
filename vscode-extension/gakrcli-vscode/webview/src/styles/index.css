@@ -839,10 +839,44 @@ details[open] .thinking-toggle {
   border-top: .5px solid color-mix(in srgb, var(--app-glass-border) 62%, transparent);
   z-index: 6;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
   padding: 5px;
   background: color-mix(in srgb, var(--app-glass-surface) 48%, transparent);
+}
+
+.input-footer > .glass-control,
+.input-footer > div {
+  min-width: 0;
+}
+
+.input-footer .glass-control {
+  max-width: min(210px, 100%);
+}
+
+.input-footer .sendButton {
+  margin-left: auto;
+}
+
+.conversation-stats {
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px 0 2px;
+  color: var(--app-secondary-foreground);
+}
+
+.conversation-stats:empty {
+  display: none;
+}
+
+.conversation-stats > div {
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 44%, transparent);
+  border-radius: var(--corner-radius-small);
+  padding: 3px 7px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-glass-highlight) 30%, transparent), transparent),
+    color-mix(in srgb, var(--app-glass-surface) 48%, transparent);
 }
 
 /* ============================================================

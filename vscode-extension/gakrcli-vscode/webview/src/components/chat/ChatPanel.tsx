@@ -8,7 +8,6 @@ import { useActiveFile } from '../../hooks/useActiveFile';
 import { ChatHeader } from '../header/ChatHeader';
 import { SessionList } from '../header/SessionList';
 import { MessageList } from './MessageList';
-import { CostDisplay } from '../shared/CostDisplay';
 import { PermissionModeIndicator } from '../input/PermissionModeIndicator';
 import type { PermissionModeValue } from '../input/ModeSelector';
 import { vscode } from '../../vscode';
@@ -162,6 +161,7 @@ export function ChatPanel() {
       {/* Message list */}
       <MessageList
         messages={messages}
+        cost={cost}
         isStreaming={isStreaming}
         processState={processState}
         onEditMessage={editMessage}
@@ -242,19 +242,22 @@ export function ChatPanel() {
               onEffortChange={setEffortLevel}
               toolActivity={toolActivity}
               permissionMode={permissionMode}
+              onOpenMcpManager={() => setShowMcpManager(true)}
+              onOpenPluginManager={() => setShowPluginManager(true)}
+              footerControls={(
+                <ModelSelector currentModel={model} availableModels={availableModels} />
+              )}
             />
           </div>
         </div>
 
-        {/* Footer: permission mode + cost + provider */}
         <div className="composer-footer">
           <div className="composer-footer-left">
             <PermissionModeIndicator
               currentMode={permissionMode}
               onModeChange={handleModeChange}
             />
-            <ProviderBadge />
-            <ModelSelector currentModel={model} availableModels={availableModels} />
+            <ProviderBadge showModel={false} />
             <FastModeToggle
               isEnabled={fastModeState.enabled}
               canToggle={fastModeState.canToggle}
@@ -264,33 +267,6 @@ export function ChatPanel() {
                 vscode.postMessage({ type: 'toggle_fast_mode', enabled: newEnabled });
               }}
             />
-          </div>
-          <div className="composer-footer-right">
-            <button
-              className="composer-utility-button"
-              onClick={() => setShowMcpManager(true)}
-              title="MCP Servers"
-              style={{
-                fontSize: 10, padding: '1px 5px', cursor: 'pointer',
-                borderRadius: 'var(--corner-radius-small)',
-                color: 'var(--app-secondary-foreground)',
-              }}
-            >
-              MCP
-            </button>
-            <button
-              className="composer-utility-button"
-              onClick={() => setShowPluginManager(true)}
-              title="Plugins"
-              style={{
-                fontSize: 10, padding: '1px 5px', cursor: 'pointer',
-                borderRadius: 'var(--corner-radius-small)',
-                color: 'var(--app-secondary-foreground)',
-              }}
-            >
-              Plugins
-            </button>
-            <CostDisplay cost={cost} className="" />
           </div>
         </div>
       </div>
@@ -315,9 +291,24 @@ interface InputAreaProps {
   onEffortChange: (level: string) => void;
   permissionMode?: string;
   toolActivity: ToolActivity | null;
+  footerControls?: React.ReactNode;
+  onOpenMcpManager: () => void;
+  onOpenPluginManager: () => void;
 }
 
-function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, onEffortChange, toolActivity, permissionMode }: InputAreaProps) {
+function InputArea({
+  isStreaming,
+  isStarting,
+  onSend,
+  onInterrupt,
+  effortLevel,
+  onEffortChange,
+  toolActivity,
+  permissionMode,
+  footerControls,
+  onOpenMcpManager,
+  onOpenPluginManager,
+}: InputAreaProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [inputValue, setInputValue] = useState('');
   const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
@@ -356,7 +347,7 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
     const text = inputValue.trim();
     if (!text && attachments.length === 0) return;
     if (isStarting) return;
-    onSend(text);
+    onSend(buildMessageText(text, attachments));
     setInputValue('');
     setAttachments([]);
     setSlashMenuVisible(false);
@@ -485,15 +476,6 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
     }
   }, [onSend]);
 
-  const handleSlashButtonClick = useCallback(() => {
-    if (slashMenuVisible) {
-      setSlashMenuVisible(false);
-    } else {
-      setSlashMenuVisible(true);
-      setSlashQuery('');
-    }
-  }, [slashMenuVisible]);
-
   const handlePaperclipClick = useCallback(() => {
     vscode.postMessage({ type: 'file_picker_request' });
   }, []);
@@ -531,7 +513,7 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
 
   const placeholder = isStarting
     ? 'Starting GakrCLI...'
-    : 'How can I help? (@ to mention files, / for commands)';
+    : 'How can I help? @ to mention files';
 
   // Keep the textarea enabled during streaming so the user can keep drafting.
   // Only disable during initial CLI startup
@@ -628,16 +610,6 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
       {/* Toolbar row */}
       <div className="input-footer">
         {/* Left: action buttons */}
-        <ToolbarIconButton onClick={handleSlashButtonClick} title="Slash commands" disabled={textareaDisabled}>
-          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13 }}>/</span>
-        </ToolbarIconButton>
-
-        <ToolbarIconButton onClick={handlePaperclipClick} title="Attach file" disabled={textareaDisabled}>
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M13.5 7.5l-6 6a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" />
-          </svg>
-        </ToolbarIconButton>
-
         <div style={{ position: 'relative' }} ref={addMenuRef}>
           <ToolbarIconButton onClick={handleAddClick} title="Add content" disabled={textareaDisabled}>
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
@@ -662,7 +634,7 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
             >
               <AddContentMenuItem
                 icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M13.5 7.5l-6 6a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" /></svg>}
-                label="Upload from computer"
+                label="Add files and photos"
                 onClick={() => {
                   vscode.postMessage({ type: 'file_picker_request' });
                   setAddMenuVisible(false);
@@ -712,9 +684,33 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
                   }
                 }}
               />
+              <AddContentMenuItem
+                icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 4h10M3 8h10M3 12h10"/><circle cx="1.5" cy="4" r=".5" fill="currentColor"/><circle cx="1.5" cy="8" r=".5" fill="currentColor"/><circle cx="1.5" cy="12" r=".5" fill="currentColor"/></svg>}
+                label="MCP servers"
+                onClick={() => {
+                  setAddMenuVisible(false);
+                  onOpenMcpManager();
+                }}
+              />
+              <AddContentMenuItem
+                icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6.5 2.5h3v3h-3zM2.5 10.5h3v3h-3zM10.5 10.5h3v3h-3zM8 5.5v2.2M4 10.5V8h8v2.5"/></svg>}
+                label="Plugins"
+                onClick={() => {
+                  setAddMenuVisible(false);
+                  onOpenPluginManager();
+                }}
+              />
             </div>
           )}
         </div>
+
+        <ToolbarIconButton onClick={handlePaperclipClick} title="Attach file" disabled={textareaDisabled}>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M13.5 7.5l-6 6a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" />
+          </svg>
+        </ToolbarIconButton>
+
+        {footerControls}
 
         {/* Spacer */}
         <div style={{ flex: 1 }} />
@@ -790,6 +786,37 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
       )}
     </div>
   );
+}
+
+function buildMessageText(text: string, attachments: AttachmentItem[]): string {
+  const attachmentRefs = attachments
+    .map(formatAttachmentReference)
+    .filter((ref): ref is string => Boolean(ref));
+
+  if (attachmentRefs.length === 0) {
+    return text;
+  }
+
+  const prefix = attachmentRefs.join(' ');
+  return text ? `${prefix}\n${text}` : prefix;
+}
+
+function formatAttachmentReference(attachment: AttachmentItem): string | null {
+  if (attachment.type === 'file' || attachment.type === 'image') {
+    return quoteAtReference(attachment.content);
+  }
+  if (attachment.type === 'url') {
+    return attachment.content;
+  }
+  if (attachment.type === 'text') {
+    return attachment.content;
+  }
+  return null;
+}
+
+function quoteAtReference(value: string): string {
+  const escaped = value.replace(/"/g, '\\"');
+  return `@"${escaped}"`;
 }
 
 function ToolbarIconButton({

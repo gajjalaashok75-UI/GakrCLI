@@ -51,10 +51,10 @@ export function ModelSelector({ currentModel, availableModels }: ModelSelectorPr
       </button>
       {isOpen && (
         <div className="glass-menu" style={{
-          position: 'absolute', bottom: '100%', left: 0, marginBottom: 4,
-          minWidth: 200, maxHeight: 300, overflowY: 'auto',
+          position: 'absolute', bottom: '100%', right: 0, marginBottom: 4,
+          minWidth: 200, width: 'min(320px, calc(100vw - 32px))', maxHeight: 300, overflowY: 'auto',
           borderRadius: 'var(--corner-radius-medium)',
-          zIndex: 50,
+          zIndex: 80,
         }}>
           <div className="glass-menu-header" style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, color: 'var(--app-secondary-foreground)' }}>
             Select Model

@@ -7,6 +7,12 @@ All notable changes to GakrCLI VS Code are documented here.
 ### Changed (2026-05-28)
 
 - Refined the VS Code webview styling with a darker black-glass theme, lower-brightness sky-blue highlights, and consistent glass treatments across chat, sessions, tool output, provider/model selectors, MCP, plugin, permission, and onboarding surfaces.
+- Reworked the chat composer footer so the input row starts with add and attachment controls, the add menu contains MCP and Plugins, and only permission mode, provider, and Fast remain in the outside footer row.
+- Moved conversation runtime usage stats to the end of the chat and expanded them to show cost, input/output tokens, cache tokens, turns, and duration.
+
+### Fixed (2026-05-28)
+
+- Kept provider and model picker popups bounded above the composer in narrow VS Code panes and preserved provider selection behavior after the footer layout change.
 
 ### Added (2026-05-27 19:09:20 +05:30)
 
