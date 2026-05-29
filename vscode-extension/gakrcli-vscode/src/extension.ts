@@ -242,6 +242,40 @@ export function activate(context: vscode.ExtensionContext) {
     };
   }
 
+  async function providerStatePayloadWithDiscoveredModels(error?: string) {
+    const payload = providerStatePayload(error);
+    try {
+      const models = await authManager.discoverCurrentProviderModels();
+      return {
+        ...payload,
+        models,
+      };
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      output.warn(`[GakrCLI] Failed to discover provider models: ${detail}`);
+      return payload;
+    }
+  }
+
+  async function sendProviderState(panelId?: string, error?: string) {
+    const immediate = providerStatePayload(error);
+    if (panelId) {
+      webviewManager!.sendToPanel(panelId, immediate as never);
+    } else {
+      webviewManager!.broadcast(immediate as never);
+    }
+
+    const discovered = await providerStatePayloadWithDiscoveredModels(error);
+    if (JSON.stringify(discovered.models ?? []) === JSON.stringify(immediate.models ?? [])) {
+      return;
+    }
+    if (panelId) {
+      webviewManager!.sendToPanel(panelId, discovered as never);
+    } else {
+      webviewManager!.broadcast(discovered as never);
+    }
+  }
+
   /**
    * Ensure the CLI process is running. Spawns it if not already started.
    * Returns the ProcessManager instance.
@@ -582,7 +616,7 @@ export function activate(context: vscode.ExtensionContext) {
     const model = authManager.normalizeModelForCurrentProvider(msg.model);
     output.info(`[Webview→CLI] set_model: ${model}`);
     await authManager.updateModel(model);
-    webviewManager!.broadcast(providerStatePayload() as never);
+    void sendProviderState();
     if (processManager) {
       void processManager.sendControlRequest({ subtype: 'set_model', model }).catch((err) => {
         const detail = err instanceof Error ? err.message : String(err);
@@ -963,7 +997,7 @@ export function activate(context: vscode.ExtensionContext) {
   // ==========================================
 
   webviewManager.onMessage('get_provider_state', async (_message, panelId) => {
-    webviewManager!.sendToPanel(panelId, providerStatePayload() as never);
+    await sendProviderState(panelId);
   });
 
   webviewManager.onMessage('set_provider', async (message) => {
@@ -979,7 +1013,7 @@ export function activate(context: vscode.ExtensionContext) {
       baseUrl: msg.baseUrl,
     });
     if (!validation.valid) {
-      webviewManager!.broadcast(providerStatePayload(validation.errors.join('; ')) as never);
+      await sendProviderState(undefined, validation.errors.join('; '));
       return;
     }
     await authManager.updateProvider({
@@ -988,7 +1022,7 @@ export function activate(context: vscode.ExtensionContext) {
       baseUrl: msg.baseUrl,
       model: msg.model,
     });
-    webviewManager!.broadcast(providerStatePayload() as never);
+    await sendProviderState();
   });
 
   // ==========================================
@@ -1284,7 +1318,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (processManager) {
         processManager.write({ type: 'user', message: { role: 'user', content: '/logout' } });
       }
-      webviewManager!.broadcast(providerStatePayload() as never);
+      await sendProviderState();
       vscode.window.showInformationMessage('GakrCLI: VS Code provider credentials cleared.');
     }),
   );

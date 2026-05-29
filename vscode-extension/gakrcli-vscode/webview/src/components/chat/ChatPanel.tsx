@@ -30,7 +30,6 @@ import type { ToolActivity } from '../../hooks/useChat';
 export function ChatPanel() {
   const {
     messages,
-    cost,
     isStreaming,
     model,
     error,
@@ -39,7 +38,6 @@ export function ChatPanel() {
     processState,
     fastModeState,
     setFastModeState,
-    availableModels,
     effortLevel,
     setEffortLevel,
     toolActivity,
@@ -187,7 +185,6 @@ export function ChatPanel() {
       {/* Message list */}
       <MessageList
         messages={messages}
-        cost={cost}
         isStreaming={isStreaming}
         processState={processState}
         onEditMessage={editMessage}
@@ -273,7 +270,7 @@ export function ChatPanel() {
               footerControls={(
                 <ModelSelector
                   currentModel={providerModel ?? model}
-                  availableModels={providerModels.length > 0 ? providerModels : availableModels}
+                  availableModels={providerModels}
                 />
               )}
             />
@@ -353,7 +350,7 @@ function getProcessStatusLabel(status: string, isStreaming: boolean): string {
   if (isStreaming) return 'Running';
   switch (status) {
     case 'running':
-      return 'Idle';
+      return 'Active';
     case 'starting':
       return 'Starting';
     case 'restarting':

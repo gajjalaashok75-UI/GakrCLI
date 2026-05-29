@@ -5,16 +5,18 @@ import { ToolCallBlock } from './ToolCallBlock';
 import { ContentBlockRouter } from '../blocks/ContentBlockRouter';
 import type { ContentBlock } from '../../types/blocks';
 import { MessageActions } from './MessageActions';
+import type { SessionCost } from '../../types/chat';
 
 interface AssistantMessageProps {
   message: ChatMessage;
   isLatest?: boolean;
   isStreaming?: boolean;
+  cost?: SessionCost;
   onRetry?: (uuid: string) => void;
   onStop?: () => void;
 }
 
-export function AssistantMessage({ message, isLatest = false, isStreaming = false, onRetry, onStop }: AssistantMessageProps) {
+export function AssistantMessage({ message, isLatest = false, isStreaming = false, cost, onRetry, onStop }: AssistantMessageProps) {
   const blocks = message.blocks || [];
 
   // Extract plain text content for copy
@@ -46,6 +48,7 @@ export function AssistantMessage({ message, isLatest = false, isStreaming = fals
             isFailed={false}
             isStreaming={isStreaming || message.isStreaming}
             isLatest={isLatest}
+            cost={cost}
             onRetry={onRetry}
             onStop={onStop}
           />

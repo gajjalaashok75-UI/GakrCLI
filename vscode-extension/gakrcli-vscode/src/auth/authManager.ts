@@ -16,6 +16,7 @@ import {
   type ActiveProviderProfileResult,
   type ProviderModelOption,
 } from '../settings/providerProfiles';
+import { discoverOpenAICompatibleModelOptions } from '../settings/providerModelDiscovery';
 
 // ============================================================================
 // Types
@@ -367,6 +368,7 @@ export class AuthManager {
     private readonly profileLoader: typeof loadProfileFile = loadProfileFile,
     private readonly activeProfileLoader: typeof loadActiveProviderProfile = loadActiveProviderProfile,
     private readonly activeProfileModelUpdater: typeof updateActiveProviderProfileModel = updateActiveProviderProfileModel,
+    private readonly modelDiscoverer: typeof discoverOpenAICompatibleModelOptions = discoverOpenAICompatibleModelOptions,
   ) {}
 
   getAvailableProviders(): ProviderDefinition[] {
@@ -500,6 +502,15 @@ export class AuthManager {
 
   normalizeModelForCurrentProvider(model: string): string {
     return normalizeModelForProvider(this.getCurrentProvider().id, model);
+  }
+
+  async discoverCurrentProviderModels(): Promise<ProviderModelOption[]> {
+    const current = this.getCurrentProvider();
+    const discovered = await this.modelDiscoverer(this.buildProcessEnv());
+    if (discovered.length > 0) {
+      return discovered;
+    }
+    return current.modelOptions ?? [];
   }
 
   validate(input: ProviderUpdateInput): ProviderValidationResult {

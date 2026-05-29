@@ -30,6 +30,8 @@ export interface ChatMessage {
   parentToolUseId: string | null;
   /** Model that generated this message (for assistant messages) */
   model?: string;
+  /** Final cost and usage for the conversation after this assistant turn completed */
+  cost?: SessionCost;
 }
 
 /** Accumulated state of a single streaming assistant turn */

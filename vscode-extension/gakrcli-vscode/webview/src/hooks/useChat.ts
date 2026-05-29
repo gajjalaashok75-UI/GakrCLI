@@ -324,7 +324,7 @@ export function useChat() {
     const usage = normalizeUsage(msg);
     const msgAny = msg as unknown as Record<string, unknown>;
 
-    setCost({
+    const nextCost = {
       totalCostUSD: readNumber(msgAny, 'total_cost_usd', 'totalCostUsd', 'totalCostUSD') ?? 0,
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
@@ -332,7 +332,9 @@ export function useChat() {
       cacheCreationTokens: usage.cacheCreationTokens,
       numTurns: readNumber(msgAny, 'num_turns', 'numTurns') ?? 0,
       durationMs: readNumber(msgAny, 'duration_ms', 'durationMs') ?? 0,
-    });
+    };
+    setCost(nextCost);
+    setMessages((prev) => attachCostToLatestAssistant(prev, nextCost));
 
     if (msg.is_error) {
       const resultText = (msg as unknown as Record<string, unknown>).result as string | undefined;
@@ -393,6 +395,16 @@ export function useChat() {
       if (data.type === 'provider_state') {
         if (typeof data.currentModel === 'string' && data.currentModel.trim()) {
           setModel(data.currentModel);
+        }
+        if (Array.isArray(data.models)) {
+          setAvailableModels(
+            (data.models as Array<Record<string, unknown>>)
+              .map((m) => ({
+                value: (m.value as string) || (m.id as string) || '',
+                displayName: (m.displayName as string) || (m.value as string) || (m.id as string) || '',
+              }))
+              .filter((m) => m.value),
+          );
         }
         return;
       }
@@ -581,6 +593,7 @@ export function useChat() {
         // Bulk load session history on resume
         if (data.type === 'session_history' && Array.isArray(data.messages)) {
           const historyMsgs: ChatMessage[] = [];
+          setCost(EMPTY_COST);
           for (const entry of data.messages as Array<Record<string, unknown>>) {
             if (entry.type === 'user') {
               // Handle both { message: { content } } and direct content formats
@@ -789,6 +802,18 @@ function createUserMessageId(): string {
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function attachCostToLatestAssistant(messages: ChatMessage[], cost: SessionCost): ChatMessage[] {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    if (messages[index]?.role !== 'assistant') {
+      continue;
+    }
+    return messages.map((message, msgIndex) =>
+      msgIndex === index ? { ...message, cost } : message,
+    );
+  }
+  return messages;
 }
 
 function normalizeUsage(msg: ResultMessage): NormalizedUsage {
