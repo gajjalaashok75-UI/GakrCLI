@@ -862,21 +862,10 @@ details[open] .thinking-toggle {
   margin-left: auto;
 }
 
-.conversation-stats {
-  display: flex;
-  justify-content: flex-end;
-  padding: 10px 0 2px;
-  color: var(--app-secondary-foreground);
-}
-
-.conversation-stats:empty {
-  display: none;
-}
-
-.conversation-stats > div {
+.message-usage-summary {
   border: 1px solid color-mix(in srgb, var(--app-glass-border) 44%, transparent);
   border-radius: var(--corner-radius-small);
-  padding: 3px 7px;
+  padding: 2px 6px;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--app-glass-highlight) 30%, transparent), transparent),
     color-mix(in srgb, var(--app-glass-surface) 48%, transparent);

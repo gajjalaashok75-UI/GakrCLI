@@ -1,6 +1,8 @@
 // webview/src/components/chat/MessageActions.tsx
 import React, { useState, useCallback } from 'react';
 import { vscode } from '../../vscode';
+import { CostDisplay } from '../shared/CostDisplay';
+import type { SessionCost } from '../../types/chat';
 
 interface MessageActionsProps {
   /** Whether this is an assistant message (shows copy, retry on failure) or user message (shows edit) */
@@ -15,6 +17,8 @@ interface MessageActionsProps {
   isStreaming?: boolean;
   /** Whether this is the most recent assistant message */
   isLatest?: boolean;
+  /** Cost and usage summary for the completed conversation */
+  cost?: SessionCost;
   /** Callback when user edits their message */
   onEdit?: (uuid: string, newContent: string) => void;
   /** Callback for retry */
@@ -30,6 +34,7 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
   isFailed = false,
   isStreaming = false,
   isLatest = false,
+  cost,
   onEdit,
   onRetry,
   onStop,
@@ -105,6 +110,10 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
 
   return (
     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+      {messageRole === 'assistant' && cost && !isStreaming && (
+        <CostDisplay cost={cost} className="message-usage-summary" />
+      )}
+
       {/* Stop button — visible during streaming on latest assistant message */}
       {isStreaming && isLatest && messageRole === 'assistant' && (
         <ActionButton

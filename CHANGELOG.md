@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed (2026-05-29)
 - **VS Code Provider Model Parity**: Wired the VS Code wrapper to the active `~/.gakrcli.json` provider profile before falling back to legacy `.gakrcli-profile.json`, kept model switches persisted through the GakrCLI `/model` profile path, showed full model IDs in the picker, and added footer runtime status for Sleep, Starting, Idle, and Running states.
+- **VS Code Dynamic Model Picker**: Matched the terminal `/model` flow more closely by fetching OpenAI-compatible provider models from `/v1/models` with `/models` fallback, removing broad static model-list fallback from the picker, and updating selected models immediately while preserving full provider-prefixed IDs.
+- **VS Code Runtime Usage UI**: Moved cost, duration, and token usage into the assistant message hover actions beside copy controls, keeping usage tied to the completed conversation instead of showing a permanent centered footer pill.
 
 ### Changed (2026-05-28)
 - **VS Code Webview Glass Theme**: Tuned the extension webview toward a darker black-glass look with low-brightness sky-blue shine, covering chat, sessions, tool output, provider/model selectors, MCP and plugin dialogs, permission prompts, and onboarding panels.
