@@ -1,0 +1,93 @@
+# npm publish only ships what the `files` field in package.json allows.
+# This .npmignore is a safety net: if `files` is ever removed or expanded,
+# nothing in this list can be published.
+
+# Marketing / landing site — never ship with the CLI package.
+web/
+
+# Build artifacts that are not needed at runtime
+dist/*.map
+dist/*.tsbuildinfo
+
+# Source files (we ship only compiled JS)
+src/
+**/*.ts
+**/*.tsx
+**/*.d.ts
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+
+# Development files
+bun.lockb
+bun.lock
+node_modules/
+scripts/
+vscode-extension/
+test*/**/*.py
+test*/**/*.js
+test*/**/*.ts
+
+# Binaries: only keep the main entry point
+bin/import-specifier.mjs
+bin/import-specifier.test.mjs
+
+# Config files that may contain secrets
+.env
+.env.local
+.env.*.local
+*.env
+
+# Git and version control
+.git/
+.gitignore
+.gitmodules
+.github/
+
+# Documentation / misc
+ANDROID_INSTALL.md
+CODE_OF_CONDUCT.md
+CONTRIBUTING.md
+CHANGELOG.md
+LICENSE
+PLAYBOOK.md
+README.md
+SECURITY.md
+info.md
+run-info.md
+publish-changes.md
+
+# User-generated data (should not be in package)
+.gakr/
+.gakrcli/
+.opengakrcli/
+.gakrcli/
+.vscode/
+
+# IDE and editor files
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+**/*:Zone.Identifier
+**/__pycache__/
+**/*.pyc
+
+# Test and coverage
+coverage/
+reports/
+*.log
+*.temp
+
+# Build outputs other than dist/
+dist/**.map
+temp/
+tmp/
+
+# Misc
+*.py
+atomic_chat_provider.py
+ollama_provider.py
+smart_router.py

@@ -1,0 +1,328 @@
+/**
+ * --provider CLI flag support.
+ *
+ * Maps the user-friendly provider name to the environment variables
+ * that the rest of the codebase uses for provider detection.
+ *
+ * Usage:
+ *   GakrCLI --provider openai --model gpt-4o
+ *   GakrCLI --provider gemini --model gemini-2.0-flash
+ *   GakrCLI --provider mistral --model ministral-3b-latest
+ *   GakrCLI --provider ollama --model llama3.2
+ *   GakrCLI --provider anthropic   (default, no-op)
+ */
+
+import '../integrations/index.js'
+import {
+  ensureIntegrationsLoaded,
+  getAllGateways,
+  getAllVendors,
+  getGateway,
+  getVendor,
+  resolveProfileRoute,
+} from '../integrations/index.js'
+import { PRESET_VENDOR_MAP } from '../integrations/compatibility.js'
+
+const PREFERRED_PROVIDER_ORDER = [
+  'anthropic',
+  'bankr',
+  'zai',
+  'xai',
+  'xiaomi-mimo',
+  'openai',
+  'gemini',
+  'mistral',
+  'github',
+  'bedrock',
+  'vertex',
+  'ollama',
+  'nvidia-nim',
+  'minimax',
+  'venice',
+] as const
+
+function buildValidProviders(): string[] {
+  ensureIntegrationsLoaded()
+
+  const discovered = new Set<string>([
+    ...PRESET_VENDOR_MAP.map(mapping => mapping.preset),
+    ...getAllVendors().map(vendor => vendor.id),
+    ...getAllGateways().map(gateway => gateway.id),
+  ])
+
+  const preferred = PREFERRED_PROVIDER_ORDER.filter(provider =>
+    discovered.has(provider),
+  )
+  const remainder = Array.from(discovered)
+    .filter(provider => !preferred.includes(provider as (typeof PREFERRED_PROVIDER_ORDER)[number]))
+    .sort()
+
+  return [...preferred, ...remainder]
+}
+
+export const VALID_PROVIDERS = buildValidProviders()
+
+export type ProviderFlagName = string
+
+/**
+ * Extract the value of --provider from argv.
+ * Returns null if the flag is absent or has no value.
+ */
+export function parseProviderFlag(args: string[]): string | null {
+  const idx = args.indexOf('--provider')
+  if (idx === -1) return null
+  const value = args[idx + 1]
+  if (!value || value.startsWith('--')) return null
+  return value
+}
+
+/**
+ * Parse and apply --provider from argv in one step.
+ * Returns undefined when the flag is absent.
+ */
+export function applyProviderFlagFromArgs(
+  args: string[],
+): { error?: string } | undefined {
+  const provider = parseProviderFlag(args)
+  if (!provider) return undefined
+  return applyProviderFlag(provider, args)
+}
+
+/**
+ * Extract the value of --model from argv.
+ * Returns null if absent.
+ */
+export function parseModelFlag(args: string[]): string | null {
+  const idx = args.indexOf('--model')
+  if (idx === -1) return null
+  const value = args[idx + 1]
+  if (!value || value.startsWith('--')) return null
+  return value
+}
+
+function getRouteDefaults(provider: string): {
+  defaultBaseUrl?: string
+  defaultModel?: string
+} {
+  ensureIntegrationsLoaded()
+
+  const route = resolveProfileRoute(provider)
+  const vendor =
+    getVendor(route.vendorId) ??
+    (route.routeId !== route.vendorId ? getVendor(route.routeId) : undefined)
+  const gateway =
+    (route.gatewayId ? getGateway(route.gatewayId) : undefined) ??
+    getGateway(route.routeId)
+
+  const defaultModel = gateway?.defaultModel ?? vendor?.defaultModel
+
+  return {
+    defaultBaseUrl: gateway?.defaultBaseUrl ?? vendor?.defaultBaseUrl,
+    defaultModel,
+  }
+}
+
+/**
+ * Apply --model without --provider to process.env for this process only.
+ *
+ * This runs after saved provider profiles are applied, so it can route the
+ * override to the already-active provider's model env var before startup
+ * rendering and request resolution read it.
+ */
+export function applyModelFlagFromArgs(args: string[]): void {
+  if (args.includes('--provider')) return
+
+  const model = parseModelFlag(args)
+  if (!model) return
+
+  const useGemini =
+    process.env.GAKR_CODE_USE_GEMINI === '1' ||
+    process.env.GAKR_CODE_USE_GEMINI === 'true'
+  const useMistral =
+    process.env.GAKR_CODE_USE_MISTRAL === '1' ||
+    process.env.GAKR_CODE_USE_MISTRAL === 'true'
+  const useOpenAI =
+    process.env.GAKR_CODE_USE_OPENAI === '1' ||
+    process.env.GAKR_CODE_USE_OPENAI === 'true'
+  const useGithub =
+    process.env.GAKR_CODE_USE_GITHUB === '1' ||
+    process.env.GAKR_CODE_USE_GITHUB === 'true'
+  const useNvidia =
+    process.env.GAKR_CODE_USE_NVIDIA === '1' ||
+    process.env.GAKR_CODE_USE_NVIDIA === 'true'
+
+  if (useGemini) {
+    process.env.GEMINI_MODEL = model
+  } else if (useMistral) {
+    process.env.MISTRAL_MODEL = model
+  } else if (useNvidia) {
+    process.env.NVIDIA_MODEL = model
+    process.env.OPENAI_MODEL = model
+  } else if (useOpenAI || useGithub) {
+    process.env.OPENAI_MODEL = model
+  } else {
+    process.env.ANTHROPIC_MODEL = model
+  }
+}
+
+/**
+ * Apply a provider name to process.env.
+ * Sets the required GAKR_CODE_USE_* flag and any provider-specific
+ * defaults (Ollama base URL, model routing). Does NOT overwrite values
+ * that are already set — explicit env vars always win.
+ *
+ * Returns { error } if the provider name is not recognized.
+ */
+export function applyProviderFlag(
+  provider: string,
+  args: string[],
+): { error?: string } {
+  if (!VALID_PROVIDERS.includes(provider)) {
+    return {
+      error: `Unknown provider "${provider}". Valid providers: ${VALID_PROVIDERS.join(', ')}`,
+    }
+  }
+
+  const copiedOpenAIKeyProvider =
+    process.env.OPENAI_API_KEY !== undefined &&
+    process.env.OPENAI_API_KEY === process.env.NVIDIA_API_KEY &&
+    process.env.NVIDIA_NIM === '1'
+      ? 'nvidia-nim'
+      : process.env.OPENAI_API_KEY !== undefined &&
+          process.env.OPENAI_API_KEY === process.env.BNKR_API_KEY
+        ? 'bankr'
+        : process.env.OPENAI_API_KEY !== undefined &&
+            process.env.OPENAI_API_KEY === process.env.XAI_API_KEY
+          ? 'xai'
+          : process.env.OPENAI_API_KEY !== undefined &&
+              process.env.OPENAI_API_KEY === process.env.MIMO_API_KEY
+            ? 'xiaomi-mimo'
+            : process.env.OPENAI_API_KEY !== undefined &&
+                process.env.OPENAI_API_KEY === process.env.VENICE_API_KEY
+              ? 'venice'
+              : process.env.OPENAI_API_KEY !== undefined &&
+                  process.env.OPENAI_API_KEY === process.env.MINIMAX_API_KEY
+                ? 'minimax'
+                : null
+
+  delete process.env.GAKR_CODE_USE_OPENAI
+  delete process.env.GAKR_CODE_USE_GEMINI
+  delete process.env.GAKR_CODE_USE_MISTRAL
+  delete process.env.GAKR_CODE_USE_GITHUB
+  delete process.env.GAKR_CODE_USE_BEDROCK
+  delete process.env.GAKR_CODE_USE_VERTEX
+  delete process.env.NVIDIA_NIM
+  if (copiedOpenAIKeyProvider && provider !== copiedOpenAIKeyProvider) {
+    delete process.env.OPENAI_API_KEY
+  }
+
+  const model = parseModelFlag(args)
+  const { defaultBaseUrl, defaultModel } = getRouteDefaults(provider)
+
+  switch (provider) {
+    case 'anthropic':
+      // Default — no env vars needed
+      break
+
+    case 'openai':
+      process.env.GAKR_CODE_USE_OPENAI = '1'
+      if (model) process.env.OPENAI_MODEL = model
+      break
+
+    case 'gemini':
+      process.env.GAKR_CODE_USE_GEMINI = '1'
+      if (model) process.env.GEMINI_MODEL = model
+      break
+
+    case 'mistral':
+      process.env.GAKR_CODE_USE_MISTRAL = '1'
+      if (model) process.env.MISTRAL_MODEL = model
+      break
+
+    case 'github':
+      process.env.GAKR_CODE_USE_GITHUB = '1'
+      if (model) process.env.OPENAI_MODEL = model
+      break
+
+    case 'bedrock':
+      process.env.GAKR_CODE_USE_BEDROCK = '1'
+      break
+
+    case 'vertex':
+      process.env.GAKR_CODE_USE_VERTEX = '1'
+      break
+
+    case 'ollama':
+      process.env.GAKR_CODE_USE_OPENAI = '1'
+      process.env.OPENAI_BASE_URL ??= defaultBaseUrl ?? 'http://localhost:11434/v1'
+      if (!process.env.OPENAI_API_KEY) {
+        process.env.OPENAI_API_KEY = 'ollama'
+      }
+      if (model) process.env.OPENAI_MODEL = model
+      break
+
+    case 'nvidia-nim':
+      process.env.GAKR_CODE_USE_OPENAI = '1'
+      process.env.OPENAI_BASE_URL ??= defaultBaseUrl ?? 'https://integrate.api.nvidia.com/v1'
+      process.env.NVIDIA_NIM = '1'
+      if (process.env.NVIDIA_API_KEY && !process.env.OPENAI_API_KEY) {
+        process.env.OPENAI_API_KEY = process.env.NVIDIA_API_KEY
+      }
+      process.env.OPENAI_MODEL ??= 'stepfun-ai/step-3.5-flash'
+      if (model) process.env.OPENAI_MODEL = model
+      break
+
+    case 'bankr':
+      process.env.GAKR_CODE_USE_OPENAI = '1'
+      process.env.OPENAI_BASE_URL ??= defaultBaseUrl ?? 'https://llm.bankr.bot/v1'
+      process.env.OPENAI_MODEL ??= 'claude-opus-4.6'
+      if (model) process.env.OPENAI_MODEL = model
+      if (process.env.BNKR_API_KEY && !process.env.OPENAI_API_KEY) {
+        process.env.OPENAI_API_KEY = process.env.BNKR_API_KEY
+      }
+      break
+
+    default:
+      process.env.GAKR_CODE_USE_OPENAI = '1'
+      if (defaultBaseUrl) {
+        process.env.OPENAI_BASE_URL ??= defaultBaseUrl
+      }
+      if (defaultModel) {
+        process.env.OPENAI_MODEL ??= defaultModel
+      }
+      if (model) process.env.OPENAI_MODEL = model
+      break
+
+    case 'xai':
+      process.env.GAKR_CODE_USE_OPENAI = '1'
+      process.env.OPENAI_BASE_URL ??= 'https://api.x.ai/v1'
+      process.env.OPENAI_MODEL ??= defaultModel ?? 'grok-4.3'
+      if (model) process.env.OPENAI_MODEL = model
+      if (process.env.XAI_API_KEY && !process.env.OPENAI_API_KEY) {
+        process.env.OPENAI_API_KEY = process.env.XAI_API_KEY
+      }
+      break
+
+    case 'xiaomi-mimo':
+      process.env.GAKR_CODE_USE_OPENAI = '1'
+      process.env.OPENAI_BASE_URL ??= defaultBaseUrl ?? 'https://api.xiaomimimo.com/v1'
+      process.env.OPENAI_MODEL ??= defaultModel ?? 'mimo-v2.5-pro'
+      if (model) process.env.OPENAI_MODEL = model
+      if (process.env.MIMO_API_KEY && !process.env.OPENAI_API_KEY) {
+        process.env.OPENAI_API_KEY = process.env.MIMO_API_KEY
+      }
+      break
+
+    case 'venice':
+      process.env.GAKR_CODE_USE_OPENAI = '1'
+      process.env.OPENAI_BASE_URL ??= defaultBaseUrl ?? 'https://api.venice.ai/api/v1'
+      process.env.OPENAI_MODEL ??= defaultModel ?? 'venice-uncensored'
+      if (model) process.env.OPENAI_MODEL = model
+      if (process.env.VENICE_API_KEY && !process.env.OPENAI_API_KEY) {
+        process.env.OPENAI_API_KEY = process.env.VENICE_API_KEY
+      }
+      break
+  }
+
+  return {}
+}
