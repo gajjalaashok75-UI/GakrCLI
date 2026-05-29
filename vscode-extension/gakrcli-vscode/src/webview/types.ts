@@ -499,6 +499,7 @@ export interface ProviderStateMessage {
   currentProviderId: string;
   currentModel?: string;
   currentBaseUrl?: string;
+  models?: Array<{ value: string; displayName: string }>;
   error?: string;
 }
 
