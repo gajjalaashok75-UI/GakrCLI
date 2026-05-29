@@ -113,7 +113,7 @@ export function useChat() {
   const [error, setError] = useState<string | null>(null);
   const [rateLimitInfo, setRateLimitInfo] = useState<RateLimitInfo | null>(null);
   const [promptSuggestions, setPromptSuggestions] = useState<string[]>([]);
-  const [processState, setProcessState] = useState<'idle' | 'starting' | 'running' | 'stopped' | 'crashed'>('idle');
+  const [processState, setProcessState] = useState<'idle' | 'starting' | 'running' | 'stopped' | 'crashed' | 'restarting'>('idle');
   const [fastModeState, setFastModeState] = useState<{ enabled: boolean; canToggle: boolean }>({
     enabled: false,
     canToggle: true,
@@ -390,6 +390,13 @@ export function useChat() {
         return;
       }
 
+      if (data.type === 'provider_state') {
+        if (typeof data.currentModel === 'string' && data.currentModel.trim()) {
+          setModel(data.currentModel);
+        }
+        return;
+      }
+
       // Unwrap cli_output envelope
       const msg: SDKMessage = data.type === 'cli_output' ? data.data : data;
       if (!msg || typeof msg !== 'object') return;
@@ -510,7 +517,7 @@ export function useChat() {
                       (initAny.models as Array<Record<string, unknown>>)
                         .map((m) => ({
                           value: (m.value as string) || (m.id as string) || '',
-                          displayName: (m.displayName as string) || (m.name as string) || (m.value as string) || '',
+                          displayName: (m.value as string) || (m.id as string) || (m.displayName as string) || (m.name as string) || '',
                         }))
                         .filter((m) => m.value),
                     );

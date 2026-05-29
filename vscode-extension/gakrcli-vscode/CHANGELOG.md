@@ -4,6 +4,12 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ## [Unreleased]
 
+### Fixed (2026-05-29)
+
+- Loaded the active GakrCLI provider profile from `~/.gakrcli.json` before falling back to `.gakrcli-profile.json`, keeping NVIDIA NIM and other provider/model selections aligned with the root `/provider` and `/model` commands.
+- Updated the model picker immediately after selection, displayed full model IDs such as `openai/gpt-oss-120b` and `openrouter/free`, and preferred the active provider profile model list over broad static catalogs.
+- Added a footer runtime status chip showing Sleep, Starting, Idle, Running, and related states beside the permission, provider, and Fast controls.
+
 ### Changed (2026-05-28)
 
 - Refined the VS Code webview styling with a darker black-glass theme, lower-brightness sky-blue highlights, and consistent glass treatments across chat, sessions, tool output, provider/model selectors, MCP, plugin, permission, and onboarding surfaces.

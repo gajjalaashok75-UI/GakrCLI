@@ -174,6 +174,7 @@ describe('AuthManager', () => {
       expect(env['NVIDIA_API_KEY']).toBe('nvidia-key');
       expect(env['OPENAI_API_KEY']).toBe('nvidia-key');
       expect(env['OPENAI_BASE_URL']).toBe('https://integrate.api.nvidia.com/v1');
+      expect(env['OPENAI_MODEL']).toBe('stepfun-ai/step-3.5-flash');
     });
   });
 
@@ -228,6 +229,50 @@ describe('AuthManager', () => {
   });
 
   describe('buildProcessEnv - saved GakrCLI profile fallback', () => {
+    it('loads the active ~/.gakrcli.json provider profile before the legacy profile', () => {
+      const manager = new AuthManager(
+        makeSettings(),
+        () => ({
+          path: 'C:\\Users\\test\\.gakrcli\\.gakrcli-profile.json',
+          profile: {
+            profile: 'openai',
+            env: {
+              OPENAI_BASE_URL: 'https://api.openai.com/v1',
+              OPENAI_MODEL: 'gpt-4o',
+            },
+          },
+        }),
+        () => ({
+          path: 'C:\\Users\\test\\.gakrcli.json',
+          profile: {
+            id: 'nvidia_prof',
+            name: 'NVIDIA NIM',
+            provider: 'nvidia-nim',
+            baseUrl: 'https://integrate.api.nvidia.com/v1',
+            model: 'nvidia/llama-3.1-nemotron-70b-instruct',
+            apiKey: 'nvapi-live',
+          },
+          modelOptions: [
+            {
+              value: 'nvidia/llama-3.1-nemotron-70b-instruct',
+              displayName: 'nvidia/llama-3.1-nemotron-70b-instruct',
+            },
+          ],
+        }),
+      );
+
+      const current = manager.getCurrentProvider();
+      const env = manager.buildProcessEnv();
+
+      expect(current.id).toBe('nvidia-nim');
+      expect(current.model).toBe('nvidia/llama-3.1-nemotron-70b-instruct');
+      expect(current.modelOptions?.[0].value).toBe('nvidia/llama-3.1-nemotron-70b-instruct');
+      expect(env['OPENAI_BASE_URL']).toBe('https://integrate.api.nvidia.com/v1');
+      expect(env['OPENAI_MODEL']).toBe('nvidia/llama-3.1-nemotron-70b-instruct');
+      expect(env['NVIDIA_NIM']).toBe('1');
+      expect(env['NVIDIA_API_KEY']).toBe('nvapi-live');
+    });
+
     it('loads profile env when extension provider settings are not explicit', () => {
       const manager = new AuthManager(
         makeSettings(),
@@ -242,6 +287,7 @@ describe('AuthManager', () => {
             },
           },
         }),
+        () => null,
       );
 
       const env = manager.buildProcessEnv();

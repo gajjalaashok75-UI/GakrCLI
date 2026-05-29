@@ -237,6 +237,7 @@ export function activate(context: vscode.ExtensionContext) {
         current.env.ANTHROPIC_BASE_URL ??
         current.env.GEMINI_BASE_URL ??
         current.env.MISTRAL_BASE_URL,
+      models: current.modelOptions,
       ...(error ? { error } : {}),
     };
   }
@@ -578,14 +579,14 @@ export function activate(context: vscode.ExtensionContext) {
   // Handle set_model from webview
   webviewManager.onMessage('set_model', async (message) => {
     const msg = message as unknown as { model: string };
-    output.info(`[Webview→CLI] set_model: ${msg.model}`);
-    await settingsSync.setModel(msg.model);
+    const model = authManager.normalizeModelForCurrentProvider(msg.model);
+    output.info(`[Webview→CLI] set_model: ${model}`);
+    await authManager.updateModel(model);
     webviewManager!.broadcast(providerStatePayload() as never);
     if (processManager) {
-      processManager.write({
-        type: 'control_request',
-        request_id: `set-model-${Date.now()}`,
-        request: { subtype: 'set_model', model: msg.model },
+      void processManager.sendControlRequest({ subtype: 'set_model', model }).catch((err) => {
+        const detail = err instanceof Error ? err.message : String(err);
+        output.warn(`[GakrCLI] Failed to set model: ${detail}`);
       });
     }
   });

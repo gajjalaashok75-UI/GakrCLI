@@ -73,6 +73,7 @@ export function ChatPanel() {
   const [showMcpManager, setShowMcpManager] = useState(false);
   const [showPluginManager, setShowPluginManager] = useState(false);
   const [providerModel, setProviderModel] = useState<string | null>(null);
+  const [providerModels, setProviderModels] = useState<Array<{ value: string; displayName: string }>>([]);
   const [showOnboarding, setShowOnboarding] = useState(() => {
     return !localStorage.getItem('gakrcli.onboarding.dismissed');
   });
@@ -110,6 +111,15 @@ export function ChatPanel() {
     vscode.postMessage({ type: 'get_provider_state' });
     return vscode.onMessage('provider_state', (message) => {
       setProviderModel(typeof message.currentModel === 'string' ? message.currentModel : null);
+      const models = Array.isArray(message.models)
+        ? (message.models as Array<Record<string, unknown>>)
+          .map((m) => ({
+            value: (m.value as string) || '',
+            displayName: (m.displayName as string) || (m.value as string) || '',
+          }))
+          .filter((m) => m.value)
+        : [];
+      setProviderModels(models);
     });
   }, []);
 
@@ -261,7 +271,10 @@ export function ChatPanel() {
               onOpenMcpManager={() => setShowMcpManager(true)}
               onOpenPluginManager={() => setShowPluginManager(true)}
               footerControls={(
-                <ModelSelector currentModel={model ?? providerModel} availableModels={availableModels} />
+                <ModelSelector
+                  currentModel={providerModel ?? model}
+                  availableModels={providerModels.length > 0 ? providerModels : availableModels}
+                />
               )}
             />
           </div>
@@ -283,6 +296,7 @@ export function ChatPanel() {
                 vscode.postMessage({ type: 'toggle_fast_mode', enabled: newEnabled });
               }}
             />
+            <ProcessStatusBadge status={processStatus} isStreaming={isStreaming} />
           </div>
         </div>
       </div>
@@ -292,6 +306,88 @@ export function ChatPanel() {
       <PluginManager isOpen={showPluginManager} onClose={() => setShowPluginManager(false)} />
     </div>
   );
+}
+
+function ProcessStatusBadge({
+  status,
+  isStreaming,
+}: {
+  status: string;
+  isStreaming: boolean;
+}) {
+  const label = getProcessStatusLabel(status, isStreaming);
+  const tone = getProcessStatusTone(status, isStreaming);
+
+  return (
+    <div
+      className="glass-control"
+      title={`GakrCLI status: ${label}`}
+      aria-label={`GakrCLI status: ${label}`}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        padding: '2px 8px',
+        fontSize: 11,
+        borderRadius: 'var(--corner-radius-small)',
+        color: 'var(--app-secondary-foreground)',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <span
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: '999px',
+          background: tone,
+          boxShadow: isStreaming ? `0 0 8px ${tone}` : undefined,
+          flex: '0 0 auto',
+        }}
+      />
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function getProcessStatusLabel(status: string, isStreaming: boolean): string {
+  if (isStreaming) return 'Running';
+  switch (status) {
+    case 'running':
+      return 'Idle';
+    case 'starting':
+      return 'Starting';
+    case 'restarting':
+      return 'Restarting';
+    case 'stopped':
+    case 'idle':
+      return 'Sleep';
+    case 'crashed':
+      return 'Crashed';
+    case 'auth_error':
+      return 'Auth';
+    case 'rate_limited':
+      return 'Limited';
+    default:
+      return 'Sleep';
+  }
+}
+
+function getProcessStatusTone(status: string, isStreaming: boolean): string {
+  if (isStreaming) return '#f6c85f';
+  switch (status) {
+    case 'running':
+      return '#5fbf8f';
+    case 'starting':
+    case 'restarting':
+      return '#6aa9ff';
+    case 'crashed':
+    case 'auth_error':
+      return '#f26d6d';
+    case 'rate_limited':
+      return '#f6c85f';
+    default:
+      return '#7f8c99';
+  }
 }
 
 // ============================================================================
