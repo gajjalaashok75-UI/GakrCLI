@@ -88,15 +88,16 @@
 ## Slice 11: VS Code Runtime Settings Webview
 
 - [x] Add a Settings button in the chat header next to New Chat.
-- [x] Add a runtime settings dialog connected to SDK-backed host messages.
-- [x] List supported SDK-updatable settings in the dialog:
-  - Model
-  - Permission mode
-  - Reasoning effort
-  - Max thinking tokens
-  - Fast mode
+- [x] Keep the Settings dialog as a coming-soon placeholder for now.
+- [x] Keep the Settings dialog Refresh button wired to SDK-backed runtime refresh.
+- [x] Keep the Settings dialog Close button local and immediate.
 - [x] Apply model, permission mode, effort, max thinking tokens, and fast mode through `ProcessManager.sendControlRequest({ subtype: 'apply_flag_settings' })`.
 - [x] Refresh visible provider/model/settings/runtime summaries after updates.
+- [x] Keep SDK-updatable settings exposed through existing composer controls for now:
+  - Model selector
+  - Permission mode selector
+  - Reasoning effort selector
+  - Fast mode toggle
 - [ ] Add provider-profile switching controls directly into the settings dialog.
 - [ ] Add editable environment override rows in the settings dialog.
 

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed (2026-05-30)
+- **VS Code Settings Entry Point**: Kept the top-right Settings button as a lightweight placeholder dialog with a working SDK-backed refresh action while runtime setting edits continue through the composer controls.
 - **SDK Runtime Control Surface**: Added a headless SDK runtime snapshot and mutation API for provider/profile/model state, settings, permission mode, reasoning effort, fast mode, context usage, slash commands, MCP, plugins, and usage summaries so IDE hosts can manage GakrCLI without launching a child CLI wrapper.
 - **VS Code SDK Webview Wiring**: Routed VS Code settings, provider/model, MCP, plugin, fast mode, effort, and runtime refresh flows through SDK control methods and added SDK-backed webview state broadcasts for native UI surfaces.
 - **VS Code Permission UI**: Reworked permission and clarification dialogs into compact centered prompts with command/details previews and numbered actions matching the native Codex-style approval flow.

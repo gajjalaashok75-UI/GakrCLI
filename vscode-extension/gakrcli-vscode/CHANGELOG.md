@@ -6,6 +6,7 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ### Changed (2026-05-30)
 
+- Kept the top-right Settings button as a lightweight coming-soon dialog with a working runtime refresh action and Close button.
 - Added SDK-backed runtime refresh and mutation paths for settings, provider/model state, MCP server state, plugin state, Fast mode, and reasoning effort in the native webview flow.
 - Added a top-right Settings entry point and SDK-backed settings state messages for the webview.
 - Reworked permission and clarification dialogs into compact centered prompts with numbered approval/deny actions and command/detail previews.
