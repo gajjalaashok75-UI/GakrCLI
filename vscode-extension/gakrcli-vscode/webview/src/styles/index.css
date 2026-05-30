@@ -1153,6 +1153,135 @@ details[open] .thinking-toggle {
   -webkit-backdrop-filter: var(--app-glass-blur);
 }
 
+.permission-modal-backdrop {
+  background: rgba(0, 0, 0, 0.48);
+}
+
+.permission-card-shell {
+  width: min(410px, calc(100vw - 28px));
+  max-height: min(78vh, 560px);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 72%, transparent);
+  border-radius: 18px;
+  padding: 20px 14px 14px;
+}
+
+.permission-card-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 4px;
+  color: var(--vscode-editor-foreground);
+  font-size: 18px;
+  line-height: 1.5;
+  font-weight: 650;
+}
+
+.permission-card-count {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  background: color-mix(in srgb, var(--app-glass-surface) 82%, transparent);
+}
+
+.permission-card-meta {
+  padding: 4px 4px 12px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+}
+
+.permission-card-code {
+  margin: 0 0 12px;
+  max-height: 130px;
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--app-transparent-inner-border) 70%, transparent);
+  border-radius: 8px;
+  padding: 11px 12px;
+  background: color-mix(in srgb, var(--vscode-input-background) 82%, rgba(0, 0, 0, 0.38));
+  color: var(--vscode-descriptionForeground);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.permission-card-body {
+  max-height: 100px;
+  overflow: auto;
+  padding: 0 4px;
+}
+
+.permission-card-note,
+.permission-card-warning {
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.permission-card-warning {
+  color: var(--vscode-errorForeground);
+}
+
+.permission-choice-list {
+  display: grid;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.permission-choice-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, auto) 1fr;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 7px 10px;
+  background: color-mix(in srgb, var(--app-glass-surface) 78%, rgba(255, 255, 255, 0.02));
+  color: var(--vscode-editor-foreground);
+  cursor: pointer;
+  text-align: left;
+}
+
+.permission-choice-row:hover,
+.permission-choice-row:focus-visible {
+  border-color: color-mix(in srgb, var(--app-glass-border-strong) 58%, transparent);
+  background: color-mix(in srgb, var(--app-list-hover-background) 88%, transparent);
+  outline: none;
+}
+
+.permission-choice-row:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.permission-choice-index,
+.permission-choice-hint {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+.permission-choice-label {
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.permission-choice-hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.permission-choice-muted {
+  opacity: 0.68;
+}
+
 .onboarding-glass-card {
   border: 1px solid color-mix(in srgb, var(--app-glass-border) 60%, transparent);
   background:

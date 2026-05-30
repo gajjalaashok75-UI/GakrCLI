@@ -130,6 +130,44 @@ describe('ProcessManager SDK mode', () => {
     expect(init.account.apiKeySource).toBe('user');
   });
 
+  it('uses SDK runtime APIs for initialize and control state', async () => {
+    (fake.query as any).getRuntimeState = vi.fn().mockResolvedValue({
+      sessionId: 'sdk-session-1',
+      cwd: '/tmp/test-project',
+      status: 'idle',
+      model: 'runtime-model',
+      models: [{ value: 'runtime-model', displayName: 'Runtime Model', description: 'From SDK' }],
+      slashCommands: [{ name: '/runtime', description: 'Runtime command', argumentHint: '<arg>' }],
+      agents: [{ name: 'runtime-agent', description: 'Runtime agent', model: 'runtime-model' }],
+      fastModeState: { state: 'on', enabled: true, canToggle: true },
+      account: { apiKeySource: 'project' },
+    });
+    (fake.query as any).listMcpServers = vi.fn(() => [{ name: 'sdk-mcp', status: 'connected' }]);
+    (fake.query as any).getSettings = vi.fn(() => ({ effective: { fastMode: true }, sources: [], applied: { model: 'runtime-model', effort: null } }));
+    (fake.query as any).getContextUsage = vi.fn().mockResolvedValue({ totalTokens: 12, maxTokens: 100, categories: [] });
+    (fake.query as any).applySettings = vi.fn().mockResolvedValue({ effective: { fastMode: false }, sources: [], applied: { model: 'runtime-model', effort: 'low' } });
+    (fake.query as any).setMcpServers = vi.fn().mockResolvedValue({ success: true, added: ['ide'], removed: [] });
+
+    const init = await manager.spawn();
+    const mcp = await manager.sendControlRequest({ subtype: 'mcp_status' });
+    const settings = await manager.sendControlRequest({ subtype: 'get_settings' });
+    const context = await manager.sendControlRequest({ subtype: 'get_context_usage' });
+    const applied = await manager.sendControlRequest({ subtype: 'apply_flag_settings', settings: { fastMode: false, effort: 'low' } });
+    const mcpSet = await manager.sendControlRequest({ subtype: 'mcp_set_servers', servers: { ide: { type: 'sse', url: 'http://127.0.0.1:1/sse' } } });
+
+    expect(init.commands).toEqual([{ name: '/runtime', description: 'Runtime command', argumentHint: '<arg>' }]);
+    expect(init.agents).toEqual([{ name: 'runtime-agent', description: 'Runtime agent', model: 'runtime-model' }]);
+    expect(init.models).toEqual([{ value: 'runtime-model', displayName: 'Runtime Model', description: 'From SDK' }]);
+    expect(init.fast_mode_state).toBe('on');
+    expect(init.account.apiKeySource).toBe('project');
+    expect(mcp).toEqual({ mcpServers: [{ name: 'sdk-mcp', status: 'connected' }] });
+    expect(settings).toEqual({ effective: { fastMode: true }, sources: [], applied: { model: 'runtime-model', effort: null } });
+    expect(context).toMatchObject({ totalTokens: 12, maxTokens: 100 });
+    expect(applied).toMatchObject({ effective: { fastMode: false } });
+    expect((fake.query as any).applySettings).toHaveBeenCalledWith(expect.objectContaining({ fastMode: false, effort: 'low' }));
+    expect(mcpSet).toMatchObject({ success: true, added: ['ide'], removed: [], errors: {} });
+  });
+
   it('tolerates nullable SDK capability responses during startup', async () => {
     fake.query.supportedCommands.mockImplementation(() => {
       throw new TypeError("Cannot read properties of null (reading 'map')");

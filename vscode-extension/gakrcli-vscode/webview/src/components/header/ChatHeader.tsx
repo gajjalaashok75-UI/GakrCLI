@@ -5,6 +5,7 @@ interface ChatHeaderProps {
   isSessionListOpen: boolean;
   onToggleSessionList: () => void;
   onNewConversation: () => void;
+  onOpenSettings: () => void;
 }
 
 export const ChatHeader: React.FC<ChatHeaderProps> = ({
@@ -12,6 +13,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   isSessionListOpen,
   onToggleSessionList,
   onNewConversation,
+  onOpenSettings,
 }) => {
   return (
     <div style={{
@@ -46,6 +48,17 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
       </div>
 
       {/* New conversation button */}
+      <button
+        onClick={onOpenSettings}
+        className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors hover:bg-[var(--vscode-toolbar-hoverBackground)]"
+        title="Runtime Settings"
+        aria-label="Runtime Settings"
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+          <path d="M9.1 1l.35 1.47c.28.1.55.21.8.35l1.3-.79 1.5 1.5-.79 1.3c.14.25.26.52.35.8L14 6v2l-1.39.37c-.09.28-.21.55-.35.8l.79 1.3-1.5 1.5-1.3-.79c-.25.14-.52.26-.8.35L9.1 13H6.9l-.35-1.47c-.28-.09-.55-.21-.8-.35l-1.3.79-1.5-1.5.79-1.3a5.2 5.2 0 0 1-.35-.8L2 8V6l1.39-.37c.09-.28.21-.55.35-.8l-.79-1.3 1.5-1.5 1.3.79c.25-.14.52-.25.8-.35L6.9 1h2.2zM8 5a2 2 0 100 4 2 2 0 000-4z"/>
+        </svg>
+        <span className="hidden sm:inline">Settings</span>
+      </button>
       <button
         onClick={onNewConversation}
         className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors hover:bg-[var(--vscode-toolbar-hoverBackground)]"

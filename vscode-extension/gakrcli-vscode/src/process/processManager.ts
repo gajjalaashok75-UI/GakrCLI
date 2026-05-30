@@ -254,6 +254,41 @@ function callRecordArray(read: () => unknown): Record<string, unknown>[] {
   }
 }
 
+function slashCommandInfo(command: Record<string, unknown>) {
+  return {
+    name: typeof command.name === 'string' ? command.name : '',
+    description: typeof command.description === 'string' ? command.description : '',
+    argumentHint: typeof command.argumentHint === 'string' ? command.argumentHint : '',
+  };
+}
+
+function agentInfo(agent: Record<string, unknown>) {
+  return {
+    name: typeof agent.name === 'string' ? agent.name : '',
+    description: typeof agent.description === 'string' ? agent.description : '',
+    model: typeof agent.model === 'string' ? agent.model : undefined,
+  };
+}
+
+function sdkModelInfo(model: Record<string, unknown>) {
+  const value = typeof model.value === 'string' ? model.value : 'default';
+  return {
+    value,
+    displayName: typeof model.displayName === 'string' ? model.displayName : value,
+    description: typeof model.description === 'string' ? model.description : '',
+    supportsEffort: typeof model.supportsReasoning === 'boolean' ? model.supportsReasoning : undefined,
+    supportsFastMode: typeof model.supportsFastMode === 'boolean' ? model.supportsFastMode : undefined,
+  };
+}
+
+function pluginInfo(plugin: Record<string, unknown>) {
+  return {
+    name: typeof plugin.name === 'string' ? plugin.name : '',
+    path: typeof plugin.path === 'string' ? plugin.path : '',
+    source: typeof plugin.source === 'string' ? plugin.source : undefined,
+  };
+}
+
 // ============================================================================
 // ProcessManager
 // ============================================================================
@@ -395,22 +430,23 @@ export class ProcessManager {
       case 'set_model': {
         const model = typeof request.model === 'string' ? request.model : undefined;
         if (model) await this.sdkQuery.setModel(model);
-        return { model };
+        return { model, runtime: await this.safeRuntimeState() };
       }
       case 'set_permission_mode': {
         const mode = toSdkPermissionMode(request.mode as PermissionMode | undefined);
         if (mode) await this.sdkQuery.setPermissionMode(mode);
-        return { mode: request.mode };
+        return { mode: request.mode, runtime: await this.safeRuntimeState() };
       }
       case 'set_max_thinking_tokens': {
         const tokens = request.max_thinking_tokens;
-        if (typeof tokens === 'number') {
-          this.sdkQuery.setMaxThinkingTokens(tokens);
-        }
-        return {};
+        this.sdkQuery.setMaxThinkingTokens(typeof tokens === 'number' ? tokens : 0);
+        return {
+          reasoning: this.callSdkMethod('getReasoningConfig') ?? {},
+          runtime: await this.safeRuntimeState(),
+        };
       }
       case 'mcp_status':
-        return { mcpServers: callRecordArray(() => this.sdkQuery?.mcpServerStatus()) };
+        return { mcpServers: this.callSdkMethod('listMcpServers') ?? callRecordArray(() => this.sdkQuery?.mcpServerStatus()) };
       case 'rewind_files': {
         const dryRun = request.dry_run !== false;
         const result = dryRun
@@ -419,23 +455,52 @@ export class ProcessManager {
         return result as Record<string, unknown>;
       }
       case 'get_context_usage':
-        return this.emptyContextUsage();
+        return await this.callSdkMethodAsync('getContextUsage') as Record<string, unknown> ?? this.emptyContextUsage();
       case 'get_settings':
-        return { effective: {}, sources: [], applied: { model: this.options.model ?? 'default', effort: null } };
-      case 'reload_plugins':
+        return this.callSdkMethod('getSettings') as Record<string, unknown> ??
+          { effective: {}, sources: [], applied: { model: this.options.model ?? 'default', effort: null } };
+      case 'get_runtime_state':
+        return await this.safeRuntimeState();
+      case 'reload_plugins': {
+        const result = await this.callSdkMethodAsync('reloadPlugins') as Record<string, unknown> ?? {};
         return {
-          commands: [],
-          agents: [],
-          plugins: [],
-          mcpServers: callRecordArray(() => this.sdkQuery?.mcpServerStatus()),
-          error_count: 0,
+          ...result,
+          commands: recordArray(this.callSdkMethod('listSlashCommands')).map(slashCommandInfo),
+          agents: (await this.safeRuntimeState())?.agents?.map((agent) => agentInfo(agent as unknown as Record<string, unknown>)) ?? [],
+          plugins: recordArray(this.callSdkMethod('listPlugins')).map(pluginInfo),
+          mcpServers: this.callSdkMethod('listMcpServers') ?? callRecordArray(() => this.sdkQuery?.mcpServerStatus()),
+          error_count: typeof result.error_count === 'number' ? result.error_count : 0,
         };
+      }
       case 'apply_flag_settings':
+        return await this.applyFlagSettings(request.settings);
       case 'seed_read_state':
       case 'cancel_async_message':
+        return {};
       case 'mcp_set_servers':
+        if (request.servers && typeof request.servers === 'object') {
+          const result = await this.callSdkMethodAsync('setMcpServers', request.servers as Record<string, unknown>) as Record<string, unknown> ??
+            { success: false, message: 'SDK MCP mutation API is unavailable' };
+          return {
+            ...result,
+            added: Array.isArray(result.added) ? result.added : [],
+            removed: Array.isArray(result.removed) ? result.removed : [],
+            errors: result.success ? {} : { sdk: result.message ?? 'Failed to set MCP servers' },
+          };
+        }
+        return { added: [], removed: [], errors: { sdk: 'Missing MCP server map' } };
       case 'mcp_reconnect':
+        if (typeof request.serverName === 'string') {
+          return await this.callSdkMethodAsync('reconnectMcpServer', request.serverName) as Record<string, unknown> ??
+            { success: false, message: 'SDK MCP reconnect API is unavailable' };
+        }
+        return { success: false, message: 'Missing MCP server name' };
       case 'mcp_toggle':
+        if (typeof request.serverName === 'string' && typeof request.enabled === 'boolean') {
+          return await this.callSdkMethodAsync('toggleMcpServer', request.serverName, request.enabled) as Record<string, unknown> ??
+            { success: false, message: 'SDK MCP toggle API is unavailable' };
+        }
+        return { success: false, message: 'Missing MCP server name or enabled flag' };
       case 'stop_task':
         return {};
       default:
@@ -534,11 +599,14 @@ export class ProcessManager {
 
   private async createInitializeResponse(): Promise<InitializeResponse> {
     const query = this.sdkQuery;
+    const runtime = await this.safeRuntimeState();
     const commands = callStringArray(() => query?.supportedCommands());
     const agents = callStringArray(() => query?.supportedAgents());
     const models = callStringArray(() => query?.supportedModels());
     let account: AccountInfo = { apiKeySource: 'none' };
-    if (query) {
+    if (runtime?.account) {
+      account = runtime.account as AccountInfo;
+    } else if (query) {
       try {
         account = await query.accountInfo() ?? account;
       } catch {
@@ -547,26 +615,106 @@ export class ProcessManager {
     }
     const fallbackModels = this.options.model ? [this.options.model] : [];
     const availableModels = models.length > 0 ? models : fallbackModels;
+    const runtimeCommands = recordArray(runtime?.slashCommands).map(slashCommandInfo).filter((command) => command.name);
+    const runtimeAgents = recordArray(runtime?.agents).map(agentInfo).filter((agent) => agent.name);
+    const runtimeModels = recordArray(runtime?.models).map(sdkModelInfo).filter((model) => model.value);
 
     return {
-      commands: commands.map((name) => ({
+      commands: runtimeCommands.length > 0 ? runtimeCommands : commands.map((name) => ({
         name,
         description: '',
         argumentHint: '',
       })),
-      agents: agents.map((name) => ({
+      agents: runtimeAgents.length > 0 ? runtimeAgents : agents.map((name) => ({
         name,
         description: '',
       })),
       output_style: 'default',
       available_output_styles: ['default'],
-      models: availableModels.length > 0
+      models: runtimeModels.length > 0
+        ? runtimeModels
+        : availableModels.length > 0
         ? availableModels.map((model) => modelInfo(model))
         : [modelInfo(this.options.model)],
       account,
       pid: process.pid,
-      fast_mode_state: 'off',
+      fast_mode_state: runtime?.fastModeState?.state ?? 'off',
     };
+  }
+
+  private async safeRuntimeState(): Promise<Record<string, unknown> | undefined> {
+    try {
+      return await this.callSdkMethodAsync('getRuntimeState') as Record<string, unknown> | undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private callSdkMethod(name: string, ...args: unknown[]): unknown {
+    const target = this.sdkQuery as unknown as Record<string, unknown> | undefined;
+    const method = target?.[name];
+    if (typeof method !== 'function') {
+      return undefined;
+    }
+    return method.apply(this.sdkQuery, args);
+  }
+
+  private async callSdkMethodAsync(name: string, ...args: unknown[]): Promise<unknown> {
+    return await this.callSdkMethod(name, ...args);
+  }
+
+  private async applyFlagSettings(settings: unknown): Promise<Record<string, unknown>> {
+    const input = settings && typeof settings === 'object'
+      ? settings as Record<string, unknown>
+      : {};
+
+    const permissionMode = typeof input.permissionMode === 'string'
+      ? toSdkPermissionMode(input.permissionMode as PermissionMode)
+      : typeof input.permission_mode === 'string'
+        ? toSdkPermissionMode(input.permission_mode as PermissionMode)
+        : undefined;
+
+    const applyInput = {
+      model: typeof input.model === 'string' ? input.model : undefined,
+      permissionMode,
+      effort: this.normalizeEffort(input.effort ?? input.reasoningEffort ?? input.reasoning_effort),
+      maxThinkingTokens: typeof input.maxThinkingTokens === 'number'
+        ? input.maxThinkingTokens
+        : typeof input.max_thinking_tokens === 'number'
+          ? input.max_thinking_tokens
+          : undefined,
+      fastMode: typeof input.fastMode === 'boolean'
+        ? input.fastMode
+        : typeof input.fast_mode === 'boolean'
+          ? input.fast_mode
+          : undefined,
+      env: input.env && typeof input.env === 'object'
+        ? input.env as Record<string, string | undefined>
+        : undefined,
+    };
+
+    const snapshot = await this.callSdkMethodAsync('applySettings', applyInput) as Record<string, unknown> | undefined ??
+      { effective: {}, sources: [], applied: { model: applyInput.model ?? this.options.model ?? 'default', effort: applyInput.effort ?? null } };
+
+    if (input.enabledPlugins && typeof input.enabledPlugins === 'object') {
+      for (const [pluginName, enabled] of Object.entries(input.enabledPlugins as Record<string, unknown>)) {
+        if (typeof enabled === 'boolean') {
+          await this.callSdkMethodAsync('setPluginEnabled', pluginName, enabled);
+        }
+      }
+    }
+
+    return {
+      ...snapshot,
+      runtime: await this.safeRuntimeState(),
+    } as unknown as Record<string, unknown>;
+  }
+
+  private normalizeEffort(value: unknown): 'low' | 'medium' | 'high' | 'max' | number | null | undefined {
+    if (value === null) return null;
+    if (typeof value === 'number') return value;
+    if (value === 'low' || value === 'medium' || value === 'high' || value === 'max') return value;
+    return undefined;
   }
 
   private async consumeSdkMessages(): Promise<void> {

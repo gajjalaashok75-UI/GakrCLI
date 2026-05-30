@@ -262,3 +262,20 @@ export type {
   ApiKeySource,
   PermissionResult,
 } from './coreTypes.generated.js'
+
+export type {
+  SDKApplySettingsInput,
+  SDKContextUsage,
+  SDKFastModeState,
+  SDKModelInfo,
+  SDKMutationResult,
+  SDKPluginInfo,
+  SDKProviderInfo,
+  SDKProviderProfileInfo,
+  SDKReasoningConfig,
+  SDKRunSlashCommandResult,
+  SDKRuntimeState,
+  SDKSettingsSnapshot,
+  SDKSlashCommandInfo,
+  SDKUsageSummary,
+} from './runtime.js'

@@ -23,6 +23,7 @@ import { SlashCommandMenu } from '../input/SlashCommandMenu';
 import { AttachmentBar, type AttachmentItem } from '../input/AttachmentBar';
 import { McpServerManager } from '../dialogs/McpServerManager';
 import { PluginManager } from '../dialogs/PluginManager';
+import { SettingsDialog } from '../dialogs/SettingsDialog';
 import { OnboardingChecklist } from '../onboarding/OnboardingChecklist';
 import type { AtMentionResult } from '../../hooks/useAtMentions';
 import type { ToolActivity } from '../../hooks/useChat';
@@ -70,6 +71,7 @@ export function ChatPanel() {
   const [announcements, setAnnouncements] = useState<Array<{ id: string; message: string; severity?: 'info' | 'warning' | 'error'; dismissible?: boolean }>>([]);
   const [showMcpManager, setShowMcpManager] = useState(false);
   const [showPluginManager, setShowPluginManager] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [providerModel, setProviderModel] = useState<string | null>(null);
   const [providerModels, setProviderModels] = useState<Array<{ value: string; displayName: string }>>([]);
   const [showOnboarding, setShowOnboarding] = useState(() => {
@@ -165,6 +167,7 @@ export function ChatPanel() {
           isSessionListOpen={isSessionListOpen}
           onToggleSessionList={() => setSessionListOpen(!isSessionListOpen)}
           onNewConversation={() => { userSetModeRef.current = false; newConversation(); }}
+          onOpenSettings={() => setShowSettings(true)}
         />
 
         {/* Session list overlay */}
@@ -301,6 +304,7 @@ export function ChatPanel() {
       {/* Dialogs */}
       <McpServerManager isOpen={showMcpManager} onClose={() => setShowMcpManager(false)} />
       <PluginManager isOpen={showPluginManager} onClose={() => setShowPluginManager(false)} />
+      <SettingsDialog isOpen={showSettings} onClose={() => setShowSettings(false)} />
     </div>
   );
 }

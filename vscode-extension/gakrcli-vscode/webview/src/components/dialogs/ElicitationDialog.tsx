@@ -54,20 +54,14 @@ export const ElicitationDialog: React.FC<ElicitationDialogProps> = ({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-[var(--vscode-editor-background)] border border-[var(--vscode-panel-border)] rounded-lg shadow-xl max-w-lg w-full mx-4 overflow-hidden">
-        {/* Header */}
-        <div className="px-4 py-3 border-b border-[var(--vscode-panel-border)] bg-[var(--vscode-input-background)]">
-          <h2 className="text-sm font-semibold text-[var(--vscode-editor-foreground)]">Question from AI</h2>
+    <div className="permission-modal-backdrop fixed inset-0 z-50 flex items-center justify-center">
+      <div className="permission-glass-dialog permission-card-shell">
+        <div className="permission-card-title">
+          <span>{request.message}</span>
         </div>
+        <div className="permission-card-meta">Question from GakrCLI</div>
 
-        {/* Message */}
-        <div className="px-4 pt-4">
-          <p className="text-sm text-[var(--vscode-descriptionForeground)] mb-4">{request.message}</p>
-        </div>
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="px-4 pb-4 space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3">
           {request.fields.map((field) => (
             <FieldRenderer
               key={field.name}
@@ -77,21 +71,24 @@ export const ElicitationDialog: React.FC<ElicitationDialogProps> = ({
             />
           ))}
 
-          {/* Actions */}
-          <div className="flex justify-end gap-2 pt-2 border-t border-[var(--vscode-panel-border)]">
+          <div className="permission-choice-list">
             <button
               type="button"
-              className="px-3 py-1.5 text-xs rounded border border-[var(--vscode-input-border)] text-[var(--vscode-editor-foreground)] bg-transparent hover:bg-[var(--vscode-input-background)] cursor-pointer"
+              className="permission-choice-row permission-choice-muted"
               onClick={onCancel}
             >
-              Cancel
+              <span className="permission-choice-index">1.</span>
+              <span className="permission-choice-label">Skip</span>
+              <span className="permission-choice-hint">Continue without answering</span>
             </button>
             <button
               type="submit"
-              className="px-3 py-1.5 text-xs rounded bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)] cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed"
+              className="permission-choice-row"
               disabled={!isValid}
             >
-              Submit
+              <span className="permission-choice-index">2.</span>
+              <span className="permission-choice-label">Submit</span>
+              <span className="permission-choice-hint">Send answer to the model</span>
             </button>
           </div>
         </form>

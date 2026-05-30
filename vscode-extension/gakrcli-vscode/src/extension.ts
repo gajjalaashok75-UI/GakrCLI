@@ -257,11 +257,16 @@ export function activate(context: vscode.ExtensionContext) {
   }
 
   async function sendProviderState(panelId?: string, error?: string) {
-    const immediate = providerStatePayload(error);
+    const runtime = await readSdkRuntimeState();
+    const immediate = runtime ? providerStatePayloadFromRuntime(runtime, error) : providerStatePayload(error);
     if (panelId) {
       webviewManager!.sendToPanel(panelId, immediate as never);
     } else {
       webviewManager!.broadcast(immediate as never);
+    }
+
+    if (runtime) {
+      return;
     }
 
     const discovered = await providerStatePayloadWithDiscoveredModels(error);
@@ -273,6 +278,185 @@ export function activate(context: vscode.ExtensionContext) {
     } else {
       webviewManager!.broadcast(discovered as never);
     }
+  }
+
+  async function readSdkRuntimeState(): Promise<Record<string, unknown> | undefined> {
+    if (!processManager || processManager.state !== ProcessState.Ready) {
+      return undefined;
+    }
+    try {
+      const runtime = await processManager.sendControlRequest({ subtype: 'get_runtime_state' });
+      return runtime && typeof runtime === 'object' ? runtime : undefined;
+    } catch (err) {
+      output.warn(`[GakrCLI] Failed to read SDK runtime state: ${err instanceof Error ? err.message : String(err)}`);
+      return undefined;
+    }
+  }
+
+  function providerStatePayloadFromRuntime(runtime: Record<string, unknown>, error?: string) {
+    const providers = Array.isArray(runtime.providers)
+      ? runtime.providers as Array<Record<string, unknown>>
+      : [];
+    const activeProfile = runtime.activeProfile as Record<string, unknown> | undefined;
+    const provider = runtime.provider as Record<string, unknown> | undefined;
+    const models = Array.isArray(runtime.models)
+      ? runtime.models as Array<Record<string, unknown>>
+      : [];
+    const model = typeof runtime.model === 'string'
+      ? runtime.model
+      : typeof activeProfile?.model === 'string'
+        ? activeProfile.model
+        : undefined;
+
+    return {
+      type: 'provider_state',
+      providers: providers.map((p) => ({
+        id: String(p.id ?? p.provider ?? ''),
+        label: String(p.label ?? p.name ?? p.id ?? ''),
+        requiresApiKey: Boolean(p.requiresApiKey),
+        requiresBaseUrl: false,
+        supportsModel: true,
+        defaultBaseUrl: typeof p.defaultBaseUrl === 'string' ? p.defaultBaseUrl : undefined,
+      })).filter((p) => p.id),
+      currentProviderId: String(activeProfile?.provider ?? provider?.provider ?? provider?.id ?? ''),
+      currentModel: model,
+      currentBaseUrl: typeof activeProfile?.baseUrl === 'string' ? activeProfile.baseUrl : undefined,
+      models: models.map((m) => ({
+        value: String(m.value ?? ''),
+        displayName: String(m.displayName ?? m.value ?? ''),
+      })).filter((m) => m.value),
+      ...(error ? { error } : {}),
+    };
+  }
+
+  async function sendRuntimeSettingsState(panelId?: string, error?: string) {
+    const pm = await ensureProcess();
+    if (!pm) return;
+
+    const [runtime, settings, context] = await Promise.all([
+      pm.sendControlRequest({ subtype: 'get_runtime_state' }).catch(() => undefined),
+      pm.sendControlRequest({ subtype: 'get_settings' }).catch(() => undefined),
+      pm.sendControlRequest({ subtype: 'get_context_usage' }).catch(() => undefined),
+    ]);
+    const payload = buildSettingsStatePayload(runtime, settings, context, error);
+
+    if (panelId) {
+      webviewManager!.sendToPanel(panelId, payload as never);
+    } else {
+      webviewManager!.broadcast(payload as never);
+    }
+  }
+
+  function buildSettingsStatePayload(
+    runtime: Record<string, unknown> | undefined,
+    settings: Record<string, unknown> | undefined,
+    contextUsage: Record<string, unknown> | undefined,
+    error?: string,
+  ) {
+    const applied = settings?.applied && typeof settings.applied === 'object'
+      ? settings.applied as Record<string, unknown>
+      : {};
+
+    return {
+      type: 'settings_state',
+      supportedSettings: [
+        { key: 'model', label: 'Model', kind: 'select' },
+        { key: 'permissionMode', label: 'Permission mode', kind: 'select' },
+        { key: 'effort', label: 'Reasoning effort', kind: 'select' },
+        { key: 'maxThinkingTokens', label: 'Max thinking tokens', kind: 'number' },
+        { key: 'fastMode', label: 'Fast mode', kind: 'boolean' },
+      ],
+      settings: settings ?? { effective: {}, sources: [], applied },
+      runtime: runtime ?? {},
+      contextUsage: contextUsage ?? undefined,
+      models: Array.isArray(runtime?.models) ? runtime?.models : [],
+      providers: Array.isArray(runtime?.providers) ? runtime?.providers : [],
+      profiles: Array.isArray(runtime?.profiles) ? runtime?.profiles : [],
+      mcpServers: Array.isArray(runtime?.mcpServers) ? runtime?.mcpServers : [],
+      plugins: Array.isArray(runtime?.plugins) ? runtime?.plugins : [],
+      current: {
+        model: typeof runtime?.model === 'string' ? runtime.model : applied.model,
+        permissionMode: typeof runtime?.permissionMode === 'string' ? runtime.permissionMode : applied.permissionMode,
+        effort: (runtime?.reasoning as Record<string, unknown> | undefined)?.effort ?? applied.effort ?? null,
+        maxThinkingTokens: (runtime?.reasoning as Record<string, unknown> | undefined)?.maxThinkingTokens ?? null,
+        fastMode: (runtime?.fastModeState as Record<string, unknown> | undefined)?.enabled ?? applied.fastMode ?? false,
+      },
+      ...(error ? { error } : {}),
+    };
+  }
+
+  async function sendMcpState(panelId?: string) {
+    const meta = mcpIdeServer.getServerMetadata();
+    let servers: unknown[] = [];
+    if (processManager) {
+      const response = await processManager.sendControlRequest({ subtype: 'mcp_status' }).catch(() => undefined);
+      if (response && Array.isArray(response.mcpServers)) {
+        servers = response.mcpServers;
+      }
+    }
+    const payload = {
+      type: 'mcp_servers_state',
+      servers: servers.map(normalizeMcpServerForWebview),
+      ideServer: {
+        running: mcpIdeServer.isRunning(),
+        port: meta?.port ?? null,
+        toolCount: meta?.tools.length ?? 0,
+      },
+    };
+    if (panelId) {
+      webviewManager!.sendToPanel(panelId, payload as never);
+    } else {
+      webviewManager!.broadcast(payload as never);
+    }
+  }
+
+  function normalizeMcpServerForWebview(server: unknown) {
+    const record = server && typeof server === 'object' ? server as Record<string, unknown> : {};
+    const config = record.config && typeof record.config === 'object' ? record.config as Record<string, unknown> : {};
+    const type = String(config.type ?? record.type ?? (config.url ? 'sse' : 'stdio'));
+    return {
+      name: String(record.name ?? ''),
+      status: String(record.status ?? 'pending'),
+      type: type === 'http' ? 'streamable-http' : type,
+      url: typeof config.url === 'string' ? config.url : undefined,
+      command: typeof config.command === 'string' ? config.command : undefined,
+      args: Array.isArray(config.args) ? config.args : undefined,
+      tools: Array.isArray(record.tools) ? record.tools : [],
+      error: typeof record.error === 'string' ? record.error : undefined,
+    };
+  }
+
+  async function sendPluginState(panelId?: string) {
+    let installed: unknown[] = [];
+    if (processManager) {
+      const response = await processManager.sendControlRequest({ subtype: 'reload_plugins' }).catch(() => undefined);
+      if (response && Array.isArray(response.plugins)) {
+        installed = response.plugins;
+      }
+    }
+    const payload = {
+      type: 'plugins_state',
+      installed: installed.map(normalizePluginForWebview),
+      marketplace: [],
+    };
+    if (panelId) {
+      webviewManager!.sendToPanel(panelId, payload as never);
+    } else {
+      webviewManager!.broadcast(payload as never);
+    }
+  }
+
+  function normalizePluginForWebview(plugin: unknown) {
+    const record = plugin && typeof plugin === 'object' ? plugin as Record<string, unknown> : {};
+    return {
+      name: String(record.name ?? ''),
+      version: String(record.version ?? ''),
+      description: typeof record.error === 'string' ? record.error : String(record.source ?? record.repository ?? ''),
+      scope: 'user',
+      status: String(record.status ?? 'disabled'),
+      commands: Array.isArray(record.commands) ? record.commands : [],
+      error: typeof record.error === 'string' ? record.error : undefined,
+    };
   }
 
   /**
@@ -611,7 +795,9 @@ export function activate(context: vscode.ExtensionContext) {
     await authManager.updateModel(model);
     void sendProviderState();
     if (processManager) {
-      void processManager.sendControlRequest({ subtype: 'set_model', model }).catch((err) => {
+      void processManager.sendControlRequest({ subtype: 'set_model', model }).then(() => {
+        void sendRuntimeSettingsState();
+      }).catch((err) => {
         const detail = err instanceof Error ? err.message : String(err);
         output.warn(`[GakrCLI] Failed to set model: ${detail}`);
       });
@@ -623,11 +809,11 @@ export function activate(context: vscode.ExtensionContext) {
     const msg = message as unknown as { level: string };
     output.info(`[Webview→CLI] set_effort_level: ${msg.level}`);
     if (processManager) {
-      processManager.write({
-        type: 'control_request',
-        request_id: `set-effort-${Date.now()}`,
-        request: { subtype: 'set_max_thinking_tokens', max_thinking_tokens: effortToTokens(msg.level) },
+      await processManager.sendControlRequest({
+        subtype: 'apply_flag_settings',
+        settings: { effort: msg.level, maxThinkingTokens: effortToTokens(msg.level) },
       });
+      void sendRuntimeSettingsState();
     }
   });
 
@@ -636,11 +822,11 @@ export function activate(context: vscode.ExtensionContext) {
     const msg = message as unknown as { enabled: boolean };
     output.info(`[Webview→CLI] toggle_fast_mode: ${msg.enabled}`);
     if (processManager) {
-      processManager.write({
-        type: 'control_request',
-        request_id: `fast-mode-${Date.now()}`,
-        request: { subtype: 'apply_flag_settings', settings: { fastMode: msg.enabled } },
+      await processManager.sendControlRequest({
+        subtype: 'apply_flag_settings',
+        settings: { fastMode: msg.enabled },
       });
+      void sendRuntimeSettingsState();
     }
   });
 
@@ -992,6 +1178,42 @@ export function activate(context: vscode.ExtensionContext) {
       model: msg.model,
     });
     await sendProviderState();
+    void sendRuntimeSettingsState();
+  });
+
+  webviewManager.onMessage('settings_refresh', async (_message, panelId) => {
+    await sendRuntimeSettingsState(panelId);
+  });
+
+  webviewManager.onMessage('settings_update', async (message, panelId) => {
+    const msg = message as unknown as { settings?: Record<string, unknown> };
+    const settings = msg.settings ?? {};
+    output.info(`[Webview] settings_update: ${Object.keys(settings).join(', ')}`);
+
+    try {
+      const pm = await ensureProcess();
+      if (!pm) return;
+
+      if (typeof settings.model === 'string') {
+        const model = authManager.normalizeModelForCurrentProvider(settings.model);
+        await authManager.updateModel(model);
+        settings.model = model;
+      }
+      if (typeof settings.permissionMode === 'string') {
+        await permissionHandler.setMode(settings.permissionMode as never);
+      }
+
+      await pm.sendControlRequest({
+        subtype: 'apply_flag_settings',
+        settings,
+      });
+      await sendProviderState();
+      await sendRuntimeSettingsState(panelId);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      output.warn(`[GakrCLI] Failed to apply settings: ${detail}`);
+      await sendRuntimeSettingsState(panelId, detail);
+    }
   });
 
   // ==========================================
@@ -999,27 +1221,16 @@ export function activate(context: vscode.ExtensionContext) {
   // ==========================================
 
   webviewManager.onMessage('mcp_refresh_status', async (_message, panelId) => {
-    const meta = mcpIdeServer.getServerMetadata();
-    webviewManager!.sendToPanel(panelId, {
-      type: 'mcp_servers_state',
-      servers: [],
-      ideServer: {
-        running: mcpIdeServer.isRunning(),
-        port: meta?.port ?? null,
-        toolCount: meta?.tools.length ?? 0,
-      },
-    } as never);
+    await sendMcpState(panelId);
   });
 
   webviewManager.onMessage('mcp_reconnect', async (message) => {
     const msg = message as unknown as { serverName: string };
     output.info(`[Webview] mcp_reconnect: ${msg.serverName}`);
     if (processManager) {
-      processManager.write({
-        type: 'control_request',
-        request_id: `mcp-reconnect-${Date.now()}`,
-        request: { subtype: 'mcp_reconnect', serverName: msg.serverName },
-      });
+      await processManager.sendControlRequest({ subtype: 'mcp_reconnect', serverName: msg.serverName });
+      await sendMcpState();
+      void sendRuntimeSettingsState();
     }
   });
 
@@ -1027,11 +1238,9 @@ export function activate(context: vscode.ExtensionContext) {
     const msg = message as unknown as { serverName: string; enabled: boolean };
     output.info(`[Webview] mcp_toggle: ${msg.serverName} enabled=${msg.enabled}`);
     if (processManager) {
-      processManager.write({
-        type: 'control_request',
-        request_id: `mcp-toggle-${Date.now()}`,
-        request: { subtype: 'mcp_toggle', serverName: msg.serverName, enabled: msg.enabled },
-      });
+      await processManager.sendControlRequest({ subtype: 'mcp_toggle', serverName: msg.serverName, enabled: msg.enabled });
+      await sendMcpState();
+      void sendRuntimeSettingsState();
     }
   });
 
@@ -1039,11 +1248,9 @@ export function activate(context: vscode.ExtensionContext) {
     const msg = message as unknown as { name: string; config: Record<string, unknown> };
     output.info(`[Webview] mcp_add_server: ${msg.name}`);
     if (processManager) {
-      processManager.write({
-        type: 'control_request',
-        request_id: `mcp-add-${Date.now()}`,
-        request: { subtype: 'mcp_set_servers', servers: { [msg.name]: msg.config } },
-      });
+      await processManager.sendControlRequest({ subtype: 'mcp_set_servers', servers: { [msg.name]: msg.config } });
+      await sendMcpState();
+      void sendRuntimeSettingsState();
     }
   });
 
@@ -1051,11 +1258,9 @@ export function activate(context: vscode.ExtensionContext) {
     const msg = message as unknown as { serverName: string };
     output.info(`[Webview] mcp_remove_server: ${msg.serverName}`);
     if (processManager) {
-      processManager.write({
-        type: 'control_request',
-        request_id: `mcp-remove-${Date.now()}`,
-        request: { subtype: 'mcp_toggle', serverName: msg.serverName, enabled: false },
-      });
+      await processManager.sendControlRequest({ subtype: 'mcp_toggle', serverName: msg.serverName, enabled: false });
+      await sendMcpState();
+      void sendRuntimeSettingsState();
     }
   });
 
@@ -1216,21 +1421,17 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   // Plugin webview message handlers
-  webviewManager.onMessage('plugin_refresh', async () => {
-    if (processManager) {
-      processManager.write({
-        type: 'control_request',
-        request_id: `plugin-state-${Date.now()}`,
-        request: { subtype: 'get_settings' },
-      });
-    }
+  webviewManager.onMessage('plugin_refresh', async (_message, panelId) => {
+    await sendPluginState(panelId);
   });
 
   webviewManager.onMessage('plugin_toggle', async (message) => {
     const msg = message as unknown as { name: string; enabled: boolean };
     if (processManager) {
-      processManager.write(buildToggleRequest(msg.name, msg.enabled) as unknown as Record<string, unknown>);
-      processManager.write(buildReloadRequest() as unknown as Record<string, unknown>);
+      await processManager.sendControlRequest((buildToggleRequest(msg.name, msg.enabled) as unknown as { request: Record<string, unknown> }).request);
+      await processManager.sendControlRequest((buildReloadRequest() as unknown as { request: Record<string, unknown> }).request);
+      await sendPluginState();
+      void sendRuntimeSettingsState();
     }
   });
 
