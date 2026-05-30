@@ -367,7 +367,11 @@ export function useChat() {
       durationMs: readNumber(msgAny, 'duration_ms', 'durationMs') ?? 0,
     };
     setCost(nextCost);
-    setMessages((prev) => attachCostToAssistant(prev, resultTargetAssistantIdRef.current, nextCost, wasUserAbort));
+    setMessages((prev) =>
+      wasUserAbort
+        ? appendInterruptedTurnCompletion(prev, nextCost)
+        : attachCostToAssistant(prev, resultTargetAssistantIdRef.current, nextCost),
+    );
 
     if (msg.is_error && !wasUserAbort) {
       const resultText = (msg as unknown as Record<string, unknown>).result as string | undefined;
@@ -886,7 +890,6 @@ function attachCostToAssistant(
   messages: ChatMessage[],
   assistantId: string | null,
   cost: SessionCost,
-  appendStatsOnly = false,
 ): ChatMessage[] {
   if (assistantId) {
     const index = messages.findIndex((message) => message.id === assistantId && message.role === 'assistant');
@@ -905,23 +908,39 @@ function attachCostToAssistant(
     }
   }
 
-  if (appendStatsOnly) {
-    return [
-      ...messages,
-      {
-        id: `asst-stats-${Date.now()}`,
-        role: 'assistant',
-        blocks: [],
-        isStreaming: false,
-        timestamp: Date.now(),
-        parentToolUseId: null,
-        cost,
-      },
-    ];
-  }
-
   return messages;
 }
+
+function appendInterruptedTurnCompletion(messages: ChatMessage[], cost: SessionCost): ChatMessage[] {
+  const timestamp = Date.now();
+  const lastMessage = messages[messages.length - 1];
+  const alreadyAppended =
+    lastMessage?.role === 'system' && lastMessage.text === INTERRUPTED_PROMPT_TEXT;
+  return [
+    ...messages,
+    ...(alreadyAppended
+      ? []
+      : [{
+          id: `sys-interrupted-${timestamp}`,
+          role: 'system' as const,
+          text: INTERRUPTED_PROMPT_TEXT,
+          isStreaming: false,
+          timestamp,
+          parentToolUseId: null,
+        }]),
+    {
+      id: `asst-turn-${timestamp}`,
+      role: 'assistant' as const,
+      blocks: [],
+      isStreaming: false,
+      timestamp: timestamp + 1,
+      parentToolUseId: null,
+      cost,
+    },
+  ];
+}
+
+const INTERRUPTED_PROMPT_TEXT = 'Interrupted · What should Gakr do instead?';
 
 function isUserInterruptText(text: string): boolean {
   const normalized = text.trim().toLowerCase();
