@@ -21,7 +21,7 @@ export async function discoverOpenAICompatibleModelOptions(
   options: { timeoutMs?: number } = {},
 ): Promise<ProviderModelOption[]> {
   const sdkModels = await discoverSdkModelOptions(env);
-  if (sdkModels.length > 0) {
+  if (sdkModels.length > 1) {
     return sdkModels;
   }
 
@@ -44,7 +44,7 @@ export async function discoverOpenAICompatibleModelOptions(
     }
   }
 
-  return [];
+  return sdkModels;
 }
 
 async function discoverSdkModelOptions(env: Record<string, string>): Promise<ProviderModelOption[]> {
