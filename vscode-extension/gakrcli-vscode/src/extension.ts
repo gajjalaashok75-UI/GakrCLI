@@ -830,6 +830,17 @@ export function activate(context: vscode.ExtensionContext) {
     }
   });
 
+  webviewManager.onMessage('set_permission_mode', async (message) => {
+    const msg = message as unknown as { mode: string };
+    if (processManager) {
+      await processManager.sendControlRequest({
+        subtype: 'set_permission_mode',
+        mode: msg.mode,
+      });
+      void sendRuntimeSettingsState();
+    }
+  });
+
   // Handle interrupt/stop
   webviewManager.onMessage('interrupt', async () => {
     output.info('[Webview→CLI] interrupt');
