@@ -170,6 +170,7 @@ export function ChatPanel() {
           isSessionListOpen={isSessionListOpen}
           onToggleSessionList={() => setSessionListOpen(!isSessionListOpen)}
           onNewConversation={() => { userSetModeRef.current = false; newConversation(); }}
+          onRefreshRuntime={() => vscode.postMessage({ type: 'refresh_runtime' })}
           onOpenSettings={() => setShowSettings(true)}
         />
 

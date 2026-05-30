@@ -844,6 +844,7 @@ export function useChat() {
   const interrupt = useCallback(() => {
     userInterruptedRef.current = true;
     setRetryInfo(null);
+    vscode.postMessage({ type: 'interrupt' });
     const durationMs = turnStartedAtRef.current ? Date.now() - turnStartedAtRef.current : 0;
     const interruptedCost = {
       ...EMPTY_COST,
@@ -856,7 +857,6 @@ export function useChat() {
     resultTargetAssistantIdRef.current = null;
     turnStartedAtRef.current = null;
     setToolActivity(null);
-    vscode.postMessage({ type: 'interrupt' });
     setIsStreaming(false);
   }, []);
 
@@ -932,38 +932,31 @@ function attachCostToAssistant(
 
 function appendInterruptedTurnCompletion(messages: ChatMessage[], cost: SessionCost): ChatMessage[] {
   const timestamp = Date.now();
-  const lastMessage = messages[messages.length - 1];
-  const previousMessage = messages[messages.length - 2];
-  if (
-    lastMessage?.role === 'assistant' &&
-    lastMessage.id.startsWith('asst-turn-') &&
-    previousMessage?.role === 'system' &&
-    previousMessage.text === INTERRUPTED_PROMPT_TEXT
-  ) {
-    const previousCost = lastMessage.cost;
+  const lastUserIndex = findLastRoleIndex(messages, 'user');
+  const targetAssistantIndex = findLastAssistantIndexAfter(messages, lastUserIndex);
+
+  if (targetAssistantIndex >= 0) {
+    const target = messages[targetAssistantIndex]!;
+    const previousCost = target.cost;
     const nextCost = {
       ...cost,
       durationMs: Math.max(cost.durationMs, previousCost?.durationMs ?? 0),
     };
     return messages.map((message, index) =>
-      index === messages.length - 1 ? { ...message, cost: nextCost } : message,
+      index === targetAssistantIndex
+        ? {
+            ...message,
+            interrupted: true,
+            isStreaming: false,
+            blocks: message.blocks?.map((block) => ({ ...block, isStreaming: false })),
+            cost: nextCost,
+          }
+        : message,
     );
   }
 
-  const alreadyAppended =
-    lastMessage?.role === 'system' && lastMessage.text === INTERRUPTED_PROMPT_TEXT;
   return [
     ...messages,
-    ...(alreadyAppended
-      ? []
-      : [{
-          id: `sys-interrupted-${timestamp}`,
-          role: 'system' as const,
-          text: INTERRUPTED_PROMPT_TEXT,
-          isStreaming: false,
-          timestamp,
-          parentToolUseId: null,
-        }]),
     {
       id: `asst-turn-${timestamp}`,
       role: 'assistant' as const,
@@ -972,11 +965,28 @@ function appendInterruptedTurnCompletion(messages: ChatMessage[], cost: SessionC
       timestamp: timestamp + 1,
       parentToolUseId: null,
       cost,
+      interrupted: true,
     },
   ];
 }
 
-const INTERRUPTED_PROMPT_TEXT = 'Interrupted · What should Gakr do instead?';
+function findLastRoleIndex(messages: ChatMessage[], role: ChatMessage['role']): number {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    if (messages[index]?.role === role) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function findLastAssistantIndexAfter(messages: ChatMessage[], afterIndex: number): number {
+  for (let index = messages.length - 1; index > afterIndex; index--) {
+    if (messages[index]?.role === 'assistant') {
+      return index;
+    }
+  }
+  return -1;
+}
 
 function isUserInterruptText(text: string): boolean {
   const normalized = text.trim().toLowerCase();
