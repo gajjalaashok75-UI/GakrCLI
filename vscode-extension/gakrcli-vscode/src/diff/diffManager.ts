@@ -7,8 +7,11 @@ import * as vscode from 'vscode';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { DiffContentProvider } from './diffContentProvider';
-import type { NdjsonTransport } from '../process/ndjsonTransport';
 import type { ControlRequestPermission } from '../types/messages';
+
+export interface ControlResponseTransport {
+  write(message: unknown): void;
+}
 
 /**
  * Represents a single pending diff waiting for user decision.
@@ -29,7 +32,7 @@ interface PendingDiff {
   /** The full tool input for passing back in updatedInput on accept */
   toolInput: Record<string, unknown>;
   /** The transport to send the control_response on */
-  transport: NdjsonTransport;
+  transport: ControlResponseTransport;
 }
 
 export class DiffManager implements vscode.Disposable {
@@ -42,7 +45,7 @@ export class DiffManager implements vscode.Disposable {
     Array<{
       requestId: string;
       request: ControlRequestPermission;
-      transport: NdjsonTransport;
+      transport: ControlResponseTransport;
     }>
   >();
 
@@ -87,7 +90,7 @@ export class DiffManager implements vscode.Disposable {
   async showDiff(
     requestId: string,
     request: ControlRequestPermission,
-    transport: NdjsonTransport,
+    transport: ControlResponseTransport,
   ): Promise<void> {
     const input = request.input;
     const filePath = input.file_path as string;
@@ -615,7 +618,7 @@ export class DiffManager implements vscode.Disposable {
     requestId: string,
     toolUseId: string,
     toolInput: Record<string, unknown>,
-    transport: NdjsonTransport,
+    transport: ControlResponseTransport,
   ): void {
     transport.write({
       type: 'control_response',
@@ -643,7 +646,7 @@ export class DiffManager implements vscode.Disposable {
     requestId: string,
     toolUseId: string,
     message: string,
-    transport: NdjsonTransport,
+    transport: ControlResponseTransport,
   ): void {
     transport.write({
       type: 'control_response',

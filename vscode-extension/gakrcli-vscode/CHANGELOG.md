@@ -4,6 +4,13 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ## [Unreleased]
 
+### Changed (2026-05-30)
+
+- Replaced the native VS Code chat runtime's hardcoded GakrCLI wrapper process with direct `@gakr-gakr/gakrcli/sdk` usage while preserving the existing webview protocol, permission prompts, diff handling, MCP status, resume, and model switching behavior.
+- Declared `@gakr-gakr/gakrcli` as a runtime dependency and packaged the published npm SDK dependency instead of relying on root checkout `dist/sdk.mjs` files.
+- Moved provider model refresh to an SDK-first path using `query().supportedModels()`, with live OpenAI-compatible `/models` fallback when the SDK has no dynamic model list.
+- Added regression coverage for active provider profiles, active model selection, model promotion into GakrCLI profiles, SDK model discovery fallback, and nullable SDK capability responses during startup.
+
 ### Fixed (2026-05-29)
 
 - Loaded the active GakrCLI provider profile from `~/.gakrcli.json` before falling back to `.gakrcli-profile.json`, keeping NVIDIA NIM and other provider/model selections aligned with the root `/provider` and `/model` commands.

@@ -273,6 +273,40 @@ describe('AuthManager', () => {
       expect(env['NVIDIA_API_KEY']).toBe('nvapi-live');
     });
 
+    it('uses the selected model as the active profile model override', () => {
+      const manager = new AuthManager(
+        makeSettings({ selectedModel: 'stepfun-ai/step-3.5-flash' }),
+        () => null,
+        () => ({
+          path: 'C:\\Users\\test\\.gakrcli.json',
+          profile: {
+            id: 'nvidia_prof',
+            name: 'NVIDIA NIM',
+            provider: 'nvidia-nim',
+            baseUrl: 'https://integrate.api.nvidia.com/v1',
+            model: 'nvidia/llama-3.1-nemotron-70b-instruct, stepfun-ai/step-3.5-flash',
+            apiKey: 'nvapi-live',
+          },
+          modelOptions: [
+            { value: 'nvidia/llama-3.1-nemotron-70b-instruct', displayName: 'Nemotron' },
+            { value: 'stepfun-ai/step-3.5-flash', displayName: 'Step 3.5 Flash' },
+          ],
+        }),
+      );
+
+      const current = manager.getCurrentProvider();
+      const env = manager.buildProcessEnv();
+
+      expect(current.id).toBe('nvidia-nim');
+      expect(current.model).toBe('stepfun-ai/step-3.5-flash');
+      expect(current.modelOptions?.map((option) => option.value)).toEqual([
+        'nvidia/llama-3.1-nemotron-70b-instruct',
+        'stepfun-ai/step-3.5-flash',
+      ]);
+      expect(env['OPENAI_MODEL']).toBe('stepfun-ai/step-3.5-flash');
+      expect(env['NVIDIA_MODEL']).toBeUndefined();
+    });
+
     it('loads profile env when extension provider settings are not explicit', () => {
       const manager = new AuthManager(
         makeSettings(),
@@ -306,6 +340,106 @@ describe('AuthManager', () => {
       expect(settings.setProvider).toHaveBeenCalledWith('openai');
       expect(settings.setApiKey).toHaveBeenCalledWith('sk-new');
       expect(settings.setModel).toHaveBeenCalledWith('gpt-4o');
+    });
+  });
+
+  describe('updateModel', () => {
+    it('promotes the selected model into the active GakrCLI provider profile', async () => {
+      const settings = makeSettings();
+      const updateActiveProfileModel = vi.fn(() => true);
+      const manager = new AuthManager(
+        settings,
+        () => null,
+        () => ({
+          path: 'C:\\Users\\test\\.gakrcli.json',
+          profile: {
+            id: 'nvidia_prof',
+            name: 'NVIDIA NIM',
+            provider: 'nvidia-nim',
+            baseUrl: 'https://integrate.api.nvidia.com/v1',
+            model: 'model-a, model-b',
+          },
+          modelOptions: [
+            { value: 'model-a', displayName: 'model-a' },
+            { value: 'model-b', displayName: 'model-b' },
+          ],
+        }),
+        updateActiveProfileModel,
+      );
+
+      await manager.updateModel('model-b');
+
+      expect(updateActiveProfileModel).toHaveBeenCalledWith('model-b');
+      expect(settings.setModel).toHaveBeenCalledWith(undefined);
+    });
+  });
+
+  describe('discoverCurrentProviderModels', () => {
+    it('returns SDK-discovered models before cached active profile models', async () => {
+      const discoverModels = vi.fn().mockResolvedValue([
+        { value: 'fresh-model-a', displayName: 'Fresh Model A' },
+        { value: 'fresh-model-b', displayName: 'Fresh Model B' },
+      ]);
+      const manager = new AuthManager(
+        makeSettings(),
+        () => null,
+        () => ({
+          path: 'C:\\Users\\test\\.gakrcli.json',
+          profile: {
+            id: 'nvidia_prof',
+            name: 'NVIDIA NIM',
+            provider: 'nvidia-nim',
+            baseUrl: 'https://integrate.api.nvidia.com/v1',
+            model: 'cached-model',
+            apiKey: 'nvapi-live',
+          },
+          modelOptions: [
+            { value: 'cached-model', displayName: 'cached-model' },
+          ],
+        }),
+        () => false,
+        discoverModels,
+      );
+
+      await expect(manager.discoverCurrentProviderModels()).resolves.toEqual([
+        { value: 'fresh-model-a', displayName: 'Fresh Model A' },
+        { value: 'fresh-model-b', displayName: 'Fresh Model B' },
+      ]);
+
+      expect(discoverModels).toHaveBeenCalledWith(expect.objectContaining({
+        GAKR_CODE_USE_OPENAI: '1',
+        OPENAI_BASE_URL: 'https://integrate.api.nvidia.com/v1',
+        OPENAI_MODEL: 'cached-model',
+        OPENAI_API_KEY: 'nvapi-live',
+        NVIDIA_API_KEY: 'nvapi-live',
+        NVIDIA_NIM: '1',
+      }));
+    });
+
+    it('falls back to active profile cached models when SDK discovery is empty', async () => {
+      const manager = new AuthManager(
+        makeSettings(),
+        () => null,
+        () => ({
+          path: 'C:\\Users\\test\\.gakrcli.json',
+          profile: {
+            id: 'openai_prof',
+            name: 'OpenAI',
+            provider: 'openai',
+            baseUrl: 'https://api.openai.com/v1',
+            model: 'gpt-4o',
+          },
+          modelOptions: [
+            { value: 'gpt-4o', displayName: 'gpt-4o' },
+          ],
+        }),
+        () => false,
+        vi.fn().mockResolvedValue([]),
+      );
+
+      await expect(manager.discoverCurrentProviderModels()).resolves.toEqual([
+        { value: 'gpt-4o', displayName: 'gpt-4o' },
+      ]);
     });
   });
 });
