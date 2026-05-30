@@ -32,6 +32,8 @@ export interface ChatMessage {
   model?: string;
   /** Final cost and usage for the conversation after this assistant turn completed */
   cost?: SessionCost;
+  /** Whether this assistant turn was stopped by the user */
+  interrupted?: boolean;
 }
 
 export type TodoStatus = 'pending' | 'in_progress' | 'completed';

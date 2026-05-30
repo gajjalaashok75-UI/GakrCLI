@@ -229,6 +229,7 @@ export interface OpenWalkthroughMessage { type: 'open_walkthrough'; }
 
 // Connection
 export interface RetryConnectionMessage { type: 'retry_connection'; }
+export interface RefreshRuntimeMessage { type: 'refresh_runtime'; }
 
 // Clipboard
 export interface CopyMessageMessage { type: 'copy_message'; content: string; }
@@ -299,6 +300,7 @@ export type WebviewToHostMessage =
   | HideOnboardingMessage
   | OpenWalkthroughMessage
   | RetryConnectionMessage
+  | RefreshRuntimeMessage
   | PlanReviewSubmitMessage
   | TeleportAcceptMessage
   | TeleportRejectMessage

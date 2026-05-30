@@ -42,6 +42,12 @@ export function AssistantMessage({ message, isLatest = false, isStreaming = fals
         ))}
       </div>
 
+      {message.interrupted && !message.isStreaming && (
+        <div className="assistant-interrupt-row">
+          Interrupted · What should Gakr do instead?
+        </div>
+      )}
+
       {turnCompletionText && (
         <div className="assistant-turn-footer" aria-label={turnCompletionText}>
           <span className="turn-completion-mark">*</span>

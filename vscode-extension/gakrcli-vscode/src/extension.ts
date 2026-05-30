@@ -307,6 +307,18 @@ export function activate(context: vscode.ExtensionContext) {
     }
   }
 
+  async function broadcastReadyState(): Promise<void> {
+    await Promise.all([
+      sendProviderState().catch((err) => {
+        output.warn(`[GakrCLI] Failed to hydrate provider state before ready: ${err instanceof Error ? err.message : String(err)}`);
+      }),
+      sendRuntimeSettingsState().catch((err) => {
+        output.warn(`[GakrCLI] Failed to hydrate runtime settings before ready: ${err instanceof Error ? err.message : String(err)}`);
+      }),
+    ]);
+    webviewManager!.broadcast({ type: 'process_state', state: 'running' });
+  }
+
   function providerStatePayloadFromRuntime(runtime: Record<string, unknown>, error?: string) {
     const providers = Array.isArray(runtime.providers)
       ? runtime.providers as Array<Record<string, unknown>>
@@ -666,7 +678,7 @@ export function activate(context: vscode.ExtensionContext) {
     processManager.onStateChange((state) => {
       output.info(`[GakrCLI] State: ${state}`);
       if (state === ProcessState.Ready) {
-        webviewManager!.broadcast({ type: 'process_state', state: 'running' });
+        void broadcastReadyState();
       }
     });
 
@@ -910,6 +922,7 @@ export function activate(context: vscode.ExtensionContext) {
       processManager = undefined;
     }
 
+    currentSessionId = message.sessionId;
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) {
       vscode.window.showErrorMessage('GakrCLI: No workspace folder open');
@@ -1019,7 +1032,7 @@ export function activate(context: vscode.ExtensionContext) {
     processManager.onStateChange((state) => {
       output.info(`[GakrCLI] State: ${state}`);
       if (state === ProcessState.Ready) {
-        webviewManager!.broadcast({ type: 'process_state', state: 'running' });
+        void broadcastReadyState();
       }
     });
     processManager.onStderr((line) => {
@@ -1786,7 +1799,19 @@ export function activate(context: vscode.ExtensionContext) {
       processManager = undefined;
     }
     crashRestartCount = 0;
-    await ensureProcess();
+    await ensureProcess(currentSessionId ? { sessionId: currentSessionId } : undefined);
+  });
+
+  webviewManager.onMessage('refresh_runtime', async () => {
+    output.info('[Webview] refresh_runtime');
+    const sessionId = currentSessionId;
+    webviewManager!.broadcast({ type: 'process_state', state: 'restarting' as never });
+    if (processManager) {
+      processManager.dispose();
+      processManager = undefined;
+    }
+    crashRestartCount = 0;
+    await ensureProcess(sessionId ? { sessionId } : undefined);
   });
 
   // Dispose ProcessManager on extension deactivation

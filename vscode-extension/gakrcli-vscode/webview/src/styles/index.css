@@ -882,6 +882,14 @@ details[open] .thinking-toggle {
   white-space: nowrap;
 }
 
+.assistant-interrupt-row {
+  margin-top: 14px;
+  color: var(--app-secondary-foreground);
+  font-size: 12px;
+  font-style: italic;
+  opacity: 0.7;
+}
+
 .todo-viewer {
   margin: 4px 16px 0;
   border: 1px solid color-mix(in srgb, var(--app-glass-border) 46%, transparent);

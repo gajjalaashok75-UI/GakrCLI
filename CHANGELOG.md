@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed (2026-05-30)
+- **VS Code Runtime Refresh And Stop Polish**: Added a header refresh button that restarts the SDK runtime while preserving the current session, kept startup in Starting until provider/model state hydrates, and folded stopped-turn interruption/duration UI into the assistant turn so the cursor and copy action settle correctly.
 - **VS Code Stop And Model Picker Fixes**: Made the webview stop button render the GakrCLI interruption prompt immediately and allowed provider model discovery to enrich SDK runtime state instead of stopping at a single fallback model.
 - **VS Code Interrupt Prompt Parity**: Added the terminal-style `Interrupted · What should Gakr do instead?` row for user-stopped webview turns while keeping the turn completion duration after the interruption.
 - **VS Code Turn Completion UI**: Replaced the chat footer cost/token pill with the GakrCLI-style per-turn duration line, kept stopped requests quiet with only the finished duration, and made assistant copy actions available on hover for every completed response.

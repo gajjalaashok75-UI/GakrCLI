@@ -5,6 +5,7 @@ interface ChatHeaderProps {
   isSessionListOpen: boolean;
   onToggleSessionList: () => void;
   onNewConversation: () => void;
+  onRefreshRuntime: () => void;
   onOpenSettings: () => void;
 }
 
@@ -13,6 +14,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   isSessionListOpen,
   onToggleSessionList,
   onNewConversation,
+  onRefreshRuntime,
   onOpenSettings,
 }) => {
   return (
@@ -47,7 +49,19 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
         </span>
       </div>
 
-      {/* New conversation button */}
+      <button
+        onClick={onRefreshRuntime}
+        className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors hover:bg-[var(--vscode-toolbar-hoverBackground)]"
+        title="Refresh GakrCLI runtime"
+        aria-label="Refresh GakrCLI runtime"
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" xmlns="http://www.w3.org/2000/svg">
+          <path d="M13.2 5.2A5.5 5.5 0 1 0 14 8" />
+          <path d="M13.5 1.8v3.8H9.7" />
+        </svg>
+        <span className="hidden sm:inline">Refresh</span>
+      </button>
+
       <button
         onClick={onOpenSettings}
         className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors hover:bg-[var(--vscode-toolbar-hoverBackground)]"
