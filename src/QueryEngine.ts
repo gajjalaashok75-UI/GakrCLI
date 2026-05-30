@@ -1168,7 +1168,7 @@ export class QueryEngine {
   }
 
   interrupt(): void {
-    this.abortController.abort()
+    this.abortController.abort('interrupt')
   }
 
   getMessages(): readonly Message[] {

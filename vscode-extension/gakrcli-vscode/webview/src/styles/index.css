@@ -857,9 +857,29 @@ details[open] .thinking-toggle {
   opacity: 0.78;
 }
 
-.assistant-usage-footer {
+.assistant-turn-footer {
   display: flex;
+  align-items: center;
+  gap: 7px;
   margin-top: 6px;
+  color: var(--app-secondary-foreground);
+  font-size: 12px;
+  font-style: italic;
+  opacity: 0.72;
+}
+
+.turn-completion-mark {
+  color: var(--app-glass-cyan);
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.turn-completion-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .todo-viewer {
