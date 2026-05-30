@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed (2026-05-30)
+- **VS Code Turn Completion UI**: Replaced the chat footer cost/token pill with the GakrCLI-style per-turn duration line, kept stopped requests quiet with only the finished duration, and made assistant copy actions available on hover for every completed response.
 - **VS Code Chat Runtime Feedback**: Added SDK-backed todo state for the webview, GakrCLI-style spinner glyphs and live turn timers, retry countdown text, per-turn usage attachment fixes, and interrupt cleanup so stopped requests no longer render synthetic abort messages.
 - **VS Code Settings Entry Point**: Kept the top-right Settings button as a lightweight placeholder dialog with a working SDK-backed refresh action while runtime setting edits continue through the composer controls.
 - **SDK Runtime Control Surface**: Added a headless SDK runtime snapshot and mutation API for provider/profile/model state, settings, permission mode, reasoning effort, fast mode, context usage, slash commands, MCP, plugins, and usage summaries so IDE hosts can manage GakrCLI without launching a child CLI wrapper.

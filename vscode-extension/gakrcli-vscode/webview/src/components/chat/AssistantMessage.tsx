@@ -5,7 +5,7 @@ import { ToolCallBlock } from './ToolCallBlock';
 import { ContentBlockRouter } from '../blocks/ContentBlockRouter';
 import type { ContentBlock } from '../../types/blocks';
 import { MessageActions } from './MessageActions';
-import { CostDisplay } from '../shared/CostDisplay';
+import { formatTurnCompletion } from '../../utils/turnCompletion';
 
 interface AssistantMessageProps {
   message: ChatMessage;
@@ -17,6 +17,10 @@ interface AssistantMessageProps {
 
 export function AssistantMessage({ message, isLatest = false, isStreaming = false, onRetry, onStop }: AssistantMessageProps) {
   const blocks = message.blocks || [];
+  const turnCompletionText =
+    message.cost && !isStreaming && !message.isStreaming
+      ? formatTurnCompletion(message.cost.durationMs, message.id)
+      : null;
 
   // Extract plain text content for copy
   const plainTextContent = blocks
@@ -38,13 +42,14 @@ export function AssistantMessage({ message, isLatest = false, isStreaming = fals
         ))}
       </div>
 
-      {message.cost && !isStreaming && !message.isStreaming && (
-        <div className="assistant-usage-footer">
-          <CostDisplay cost={message.cost} className="message-usage-summary" />
+      {turnCompletionText && (
+        <div className="assistant-turn-footer" aria-label={turnCompletionText}>
+          <span className="turn-completion-mark">*</span>
+          <span className="turn-completion-summary">{turnCompletionText}</span>
         </div>
       )}
 
-      {plainTextContent && isLatest && (
+      {plainTextContent && (
         <div className="message-actions-row">
           <MessageActions
             messageRole="assistant"
