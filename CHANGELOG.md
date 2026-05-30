@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (2026-05-30)
+- **VS Code SDK Runtime**: Replaced the native VS Code chat runtime's hardcoded CLI wrapper process with direct `@gakr-gakr/gakrcli/sdk` usage, preserving the existing webview, permission, diff, MCP, resume, and model-control behavior through the SDK query surface.
+- **VS Code SDK Packaging**: Declared `@gakr-gakr/gakrcli` as the extension runtime dependency, kept the SDK import external in the extension bundle, and packaged the published npm SDK dependency instead of relying on root checkout files.
+- **VS Code Provider Model Discovery**: Added SDK-first model discovery through `query().supportedModels()` with live OpenAI-compatible `/models` fallback, and covered active provider profile, active model, model promotion, and nullable SDK capability responses with regression tests.
+
 ### Fixed (2026-05-29)
 - **VS Code Provider Model Parity**: Wired the VS Code wrapper to the active `~/.gakrcli.json` provider profile before falling back to legacy `.gakrcli-profile.json`, kept model switches persisted through the GakrCLI `/model` profile path, showed full model IDs in the picker, and added footer runtime status for Sleep, Starting, Idle, and Running states.
 - **VS Code Dynamic Model Picker**: Matched the terminal `/model` flow more closely by fetching OpenAI-compatible provider models from `/v1/models` with `/models` fallback, removing broad static model-list fallback from the picker, and updating selected models immediately while preserving full provider-prefixed IDs.

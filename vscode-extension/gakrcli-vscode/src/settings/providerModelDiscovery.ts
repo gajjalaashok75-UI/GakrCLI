@@ -1,16 +1,30 @@
 import type { ProviderModelOption } from './providerProfiles';
+import type { Query } from '@gakr-gakr/gakrcli/sdk';
 
 const DISCOVERY_TIMEOUT_MS = 5000;
+
+type SdkModule = typeof import('@gakr-gakr/gakrcli/sdk');
 
 interface OpenAIModelsResponse {
   data?: Array<{ id?: string | null } | string>;
   models?: Array<{ id?: string | null; name?: string | null } | string>;
 }
 
+let sdkModuleForTests: SdkModule | undefined;
+
+export function __setSdkModuleForTests(sdk: SdkModule | undefined): void {
+  sdkModuleForTests = sdk;
+}
+
 export async function discoverOpenAICompatibleModelOptions(
   env: Record<string, string>,
   options: { timeoutMs?: number } = {},
 ): Promise<ProviderModelOption[]> {
+  const sdkModels = await discoverSdkModelOptions(env);
+  if (sdkModels.length > 0) {
+    return sdkModels;
+  }
+
   const fallbackBaseUrl = env.GAKR_CODE_USE_OPENAI === '1' || env.OPENAI_API_KEY
     ? 'https://api.openai.com/v1'
     : '';
@@ -31,6 +45,41 @@ export async function discoverOpenAICompatibleModelOptions(
   }
 
   return [];
+}
+
+async function discoverSdkModelOptions(env: Record<string, string>): Promise<ProviderModelOption[]> {
+  let query: Query | undefined;
+  try {
+    const sdk = sdkModuleForTests ?? await import('@gakr-gakr/gakrcli/sdk');
+    query = sdk.query({
+      prompt: emptyPrompt(),
+      options: {
+        cwd: process.cwd(),
+        env,
+      },
+    });
+    const models = readSdkModels(query);
+    return models.map((model) => ({
+      value: model,
+      displayName: model,
+    }));
+  } catch {
+    return [];
+  } finally {
+    query?.close();
+  }
+}
+
+async function* emptyPrompt(): AsyncGenerator<never> {
+  return;
+}
+
+function readSdkModels(query: Query): string[] {
+  try {
+    return uniqueModelNames(query.supportedModels());
+  } catch {
+    return [];
+  }
 }
 
 function getModelListUrls(baseUrl: string, env: Record<string, string>): string[] {
@@ -127,7 +176,7 @@ function readModelNames(value: OpenAIModelsResponse['data'] | OpenAIModelsRespon
       if (typeof entry === 'string') {
         return entry;
       }
-      return entry.id ?? entry.name ?? '';
+      return entry.id ?? ('name' in entry ? entry.name : '') ?? '';
     })
     .filter((model): model is string => model.trim().length > 0);
 }

@@ -1,25 +1,25 @@
 // src/process/processManager.ts
-// Spawns and manages the GakrCLI CLI child process.
-// Wires NdjsonTransport for communication, ControlRouter for control_request dispatch.
-// Performs the initialize handshake on spawn.
+// In-process transport for GakrCLI SDK sessions.
 //
-// Process transport for GakrCLI stream-json sessions.
+// This keeps the extension-facing ProcessManager API stable, but runs the
+// GakrCLI SDK directly instead of spawning the CLI and speaking NDJSON.
 
-import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import * as path from 'node:path';
-import * as readline from 'node:readline';
-import { NdjsonTransport } from './ndjsonTransport';
 import { ControlRouter, type ControlRequestHandler } from './controlRouter';
 import type { InitializeResponse } from '../types/protocol';
 import type {
   SDKControlRequest,
-  SDKControlCancelRequest,
   SDKKeepAliveMessage,
+  SDKUserMessage,
   StdoutMessage,
 } from '../types/messages';
-import type { PermissionMode } from '../types/session';
+import type { AccountInfo, PermissionMode, PermissionResult } from '../types/session';
+import type {
+  Query,
+  QueryOptions,
+  SDKMessage,
+  SDKPermissionRequestMessage,
+  PermissionResult as SDKPermissionResult,
+} from '@gakr-gakr/gakrcli/sdk';
 
 // ============================================================================
 // Types
@@ -34,11 +34,11 @@ export enum ProcessState {
 }
 
 export interface ProcessManagerOptions {
-  /** Working directory for the CLI */
+  /** Working directory for the SDK session */
   cwd: string;
-  /** Path to the gakrcli executable (default: 'gakrcli') */
+  /** Retained for backward compatibility; ignored by SDK mode. */
   executable?: string;
-  /** Arguments that must appear before the GakrCLI runtime flags, e.g. dist/cli.mjs for node. */
+  /** Retained for backward compatibility; ignored by SDK mode. */
   executableArgs?: string[];
   /** Model to use */
   model?: string;
@@ -50,23 +50,23 @@ export interface ProcessManagerOptions {
   sessionId?: string;
   /** Continue last session */
   continueSession?: boolean;
-  /** IDE MCP server to pass to GakrCLI's headless MCP loader. */
+  /** IDE MCP server exposed by the extension. */
   ideMcpServer?: {
     port: number;
     ideName?: string;
   };
-  /** Fork session from a checkpoint UUID (used with sessionId) */
+  /** Fork session before resuming */
   forkSession?: boolean;
-  /** Worktree name to pass as --worktree flag */
+  /** Worktree name. Retained for API compatibility. */
   worktree?: string;
   /** Additional environment variables */
   env?: Record<string, string>;
   /** Initialize request options */
   promptSuggestions?: boolean;
   agentProgressSummaries?: boolean;
-  /** Auto-restart on crash */
+  /** Retained for API compatibility. SDK mode does not crash-restart. */
   autoRestart?: boolean;
-  /** Keep-alive interval in ms (default: 30000) */
+  /** Retained for API compatibility. */
   keepAliveIntervalMs?: number;
   /** SDK-owned MCP server names to advertise during initialize. */
   sdkMcpServers?: string[];
@@ -78,51 +78,180 @@ type ExitCallback = (code: number | null, signal: string | null) => void;
 type StderrCallback = (line: string) => void;
 type StateCallback = (state: ProcessState) => void;
 
-interface SpawnCommand {
-  executable: string;
-  args: string[];
+type SdkModule = typeof import('@gakr-gakr/gakrcli/sdk');
+
+interface QueuedPrompt {
+  type: 'user';
+  message: {
+    role: 'user';
+    content: string | unknown[];
+  };
+  parent_tool_use_id: null;
+  uuid?: string;
+  priority?: 'now' | 'next' | 'later';
 }
 
-function isBareWindowsCommand(executable: string): boolean {
-  return !/[\\/]/.test(executable) && path.win32.extname(executable) === '';
-}
+class AsyncPromptQueue implements AsyncIterable<QueuedPrompt> {
+  private readonly values: QueuedPrompt[] = [];
+  private readonly waiters: Array<(next: IteratorResult<QueuedPrompt>) => void> = [];
+  private closed = false;
 
-function isWindowsBatchWrapper(executable: string): boolean {
-  const ext = path.win32.extname(executable).toLowerCase();
-  return ext === '.cmd' || ext === '.bat';
-}
-
-function quoteForWindowsCmd(arg: string): string {
-  if (arg.length === 0) {
-    return '""';
+  push(value: QueuedPrompt): void {
+    if (this.closed) return;
+    const waiter = this.waiters.shift();
+    if (waiter) {
+      waiter({ value, done: false });
+      return;
+    }
+    this.values.push(value);
   }
 
-  if (!/[\s"&()<>^|]/.test(arg)) {
-    return arg;
+  close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    while (this.waiters.length > 0) {
+      this.waiters.shift()?.({ value: undefined, done: true });
+    }
   }
 
-  return `"${arg.replace(/"/g, '""')}"`;
+  async *[Symbol.asyncIterator](): AsyncIterator<QueuedPrompt> {
+    while (true) {
+      if (this.values.length > 0) {
+        yield this.values.shift()!;
+        continue;
+      }
+      if (this.closed) {
+        return;
+      }
+      const next = await new Promise<IteratorResult<QueuedPrompt>>((resolve) => {
+        this.waiters.push(resolve);
+      });
+      if (next.done) return;
+      yield next.value;
+    }
+  }
 }
 
-function resolveSpawnCommand(executable: string, args: string[]): SpawnCommand {
-  if (
-    process.platform === 'win32' &&
-    (isBareWindowsCommand(executable) || isWindowsBatchWrapper(executable))
-  ) {
-    // npm installs `gakrcli` on Windows as a `.cmd` shim, which must be
-    // launched through `cmd.exe` for PATH/PATHEXT resolution to work reliably.
-    return {
-      executable: process.env.ComSpec?.trim() || 'cmd.exe',
-      args: [
-        '/d',
-        '/s',
-        '/c',
-        [executable, ...args].map(quoteForWindowsCmd).join(' '),
-      ],
+class SdkResponseTransport {
+  private readonly requestToToolUse = new Map<string, string>();
+
+  constructor(private readonly respond: (toolUseId: string, decision: SDKPermissionResult) => void) {}
+
+  remember(requestId: string, toolUseId: string): void {
+    this.requestToToolUse.set(requestId, toolUseId);
+  }
+
+  write(message: unknown): void {
+    const msg = message as {
+      type?: string;
+      response?: {
+        subtype?: 'success' | 'error';
+        request_id?: string;
+        response?: PermissionResult;
+        error?: string;
+      };
     };
+
+    if (msg.type !== 'control_response' || !msg.response?.request_id) {
+      return;
+    }
+
+    const requestId = msg.response.request_id;
+    const toolUseId =
+      msg.response.response?.toolUseID ??
+      this.requestToToolUse.get(requestId);
+    if (!toolUseId) {
+      return;
+    }
+
+    this.requestToToolUse.delete(requestId);
+    if (msg.response.subtype === 'error') {
+      this.respond(toolUseId, {
+        behavior: 'deny',
+        message: msg.response.error ?? 'Permission request failed',
+        toolUseID: toolUseId,
+      });
+      return;
+    }
+
+    const decision = msg.response.response;
+    if (decision) {
+      this.respond(toolUseId, decision as unknown as SDKPermissionResult);
+    }
   }
 
-  return { executable, args };
+  dispose(): void {
+    this.requestToToolUse.clear();
+  }
+}
+
+// ============================================================================
+// SDK loading
+// ============================================================================
+
+let sdkModulePromise: Promise<SdkModule> | undefined;
+
+async function loadSdkModule(): Promise<SdkModule> {
+  if (!sdkModulePromise) {
+    sdkModulePromise = importSdkModule();
+  }
+  return sdkModulePromise;
+}
+
+async function importSdkModule(): Promise<SdkModule> {
+  try {
+    return await import('@gakr-gakr/gakrcli/sdk');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Unable to load @gakr-gakr/gakrcli/sdk from the extension dependencies: ${message}. ` +
+        'Run npm install in the extension project before development, and package the extension with production dependencies.',
+    );
+  }
+}
+
+export function __setSdkModuleForTests(sdk: SdkModule | undefined): void {
+  sdkModulePromise = sdk ? Promise.resolve(sdk) : undefined;
+}
+
+function toSdkPermissionMode(mode?: PermissionMode): QueryOptions['permissionMode'] {
+  if (mode === 'dontAsk') return 'default';
+  return mode;
+}
+
+function modelInfo(model: string | undefined) {
+  const value = model || 'default';
+  return {
+    value,
+    displayName: value,
+    description: 'Current GakrCLI SDK model',
+  };
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function callStringArray(read: () => unknown): string[] {
+  try {
+    return stringArray(read());
+  } catch {
+    return [];
+  }
+}
+
+function recordArray(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+    : [];
+}
+
+function callRecordArray(read: () => unknown): Record<string, unknown>[] {
+  try {
+    return recordArray(read());
+  } catch {
+    return [];
+  }
 }
 
 // ============================================================================
@@ -131,28 +260,18 @@ function resolveSpawnCommand(executable: string, args: string[]): SpawnCommand {
 
 export class ProcessManager {
   private options: ProcessManagerOptions;
-  private process: ChildProcess | undefined;
-  private transport: NdjsonTransport | undefined;
+  private sdkQuery: Query | undefined;
+  private promptQueue: AsyncPromptQueue | undefined;
   private router: ControlRouter | undefined;
-  private stderrRl: readline.Interface | undefined;
-  private keepAliveTimer: ReturnType<typeof setInterval> | undefined;
-  private tempMcpConfigDir: string | undefined;
-  private stderrTail: string[] = [];
+  private responseTransport: SdkResponseTransport | undefined;
+  private abortController: AbortController | undefined;
+  private consumePromise: Promise<void> | undefined;
 
   private _state: ProcessState = ProcessState.Idle;
   private _sessionId: string | undefined;
   private _initializeResponse: InitializeResponse | undefined;
-
-  // Pending initialize handshake resolution
-  private pendingInitResolve:
-    | ((response: InitializeResponse) => void)
-    | undefined;
-  private pendingInitReject: ((error: Error) => void) | undefined;
-  private initRequestId: string | undefined;
-  private initTimer: ReturnType<typeof setTimeout> | undefined;
   private intentionalShutdown = false;
 
-  // Callbacks
   private messageCallbacks: MessageCallback[] = [];
   private errorCallbacks: ErrorCallback[] = [];
   private exitCallbacks: ExitCallback[] = [];
@@ -163,10 +282,6 @@ export class ProcessManager {
   constructor(options: ProcessManagerOptions) {
     this.options = options;
   }
-
-  // ============================================================================
-  // Public API
-  // ============================================================================
 
   get state(): ProcessState {
     return this._state;
@@ -180,156 +295,154 @@ export class ProcessManager {
     return this._initializeResponse;
   }
 
-  /** Get the current NDJSON transport (available after spawn). */
-  get ndjsonTransport(): NdjsonTransport | undefined {
-    return this.transport;
+  /** Compatibility adapter used by permission and diff handlers. */
+  get ndjsonTransport(): { write(message: unknown): void } | undefined {
+    return this.responseTransport;
   }
 
-  /**
-   * Spawn the CLI process and perform the initialize handshake.
-   * Returns the InitializeResponse on success.
-   */
-  spawn(): Promise<InitializeResponse> | void {
+  async spawn(): Promise<InitializeResponse> {
     if (this._state !== ProcessState.Idle && this._state !== ProcessState.Restarting) {
-      return;
+      return this._initializeResponse ?? this.createInitializeResponse();
     }
 
     this.setState(ProcessState.Spawning);
     this.intentionalShutdown = false;
-    this.stderrTail = [];
-
-    const executable = (this.options.executable ?? 'gakrcli').trim() || 'gakrcli';
-    const args = [...(this.options.executableArgs ?? []), ...this.buildArgs()];
-    const env = this.buildEnv();
-    const spawnCommand = resolveSpawnCommand(executable, args);
 
     try {
-      this.process = spawn(spawnCommand.executable, spawnCommand.args, {
-        cwd: this.options.cwd,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env,
-        windowsHide: true,
-        shell: false,
+      this.setState(ProcessState.Initializing);
+      const sdk = await loadSdkModule();
+
+      this.abortController = new AbortController();
+      this.promptQueue = new AsyncPromptQueue();
+      this.responseTransport = new SdkResponseTransport((toolUseId, decision) => {
+        this.sdkQuery?.respondToPermission(toolUseId, decision);
       });
-    } catch (err) {
-      this.setState(ProcessState.Idle);
-      this.cleanupTempMcpConfig();
-      const error =
-        err instanceof Error ? err : new Error(String(err));
-      this.emitError(error);
-      return;
-    }
 
-    // Wire up transport
-    if (this.process.stdout && this.process.stdin) {
-      this.transport = new NdjsonTransport(
-        this.process.stdout,
-        this.process.stdin,
-      );
-
-      // Create router that writes through transport
-      this.router = new ControlRouter((msg) => this.transport?.write(msg));
+      this.router = new ControlRouter((msg) => this.responseTransport?.write(msg));
       for (const [subtype, handler] of this.controlHandlers) {
         this.router.registerHandler(subtype, handler);
       }
 
-      // Handle parsed messages from stdout
-      this.transport.onMessage((msg) => this.handleMessage(msg as StdoutMessage));
-      this.transport.onError((err) => this.emitError(err));
-      this.transport.onClose(() => {
-        // Stream closed — process is exiting
+      this.sdkQuery = sdk.query({
+        prompt: this.promptQueue,
+        options: this.buildQueryOptions(),
       });
-    }
+      this._sessionId = this.sdkQuery.sessionId;
+      this._initializeResponse = await this.createInitializeResponse();
+      this.consumePromise = this.consumeSdkMessages();
 
-    // Wire up stderr for debug logging
-    if (this.process.stderr) {
-      this.stderrRl = readline.createInterface({
-        input: this.process.stderr,
-      });
-      this.stderrRl.on('line', (line) => {
-        this.recordStderrLine(line);
-        for (const cb of this.stderrCallbacks) {
-          cb(line);
-        }
-      });
-    }
-
-    // Handle process lifecycle
-    this.process.on('error', (err) => {
-      this.setState(ProcessState.Idle);
-      this.emitError(err);
-      this.rejectPendingInitialize(err);
-    });
-
-    this.process.on('exit', (code, signal) => {
-      if (this.intentionalShutdown) {
-        this.clearPendingInitialize();
-      } else {
-        this.rejectPendingInitialize(
-          new Error(this.formatEarlyExitError(code, signal)),
-        );
-      }
+      this.setState(ProcessState.Ready);
+      return this._initializeResponse;
+    } catch (err) {
       this.cleanup();
       this.setState(ProcessState.Idle);
-
-      for (const cb of this.exitCallbacks) {
-        cb(code, signal);
-      }
-
-      // Auto-restart on non-zero exit if enabled
-      if (
-        this.options.autoRestart &&
-        code !== 0 &&
-        code !== null &&
-        this._sessionId
-      ) {
-        this.restartWithResume();
-      }
-    });
-
-    // Send initialize handshake
-    this.setState(ProcessState.Initializing);
-    return this.sendInitialize();
+      const error = err instanceof Error ? err : new Error(String(err));
+      this.emitError(error);
+      throw error;
+    }
   }
 
-  /**
-   * Write a message to the CLI's stdin via the transport.
-   */
   write(message: unknown): void {
-    this.transport?.write(message);
+    const msg = message as Record<string, unknown>;
+    if (msg.type === 'user') {
+      const userMessage = msg as unknown as SDKUserMessage;
+      const message = userMessage.message as { content?: unknown } | undefined;
+      const content = message?.content;
+      this.promptQueue?.push({
+        type: 'user',
+        message: {
+          role: 'user',
+          content: typeof content === 'string' || Array.isArray(content)
+            ? content
+            : String(content ?? ''),
+        },
+        parent_tool_use_id: null,
+        uuid: typeof userMessage.uuid === 'string' ? userMessage.uuid : undefined,
+        priority: userMessage.priority,
+      });
+      return;
+    }
+
+    if (msg.type === 'control_response') {
+      this.responseTransport?.write(message);
+      return;
+    }
+
+    if (msg.type === 'control_request') {
+      const request = msg.request as Record<string, unknown> | undefined;
+      if (request) {
+        void this.sendControlRequest(request).catch((err) => this.emitError(err));
+      }
+      return;
+    }
+
+    if ((msg as unknown as SDKKeepAliveMessage).type === 'keep_alive') {
+      return;
+    }
   }
 
-  /**
-   * Send a control_request to the CLI and return a promise for the response.
-   */
   async sendControlRequest(
     request: Record<string, unknown>,
   ): Promise<Record<string, unknown> | undefined> {
-    const requestId = this.generateRequestId();
-    const envelope = {
-      type: 'control_request',
-      request_id: requestId,
-      request,
-    };
+    if (!this.sdkQuery) {
+      return undefined;
+    }
 
-    return new Promise((resolve, reject) => {
-      // Store resolver indexed by request_id so handleMessage can resolve it
-      this.pendingControlRequests.set(requestId, { resolve, reject });
-      this.transport?.write(envelope);
-    });
+    switch (request.subtype) {
+      case 'interrupt':
+        this.sdkQuery.interrupt();
+        return {};
+      case 'set_model': {
+        const model = typeof request.model === 'string' ? request.model : undefined;
+        if (model) await this.sdkQuery.setModel(model);
+        return { model };
+      }
+      case 'set_permission_mode': {
+        const mode = toSdkPermissionMode(request.mode as PermissionMode | undefined);
+        if (mode) await this.sdkQuery.setPermissionMode(mode);
+        return { mode: request.mode };
+      }
+      case 'set_max_thinking_tokens': {
+        const tokens = request.max_thinking_tokens;
+        if (typeof tokens === 'number') {
+          this.sdkQuery.setMaxThinkingTokens(tokens);
+        }
+        return {};
+      }
+      case 'mcp_status':
+        return { mcpServers: callRecordArray(() => this.sdkQuery?.mcpServerStatus()) };
+      case 'rewind_files': {
+        const dryRun = request.dry_run !== false;
+        const result = dryRun
+          ? this.sdkQuery.rewindFiles()
+          : await this.sdkQuery.rewindFilesAsync();
+        return result as Record<string, unknown>;
+      }
+      case 'get_context_usage':
+        return this.emptyContextUsage();
+      case 'get_settings':
+        return { effective: {}, sources: [], applied: { model: this.options.model ?? 'default', effort: null } };
+      case 'reload_plugins':
+        return {
+          commands: [],
+          agents: [],
+          plugins: [],
+          mcpServers: callRecordArray(() => this.sdkQuery?.mcpServerStatus()),
+          error_count: 0,
+        };
+      case 'apply_flag_settings':
+      case 'seed_read_state':
+      case 'cancel_async_message':
+      case 'mcp_set_servers':
+      case 'mcp_reconnect':
+      case 'mcp_toggle':
+      case 'stop_task':
+        return {};
+      default:
+        return undefined;
+    }
   }
 
-  private pendingControlRequests = new Map<
-    string,
-    {
-      resolve: (response: Record<string, unknown> | undefined) => void;
-      reject: (error: Error) => void;
-    }
-  >();
-
-  /**
-   * Register a handler for an incoming control_request subtype from the CLI.
-   */
   registerControlHandler(
     subtype: string,
     handler: ControlRequestHandler,
@@ -338,40 +451,30 @@ export class ProcessManager {
     this.router?.registerHandler(subtype, handler);
   }
 
-  /**
-   * Kill the CLI process.
-   */
   kill(signal: NodeJS.Signals = 'SIGTERM'): void {
-    if (this.process && !this.process.killed) {
-      if (this.pendingInitReject) {
-        this.intentionalShutdown = true;
-      }
-      this.process.kill(signal);
+    if (signal === 'SIGINT') {
+      this.sdkQuery?.interrupt();
+      return;
+    }
+
+    this.intentionalShutdown = true;
+    this.cleanup();
+    this.setState(ProcessState.Idle);
+    for (const cb of this.exitCallbacks) {
+      cb(0, signal);
     }
   }
 
-  /**
-   * Clean up all resources.
-   */
   dispose(): void {
     this.intentionalShutdown = true;
-    this.stopKeepAlive();
-    this.kill();
-    this.transport?.dispose();
-    this.router?.dispose();
-    this.stderrRl?.close();
+    this.cleanup();
     this.messageCallbacks = [];
     this.errorCallbacks = [];
     this.exitCallbacks = [];
     this.stderrCallbacks = [];
     this.stateCallbacks = [];
     this.controlHandlers.clear();
-    this.cleanupTempMcpConfig();
   }
-
-  // ============================================================================
-  // Event Registration
-  // ============================================================================
 
   onMessage(callback: MessageCallback): void {
     this.messageCallbacks.push(callback);
@@ -393,295 +496,157 @@ export class ProcessManager {
     this.stateCallbacks.push(callback);
   }
 
-  // ============================================================================
-  // Private Methods
-  // ============================================================================
-
-  private buildArgs(): string[] {
-    const args: string[] = [
-      '--print',
-      '--output-format',
-      'stream-json',
-      '--verbose',
-      '--input-format',
-      'stream-json',
-      '--include-partial-messages',
-      '--permission-prompt-tool',
-      'stdio',
-    ];
-
-    if (this.options.model) {
-      args.push('--model', this.options.model);
-    }
-
-    if (this.options.permissionMode) {
-      args.push('--permission-mode', this.options.permissionMode);
-    }
-
-    if (this.options.allowDangerouslySkipPermissions) {
-      args.push('--allow-dangerously-skip-permissions');
-    }
-
-    if (this.options.sessionId) {
-      args.push('--resume', this.options.sessionId);
-    }
-
-    // Fork session: spawn from a checkpoint message UUID
-    if (this.options.forkSession) {
-      args.push('--fork-session');
-    }
-
-    if (this.options.continueSession) {
-      args.push('--continue');
-    }
-
-    if (this.options.worktree) {
-      args.push('--worktree', this.options.worktree);
-    }
-
+  private buildQueryOptions(): QueryOptions {
+    const mcpServers: Record<string, unknown> = {};
     if (this.options.ideMcpServer) {
-      args.push('--mcp-config', this.writeIdeMcpConfigFile());
+      mcpServers.ide = {
+        type: 'sse',
+        url: `http://127.0.0.1:${this.options.ideMcpServer.port}/sse`,
+      };
     }
 
-    return args;
+    return {
+      cwd: this.options.cwd,
+      model: this.options.model,
+      sessionId: this.options.sessionId,
+      continue: this.options.continueSession,
+      forkSession: this.options.forkSession,
+      permissionMode: toSdkPermissionMode(this.options.permissionMode),
+      allowDangerouslySkipPermissions: this.options.allowDangerouslySkipPermissions,
+      includePartialMessages: true,
+      abortController: this.abortController,
+      env: this.buildEnvOverrides(),
+      mcpServers: Object.keys(mcpServers).length > 0 ? mcpServers : undefined,
+      onPermissionRequest: (message) => this.handlePermissionRequest(message),
+      stderr: (line) => this.emitStderr(String(line)),
+    };
   }
 
-  private buildEnv(): NodeJS.ProcessEnv {
-    const env: NodeJS.ProcessEnv = { ...process.env };
-
-    // Merge custom env vars
-    if (this.options.env) {
-      Object.assign(env, this.options.env);
-    }
-
-    // Set GakrCLI launch markers for provider/session diagnostics.
-    if (!env.GAKR_CODE_ENTRYPOINT) {
-      env.GAKR_CODE_ENTRYPOINT = 'gakrcli-vscode';
-    }
-    if (!env.GAKR_CODE_ENVIRONMENT_KIND) {
-      env.GAKR_CODE_ENVIRONMENT_KIND = 'vscode';
-    }
-
-    // Remove NODE_OPTIONS to avoid runtime flag conflicts in the child process.
-    delete env.NODE_OPTIONS;
-
+  private buildEnvOverrides(): Record<string, string | undefined> {
+    const env: Record<string, string | undefined> = {
+      ...(this.options.env ?? {}),
+      GAKR_CODE_ENTRYPOINT: this.options.env?.GAKR_CODE_ENTRYPOINT ?? 'gakrcli-vscode',
+      GAKR_CODE_ENVIRONMENT_KIND: this.options.env?.GAKR_CODE_ENVIRONMENT_KIND ?? 'vscode',
+      NODE_OPTIONS: undefined,
+    };
     return env;
   }
 
-  private sendInitialize(): Promise<InitializeResponse> {
-    return new Promise<InitializeResponse>((resolve, reject) => {
-      this.pendingInitResolve = resolve;
-      this.pendingInitReject = reject;
+  private async createInitializeResponse(): Promise<InitializeResponse> {
+    const query = this.sdkQuery;
+    const commands = callStringArray(() => query?.supportedCommands());
+    const agents = callStringArray(() => query?.supportedAgents());
+    const models = callStringArray(() => query?.supportedModels());
+    let account: AccountInfo = { apiKeySource: 'none' };
+    if (query) {
+      try {
+        account = await query.accountInfo() ?? account;
+      } catch {
+        account = { apiKeySource: 'none' };
+      }
+    }
+    const fallbackModels = this.options.model ? [this.options.model] : [];
+    const availableModels = models.length > 0 ? models : fallbackModels;
 
-      this.initRequestId = this.generateRequestId();
-
-      const initRequest = {
-        type: 'control_request',
-        request_id: this.initRequestId,
-        request: {
-          subtype: 'initialize',
-          hooks: {},
-          sdkMcpServers: this.options.sdkMcpServers ?? [],
-          promptSuggestions: this.options.promptSuggestions ?? true,
-          agentProgressSummaries: this.options.agentProgressSummaries ?? true,
-        },
-      };
-
-      this.transport?.write(initRequest);
-      this.initTimer = setTimeout(() => {
-        this.rejectPendingInitialize(
-          new Error('GakrCLI did not respond to initialize within 15000ms'),
-        );
-      }, 15_000);
-    });
+    return {
+      commands: commands.map((name) => ({
+        name,
+        description: '',
+        argumentHint: '',
+      })),
+      agents: agents.map((name) => ({
+        name,
+        description: '',
+      })),
+      output_style: 'default',
+      available_output_styles: ['default'],
+      models: availableModels.length > 0
+        ? availableModels.map((model) => modelInfo(model))
+        : [modelInfo(this.options.model)],
+      account,
+      pid: process.pid,
+      fast_mode_state: 'off',
+    };
   }
 
-  private handleMessage(message: StdoutMessage): void {
-    // Handle control_response (may be initialize response or response to our requests)
-    if (message.type === 'control_response') {
-      const response = message.response;
-      const requestId = response.request_id;
+  private async consumeSdkMessages(): Promise<void> {
+    const query = this.sdkQuery;
+    if (!query) return;
 
-      // Check if this is the initialize response
-      if (requestId === this.initRequestId && this.pendingInitResolve) {
-        this.clearInitializeTimer();
-        if (response.subtype === 'success') {
-          const initResponse = response.response as unknown as InitializeResponse;
-          this._initializeResponse = initResponse;
-          const sessionId =
-            (initResponse as Record<string, unknown>).session_id ??
-            (initResponse as Record<string, unknown>).sessionId;
-          if (typeof sessionId === 'string') {
-            this._sessionId = sessionId;
-          }
-          this.setState(ProcessState.Ready);
-          this.startKeepAlive();
-          this.pendingInitResolve(initResponse);
-        } else {
-          this.pendingInitReject?.(
-            new Error(`Initialize failed: ${response.error}`),
-          );
-        }
-        this.pendingInitResolve = undefined;
-        this.pendingInitReject = undefined;
-        this.initRequestId = undefined;
-        return;
+    try {
+      for await (const message of query) {
+        this.handleSdkMessage(message);
       }
-
-      // Check if it matches a pending control request
-      const pending = this.pendingControlRequests.get(requestId);
-      if (pending) {
-        this.pendingControlRequests.delete(requestId);
-        if (response.subtype === 'success') {
-          pending.resolve(response.response);
-        } else {
-          pending.reject(new Error(response.error));
-        }
-        return;
+    } catch (err) {
+      if (!this.intentionalShutdown) {
+        this.emitError(err instanceof Error ? err : new Error(String(err)));
+        this.setState(ProcessState.Idle);
       }
     }
+  }
 
-    // Handle incoming control_request from CLI (permission, elicitation, etc.)
-    if (message.type === 'control_request') {
-      for (const cb of this.messageCallbacks) {
-        cb(message);
-      }
-      this.router?.handleControlRequest(message as SDKControlRequest);
-      return;
+  private handleSdkMessage(message: SDKMessage): void {
+    const msg = message as StdoutMessage;
+    const record = msg as unknown as Record<string, unknown>;
+    if ('session_id' in record && typeof record.session_id === 'string') {
+      this._sessionId = record.session_id;
     }
 
-    // Handle cancel requests
-    if (message.type === 'control_cancel_request') {
-      for (const cb of this.messageCallbacks) {
-        cb(message);
-      }
-      this.router?.handleControlCancelRequest(
-        message as SDKControlCancelRequest,
-      );
-      return;
-    }
-
-    // Handle keep_alive (no-op, just acknowledge receipt)
-    if (message.type === 'keep_alive') {
-      return;
-    }
-
-    // Extract session_id from messages that carry it
-    if ('session_id' in message && typeof (message as Record<string, unknown>).session_id === 'string') {
-      this._sessionId = (message as Record<string, unknown>).session_id as string;
-    }
-
-    // Forward all other messages to listeners
     for (const cb of this.messageCallbacks) {
-      cb(message);
+      cb(msg);
     }
   }
 
-  private startKeepAlive(): void {
-    const interval = this.options.keepAliveIntervalMs ?? 30_000;
-    this.keepAliveTimer = setInterval(() => {
-      this.transport?.write({ type: 'keep_alive' } satisfies SDKKeepAliveMessage);
-    }, interval);
-  }
+  private handlePermissionRequest(message: SDKPermissionRequestMessage): void {
+    const controlRequest: SDKControlRequest = {
+      type: 'control_request',
+      request_id: message.request_id,
+      request: {
+        subtype: 'can_use_tool',
+        tool_name: message.tool_name,
+        input: message.input,
+        tool_use_id: message.tool_use_id,
+      },
+    };
 
-  private stopKeepAlive(): void {
-    if (this.keepAliveTimer) {
-      clearInterval(this.keepAliveTimer);
-      this.keepAliveTimer = undefined;
-    }
-  }
+    this.responseTransport?.remember(message.request_id, message.tool_use_id);
 
-  private clearInitializeTimer(): void {
-    if (this.initTimer) {
-      clearTimeout(this.initTimer);
-      this.initTimer = undefined;
-    }
-  }
-
-  private rejectPendingInitialize(error: Error): void {
-    if (!this.pendingInitReject) {
-      return;
-    }
-    this.clearInitializeTimer();
-    this.pendingInitReject(error);
-    this.pendingInitResolve = undefined;
-    this.pendingInitReject = undefined;
-    this.initRequestId = undefined;
-  }
-
-  private clearPendingInitialize(): void {
-    this.clearInitializeTimer();
-    this.pendingInitResolve = undefined;
-    this.pendingInitReject = undefined;
-    this.initRequestId = undefined;
-  }
-
-  private restartWithResume(): void {
-    this.setState(ProcessState.Restarting);
-
-    // Update options to resume the session
-    if (this._sessionId) {
-      this.options = { ...this.options, sessionId: this._sessionId };
+    for (const cb of this.messageCallbacks) {
+      cb(controlRequest as StdoutMessage);
     }
 
-    // Delay slightly before restart to avoid tight restart loops
-    setTimeout(() => {
-      this.spawn();
-    }, 1000);
+    void this.router?.handleControlRequest(controlRequest);
+  }
+
+  private emptyContextUsage(): Record<string, unknown> {
+    return {
+      categories: [],
+      totalTokens: 0,
+      maxTokens: 0,
+      rawMaxTokens: 0,
+      percentage: 0,
+      gridRows: [],
+      model: this.options.model ?? 'default',
+      memoryFiles: [],
+      mcpTools: [],
+      agents: [],
+      isAutoCompactEnabled: false,
+      apiUsage: null,
+    };
   }
 
   private cleanup(): void {
-    this.stopKeepAlive();
-    this.clearInitializeTimer();
-    this.transport?.dispose();
-    this.transport = undefined;
+    this.promptQueue?.close();
+    this.promptQueue = undefined;
+    this.sdkQuery?.close();
+    this.sdkQuery = undefined;
+    this.abortController?.abort();
+    this.abortController = undefined;
     this.router?.dispose();
     this.router = undefined;
-    this.stderrRl?.close();
-    this.stderrRl = undefined;
-    this.process = undefined;
-    this.cleanupTempMcpConfig();
-  }
-
-  private writeIdeMcpConfigFile(): string {
-    this.cleanupTempMcpConfig();
-    const dir = mkdtempSync(path.join(tmpdir(), 'gakrcli-vscode-mcp-'));
-    const file = path.join(dir, 'mcp-config.json');
-    const config = {
-      mcpServers: {
-        ide: {
-          type: 'sse-ide',
-          url: `http://127.0.0.1:${this.options.ideMcpServer!.port}/sse`,
-          ideName: this.options.ideMcpServer!.ideName ?? 'VS Code',
-        },
-      },
-    };
-    writeFileSync(file, JSON.stringify(config), 'utf8');
-    this.tempMcpConfigDir = dir;
-    return file;
-  }
-
-  private cleanupTempMcpConfig(): void {
-    if (!this.tempMcpConfigDir) {
-      return;
-    }
-    rmSync(this.tempMcpConfigDir, { recursive: true, force: true });
-    this.tempMcpConfigDir = undefined;
-  }
-
-  private recordStderrLine(line: string): void {
-    this.stderrTail.push(line);
-    if (this.stderrTail.length > 20) {
-      this.stderrTail.shift();
-    }
-  }
-
-  private formatEarlyExitError(code: number | null, signal: string | null): string {
-    const base = `GakrCLI exited before initialize completed: code=${code}, signal=${signal}`;
-    if (this.stderrTail.length === 0) {
-      return base;
-    }
-    return `${base}. stderr:\n${this.stderrTail.join('\n')}`;
+    this.responseTransport?.dispose();
+    this.responseTransport = undefined;
+    this.consumePromise = undefined;
   }
 
   private setState(state: ProcessState): void {
@@ -697,7 +662,9 @@ export class ProcessManager {
     }
   }
 
-  private generateRequestId(): string {
-    return Math.random().toString(36).substring(2, 15);
+  private emitStderr(line: string): void {
+    for (const cb of this.stderrCallbacks) {
+      cb(line);
+    }
   }
 }

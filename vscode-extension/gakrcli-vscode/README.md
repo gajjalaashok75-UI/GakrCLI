@@ -282,7 +282,7 @@ npm test
 
 **Package a `.vsix`:**
 ```bash
-npx @vscode/vsce package --no-dependencies --allow-missing-repository
+npx @vscode/vsce package --allow-missing-repository
 ```
 
 **Publish to the VS Code Marketplace:**
