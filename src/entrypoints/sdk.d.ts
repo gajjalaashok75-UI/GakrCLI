@@ -240,6 +240,19 @@ export type SDKUsageSummary = {
   fastModeState?: 'off' | 'cooldown' | 'on'
 }
 
+export type SDKTodoItem = {
+  content: string
+  status: 'pending' | 'in_progress' | 'completed'
+  activeForm?: string
+}
+
+export type SDKTodoState = {
+  items: SDKTodoItem[]
+  activeItem?: SDKTodoItem
+  completed: number
+  total: number
+}
+
 export type SDKContextUsage = {
   categories: Array<{ name: string; tokens: number; color: string; isDeferred?: boolean }>
   totalTokens: number
@@ -322,6 +335,7 @@ export type SDKRuntimeState = {
   plugins: SDKPluginInfo[]
   account: { apiKeySource: string; [key: string]: unknown }
   usage: SDKUsageSummary
+  todos: SDKTodoState
 }
 
 export type SDKApplySettingsInput = {
@@ -469,6 +483,7 @@ export interface Query {
   setFastMode(enabled: boolean): SDKFastModeState
   getContextUsage(): Promise<SDKContextUsage>
   getUsageSummary(): SDKUsageSummary
+  getTodoState(): SDKTodoState
   listSlashCommands(): SDKSlashCommandInfo[]
   runSlashCommand(command: string, args?: string): Promise<SDKRunSlashCommandResult>
   listMcpServers(): McpServerStatus[]

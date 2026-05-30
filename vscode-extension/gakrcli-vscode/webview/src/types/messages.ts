@@ -227,6 +227,18 @@ export interface ResultMessage {
   session_id: string;
 }
 
+export interface SystemApiRetryMessage {
+  type: 'system';
+  subtype: 'api_retry';
+  attempt: number;
+  max_retries?: number;
+  retry_delay_ms?: number;
+  error_status?: number | null;
+  error?: string;
+  uuid: string;
+  session_id: string;
+}
+
 export interface ModelUsage {
   inputTokens: number;
   outputTokens: number;
@@ -267,4 +279,5 @@ export type SDKMessage =
   | UserMessage
   | ResultMessage
   | SystemInitMessage
+  | SystemApiRetryMessage
   | SystemStatusMessage;

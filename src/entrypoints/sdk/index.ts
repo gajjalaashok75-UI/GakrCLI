@@ -277,5 +277,7 @@ export type {
   SDKRuntimeState,
   SDKSettingsSnapshot,
   SDKSlashCommandInfo,
+  SDKTodoItem,
+  SDKTodoState,
   SDKUsageSummary,
 } from './runtime.js'

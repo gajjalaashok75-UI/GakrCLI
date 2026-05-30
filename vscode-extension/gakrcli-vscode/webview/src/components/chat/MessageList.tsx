@@ -53,7 +53,6 @@ export function MessageList({ messages, isStreaming, processState, onEditMessage
                   message={msg}
                   isLatest={index === latestAssistantIndex}
                   isStreaming={isStreaming && index === latestAssistantIndex}
-                  cost={msg.cost}
                 />
               )}
             </div>

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { vscode } from '../vscode';
 import { useStream } from './useStream';
-import type { ChatMessage, SessionCost } from '../types/chat';
+import type { ChatMessage, SessionCost, TodoItem } from '../types/chat';
 import type {
   SDKMessage,
   StreamEvent,
@@ -50,6 +50,12 @@ export interface RateLimitInfo {
 export interface ToolActivity {
   toolName: string;
   description: string;  // e.g. "Editing src/App.tsx" or "Running: npm test"
+}
+
+export interface RetryInfo {
+  attempt: number;
+  retryAt: number;
+  delayMs: number;
 }
 
 /** Format a human-readable description of tool activity */
@@ -121,10 +127,14 @@ export function useChat() {
   const [availableModels, setAvailableModels] = useState<Array<{ value: string; displayName: string }>>([]);
   const [effortLevel, setEffortLevel] = useState<string>('medium');
   const [toolActivity, setToolActivity] = useState<ToolActivity | null>(null);
+  const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [retryInfo, setRetryInfo] = useState<RetryInfo | null>(null);
 
   const { processStreamEvent, resetStream } = useStream();
   const streamingUuidRef = useRef<string | null>(null);
+  const resultTargetAssistantIdRef = useRef<string | null>(null);
   const activeToolUseIdsRef = useRef<Set<string>>(new Set());
+  const userInterruptedRef = useRef(false);
 
   const handleUserMessage = useCallback((msg: UserMessage) => {
     const id = msg.uuid || `user-${Date.now()}`;
@@ -145,7 +155,11 @@ export function useChat() {
     if (!text) {
       return;
     }
+    if (isUserInterruptText(text)) {
+      return;
+    }
 
+    resultTargetAssistantIdRef.current = null;
     const chatMsg: ChatMessage = {
       id,
       role: 'user',
@@ -168,6 +182,7 @@ export function useChat() {
       switch (update.type) {
         case 'message_start': {
           streamingUuidRef.current = update.uuid;
+          resultTargetAssistantIdRef.current = update.uuid;
           setIsStreaming(true);
           if (update.model) setModel(update.model);
 
@@ -190,6 +205,10 @@ export function useChat() {
           const uuid = streamingUuidRef.current;
           if (!uuid) break;
           const displayBlocks = normalizeRenderableBlocks(update.blocks);
+          const nextTodos = extractTodosFromRenderableBlocks(displayBlocks);
+          if (nextTodos) {
+            setTodos(nextTodos);
+          }
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === uuid ? { ...msg, blocks: displayBlocks } : msg,
@@ -263,6 +282,9 @@ export function useChat() {
       block: normalizeTextContentBlock(block),
       isStreaming: false,
     }));
+    if (isUserAbortAssistantBlocks(blocks)) {
+      return;
+    }
 
     const chatMsg: ChatMessage = {
       id: msg.uuid,
@@ -273,9 +295,15 @@ export function useChat() {
       parentToolUseId: msg.parent_tool_use_id,
       model: msg.message.model,
     };
+    const nextTodos = extractTodosFromRenderableBlocks(blocks);
+    if (nextTodos) {
+      setTodos(nextTodos);
+    }
+    let resolvedAssistantId = msg.uuid;
     setMessages((prev) => {
       const existingIndex = msg.uuid ? prev.findIndex((m) => m.id === msg.uuid) : -1;
       if (existingIndex >= 0) {
+        resolvedAssistantId = msg.uuid;
         return prev.map((m, index) =>
           index === existingIndex
             ? { ...m, ...chatMsg, blocks: mergeExistingToolResults(blocks, m.blocks ?? []) }
@@ -294,6 +322,7 @@ export function useChat() {
           blocksSignature(candidateBlocks) === finalSignature ||
           (finalSoftSignature && blocksSoftSignature(candidateBlocks) === finalSoftSignature)
         ) {
+          resolvedAssistantId = candidate.id;
           return prev.map((m, msgIndex) =>
             msgIndex === index
               ? {
@@ -309,6 +338,7 @@ export function useChat() {
 
       return [...prev, chatMsg];
     });
+    resultTargetAssistantIdRef.current = resolvedAssistantId;
     if (!streamingUuidRef.current && activeToolUseIdsRef.current.size === 0) {
       setIsStreaming(false);
       setToolActivity(null);
@@ -318,11 +348,14 @@ export function useChat() {
   const handleResultMessage = useCallback((msg: ResultMessage) => {
     setIsStreaming(false);
     setToolActivity(null);
+    setRetryInfo(null);
     activeToolUseIdsRef.current.clear();
     streamingUuidRef.current = null;
     resetStream();
     const usage = normalizeUsage(msg);
     const msgAny = msg as unknown as Record<string, unknown>;
+    const wasUserAbort = userInterruptedRef.current || isUserAbortResult(msg);
+    const rawTurns = readNumber(msgAny, 'num_turns', 'numTurns') ?? 0;
 
     const nextCost = {
       totalCostUSD: readNumber(msgAny, 'total_cost_usd', 'totalCostUsd', 'totalCostUSD') ?? 0,
@@ -330,13 +363,13 @@ export function useChat() {
       outputTokens: usage.outputTokens,
       cacheReadTokens: usage.cacheReadTokens,
       cacheCreationTokens: usage.cacheCreationTokens,
-      numTurns: readNumber(msgAny, 'num_turns', 'numTurns') ?? 0,
+      numTurns: wasUserAbort && rawTurns > 0 ? rawTurns - 1 : rawTurns,
       durationMs: readNumber(msgAny, 'duration_ms', 'durationMs') ?? 0,
     };
     setCost(nextCost);
-    setMessages((prev) => attachCostToLatestAssistant(prev, nextCost));
+    setMessages((prev) => attachCostToAssistant(prev, resultTargetAssistantIdRef.current, nextCost, wasUserAbort));
 
-    if (msg.is_error) {
+    if (msg.is_error && !wasUserAbort) {
       const resultText = (msg as unknown as Record<string, unknown>).result as string | undefined;
       if (resultText) {
         setError(resultText);
@@ -346,6 +379,7 @@ export function useChat() {
         setError('An error occurred');
       }
     }
+    userInterruptedRef.current = false;
   }, [resetStream]);
 
   const handleSystemInit = useCallback((msg: SystemInitMessage) => {
@@ -382,7 +416,9 @@ export function useChat() {
         if (data.state === 'stopped' || data.state === 'crashed') {
           setIsStreaming(false);
           setToolActivity(null);
+          setRetryInfo(null);
           streamingUuidRef.current = null;
+          resultTargetAssistantIdRef.current = null;
         }
         // Clear errors when process comes back up
         if (data.state === 'running' || data.state === 'starting') {
@@ -546,7 +582,16 @@ export function useChat() {
               }
               case 'api_retry': {
                 const attempt = msgAny.attempt as number ?? 1;
-                addSystemMessage(`Retrying API call (attempt ${attempt})...`, `retry-${Date.now()}`);
+                const delayMs = readNumber(msgAny, 'retry_delay_ms', 'retryDelayMs') ?? 0;
+                if (delayMs > 0) {
+                  setRetryInfo({
+                    attempt,
+                    delayMs,
+                    retryAt: Date.now() + delayMs,
+                  });
+                }
+                const delayText = delayMs > 0 ? `, next attempt in ${formatShortDuration(delayMs)}` : '';
+                addSystemMessage(`Retrying API call (attempt ${attempt}${delayText})...`, `retry-${Date.now()}`);
                 break;
               }
               case 'compact_boundary':
@@ -586,7 +631,11 @@ export function useChat() {
           setRateLimitInfo(null);
           setPromptSuggestions([]);
           setToolActivity(null);
+          setRetryInfo(null);
           streamingUuidRef.current = null;
+          resultTargetAssistantIdRef.current = null;
+          userInterruptedRef.current = false;
+          setTodos([]);
           resetStream();
         }
 
@@ -594,6 +643,8 @@ export function useChat() {
         if (data.type === 'session_history' && Array.isArray(data.messages)) {
           const historyMsgs: ChatMessage[] = [];
           setCost(EMPTY_COST);
+          setTodos([]);
+          let lastHistoryAssistantId: string | null = null;
           for (const entry of data.messages as Array<Record<string, unknown>>) {
             if (entry.type === 'user') {
               // Handle both { message: { content } } and direct content formats
@@ -641,8 +692,13 @@ export function useChat() {
                 block: block as unknown as import('../types/messages').ContentBlock,
                 isStreaming: false,
               }));
+              const assistantId = (entry.uuid as string) || `asst-hist-${historyMsgs.length}`;
+              const nextTodos = extractTodosFromRenderableBlocks(blocks);
+              if (nextTodos) {
+                setTodos(nextTodos);
+              }
               historyMsgs.push({
-                id: (entry.uuid as string) || `asst-hist-${historyMsgs.length}`,
+                id: assistantId,
                 role: 'assistant',
                 blocks,
                 isStreaming: false,
@@ -650,6 +706,14 @@ export function useChat() {
                 parentToolUseId: (entry.parent_tool_use_id as string) || null,
                 model: (msg?.model as string) || undefined,
               });
+              lastHistoryAssistantId = assistantId;
+            } else if (entry.type === 'result') {
+              const historyCost = costFromResultEntry(entry);
+              if (historyCost) {
+                const updated = attachCostToAssistant(historyMsgs, lastHistoryAssistantId, historyCost);
+                historyMsgs.splice(0, historyMsgs.length, ...updated);
+                setCost(historyCost);
+              }
             }
           }
           if (historyMsgs.length > 0) {
@@ -693,12 +757,15 @@ export function useChat() {
     ]);
     setError(null);
     setRateLimitInfo(null);
+    setRetryInfo(null);
     setPromptSuggestions([]);
     if (!isStreaming) {
       setToolActivity(null);
     }
     setIsStreaming(!isLocalUiCommand(text));
     streamingUuidRef.current = null;
+    resultTargetAssistantIdRef.current = null;
+    userInterruptedRef.current = false;
 
     vscode.postMessage({
       type: 'send_prompt',
@@ -729,10 +796,13 @@ export function useChat() {
     });
     setError(null);
     setRateLimitInfo(null);
+    setRetryInfo(null);
     setPromptSuggestions([]);
     setToolActivity(null);
     setIsStreaming(!isLocalUiCommand(text));
     streamingUuidRef.current = null;
+    resultTargetAssistantIdRef.current = null;
+    userInterruptedRef.current = false;
     resetStream();
 
     vscode.postMessage({
@@ -750,13 +820,19 @@ export function useChat() {
     setIsStreaming(false);
     setError(null);
     setRateLimitInfo(null);
+    setRetryInfo(null);
     setPromptSuggestions([]);
     setToolActivity(null);
     streamingUuidRef.current = null;
+    resultTargetAssistantIdRef.current = null;
+    userInterruptedRef.current = false;
+    setTodos([]);
     resetStream();
   }, [resetStream]);
 
   const interrupt = useCallback(() => {
+    userInterruptedRef.current = true;
+    setRetryInfo(null);
     vscode.postMessage({ type: 'interrupt' });
     setIsStreaming(false);
   }, []);
@@ -778,6 +854,8 @@ export function useChat() {
     effortLevel,
     setEffortLevel,
     toolActivity,
+    todos,
+    retryInfo,
     sendMessage,
     editMessage,
     clearMessages,
@@ -804,16 +882,131 @@ function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
-function attachCostToLatestAssistant(messages: ChatMessage[], cost: SessionCost): ChatMessage[] {
-  for (let index = messages.length - 1; index >= 0; index--) {
-    if (messages[index]?.role !== 'assistant') {
-      continue;
+function attachCostToAssistant(
+  messages: ChatMessage[],
+  assistantId: string | null,
+  cost: SessionCost,
+  appendStatsOnly = false,
+): ChatMessage[] {
+  if (assistantId) {
+    const index = messages.findIndex((message) => message.id === assistantId && message.role === 'assistant');
+    if (index >= 0) {
+      return messages.map((message, msgIndex) =>
+        msgIndex === index ? { ...message, cost } : message,
+      );
     }
-    return messages.map((message, msgIndex) =>
-      msgIndex === index ? { ...message, cost } : message,
-    );
   }
+
+  for (let index = messages.length - 1; index >= 0; index--) {
+    if (messages[index]?.role === 'assistant') {
+      return messages.map((message, msgIndex) =>
+        msgIndex === index ? { ...message, cost } : message,
+      );
+    }
+  }
+
+  if (appendStatsOnly) {
+    return [
+      ...messages,
+      {
+        id: `asst-stats-${Date.now()}`,
+        role: 'assistant',
+        blocks: [],
+        isStreaming: false,
+        timestamp: Date.now(),
+        parentToolUseId: null,
+        cost,
+      },
+    ];
+  }
+
   return messages;
+}
+
+function isUserInterruptText(text: string): boolean {
+  const normalized = text.trim().toLowerCase();
+  return normalized === '[request interrupted by user]' ||
+    normalized === 'request interrupted by user' ||
+    normalized.startsWith('[request interrupted by user ');
+}
+
+function isUserAbortAssistantBlocks(blocks: ChatMessage['blocks']): boolean {
+  const text = (blocks ?? [])
+    .filter((item) => item.block.type === 'text')
+    .map((item) => (item.block as { text?: string }).text ?? '')
+    .join('\n')
+    .trim();
+  if (!text) return false;
+  return isUserAbortText(text);
+}
+
+function isUserAbortResult(msg: ResultMessage): boolean {
+  const record = msg as unknown as Record<string, unknown>;
+  const result = typeof record.result === 'string' ? record.result : '';
+  const errors = Array.isArray(msg.errors) ? msg.errors.join('\n') : '';
+  return isUserAbortText(`${result}\n${errors}`);
+}
+
+function isUserAbortText(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return normalized.includes('request interrupted by user') ||
+    normalized.includes('operation was aborted') ||
+    normalized.includes('request was aborted') ||
+    normalized.includes('apiuserabort') ||
+    normalized.includes('aborterror');
+}
+
+function formatShortDuration(ms: number): string {
+  const seconds = Math.max(0, Math.ceil(ms / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remaining = seconds % 60;
+  return remaining > 0 ? `${minutes}m ${remaining}s` : `${minutes}m`;
+}
+
+function costFromResultEntry(entry: Record<string, unknown>): SessionCost | null {
+  if (entry.type !== 'result') return null;
+  const usage = normalizeUsage(entry as unknown as ResultMessage);
+  return {
+    totalCostUSD: readNumber(entry, 'total_cost_usd', 'totalCostUsd', 'totalCostUSD') ?? 0,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    cacheReadTokens: usage.cacheReadTokens,
+    cacheCreationTokens: usage.cacheCreationTokens,
+    numTurns: readNumber(entry, 'num_turns', 'numTurns') ?? 0,
+    durationMs: readNumber(entry, 'duration_ms', 'durationMs') ?? 0,
+  };
+}
+
+function extractTodosFromRenderableBlocks(blocks: ChatMessage['blocks'] | undefined): TodoItem[] | null {
+  if (!blocks) return null;
+
+  for (let index = blocks.length - 1; index >= 0; index--) {
+    const block = blocks[index]?.block;
+    if (!block || block.type !== 'tool_use') continue;
+    const tool = block as { name?: string; input?: Record<string, unknown> };
+    if (tool.name !== 'TodoWrite') continue;
+    const rawTodos = tool.input?.todos;
+    if (!Array.isArray(rawTodos)) return null;
+    const todos = rawTodos
+      .map(normalizeTodoItem)
+      .filter((todo): todo is TodoItem => Boolean(todo));
+    return todos.every((todo) => todo.status === 'completed') ? [] : todos;
+  }
+
+  return null;
+}
+
+function normalizeTodoItem(item: unknown): TodoItem | null {
+  if (!item || typeof item !== 'object') return null;
+  const record = item as Record<string, unknown>;
+  const content = typeof record.content === 'string' ? record.content : '';
+  const status = record.status;
+  if (!content || (status !== 'pending' && status !== 'in_progress' && status !== 'completed')) {
+    return null;
+  }
+  const activeForm = typeof record.activeForm === 'string' ? record.activeForm : undefined;
+  return { content, status, activeForm };
 }
 
 function normalizeUsage(msg: ResultMessage): NormalizedUsage {

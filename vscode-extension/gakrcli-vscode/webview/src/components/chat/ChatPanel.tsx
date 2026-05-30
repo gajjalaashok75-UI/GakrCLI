@@ -17,6 +17,7 @@ import { FastModeToggle } from '../input/FastModeToggle';
 import { EffortSelector } from '../input/EffortSelector';
 import { CompanyAnnouncement } from './CompanyAnnouncement';
 import { SpinnerStatus } from './SpinnerStatus';
+import { TodoListViewer } from './TodoListViewer';
 import { ErrorBanner } from './ErrorBanner';
 import { AtMentionPicker } from '../input/AtMentionPicker';
 import { SlashCommandMenu } from '../input/SlashCommandMenu';
@@ -42,6 +43,8 @@ export function ChatPanel() {
     effortLevel,
     setEffortLevel,
     toolActivity,
+    todos,
+    retryInfo,
     sendMessage,
     editMessage,
     interrupt,
@@ -216,11 +219,15 @@ export function ChatPanel() {
       {/* Spinner status during tool execution */}
       <SpinnerStatus
         isActive={isStreaming}
+        activityLabel={toolActivity?.description}
+        retryInfo={retryInfo}
         customVerbs={[]}
         customTips={[]}
         tipsEnabled={true}
         reducedMotion={false}
       />
+
+      <TodoListViewer todos={todos} />
 
       {/* Prompt suggestions */}
       {promptSuggestions.length > 0 && !isStreaming && (
@@ -270,6 +277,7 @@ export function ChatPanel() {
               permissionMode={permissionMode}
               onOpenMcpManager={() => setShowMcpManager(true)}
               onOpenPluginManager={() => setShowPluginManager(true)}
+              statusControl={<ProcessStatusBadge status={processStatus} isStreaming={isStreaming} />}
               footerControls={(
                 <ModelSelector
                   currentModel={providerModel ?? model}
@@ -296,7 +304,6 @@ export function ChatPanel() {
                 vscode.postMessage({ type: 'toggle_fast_mode', enabled: newEnabled });
               }}
             />
-            <ProcessStatusBadge status={processStatus} isStreaming={isStreaming} />
           </div>
         </div>
       </div>
@@ -404,6 +411,7 @@ interface InputAreaProps {
   onEffortChange: (level: string) => void;
   permissionMode?: string;
   toolActivity: ToolActivity | null;
+  statusControl?: React.ReactNode;
   footerControls?: React.ReactNode;
   onOpenMcpManager: () => void;
   onOpenPluginManager: () => void;
@@ -418,6 +426,7 @@ function InputArea({
   onEffortChange,
   toolActivity,
   permissionMode,
+  statusControl,
   footerControls,
   onOpenMcpManager,
   onOpenPluginManager,
@@ -813,6 +822,7 @@ function InputArea({
           )}
         </div>
 
+        {statusControl}
         {footerControls}
 
         {/* Spacer */}

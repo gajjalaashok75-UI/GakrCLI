@@ -832,6 +832,106 @@ details[open] .thinking-toggle {
   color: var(--app-glass-cyan);
 }
 
+.gakrcli-spinner-glyph {
+  width: 16px;
+  flex: 0 0 16px;
+  color: var(--app-spinner-foreground);
+  font-size: 13px;
+  line-height: 1;
+  text-align: center;
+  text-shadow: 0 0 10px color-mix(in srgb, var(--app-spinner-foreground) 45%, transparent);
+}
+
+.gakrcli-spinner-label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--app-glass-cyan);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gakrcli-spinner-timer {
+  flex: 0 0 auto;
+  color: var(--app-secondary-foreground);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.78;
+}
+
+.assistant-usage-footer {
+  display: flex;
+  margin-top: 6px;
+}
+
+.todo-viewer {
+  margin: 4px 16px 0;
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 46%, transparent);
+  border-radius: var(--corner-radius-small);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-glass-highlight) 28%, transparent), transparent),
+    color-mix(in srgb, var(--app-glass-surface) 58%, transparent);
+  overflow: hidden;
+}
+
+.todo-viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--app-glass-border) 38%, transparent);
+  color: var(--app-secondary-foreground);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.todo-viewer-list {
+  display: grid;
+  gap: 1px;
+  padding: 4px;
+}
+
+.todo-viewer-row {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  min-height: 24px;
+  padding: 2px 4px;
+  color: var(--app-primary-foreground);
+  font-size: 12px;
+}
+
+.todo-viewer-mark {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  border: 1px solid var(--app-secondary-foreground);
+  opacity: 0.7;
+}
+
+.todo-viewer-row[data-status="in_progress"] .todo-viewer-mark {
+  border-color: var(--app-glass-amber);
+  background: var(--app-glass-amber);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--app-glass-amber) 50%, transparent);
+}
+
+.todo-viewer-row[data-status="completed"] {
+  color: var(--app-secondary-foreground);
+  text-decoration: line-through;
+}
+
+.todo-viewer-row[data-status="completed"] .todo-viewer-mark {
+  border-color: var(--app-success-foreground);
+  background: var(--app-success-foreground);
+}
+
+.todo-viewer-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ============================================================
    Input footer
    ============================================================ */

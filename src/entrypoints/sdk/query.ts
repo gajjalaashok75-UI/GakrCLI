@@ -58,6 +58,7 @@ import type {
   SDKRuntimeState,
   SDKSettingsSnapshot,
   SDKSlashCommandInfo,
+  SDKTodoState,
   SDKUsageSummary,
 } from './runtime.js'
 import {
@@ -69,6 +70,7 @@ import {
   getFastModeState,
   getReasoningConfig,
   getSettingsSnapshot,
+  getTodoStateFromState,
   listModelsFromState,
   listPluginsFromState,
   listProviderProfiles,
@@ -271,6 +273,8 @@ export interface Query {
   getContextUsage(): Promise<SDKContextUsage>
   /** Return usage/cost from the latest result message observed by this query. */
   getUsageSummary(): SDKUsageSummary
+  /** Return the current TodoWrite task state for headless hosts. */
+  getTodoState(): SDKTodoState
   /** List slash commands known to the active SDK runtime. */
   listSlashCommands(): SDKSlashCommandInfo[]
   /** Run or classify a slash command without importing TUI UI. */
@@ -1223,6 +1227,10 @@ class QueryImpl implements Query {
 
   getUsageSummary(): SDKUsageSummary {
     return this.lastUsageSummary
+  }
+
+  getTodoState(): SDKTodoState {
+    return getTodoStateFromState(this.appStateStore.getState())
   }
 
   listSlashCommands(): SDKSlashCommandInfo[] {
