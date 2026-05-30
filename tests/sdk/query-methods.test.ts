@@ -296,6 +296,27 @@ describe('QueryImpl runtime control API', () => {
     q.interrupt()
   })
 
+  test('getTodoState returns TodoWrite state for headless hosts', () => {
+    const q = query({ prompt: 'test', options: { cwd: process.cwd() } })
+
+    ;(q as any).appStateStore.setState(() => ({
+      ...(q as any).appStateStore.getState(),
+      todos: {
+        [q.sessionId]: [
+          { content: 'Read SDK state', activeForm: 'Reading SDK state', status: 'in_progress' },
+          { content: 'Wire webview', status: 'pending' },
+          { content: 'Build extension', status: 'completed' },
+        ],
+      },
+    }))
+
+    const todos = q.getTodoState()
+    expect(todos.total).toBe(3)
+    expect(todos.completed).toBe(1)
+    expect(todos.activeItem?.activeForm).toBe('Reading SDK state')
+    q.interrupt()
+  })
+
   test('listProviders and listModels expose catalogs for hosts', () => {
     const q = query({ prompt: 'test', options: { cwd: process.cwd() } })
 

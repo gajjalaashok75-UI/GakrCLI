@@ -5,18 +5,17 @@ import { ToolCallBlock } from './ToolCallBlock';
 import { ContentBlockRouter } from '../blocks/ContentBlockRouter';
 import type { ContentBlock } from '../../types/blocks';
 import { MessageActions } from './MessageActions';
-import type { SessionCost } from '../../types/chat';
+import { CostDisplay } from '../shared/CostDisplay';
 
 interface AssistantMessageProps {
   message: ChatMessage;
   isLatest?: boolean;
   isStreaming?: boolean;
-  cost?: SessionCost;
   onRetry?: (uuid: string) => void;
   onStop?: () => void;
 }
 
-export function AssistantMessage({ message, isLatest = false, isStreaming = false, cost, onRetry, onStop }: AssistantMessageProps) {
+export function AssistantMessage({ message, isLatest = false, isStreaming = false, onRetry, onStop }: AssistantMessageProps) {
   const blocks = message.blocks || [];
 
   // Extract plain text content for copy
@@ -39,6 +38,12 @@ export function AssistantMessage({ message, isLatest = false, isStreaming = fals
         ))}
       </div>
 
+      {message.cost && !isStreaming && !message.isStreaming && (
+        <div className="assistant-usage-footer">
+          <CostDisplay cost={message.cost} className="message-usage-summary" />
+        </div>
+      )}
+
       {plainTextContent && isLatest && (
         <div className="message-actions-row">
           <MessageActions
@@ -48,7 +53,6 @@ export function AssistantMessage({ message, isLatest = false, isStreaming = fals
             isFailed={false}
             isStreaming={isStreaming || message.isStreaming}
             isLatest={isLatest}
-            cost={cost}
             onRetry={onRetry}
             onStop={onStop}
           />

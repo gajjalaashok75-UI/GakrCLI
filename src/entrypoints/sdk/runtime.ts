@@ -78,6 +78,19 @@ export type SDKUsageSummary = {
   fastModeState?: 'off' | 'cooldown' | 'on'
 }
 
+export type SDKTodoItem = {
+  content: string
+  status: 'pending' | 'in_progress' | 'completed'
+  activeForm?: string
+}
+
+export type SDKTodoState = {
+  items: SDKTodoItem[]
+  activeItem?: SDKTodoItem
+  completed: number
+  total: number
+}
+
 export type SDKContextUsage = {
   categories: Array<{
     name: string
@@ -175,6 +188,7 @@ export type SDKRuntimeState = {
   plugins: SDKPluginInfo[]
   account: { apiKeySource: string; [key: string]: unknown }
   usage: SDKUsageSummary
+  todos: SDKTodoState
 }
 
 export type SDKApplySettingsInput = {
@@ -400,6 +414,17 @@ export function emptyUsageSummary(): SDKUsageSummary {
   }
 }
 
+export function getTodoStateFromState(state: AppState): SDKTodoState {
+  const items = Object.values(state.todos ?? {}).flat() as SDKTodoItem[]
+  const visibleItems = items.every(todo => todo.status === 'completed') ? [] : items
+  return {
+    items: visibleItems,
+    activeItem: visibleItems.find(todo => todo.status === 'in_progress'),
+    completed: visibleItems.filter(todo => todo.status === 'completed').length,
+    total: visibleItems.length,
+  }
+}
+
 export function usageSummaryFromResult(message: any): SDKUsageSummary | undefined {
   if (!message || message.type !== 'result') return undefined
   return {
@@ -460,6 +485,7 @@ export function buildRuntimeState(input: {
     plugins: listPluginsFromState(input.state),
     account: input.account,
     usage: input.usage ?? emptyUsageSummary(),
+    todos: getTodoStateFromState(input.state),
   }
 }
 

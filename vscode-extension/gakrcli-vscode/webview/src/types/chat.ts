@@ -34,6 +34,14 @@ export interface ChatMessage {
   cost?: SessionCost;
 }
 
+export type TodoStatus = 'pending' | 'in_progress' | 'completed';
+
+export interface TodoItem {
+  content: string;
+  status: TodoStatus;
+  activeForm?: string;
+}
+
 /** Accumulated state of a single streaming assistant turn */
 export interface StreamState {
   /** UUID of the current streaming message */

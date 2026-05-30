@@ -6,6 +6,7 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ### Changed (2026-05-30)
 
+- Added GakrCLI-style spinner glyphs, live turn timers, API retry countdowns, SDK todo-list state, stable per-turn usage attachment, and interrupt cleanup so stopped requests do not render synthetic abort chat bubbles.
 - Kept the top-right Settings button as a lightweight coming-soon dialog with a working runtime refresh action and Close button.
 - Added SDK-backed runtime refresh and mutation paths for settings, provider/model state, MCP server state, plugin state, Fast mode, and reasoning effort in the native webview flow.
 - Added a top-right Settings entry point and SDK-backed settings state messages for the webview.
