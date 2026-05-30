@@ -135,6 +135,7 @@ export function useChat() {
   const resultTargetAssistantIdRef = useRef<string | null>(null);
   const activeToolUseIdsRef = useRef<Set<string>>(new Set());
   const userInterruptedRef = useRef(false);
+  const turnStartedAtRef = useRef<number | null>(null);
 
   const handleUserMessage = useCallback((msg: UserMessage) => {
     const id = msg.uuid || `user-${Date.now()}`;
@@ -183,6 +184,7 @@ export function useChat() {
         case 'message_start': {
           streamingUuidRef.current = update.uuid;
           resultTargetAssistantIdRef.current = update.uuid;
+          turnStartedAtRef.current ??= Date.now();
           setIsStreaming(true);
           if (update.model) setModel(update.model);
 
@@ -384,6 +386,7 @@ export function useChat() {
       }
     }
     userInterruptedRef.current = false;
+    turnStartedAtRef.current = null;
   }, [resetStream]);
 
   const handleSystemInit = useCallback((msg: SystemInitMessage) => {
@@ -639,6 +642,7 @@ export function useChat() {
           streamingUuidRef.current = null;
           resultTargetAssistantIdRef.current = null;
           userInterruptedRef.current = false;
+          turnStartedAtRef.current = null;
           setTodos([]);
           resetStream();
         }
@@ -770,6 +774,7 @@ export function useChat() {
     streamingUuidRef.current = null;
     resultTargetAssistantIdRef.current = null;
     userInterruptedRef.current = false;
+    turnStartedAtRef.current = Date.now();
 
     vscode.postMessage({
       type: 'send_prompt',
@@ -807,6 +812,7 @@ export function useChat() {
     streamingUuidRef.current = null;
     resultTargetAssistantIdRef.current = null;
     userInterruptedRef.current = false;
+    turnStartedAtRef.current = Date.now();
     resetStream();
 
     vscode.postMessage({
@@ -830,6 +836,7 @@ export function useChat() {
     streamingUuidRef.current = null;
     resultTargetAssistantIdRef.current = null;
     userInterruptedRef.current = false;
+    turnStartedAtRef.current = null;
     setTodos([]);
     resetStream();
   }, [resetStream]);
@@ -837,6 +844,18 @@ export function useChat() {
   const interrupt = useCallback(() => {
     userInterruptedRef.current = true;
     setRetryInfo(null);
+    const durationMs = turnStartedAtRef.current ? Date.now() - turnStartedAtRef.current : 0;
+    const interruptedCost = {
+      ...EMPTY_COST,
+      durationMs,
+    };
+    setCost(interruptedCost);
+    setMessages((prev) => appendInterruptedTurnCompletion(prev, interruptedCost));
+    activeToolUseIdsRef.current.clear();
+    streamingUuidRef.current = null;
+    resultTargetAssistantIdRef.current = null;
+    turnStartedAtRef.current = null;
+    setToolActivity(null);
     vscode.postMessage({ type: 'interrupt' });
     setIsStreaming(false);
   }, []);
@@ -914,6 +933,23 @@ function attachCostToAssistant(
 function appendInterruptedTurnCompletion(messages: ChatMessage[], cost: SessionCost): ChatMessage[] {
   const timestamp = Date.now();
   const lastMessage = messages[messages.length - 1];
+  const previousMessage = messages[messages.length - 2];
+  if (
+    lastMessage?.role === 'assistant' &&
+    lastMessage.id.startsWith('asst-turn-') &&
+    previousMessage?.role === 'system' &&
+    previousMessage.text === INTERRUPTED_PROMPT_TEXT
+  ) {
+    const previousCost = lastMessage.cost;
+    const nextCost = {
+      ...cost,
+      durationMs: Math.max(cost.durationMs, previousCost?.durationMs ?? 0),
+    };
+    return messages.map((message, index) =>
+      index === messages.length - 1 ? { ...message, cost: nextCost } : message,
+    );
+  }
+
   const alreadyAppended =
     lastMessage?.role === 'system' && lastMessage.text === INTERRUPTED_PROMPT_TEXT;
   return [

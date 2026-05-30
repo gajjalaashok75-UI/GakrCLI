@@ -266,6 +266,20 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     if (runtime) {
+      const discovered = await providerStatePayloadWithDiscoveredModels(error);
+      const runtimeModels = Array.isArray(immediate.models) ? immediate.models : [];
+      const discoveredModels = Array.isArray(discovered.models) ? discovered.models : [];
+      if (discoveredModels.length > runtimeModels.length) {
+        const enriched = {
+          ...immediate,
+          models: discoveredModels,
+        };
+        if (panelId) {
+          webviewManager!.sendToPanel(panelId, enriched as never);
+        } else {
+          webviewManager!.broadcast(enriched as never);
+        }
+      }
       return;
     }
 
