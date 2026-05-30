@@ -6,6 +6,9 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ### Changed (2026-05-30)
 
+- Added SDK-backed runtime refresh and mutation paths for settings, provider/model state, MCP server state, plugin state, Fast mode, and reasoning effort in the native webview flow.
+- Added a top-right Settings entry point and SDK-backed settings state messages for the webview.
+- Reworked permission and clarification dialogs into compact centered prompts with numbered approval/deny actions and command/detail previews.
 - Replaced the native VS Code chat runtime's hardcoded GakrCLI wrapper process with direct `@gakr-gakr/gakrcli/sdk` usage while preserving the existing webview protocol, permission prompts, diff handling, MCP status, resume, and model switching behavior.
 - Declared `@gakr-gakr/gakrcli` as a runtime dependency and packaged the published npm SDK dependency instead of relying on root checkout `dist/sdk.mjs` files.
 - Moved provider model refresh to an SDK-first path using `query().supportedModels()`, with live OpenAI-compatible `/models` fallback when the SDK has no dynamic model list.

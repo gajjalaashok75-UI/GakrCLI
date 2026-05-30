@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed (2026-05-30)
+- **SDK Runtime Control Surface**: Added a headless SDK runtime snapshot and mutation API for provider/profile/model state, settings, permission mode, reasoning effort, fast mode, context usage, slash commands, MCP, plugins, and usage summaries so IDE hosts can manage GakrCLI without launching a child CLI wrapper.
+- **VS Code SDK Webview Wiring**: Routed VS Code settings, provider/model, MCP, plugin, fast mode, effort, and runtime refresh flows through SDK control methods and added SDK-backed webview state broadcasts for native UI surfaces.
+- **VS Code Permission UI**: Reworked permission and clarification dialogs into compact centered prompts with command/details previews and numbered actions matching the native Codex-style approval flow.
 - **VS Code SDK Runtime**: Replaced the native VS Code chat runtime's hardcoded CLI wrapper process with direct `@gakr-gakr/gakrcli/sdk` usage, preserving the existing webview, permission, diff, MCP, resume, and model-control behavior through the SDK query surface.
 - **VS Code SDK Packaging**: Declared `@gakr-gakr/gakrcli` as the extension runtime dependency, kept the SDK import external in the extension bundle, and packaged the published npm SDK dependency instead of relying on root checkout files.
 - **VS Code Provider Model Discovery**: Added SDK-first model discovery through `query().supportedModels()` with live OpenAI-compatible `/models` fallback, and covered active provider profile, active model, model promotion, and nullable SDK capability responses with regression tests.

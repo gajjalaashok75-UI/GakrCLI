@@ -152,6 +152,44 @@ A `Query` has:
 
 Call `close()` when a query will not be consumed or when you are done early.
 
+### Headless Runtime Control
+
+`Query` also exposes a host/runtime control surface for IDEs and other embedded clients. These methods are intended to replace child-process control wrappers when the host already runs the SDK in-process.
+
+- `getRuntimeState()`: Returns one snapshot with session id, cwd, runtime status, active provider/profile/model, model catalog, permission mode, reasoning config, fast mode, slash commands, agents, MCP status, plugins, account info, and latest usage/cost.
+- `getSettings()` / `applySettings(settings)`: Read current effective settings and apply supported runtime changes.
+- `listProviders()` / `listProviderProfiles()` / `getActiveProviderProfile()` / `setActiveProviderProfile(profileId)`: Read and switch provider/profile state.
+- `listModels()` / `discoverModels()` / `setModel(model)`: Read configured models and switch the active model.
+- `getPermissionMode()` / `setPermissionMode(mode)`: Read and change permission mode.
+- `getReasoningConfig()` / `setReasoningEffort(effort)` / `setMaxThinkingTokens(tokens)`: Read and change thinking/reasoning behavior.
+- `getFastModeState()` / `setFastMode(enabled)`: Read and toggle fast mode.
+- `getContextUsage()` / `getUsageSummary()`: Read context usage and the latest observed result usage/cost.
+- `listSlashCommands()` / `runSlashCommand(command, args)`: Read command metadata and classify headless command execution. UI-backed JSX/TUI commands return `requires_ui`.
+- `listMcpServers()` / `setMcpServers(servers)` / `toggleMcpServer(name, enabled)` / `reconnectMcpServer(name)`: Read and mutate SDK-managed MCP state.
+- `listPlugins()` / `setPluginEnabled(name, enabled)` / `reloadPlugins()`: Read and mutate plugin state where existing plugin operations support headless execution.
+
+Example:
+
+```ts
+const q = query({
+  prompt: promptStream,
+  options: { cwd: process.cwd(), includePartialMessages: true },
+})
+
+const runtime = await q.getRuntimeState()
+console.log(runtime.model, runtime.permissionMode, runtime.fastModeState.state)
+
+await q.applySettings({
+  model: 'claude-sonnet-4-6',
+  permissionMode: 'plan',
+  effort: 'low',
+  fastMode: true,
+})
+
+const context = await q.getContextUsage()
+console.log(context.totalTokens, context.maxTokens)
+```
+
 ## Streaming User Prompts
 
 `query()` can accept an `AsyncIterable<SDKUserMessage>` instead of a string. Each yielded user message is sent into the engine.

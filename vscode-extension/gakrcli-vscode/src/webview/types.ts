@@ -239,6 +239,8 @@ export interface ElicitationCancelMessage { type: 'elicitation_cancel'; requestI
 
 // Fast mode toggle
 export interface ToggleFastModeMessage { type: 'toggle_fast_mode'; enabled: boolean; }
+export interface SettingsRefreshMessage { type: 'settings_refresh'; }
+export interface SettingsUpdateMessage { type: 'settings_update'; settings: Record<string, unknown>; }
 
 // Plan review
 export interface PlanReviewSubmitMessage { type: 'plan_review_submit'; requestId: string; action: Record<string, unknown>; }
@@ -300,7 +302,9 @@ export type WebviewToHostMessage =
   | PlanReviewSubmitMessage
   | TeleportAcceptMessage
   | TeleportRejectMessage
-  | ToggleFastModeMessage;
+  | ToggleFastModeMessage
+  | SettingsRefreshMessage
+  | SettingsUpdateMessage;
 
 // ============================================================
 // Extension Host -> Webview messages
@@ -510,6 +514,21 @@ export interface PermissionModeStateMessage {
   rejectedMode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk';
 }
 
+export interface SettingsStateMessage {
+  type: 'settings_state';
+  supportedSettings: Array<{ key: string; label: string; kind: string }>;
+  settings: Record<string, unknown>;
+  runtime: Record<string, unknown>;
+  contextUsage?: Record<string, unknown>;
+  models?: Array<{ value: string; displayName?: string }>;
+  providers?: Array<Record<string, unknown>>;
+  profiles?: Array<Record<string, unknown>>;
+  mcpServers?: Array<Record<string, unknown>>;
+  plugins?: Array<Record<string, unknown>>;
+  current?: Record<string, unknown>;
+  error?: string;
+}
+
 /** All messages the extension host can send to the webview */
 export type HostToWebviewMessage =
   | InitStateMessage
@@ -529,6 +548,7 @@ export type HostToWebviewMessage =
   | RewindResultMessage
   | ProviderStateMessage
   | PermissionModeStateMessage
+  | SettingsStateMessage
   | AtMentionResultsMessage
   | FilePickerResultMessage
   | ActiveFileChangedMessage

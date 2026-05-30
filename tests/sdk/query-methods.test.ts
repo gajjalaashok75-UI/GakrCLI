@@ -255,6 +255,85 @@ describe('QueryImpl.rewindFiles', () => {
   })
 })
 
+describe('QueryImpl runtime control API', () => {
+  test('returns a runtime snapshot with provider, model, command, and usage state', async () => {
+    setPluginCommandsState([
+      { type: 'prompt', name: '/runtime-alpha', description: 'Alpha command', prompt: '' },
+    ])
+    const q = query({ prompt: 'test', options: { cwd: process.cwd() } })
+    await q.setModel('claude-sonnet-4-6')
+
+    const state = await q.getRuntimeState()
+
+    expect(state.sessionId).toBe(q.sessionId)
+    expect(state.cwd).toBe(process.cwd())
+    expect(state.model).toBe('claude-sonnet-4-6')
+    expect(state.models.length).toBeGreaterThan(0)
+    expect(state.slashCommands.some(command => command.name === '/runtime-alpha')).toBe(true)
+    expect(state.usage.totalCostUsd).toBe(0)
+    q.interrupt()
+    setPluginCommandsState([])
+  })
+
+  test('applySettings updates model, permission mode, fast mode, and reasoning', async () => {
+    const q = query({ prompt: 'test', options: { cwd: process.cwd() } })
+
+    const settings = await q.applySettings({
+      model: 'claude-haiku-4-5',
+      permissionMode: 'plan',
+      effort: 'low',
+      fastMode: true,
+    })
+
+    const state = (q as any).appStateStore.getState()
+    expect(settings.applied.model).toBe('claude-haiku-4-5')
+    expect(settings.applied.permissionMode).toBe('plan')
+    expect(settings.applied.fastMode).toBe(true)
+    expect(state.mainLoopModel).toBe('claude-haiku-4-5')
+    expect(q.getPermissionMode()).toBe('plan')
+    expect(q.getFastModeState().state).toBe('on')
+    expect(q.getReasoningConfig().effort).toBe('low')
+    q.interrupt()
+  })
+
+  test('listProviders and listModels expose catalogs for hosts', () => {
+    const q = query({ prompt: 'test', options: { cwd: process.cwd() } })
+
+    expect(q.listProviders().length).toBeGreaterThan(0)
+    expect(q.listModels().length).toBeGreaterThan(0)
+    q.interrupt()
+  })
+
+  test('setMcpServers returns mutation details without spawning a CLI wrapper', async () => {
+    const q = query({ prompt: 'test', options: { cwd: process.cwd() } })
+
+    const result = await q.setMcpServers({
+      sdkTest: { type: 'sdk', name: 'sdkTest' },
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.added).toContain('sdkTest')
+    expect(q.listMcpServers()).toEqual([])
+    q.interrupt()
+  })
+
+  test('runSlashCommand returns UI metadata for local JSX commands', async () => {
+    setPluginCommandsState([
+      { type: 'local-jsx', name: '/needs-ui', description: 'Needs UI', call: () => null },
+    ])
+    const q = query({ prompt: 'test', options: { cwd: process.cwd() } })
+
+    const result = await q.runSlashCommand('/needs-ui')
+
+    expect(result.type).toBe('requires_ui')
+    if (result.type === 'requires_ui') {
+      expect(result.command.requiresUi).toBe(true)
+    }
+    q.interrupt()
+    setPluginCommandsState([])
+  })
+})
+
 // setPermissionMode is tested via buildPermissionContext in permissions.test.ts
 // (mode mapping, additionalDirectories, bypass flag). The QueryImpl.setPermissionMode
 // method delegates to buildPermissionContext + getTools + engine.updateTools — the
