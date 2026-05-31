@@ -39,6 +39,10 @@ const FILE_EDIT_TOOLS = new Set([
   'NotebookEditTool',
 ]);
 
+const CLARIFICATION_TOOLS = new Set([
+  'AskUserQuestion',
+]);
+
 export function getPermissionRequestFromCliOutput(message: Record<string, unknown>): PermissionRequest | null {
   const data = message.data as Record<string, unknown> | undefined;
   if (!data || data.type !== 'control_request' || typeof data.request_id !== 'string') {
@@ -50,7 +54,7 @@ export function getPermissionRequestFromCliOutput(message: Record<string, unknow
     return null;
   }
 
-  if (FILE_EDIT_TOOLS.has(request.tool_name)) {
+  if (FILE_EDIT_TOOLS.has(request.tool_name) || CLARIFICATION_TOOLS.has(request.tool_name)) {
     return null;
   }
 

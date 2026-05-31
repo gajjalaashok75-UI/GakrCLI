@@ -1592,7 +1592,15 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Handle elicitation response from webview → forward to CLI
   webviewManager.onMessage('elicitation_response', async (message) => {
-    const msg = message as unknown as { requestId: string; values: Record<string, unknown> };
+    const msg = message as unknown as {
+      requestId: string;
+      values?: Record<string, unknown>;
+      response?: Record<string, unknown>;
+    };
+    const values = msg.values ?? msg.response ?? {};
+    if (permissionHandler.handleAskUserQuestionResponse(msg.requestId, values)) {
+      return;
+    }
     output.info(`[Webview→CLI] elicitation_response: ${msg.requestId}`);
     if (processManager) {
       processManager.write({
@@ -1600,7 +1608,7 @@ export function activate(context: vscode.ExtensionContext) {
         response: {
           subtype: 'success',
           request_id: msg.requestId,
-          response: msg.values,
+          response: values,
         },
       });
     }
@@ -1609,6 +1617,9 @@ export function activate(context: vscode.ExtensionContext) {
   // Handle elicitation cancel from webview → forward error response to CLI
   webviewManager.onMessage('elicitation_cancel', async (message) => {
     const msg = message as unknown as { requestId: string };
+    if (permissionHandler.handleAskUserQuestionCancel(msg.requestId)) {
+      return;
+    }
     output.info(`[Webview→CLI] elicitation_cancel: ${msg.requestId}`);
     if (processManager) {
       processManager.write({

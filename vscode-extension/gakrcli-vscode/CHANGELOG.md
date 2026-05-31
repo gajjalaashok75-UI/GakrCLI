@@ -4,6 +4,10 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ## [Unreleased]
 
+### Fixed (2026-05-31)
+
+- Routed `AskUserQuestion` requests to the webview clarification dialog instead of the permission dialog, then returned selected answers to the SDK as `updatedInput.answers`.
+
 ### Changed (2026-05-30)
 
 - Routed pending-permission status through the real permission dialog lifecycle, added a webview fallback for SDK tool permission requests, and cleared pending permission UI/status on stop, restart, session changes, and shutdown.
