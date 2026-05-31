@@ -351,6 +351,10 @@ export interface CancelRequestMessage {
   requestId: string;
 }
 
+export interface PermissionsClearedMessage {
+  type: 'permissions_cleared';
+}
+
 /** Elicitation request from CLI → show structured question */
 export interface ElicitationRequestMessage {
   type: 'elicitation_request';
@@ -537,6 +541,7 @@ export type HostToWebviewMessage =
   | CliOutputMessage
   | PermissionRequestMessage
   | CancelRequestMessage
+  | PermissionsClearedMessage
   | ElicitationRequestMessage
   | SessionStateMessage
   | ContextUsageMessage

@@ -4,7 +4,11 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { vscode } from '../vscode';
-import { getPermissionCancelRequestId, toPermissionRequest } from '../utils/permissionRequests';
+import {
+  getPermissionCancelRequestId,
+  getPermissionRequestFromCliOutput,
+  toPermissionRequest,
+} from '../utils/permissionRequests';
 
 export interface PermissionRequest {
   requestId: string;
@@ -38,6 +42,11 @@ export function usePermissions() {
     });
 
     const unsubCliOutput = vscode.onMessage('cli_output', (message) => {
+      const req = getPermissionRequestFromCliOutput(message);
+      if (req) {
+        enqueue(req);
+      }
+
       const cancelId = getPermissionCancelRequestId(message);
       if (cancelId) {
         setQueue((prev) => prev.filter((r) => r.requestId !== cancelId));
@@ -50,10 +59,22 @@ export function usePermissions() {
       setQueue((prev) => prev.filter((r) => r.requestId !== cancelId));
     });
 
+    const unsubClear = vscode.onMessage('permissions_cleared', () => {
+      setQueue([]);
+    });
+
+    const unsubProcessState = vscode.onMessage('process_state', (message) => {
+      if (message.state === 'stopped' || message.state === 'crashed' || message.state === 'restarting') {
+        setQueue([]);
+      }
+    });
+
     return () => {
       unsubPermission();
       unsubCliOutput();
       unsubCancel();
+      unsubClear();
+      unsubProcessState();
     };
   }, []);
 

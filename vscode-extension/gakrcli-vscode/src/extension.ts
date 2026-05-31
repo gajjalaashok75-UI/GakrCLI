@@ -54,7 +54,12 @@ export function activate(context: vscode.ExtensionContext) {
 
   // === Permission system: create rules store and handler ===
   const permissionRules = new PermissionRules(context);
-  const permissionHandler = new PermissionHandler(webviewManager, permissionRules, output);
+  const permissionHandler = new PermissionHandler(
+    webviewManager,
+    permissionRules,
+    output,
+    (pending) => statusBarManager.setPendingPermission(pending),
+  );
   context.subscriptions.push(permissionHandler);
 
   const provider = new GakrCLIWebviewProvider(webviewManager);
@@ -585,12 +590,6 @@ export function activate(context: vscode.ExtensionContext) {
       webviewManager!.broadcast({ type: 'cli_output', data: msg });
 
       const msgObj = msg as Record<string, unknown>;
-      if (msgObj.type === 'control_request') {
-        const req = msgObj.request as Record<string, unknown> | undefined;
-        if (req?.subtype === 'can_use_tool') {
-          statusBarManager.setPendingPermission(true);
-        }
-      }
       if (msgObj.type === 'control_cancel_request' && typeof msgObj.request_id === 'string') {
         permissionHandler.handleCancel(msgObj.request_id);
         statusBarManager.setPendingPermission(false);
@@ -672,6 +671,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
       }
 
+      permissionHandler.cancelAll();
       webviewManager!.broadcast({ type: 'process_state', state: 'stopped' });
     });
 
@@ -870,6 +870,8 @@ export function activate(context: vscode.ExtensionContext) {
   // Handle interrupt/stop
   webviewManager.onMessage('interrupt', async () => {
     output.info('[Webview→CLI] interrupt');
+    permissionHandler.cancelAll();
+    statusBarManager.setPendingPermission(false);
     if (processManager) {
       processManager.kill('SIGINT');
     }
@@ -882,6 +884,7 @@ export function activate(context: vscode.ExtensionContext) {
       processManager.dispose();
       processManager = undefined;
     }
+    permissionHandler.cancelAll();
     currentSessionId = undefined;
     crashRestartCount = 0;
     checkpointManager.clear();
@@ -921,6 +924,7 @@ export function activate(context: vscode.ExtensionContext) {
       processManager.dispose();
       processManager = undefined;
     }
+    permissionHandler.cancelAll();
 
     currentSessionId = message.sessionId;
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -1002,12 +1006,6 @@ export function activate(context: vscode.ExtensionContext) {
       webviewManager!.broadcast({ type: 'cli_output', data: msg });
 
       const msgObj = msg as Record<string, unknown>;
-      if (msgObj.type === 'control_request') {
-        const req = msgObj.request as Record<string, unknown> | undefined;
-        if (req?.subtype === 'can_use_tool') {
-          statusBarManager.setPendingPermission(true);
-        }
-      }
       if (msgObj.type === 'control_cancel_request' && typeof msgObj.request_id === 'string') {
         permissionHandler.handleCancel(msgObj.request_id);
         statusBarManager.setPendingPermission(false);
@@ -1026,6 +1024,7 @@ export function activate(context: vscode.ExtensionContext) {
     });
     processManager.onExit((code, signal) => {
       output.info(`[GakrCLI] CLI exited: code=${code}, signal=${signal}`);
+      permissionHandler.cancelAll();
       webviewManager!.broadcast({ type: 'process_state', state: 'stopped' });
       isSpawning = false;
     });
@@ -1311,6 +1310,7 @@ export function activate(context: vscode.ExtensionContext) {
         processManager = undefined;
         currentSessionId = undefined;
         crashRestartCount = 0;
+        permissionHandler.cancelAll();
         webviewManager!.broadcast({ type: 'process_state', state: 'stopped' });
       }
     }),
@@ -1390,6 +1390,7 @@ export function activate(context: vscode.ExtensionContext) {
       currentSessionId = undefined;
       crashRestartCount = 0;
       checkpointManager.clear();
+      permissionHandler.cancelAll();
       webviewManager!.broadcast({ type: 'clearMessages' } as never);
       webviewManager!.broadcast({ type: 'process_state', state: 'stopped' });
       webviewManager!.broadcast({ type: 'checkpoint_state', checkpoints: [] });
@@ -1798,6 +1799,7 @@ export function activate(context: vscode.ExtensionContext) {
       processManager.dispose();
       processManager = undefined;
     }
+    permissionHandler.cancelAll();
     crashRestartCount = 0;
     await ensureProcess(currentSessionId ? { sessionId: currentSessionId } : undefined);
   });
@@ -1810,6 +1812,7 @@ export function activate(context: vscode.ExtensionContext) {
       processManager.dispose();
       processManager = undefined;
     }
+    permissionHandler.cancelAll();
     crashRestartCount = 0;
     await ensureProcess(sessionId ? { sessionId } : undefined);
   });

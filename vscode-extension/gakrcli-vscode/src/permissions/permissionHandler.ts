@@ -47,6 +47,7 @@ export class PermissionHandler implements vscode.Disposable {
     private readonly webviewManager: WebviewManager,
     private readonly rules: PermissionRules,
     private readonly output: vscode.OutputChannel,
+    private readonly onPendingChange?: (pending: boolean) => void,
   ) {
     // Listen for permission_response from webview
     this.disposables.push(
@@ -126,6 +127,11 @@ export class PermissionHandler implements vscode.Disposable {
       this.output.appendLine(
         `[PermissionHandler] Auto-approved: ${tool_name} (mode=${this.currentMode})`,
       );
+      this.webviewManager.broadcast({
+        type: 'cancel_request',
+        requestId,
+      });
+      this.onPendingChange?.(this.pendingRequests.size > 0);
       return autoResult;
     }
 
@@ -135,6 +141,7 @@ export class PermissionHandler implements vscode.Disposable {
     );
 
     this.pendingRequests.set(requestId, { requestId, request, signal });
+    this.onPendingChange?.(true);
 
     // Listen for abort (control_cancel_request)
     signal.addEventListener('abort', () => {
@@ -143,6 +150,7 @@ export class PermissionHandler implements vscode.Disposable {
         type: 'cancel_request',
         requestId,
       });
+      this.onPendingChange?.(this.pendingRequests.size > 0);
     });
 
     // Send permission_request to webview
@@ -190,6 +198,22 @@ export class PermissionHandler implements vscode.Disposable {
       type: 'cancel_request',
       requestId,
     });
+    this.onPendingChange?.(this.pendingRequests.size > 0);
+  }
+
+  cancelAll(): void {
+    const requestIds = Array.from(this.pendingRequests.keys());
+    this.pendingRequests.clear();
+    for (const requestId of requestIds) {
+      this.webviewManager.broadcast({
+        type: 'cancel_request',
+        requestId,
+      });
+    }
+    this.webviewManager.broadcast({
+      type: 'permissions_cleared',
+    } as never);
+    this.onPendingChange?.(false);
   }
 
   allowTool(toolName: string): number {
@@ -268,6 +292,7 @@ export class PermissionHandler implements vscode.Disposable {
     }
 
     this.pendingRequests.delete(requestId);
+    this.onPendingChange?.(this.pendingRequests.size > 0);
 
     if (alwaysAllow && allowed) {
       this.rules.add(pending.request.tool_name);
@@ -330,5 +355,6 @@ export class PermissionHandler implements vscode.Disposable {
     }
     this.disposables.length = 0;
     this.pendingRequests.clear();
+    this.onPendingChange?.(false);
   }
 }
