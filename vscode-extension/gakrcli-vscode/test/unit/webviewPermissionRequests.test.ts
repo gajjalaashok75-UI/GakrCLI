@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   getPermissionCancelRequestId,
+  getPermissionRequestFromCliOutput,
   toPermissionRequest,
 } from '../../webview/src/utils/permissionRequests';
 
@@ -29,6 +30,31 @@ describe('webview permission request normalization', () => {
         request: {
           subtype: 'can_use_tool',
           tool_name: 'WebSearch',
+        },
+      },
+    })).toBeNull();
+  });
+
+  it('does not treat AskUserQuestion control requests as permission prompts', () => {
+    expect(getPermissionRequestFromCliOutput({
+      type: 'cli_output',
+      data: {
+        type: 'control_request',
+        request_id: 'req-question',
+        request: {
+          subtype: 'can_use_tool',
+          tool_name: 'AskUserQuestion',
+          input: {
+            questions: [
+              {
+                question: 'Choose features?',
+                options: [
+                  { label: 'Gradients', description: 'Color fills' },
+                  { label: 'Logo', description: 'Center logo' },
+                ],
+              },
+            ],
+          },
         },
       },
     })).toBeNull();

@@ -5,7 +5,10 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [released - 0.5.4]
+
+### Fixed (2026-05-31)
+- **VS Code AskUserQuestion Routing**: Treated `AskUserQuestion` as a clarification flow instead of a tool permission prompt, rendering the question fields in the webview and returning collected answers through the SDK permission response path.
 
 ### Changed (2026-05-30)
 - **VS Code Permission Prompt Reliability**: Routed pending-permission status through the real permission dialog lifecycle, added a webview fallback for SDK tool permission requests, and cleared pending permission UI/status on stop, restart, session changes, and shutdown.

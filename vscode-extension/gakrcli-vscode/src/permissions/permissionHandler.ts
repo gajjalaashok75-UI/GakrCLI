@@ -28,6 +28,8 @@ const ACCEPT_EDITS_TOOLS = new Set([
   ...FILE_EDIT_TOOLS,
 ]);
 
+const ASK_USER_QUESTION_TOOL_NAME = 'AskUserQuestion';
+
 /** Callback to write a control_response to the CLI's stdin */
 export type WriteToStdinFn = (message: unknown) => void;
 
@@ -40,6 +42,7 @@ interface PendingRequest {
 export class PermissionHandler implements vscode.Disposable {
   private currentMode: PermissionMode = 'default';
   private readonly pendingRequests = new Map<string, PendingRequest>();
+  private readonly pendingAskUserQuestions = new Map<string, PendingRequest>();
   private readonly disposables: vscode.Disposable[] = [];
   private writeToStdin: WriteToStdinFn | undefined;
 
@@ -121,6 +124,10 @@ export class PermissionHandler implements vscode.Disposable {
   ): Promise<PermissionResult | symbol> {
     const { tool_name } = request;
 
+    if (this.isAskUserQuestionRequest(request)) {
+      return this.handleAskUserQuestionRequest(request, signal, requestId);
+    }
+
     // Check auto-approve conditions
     const autoResult = this.checkAutoApprove(request);
     if (autoResult) {
@@ -194,21 +201,34 @@ export class PermissionHandler implements vscode.Disposable {
    */
   handleCancel(requestId: string): void {
     this.pendingRequests.delete(requestId);
+    this.pendingAskUserQuestions.delete(requestId);
     this.webviewManager.broadcast({
       type: 'cancel_request',
       requestId,
     });
+    this.webviewManager.broadcast({
+      type: 'dismiss_elicitation',
+      requestId,
+    } as never);
     this.onPendingChange?.(this.pendingRequests.size > 0);
   }
 
   cancelAll(): void {
     const requestIds = Array.from(this.pendingRequests.keys());
+    const questionRequestIds = Array.from(this.pendingAskUserQuestions.keys());
     this.pendingRequests.clear();
+    this.pendingAskUserQuestions.clear();
     for (const requestId of requestIds) {
       this.webviewManager.broadcast({
         type: 'cancel_request',
         requestId,
       });
+    }
+    for (const requestId of questionRequestIds) {
+      this.webviewManager.broadcast({
+        type: 'dismiss_elicitation',
+        requestId,
+      } as never);
     }
     this.webviewManager.broadcast({
       type: 'permissions_cleared',
@@ -233,6 +253,67 @@ export class PermissionHandler implements vscode.Disposable {
     }
 
     return resolved;
+  }
+
+  handleAskUserQuestionResponse(
+    requestId: string,
+    values: Record<string, unknown>,
+  ): boolean {
+    const pending = this.pendingAskUserQuestions.get(requestId);
+    if (!pending) {
+      return false;
+    }
+
+    this.pendingAskUserQuestions.delete(requestId);
+    const input = (pending.request.input ?? {}) as Record<string, unknown>;
+    const questions = this.getAskUserQuestions(input);
+    const answers: Record<string, string> = {};
+
+    for (const question of questions) {
+      const questionText = String(question.question ?? '');
+      if (!questionText) continue;
+
+      const value = values[questionText];
+      if (Array.isArray(value)) {
+        const answer = value.map(String).filter(Boolean).join(', ');
+        if (answer) answers[questionText] = answer;
+      } else if (typeof value === 'string' && value.trim()) {
+        answers[questionText] = value.trim();
+      }
+    }
+
+    this.output.appendLine(
+      `[PermissionHandler] Answered AskUserQuestion request: ${requestId}`,
+    );
+    this.sendControlResponse(requestId, {
+      behavior: 'allow',
+      updatedInput: {
+        ...input,
+        answers,
+      },
+      toolUseID: pending.request.tool_use_id,
+      decisionClassification: 'user_temporary',
+    });
+    return true;
+  }
+
+  handleAskUserQuestionCancel(requestId: string): boolean {
+    const pending = this.pendingAskUserQuestions.get(requestId);
+    if (!pending) {
+      return false;
+    }
+
+    this.pendingAskUserQuestions.delete(requestId);
+    this.output.appendLine(
+      `[PermissionHandler] Cancelled AskUserQuestion request: ${requestId}`,
+    );
+    this.sendControlResponse(requestId, {
+      behavior: 'deny',
+      message: 'User declined to answer questions',
+      toolUseID: pending.request.tool_use_id,
+      decisionClassification: 'user_reject',
+    });
+    return true;
   }
 
   private checkAutoApprove(request: ControlRequestPermission): PermissionResult | null {
@@ -276,6 +357,79 @@ export class PermissionHandler implements vscode.Disposable {
     }
 
     return null;
+  }
+
+  private handleAskUserQuestionRequest(
+    request: ControlRequestPermission,
+    signal: AbortSignal,
+    requestId: string,
+  ): symbol {
+    this.output.appendLine(
+      `[PermissionHandler] Forwarding AskUserQuestion to clarification dialog: ${requestId}`,
+    );
+
+    this.pendingAskUserQuestions.set(requestId, { requestId, request, signal });
+
+    signal.addEventListener('abort', () => {
+      this.pendingAskUserQuestions.delete(requestId);
+      this.webviewManager.broadcast({
+        type: 'dismiss_elicitation',
+        requestId,
+      } as never);
+    }, { once: true });
+
+    const input = (request.input ?? {}) as Record<string, unknown>;
+    const questions = this.getAskUserQuestions(input);
+    this.webviewManager.broadcast({
+      type: 'show_elicitation',
+      requestId,
+      message: 'GakrCLI needs your input',
+      fields: questions.map((question) => this.toAskUserQuestionField(question)),
+    } as never);
+
+    return SELF_HANDLED;
+  }
+
+  private isAskUserQuestionRequest(request: ControlRequestPermission): boolean {
+    return request.tool_name === ASK_USER_QUESTION_TOOL_NAME &&
+      this.getAskUserQuestions((request.input ?? {}) as Record<string, unknown>).length > 0;
+  }
+
+  private getAskUserQuestions(input: Record<string, unknown>): Array<Record<string, unknown>> {
+    return Array.isArray(input.questions)
+      ? input.questions.filter((q): q is Record<string, unknown> => Boolean(q && typeof q === 'object'))
+      : [];
+  }
+
+  private toAskUserQuestionField(question: Record<string, unknown>): Record<string, unknown> {
+    const questionText = String(question.question ?? 'Question');
+    const options = Array.isArray(question.options)
+      ? question.options
+          .filter((option): option is Record<string, unknown> => Boolean(option && typeof option === 'object'))
+          .map((option) => {
+            const label = String(option.label ?? option.value ?? '');
+            return {
+              value: label,
+              label,
+              description: typeof option.description === 'string' ? option.description : undefined,
+            };
+          })
+          .filter((option) => option.value)
+      : [];
+
+    return {
+      name: questionText,
+      label: questionText,
+      required: true,
+      type: options.length > 0
+        ? {
+            type: question.multiSelect ? 'multiselect' : 'select',
+            options,
+          }
+        : {
+            type: 'text',
+          },
+    };
   }
 
   private handlePermissionResponse(
@@ -355,6 +509,7 @@ export class PermissionHandler implements vscode.Disposable {
     }
     this.disposables.length = 0;
     this.pendingRequests.clear();
+    this.pendingAskUserQuestions.clear();
     this.onPendingChange?.(false);
   }
 }
