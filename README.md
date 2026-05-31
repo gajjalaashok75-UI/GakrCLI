@@ -5,7 +5,7 @@
 # GakrCLI
 </div>
 
-**Version 0.5.4** — Any model. Every tool. Zero limits.
+**Version 0.5.5** — Any model. Every tool. Zero limits.
 
 GakrCLI is a terminal-first AI coding agent that brings powerful LLM workflows to your command line. Use OpenAI, Anthropic, Gemini, DeepSeek, Ollama, and 200+ other models while keeping one unified terminal workflow: prompts, tools, agents, MCP integration, slash commands, and streaming output.
 

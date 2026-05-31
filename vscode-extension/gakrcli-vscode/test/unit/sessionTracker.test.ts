@@ -155,6 +155,41 @@ describe('SessionTracker — JSONL parsing', () => {
     tracker.dispose();
   });
 
+  it('keeps result entries for history replay so turn completion metadata is restored', async () => {
+    const tracker = new SessionTracker();
+    const filePath = writeJsonl('session-results', [
+      {
+        type: 'user',
+        message: { role: 'user', content: 'Say hello' },
+        timestamp: '2026-05-31T10:00:00.000Z',
+        isMeta: false,
+      },
+      {
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          model: 'gpt-5.4',
+          content: [{ type: 'text', text: 'Hello.' }],
+        },
+        timestamp: '2026-05-31T10:00:01.000Z',
+      },
+      {
+        type: 'result',
+        duration_ms: 4200,
+        total_cost_usd: 0,
+        num_turns: 1,
+        timestamp: '2026-05-31T10:00:05.000Z',
+      },
+    ]);
+
+    await tracker.parseSessionFile(filePath);
+
+    const replayMessages = await tracker.loadSessionMessages('session-results');
+    expect(replayMessages.map((entry) => entry.type)).toEqual(['user', 'assistant', 'result']);
+    expect(replayMessages[2]?.duration_ms).toBe(4200);
+    tracker.dispose();
+  });
+
   it('should prefer ai-title over first user message for session title', () => {
     const lines = [
       {

@@ -834,12 +834,18 @@ export function activate(context: vscode.ExtensionContext) {
   webviewManager.onMessage('set_effort_level', async (message) => {
     const msg = message as unknown as { level: string };
     output.info(`[Webview→CLI] set_effort_level: ${msg.level}`);
-    if (processManager) {
-      await processManager.sendControlRequest({
+    try {
+      const pm = await ensureProcess();
+      if (!pm) return;
+      await pm.sendControlRequest({
         subtype: 'apply_flag_settings',
         settings: { effort: msg.level, maxThinkingTokens: effortToTokens(msg.level) },
       });
       void sendRuntimeSettingsState();
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      output.warn(`[GakrCLI] Failed to set effort level: ${detail}`);
+      void sendRuntimeSettingsState(undefined, detail);
     }
   });
 
@@ -847,12 +853,18 @@ export function activate(context: vscode.ExtensionContext) {
   webviewManager.onMessage('toggle_fast_mode', async (message) => {
     const msg = message as unknown as { enabled: boolean };
     output.info(`[Webview→CLI] toggle_fast_mode: ${msg.enabled}`);
-    if (processManager) {
-      await processManager.sendControlRequest({
+    try {
+      const pm = await ensureProcess();
+      if (!pm) return;
+      await pm.sendControlRequest({
         subtype: 'apply_flag_settings',
         settings: { fastMode: msg.enabled },
       });
       void sendRuntimeSettingsState();
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      output.warn(`[GakrCLI] Failed to toggle fast mode: ${detail}`);
+      void sendRuntimeSettingsState(undefined, detail);
     }
   });
 

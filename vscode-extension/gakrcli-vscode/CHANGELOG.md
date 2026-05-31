@@ -6,6 +6,9 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ### Fixed (2026-05-31)
 
+- Restored result entries during resumed chat replay so per-turn completion text remains attached after loading session history.
+- Synced Fast mode from SDK runtime settings snapshots after webview toggles, including toggles made before the runtime was already active.
+- Changed clarification prompts to a one-question stepper with scrollable content and pinned Skip, Back, Next, and Submit actions.
 - Routed `AskUserQuestion` requests to the webview clarification dialog instead of the permission dialog, then returned selected answers to the SDK as `updatedInput.answers`.
 
 ### Changed (2026-05-30)

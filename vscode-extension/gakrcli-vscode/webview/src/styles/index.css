@@ -1410,6 +1410,109 @@ details[open] .thinking-toggle {
   opacity: 0.68;
 }
 
+.elicitation-card-shell {
+  display: flex;
+  flex-direction: column;
+  width: min(440px, calc(100vw - 28px));
+  max-height: min(82vh, 590px);
+  padding: 0;
+}
+
+.elicitation-card-header {
+  flex: 0 0 auto;
+  padding: 20px 14px 0;
+}
+
+.elicitation-step-count {
+  display: inline-flex;
+  margin-left: 8px;
+  border-left: 1px solid color-mix(in srgb, var(--app-transparent-inner-border) 72%, transparent);
+  padding-left: 8px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.elicitation-card-shell form {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 14px 14px;
+}
+
+.elicitation-question-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 4px 2px;
+}
+
+.elicitation-question-body label {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.elicitation-question-body .space-y-1 {
+  display: grid;
+  gap: 8px;
+}
+
+.elicitation-question-body .space-y-1 > label {
+  min-height: 56px;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.elicitation-question-body .space-y-1 > label > div:last-child {
+  min-width: 0;
+}
+
+.elicitation-question-body .space-y-1 > label > div:last-child > div:first-child {
+  overflow-wrap: anywhere;
+}
+
+.elicitation-dialog-actions {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--app-transparent-inner-border) 58%, transparent);
+  padding: 12px 4px 0;
+}
+
+.elicitation-dialog-button {
+  min-width: 72px;
+  height: 32px;
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 68%, transparent);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: color-mix(in srgb, var(--app-glass-surface) 78%, rgba(255, 255, 255, 0.02));
+  color: var(--vscode-editor-foreground);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.elicitation-dialog-button:hover,
+.elicitation-dialog-button:focus-visible {
+  border-color: color-mix(in srgb, var(--vscode-focusBorder) 82%, transparent);
+  outline: none;
+}
+
+.elicitation-dialog-button.primary {
+  background: color-mix(in srgb, var(--vscode-focusBorder) 34%, var(--app-glass-surface));
+  border-color: color-mix(in srgb, var(--vscode-focusBorder) 78%, transparent);
+}
+
+.elicitation-dialog-button.muted {
+  color: var(--vscode-descriptionForeground);
+}
+
+.elicitation-dialog-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
 .onboarding-glass-card {
   border: 1px solid color-mix(in srgb, var(--app-glass-border) 60%, transparent);
   background:
