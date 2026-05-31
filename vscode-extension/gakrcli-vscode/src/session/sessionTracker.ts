@@ -393,6 +393,11 @@ export class SessionTracker implements vscode.Disposable {
         else if (type === 'assistant') {
           messages.push(entry);
         }
+        // Include result messages so resumed chats can restore per-turn completion
+        // metadata such as "worked for 5s".
+        else if (type === 'result') {
+          messages.push(entry);
+        }
       }
     } catch (err) {
       console.error(`SessionTracker: failed to load messages for ${sessionId}:`, err);

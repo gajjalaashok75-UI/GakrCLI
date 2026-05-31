@@ -5,9 +5,11 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [released - 0.5.4]
+## [released - 0.5.5]
 
 ### Fixed (2026-05-31)
+- **VS Code Resume And Fast Mode State**: Restored result records during resumed chat replay so per-turn completion text survives session reloads, and synced Fast mode from SDK runtime settings snapshots after webview toggles.
+- **VS Code Clarification Dialog**: Changed AskUserQuestion/clarification prompts to a one-question stepper with scrollable content and pinned Skip, Back, Next, and Submit actions.
 - **VS Code AskUserQuestion Routing**: Treated `AskUserQuestion` as a clarification flow instead of a tool permission prompt, rendering the question fields in the webview and returning collected answers through the SDK permission response path.
 
 ### Changed (2026-05-30)

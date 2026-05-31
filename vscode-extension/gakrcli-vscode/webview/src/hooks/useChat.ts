@@ -452,6 +452,43 @@ export function useChat() {
         return;
       }
 
+      if (data.type === 'settings_state') {
+        const current = data.current && typeof data.current === 'object'
+          ? data.current as Record<string, unknown>
+          : {};
+        const runtime = data.runtime && typeof data.runtime === 'object'
+          ? data.runtime as Record<string, unknown>
+          : {};
+        const runtimeFastMode = runtime.fastModeState && typeof runtime.fastModeState === 'object'
+          ? runtime.fastModeState as Record<string, unknown>
+          : {};
+
+        if (typeof current.fastMode === 'boolean' || typeof runtimeFastMode.enabled === 'boolean') {
+          setFastModeState({
+            enabled: (runtimeFastMode.enabled as boolean | undefined) ?? (current.fastMode as boolean | undefined) ?? false,
+            canToggle: (runtimeFastMode.canToggle as boolean | undefined) ?? true,
+          });
+        }
+
+        if (typeof current.model === 'string' && current.model.trim()) {
+          setModel(current.model);
+        }
+        if (typeof current.effort === 'string') {
+          setEffortLevel(current.effort);
+        }
+        if (Array.isArray(data.models)) {
+          setAvailableModels(
+            (data.models as Array<Record<string, unknown>>)
+              .map((m) => ({
+                value: (m.value as string) || (m.id as string) || '',
+                displayName: (m.displayName as string) || (m.value as string) || (m.id as string) || '',
+              }))
+              .filter((m) => m.value),
+          );
+        }
+        return;
+      }
+
       // Unwrap cli_output envelope
       const msg: SDKMessage = data.type === 'cli_output' ? data.data : data;
       if (!msg || typeof msg !== 'object') return;

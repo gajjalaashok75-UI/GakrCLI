@@ -1,5 +1,5 @@
 // webview/src/components/dialogs/ElicitationDialog.tsx
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import type {
   ElicitationRequest,
   ElicitationField,
@@ -17,7 +17,7 @@ export const ElicitationDialog: React.FC<ElicitationDialogProps> = ({
   onSubmit,
   onCancel,
 }) => {
-  const [values, setValues] = useState<Record<string, unknown>>(() => {
+  const initialValues = useMemo(() => {
     const defaults: Record<string, unknown> = {};
     for (const field of request.fields) {
       if (field.default !== undefined) {
@@ -31,64 +31,100 @@ export const ElicitationDialog: React.FC<ElicitationDialogProps> = ({
       }
     }
     return defaults;
-  });
+  }, [request]);
+
+  const [values, setValues] = useState<Record<string, unknown>>(initialValues);
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  useEffect(() => {
+    setValues(initialValues);
+    setCurrentIndex(0);
+  }, [initialValues]);
 
   const setValue = useCallback((name: string, value: unknown) => {
     setValues((prev) => ({ ...prev, [name]: value }));
   }, []);
 
+  const currentField = request.fields[currentIndex];
+  const fieldCount = request.fields.length;
+  const isLastField = currentIndex >= fieldCount - 1;
+  const currentFieldValid = currentField ? isFieldValid(currentField, values[currentField.name]) : true;
+  const allFieldsValid = request.fields.every((field) => isFieldValid(field, values[field.name]));
+
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
-      onSubmit(values);
+      if (!currentFieldValid) return;
+      if (!isLastField) {
+        setCurrentIndex((index) => Math.min(index + 1, fieldCount - 1));
+        return;
+      }
+      if (allFieldsValid) {
+        onSubmit(values);
+      }
     },
-    [values, onSubmit],
+    [allFieldsValid, currentFieldValid, fieldCount, isLastField, values, onSubmit],
   );
 
-  const isValid = request.fields.every((field) => {
-    if (!field.required) return true;
-    const val = values[field.name];
-    if (val === undefined || val === null || val === '') return false;
-    if (Array.isArray(val) && val.length === 0) return false;
-    return true;
-  });
+  const goBack = useCallback(() => {
+    setCurrentIndex((index) => Math.max(0, index - 1));
+  }, []);
 
   return (
     <div className="permission-modal-backdrop fixed inset-0 z-50 flex items-center justify-center">
-      <div className="permission-glass-dialog permission-card-shell">
-        <div className="permission-card-title">
-          <span>{request.message}</span>
+      <div className="permission-glass-dialog permission-card-shell elicitation-card-shell">
+        <div className="elicitation-card-header">
+          <div className="permission-card-title">
+            <span>{request.message}</span>
+          </div>
+          <div className="permission-card-meta">
+            Question from GakrCLI
+            {fieldCount > 1 && (
+              <span className="elicitation-step-count">
+                {currentIndex + 1} of {fieldCount}
+              </span>
+            )}
+          </div>
         </div>
-        <div className="permission-card-meta">Question from GakrCLI</div>
 
         <form onSubmit={handleSubmit} className="space-y-3">
-          {request.fields.map((field) => (
-            <FieldRenderer
-              key={field.name}
-              field={field}
-              value={values[field.name]}
-              onChange={(val) => setValue(field.name, val)}
-            />
-          ))}
+          <div className="elicitation-question-body">
+            {currentField ? (
+              <FieldRenderer
+                key={currentField.name}
+                field={currentField}
+                value={values[currentField.name]}
+                onChange={(val) => setValue(currentField.name, val)}
+              />
+            ) : (
+              <div className="permission-card-note">No question details were provided.</div>
+            )}
+          </div>
 
-          <div className="permission-choice-list">
+          <div className="elicitation-dialog-actions">
             <button
               type="button"
-              className="permission-choice-row permission-choice-muted"
+              className="elicitation-dialog-button muted"
               onClick={onCancel}
             >
-              <span className="permission-choice-index">1.</span>
-              <span className="permission-choice-label">Skip</span>
-              <span className="permission-choice-hint">Continue without answering</span>
+              Skip
             </button>
+            {fieldCount > 1 && (
+              <button
+                type="button"
+                className="elicitation-dialog-button muted"
+                onClick={goBack}
+                disabled={currentIndex === 0}
+              >
+                Back
+              </button>
+            )}
             <button
               type="submit"
-              className="permission-choice-row"
-              disabled={!isValid}
+              className="elicitation-dialog-button primary"
+              disabled={!currentFieldValid || (isLastField && !allFieldsValid)}
             >
-              <span className="permission-choice-index">2.</span>
-              <span className="permission-choice-label">Submit</span>
-              <span className="permission-choice-hint">Send answer to the model</span>
+              {isLastField ? 'Submit' : 'Next'}
             </button>
           </div>
         </form>
@@ -96,6 +132,13 @@ export const ElicitationDialog: React.FC<ElicitationDialogProps> = ({
     </div>
   );
 };
+
+function isFieldValid(field: ElicitationField, value: unknown): boolean {
+  if (!field.required) return true;
+  if (value === undefined || value === null || value === '') return false;
+  if (Array.isArray(value) && value.length === 0) return false;
+  return true;
+}
 
 /** Renders a single elicitation field based on its type */
 const FieldRenderer: React.FC<{
