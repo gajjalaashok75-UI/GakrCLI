@@ -7,6 +7,8 @@ import type { ContentBlock } from '../../types/blocks';
 import { MessageActions } from './MessageActions';
 import { formatTurnCompletion } from '../../utils/turnCompletion';
 import { isThinkingBlock } from '../../utils/messageVisibility';
+import { getPairedToolResult, isPairedToolResult } from '../../utils/toolBlockPairs';
+import { formatToolResultContent } from '../../utils/toolDisplay';
 
 interface AssistantMessageProps {
   message: ChatMessage;
@@ -34,9 +36,11 @@ export function AssistantMessage({ message, isLatest = false, isStreaming = fals
       {/* Message actions (hover) */}
       {/* Content blocks — no header/label, just content */}
       <div>
-        {blocks.map((renderableBlock) => (
+        {blocks.map((renderableBlock, blockIndex) => (
           <BlockRenderer
             key={renderableBlock.index}
+            blocks={blocks}
+            blockIndex={blockIndex}
             renderableBlock={renderableBlock}
             isMessageStreaming={message.isStreaming}
           />
@@ -79,15 +83,21 @@ export function AssistantMessage({ message, isLatest = false, isStreaming = fals
 // ============================================================================
 
 interface BlockRendererProps {
+  blocks: RenderableBlock[];
+  blockIndex: number;
   renderableBlock: RenderableBlock;
   isMessageStreaming: boolean;
 }
 
-function BlockRenderer({ renderableBlock, isMessageStreaming: _isMessageStreaming }: BlockRendererProps) {
+function BlockRenderer({ blocks, blockIndex, renderableBlock, isMessageStreaming: _isMessageStreaming }: BlockRendererProps) {
   const { block, isStreaming } = renderableBlock;
   const blockType = (block as { type: string }).type;
 
   if (isThinkingBlock(block)) {
+    return null;
+  }
+
+  if (blockType === 'tool_result' && isPairedToolResult(blocks, blockIndex)) {
     return null;
   }
 
@@ -106,6 +116,7 @@ function BlockRenderer({ renderableBlock, isMessageStreaming: _isMessageStreamin
         <ToolCallBlock
           block={block as ToolUseBlock | ServerToolUseBlock}
           isStreaming={isStreaming}
+          result={getPairedToolResult(blocks, blockIndex)}
         />
       );
 
@@ -152,17 +163,6 @@ function ToolResultBlock({ block }: { block: ToolResultContentBlock }) {
       </pre>
     </details>
   );
-}
-
-function formatToolResultContent(content: ToolResultContentBlock['content']): string {
-  if (typeof content === 'string') {
-    return content;
-  }
-  try {
-    return JSON.stringify(content, null, 2);
-  } catch {
-    return String(content);
-  }
 }
 
 // ============================================================================

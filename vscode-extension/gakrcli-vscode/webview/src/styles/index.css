@@ -1289,17 +1289,48 @@ details[open] .thinking-toggle {
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--app-glass-mint) 7%, transparent), transparent 72%),
     color-mix(in srgb, var(--app-glass-surface-raised) 84%, rgba(0,0,0,0.14));
+  cursor: pointer;
 }
 
 .tool-call-header:hover,
-.tool-result-summary:hover {
+.tool-call-header:focus-visible,
+.tool-call-header[aria-expanded="true"],
+.tool-result-summary:hover,
+.tool-result-summary:focus-visible {
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--app-glass-sky) 10%, transparent), transparent 72%),
     color-mix(in srgb, var(--app-list-hover-background) 86%, rgba(0,0,0,0.12));
+  color: var(--app-primary-foreground);
 }
 
 .tool-call-body {
   border-top: 1px solid color-mix(in srgb, var(--app-glass-border) 52%, transparent);
+}
+
+.tool-call-preview {
+  flex: 1 1 auto;
+}
+
+.tool-detail-section + .tool-detail-section {
+  margin-top: 8px;
+}
+
+.tool-detail-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 4px;
+}
+
+.tool-result-inline-preview {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--app-secondary-foreground);
+  opacity: 0.58;
+  font-size: 11px;
 }
 
 .tool-input-pre,
