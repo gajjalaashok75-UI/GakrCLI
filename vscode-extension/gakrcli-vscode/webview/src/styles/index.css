@@ -658,6 +658,48 @@ details[open] .thinking-toggle {
   40% { opacity: 1; }
 }
 
+@keyframes thinkingShine {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(0.94) rotate(0deg);
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  45% {
+    opacity: 1;
+    transform: scale(1.08) rotate(8deg);
+    filter: drop-shadow(0 0 8px color-mix(in srgb, var(--app-glass-cyan) 70%, transparent));
+  }
+}
+
+.thinking-status {
+  color: var(--app-secondary-foreground);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 0;
+  font-size: 12px;
+}
+
+.thinking-status-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--app-brand-accent);
+  animation: thinkingShine 1.35s ease-in-out infinite;
+}
+
+.thinking-status-icon svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.thinking-status-label {
+  font-style: italic;
+}
+
 @keyframes caretBlink {
   0%, 45% { opacity: 0.75; }
   46%, 100% { opacity: 0; }

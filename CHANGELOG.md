@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [unreleased - 0.5.5]
 
 ### Fixed (2026-06-01)
+- **VS Code Hidden Thinking Display**: Hid streamed and resumed thinking blocks from the GakrCLI webview transcript while keeping a compact shining thinking indicator active during hidden reasoning, reducing long-scroll conversations around tool use.
 - **SDK And VS Code Session Persistence**: Kept SDK transcript writes inside the query-scoped async context, forced fresh SDK sessions to use the workspace transcript directory, and refreshed VS Code chat titles/history from live SDK user/result events.
 - **SDK Headless Permission Flow**: Kept forced `ask` decisions on the SDK host-permission path instead of returning an unresolved ask decision to the tool runner, so interactive tools such as `AskUserQuestion` can receive webview answers through `canUseTool`/`onPermissionRequest`.
 - **SDK Session Transcript Routing**: Reset the SDK transcript file pointer immediately after session resolution so new in-process VS Code turns write under the active workspace session directory instead of reusing a stale process-cwd transcript path.
