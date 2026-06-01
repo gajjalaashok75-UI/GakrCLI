@@ -86,7 +86,7 @@ export function ToolCallBlock({ block, isStreaming, result = null }: ToolCallBlo
           {hasInput ? (
             <div className="tool-detail-section">
               <div className="text-xs opacity-50 mb-1 font-semibold">Input</div>
-              <pre className="tool-input-pre text-xs font-mono overflow-x-auto p-2 rounded whitespace-pre-wrap break-all">
+              <pre className="tool-input-pre tool-detail-pre text-xs font-mono overflow-auto p-2 rounded whitespace-pre-wrap break-all">
                 {formatToolInput(input)}
               </pre>
             </div>
@@ -99,7 +99,7 @@ export function ToolCallBlock({ block, isStreaming, result = null }: ToolCallBlo
                 <span className="text-xs opacity-50 font-semibold">Result</span>
                 {resultSummary && !isError && <span className="tool-result-inline-preview">{resultSummary}</span>}
               </div>
-              <pre className="tool-result-pre m-0 px-3 py-2 text-xs font-mono whitespace-pre-wrap break-words max-h-56 overflow-auto">
+              <pre className="tool-result-pre tool-detail-pre m-0 px-3 py-2 text-xs font-mono whitespace-pre-wrap break-words overflow-auto">
                 {resultContent || 'No output'}
               </pre>
             </div>

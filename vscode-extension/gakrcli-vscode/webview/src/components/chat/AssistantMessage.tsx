@@ -14,22 +14,26 @@ interface AssistantMessageProps {
   message: ChatMessage;
   isLatest?: boolean;
   isStreaming?: boolean;
+  showActions?: boolean;
+  actionContent?: string;
   onRetry?: (uuid: string) => void;
   onStop?: () => void;
 }
 
-export function AssistantMessage({ message, isLatest = false, isStreaming = false, onRetry, onStop }: AssistantMessageProps) {
+export function AssistantMessage({
+  message,
+  isLatest = false,
+  isStreaming = false,
+  showActions = false,
+  actionContent = '',
+  onRetry,
+  onStop,
+}: AssistantMessageProps) {
   const blocks = message.blocks || [];
   const turnCompletionText =
     message.cost && !isStreaming && !message.isStreaming
       ? formatTurnCompletion(message.cost.durationMs, message.id)
       : null;
-
-  // Extract plain text content for copy
-  const plainTextContent = blocks
-    .filter((b) => b.block.type === 'text')
-    .map((b) => (b.block as TextBlock).text)
-    .join('\n');
 
   return (
     <div className="group relative" style={{ width: '100%' }}>
@@ -60,15 +64,16 @@ export function AssistantMessage({ message, isLatest = false, isStreaming = fals
         </div>
       )}
 
-      {plainTextContent && (
+      {showActions && actionContent && (
         <div className="message-actions-row">
           <MessageActions
             messageRole="assistant"
-            content={plainTextContent}
+            content={actionContent}
             uuid={message.id}
             isFailed={false}
             isStreaming={isStreaming}
             isLatest={isLatest}
+            copyLabel="Copy conversation"
             onRetry={onRetry}
             onStop={onStop}
           />
