@@ -6,6 +6,7 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ### Fixed (2026-06-01)
 
+- Tightened tool-row spacing, headers, borders, and expanded detail heights so collapsed and opened tool results take less vertical space.
 - Bounded expanded tool input panels with their own scroll area and moved assistant copy actions to the end of each assistant turn, copying the full turn text instead of each intermediate text fragment.
 - Paired tool calls with their matching results inside one expandable webview row so command inputs and outputs stay available on click without adding extra transcript height.
 - Hid streamed and resumed thinking blocks from the webview transcript while showing only a compact shining thinking indicator during active hidden reasoning.
