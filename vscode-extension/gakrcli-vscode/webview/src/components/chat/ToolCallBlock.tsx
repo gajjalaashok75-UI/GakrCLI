@@ -75,7 +75,7 @@ export function ToolCallBlock({ block, isStreaming, result = null }: ToolCallBlo
         )}
         {!isStreaming && !isError && (
           <span className="ml-auto text-xs opacity-40">
-            {hasResult ? 'Done' : 'Queued'}
+            {hasResult ? 'Done' : 'Running'}
           </span>
         )}
       </button>
