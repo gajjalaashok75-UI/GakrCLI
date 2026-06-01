@@ -4,6 +4,7 @@ import { useAutoScroll } from '../../hooks/useAutoScroll';
 import { UserMessage } from './UserMessage';
 import { AssistantMessage } from './AssistantMessage';
 import { StreamingIndicator } from './StreamingIndicator';
+import { findStreamingAssistantIndex } from '../../utils/messageListState';
 
 interface MessageListProps {
   messages: ChatMessage[];
@@ -15,6 +16,7 @@ interface MessageListProps {
 export function MessageList({ messages, isStreaming, processState, onEditMessage }: MessageListProps) {
   const { containerRef, userScrolledUp, autoScroll, scrollToBottom } = useAutoScroll();
   const latestAssistantIndex = findLatestAssistantIndex(messages);
+  const streamingAssistantIndex = findStreamingAssistantIndex(messages);
 
   // Auto-scroll when messages change or streaming content updates
   useEffect(() => {
@@ -52,7 +54,7 @@ export function MessageList({ messages, isStreaming, processState, onEditMessage
                 <AssistantMessage
                   message={msg}
                   isLatest={index === latestAssistantIndex}
-                  isStreaming={isStreaming && index === latestAssistantIndex}
+                  isStreaming={isStreaming && index === streamingAssistantIndex}
                 />
               )}
             </div>

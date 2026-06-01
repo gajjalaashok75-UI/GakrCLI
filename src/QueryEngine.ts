@@ -1295,6 +1295,15 @@ export class QueryEngine {
   }
 
   /**
+   * Replace the slash command registry used for prompt processing.
+   * SDK mode loads commands after async init, so the engine starts with an
+   * empty registry and receives the canonical CLI registry before each turn.
+   */
+  setCommands(commands: Command[]): void {
+    this.config.commands = commands
+  }
+
+  /**
    * Get MCP server connections. Returns a readonly array to prevent
    * external mutation (use setMcpClients or updateTools to modify).
    */

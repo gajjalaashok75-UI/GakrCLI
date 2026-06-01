@@ -10,13 +10,22 @@ describe('webview slash command filtering', () => {
     const commands = mergeGakrCLICommands(normalizeCommands([
       '/surprise-me',
       { name: 'surprise-me', description: 'duplicate should be ignored' },
+      { name: '/provider', description: 'from SDK' },
       { command: '/product-buyer', description: 'product workflow' },
     ]));
 
     expect(commands.filter((command) => command.name === 'surprise-me')).toHaveLength(1);
-    expect(commands.some((command) => command.name === 'provider')).toBe(true);
-    expect(commands.some((command) => command.name === 'providers')).toBe(true);
+    expect(commands.filter((command) => command.name === 'provider')).toHaveLength(1);
+    expect(commands.some((command) => command.name === 'providers')).toBe(false);
     expect(commands.some((command) => command.name === 'product-buyer')).toBe(true);
+  });
+
+  it('does not inject local fallback commands when the SDK has not supplied them', () => {
+    const commands = mergeGakrCLICommands(normalizeCommands([
+      '/help',
+    ]));
+
+    expect(commands.map((command) => command.name)).toEqual(['help']);
   });
 
   it('matches only command names by prefix, not description text', () => {

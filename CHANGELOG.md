@@ -10,7 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed (2026-06-01)
 - **SDK Headless Permission Flow**: Kept forced `ask` decisions on the SDK host-permission path instead of returning an unresolved ask decision to the tool runner, so interactive tools such as `AskUserQuestion` can receive webview answers through `canUseTool`/`onPermissionRequest`.
 - **SDK Session Transcript Routing**: Reset the SDK transcript file pointer immediately after session resolution so new in-process VS Code turns write under the active workspace session directory instead of reusing a stale process-cwd transcript path.
+- **SDK Slash Command Registry**: Loaded the canonical CLI slash command registry into headless SDK runtime snapshots and query processing, deduping hidden/model-only commands so VS Code can show the full command menu without local fallbacks.
 - **VS Code Session History And Fast Mode**: Recovered misplaced SDK transcripts by matching recorded JSONL `cwd` to the open workspace, refreshed history on demand, normalized Fast mode from both SDK string and object states, and routed extension permission decisions through an explicit SDK `canUseTool` callback.
+- **VS Code Chat Hover And Fast Mode State**: Scoped stop-generation hover actions to the actively streaming assistant turn, kept completed turns on copy-only hover, and preserved the user's Fast mode toggle across per-turn runtime/result updates.
 
 ## [released - 0.5.4]
 ### Fixed (2026-05-31)
