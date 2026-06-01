@@ -12,13 +12,10 @@ interface UseSlashCommandsReturn {
   isLoaded: boolean;
 }
 
-/** GakrCLI-specific commands that are always available */
-export const GAKRCLI_COMMANDS: SlashCommandDef[] = [
-  { name: 'provider', description: 'Set up and save a third-party provider profile', argumentHint: '' },
-  { name: 'providers', description: 'Set up and save a third-party provider profile', argumentHint: '' },
-];
+/** Compatibility hook for legacy local fallbacks; SDK-provided commands are authoritative. */
+export const GAKRCLI_COMMANDS: SlashCommandDef[] = [];
 
-/** Merge GakrCLI-specific commands into the list (avoiding duplicates) */
+/** Normalize and dedupe host-provided commands. */
 export function mergeGakrCLICommands(cmds: SlashCommandDef[]): SlashCommandDef[] {
   const byName = new Map<string, SlashCommandDef>();
   for (const command of cmds) {

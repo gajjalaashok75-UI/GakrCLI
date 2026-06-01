@@ -464,7 +464,11 @@ export function useChat() {
 
         if (typeof current.fastMode === 'boolean' || runtimeFastMode !== undefined) {
           setFastModeState((previous) =>
-            normalizeFastModeState(runtimeFastMode, normalizeFastModeState(current.fastMode, previous)),
+            normalizeFastModeState(
+              runtimeFastMode,
+              normalizeFastModeState(current.fastMode, previous),
+              { preserveEnabled: typeof current.fastMode === 'boolean' },
+            ),
           );
         }
 
@@ -512,7 +516,9 @@ export function useChat() {
             {
               const resultAny = msg as Record<string, unknown>;
               if (resultAny.fast_mode_state) {
-                setFastModeState((previous) => normalizeFastModeState(resultAny.fast_mode_state, previous));
+                setFastModeState((previous) =>
+                  normalizeFastModeState(resultAny.fast_mode_state, previous, { preserveEnabled: true }),
+                );
               }
               if (typeof resultAny.effort === 'string') {
                 setEffortLevel(resultAny.effort);
@@ -592,7 +598,9 @@ export function useChat() {
                 {
                   const initAny = msg as Record<string, unknown>;
                   if (initAny.fast_mode_state) {
-                    setFastModeState((previous) => normalizeFastModeState(initAny.fast_mode_state, previous));
+                    setFastModeState((previous) =>
+                      normalizeFastModeState(initAny.fast_mode_state, previous, { preserveEnabled: true }),
+                    );
                   }
                   if (Array.isArray(initAny.models)) {
                     setAvailableModels(

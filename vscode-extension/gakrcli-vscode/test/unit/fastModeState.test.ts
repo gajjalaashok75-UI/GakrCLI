@@ -8,6 +8,19 @@ describe('webview fast mode state normalization', () => {
     expect(normalizeFastModeState('cooldown')).toEqual({ enabled: false, canToggle: true });
   });
 
+  it('can preserve the user toggle when turn-level runtime state reports off', () => {
+    const fallback = { enabled: true, canToggle: true };
+
+    expect(normalizeFastModeState('off', fallback, { preserveEnabled: true })).toEqual({
+      enabled: true,
+      canToggle: true,
+    });
+    expect(normalizeFastModeState({ state: 'cooldown' }, fallback, { preserveEnabled: true })).toEqual({
+      enabled: true,
+      canToggle: true,
+    });
+  });
+
   it('preserves SDK object states and canToggle', () => {
     expect(normalizeFastModeState({ state: 'on', canToggle: false })).toEqual({
       enabled: true,

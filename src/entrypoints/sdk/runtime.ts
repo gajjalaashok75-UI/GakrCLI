@@ -1,7 +1,7 @@
 import type { Store } from '../../state/store.js'
 import type { AppState } from '../../state/AppStateStore.js'
 import type { Command } from '../../types/command.js'
-import { getCommandName } from '../../types/command.js'
+import { getCommandName, isCommandEnabled } from '../../types/command.js'
 import type { LoadedPlugin } from '../../types/plugin.js'
 import { getPluginErrorMessage } from '../../types/plugin.js'
 import { getPluginCommandsState } from '../../state/pluginCommandsStore.js'
@@ -191,6 +191,15 @@ export type SDKRuntimeState = {
   todos: SDKTodoState
 }
 
+export async function loadSlashCommandsForSdk(cwd: string): Promise<Command[]> {
+  try {
+    const { getCommands } = await import('../../commands.js')
+    return await getCommands(cwd)
+  } catch {
+    return []
+  }
+}
+
 export type SDKApplySettingsInput = {
   model?: string | null
   permissionMode?: QueryPermissionMode
@@ -309,8 +318,12 @@ export function getFastModeState(state: AppState): SDKFastModeState {
   }
 }
 
-export function listSlashCommandsFromState(state: AppState): SDKSlashCommandInfo[] {
+export function listSlashCommandsFromState(
+  state: AppState,
+  commandsFromRegistry: readonly Command[] = [],
+): SDKSlashCommandInfo[] {
   const commands = [
+    ...commandsFromRegistry,
     ...(state.mcp.commands ?? []),
     ...(state.plugins.commands ?? []),
     ...getPluginCommandsState(),
@@ -320,7 +333,13 @@ export function listSlashCommandsFromState(state: AppState): SDKSlashCommandInfo
 
   for (const command of commands) {
     const name = getCommandName(command)
-    if (!name || seen.has(name)) continue
+    if (
+      !name ||
+      seen.has(name) ||
+      command.userInvocable === false ||
+      command.isHidden ||
+      !isCommandEnabled(command)
+    ) continue
     seen.add(name)
     result.push(commandToInfo(command))
   }
@@ -458,6 +477,7 @@ export function buildRuntimeState(input: {
   mcpServers: McpServerStatus[]
   account: { apiKeySource: string; [key: string]: unknown }
   usage?: SDKUsageSummary
+  slashCommands?: SDKSlashCommandInfo[]
 }): SDKRuntimeState {
   const providers = listProviders()
   const activeProfile = getActiveProviderProfile()
@@ -479,7 +499,7 @@ export function buildRuntimeState(input: {
     permissionMode: input.state.toolPermissionContext.mode as QueryPermissionMode,
     reasoning: getReasoningConfig(input.state),
     fastModeState: getFastModeState(input.state),
-    slashCommands: listSlashCommandsFromState(input.state),
+    slashCommands: input.slashCommands ?? listSlashCommandsFromState(input.state),
     agents: listAgentsFromState(input.state),
     mcpServers: input.mcpServers,
     plugins: listPluginsFromState(input.state),

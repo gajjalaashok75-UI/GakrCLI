@@ -3,13 +3,24 @@ export interface WebviewFastModeState {
   canToggle: boolean;
 }
 
+export interface NormalizeFastModeStateOptions {
+  /**
+   * Turn-level SDK messages can report the operational fast-mode route as
+   * "off" or "cooldown" even when the user preference remains enabled. In
+   * those cases the toggle should keep showing the user-selected state.
+   */
+  preserveEnabled?: boolean;
+}
+
 export function normalizeFastModeState(
   value: unknown,
   fallback: WebviewFastModeState = { enabled: false, canToggle: true },
+  options: NormalizeFastModeStateOptions = {},
 ): WebviewFastModeState {
   if (typeof value === 'string') {
+    const enabled = options.preserveEnabled ? fallback.enabled : value === 'on';
     return {
-      enabled: value === 'on',
+      enabled,
       canToggle: true,
     };
   }
@@ -29,7 +40,9 @@ export function normalizeFastModeState(
       : state === 'on'
         ? true
         : state === 'off' || state === 'cooldown'
-          ? false
+          ? options.preserveEnabled
+            ? fallback.enabled
+            : false
           : fallback.enabled;
 
     return {

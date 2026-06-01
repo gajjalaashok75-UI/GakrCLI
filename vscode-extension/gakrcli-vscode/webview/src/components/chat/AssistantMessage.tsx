@@ -62,7 +62,7 @@ export function AssistantMessage({ message, isLatest = false, isStreaming = fals
             content={plainTextContent}
             uuid={message.id}
             isFailed={false}
-            isStreaming={isStreaming || message.isStreaming}
+            isStreaming={isStreaming}
             isLatest={isLatest}
             onRetry={onRetry}
             onStop={onStop}

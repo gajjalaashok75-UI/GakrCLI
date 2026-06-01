@@ -37,6 +37,7 @@ import {
 } from '../../bootstrap/state.js'
 import type { SessionId } from '../../types/ids.js'
 import { getAgentDefinitionsWithOverrides } from '../../tools/AgentTool/loadAgentsDir.js'
+import type { Command } from '../../types/command.js'
 import { getCommandName } from '../../types/command.js'
 import type {
   RewindFilesResult,
@@ -71,6 +72,7 @@ import {
   getReasoningConfig,
   getSettingsSnapshot,
   getTodoStateFromState,
+  loadSlashCommandsForSdk,
   listModelsFromState,
   listPluginsFromState,
   listProviderProfiles,
@@ -491,6 +493,8 @@ class QueryImpl implements Query {
   private agentFailureQueue: SDKAgentLoadFailureMessage[] = []
   private runtimeStatus: 'idle' | 'running' | 'closed' = 'idle'
   private lastUsageSummary: SDKUsageSummary = emptyUsageSummary()
+  private slashCommandRegistry: Command[] = []
+  private slashCommandInfos: SDKSlashCommandInfo[] | undefined
 
   constructor(
     engine: QueryEngine | null,
@@ -632,6 +636,9 @@ class QueryImpl implements Query {
             ...prev,
             agentDefinitions: agentDefs,
           }))
+
+          await self.refreshSlashCommands()
+          self.engine.setCommands(self.slashCommandRegistry)
 
           // Inject agents into the engine
           if (self.userAgents && Object.keys(self.userAgents).length > 0) {
@@ -1069,6 +1076,7 @@ class QueryImpl implements Query {
   }
 
   async getRuntimeState(): Promise<SDKRuntimeState> {
+    const slashCommands = await this.getSlashCommandInfos()
     return buildRuntimeState({
       sessionId: this.sessionId,
       cwd: this.cwd,
@@ -1077,6 +1085,7 @@ class QueryImpl implements Query {
       mcpServers: this.mcpServerStatus(),
       account: await this.accountInfo(),
       usage: this.lastUsageSummary,
+      slashCommands,
     })
   }
 
@@ -1236,13 +1245,15 @@ class QueryImpl implements Query {
   }
 
   listSlashCommands(): SDKSlashCommandInfo[] {
-    return listSlashCommandsFromState(this.appStateStore.getState())
+    return this.slashCommandInfos ?? listSlashCommandsFromState(this.appStateStore.getState(), this.slashCommandRegistry)
   }
 
   async runSlashCommand(commandName: string, args = ''): Promise<SDKRunSlashCommandResult> {
     const normalized = commandName.replace(/^\/+/, '')
+    await this.refreshSlashCommands()
     const state = this.appStateStore.getState()
     const command = [
+      ...this.slashCommandRegistry,
       ...(state.mcp.commands ?? []),
       ...(state.plugins.commands ?? []),
       ...getPluginCommandsState(),
@@ -1271,6 +1282,16 @@ class QueryImpl implements Query {
       command: info,
       reason: `Local command execution is not yet available through the headless SDK. Args: ${args}`,
     }
+  }
+
+  private async getSlashCommandInfos(): Promise<SDKSlashCommandInfo[]> {
+    await this.refreshSlashCommands()
+    return this.listSlashCommands()
+  }
+
+  private async refreshSlashCommands(): Promise<void> {
+    this.slashCommandRegistry = await loadSlashCommandsForSdk(this.cwd)
+    this.slashCommandInfos = listSlashCommandsFromState(this.appStateStore.getState(), this.slashCommandRegistry)
   }
 
   listMcpServers(): McpServerStatus[] {
