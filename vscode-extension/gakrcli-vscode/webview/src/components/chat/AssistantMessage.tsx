@@ -116,14 +116,19 @@ function BlockRenderer({ blocks, blockIndex, renderableBlock, isMessageStreaming
       );
 
     case 'tool_use':
-    case 'server_tool_use':
+    case 'server_tool_use': {
+      const result = getPairedToolResult(blocks, blockIndex);
+      if (!isStreaming && !result) {
+        return null;
+      }
       return (
         <ToolCallBlock
           block={block as ToolUseBlock | ServerToolUseBlock}
           isStreaming={isStreaming}
-          result={getPairedToolResult(blocks, blockIndex)}
+          result={result}
         />
       );
+    }
 
     case 'tool_result':
       return (

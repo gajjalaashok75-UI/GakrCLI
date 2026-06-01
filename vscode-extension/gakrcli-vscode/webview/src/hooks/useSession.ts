@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { vscode } from '../vscode';
 import { removeDeletedSessionFromGroups, removeDeletedSessionFromList } from '../utils/sessionState';
+import { extractUserVisibleText } from '../utils/chatMessageTransforms';
+import type { UserMessage } from '../types/messages';
 
 export interface SessionData {
   id: string;
@@ -49,6 +51,17 @@ export function useSession(): UseSessionReturn {
     const handler = (event: MessageEvent) => {
       const msg = event.data;
       switch (msg.type) {
+        case 'cli_output': {
+          const data = msg.data as Record<string, unknown> | undefined;
+          if (data?.type === 'user' && sessionTitle === 'New Conversation') {
+            const message = data.message as Partial<UserMessage['message']> | undefined;
+            const text = message?.content ? extractUserVisibleText(message.content) : '';
+            if (text) {
+              setSessionTitle(compactTitle(text));
+            }
+          }
+          break;
+        }
         case 'sessionsData': {
           setGroupedSessions(msg.grouped);
           const flat: SessionData[] = msg.grouped.flatMap(
@@ -95,7 +108,7 @@ export function useSession(): UseSessionReturn {
     // Request initial data
     vscode.postMessage({ type: 'get_sessions' });
     return () => window.removeEventListener('message', handler);
-  }, [activeSessionId]);
+  }, [activeSessionId, sessionTitle]);
 
   // Client-side search filtering (instant, no round-trip)
   useEffect(() => {
@@ -144,4 +157,8 @@ export function useSession(): UseSessionReturn {
     newConversation,
     isLoading,
   };
+}
+
+function compactTitle(text: string): string {
+  return text.replace(/\s+/g, ' ').trim().slice(0, 120);
 }
