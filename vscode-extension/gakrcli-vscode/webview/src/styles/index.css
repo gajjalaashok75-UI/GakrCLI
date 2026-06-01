@@ -1340,6 +1340,10 @@ details[open] .thinking-toggle {
   color: var(--app-primary-foreground);
 }
 
+.tool-detail-pre {
+  max-height: 180px;
+}
+
 .tool-result-error {
   border-color: color-mix(in srgb, var(--app-error-foreground) 64%, transparent);
   box-shadow: inset 2px 0 0 var(--app-error-foreground);

@@ -6,6 +6,7 @@ import { AssistantMessage } from './AssistantMessage';
 import { StreamingIndicator } from './StreamingIndicator';
 import { findStreamingAssistantIndex } from '../../utils/messageListState';
 import { shouldShowThinkingIndicator } from '../../utils/messageVisibility';
+import { collectAssistantTurnText, isAssistantTurnEnd } from '../../utils/assistantTurnActions';
 
 interface MessageListProps {
   messages: ChatMessage[];
@@ -56,6 +57,8 @@ export function MessageList({ messages, isStreaming, processState, onEditMessage
                   message={msg}
                   isLatest={index === latestAssistantIndex}
                   isStreaming={isStreaming && index === streamingAssistantIndex}
+                  showActions={isAssistantTurnEnd(messages, index)}
+                  actionContent={collectAssistantTurnText(messages, index)}
                 />
               )}
             </div>
