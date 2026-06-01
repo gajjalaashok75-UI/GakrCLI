@@ -13,7 +13,6 @@ import {
   getDefaultAppState,
   type AppState,
 } from '../../state/AppStateStore.js'
-import { getPluginCommandsState } from '../../state/pluginCommandsStore.js'
 import { createStore, type Store } from '../../state/store.js'
 import {
   getEmptyToolPermissionContext,
@@ -73,6 +72,7 @@ import {
   getSettingsSnapshot,
   getTodoStateFromState,
   loadSlashCommandsForSdk,
+  listPluginCommandsFromStore,
   listModelsFromState,
   listPluginsFromState,
   listProviderProfiles,
@@ -992,7 +992,7 @@ class QueryImpl implements Query {
     const mcpCommands = state.mcp.commands?.map(c => c.name ?? c) ?? []
     const pluginCommands = [
       ...(state.plugins.commands?.map(c => c.name ?? c) ?? []),
-      ...getPluginCommandsState().map(c => c.name ?? c),
+      ...listPluginCommandsFromStore().map(c => c.name ?? c),
     ]
     return [...new Set([...mcpCommands, ...pluginCommands])]
   }
@@ -1256,7 +1256,7 @@ class QueryImpl implements Query {
       ...this.slashCommandRegistry,
       ...(state.mcp.commands ?? []),
       ...(state.plugins.commands ?? []),
-      ...getPluginCommandsState(),
+      ...listPluginCommandsFromStore(),
     ].find(cmd => {
       const name = getCommandName(cmd).replace(/^\/+/, '')
       return name === normalized || cmd.aliases?.some(alias => alias.replace(/^\/+/, '') === normalized)

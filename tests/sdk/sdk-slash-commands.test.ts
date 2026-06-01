@@ -1,9 +1,36 @@
 import { describe, expect, test } from 'bun:test'
 import { getDefaultAppState } from '../../src/state/AppStateStore.js'
-import { listSlashCommandsFromState } from '../../src/entrypoints/sdk/runtime.js'
+import {
+  buildRuntimeState,
+  coerceCommandArray,
+  listSlashCommandsFromState,
+} from '../../src/entrypoints/sdk/runtime.js'
 import type { Command } from '../../src/types/command.js'
 
 describe('SDK slash command metadata', () => {
+  test('treats missing plugin command stores as empty command lists', () => {
+    expect(coerceCommandArray(null)).toEqual([])
+    expect(coerceCommandArray(undefined)).toEqual([])
+    expect(coerceCommandArray({ name: 'not-array' })).toEqual([])
+  })
+
+  test('builds an early runtime snapshot before provider config is initialized', () => {
+    const runtime = buildRuntimeState({
+      sessionId: 'session-early',
+      cwd: process.cwd(),
+      status: 'idle',
+      state: getDefaultAppState(),
+      mcpServers: [],
+      account: { apiKeySource: 'none' },
+      slashCommands: [],
+    })
+
+    expect(runtime.sessionId).toBe('session-early')
+    expect(runtime.status).toBe('idle')
+    expect(Array.isArray(runtime.profiles)).toBe(true)
+    expect(Array.isArray(runtime.models)).toBe(true)
+  })
+
   test('deduplicates registry commands and hides non-user commands', () => {
     const registryCommands = [
       {

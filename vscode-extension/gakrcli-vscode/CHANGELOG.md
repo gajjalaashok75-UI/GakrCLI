@@ -11,6 +11,7 @@ All notable changes to GakrCLI VS Code are documented here.
 - Scoped hover stop controls to the currently streaming assistant response so completed turns keep copy-only actions while a later prompt is running.
 - Kept Fast mode toggles stable by accepting both SDK string states (`on`, `off`, `cooldown`) and object states from runtime snapshots, result messages, and init messages.
 - Preserved the user's Fast mode toggle across turn-level SDK result/init updates and removed hardcoded slash command fallbacks so the menu follows the SDK command registry without duplicate provider aliases.
+- Prevented SDK runtime snapshot failures from surfacing as crashed/connection lost during startup when provider config is not initialized yet or the headless SDK has a stubbed plugin command store.
 - Preferred the local workspace SDK build during source-checkout development while still falling back to the packaged `@gakr-gakr/gakrcli/sdk` dependency.
 
 ### Fixed (2026-05-31)

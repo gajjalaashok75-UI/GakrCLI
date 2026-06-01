@@ -232,6 +232,22 @@ export function sanitizeProfile(profile: ReturnType<typeof readActiveProviderPro
   }
 }
 
+function safeReadActiveProviderProfile(): ReturnType<typeof readActiveProviderProfile> | undefined {
+  try {
+    return readActiveProviderProfile()
+  } catch {
+    return undefined
+  }
+}
+
+function safeReadProviderProfiles(): ReturnType<typeof getProviderProfiles> {
+  try {
+    return getProviderProfiles()
+  } catch {
+    return []
+  }
+}
+
 export function listProviders(): SDKProviderInfo[] {
   return ORDERED_PROVIDER_PRESETS.map((preset: ProviderPreset) => {
     const metadata = getProviderPresetUiMetadata(preset)
@@ -248,30 +264,43 @@ export function listProviders(): SDKProviderInfo[] {
 }
 
 export function listProviderProfiles(): SDKProviderProfileInfo[] {
-  const active = readActiveProviderProfile()
-  return getProviderProfiles().map(profile => ({
+  const active = safeReadActiveProviderProfile()
+  return safeReadProviderProfiles().map(profile => ({
     ...sanitizeProfile(profile)!,
     active: active?.id === profile.id,
   }))
 }
 
 export function getActiveProviderProfile(): SDKProviderProfileInfo | undefined {
-  const active = sanitizeProfile(readActiveProviderProfile())
+  const active = sanitizeProfile(safeReadActiveProviderProfile())
   return active ? { ...active, active: true } : undefined
 }
 
 export function setActiveProviderProfile(profileId: string): SDKMutationResult {
-  const profile = activateProviderProfile(profileId)
-  if (!profile) {
-    return { success: false, message: `Provider profile not found: ${profileId}` }
+  try {
+    const profile = activateProviderProfile(profileId)
+    if (!profile) {
+      return { success: false, message: `Provider profile not found: ${profileId}` }
+    }
+    return { success: true, profile: { ...sanitizeProfile(profile), active: true } }
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : String(error),
+    }
   }
-  return { success: true, profile: { ...sanitizeProfile(profile), active: true } }
 }
 
 export function listModelsFromState(state: AppState): SDKModelInfo[] {
-  const activeProfile = readActiveProviderProfile()
+  const activeProfile = safeReadActiveProviderProfile()
   if (activeProfile) {
-    const options = getProfileModelOptions(activeProfile)
+    const options = (() => {
+      try {
+        return getProfileModelOptions(activeProfile)
+      } catch {
+        return []
+      }
+    })()
     return options.map(option => ({
       value: option.value,
       displayName: option.label ?? option.value,
@@ -326,7 +355,7 @@ export function listSlashCommandsFromState(
     ...commandsFromRegistry,
     ...(state.mcp.commands ?? []),
     ...(state.plugins.commands ?? []),
-    ...getPluginCommandsState(),
+    ...listPluginCommandsFromStore(),
   ]
   const seen = new Set<string>()
   const result: SDKSlashCommandInfo[] = []
@@ -345,6 +374,22 @@ export function listSlashCommandsFromState(
   }
 
   return result
+}
+
+export function coerceCommandArray(value: unknown): Command[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is Command => Boolean(item) && typeof item === 'object' && typeof (item as Command).name === 'string')
+    : []
+}
+
+export function listPluginCommandsFromStore(): Command[] {
+  try {
+    const readPluginCommands = getPluginCommandsState as unknown
+    if (typeof readPluginCommands !== 'function') return []
+    return coerceCommandArray(readPluginCommands())
+  } catch {
+    return []
+  }
 }
 
 export function commandToInfo(command: Command): SDKSlashCommandInfo {
@@ -463,10 +508,17 @@ export function usageSummaryFromResult(message: any): SDKUsageSummary | undefine
 }
 
 export function applyModelToProfile(model: string): SDKMutationResult {
-  const profile = persistActiveProviderProfileModel(model)
-  return profile
-    ? { success: true, profile: { ...sanitizeProfile(profile), active: true } }
-    : { success: false, message: 'No active provider profile accepted the model update' }
+  try {
+    const profile = persistActiveProviderProfileModel(model)
+    return profile
+      ? { success: true, profile: { ...sanitizeProfile(profile), active: true } }
+      : { success: false, message: 'No active provider profile accepted the model update' }
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : String(error),
+    }
+  }
 }
 
 export function buildRuntimeState(input: {
