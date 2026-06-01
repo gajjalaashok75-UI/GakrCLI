@@ -90,16 +90,47 @@ export class SessionTracker implements vscode.Disposable {
   /** Scan all JSONL files in the current workspace's project directory. */
   async scanAllSessions(): Promise<void> {
     const projectDir = this.getProjectDirForWorkspace();
-    if (!projectDir) {
-      return;
-    }
-    const projectPath = path.join(this.getProjectsDir(), projectDir);
-    if (!fs.existsSync(projectPath)) {
+    const workspaceRoots = this.getWorkspaceRoots();
+    if (!projectDir || workspaceRoots.length === 0) {
       return;
     }
 
-    const files = fs.readdirSync(projectPath).filter(f => f.endsWith('.jsonl'));
-    await Promise.all(files.map(f => this.parseSessionFile(path.join(projectPath, f))));
+    this.sessions.clear();
+    const projectsDir = this.getProjectsDir();
+    const expectedProjectPath = path.join(projectsDir, projectDir);
+    const candidateDirs = new Map<string, boolean>();
+    if (fs.existsSync(expectedProjectPath)) {
+      candidateDirs.set(expectedProjectPath, false);
+    }
+
+    // SDK sessions created before the in-process transcript pointer is reset can
+    // land under VS Code's process cwd. Recover those by scanning sibling
+    // project dirs and keeping only transcripts whose recorded cwd matches the
+    // active workspace.
+    if (fs.existsSync(projectsDir)) {
+      for (const entry of fs.readdirSync(projectsDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const dirPath = path.join(projectsDir, entry.name);
+        if (!candidateDirs.has(dirPath)) {
+          candidateDirs.set(dirPath, true);
+        }
+      }
+    }
+
+    const parseTasks: Promise<void>[] = [];
+    for (const [dirPath, requireWorkspaceMatch] of candidateDirs) {
+      let files: string[] = [];
+      try {
+        files = fs.readdirSync(dirPath).filter(f => f.endsWith('.jsonl'));
+      } catch {
+        continue;
+      }
+      parseTasks.push(...files.map(f =>
+        this.parseSessionFile(path.join(dirPath, f), { requireWorkspaceMatch }),
+      ));
+    }
+
+    await Promise.all(parseTasks);
     this._onSessionsChanged.fire(this.getSessionList());
   }
 
@@ -107,7 +138,10 @@ export class SessionTracker implements vscode.Disposable {
    * Parse a single JSONL file to extract session metadata.
    * Uses readline to stream line-by-line (never loads entire file into memory).
    */
-  async parseSessionFile(filePath: string): Promise<void> {
+  async parseSessionFile(
+    filePath: string,
+    options: { requireWorkspaceMatch?: boolean } = {},
+  ): Promise<void> {
     const filename = path.basename(filePath, '.jsonl');
     const projectDir = path.basename(path.dirname(filePath));
 
@@ -217,6 +251,10 @@ export class SessionTracker implements vscode.Disposable {
       return; // Empty or completely unparseable file
     }
 
+    if (options.requireWorkspaceMatch && !this.isWorkspaceSession(cwd)) {
+      return;
+    }
+
     this.sessions.set(filename, {
       id: filename,
       title: title || fallbackTitle || 'Untitled Session',
@@ -229,6 +267,26 @@ export class SessionTracker implements vscode.Disposable {
       cwd,
       gitBranch,
     });
+  }
+
+  private getWorkspaceRoots(): string[] {
+    return (vscode.workspace.workspaceFolders ?? [])
+      .map(folder => this.normalizeWorkspacePath(folder.uri.fsPath))
+      .filter((root): root is string => Boolean(root));
+  }
+
+  private isWorkspaceSession(cwd: string): boolean {
+    if (!cwd) {
+      return false;
+    }
+    const normalizedCwd = this.normalizeWorkspacePath(cwd);
+    return this.getWorkspaceRoots().some(root =>
+      normalizedCwd === root || normalizedCwd.startsWith(root + path.sep),
+    );
+  }
+
+  private normalizeWorkspacePath(value: string): string {
+    return path.resolve(value).toLowerCase();
   }
 
   /** Watch for new/changed/deleted JSONL files in the project directory. */

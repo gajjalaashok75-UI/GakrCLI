@@ -908,6 +908,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Handle get sessions request
   webviewManager.onMessage('get_sessions', async (_message, panelId) => {
     output.info('[Webview] get_sessions');
+    await sessionTracker.scanAllSessions();
     const grouped = sessionTracker.getGroupedSessions();
     const payload = {
       type: 'sessionsData',

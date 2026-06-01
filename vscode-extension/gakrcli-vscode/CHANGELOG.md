@@ -4,6 +4,13 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ## [Unreleased]
 
+### Fixed (2026-06-01)
+
+- Recovered today's sessions when SDK transcripts were written under VS Code's process directory by rescanning project stores and matching each JSONL file's recorded `cwd` to the active workspace.
+- Routed SDK tool permission checks through an explicit `canUseTool` bridge so `AskUserQuestion` submissions resolve with `updatedInput.answers` instead of falling through to the SDK default denial.
+- Kept Fast mode toggles stable by accepting both SDK string states (`on`, `off`, `cooldown`) and object states from runtime snapshots, result messages, and init messages.
+- Preferred the local workspace SDK build during source-checkout development while still falling back to the packaged `@gakr-gakr/gakrcli/sdk` dependency.
+
 ### Fixed (2026-05-31)
 
 - Restored result entries during resumed chat replay so per-turn completion text remains attached after loading session history.

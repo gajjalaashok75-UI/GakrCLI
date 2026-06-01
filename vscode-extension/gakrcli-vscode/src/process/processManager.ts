@@ -20,6 +20,10 @@ import type {
   SDKPermissionRequestMessage,
   PermissionResult as SDKPermissionResult,
 } from '@gakr-gakr/gakrcli/sdk';
+import { existsSync, readFileSync } from 'fs';
+import * as path from 'path';
+import { pathToFileURL } from 'url';
+import { randomUUID } from 'crypto';
 
 // ============================================================================
 // Types
@@ -134,11 +138,32 @@ class AsyncPromptQueue implements AsyncIterable<QueuedPrompt> {
 
 class SdkResponseTransport {
   private readonly requestToToolUse = new Map<string, string>();
+  private readonly pendingDecisions = new Map<string, {
+    resolve: (decision: SDKPermissionResult) => void;
+    reject: (error: Error) => void;
+    timeout: NodeJS.Timeout;
+  }>();
 
   constructor(private readonly respond: (toolUseId: string, decision: SDKPermissionResult) => void) {}
 
   remember(requestId: string, toolUseId: string): void {
     this.requestToToolUse.set(requestId, toolUseId);
+  }
+
+  waitForDecision(
+    requestId: string,
+    toolUseId: string,
+    timeoutMs = 300_000,
+  ): Promise<SDKPermissionResult> {
+    this.remember(requestId, toolUseId);
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingDecisions.delete(requestId);
+        this.requestToToolUse.delete(requestId);
+        reject(new Error(`Permission request timed out for ${toolUseId}`));
+      }, timeoutMs);
+      this.pendingDecisions.set(requestId, { resolve, reject, timeout });
+    });
   }
 
   write(message: unknown): void {
@@ -166,22 +191,39 @@ class SdkResponseTransport {
 
     this.requestToToolUse.delete(requestId);
     if (msg.response.subtype === 'error') {
-      this.respond(toolUseId, {
+      const decision = {
         behavior: 'deny',
         message: msg.response.error ?? 'Permission request failed',
         toolUseID: toolUseId,
-      });
+      } as SDKPermissionResult;
+      this.resolvePendingDecision(requestId, decision);
+      this.respond(toolUseId, decision);
       return;
     }
 
     const decision = msg.response.response;
     if (decision) {
-      this.respond(toolUseId, decision as unknown as SDKPermissionResult);
+      const sdkDecision = decision as unknown as SDKPermissionResult;
+      this.resolvePendingDecision(requestId, sdkDecision);
+      this.respond(toolUseId, sdkDecision);
     }
   }
 
   dispose(): void {
+    for (const pending of this.pendingDecisions.values()) {
+      clearTimeout(pending.timeout);
+      pending.reject(new Error('SDK response transport disposed'));
+    }
+    this.pendingDecisions.clear();
     this.requestToToolUse.clear();
+  }
+
+  private resolvePendingDecision(requestId: string, decision: SDKPermissionResult): void {
+    const pending = this.pendingDecisions.get(requestId);
+    if (!pending) return;
+    clearTimeout(pending.timeout);
+    this.pendingDecisions.delete(requestId);
+    pending.resolve(decision);
   }
 }
 
@@ -199,6 +241,11 @@ async function loadSdkModule(): Promise<SdkModule> {
 }
 
 async function importSdkModule(): Promise<SdkModule> {
+  const workspaceSdk = await importWorkspaceSdkModule();
+  if (workspaceSdk) {
+    return workspaceSdk;
+  }
+
   try {
     return await import('@gakr-gakr/gakrcli/sdk');
   } catch (error) {
@@ -207,6 +254,41 @@ async function importSdkModule(): Promise<SdkModule> {
       `Unable to load @gakr-gakr/gakrcli/sdk from the extension dependencies: ${message}. ` +
         'Run npm install in the extension project before development, and package the extension with production dependencies.',
     );
+  }
+}
+
+async function importWorkspaceSdkModule(): Promise<SdkModule | undefined> {
+  const explicitSdkPath = process.env.GAKRCLI_VSCODE_SDK_PATH;
+  const baseDir = typeof __dirname === 'string' ? __dirname : process.cwd();
+  const candidateRoots = [
+    path.resolve(baseDir, '..', '..', '..'),
+    path.resolve(baseDir, '..', '..', '..', '..'),
+    process.cwd(),
+  ];
+  const candidates = [
+    ...(explicitSdkPath ? [{ file: explicitSdkPath, explicit: true }] : []),
+    ...candidateRoots.map(root => ({ file: path.join(root, 'dist', 'sdk.mjs'), explicit: false })),
+  ];
+
+  for (const candidate of candidates) {
+    if (!existsSync(candidate.file)) continue;
+    if (!candidate.explicit && !isGakrcliWorkspaceSdk(candidate.file)) continue;
+    try {
+      return await import(pathToFileURL(candidate.file).href) as SdkModule;
+    } catch {
+      // Fall back to the extension dependency if the local workspace build is stale.
+    }
+  }
+  return undefined;
+}
+
+function isGakrcliWorkspaceSdk(candidate: string): boolean {
+  try {
+    const packageJsonPath = path.join(path.dirname(path.dirname(candidate)), 'package.json');
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as { name?: string };
+    return packageJson.name === '@gakr-gakr/gakrcli';
+  } catch {
+    return false;
   }
 }
 
@@ -582,6 +664,8 @@ export class ProcessManager {
       abortController: this.abortController,
       env: this.buildEnvOverrides(),
       mcpServers: Object.keys(mcpServers).length > 0 ? mcpServers : undefined,
+      canUseTool: (toolName, input, context) =>
+        this.requestToolPermission(toolName, input, context?.toolUseID),
       onPermissionRequest: (message) => this.handlePermissionRequest(message),
       stderr: (line) => this.emitStderr(String(line)),
     };
@@ -764,6 +848,42 @@ export class ProcessManager {
     }
 
     void this.router?.handleControlRequest(controlRequest);
+  }
+
+  private async requestToolPermission(
+    toolName: string,
+    input: unknown,
+    toolUseId?: string,
+  ): Promise<SDKPermissionResult> {
+    const effectiveToolUseId = toolUseId ?? randomUUID();
+    const requestId = randomUUID();
+    const controlRequest: SDKControlRequest = {
+      type: 'control_request',
+      request_id: requestId,
+      request: {
+        subtype: 'can_use_tool',
+        tool_name: toolName,
+        input: input as Record<string, unknown>,
+        tool_use_id: effectiveToolUseId,
+      },
+    };
+    const decisionPromise = this.responseTransport?.waitForDecision(requestId, effectiveToolUseId);
+
+    for (const cb of this.messageCallbacks) {
+      cb(controlRequest as StdoutMessage);
+    }
+
+    void this.router?.handleControlRequest(controlRequest);
+
+    if (!decisionPromise) {
+      return {
+        behavior: 'deny',
+        message: 'Permission transport unavailable',
+        toolUseID: effectiveToolUseId,
+      } as SDKPermissionResult;
+    }
+
+    return decisionPromise;
   }
 
   private emptyContextUsage(): Record<string, unknown> {
