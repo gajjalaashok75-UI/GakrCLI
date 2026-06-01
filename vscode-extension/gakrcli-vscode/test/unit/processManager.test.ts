@@ -274,6 +274,49 @@ describe('ProcessManager SDK mode', () => {
     });
   });
 
+  it('provides a canUseTool callback that resolves through extension permission handlers', async () => {
+    const handler = vi.fn().mockResolvedValue({
+      behavior: 'allow',
+      updatedInput: {
+        questions: [{ question: 'Pick one?', options: [] }],
+        answers: { 'Pick one?': 'Yes' },
+      },
+      toolUseID: 'tool-ask',
+    });
+    manager.registerControlHandler('can_use_tool', handler);
+
+    await manager.spawn();
+    const canUseTool = capturedParams!.options.canUseTool as (
+      name: string,
+      input: unknown,
+      options?: { toolUseID?: string },
+    ) => Promise<unknown>;
+
+    const result = await canUseTool(
+      'AskUserQuestion',
+      { questions: [{ question: 'Pick one?', options: [] }] },
+      { toolUseID: 'tool-ask' },
+    );
+
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subtype: 'can_use_tool',
+        tool_name: 'AskUserQuestion',
+        tool_use_id: 'tool-ask',
+      }),
+      expect.any(AbortSignal),
+      expect.any(String),
+    );
+    expect(result).toEqual({
+      behavior: 'allow',
+      updatedInput: {
+        questions: [{ question: 'Pick one?', options: [] }],
+        answers: { 'Pick one?': 'Yes' },
+      },
+      toolUseID: 'tool-ask',
+    });
+  });
+
   it('broadcasts SDK messages and tracks session id updates', async () => {
     const onMessage = vi.fn();
     manager.onMessage(onMessage);

@@ -23,6 +23,7 @@ import {
   normalizeTextContentBlock,
   stripInternalTextWrappers,
 } from '../utils/chatMessageTransforms';
+import { normalizeFastModeState } from '../utils/fastModeState';
 
 const EMPTY_COST: SessionCost = {
   totalCostUSD: 0,
@@ -459,15 +460,12 @@ export function useChat() {
         const runtime = data.runtime && typeof data.runtime === 'object'
           ? data.runtime as Record<string, unknown>
           : {};
-        const runtimeFastMode = runtime.fastModeState && typeof runtime.fastModeState === 'object'
-          ? runtime.fastModeState as Record<string, unknown>
-          : {};
+        const runtimeFastMode = runtime.fastModeState;
 
-        if (typeof current.fastMode === 'boolean' || typeof runtimeFastMode.enabled === 'boolean') {
-          setFastModeState({
-            enabled: (runtimeFastMode.enabled as boolean | undefined) ?? (current.fastMode as boolean | undefined) ?? false,
-            canToggle: (runtimeFastMode.canToggle as boolean | undefined) ?? true,
-          });
+        if (typeof current.fastMode === 'boolean' || runtimeFastMode !== undefined) {
+          setFastModeState((previous) =>
+            normalizeFastModeState(runtimeFastMode, normalizeFastModeState(current.fastMode, previous)),
+          );
         }
 
         if (typeof current.model === 'string' && current.model.trim()) {
@@ -514,11 +512,7 @@ export function useChat() {
             {
               const resultAny = msg as Record<string, unknown>;
               if (resultAny.fast_mode_state) {
-                const fms = resultAny.fast_mode_state as Record<string, unknown>;
-                setFastModeState({
-                  enabled: (fms.enabled as boolean) ?? false,
-                  canToggle: (fms.canToggle as boolean) ?? true,
-                });
+                setFastModeState((previous) => normalizeFastModeState(resultAny.fast_mode_state, previous));
               }
               if (typeof resultAny.effort === 'string') {
                 setEffortLevel(resultAny.effort);
@@ -598,11 +592,7 @@ export function useChat() {
                 {
                   const initAny = msg as Record<string, unknown>;
                   if (initAny.fast_mode_state) {
-                    const fms = initAny.fast_mode_state as Record<string, unknown>;
-                    setFastModeState({
-                      enabled: (fms.enabled as boolean) ?? false,
-                      canToggle: (fms.canToggle as boolean) ?? true,
-                    });
+                    setFastModeState((previous) => normalizeFastModeState(initAny.fast_mode_state, previous));
                   }
                   if (Array.isArray(initAny.models)) {
                     setAvailableModels(

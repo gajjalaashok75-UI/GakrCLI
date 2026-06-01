@@ -229,7 +229,8 @@ export function buildPermissionContext(options: PermissionContextOptions): ToolP
  *
  * The flow:
  * 1. QueryEngine calls canUseTool(tool, input, ..., toolUseID, forceDecision)
- * 2. If forceDecision is set, honor it immediately
+ * 2. If forceDecision is a final allow/deny, honor it immediately. Forced
+ *    ask decisions still go through the host callback in headless SDK mode.
  * 3. If user canUseTool callback exists, delegate to it
  * 4. Otherwise, emit permission_request message and await external resolution
  *
@@ -258,15 +259,21 @@ export function createExternalCanUseTool(
   return async (tool, input, toolUseContext, assistantMessage, toolUseID, forceDecision): Promise<PermissionDecision> => {
     // Cast input to ensure type compatibility with PermissionDecision
     const typedInput = input as Record<string, unknown>
-    // If a forced decision was passed in, honor it
-    if (forceDecision) return forceDecision
+    // If a forced final decision was passed in, honor it. Forced ask
+    // decisions still need the SDK host to collect a real user decision;
+    // returning "ask" directly from headless mode is treated as denial by the
+    // tool runner and never reaches the host UI.
+    if (forceDecision && forceDecision.behavior !== 'ask') return forceDecision
+    const permissionInput = forceDecision?.updatedInput
+      ? forceDecision.updatedInput as Record<string, unknown>
+      : typedInput
 
     // If the user provided a synchronous canUseTool callback, use it
     if (userFn) {
       try {
-        const result = await userFn(tool.name, typedInput, { toolUseID })
+        const result = await userFn(tool.name, permissionInput, { toolUseID })
         if (result.behavior === 'allow') {
-          return { behavior: 'allow' as const, updatedInput: (result.updatedInput as Record<string, unknown> | undefined) ?? typedInput }
+          return { behavior: 'allow' as const, updatedInput: (result.updatedInput as Record<string, unknown> | undefined) ?? permissionInput }
         }
         return {
           behavior: 'deny' as const,
@@ -302,7 +309,7 @@ export function createExternalCanUseTool(
           request_id: requestId,
           tool_name: tool.name,
           tool_use_id: toolUseID,
-          input: input as Record<string, unknown>,
+          input: permissionInput,
           uuid: messageUuid,
           session_id: resolveSessionId(),
         })
@@ -367,7 +374,7 @@ export function createExternalCanUseTool(
     }
 
     // No callback or no toolUseID — fall through to default permission logic
-    return fallback(tool, input, toolUseContext, assistantMessage, toolUseID, forceDecision)
+    return fallback(tool, permissionInput, toolUseContext, assistantMessage, toolUseID, forceDecision)
   }
 }
 
@@ -565,7 +572,7 @@ export function createDefaultCanUseTool(
 ): CanUseToolFn {
   const log = logger ?? defaultLogger
   return async (tool, input, _toolUseContext, _assistantMessage, _toolUseID, forceDecision) => {
-    if (forceDecision) return forceDecision
+    if (forceDecision && forceDecision.behavior !== 'ask') return forceDecision
     if (!warnedDefaultPermissions) {
       warnedDefaultPermissions = true
       log.warn(

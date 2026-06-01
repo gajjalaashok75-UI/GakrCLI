@@ -143,7 +143,7 @@ All changes follow the reference implementation from `references/` and are adapt
 - ✅ web/dist/ and web/*.tsbuildinfo ignored in .gitignore
 - ✅ All upstream project-name references replaced with "gakrcli"
 - ✅ All github links and branding preserved
-- ✅ Version numbers updated to match current package (v0.5.3)
+- ✅ Version numbers updated to match current package (v0.5.5)
 
 ## Impact Assessment
 

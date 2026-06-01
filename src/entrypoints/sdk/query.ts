@@ -85,6 +85,7 @@ import {
   fileHistoryGetDiffStats,
   fileHistoryRewind,
 } from '../../utils/fileHistory.js'
+import { resetSessionFilePointer } from '../../utils/sessionStorage.js'
 import type { MCPServerConnection } from '../../services/mcp/types.js'
 import {
   acquireEnvMutex,
@@ -754,6 +755,7 @@ class QueryImpl implements Query {
               effectiveSessionId = getSessionId()
             }
             switchSession(effectiveSessionId as SessionId, resolvedTranscriptDir)
+            await resetSessionFilePointer()
 
             // Sync resolved sessionId and transcript dir back to authoritative fields
             self._sessionId = effectiveSessionId

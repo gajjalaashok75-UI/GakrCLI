@@ -5,8 +5,14 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [released - 0.5.5]
+## [unreleased - 0.5.5]
 
+### Fixed (2026-06-01)
+- **SDK Headless Permission Flow**: Kept forced `ask` decisions on the SDK host-permission path instead of returning an unresolved ask decision to the tool runner, so interactive tools such as `AskUserQuestion` can receive webview answers through `canUseTool`/`onPermissionRequest`.
+- **SDK Session Transcript Routing**: Reset the SDK transcript file pointer immediately after session resolution so new in-process VS Code turns write under the active workspace session directory instead of reusing a stale process-cwd transcript path.
+- **VS Code Session History And Fast Mode**: Recovered misplaced SDK transcripts by matching recorded JSONL `cwd` to the open workspace, refreshed history on demand, normalized Fast mode from both SDK string and object states, and routed extension permission decisions through an explicit SDK `canUseTool` callback.
+
+## [released - 0.5.4]
 ### Fixed (2026-05-31)
 - **VS Code Resume And Fast Mode State**: Restored result records during resumed chat replay so per-turn completion text survives session reloads, and synced Fast mode from SDK runtime settings snapshots after webview toggles.
 - **VS Code Clarification Dialog**: Changed AskUserQuestion/clarification prompts to a one-question stepper with scrollable content and pinned Skip, Back, Next, and Submit actions.

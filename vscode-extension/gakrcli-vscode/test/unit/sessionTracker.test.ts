@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import * as vscode from 'vscode';
 import { SessionTracker, sanitizeProjectPathForSessions } from '../../src/session/sessionTracker';
 
 describe('SessionTracker project path sanitizer', () => {
@@ -278,6 +279,61 @@ describe('SessionTracker — JSONL parsing', () => {
       }
     }
     expect(fallbackTitle).toBe('Now fix the bug');
+  });
+});
+
+describe('SessionTracker — workspace recovery scan', () => {
+  const testDir = path.join(os.tmpdir(), 'gakrcli-session-recovery-test-' + Date.now());
+  const workspaceRoot = path.join(testDir, 'workspace');
+  const configDir = path.join(testDir, 'config');
+  const projectsDir = path.join(configDir, 'projects');
+  const oldConfigDir = process.env.GAKR_CONFIG_DIR;
+  const oldWorkspaceFolders = vscode.workspace.workspaceFolders;
+
+  beforeEach(() => {
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+    fs.mkdirSync(projectsDir, { recursive: true });
+    process.env.GAKR_CONFIG_DIR = configDir;
+    (vscode.workspace as unknown as { workspaceFolders: unknown[] }).workspaceFolders = [
+      { uri: { fsPath: workspaceRoot } },
+    ];
+  });
+
+  afterEach(() => {
+    if (oldConfigDir === undefined) {
+      delete process.env.GAKR_CONFIG_DIR;
+    } else {
+      process.env.GAKR_CONFIG_DIR = oldConfigDir;
+    }
+    (vscode.workspace as unknown as { workspaceFolders: unknown[] }).workspaceFolders = oldWorkspaceFolders;
+    fs.rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it('finds SDK transcripts written under a non-workspace project dir when their cwd matches the workspace', async () => {
+    const misplacedDir = path.join(projectsDir, sanitizeProjectPathForSessions('C:\\Users\\gajja\\AppData\\Local\\Programs\\Microsoft VS Code'));
+    fs.mkdirSync(misplacedDir, { recursive: true });
+    fs.writeFileSync(path.join(misplacedDir, 'today-session.jsonl'), [
+      JSON.stringify({
+        type: 'user',
+        message: { role: 'user', content: 'Today prompt' },
+        timestamp: new Date().toISOString(),
+        isMeta: false,
+        cwd: workspaceRoot,
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'Done' }], model: 'gpt-5.4' },
+        timestamp: new Date().toISOString(),
+        cwd: workspaceRoot,
+      }),
+    ].join('\n') + '\n');
+
+    const tracker = new SessionTracker();
+    await tracker.scanAllSessions();
+
+    expect(tracker.getSession('today-session')?.title).toBe('Today prompt');
+    expect(tracker.getGroupedSessions()[0]?.group).toBe('Today');
+    tracker.dispose();
   });
 });
 
