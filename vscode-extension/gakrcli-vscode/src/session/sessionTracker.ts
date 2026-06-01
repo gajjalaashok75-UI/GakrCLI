@@ -55,6 +55,7 @@ export interface GroupedSessions {
 export class SessionTracker implements vscode.Disposable {
   private sessions: Map<string, SessionInfo> = new Map();
   private watcher: vscode.FileSystemWatcher | undefined;
+  private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly _onSessionsChanged = new vscode.EventEmitter<SessionInfo[]>();
   public readonly onSessionsChanged = this._onSessionsChanged.event;
   private disposables: vscode.Disposable[] = [];
@@ -213,6 +214,7 @@ export class SessionTracker implements vscode.Disposable {
               // Skip command/caveat messages as fallback titles
               if (
                 text &&
+                !text.startsWith('<command-message>') &&
                 !text.startsWith('<command-name>') &&
                 !text.startsWith('<local-command')
               ) {
@@ -289,32 +291,34 @@ export class SessionTracker implements vscode.Disposable {
     return path.resolve(value).toLowerCase();
   }
 
-  /** Watch for new/changed/deleted JSONL files in the project directory. */
+  /** Watch for new/changed/deleted JSONL files in all GakrCLI project dirs. */
   private startWatching(): void {
-    const projectDir = this.getProjectDirForWorkspace();
-    if (!projectDir) {
-      return;
-    }
+    if (this.getWorkspaceRoots().length === 0) return;
+    const projectsDir = this.getProjectsDir();
     const pattern = new vscode.RelativePattern(
-      vscode.Uri.file(path.join(this.getProjectsDir(), projectDir)),
-      '*.jsonl',
+      vscode.Uri.file(projectsDir),
+      '*/*.jsonl',
     );
     this.watcher = vscode.workspace.createFileSystemWatcher(pattern);
 
-    this.watcher.onDidCreate(async (uri) => {
-      await this.parseSessionFile(uri.fsPath);
-      this._onSessionsChanged.fire(this.getSessionList());
-    });
-    this.watcher.onDidChange(async (uri) => {
-      await this.parseSessionFile(uri.fsPath);
-      this._onSessionsChanged.fire(this.getSessionList());
-    });
+    this.watcher.onDidCreate(() => this.scheduleRefresh());
+    this.watcher.onDidChange(() => this.scheduleRefresh());
     this.watcher.onDidDelete((uri) => {
       this.sessions.delete(path.basename(uri.fsPath, '.jsonl'));
-      this._onSessionsChanged.fire(this.getSessionList());
+      this.scheduleRefresh();
     });
 
     this.disposables.push(this.watcher);
+  }
+
+  private scheduleRefresh(): void {
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+    }
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = undefined;
+      void this.scanAllSessions();
+    }, 250);
   }
 
   /** All sessions sorted by timestamp descending. */
@@ -474,6 +478,10 @@ export class SessionTracker implements vscode.Disposable {
   }
 
   dispose(): void {
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = undefined;
+    }
     for (const d of this.disposables) {
       d.dispose();
     }

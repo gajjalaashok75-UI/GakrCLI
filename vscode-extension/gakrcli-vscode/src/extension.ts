@@ -74,23 +74,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Broadcast session changes to all webviews
   sessionTracker.onSessionsChanged(() => {
-    const grouped = sessionTracker.getGroupedSessions();
-    webviewManager!.broadcast({
-      type: 'sessionsData',
-      grouped: grouped.map((g) => ({
-        group: g.group,
-        sessions: g.sessions.map((s) => ({
-          id: s.id,
-          title: s.title,
-          model: s.model,
-          timestamp: s.timestamp.toISOString(),
-          createdAt: s.createdAt.toISOString(),
-          messageCount: s.messageCount,
-          cwd: s.cwd,
-          gitBranch: s.gitBranch,
-        })),
-      })),
-    } as never);
+    webviewManager!.broadcast(sessionGroupsPayload() as never);
   });
 
   // Check if secondary sidebar is supported (VS Code 1.106+)
@@ -190,6 +174,186 @@ export function activate(context: vscode.ExtensionContext) {
   let crashRestartCount = 0;
   let lastCrashTime = 0;
   let currentSessionId: string | undefined;
+  let activeSessionTitle: string | undefined;
+  let activeSessionTitleIsFallback = false;
+  let sessionRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+
+  context.subscriptions.push({
+    dispose: () => {
+      if (sessionRefreshTimer) {
+        clearTimeout(sessionRefreshTimer);
+        sessionRefreshTimer = undefined;
+      }
+    },
+  });
+
+  function sessionGroupsPayload() {
+    const grouped = sessionTracker.getGroupedSessions();
+    return {
+      type: 'sessionsData',
+      grouped: grouped.map((g) => ({
+        group: g.group,
+        sessions: g.sessions.map((s) => ({
+          id: s.id,
+          title: s.title,
+          model: s.model,
+          timestamp: s.timestamp.toISOString(),
+          createdAt: s.createdAt.toISOString(),
+          messageCount: s.messageCount,
+          cwd: s.cwd,
+          gitBranch: s.gitBranch,
+        })),
+      })),
+    };
+  }
+
+  async function refreshSessions(panelId?: string): Promise<void> {
+    await sessionTracker.scanAllSessions();
+    const payload = sessionGroupsPayload();
+    if (panelId) {
+      webviewManager!.sendToPanel(panelId, payload as never);
+    } else {
+      webviewManager!.broadcast(payload as never);
+    }
+  }
+
+  function scheduleSessionRefresh(delayMs = 350): void {
+    if (sessionRefreshTimer) {
+      clearTimeout(sessionRefreshTimer);
+    }
+    sessionRefreshTimer = setTimeout(() => {
+      sessionRefreshTimer = undefined;
+      refreshSessions().catch((err) => {
+        output.warn(`[GakrCLI] Failed to refresh sessions: ${err instanceof Error ? err.message : String(err)}`);
+      });
+    }, delayMs);
+  }
+
+  function compactTitleText(text: string): string {
+    return text.replace(/\s+/g, ' ').trim().slice(0, 120);
+  }
+
+  function titleFromCliUserMessage(msgObj: Record<string, unknown>): string | undefined {
+    if (msgObj.isSynthetic || msgObj.isMeta) return undefined;
+    const message = msgObj.message as Record<string, unknown> | undefined;
+    const content = message?.content;
+    let text = '';
+    if (typeof content === 'string') {
+      text = content;
+    } else if (Array.isArray(content)) {
+      const textBlock = content.find((block) =>
+        Boolean(block) &&
+        typeof block === 'object' &&
+        (block as Record<string, unknown>).type === 'text' &&
+        typeof (block as Record<string, unknown>).text === 'string',
+      ) as Record<string, unknown> | undefined;
+      text = typeof textBlock?.text === 'string' ? textBlock.text : '';
+    }
+
+    const title = compactTitleText(text);
+    if (
+      !title ||
+      title.startsWith('<command-message>') ||
+      title.startsWith('<command-name>') ||
+      title.startsWith('<local-command')
+    ) {
+      return undefined;
+    }
+    return title;
+  }
+
+  function publishSessionTitle(sessionId: string, title: string, source: 'fallback' | 'ai' | 'known'): void {
+    const compactTitle = compactTitleText(title);
+    if (!compactTitle) return;
+
+    const isFallback = source === 'fallback';
+    const isNewSession = currentSessionId !== sessionId;
+    if (!isNewSession && isFallback && activeSessionTitle && !activeSessionTitleIsFallback) {
+      return;
+    }
+    if (!isNewSession && isFallback && activeSessionTitle) {
+      return;
+    }
+
+    currentSessionId = sessionId;
+    activeSessionTitle = compactTitle;
+    activeSessionTitleIsFallback = isFallback;
+    sessionTracker.updateSessionTitle(sessionId, compactTitle);
+    webviewManager!.broadcast({
+      type: 'sessionTitleUpdate',
+      sessionId,
+      title: compactTitle,
+    } as never);
+  }
+
+  function handleProcessMessage(msg: unknown): void {
+    output.info(`[CLIâ†’Webview] ${JSON.stringify(msg).substring(0, 300)}`);
+    webviewManager!.broadcast({ type: 'cli_output', data: msg } as never);
+
+    const msgObj = msg as Record<string, unknown>;
+    if (msgObj.type === 'control_cancel_request' && typeof msgObj.request_id === 'string') {
+      permissionHandler.handleCancel(msgObj.request_id);
+      statusBarManager.setPendingPermission(false);
+    }
+
+    if (msgObj.type === 'result' || msgObj.subtype === 'result') {
+      if (!webviewManager!.hasVisibleWebview()) {
+        statusBarManager.setCompletedWhileHidden(true);
+      }
+      scheduleSessionRefresh(250);
+    }
+
+    const sessionId = typeof msgObj.session_id === 'string' ? msgObj.session_id : undefined;
+    if (sessionId && sessionId !== currentSessionId) {
+      currentSessionId = sessionId;
+      const knownSession = sessionTracker.getSession(sessionId);
+      activeSessionTitle = knownSession?.title && knownSession.title !== 'Untitled Session'
+        ? knownSession.title
+        : undefined;
+      activeSessionTitleIsFallback = Boolean(activeSessionTitle);
+      if (activeSessionTitle) {
+        publishSessionTitle(sessionId, activeSessionTitle, 'known');
+      }
+    }
+
+    if (sessionId && msgObj.type === 'user') {
+      const title = titleFromCliUserMessage(msgObj);
+      if (title) {
+        publishSessionTitle(sessionId, title, 'fallback');
+        scheduleSessionRefresh(450);
+      }
+    }
+
+    if (msgObj.type === 'system' && msgObj.subtype === 'ai-title' && typeof msgObj.title === 'string' && sessionId) {
+      publishSessionTitle(sessionId, msgObj.title, 'ai');
+      scheduleSessionRefresh(150);
+    }
+
+    if (msgObj.type === 'assistant' && typeof msgObj.uuid === 'string' && sessionId) {
+      checkpointManager.registerAssistantMessage(msgObj.uuid, sessionId);
+      webviewManager!.broadcast({
+        type: 'checkpoint_state',
+        checkpoints: checkpointManager.getWebviewState(),
+      });
+    }
+
+    if (msgObj.type === 'system' && msgObj.subtype === 'files_persisted' && typeof msgObj.uuid === 'string') {
+      const files = (msgObj.files as Array<{ filename: string; file_id: string }>) ?? [];
+      checkpointManager.markFilesPersisted(msgObj.uuid, files);
+      webviewManager!.broadcast({
+        type: 'checkpoint_state',
+        checkpoints: checkpointManager.getWebviewState(),
+      });
+    }
+
+    if (msgObj.type === 'system' && msgObj.subtype === 'session_state_changed') {
+      const state = msgObj.state as 'idle' | 'running' | 'requires_action';
+      const stateSessionId = msgObj.session_id as string;
+      if (state && stateSessionId) {
+        checkpointManager.handleSessionStateChanged(state, stateSessionId);
+      }
+    }
+  }
 
   /** Map effort level string to max_thinking_tokens value */
   function effortToTokens(level: string): number | null {
@@ -585,59 +749,7 @@ export function activate(context: vscode.ExtensionContext) {
     permissionHandler.setWriteToStdin((msg) => processManager?.ndjsonTransport?.write(msg));
 
     // Forward ALL CLI messages to the webview
-    processManager.onMessage((msg) => {
-      output.info(`[CLI→Webview] ${JSON.stringify(msg).substring(0, 300)}`);
-      webviewManager!.broadcast({ type: 'cli_output', data: msg });
-
-      const msgObj = msg as Record<string, unknown>;
-      if (msgObj.type === 'control_cancel_request' && typeof msgObj.request_id === 'string') {
-        permissionHandler.handleCancel(msgObj.request_id);
-        statusBarManager.setPendingPermission(false);
-      }
-
-      // StatusBar: detect result while panel is hidden → orange dot
-      if (msgObj.type === 'result' || msgObj.subtype === 'result') {
-        if (!webviewManager!.hasVisibleWebview()) {
-          statusBarManager.setCompletedWhileHidden(true);
-        }
-      }
-
-      // Track session ID for auto-restart
-      if (typeof msgObj.session_id === 'string') {
-        currentSessionId = msgObj.session_id;
-      }
-
-      // ai-title: update session tracker so the session list shows the new title
-      if (msgObj.type === 'system' && msgObj.subtype === 'ai-title' && typeof msgObj.title === 'string' && typeof msgObj.session_id === 'string') {
-        sessionTracker.updateSessionTitle(msgObj.session_id, msgObj.title);
-      }
-
-      // --- Checkpoint tracking (Story 10) ---
-      if (msgObj.type === 'assistant' && typeof msgObj.uuid === 'string' && typeof msgObj.session_id === 'string') {
-        checkpointManager.registerAssistantMessage(msgObj.uuid, msgObj.session_id);
-        webviewManager!.broadcast({
-          type: 'checkpoint_state',
-          checkpoints: checkpointManager.getWebviewState(),
-        });
-      }
-
-      if (msgObj.type === 'system' && msgObj.subtype === 'files_persisted' && typeof msgObj.uuid === 'string') {
-        const files = (msgObj.files as Array<{ filename: string; file_id: string }>) ?? [];
-        checkpointManager.markFilesPersisted(msgObj.uuid, files);
-        webviewManager!.broadcast({
-          type: 'checkpoint_state',
-          checkpoints: checkpointManager.getWebviewState(),
-        });
-      }
-
-      if (msgObj.type === 'system' && msgObj.subtype === 'session_state_changed') {
-        const state = msgObj.state as 'idle' | 'running' | 'requires_action';
-        const sessionId = msgObj.session_id as string;
-        if (state && sessionId) {
-          checkpointManager.handleSessionStateChanged(state, sessionId);
-        }
-      }
-    });
+    processManager.onMessage(handleProcessMessage);
 
     processManager.onError((err) => {
       output.error(`[GakrCLI] Error: ${err.message}`);
@@ -898,6 +1010,8 @@ export function activate(context: vscode.ExtensionContext) {
     }
     permissionHandler.cancelAll();
     currentSessionId = undefined;
+    activeSessionTitle = undefined;
+    activeSessionTitleIsFallback = false;
     crashRestartCount = 0;
     checkpointManager.clear();
     webviewManager!.broadcast({ type: 'clearMessages' } as never);
@@ -908,25 +1022,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Handle get sessions request
   webviewManager.onMessage('get_sessions', async (_message, panelId) => {
     output.info('[Webview] get_sessions');
-    await sessionTracker.scanAllSessions();
-    const grouped = sessionTracker.getGroupedSessions();
-    const payload = {
-      type: 'sessionsData',
-      grouped: grouped.map((g) => ({
-        group: g.group,
-        sessions: g.sessions.map((s) => ({
-          id: s.id,
-          title: s.title,
-          model: s.model,
-          timestamp: s.timestamp.toISOString(),
-          createdAt: s.createdAt.toISOString(),
-          messageCount: s.messageCount,
-          cwd: s.cwd,
-          gitBranch: s.gitBranch,
-        })),
-      })),
-    };
-    webviewManager!.sendToPanel(panelId, payload as never);
+    await refreshSessions(panelId);
   });
 
   // Handle resume session
@@ -1014,23 +1110,7 @@ export function activate(context: vscode.ExtensionContext) {
     );
     permissionHandler.setWriteToStdin((msg) => processManager?.ndjsonTransport?.write(msg));
 
-    processManager.onMessage((msg) => {
-      output.info(`[CLI→Webview] ${JSON.stringify(msg).substring(0, 300)}`);
-      webviewManager!.broadcast({ type: 'cli_output', data: msg });
-
-      const msgObj = msg as Record<string, unknown>;
-      if (msgObj.type === 'control_cancel_request' && typeof msgObj.request_id === 'string') {
-        permissionHandler.handleCancel(msgObj.request_id);
-        statusBarManager.setPendingPermission(false);
-      }
-
-      // StatusBar: detect result while panel is hidden → orange dot
-      if (msgObj.type === 'result' || msgObj.subtype === 'result') {
-        if (!webviewManager!.hasVisibleWebview()) {
-          statusBarManager.setCompletedWhileHidden(true);
-        }
-      }
-    });
+    processManager.onMessage(handleProcessMessage);
     processManager.onError((err) => {
       output.error(`[GakrCLI] Error: ${err.message}`);
       webviewManager!.broadcast({ type: 'process_state', state: 'crashed' });
@@ -1079,23 +1159,7 @@ export function activate(context: vscode.ExtensionContext) {
       success: ok,
     } as never);
     if (ok) {
-      const grouped = sessionTracker.getGroupedSessions();
-      webviewManager!.broadcast({
-        type: 'sessionsData',
-        grouped: grouped.map((g) => ({
-          group: g.group,
-          sessions: g.sessions.map((s) => ({
-            id: s.id,
-            title: s.title,
-            model: s.model,
-            timestamp: s.timestamp.toISOString(),
-            createdAt: s.createdAt.toISOString(),
-            messageCount: s.messageCount,
-            cwd: s.cwd,
-            gitBranch: s.gitBranch,
-          })),
-        })),
-      } as never);
+      await refreshSessions();
     }
   });
 

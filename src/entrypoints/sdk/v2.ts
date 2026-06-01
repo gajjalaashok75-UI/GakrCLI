@@ -25,6 +25,7 @@ import {
   readTranscriptForLoad,
   SKIP_PRECOMPACT_THRESHOLD,
 } from '../../utils/sessionStoragePortable.js'
+import { getProjectDir } from '../../utils/sessionStorage.js'
 import { readJSONLFile } from '../../utils/json.js'
 import { stat } from 'fs/promises'
 import {
@@ -66,6 +67,35 @@ import {
   buildConversationChain as buildChain,
   stripExtraFields as stripChainFields,
 } from './transcript.js'
+
+type SdkAsyncContext = {
+  sessionId: SessionId
+  sessionProjectDir: string | null
+  cwd: string
+  originalCwd: string
+  parentSessionId?: SessionId
+}
+
+function iterateWithSdkContext<T>(
+  context: SdkAsyncContext,
+  iterator: AsyncGenerator<T>,
+): AsyncGenerator<T> {
+  return (async function* (): AsyncGenerator<T> {
+    try {
+      while (true) {
+        const next = await runWithSdkContext(context, () => iterator.next())
+        if (next.done) {
+          return next.value
+        }
+        yield next.value
+      }
+    } finally {
+      if (iterator.return) {
+        await runWithSdkContext(context, () => iterator.return(undefined))
+      }
+    }
+  })()
+}
 
 // ============================================================================
 // V2 API Types
@@ -219,6 +249,7 @@ class SDKSessionImpl implements SDKSession {
     if (appStateStore) this._appStateStore = appStateStore
     if (abortController) this._abortController = abortController
     this.mcpServers = options.mcpServers
+    this._sessionProjectDir = getProjectDir(options.cwd)
   }
 
   /** Late-bind the engine (used when session is created before engine). */
@@ -254,8 +285,7 @@ class SDKSessionImpl implements SDKSession {
     }
 
     const self = this
-    const inner = runWithSdkContext(sdkContext, () => {
-      return (async function* (): AsyncGenerator<SDKMessage> {
+    const inner = (async function* (): AsyncGenerator<SDKMessage> {
         await init()
 
         // Load agent definitions once (not on every sendMessage call)
@@ -307,6 +337,7 @@ class SDKSessionImpl implements SDKSession {
         }
 
         // Switch session for transcript writes using session's own resolved dir
+        self._sessionProjectDir ??= getProjectDir(self.options.cwd)
         switchSession(self._sessionId as SessionId, self._sessionProjectDir)
 
         try {
@@ -322,10 +353,9 @@ class SDKSessionImpl implements SDKSession {
           self.timeoutQueue.length = 0
           self.agentFailureQueue.length = 0
         }
-      })()
-    })
+    })()
 
-    yield* inner
+    yield* iterateWithSdkContext(sdkContext, inner)
   }
 
   getMessages(): SDKMessage[] {

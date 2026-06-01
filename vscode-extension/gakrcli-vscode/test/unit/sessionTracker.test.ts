@@ -280,6 +280,29 @@ describe('SessionTracker — JSONL parsing', () => {
     }
     expect(fallbackTitle).toBe('Now fix the bug');
   });
+
+  it('skips command-message envelopes when deriving parsed session titles', async () => {
+    const tracker = new SessionTracker();
+    const filePath = writeJsonl('session-command-envelope', [
+      {
+        type: 'user',
+        message: { role: 'user', content: '<command-message>/provider</command-message> <command-name>/provider</command-name>' },
+        timestamp: '2026-06-01T10:00:00.000Z',
+        isMeta: false,
+      },
+      {
+        type: 'user',
+        message: { role: 'user', content: 'Build a compact settings panel' },
+        timestamp: '2026-06-01T10:00:01.000Z',
+        isMeta: false,
+      },
+    ]);
+
+    await tracker.parseSessionFile(filePath);
+
+    expect(tracker.getSession('session-command-envelope')?.title).toBe('Build a compact settings panel');
+    tracker.dispose();
+  });
 });
 
 describe('SessionTracker — workspace recovery scan', () => {

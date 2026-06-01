@@ -6,6 +6,7 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ### Fixed (2026-06-01)
 
+- Kept active chat titles and today's history fresh by publishing fallback titles from SDK user replay messages, refreshing sessions after user/result events, and watching all GakrCLI project stores instead of only the expected workspace directory.
 - Recovered today's sessions when SDK transcripts were written under VS Code's process directory by rescanning project stores and matching each JSONL file's recorded `cwd` to the active workspace.
 - Routed SDK tool permission checks through an explicit `canUseTool` bridge so `AskUserQuestion` submissions resolve with `updatedInput.answers` instead of falling through to the SDK default denial.
 - Scoped hover stop controls to the currently streaming assistant response so completed turns keep copy-only actions while a later prompt is running.

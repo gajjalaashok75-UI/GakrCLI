@@ -87,7 +87,7 @@ import {
   fileHistoryGetDiffStats,
   fileHistoryRewind,
 } from '../../utils/fileHistory.js'
-import { resetSessionFilePointer } from '../../utils/sessionStorage.js'
+import { getProjectDir, resetSessionFilePointer } from '../../utils/sessionStorage.js'
 import type { MCPServerConnection } from '../../services/mcp/types.js'
 import {
   acquireEnvMutex,
@@ -122,6 +122,35 @@ import {
   buildConversationChain,
   stripExtraFields,
 } from './transcript.js'
+
+type SdkAsyncContext = {
+  sessionId: SessionId
+  sessionProjectDir: string | null
+  cwd: string
+  originalCwd: string
+  parentSessionId?: SessionId
+}
+
+function iterateWithSdkContext<T>(
+  context: SdkAsyncContext,
+  iterator: AsyncGenerator<T>,
+): AsyncGenerator<T> {
+  return (async function* (): AsyncGenerator<T> {
+    try {
+      while (true) {
+        const next = await runWithSdkContext(context, () => iterator.next())
+        if (next.done) {
+          return next.value
+        }
+        yield next.value
+      }
+    } finally {
+      if (iterator.return) {
+        await runWithSdkContext(context, () => iterator.return(undefined))
+      }
+    }
+  })()
+}
 
 // ============================================================================
 // QueryOptions type
@@ -604,8 +633,7 @@ class QueryImpl implements Query {
     }
 
     const self = this
-    const inner = runWithSdkContext(sdkContext, () => {
-      return (async function* (): AsyncGenerator<SDKMessage> {
+    const inner = (async function* (): AsyncGenerator<SDKMessage> {
         // Fast exit: if interrupt()/close() was called before iteration
         // started, skip init entirely — avoids auth/network side-effects.
         if (self.abortController.signal.aborted) return
@@ -761,6 +789,7 @@ class QueryImpl implements Query {
               regenerateSessionId()
               effectiveSessionId = getSessionId()
             }
+            resolvedTranscriptDir ??= getProjectDir(self.cwd)
             switchSession(effectiveSessionId as SessionId, resolvedTranscriptDir)
             await resetSessionFilePointer()
 
@@ -816,10 +845,9 @@ class QueryImpl implements Query {
               releaseEnvMutex()
             }
           }
-      })()
-    })
+    })()
 
-    yield* inner
+    yield* iterateWithSdkContext(sdkContext, inner)
   }
 
   private recordUsageIfResult(message: unknown): void {
