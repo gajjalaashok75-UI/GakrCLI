@@ -6,6 +6,7 @@ import { ContentBlockRouter } from '../blocks/ContentBlockRouter';
 import type { ContentBlock } from '../../types/blocks';
 import { MessageActions } from './MessageActions';
 import { formatTurnCompletion } from '../../utils/turnCompletion';
+import { isThinkingBlock } from '../../utils/messageVisibility';
 
 interface AssistantMessageProps {
   message: ChatMessage;
@@ -84,8 +85,13 @@ interface BlockRendererProps {
 
 function BlockRenderer({ renderableBlock, isMessageStreaming: _isMessageStreaming }: BlockRendererProps) {
   const { block, isStreaming } = renderableBlock;
+  const blockType = (block as { type: string }).type;
 
-  switch (block.type) {
+  if (isThinkingBlock(block)) {
+    return null;
+  }
+
+  switch (blockType) {
     case 'text':
       return (
         <MarkdownRenderer
@@ -110,8 +116,6 @@ function BlockRenderer({ renderableBlock, isMessageStreaming: _isMessageStreamin
         />
       );
 
-    case 'thinking':
-    case 'redacted_thinking':
     case 'image':
     case 'document':
     case 'search_result':
@@ -119,7 +123,6 @@ function BlockRenderer({ renderableBlock, isMessageStreaming: _isMessageStreamin
       return (
         <ContentBlockRouter
           block={block as ContentBlock}
-          showThinkingSummaries={false}
         />
       );
 

@@ -1,17 +1,15 @@
 // webview/src/components/blocks/ContentBlockRouter.tsx
 import React from 'react';
 import type { ContentBlock } from '../../types/blocks';
-import { ThinkingBlockRenderer } from './ThinkingBlockRenderer';
-import { RedactedThinkingBlock } from './RedactedThinkingBlock';
 import { ImageBlockRenderer } from './ImageBlockRenderer';
 import { DocumentBlockRenderer } from './DocumentBlockRenderer';
 import { SearchResultBlock } from './SearchResultBlock';
 import { WebSearchResultBlock } from './WebSearchResultBlock';
 import { ServerToolUseBlock } from './ServerToolUseBlock';
+import { isThinkingBlock } from '../../utils/messageVisibility';
 
 interface ContentBlockRouterProps {
   block: ContentBlock;
-  showThinkingSummaries: boolean;
 }
 
 /**
@@ -22,17 +20,12 @@ interface ContentBlockRouterProps {
  */
 export const ContentBlockRouter: React.FC<ContentBlockRouterProps> = ({
   block,
-  showThinkingSummaries,
 }) => {
+  if (isThinkingBlock(block)) {
+    return null;
+  }
+
   switch (block.type) {
-    case 'thinking':
-      return (
-        <ThinkingBlockRenderer block={block} showSummaries={showThinkingSummaries} />
-      );
-
-    case 'redacted_thinking':
-      return <RedactedThinkingBlock block={block} />;
-
     case 'image':
       return <ImageBlockRenderer block={block} />;
 

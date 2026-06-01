@@ -5,6 +5,7 @@ import { UserMessage } from './UserMessage';
 import { AssistantMessage } from './AssistantMessage';
 import { StreamingIndicator } from './StreamingIndicator';
 import { findStreamingAssistantIndex } from '../../utils/messageListState';
+import { shouldShowThinkingIndicator } from '../../utils/messageVisibility';
 
 interface MessageListProps {
   messages: ChatMessage[];
@@ -62,7 +63,7 @@ export function MessageList({ messages, isStreaming, processState, onEditMessage
 
           {/* Streaming indicator — shown when waiting for first content block */}
           <StreamingIndicator
-            visible={isStreaming && !hasStreamingBlocks(messages)}
+            visible={shouldShowThinkingIndicator(messages, isStreaming)}
           />
 
         </div>
@@ -91,13 +92,6 @@ export function MessageList({ messages, isStreaming, processState, onEditMessage
 // ============================================================================
 // Helpers
 // ============================================================================
-
-/** Check if the last message has any streaming blocks (meaning content is arriving) */
-function hasStreamingBlocks(messages: ChatMessage[]): boolean {
-  const last = messages[messages.length - 1];
-  if (!last || last.role !== 'assistant') return false;
-  return (last.blocks?.length ?? 0) > 0;
-}
 
 function findLatestAssistantIndex(messages: ChatMessage[]): number {
   for (let index = messages.length - 1; index >= 0; index--) {
