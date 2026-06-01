@@ -29,11 +29,11 @@ export function ToolCallBlock({ block, isStreaming, result = null }: ToolCallBlo
   const resultContent = result ? formatToolResultContent(result.content) : '';
 
   return (
-    <div className={`tool-call-card my-1 rounded-md overflow-hidden ${isError ? 'tool-result-error' : ''}`}>
+    <div className={`tool-call-card my-0 overflow-hidden ${isError ? 'tool-result-error' : ''}`}>
       {/* Collapsible header */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="tool-call-header flex items-center gap-2 w-full px-3 py-1.5 text-left text-sm transition-colors"
+        className="tool-call-header flex items-center gap-1.5 w-full px-2.5 py-1 text-left text-sm transition-colors"
         aria-expanded={isExpanded}
       >
         {/* Chevron */}
@@ -82,11 +82,11 @@ export function ToolCallBlock({ block, isStreaming, result = null }: ToolCallBlo
 
       {/* Expandable content */}
       {isExpanded && (
-        <div className="tool-call-body px-3 py-2">
+        <div className="tool-call-body px-2.5 py-1.5">
           {hasInput ? (
             <div className="tool-detail-section">
               <div className="text-xs opacity-50 mb-1 font-semibold">Input</div>
-              <pre className="tool-input-pre tool-detail-pre text-xs font-mono overflow-auto p-2 rounded whitespace-pre-wrap break-all">
+              <pre className="tool-input-pre tool-detail-pre text-xs font-mono overflow-auto p-1.5 rounded whitespace-pre-wrap break-all">
                 {formatToolInput(input)}
               </pre>
             </div>
@@ -99,7 +99,7 @@ export function ToolCallBlock({ block, isStreaming, result = null }: ToolCallBlo
                 <span className="text-xs opacity-50 font-semibold">Result</span>
                 {resultSummary && !isError && <span className="tool-result-inline-preview">{resultSummary}</span>}
               </div>
-              <pre className="tool-result-pre tool-detail-pre m-0 px-3 py-2 text-xs font-mono whitespace-pre-wrap break-words overflow-auto">
+              <pre className="tool-result-pre tool-detail-pre m-0 px-2 py-1.5 text-xs font-mono whitespace-pre-wrap break-words overflow-auto">
                 {resultContent || 'No output'}
               </pre>
             </div>

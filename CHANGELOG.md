@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [unreleased - 0.5.5]
 
 ### Fixed (2026-06-01)
+- **VS Code Codex-Style Tool Rows**: Tightened webview tool-row spacing, headers, borders, and expanded detail heights so collapsed and opened tool results take less vertical space.
 - **VS Code Tool Details And Copy Actions**: Bounded expanded tool input panels with their own scroll area and moved assistant copy actions to the end of each assistant turn, copying the full turn text instead of each intermediate text fragment.
 - **VS Code Tool Transcript Density**: Paired tool calls with their matching results inside one expandable webview row, keeping command/result details hidden until clicked while preserving compact previews for hover and scan.
 - **VS Code Hidden Thinking Display**: Hid streamed and resumed thinking blocks from the GakrCLI webview transcript while keeping a compact shining thinking indicator active during hidden reasoning, reducing long-scroll conversations around tool use.

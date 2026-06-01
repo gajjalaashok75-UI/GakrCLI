@@ -157,13 +157,13 @@ function ToolResultBlock({ block }: { block: ToolResultContentBlock }) {
   const preview = content.length > 160 ? `${content.slice(0, 157)}...` : content;
 
   return (
-    <details className={`tool-result-card my-1 rounded overflow-hidden ${block.is_error ? 'tool-result-error' : ''}`}>
-      <summary className="tool-result-summary flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer">
+    <details className={`tool-result-card my-0 overflow-hidden ${block.is_error ? 'tool-result-error' : ''}`}>
+      <summary className="tool-result-summary flex items-center gap-1.5 px-2.5 py-1 text-xs cursor-pointer">
         <span className="opacity-60">Result</span>
         {block.is_error && <span className="text-red-400">Error</span>}
         {!block.is_error && <span className="ml-auto opacity-40">{preview || 'No output'}</span>}
       </summary>
-      <pre className="tool-result-pre m-0 px-3 py-2 text-xs font-mono whitespace-pre-wrap break-words max-h-56 overflow-auto">
+      <pre className="tool-result-pre m-0 px-2 py-1.5 text-xs font-mono whitespace-pre-wrap break-words max-h-40 overflow-auto">
         {content || 'No output'}
       </pre>
     </details>
