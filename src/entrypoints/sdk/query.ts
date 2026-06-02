@@ -33,6 +33,7 @@ import {
   regenerateSessionId,
   getSessionId,
   runWithSdkContext,
+  getSdkBetas,
 } from '../../bootstrap/state.js'
 import type { SessionId } from '../../types/ids.js'
 import { getAgentDefinitionsWithOverrides } from '../../tools/AgentTool/loadAgentsDir.js'
@@ -88,6 +89,12 @@ import {
   fileHistoryRewind,
 } from '../../utils/fileHistory.js'
 import { getProjectDir, resetSessionFilePointer } from '../../utils/sessionStorage.js'
+import { getContextWindowForModel } from '../../utils/context.js'
+import {
+  getAutoCompactThreshold,
+  isAutoCompactEnabled,
+} from '../../services/compact/autoCompact.js'
+import { tokenCountWithEstimation } from '../../utils/tokens.js'
 import type { MCPServerConnection } from '../../services/mcp/types.js'
 import {
   acquireEnvMutex,
@@ -1247,19 +1254,28 @@ class QueryImpl implements Query {
       }) as SDKContextUsage
     } catch {
       const state = this.appStateStore.getState()
+      const model = state.mainLoopModel ?? 'default'
+      const messages = this.engine.getMessages() as any
+      const rawMaxTokens = getContextWindowForModel(model, getSdkBetas())
+      const totalTokens = Math.max(0, tokenCountWithEstimation(messages))
+      const autoCompactEnabled = isAutoCompactEnabled()
       return {
         categories: [],
-        totalTokens: 0,
-        maxTokens: 0,
-        rawMaxTokens: 0,
-        percentage: 0,
+        totalTokens,
+        maxTokens: rawMaxTokens,
+        rawMaxTokens,
+        percentage: rawMaxTokens > 0
+          ? Math.max(0, Math.min(100, Math.round((totalTokens / rawMaxTokens) * 100)))
+          : 0,
         gridRows: [],
-        model: state.mainLoopModel ?? 'default',
+        model,
         memoryFiles: [],
         mcpTools: [],
         agents: [],
-        isAutoCompactEnabled: false,
+        isAutoCompactEnabled: autoCompactEnabled,
+        autoCompactThreshold: autoCompactEnabled ? getAutoCompactThreshold(model) : undefined,
         apiUsage: null,
+        source: 'local_estimate',
       }
     }
   }

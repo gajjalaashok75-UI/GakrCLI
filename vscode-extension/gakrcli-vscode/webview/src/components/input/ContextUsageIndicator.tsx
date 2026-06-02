@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react';
+import { useState, type CSSProperties } from 'react';
 import type { WebviewContextUsage } from '../../utils/contextUsage';
 import {
   buildContextUsageTooltip,
@@ -10,12 +10,13 @@ interface ContextUsageIndicatorProps {
 }
 
 export function ContextUsageIndicator({ usage }: ContextUsageIndicatorProps) {
+  const [isHovering, setIsHovering] = useState(false);
   if (!usage) {
     return null;
   }
 
   const capacity = usage.rawMaxTokens || usage.maxTokens;
-  const tooltip = buildContextUsageTooltip(usage);
+  const tooltipLines = buildContextUsageTooltip(usage).split('\n');
   const tone = !usage.isKnown
     ? 'var(--app-glass-sky)'
     : usage.percentage >= 90
@@ -29,9 +30,13 @@ export function ContextUsageIndicator({ usage }: ContextUsageIndicatorProps) {
     <div
       className="context-usage-indicator glass-control"
       data-known={usage.isKnown ? 'true' : 'false'}
-      title={tooltip}
-      aria-label={tooltip}
+      aria-label={tooltipLines.join(', ')}
       role="status"
+      onMouseEnter={() => setIsHovering(true)}
+      onMouseLeave={() => setIsHovering(false)}
+      onFocus={() => setIsHovering(true)}
+      onBlur={() => setIsHovering(false)}
+      tabIndex={0}
       style={{
         '--context-usage-percent': `${usage.percentage}%`,
         '--context-usage-color': tone,
@@ -42,6 +47,22 @@ export function ContextUsageIndicator({ usage }: ContextUsageIndicatorProps) {
       </span>
       <span className="context-usage-label">{usage.percentage}%</span>
       <span className="context-usage-capacity">{capacityLabel}</span>
+      <span className="context-usage-bars" aria-hidden="true">
+        <span />
+        <span />
+      </span>
+      {isHovering && (
+        <div className="context-usage-popover" role="tooltip">
+          <div className="context-usage-popover-title">{tooltipLines[0] ?? 'Context usage'}</div>
+          <div className="context-usage-popover-meter" aria-hidden="true">
+            <span />
+            <span />
+          </div>
+          {tooltipLines.slice(1).map((line) => (
+            <div key={line} className="context-usage-popover-line">{line}</div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

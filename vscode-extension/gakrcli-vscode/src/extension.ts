@@ -564,7 +564,7 @@ export function activate(context: vscode.ExtensionContext) {
       ],
       settings: settings ?? { effective: {}, sources: [], applied },
       runtime: runtime ?? {},
-      contextUsage: contextUsage ?? undefined,
+      contextUsage: buildContextUsageForWebview(contextUsage, runtime),
       models: Array.isArray(runtime?.models) ? runtime?.models : [],
       providers: Array.isArray(runtime?.providers) ? runtime?.providers : [],
       profiles: Array.isArray(runtime?.profiles) ? runtime?.profiles : [],
@@ -579,6 +579,123 @@ export function activate(context: vscode.ExtensionContext) {
       },
       ...(error ? { error } : {}),
     };
+  }
+
+  function buildContextUsageForWebview(
+    contextUsage: Record<string, unknown> | undefined,
+    runtime: Record<string, unknown> | undefined,
+  ): Record<string, unknown> | undefined {
+    if (hasContextCapacity(contextUsage)) {
+      return contextUsage;
+    }
+
+    const fallback = deriveContextUsageFromRuntimeUsage(runtime);
+    if (!fallback) {
+      return contextUsage;
+    }
+
+    return {
+      ...(contextUsage ?? {}),
+      ...fallback,
+      source: 'usage_summary',
+    };
+  }
+
+  function hasContextCapacity(contextUsage: Record<string, unknown> | undefined): boolean {
+    if (!contextUsage) return false;
+    return readPositiveNumber(contextUsage.rawMaxTokens, contextUsage.raw_max_tokens, contextUsage.maxTokens, contextUsage.max_tokens) !== null;
+  }
+
+  function deriveContextUsageFromRuntimeUsage(runtime: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+    const usage = runtime?.usage && typeof runtime.usage === 'object'
+      ? runtime.usage as Record<string, unknown>
+      : undefined;
+    const modelUsage = usage?.modelUsage && typeof usage.modelUsage === 'object'
+      ? usage.modelUsage as Record<string, unknown>
+      : undefined;
+    if (!modelUsage) return undefined;
+
+    const runtimeModel = typeof runtime?.model === 'string' ? runtime.model : undefined;
+    const selected = selectModelUsage(modelUsage, runtimeModel);
+    if (!selected) return undefined;
+
+    const { model, usage: selectedUsage } = selected;
+    const inputTokens = readNumber(selectedUsage.inputTokens, selectedUsage.input_tokens) ?? 0;
+    const outputTokens = readNumber(selectedUsage.outputTokens, selectedUsage.output_tokens) ?? 0;
+    const cacheRead = readNumber(selectedUsage.cacheReadInputTokens, selectedUsage.cache_read_input_tokens) ?? 0;
+    const cacheCreation = readNumber(selectedUsage.cacheCreationInputTokens, selectedUsage.cache_creation_input_tokens) ?? 0;
+    const contextWindow = readPositiveNumber(selectedUsage.contextWindow, selectedUsage.context_window);
+    if (!contextWindow) return undefined;
+
+    const totalTokens = Math.max(0, Math.round(inputTokens + outputTokens + cacheRead + cacheCreation));
+    return {
+      categories: [],
+      totalTokens,
+      maxTokens: contextWindow,
+      rawMaxTokens: contextWindow,
+      percentage: Math.max(0, Math.min(100, Math.round((totalTokens / contextWindow) * 100))),
+      gridRows: [],
+      model,
+      memoryFiles: [],
+      mcpTools: [],
+      agents: [],
+      isAutoCompactEnabled: Boolean(runtime?.autoCompactEnabled ?? runtime?.isAutoCompactEnabled),
+      apiUsage: {
+        input_tokens: Math.max(0, Math.round(inputTokens)),
+        output_tokens: Math.max(0, Math.round(outputTokens)),
+        cache_creation_input_tokens: Math.max(0, Math.round(cacheCreation)),
+        cache_read_input_tokens: Math.max(0, Math.round(cacheRead)),
+      },
+    };
+  }
+
+  function selectModelUsage(
+    modelUsage: Record<string, unknown>,
+    preferredModel: string | undefined,
+  ): { model: string; usage: Record<string, unknown> } | undefined {
+    const entries = Object.entries(modelUsage)
+      .map(([model, value]) => ({
+        model,
+        usage: value && typeof value === 'object' ? value as Record<string, unknown> : undefined,
+      }))
+      .filter((entry): entry is { model: string; usage: Record<string, unknown> } => Boolean(entry.usage));
+    if (entries.length === 0) return undefined;
+
+    const preferred = preferredModel
+      ? entries.find((entry) => entry.model === preferredModel)
+      : undefined;
+    if (preferred) return preferred;
+
+    return entries.reduce((best, entry) => {
+      const bestTokens = contextTokenTotal(best.usage);
+      const entryTokens = contextTokenTotal(entry.usage);
+      return entryTokens > bestTokens ? entry : best;
+    }, entries[0]!);
+  }
+
+  function contextTokenTotal(usage: Record<string, unknown>): number {
+    return (
+      (readNumber(usage.inputTokens, usage.input_tokens) ?? 0) +
+      (readNumber(usage.outputTokens, usage.output_tokens) ?? 0) +
+      (readNumber(usage.cacheReadInputTokens, usage.cache_read_input_tokens) ?? 0) +
+      (readNumber(usage.cacheCreationInputTokens, usage.cache_creation_input_tokens) ?? 0)
+    );
+  }
+
+  function readNumber(...values: unknown[]): number | null {
+    for (const value of values) {
+      if (typeof value === 'number' && Number.isFinite(value)) return value;
+      if (typeof value === 'string' && value.trim()) {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed)) return parsed;
+      }
+    }
+    return null;
+  }
+
+  function readPositiveNumber(...values: unknown[]): number | null {
+    const value = readNumber(...values);
+    return value && value > 0 ? value : null;
   }
 
   async function sendMcpState(panelId?: string) {
