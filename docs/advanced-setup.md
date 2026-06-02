@@ -35,6 +35,8 @@ bun run dev
 
 ## Provider Examples
 
+For the complete current provider list, see [PROVIDERS.md](PROVIDERS.md).
+
 ### OpenAI
 
 ```bash

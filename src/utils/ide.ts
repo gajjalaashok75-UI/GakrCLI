@@ -1,10 +1,8 @@
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js'
-import axios from 'axios'
 import { execa } from 'execa'
 import capitalize from 'lodash-es/capitalize.js'
 import memoize from 'lodash-es/memoize.js'
 import { createConnection } from 'net'
-import * as os from 'os'
 import { basename, join, sep as pathSeparator, resolve } from 'path'
 import { logEvent } from 'src/services/analytics/index.js'
 import { getIsScrollDraining, getOriginalCwd } from '../bootstrap/state.js'
@@ -1381,105 +1379,6 @@ const detectHostIP = memoize(
 )
 
 async function installFromArtifactory(command: string): Promise<string> {
-  // Read auth token from ~/.npmrc
-  const npmrcPath = join(os.homedir(), '.npmrc')
-  let authToken: string | null = null
-  const fs = getFsImplementation()
-
-  try {
-    const npmrcContent = await fs.readFile(npmrcPath, {
-      encoding: 'utf8',
-    })
-    const lines = npmrcContent.split('\n')
-    for (const line of lines) {
-      // Look for the artifactory auth token line
-      const match = line.match(
-        /\/\/artifactory\.infra\.ant\.dev\/artifactory\/api\/npm\/npm-all\/:_authToken=(.+)/,
-      )
-      if (match && match[1]) {
-        authToken = match[1].trim()
-        break
-      }
-    }
-  } catch (error) {
-    logError(error as Error)
-    throw new Error(`Failed to read npm authentication: ${error}`)
-  }
-
-  if (!authToken) {
-    throw new Error('No artifactory auth token found in ~/.npmrc')
-  }
-
-  // Fetch the version from artifactory
-  const versionUrl =
-    'https://artifactory.infra.ant.dev/artifactory/armorcode-gakrcli-code-internal/gakrcli-vscode-releases/stable'
-
-  try {
-    const versionResponse = await axios.get(versionUrl, {
-      headers: {
-        Authorization: `Bearer ${authToken}`,
-      },
-    })
-
-    const version = versionResponse.data.trim()
-    if (!version) {
-      throw new Error('No version found in artifactory response')
-    }
-
-    // Download the .vsix file from artifactory
-    const vsixUrl = `https://artifactory.infra.ant.dev/artifactory/armorcode-gakrcli-code-internal/gakrcli-vscode-releases/${version}/gakrcli-code.vsix`
-    const tempVsixPath = join(
-      os.tmpdir(),
-      `gakrcli-code-${version}-${Date.now()}.vsix`,
-    )
-
-    try {
-      const vsixResponse = await axios.get(vsixUrl, {
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-        },
-        responseType: 'stream',
-      })
-
-      // Write the downloaded file to disk
-      const writeStream = getFsImplementation().createWriteStream(tempVsixPath)
-      await new Promise<void>((resolve, reject) => {
-        vsixResponse.data.pipe(writeStream)
-        writeStream.on('finish', resolve)
-        writeStream.on('error', reject)
-      })
-
-      // Install the .vsix file
-      // Add delay to prevent code command crashes
-      await sleep(500)
-
-      const result = await execFileNoThrowWithCwd(
-        command,
-        ['--force', '--install-extension', tempVsixPath],
-        {
-          env: getInstallationEnv(),
-        },
-      )
-
-      if (result.code !== 0) {
-        throw new Error(`${result.code}: ${result.error} ${result.stderr}`)
-      }
-
-      return version
-    } finally {
-      // Clean up the temporary file
-      try {
-        await fs.unlink(tempVsixPath)
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
-  } catch (error) {
-    if (axios.isAxiosError(error)) {
-      throw new Error(
-        `Failed to fetch extension version from artifactory: ${error.message}`,
-      )
-    }
-    throw error
-  }
+  void command
+  throw new Error('Internal VS Code extension installer is unavailable in the open build.')
 }

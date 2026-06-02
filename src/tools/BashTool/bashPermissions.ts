@@ -234,7 +234,7 @@ const BARE_SHELL_PREFIXES = new Set([
  *
  * Deliberately not used by suggestionForExactCommand: a backend-suggested
  * `Bash(rm:*)` is too broad to auto-generate, but as an editable starting
- * point it's what users expect (Slack C07VBSHV7EV/p1772670433193449).
+ * point it's what users expect (internal report 1772670433193449).
  *
  * Reuses the same SAFE_ENV_VARS gate as getSimpleCommandPrefix — a rule like
  * `Bash(python3:*)` can never match `RUN=/path python3 ...` at check time
