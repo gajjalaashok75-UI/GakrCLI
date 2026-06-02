@@ -36,6 +36,10 @@ export function normalizeContextUsage(
   const rawMaxTokens = readNumber(record.rawMaxTokens, record.raw_max_tokens) ?? maxTokens;
   const capacity = rawMaxTokens || maxTokens;
 
+  if (capacity <= 0 && fallback?.isKnown) {
+    return fallback;
+  }
+
   const reportedPercentage = readNumber(record.percentage, record.utilization);
   const percentage = clampPercentage(
     reportedPercentage ?? (capacity > 0 ? (totalTokens / capacity) * 100 : fallback?.percentage ?? 0),

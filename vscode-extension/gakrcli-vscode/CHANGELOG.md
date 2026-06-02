@@ -6,6 +6,7 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ### Fixed (2026-06-01)
 
+- Preserved the last known live context value across empty SDK refreshes and guarded sandbox stderr annotation so Bash results keep working when the sandbox runtime does not expose its optional helper.
 - Kept the composer context meter updating from SDK runtime usage and local SDK token estimates when full context analysis is unavailable, and replaced the native title tooltip with a glass hover panel and fill-line meter.
 - Added a live SDK-backed context meter between the model selector and reasoning effort control, kept it visible while token capacity is still refreshing, and rendered Codex-style compacting/compacted dividers from SDK status and compact-boundary events.
 - Derived a live header title from the first visible user prompt while new sessions are still waiting for host/session title updates, matching resumed chat titles.
