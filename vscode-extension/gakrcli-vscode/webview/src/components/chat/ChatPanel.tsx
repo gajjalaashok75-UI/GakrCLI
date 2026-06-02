@@ -28,10 +28,12 @@ import { SettingsDialog } from '../dialogs/SettingsDialog';
 import { OnboardingChecklist } from '../onboarding/OnboardingChecklist';
 import type { AtMentionResult } from '../../hooks/useAtMentions';
 import type { ToolActivity } from '../../hooks/useChat';
+import { getDisplaySessionTitle } from '../../utils/chatTitle';
 
 export function ChatPanel() {
   const {
     messages,
+    sessionTitle: chatSessionTitle,
     isStreaming,
     model,
     error,
@@ -148,6 +150,7 @@ export function ChatPanel() {
   }, []);
 
   const isStarting = processState === 'starting';
+  const displaySessionTitle = getDisplaySessionTitle(messages, sessionTitle, chatSessionTitle);
 
   return (
     <div
@@ -166,7 +169,7 @@ export function ChatPanel() {
       {/* Header + Session list overlay wrapper */}
       <div className="gakr-header-shell" style={{ position: 'relative', flexShrink: 0, zIndex: 10 }}>
         <ChatHeader
-          sessionTitle={sessionTitle}
+          sessionTitle={displaySessionTitle}
           isSessionListOpen={isSessionListOpen}
           onToggleSessionList={() => setSessionListOpen(!isSessionListOpen)}
           onNewConversation={() => { userSetModeRef.current = false; newConversation(); }}
