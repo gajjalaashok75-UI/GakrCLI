@@ -50,6 +50,22 @@ describe('context usage display data', () => {
     expect(normalizeContextUsage(null).isKnown).toBe(false);
   });
 
+  test('preserves the last known context when a refresh returns empty capacity', () => {
+    const previous = normalizeContextUsage({
+      totalTokens: 40_000,
+      rawMaxTokens: 128_000,
+      percentage: 31,
+      model: 'stepfun-ai/step-3.7-flash',
+    });
+
+    expect(normalizeContextUsage({
+      totalTokens: 0,
+      rawMaxTokens: 0,
+      percentage: 0,
+      model: 'stepfun-ai/step-3.7-flash',
+    }, previous)).toBe(previous);
+  });
+
   test('formats token counts compactly', () => {
     expect(formatContextTokens(999)).toBe('999');
     expect(formatContextTokens(12_500)).toBe('13K');

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [unreleased - 0.5.5]
 
 ### Fixed (2026-06-01)
+- **VS Code Context Meter And Bash Stability**: Preserved the last known live context value across empty SDK refreshes and guarded sandbox stderr annotation so Bash results keep working when the sandbox runtime does not expose its optional helper.
 - **VS Code Live Context Meter Refresh**: Kept the composer context meter updating from SDK runtime usage and local SDK token estimates when full context analysis is unavailable, and replaced the native title tooltip with a glass hover panel and fill-line meter.
 - **VS Code Context Meter And Autocompact UI**: Added a live SDK-backed composer context meter between model and reasoning controls, kept pending context data visible while refreshing, and rendered compacting/compacted transcript dividers from SDK status and compact-boundary events.
 - **VS Code Live Chat Title**: Derived a live header title from the first visible user prompt while new sessions are still waiting for host/session title updates, matching resumed chat titles.
