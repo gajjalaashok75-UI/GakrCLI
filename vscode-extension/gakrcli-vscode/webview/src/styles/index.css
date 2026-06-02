@@ -1033,6 +1033,7 @@ details[open] .thinking-toggle {
 }
 
 .context-usage-indicator {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -1044,6 +1045,7 @@ details[open] .thinking-toggle {
   font-size: 11px;
   line-height: 1;
   white-space: nowrap;
+  outline: none;
 }
 
 .context-usage-ring {
@@ -1081,6 +1083,95 @@ details[open] .thinking-toggle {
   overflow: hidden;
   color: color-mix(in srgb, var(--app-secondary-foreground) 82%, transparent);
   text-overflow: ellipsis;
+}
+
+.context-usage-bars {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 24px;
+  flex: 0 0 auto;
+}
+
+.context-usage-bars span,
+.context-usage-popover-meter span {
+  display: block;
+  height: 2px;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      90deg,
+      var(--context-usage-color) 0 var(--context-usage-percent),
+      color-mix(in srgb, var(--app-glass-border) 28%, transparent) var(--context-usage-percent) 100%
+    );
+}
+
+.context-usage-bars span:last-child,
+.context-usage-popover-meter span:last-child {
+  opacity: 0.58;
+}
+
+.context-usage-indicator[data-known="false"] .context-usage-bars span {
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--context-usage-color) 58%, transparent),
+      color-mix(in srgb, var(--context-usage-color) 18%, transparent),
+      color-mix(in srgb, var(--context-usage-color) 58%, transparent)
+    );
+  background-size: 200% 100%;
+  animation: context-usage-pending 1.4s ease-in-out infinite;
+}
+
+.context-usage-popover {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 7px);
+  z-index: 80;
+  width: min(280px, calc(100vw - 28px));
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 70%, transparent);
+  border-radius: var(--corner-radius-medium);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-glass-highlight) 32%, transparent), transparent),
+    color-mix(in srgb, var(--app-glass-surface-raised) 92%, rgba(0,0,0,0.28));
+  box-shadow: var(--app-glass-shadow-soft);
+  color: var(--app-primary-foreground);
+  line-height: 1.35;
+  white-space: normal;
+  pointer-events: none;
+}
+
+.context-usage-popover-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--app-primary-foreground);
+}
+
+.context-usage-popover-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 8px 0;
+}
+
+.context-usage-popover-meter span {
+  height: 3px;
+}
+
+.context-usage-popover-line {
+  margin-top: 3px;
+  color: var(--app-secondary-foreground);
+  font-size: 11px;
+}
+
+@keyframes context-usage-pending {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
 }
 
 .compact-boundary {
