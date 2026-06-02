@@ -358,6 +358,18 @@ export async function getVersionHistory() { return []; }
 export async function installGlobalPackage() { return 'success'; }
 `,
 
+	'utils/nativeInstaller/download': `
+export const ARTIFACTORY_REGISTRY_URL = '';
+export const STALL_TIMEOUT_MS = 60000;
+export async function getLatestVersionFromArtifactory() { return null; }
+export async function getLatestVersionFromBinaryRepo() { return null; }
+export async function getLatestVersion() { return null; }
+export async function downloadVersionFromArtifactory() { return undefined; }
+export async function downloadVersionFromBinaryRepo() { return undefined; }
+export async function downloadVersion() { return undefined; }
+export const _downloadAndVerifyBinaryForTesting = async () => undefined;
+`,
+
 	// ─── Plugin fetch telemetry (not the marketplace itself) ───────
 
 	'utils/plugins/fetchTelemetry': `

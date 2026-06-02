@@ -141,3 +141,4 @@ npm uninstall -g @gakr-gakr/gakrcli
 Use:
 
 - [Advanced Setup](advanced-setup.md)
+- [Provider Reference](PROVIDERS.md)

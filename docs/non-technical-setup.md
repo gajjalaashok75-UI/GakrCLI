@@ -15,6 +15,11 @@ Gakr lets you use an AI coding assistant with different model providers such as:
 - Gemini
 - Ollama
 - Codex
+- Anthropic Claude
+- NVIDIA NIM
+- OpenRouter
+- LM Studio
+- Custom OpenAI-compatible providers
 
 For most first-time users, OpenAI is the easiest option.
 
@@ -114,3 +119,4 @@ Fix:
 If you want source builds, advanced provider profiles, diagnostics, or Bun-based workflows, use:
 
 - [Advanced Setup](advanced-setup.md)
+- [Provider Reference](PROVIDERS.md)
