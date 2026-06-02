@@ -1919,6 +1919,35 @@ details[open] .thinking-toggle {
   margin: 0.5em 0;
 }
 
+.markdown-body ul {
+  list-style: disc;
+}
+
+.markdown-body ol {
+  list-style: decimal;
+}
+
+.markdown-body ul ul {
+  list-style: circle;
+}
+
+.markdown-body ul ul ul {
+  list-style: square;
+}
+
+.markdown-body li {
+  margin: 0.2em 0;
+  padding-left: 0.15em;
+}
+
+.markdown-body li::marker {
+  color: color-mix(in srgb, var(--app-secondary-foreground) 84%, var(--app-glass-cyan) 16%);
+}
+
+.markdown-body li.list-none {
+  list-style: none;
+}
+
 .markdown-body hr {
   border: none;
   border-top: 1px solid color-mix(in srgb, var(--app-glass-border) 58%, transparent);

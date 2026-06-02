@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [unreleased - 0.5.5]
 
 ### Fixed (2026-06-01)
+- **Edit Tool Anchored Deletions**: Normalized unique anchored deletion edits so stale surrounding anchors do not break safe block removals, while still rejecting ambiguous duplicate deletion targets.
+- **VS Code Markdown List Markers**: Restored visible unordered, ordered, and nested list markers in assistant markdown output after Tailwind's base reset removed default bullets.
+- **VS Code Context Meter Placement**: Moved the live context usage indicator from the input toolbar into the lower composer control row beside permission, provider, and Fast mode controls.
+- **Edit Tool Indentation Matching**: Allowed unique multiline edit targets to match when only leading indentation differs, preventing brittle HTML/CSS replacement failures while still refusing ambiguous relaxed matches.
 - **VS Code Context Meter And Bash Stability**: Preserved the last known live context value across empty SDK refreshes and guarded sandbox stderr annotation so Bash results keep working when the sandbox runtime does not expose its optional helper.
 - **VS Code Live Context Meter Refresh**: Kept the composer context meter updating from SDK runtime usage and local SDK token estimates when full context analysis is unavailable, and replaced the native title tooltip with a glass hover panel and fill-line meter.
 - **VS Code Context Meter And Autocompact UI**: Added a live SDK-backed composer context meter between model and reasoning controls, kept pending context data visible while refreshing, and rendered compacting/compacted transcript dividers from SDK status and compact-boundary events.
