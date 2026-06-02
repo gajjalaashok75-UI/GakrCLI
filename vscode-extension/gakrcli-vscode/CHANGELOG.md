@@ -6,6 +6,7 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ### Fixed (2026-06-01)
 
+- Added a live SDK-backed context meter between the model selector and reasoning effort control, kept it visible while token capacity is still refreshing, and rendered Codex-style compacting/compacted dividers from SDK status and compact-boundary events.
 - Derived a live header title from the first visible user prompt while new sessions are still waiting for host/session title updates, matching resumed chat titles.
 - Matched live chats to resumed history by hiding unresolved stopped tool placeholders and deriving the header title immediately from the first visible user prompt.
 - Tightened tool-row spacing, headers, borders, and expanded detail heights so collapsed and opened tool results take less vertical space.

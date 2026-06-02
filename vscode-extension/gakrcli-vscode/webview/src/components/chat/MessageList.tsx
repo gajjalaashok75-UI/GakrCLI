@@ -11,7 +11,7 @@ import { collectAssistantTurnText, isAssistantTurnEnd } from '../../utils/assist
 interface MessageListProps {
   messages: ChatMessage[];
   isStreaming: boolean;
-  processState?: 'idle' | 'starting' | 'running' | 'stopped' | 'crashed';
+  processState?: 'idle' | 'starting' | 'running' | 'stopped' | 'crashed' | 'restarting';
   onEditMessage?: (uuid: string, newContent: string) => void;
 }
 
@@ -51,7 +51,7 @@ export function MessageList({ messages, isStreaming, processState, onEditMessage
               {msg.role === 'user' ? (
                 <UserMessage message={msg} onEdit={onEditMessage} />
               ) : msg.role === 'system' ? (
-                <SystemMessage text={msg.text ?? ''} />
+                <SystemMessage text={msg.text ?? ''} kind={msg.systemKind} />
               ) : (
                 <AssistantMessage
                   message={msg}
@@ -128,7 +128,31 @@ function LoadingState() {
 }
 
 /** Inline system message (api_retry, compact_boundary, tool_use_summary) */
-function SystemMessage({ text }: { text: string }) {
+function SystemMessage({
+  text,
+  kind,
+}: {
+  text: string;
+  kind?: ChatMessage['systemKind'];
+}) {
+  if (kind === 'compact-start' || kind === 'compact-done') {
+    return (
+      <div
+        className="compact-boundary"
+        data-state={kind === 'compact-start' ? 'active' : 'done'}
+        role="status"
+        aria-live="polite"
+      >
+        <span className="compact-boundary-line" />
+        <span className="compact-boundary-label">
+          <CompactBoundaryIcon active={kind === 'compact-start'} />
+          <span>{text}</span>
+        </span>
+        <span className="compact-boundary-line" />
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
@@ -141,5 +165,33 @@ function SystemMessage({ text }: { text: string }) {
     >
       {text}
     </div>
+  );
+}
+
+function CompactBoundaryIcon({ active }: { active: boolean }) {
+  if (active) {
+    return (
+      <span className="compact-boundary-spinner" aria-hidden="true" />
+    );
+  }
+
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4 3h5l3 3v7H4z" />
+      <path d="M9 3v3h3" />
+      <path d="M2.5 5.5h2" />
+      <path d="M2.5 8h2" />
+      <path d="M2.5 10.5h2" />
+    </svg>
   );
 }

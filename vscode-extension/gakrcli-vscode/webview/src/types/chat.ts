@@ -34,6 +34,8 @@ export interface ChatMessage {
   cost?: SessionCost;
   /** Whether this assistant turn was stopped by the user */
   interrupted?: boolean;
+  /** Specialized rendering for inline system status markers */
+  systemKind?: 'compact-start' | 'compact-done';
 }
 
 export type TodoStatus = 'pending' | 'in_progress' | 'completed';
