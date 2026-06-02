@@ -1,5 +1,5 @@
 // webview/src/components/dialogs/ElicitationDialog.tsx
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import type {
   ElicitationRequest,
   ElicitationField,
@@ -17,7 +17,7 @@ export const ElicitationDialog: React.FC<ElicitationDialogProps> = ({
   onSubmit,
   onCancel,
 }) => {
-  const [values, setValues] = useState<Record<string, unknown>>(() => {
+  const initialValues = useMemo(() => {
     const defaults: Record<string, unknown> = {};
     for (const field of request.fields) {
       if (field.default !== undefined) {
@@ -31,67 +31,100 @@ export const ElicitationDialog: React.FC<ElicitationDialogProps> = ({
       }
     }
     return defaults;
-  });
+  }, [request]);
+
+  const [values, setValues] = useState<Record<string, unknown>>(initialValues);
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  useEffect(() => {
+    setValues(initialValues);
+    setCurrentIndex(0);
+  }, [initialValues]);
 
   const setValue = useCallback((name: string, value: unknown) => {
     setValues((prev) => ({ ...prev, [name]: value }));
   }, []);
 
+  const currentField = request.fields[currentIndex];
+  const fieldCount = request.fields.length;
+  const isLastField = currentIndex >= fieldCount - 1;
+  const currentFieldValid = currentField ? isFieldValid(currentField, values[currentField.name]) : true;
+  const allFieldsValid = request.fields.every((field) => isFieldValid(field, values[field.name]));
+
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
-      onSubmit(values);
+      if (!currentFieldValid) return;
+      if (!isLastField) {
+        setCurrentIndex((index) => Math.min(index + 1, fieldCount - 1));
+        return;
+      }
+      if (allFieldsValid) {
+        onSubmit(values);
+      }
     },
-    [values, onSubmit],
+    [allFieldsValid, currentFieldValid, fieldCount, isLastField, values, onSubmit],
   );
 
-  const isValid = request.fields.every((field) => {
-    if (!field.required) return true;
-    const val = values[field.name];
-    if (val === undefined || val === null || val === '') return false;
-    if (Array.isArray(val) && val.length === 0) return false;
-    return true;
-  });
+  const goBack = useCallback(() => {
+    setCurrentIndex((index) => Math.max(0, index - 1));
+  }, []);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-[var(--vscode-editor-background)] border border-[var(--vscode-panel-border)] rounded-lg shadow-xl max-w-lg w-full mx-4 overflow-hidden">
-        {/* Header */}
-        <div className="px-4 py-3 border-b border-[var(--vscode-panel-border)] bg-[var(--vscode-input-background)]">
-          <h2 className="text-sm font-semibold text-[var(--vscode-editor-foreground)]">Question from AI</h2>
+    <div className="permission-modal-backdrop fixed inset-0 z-50 flex items-center justify-center">
+      <div className="permission-glass-dialog permission-card-shell elicitation-card-shell">
+        <div className="elicitation-card-header">
+          <div className="permission-card-title">
+            <span>{request.message}</span>
+          </div>
+          <div className="permission-card-meta">
+            Question from GakrCLI
+            {fieldCount > 1 && (
+              <span className="elicitation-step-count">
+                {currentIndex + 1} of {fieldCount}
+              </span>
+            )}
+          </div>
         </div>
 
-        {/* Message */}
-        <div className="px-4 pt-4">
-          <p className="text-sm text-[var(--vscode-descriptionForeground)] mb-4">{request.message}</p>
-        </div>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="elicitation-question-body">
+            {currentField ? (
+              <FieldRenderer
+                key={currentField.name}
+                field={currentField}
+                value={values[currentField.name]}
+                onChange={(val) => setValue(currentField.name, val)}
+              />
+            ) : (
+              <div className="permission-card-note">No question details were provided.</div>
+            )}
+          </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="px-4 pb-4 space-y-4">
-          {request.fields.map((field) => (
-            <FieldRenderer
-              key={field.name}
-              field={field}
-              value={values[field.name]}
-              onChange={(val) => setValue(field.name, val)}
-            />
-          ))}
-
-          {/* Actions */}
-          <div className="flex justify-end gap-2 pt-2 border-t border-[var(--vscode-panel-border)]">
+          <div className="elicitation-dialog-actions">
             <button
               type="button"
-              className="px-3 py-1.5 text-xs rounded border border-[var(--vscode-input-border)] text-[var(--vscode-editor-foreground)] bg-transparent hover:bg-[var(--vscode-input-background)] cursor-pointer"
+              className="elicitation-dialog-button muted"
               onClick={onCancel}
             >
-              Cancel
+              Skip
             </button>
+            {fieldCount > 1 && (
+              <button
+                type="button"
+                className="elicitation-dialog-button muted"
+                onClick={goBack}
+                disabled={currentIndex === 0}
+              >
+                Back
+              </button>
+            )}
             <button
               type="submit"
-              className="px-3 py-1.5 text-xs rounded bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)] cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={!isValid}
+              className="elicitation-dialog-button primary"
+              disabled={!currentFieldValid || (isLastField && !allFieldsValid)}
             >
-              Submit
+              {isLastField ? 'Submit' : 'Next'}
             </button>
           </div>
         </form>
@@ -99,6 +132,13 @@ export const ElicitationDialog: React.FC<ElicitationDialogProps> = ({
     </div>
   );
 };
+
+function isFieldValid(field: ElicitationField, value: unknown): boolean {
+  if (!field.required) return true;
+  if (value === undefined || value === null || value === '') return false;
+  if (Array.isArray(value) && value.length === 0) return false;
+  return true;
+}
 
 /** Renders a single elicitation field based on its type */
 const FieldRenderer: React.FC<{

@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react';
 import { ModeSelector, type PermissionModeValue } from './ModeSelector';
-import { vscode } from '../../vscode';
 
 // Colors matching GakrCLI permission mode badges.
 const MODE_CONFIG: Record<PermissionModeValue, { label: string; color: string }> = {
@@ -22,18 +21,17 @@ export function PermissionModeIndicator({ currentMode, onModeChange }: Permissio
 
   const handleSelectMode = useCallback((mode: PermissionModeValue) => {
     onModeChange(mode);
-    vscode.postMessage({ type: 'set_permission_mode', mode });
   }, [onModeChange]);
 
   return (
     <div style={{ position: 'relative', display: 'inline-flex' }}>
       <button
+        className="glass-control"
         onClick={() => setIsOpen(!isOpen)}
         title="Change permission mode"
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 4,
           padding: '2px 6px', fontSize: 11,
-          background: 'transparent', border: 'none',
           borderRadius: 'var(--corner-radius-small)',
           cursor: 'pointer',
           color: cfg.color,

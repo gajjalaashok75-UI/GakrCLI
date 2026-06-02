@@ -4,6 +4,11 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { vscode } from '../vscode';
+import {
+  getPermissionCancelRequestId,
+  getPermissionRequestFromCliOutput,
+  toPermissionRequest,
+} from '../utils/permissionRequests';
 
 export interface PermissionRequest {
   requestId: string;
@@ -22,21 +27,30 @@ export function usePermissions() {
   const [queue, setQueue] = useState<PermissionRequest[]>([]);
 
   useEffect(() => {
+    const enqueue = (req: PermissionRequest) => {
+      setQueue((prev) =>
+        prev.some((existing) => existing.requestId === req.requestId)
+          ? prev
+          : [...prev, req],
+      );
+    };
+
     // Listen for permission_request messages
     const unsubPermission = vscode.onMessage('permission_request', (message) => {
-      const req: PermissionRequest = {
-        requestId: message.requestId as string,
-        toolName: message.toolName as string,
-        toolInput: (message.toolInput as Record<string, unknown>) ?? {},
-        riskLevel: message.riskLevel as string | undefined,
-        title: message.title as string | undefined,
-        description: message.description as string | undefined,
-        decisionReason: message.decisionReason as string | undefined,
-        blockedPath: message.blockedPath as string | undefined,
-        permissionSuggestions: message.permissionSuggestions as unknown[] | undefined,
-        agentId: message.agentId as string | undefined,
-      };
-      setQueue((prev) => [...prev, req]);
+      const req = toPermissionRequest(message);
+      if (req) enqueue(req);
+    });
+
+    const unsubCliOutput = vscode.onMessage('cli_output', (message) => {
+      const req = getPermissionRequestFromCliOutput(message);
+      if (req) {
+        enqueue(req);
+      }
+
+      const cancelId = getPermissionCancelRequestId(message);
+      if (cancelId) {
+        setQueue((prev) => prev.filter((r) => r.requestId !== cancelId));
+      }
     });
 
     // Listen for cancel_request messages
@@ -45,9 +59,22 @@ export function usePermissions() {
       setQueue((prev) => prev.filter((r) => r.requestId !== cancelId));
     });
 
+    const unsubClear = vscode.onMessage('permissions_cleared', () => {
+      setQueue([]);
+    });
+
+    const unsubProcessState = vscode.onMessage('process_state', (message) => {
+      if (message.state === 'stopped' || message.state === 'crashed' || message.state === 'restarting') {
+        setQueue([]);
+      }
+    });
+
     return () => {
       unsubPermission();
+      unsubCliOutput();
       unsubCancel();
+      unsubClear();
+      unsubProcessState();
     };
   }, []);
 

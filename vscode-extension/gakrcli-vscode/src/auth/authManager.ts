@@ -7,6 +7,16 @@ import {
   loadProfileFile,
   type GakrCliProfileFile,
 } from '../settings/profileFile';
+import {
+  buildEnvForProviderProfile,
+  getPrimaryProviderModel,
+  loadActiveProviderProfile,
+  normalizeModelForProvider,
+  updateActiveProviderProfileModel,
+  type ActiveProviderProfileResult,
+  type ProviderModelOption,
+} from '../settings/providerProfiles';
+import { discoverOpenAICompatibleModelOptions } from '../settings/providerModelDiscovery';
 
 // ============================================================================
 // Types
@@ -19,6 +29,7 @@ export interface ProviderDefinition {
   requiresBaseUrl: boolean;
   supportsModel: boolean;
   defaultBaseUrl?: string;
+  defaultModel?: string;
   credentialEnvVar?: string;
   modelEnvVar?: string;
   mode?: 'anthropic' | 'openai-compatible' | 'gemini' | 'mistral' | 'github' | 'bedrock' | 'vertex' | 'codex';
@@ -32,6 +43,7 @@ export interface ProviderConfig {
   label: string;
   env: Record<string, string>;
   model?: string;
+  modelOptions?: ProviderModelOption[];
 }
 
 export interface ProviderUpdateInput {
@@ -221,6 +233,7 @@ const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
     requiresBaseUrl: false,
     supportsModel: true,
     defaultBaseUrl: 'https://integrate.api.nvidia.com/v1',
+    defaultModel: 'stepfun-ai/step-3.5-flash',
     credentialEnvVar: 'NVIDIA_API_KEY',
     mode: 'openai-compatible',
     extraEnv: { NVIDIA_NIM: '1' },
@@ -353,6 +366,9 @@ export class AuthManager {
   constructor(
     private readonly settings: SettingsSync,
     private readonly profileLoader: typeof loadProfileFile = loadProfileFile,
+    private readonly activeProfileLoader: typeof loadActiveProviderProfile = loadActiveProviderProfile,
+    private readonly activeProfileModelUpdater: typeof updateActiveProviderProfileModel = updateActiveProviderProfileModel,
+    private readonly modelDiscoverer: typeof discoverOpenAICompatibleModelOptions = discoverOpenAICompatibleModelOptions,
   ) {}
 
   getAvailableProviders(): ProviderDefinition[] {
@@ -360,16 +376,42 @@ export class AuthManager {
   }
 
   getCurrentProvider(): ProviderConfig {
+    const activeProfile = this.getActiveProviderProfileFallback();
+    if (activeProfile) {
+      const model =
+        (this.settings.selectedModel
+          ? normalizeModelForProvider(activeProfile.profile.provider, this.settings.selectedModel)
+          : undefined) ??
+        getPrimaryProviderModel(activeProfile.profile.model, activeProfile.profile.provider);
+      return {
+        id: activeProfile.profile.provider,
+        label: activeProfile.profile.name,
+        env: buildEnvForProviderProfile(activeProfile.profile, { modelOverride: model }),
+        model,
+        modelOptions: activeProfile.modelOptions,
+      };
+    }
+
     const profile = this.getProfileFallback();
     if (profile) {
+      const rawModel = this.settings.selectedModel ??
+        profile.profile.env.OPENAI_MODEL ??
+        profile.profile.env.NVIDIA_MODEL ??
+        profile.profile.env.ANTHROPIC_MODEL ??
+        profile.profile.env.GEMINI_MODEL ??
+        profile.profile.env.MISTRAL_MODEL ??
+        profile.profile.env.MINIMAX_MODEL ??
+        profile.profile.env.BANKR_MODEL;
+      const model = rawModel ? normalizeModelForProvider(profile.profile.profile, rawModel) : undefined;
       return {
         id: profile.profile.profile,
         label: labelForProfile(profile.profile.profile),
-        env: applyCompatibilityFlag(profile.profile.profile, profile.profile.env),
-        model: profile.profile.env.OPENAI_MODEL ??
-          profile.profile.env.ANTHROPIC_MODEL ??
-          profile.profile.env.GEMINI_MODEL ??
-          profile.profile.env.MISTRAL_MODEL,
+        env: withModelOverride(
+          profile.profile.profile,
+          applyCompatibilityFlag(profile.profile.profile, profile.profile.env),
+          this.settings.selectedModel,
+        ),
+        model,
       };
     }
 
@@ -377,13 +419,14 @@ export class AuthManager {
     const def = PROVIDER_DEFINITIONS.find((p) => p.id === providerId) ?? PROVIDER_DEFINITIONS[0];
     const apiKey = this.settings.apiKey;
     const baseUrl = this.settings.baseUrl;
-    const model = this.settings.selectedModel;
+    const model = this.settings.selectedModel ?? def.defaultModel;
+    const normalizedModel = model ? normalizeModelForProvider(def.id, model) : undefined;
 
     return {
       id: def.id,
       label: def.label,
-      env: this._buildEnvForProvider(def, apiKey, baseUrl),
-      model,
+      env: this._buildEnvForProvider(def, apiKey, baseUrl, normalizedModel),
+      model: normalizedModel,
     };
   }
 
@@ -397,9 +440,21 @@ export class AuthManager {
       env[name] = value;
     }
 
+    const activeProfile = this.getActiveProviderProfileFallback();
+    if (activeProfile) {
+      Object.assign(env, buildEnvForProviderProfile(activeProfile.profile, {
+        modelOverride: this.settings.selectedModel,
+      }));
+      return env;
+    }
+
     const profile = this.getProfileFallback();
     if (profile) {
-      Object.assign(env, applyCompatibilityFlag(profile.profile.profile, profile.profile.env));
+      Object.assign(env, withModelOverride(
+        profile.profile.profile,
+        applyCompatibilityFlag(profile.profile.profile, profile.profile.env),
+        this.settings.selectedModel,
+      ));
       return env;
     }
 
@@ -407,9 +462,16 @@ export class AuthManager {
     const def = PROVIDER_DEFINITIONS.find((p) => p.id === providerId) ?? PROVIDER_DEFINITIONS[0];
     const apiKey = this.settings.apiKey;
     const baseUrl = this.settings.baseUrl;
+    const model = this.settings.selectedModel ?? def.defaultModel;
+    const normalizedModel = model ? normalizeModelForProvider(def.id, model) : undefined;
 
     // Merge provider-specific env vars (provider takes precedence for its own keys)
-    const providerEnv = this._buildEnvForProvider(def, apiKey, baseUrl);
+    const providerEnv = this._buildEnvForProvider(
+      def,
+      apiKey,
+      baseUrl,
+      normalizedModel,
+    );
     Object.assign(env, providerEnv);
 
     return env;
@@ -426,6 +488,29 @@ export class AuthManager {
     if (input.model !== undefined) {
       await this.settings.setModel(input.model);
     }
+  }
+
+  async updateModel(model: string | undefined): Promise<void> {
+    const activeProfile = this.getActiveProviderProfileFallback();
+    if (activeProfile && model && this.activeProfileModelUpdater(model)) {
+      await this.settings.setModel(undefined);
+      return;
+    }
+
+    await this.settings.setModel(model);
+  }
+
+  normalizeModelForCurrentProvider(model: string): string {
+    return normalizeModelForProvider(this.getCurrentProvider().id, model);
+  }
+
+  async discoverCurrentProviderModels(): Promise<ProviderModelOption[]> {
+    const current = this.getCurrentProvider();
+    const discovered = await this.modelDiscoverer(this.buildProcessEnv());
+    if (discovered.length > 0) {
+      return discovered;
+    }
+    return current.modelOptions ?? [];
   }
 
   validate(input: ProviderUpdateInput): ProviderValidationResult {
@@ -455,12 +540,14 @@ export class AuthManager {
     def: ProviderDefinition,
     apiKey: string | undefined,
     baseUrl: string | undefined,
+    model: string | undefined,
   ): Record<string, string> {
     const env: Record<string, string> = {};
 
     switch (def.mode ?? def.id) {
       case 'anthropic':
         if (apiKey && def.credentialEnvVar) env[def.credentialEnvVar] = apiKey;
+        if (model) env[def.modelEnvVar ?? 'ANTHROPIC_MODEL'] = model;
         break;
 
       case 'bedrock':
@@ -474,23 +561,28 @@ export class AuthManager {
       case 'gemini':
         if (apiKey && def.credentialEnvVar) env[def.credentialEnvVar] = apiKey;
         if (baseUrl) env['GEMINI_BASE_URL'] = baseUrl;
+        if (model) env[def.modelEnvVar ?? 'GEMINI_MODEL'] = model;
         env['GAKR_CODE_USE_GEMINI'] = '1';
         break;
 
       case 'mistral':
         if (apiKey && def.credentialEnvVar) env[def.credentialEnvVar] = apiKey;
         if (baseUrl || def.defaultBaseUrl) env['MISTRAL_BASE_URL'] = baseUrl || def.defaultBaseUrl!;
+        if (model) env[def.modelEnvVar ?? 'MISTRAL_MODEL'] = model;
         env['GAKR_CODE_USE_MISTRAL'] = '1';
         break;
 
       case 'github':
         if (apiKey && def.credentialEnvVar) env[def.credentialEnvVar] = apiKey;
+        if (baseUrl || def.defaultBaseUrl) env['OPENAI_BASE_URL'] = baseUrl || def.defaultBaseUrl!;
+        if (model) env['OPENAI_MODEL'] = model;
         env['GAKR_CODE_USE_GITHUB'] = '1';
         break;
 
       case 'codex':
         if (apiKey && def.credentialEnvVar) env[def.credentialEnvVar] = apiKey;
         if (baseUrl || def.defaultBaseUrl) env['OPENAI_BASE_URL'] = baseUrl || def.defaultBaseUrl!;
+        if (model) env['OPENAI_MODEL'] = model;
         env['GAKR_CODE_USE_OPENAI'] = '1';
         break;
 
@@ -506,6 +598,12 @@ export class AuthManager {
         }
         if (baseUrl || def.defaultBaseUrl) {
           env['OPENAI_BASE_URL'] = baseUrl || def.defaultBaseUrl!;
+        }
+        if (model) {
+          env['OPENAI_MODEL'] = model;
+          if (def.id === 'nvidia-nim') {
+            env['NVIDIA_MODEL'] = model;
+          }
         }
         env['GAKR_CODE_USE_OPENAI'] = '1';
         Object.assign(env, def.extraEnv);
@@ -523,6 +621,14 @@ export class AuthManager {
     return this.profileLoader();
   }
 
+  private getActiveProviderProfileFallback(): ActiveProviderProfileResult | null {
+    if (this.hasExplicitExtensionProvider()) {
+      return null;
+    }
+
+    return this.activeProfileLoader();
+  }
+
   private hasExplicitExtensionProvider(): boolean {
     const settings = this.settings as SettingsSync & {
       hasConfiguredProvider?: () => boolean;
@@ -538,6 +644,39 @@ export class AuthManager {
       this.settings.baseUrl,
     );
   }
+}
+
+function withModelOverride(
+  profile: string,
+  env: Record<string, string>,
+  model: string | undefined,
+): Record<string, string> {
+  if (!model) {
+    return env;
+  }
+
+  const next = { ...env };
+  switch (profile) {
+    case 'anthropic':
+    case 'bedrock':
+    case 'vertex':
+      next.ANTHROPIC_MODEL = model;
+      break;
+    case 'gemini':
+      next.GEMINI_MODEL = model;
+      break;
+    case 'mistral':
+      next.MISTRAL_MODEL = model;
+      break;
+    case 'nvidia-nim':
+      next.OPENAI_MODEL = model;
+      next.NVIDIA_MODEL = model;
+      break;
+    default:
+      next.OPENAI_MODEL = model;
+      break;
+  }
+  return next;
 }
 
 function labelForProfile(profile: string): string {

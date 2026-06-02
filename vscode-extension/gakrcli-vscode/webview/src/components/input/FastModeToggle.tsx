@@ -16,7 +16,7 @@ export const FastModeToggle: React.FC<FastModeToggleProps> = ({ isEnabled, canTo
 
   return (
     <button
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border cursor-pointer transition-colors ${
+      className={`glass-control inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border cursor-pointer transition-colors ${
         isEnabled
           ? 'bg-yellow-500/15 border-yellow-500/40 text-yellow-500 hover:bg-yellow-500/25'
           : 'bg-transparent border-vscode-border text-vscode-fg/50 hover:border-vscode-fg/40 hover:text-vscode-fg/70'

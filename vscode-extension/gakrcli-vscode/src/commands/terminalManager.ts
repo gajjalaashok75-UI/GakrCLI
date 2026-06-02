@@ -10,7 +10,7 @@ export class TerminalManager implements vscode.Disposable {
   private terminal: vscode.Terminal | undefined;
   private readonly disposables: vscode.Disposable[] = [];
 
-  constructor() {
+  constructor(private readonly extensionPath?: string) {
     this.disposables.push(
       vscode.window.onDidCloseTerminal((closed) => {
         if (closed === this.terminal) {
@@ -32,7 +32,10 @@ export class TerminalManager implements vscode.Disposable {
 
     const config = vscode.workspace.getConfiguration('gakrcliCode');
     const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    const cliCommand = resolveCliLaunchCommand(config, cwd).displayCommand;
+    const cliCommand = resolveCliLaunchCommand(config, {
+      workspaceFolder: cwd,
+      extensionPath: this.extensionPath,
+    }).displayCommand;
 
     const envVars = config.get<Array<{ name: string; value: string }>>(
       'environmentVariables',
@@ -70,7 +73,10 @@ export class TerminalManager implements vscode.Disposable {
   runCommand(args: string[], name = 'GakrCLI'): void {
     const config = vscode.workspace.getConfiguration('gakrcliCode');
     const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    const cliCommand = resolveCliLaunchCommand(config, cwd).displayCommand;
+    const cliCommand = resolveCliLaunchCommand(config, {
+      workspaceFolder: cwd,
+      extensionPath: this.extensionPath,
+    }).displayCommand;
     const terminal = vscode.window.createTerminal({
       name,
       cwd,

@@ -4,11 +4,105 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ## [Unreleased]
 
+### Fixed (2026-06-01)
+
+- Restored visible unordered, ordered, and nested list markers in assistant markdown output after Tailwind's base reset removed default bullets.
+- Normalized unique anchored deletion edits so stale surrounding anchors do not break safe block removals, while still rejecting ambiguous duplicate deletion targets.
+- Moved the live context usage indicator from the input toolbar into the lower composer control row beside permission, provider, and Fast mode controls.
+- Allowed unique multiline edit targets to match when only leading indentation differs, preventing brittle HTML/CSS replacement failures while still refusing ambiguous relaxed matches.
+- Preserved the last known live context value across empty SDK refreshes and guarded sandbox stderr annotation so Bash results keep working when the sandbox runtime does not expose its optional helper.
+- Kept the composer context meter updating from SDK runtime usage and local SDK token estimates when full context analysis is unavailable, and replaced the native title tooltip with a glass hover panel and fill-line meter.
+- Added a live SDK-backed context meter between the model selector and reasoning effort control, kept it visible while token capacity is still refreshing, and rendered Codex-style compacting/compacted dividers from SDK status and compact-boundary events.
+- Derived a live header title from the first visible user prompt while new sessions are still waiting for host/session title updates, matching resumed chat titles.
+- Matched live chats to resumed history by hiding unresolved stopped tool placeholders and deriving the header title immediately from the first visible user prompt.
+- Tightened tool-row spacing, headers, borders, and expanded detail heights so collapsed and opened tool results take less vertical space.
+- Bounded expanded tool input panels with their own scroll area and moved assistant copy actions to the end of each assistant turn, copying the full turn text instead of each intermediate text fragment.
+- Paired tool calls with their matching results inside one expandable webview row so command inputs and outputs stay available on click without adding extra transcript height.
+- Hid streamed and resumed thinking blocks from the webview transcript while showing only a compact shining thinking indicator during active hidden reasoning.
+- Kept active chat titles and today's history fresh by publishing fallback titles from SDK user replay messages, refreshing sessions after user/result events, and watching all GakrCLI project stores instead of only the expected workspace directory.
+- Recovered today's sessions when SDK transcripts were written under VS Code's process directory by rescanning project stores and matching each JSONL file's recorded `cwd` to the active workspace.
+- Routed SDK tool permission checks through an explicit `canUseTool` bridge so `AskUserQuestion` submissions resolve with `updatedInput.answers` instead of falling through to the SDK default denial.
+- Scoped hover stop controls to the currently streaming assistant response so completed turns keep copy-only actions while a later prompt is running.
+- Kept Fast mode toggles stable by accepting both SDK string states (`on`, `off`, `cooldown`) and object states from runtime snapshots, result messages, and init messages.
+- Preserved the user's Fast mode toggle across turn-level SDK result/init updates and removed hardcoded slash command fallbacks so the menu follows the SDK command registry without duplicate provider aliases.
+- Prevented SDK runtime snapshot failures from surfacing as crashed/connection lost during startup when provider config is not initialized yet or the headless SDK has a stubbed plugin command store.
+- Preferred the local workspace SDK build during source-checkout development while still falling back to the packaged `@gakr-gakr/gakrcli/sdk` dependency.
+
+### Fixed (2026-05-31)
+
+- Restored result entries during resumed chat replay so per-turn completion text remains attached after loading session history.
+- Synced Fast mode from SDK runtime settings snapshots after webview toggles, including toggles made before the runtime was already active.
+- Changed clarification prompts to a one-question stepper with scrollable content and pinned Skip, Back, Next, and Submit actions.
+- Routed `AskUserQuestion` requests to the webview clarification dialog instead of the permission dialog, then returned selected answers to the SDK as `updatedInput.answers`.
+
+### Changed (2026-05-30)
+
+- Routed pending-permission status through the real permission dialog lifecycle, added a webview fallback for SDK tool permission requests, and cleared pending permission UI/status on stop, restart, session changes, and shutdown.
+- Added a header refresh button that restarts the SDK runtime while preserving the current session, delayed Active status until provider/model state is hydrated, and folded stopped-turn interruption/duration UI into the assistant turn so the cursor and copy action settle correctly.
+- Made the stop button show the GakrCLI interruption prompt immediately and fixed provider model refresh so discovered provider catalogs can replace single-model SDK fallbacks.
+- Added the terminal-style `Interrupted · What should Gakr do instead?` row for stopped webview turns, followed by the GakrCLI-style completion duration.
+- Replaced assistant footer usage stats with the GakrCLI-style turn completion line, kept stopped turns from showing synthetic interruption bubbles, and made copy controls appear on hover for every assistant response.
+- Added GakrCLI-style spinner glyphs, live turn timers, API retry countdowns, SDK todo-list state, stable per-turn usage attachment, and interrupt cleanup so stopped requests do not render synthetic abort chat bubbles.
+- Kept the top-right Settings button as a lightweight coming-soon dialog with a working runtime refresh action and Close button.
+- Added SDK-backed runtime refresh and mutation paths for settings, provider/model state, MCP server state, plugin state, Fast mode, and reasoning effort in the native webview flow.
+- Added a top-right Settings entry point and SDK-backed settings state messages for the webview.
+- Reworked permission and clarification dialogs into compact centered prompts with numbered approval/deny actions and command/detail previews.
+- Replaced the native VS Code chat runtime's hardcoded GakrCLI wrapper process with direct `@gakr-gakr/gakrcli/sdk` usage while preserving the existing webview protocol, permission prompts, diff handling, MCP status, resume, and model switching behavior.
+- Declared `@gakr-gakr/gakrcli` as a runtime dependency and packaged the published npm SDK dependency instead of relying on root checkout `dist/sdk.mjs` files.
+- Moved provider model refresh to an SDK-first path using `query().supportedModels()`, with live OpenAI-compatible `/models` fallback when the SDK has no dynamic model list.
+- Added regression coverage for active provider profiles, active model selection, model promotion into GakrCLI profiles, SDK model discovery fallback, and nullable SDK capability responses during startup.
+
+### Fixed (2026-05-29)
+
+- Loaded the active GakrCLI provider profile from `~/.gakrcli.json` before falling back to `.gakrcli-profile.json`, keeping NVIDIA NIM and other provider/model selections aligned with the root `/provider` and `/model` commands.
+- Updated the model picker immediately after selection, displayed full model IDs such as `openai/gpt-oss-120b` and `openrouter/free`, and preferred the active provider profile model list over broad static catalogs.
+- Added a footer runtime status chip showing Sleep, Starting, Idle, Running, and related states beside the permission, provider, and Fast controls.
+- Fetched OpenAI-compatible model choices dynamically from the active provider `/v1/models` endpoint with `/models` fallback, using the same merged environment used to launch GakrCLI.
+- Renamed the ready runtime chip from Idle to Active and moved cost, duration, and token usage into the assistant message hover actions beside the copy button.
+
+### Changed (2026-05-28)
+
+- Refined the VS Code webview styling with a darker black-glass theme, lower-brightness sky-blue highlights, and consistent glass treatments across chat, sessions, tool output, provider/model selectors, MCP, plugin, permission, and onboarding surfaces.
+- Reworked the chat composer footer so the input row starts with add and attachment controls, the add menu contains MCP and Plugins, and only permission mode, provider, and Fast remain in the outside footer row.
+- Moved conversation runtime usage stats to the end of the chat and expanded them to show cost, input/output tokens, cache tokens, turns, and duration.
+- Added a subtle full-shell webview border and removed the duplicate standalone attach button now that file/photo upload lives in the add menu.
+
+### Fixed (2026-05-28)
+
+- Wired Bypass mode through the wrapper launch flags by enabling the required GakrCLI allow flag when selected and passing `--allow-dangerously-skip-permissions` into new and resumed processes.
+- Rendered the model menu through a bounded webview portal, kept the active model label populated from provider/profile state, and allowed explicit model selections to override the `.gakrcli-profile.json` fallback model.
+- Deduplicated attached files from the picker through send-time prompt construction and compacted the attachment bar for larger file sets.
+- Kept provider and model picker popups bounded above the composer in narrow VS Code panes and preserved provider selection behavior after the footer layout change.
+- Clamped the model picker to the webview viewport so it stays visible in narrow panes.
+- Kept startup, resume, and provider display aligned with the active `.gakrcli-profile.json` fallback model and base URL when extension provider settings are not explicitly set.
+- Synced the effective permission mode back to the webview so blocked Bypass attempts snap back to the active mode.
+
+### Added (2026-05-27 19:09:20 +05:30)
+
+- Added focused regression tests for VS Code chat message cleanup, tool-result replay, permission request normalization, slash command filtering, session deletion state, and session history parsing.
+- Extracted chat message transforms, permission request normalization, and session deletion updates into tested webview utility modules.
+
+### Fixed (2026-05-27 19:09:20 +05:30)
+
+- Permission approvals now stay bound to host-confirmed pending requests, preventing raw CLI control events from creating stale approval cards that cannot resolve.
+- Tool results now remain attached under their matching tool calls during live streaming and resumed history, avoiding `[tool interaction]`, `[complex content]`, and duplicated final-answer output.
+- Queued prompts sent while GakrCLI is still running keep their UUID/priority metadata so steering messages remain in the same conversation.
+- Session history delete responses now update the visible grouped history immediately after a successful delete.
+
+### Fixed (2026-05-27 16:49:02 +05:30)
+
+- Headless wrapper launches now pass `--permission-prompt-tool stdio`, allowing WebSearch, Bash, and other tool approvals to appear in the VS Code permission dialog instead of being denied before the UI can respond.
+- Added `allow ToolName` and `/allow ToolName` fallback handling to register a tool as allowed and resolve matching pending permission requests.
+- Deduplicated streamed assistant responses from final payloads, hid internal local-command wrappers, stripped raw thinking tags, and moved copy actions to the latest assistant response.
+- Slash command search now deduplicates by command name, matches command names only, hides empty results, and no longer blocks unknown slash-style prompts.
+- Provider selection now scrolls inside a bounded dialog so all provider options remain reachable in narrow VS Code panes.
+
 ## [0.2.2] - 2026-05-27
 
 ### Fixed
 
 - The dev-host/source-checkout launch path now starts the real CLI with `node dist/cli.mjs`, supports wrapper commands with inline arguments, and reports initialize timeouts or early exits instead of hanging on "Starting GakrCLI...".
+- Relative wrapper commands such as `node dist/cli.mjs` now resolve against the GakrCLI source checkout even when VS Code is opened on another folder, IDE MCP config is passed as a JSON file on Windows, and early startup failures include stderr details.
 - VS Code terminals now receive `GAKR_CODE_SSE_PORT` from the extension MCP server, and Windows `/ide` matching now treats workspace paths case-insensitively so fresh terminals reconnect reliably.
 - Provider badges, provider selection, and profile loading now match the root GakrCLI provider catalog, search ancestor workspace profiles, and fall back to `~/.gakrcli/.gakrcli-profile.json` when no project profile exists.
 - User chat messages now render on the right side, and editing a user message sends the updated prompt back through the active CLI session.

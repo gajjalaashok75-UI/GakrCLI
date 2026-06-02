@@ -6,18 +6,35 @@ interface CostDisplayProps {
 }
 
 export function CostDisplay({ cost, className = '' }: CostDisplayProps) {
-  if (cost.totalCostUSD === 0 && cost.inputTokens === 0) {
+  const hasUsage =
+    cost.totalCostUSD !== 0 ||
+    cost.inputTokens !== 0 ||
+    cost.outputTokens !== 0 ||
+    cost.cacheReadTokens !== 0 ||
+    cost.cacheCreationTokens !== 0 ||
+    cost.numTurns !== 0 ||
+    cost.durationMs !== 0;
+
+  if (!hasUsage) {
     return null;
   }
 
   return (
     <div
-      className={`flex items-center gap-3 text-xs opacity-60 ${className}`}
+      className={`flex items-center gap-2 text-xs opacity-60 flex-wrap min-w-0 ${className}`}
       title={buildTooltip(cost)}
     >
-      <span>{formatCost(cost.totalCostUSD)}</span>
+      <span>Cost {formatCost(cost.totalCostUSD)}</span>
       <span className="opacity-40">|</span>
-      <span>{formatTokens(cost.inputTokens + cost.outputTokens)} tokens</span>
+      <span>In {formatTokens(cost.inputTokens)}</span>
+      <span className="opacity-40">|</span>
+      <span>Out {formatTokens(cost.outputTokens)}</span>
+      {(cost.cacheReadTokens > 0 || cost.cacheCreationTokens > 0) && (
+        <>
+          <span className="opacity-40">|</span>
+          <span>Cache {formatTokens(cost.cacheReadTokens + cost.cacheCreationTokens)}</span>
+        </>
+      )}
       {cost.numTurns > 0 && (
         <>
           <span className="opacity-40">|</span>

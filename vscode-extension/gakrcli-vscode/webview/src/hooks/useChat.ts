@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { vscode } from '../vscode';
 import { useStream } from './useStream';
-import type { ChatMessage, SessionCost } from '../types/chat';
+import type { ChatMessage, SessionCost, TodoItem } from '../types/chat';
 import type {
   SDKMessage,
   StreamEvent,
@@ -10,6 +10,29 @@ import type {
   ResultMessage,
   SystemInitMessage,
 } from '../types/messages';
+import {
+  attachToolResults,
+  blocksSignature,
+  blocksSoftSignature,
+  extractToolResultBlocks,
+  extractUserVisibleText,
+  formatFilesPersistedMessage,
+  isToolUseBlock,
+  mergeExistingToolResults,
+  normalizeRenderableBlocks,
+  normalizeTextContentBlock,
+  stripInternalTextWrappers,
+} from '../utils/chatMessageTransforms';
+import {
+  createPendingContextUsage,
+  normalizeContextUsage,
+  type WebviewContextUsage,
+} from '../utils/contextUsage';
+import {
+  completeCompactSystemMessage,
+  startCompactSystemMessage,
+} from '../utils/compactSystemMessage';
+import { normalizeFastModeState } from '../utils/fastModeState';
 
 const EMPTY_COST: SessionCost = {
   totalCostUSD: 0,
@@ -21,6 +44,13 @@ const EMPTY_COST: SessionCost = {
   durationMs: 0,
 };
 
+interface NormalizedUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+}
+
 export interface RateLimitInfo {
   resetsAt: number;       // Unix timestamp seconds
   rateLimitType: string;
@@ -30,6 +60,12 @@ export interface RateLimitInfo {
 export interface ToolActivity {
   toolName: string;
   description: string;  // e.g. "Editing src/App.tsx" or "Running: npm test"
+}
+
+export interface RetryInfo {
+  attempt: number;
+  retryAt: number;
+  delayMs: number;
 }
 
 /** Format a human-readable description of tool activity */
@@ -93,7 +129,7 @@ export function useChat() {
   const [error, setError] = useState<string | null>(null);
   const [rateLimitInfo, setRateLimitInfo] = useState<RateLimitInfo | null>(null);
   const [promptSuggestions, setPromptSuggestions] = useState<string[]>([]);
-  const [processState, setProcessState] = useState<'idle' | 'starting' | 'running' | 'stopped' | 'crashed'>('idle');
+  const [processState, setProcessState] = useState<'idle' | 'starting' | 'running' | 'stopped' | 'crashed' | 'restarting'>('idle');
   const [fastModeState, setFastModeState] = useState<{ enabled: boolean; canToggle: boolean }>({
     enabled: false,
     canToggle: true,
@@ -101,17 +137,43 @@ export function useChat() {
   const [availableModels, setAvailableModels] = useState<Array<{ value: string; displayName: string }>>([]);
   const [effortLevel, setEffortLevel] = useState<string>('medium');
   const [toolActivity, setToolActivity] = useState<ToolActivity | null>(null);
+  const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [retryInfo, setRetryInfo] = useState<RetryInfo | null>(null);
+  const [contextUsage, setContextUsage] = useState<WebviewContextUsage | null>(() => createPendingContextUsage());
 
   const { processStreamEvent, resetStream } = useStream();
   const streamingUuidRef = useRef<string | null>(null);
+  const resultTargetAssistantIdRef = useRef<string | null>(null);
+  const activeToolUseIdsRef = useRef<Set<string>>(new Set());
+  const userInterruptedRef = useRef(false);
+  const turnStartedAtRef = useRef<number | null>(null);
+  const compactSystemMessageIdRef = useRef<string | null>(null);
+  const isCompactingRef = useRef(false);
 
   const handleUserMessage = useCallback((msg: UserMessage) => {
     const id = msg.uuid || `user-${Date.now()}`;
-    const text =
-      typeof msg.message.content === 'string'
-        ? msg.message.content
-        : '[complex content]';
+    const toolResults = extractToolResultBlocks(msg.message.content);
+    if (toolResults.length > 0) {
+      setMessages((prev) => attachToolResults(prev, toolResults));
+      for (const result of toolResults) {
+        activeToolUseIdsRef.current.delete(result.tool_use_id);
+      }
+      if (activeToolUseIdsRef.current.size === 0) {
+        setToolActivity(null);
+      }
+      return;
+    }
 
+    const text = extractUserVisibleText(msg.message.content);
+
+    if (!text) {
+      return;
+    }
+    if (isUserInterruptText(text)) {
+      return;
+    }
+
+    resultTargetAssistantIdRef.current = null;
     const chatMsg: ChatMessage = {
       id,
       role: 'user',
@@ -134,6 +196,8 @@ export function useChat() {
       switch (update.type) {
         case 'message_start': {
           streamingUuidRef.current = update.uuid;
+          resultTargetAssistantIdRef.current = update.uuid;
+          turnStartedAtRef.current ??= Date.now();
           setIsStreaming(true);
           if (update.model) setModel(update.model);
 
@@ -155,18 +219,26 @@ export function useChat() {
         case 'block_stop': {
           const uuid = streamingUuidRef.current;
           if (!uuid) break;
+          const displayBlocks = normalizeRenderableBlocks(update.blocks);
+          const nextTodos = extractTodosFromRenderableBlocks(displayBlocks);
+          if (nextTodos) {
+            setTodos(nextTodos);
+          }
           setMessages((prev) =>
             prev.map((msg) =>
-              msg.id === uuid ? { ...msg, blocks: update.blocks } : msg,
+              msg.id === uuid ? { ...msg, blocks: displayBlocks } : msg,
             ),
           );
           // Extract tool activity from tool_use blocks
-          if (update.type === 'block_start' && update.blocks) {
-            const latestBlock = update.blocks[update.blocks.length - 1];
+          if (update.type === 'block_start' && displayBlocks) {
+            const latestBlock = displayBlocks[displayBlocks.length - 1];
             if (latestBlock) {
               const block = latestBlock.block;
               if (block.type === 'tool_use' || block.type === 'server_tool_use') {
                 const toolInput = (block as { input?: Record<string, unknown> }).input;
+                if (typeof block.id === 'string') {
+                  activeToolUseIdsRef.current.add(block.id);
+                }
                 setToolActivity({
                   toolName: block.name,
                   description: formatToolActivity(block.name, undefined, toolInput),
@@ -179,36 +251,55 @@ export function useChat() {
 
         case 'message_stop': {
           const uuid = streamingUuidRef.current;
+          const stoppedBlocks = normalizeRenderableBlocks(update.blocks ?? []);
           if (uuid) {
             setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === uuid
-                  ? {
-                      ...msg,
-                      isStreaming: false,
-                      blocks: msg.blocks?.map((b) => ({ ...b, isStreaming: false })),
-                    }
-                  : msg,
-              ),
+              prev.map((msg) => {
+                if (msg.id === uuid) {
+                  return {
+                    ...msg,
+                    isStreaming: false,
+                    blocks: msg.blocks?.map((b) => ({ ...b, isStreaming: false })),
+                  };
+                }
+                return msg;
+              }),
             );
           }
-          setIsStreaming(false);
-          setToolActivity(null);
+          const waitingForTools =
+            activeToolUseIdsRef.current.size > 0 ||
+            stoppedBlocks.some((b) => isToolUseBlock(b.block));
+
+          if (waitingForTools) {
+            setIsStreaming(true);
+            if (!toolActivity) {
+              setToolActivity({
+                toolName: 'Tool',
+                description: 'Waiting for tool result...',
+              });
+            }
+          } else {
+            setIsStreaming(false);
+            setToolActivity(null);
+          }
           streamingUuidRef.current = null;
           resetStream();
           break;
         }
       }
     },
-    [processStreamEvent, resetStream],
+    [processStreamEvent, resetStream, toolActivity],
   );
 
   const handleAssistantMessage = useCallback((msg: AssistantMessage) => {
     const blocks = (msg.message.content || []).map((block, index) => ({
       index,
-      block,
+      block: normalizeTextContentBlock(block),
       isStreaming: false,
     }));
+    if (isUserAbortAssistantBlocks(blocks)) {
+      return;
+    }
 
     const chatMsg: ChatMessage = {
       id: msg.uuid,
@@ -219,31 +310,85 @@ export function useChat() {
       parentToolUseId: msg.parent_tool_use_id,
       model: msg.message.model,
     };
+    const nextTodos = extractTodosFromRenderableBlocks(blocks);
+    if (nextTodos) {
+      setTodos(nextTodos);
+    }
+    let resolvedAssistantId = msg.uuid;
     setMessages((prev) => {
-      // Skip if this message was already loaded from session history
-      if (msg.uuid && prev.some((m) => m.id === msg.uuid)) return prev;
+      const existingIndex = msg.uuid ? prev.findIndex((m) => m.id === msg.uuid) : -1;
+      if (existingIndex >= 0) {
+        resolvedAssistantId = msg.uuid;
+        return prev.map((m, index) =>
+          index === existingIndex
+            ? { ...m, ...chatMsg, blocks: mergeExistingToolResults(blocks, m.blocks ?? []) }
+            : m,
+        );
+      }
+
+      const finalSignature = blocksSignature(blocks);
+      const finalSoftSignature = blocksSoftSignature(blocks);
+      for (let index = prev.length - 1, checked = 0; index >= 0 && checked < 8; index--) {
+        const candidate = prev[index];
+        if (!candidate || candidate.role !== 'assistant') continue;
+        checked++;
+        const candidateBlocks = candidate.blocks ?? [];
+        if (
+          blocksSignature(candidateBlocks) === finalSignature ||
+          (finalSoftSignature && blocksSoftSignature(candidateBlocks) === finalSoftSignature)
+        ) {
+          resolvedAssistantId = candidate.id;
+          return prev.map((m, msgIndex) =>
+            msgIndex === index
+              ? {
+                  ...m,
+                  blocks: mergeExistingToolResults(blocks, candidateBlocks),
+                  isStreaming: false,
+                  model: chatMsg.model ?? m.model,
+                }
+              : m,
+          );
+        }
+      }
+
       return [...prev, chatMsg];
     });
+    resultTargetAssistantIdRef.current = resolvedAssistantId;
+    if (!streamingUuidRef.current && activeToolUseIdsRef.current.size === 0) {
+      setIsStreaming(false);
+      setToolActivity(null);
+    }
   }, []);
 
   const handleResultMessage = useCallback((msg: ResultMessage) => {
     setIsStreaming(false);
     setToolActivity(null);
+    setRetryInfo(null);
+    activeToolUseIdsRef.current.clear();
     streamingUuidRef.current = null;
     resetStream();
+    const usage = normalizeUsage(msg);
+    const msgAny = msg as unknown as Record<string, unknown>;
+    const wasUserAbort = userInterruptedRef.current || isUserAbortResult(msg);
+    const rawTurns = readNumber(msgAny, 'num_turns', 'numTurns') ?? 0;
 
-    setCost({
-      totalCostUSD: msg.total_cost_usd,
-      inputTokens: msg.usage?.inputTokens ?? 0,
-      outputTokens: msg.usage?.outputTokens ?? 0,
-      cacheReadTokens: msg.usage?.cacheReadInputTokens ?? 0,
-      cacheCreationTokens: msg.usage?.cacheCreationInputTokens ?? 0,
-      numTurns: msg.num_turns,
-      durationMs: msg.duration_ms,
-    });
+    const nextCost = {
+      totalCostUSD: readNumber(msgAny, 'total_cost_usd', 'totalCostUsd', 'totalCostUSD') ?? 0,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cacheReadTokens: usage.cacheReadTokens,
+      cacheCreationTokens: usage.cacheCreationTokens,
+      numTurns: wasUserAbort && rawTurns > 0 ? rawTurns - 1 : rawTurns,
+      durationMs: readNumber(msgAny, 'duration_ms', 'durationMs') ?? 0,
+    };
+    setCost(nextCost);
+    setMessages((prev) =>
+      wasUserAbort
+        ? appendInterruptedTurnCompletion(prev, nextCost)
+        : attachCostToAssistant(prev, resultTargetAssistantIdRef.current, nextCost),
+    );
 
-    if (msg.is_error) {
-      // Parse rate limit from result text e.g. "You've hit your limit · resets 3am (America/New_York)"
+    if (msg.is_error && !wasUserAbort) {
       const resultText = (msg as unknown as Record<string, unknown>).result as string | undefined;
       if (resultText) {
         setError(resultText);
@@ -253,11 +398,18 @@ export function useChat() {
         setError('An error occurred');
       }
     }
+    userInterruptedRef.current = false;
+    turnStartedAtRef.current = null;
+    vscode.postMessage({ type: 'settings_refresh' });
   }, [resetStream]);
 
   const handleSystemInit = useCallback((msg: SystemInitMessage) => {
     setSessionId(msg.session_id);
     setModel(msg.model);
+    setContextUsage((previous) => ({
+      ...(previous ?? createPendingContextUsage()),
+      model: msg.model,
+    }));
   }, []);
 
   const handleSessionTitle = useCallback((title: string) => {
@@ -278,7 +430,6 @@ export function useChat() {
       },
     ]);
   }, []);
-
   useEffect(() => {
     const handler = (event: MessageEvent) => {
       const data = event.data;
@@ -290,7 +441,9 @@ export function useChat() {
         if (data.state === 'stopped' || data.state === 'crashed') {
           setIsStreaming(false);
           setToolActivity(null);
+          setRetryInfo(null);
           streamingUuidRef.current = null;
+          resultTargetAssistantIdRef.current = null;
         }
         // Clear errors when process comes back up
         if (data.state === 'running' || data.state === 'starting') {
@@ -300,12 +453,72 @@ export function useChat() {
         return;
       }
 
+      if (data.type === 'provider_state') {
+        if (typeof data.currentModel === 'string' && data.currentModel.trim()) {
+          setModel(data.currentModel);
+        }
+        if (Array.isArray(data.models)) {
+          setAvailableModels(
+            (data.models as Array<Record<string, unknown>>)
+              .map((m) => ({
+                value: (m.value as string) || (m.id as string) || '',
+                displayName: (m.displayName as string) || (m.value as string) || (m.id as string) || '',
+              }))
+              .filter((m) => m.value),
+          );
+        }
+        return;
+      }
+
+      if (data.type === 'settings_state') {
+        const current = data.current && typeof data.current === 'object'
+          ? data.current as Record<string, unknown>
+          : {};
+        const runtime = data.runtime && typeof data.runtime === 'object'
+          ? data.runtime as Record<string, unknown>
+          : {};
+        const runtimeFastMode = runtime.fastModeState;
+
+        if (typeof current.fastMode === 'boolean' || runtimeFastMode !== undefined) {
+          setFastModeState((previous) =>
+            normalizeFastModeState(
+              runtimeFastMode,
+              normalizeFastModeState(current.fastMode, previous),
+              { preserveEnabled: typeof current.fastMode === 'boolean' },
+            ),
+          );
+        }
+
+        const currentModel = typeof current.model === 'string' && current.model.trim() ? current.model : null;
+        if (currentModel) setModel(currentModel);
+        if (typeof current.effort === 'string') {
+          setEffortLevel(current.effort);
+        }
+        if (Array.isArray(data.models)) {
+          setAvailableModels(
+            (data.models as Array<Record<string, unknown>>)
+              .map((m) => ({
+                value: (m.value as string) || (m.id as string) || '',
+                displayName: (m.displayName as string) || (m.value as string) || (m.id as string) || '',
+              }))
+              .filter((m) => m.value),
+          );
+        }
+        setContextUsage((previous) =>
+          normalizeContextUsage(
+            data.contextUsage,
+            previous ?? createPendingContextUsage(currentModel ?? model),
+          ),
+        );
+        return;
+      }
+
       // Unwrap cli_output envelope
       const msg: SDKMessage = data.type === 'cli_output' ? data.data : data;
       if (!msg || typeof msg !== 'object') return;
 
       try {
-        const msgAny = msg as Record<string, unknown>;
+        const msgAny = msg as unknown as Record<string, unknown>;
 
         switch (msgAny.type) {
           case 'stream_event':
@@ -323,13 +536,11 @@ export function useChat() {
           case 'result':
             handleResultMessage(msg as ResultMessage);
             {
-              const resultAny = msg as Record<string, unknown>;
+              const resultAny = msg as unknown as Record<string, unknown>;
               if (resultAny.fast_mode_state) {
-                const fms = resultAny.fast_mode_state as Record<string, unknown>;
-                setFastModeState({
-                  enabled: (fms.enabled as boolean) ?? false,
-                  canToggle: (fms.canToggle as boolean) ?? true,
-                });
+                setFastModeState((previous) =>
+                  normalizeFastModeState(resultAny.fast_mode_state, previous, { preserveEnabled: true }),
+                );
               }
               if (typeof resultAny.effort === 'string') {
                 setEffortLevel(resultAny.effort);
@@ -365,6 +576,7 @@ export function useChat() {
                 toolName,
                 description: formatToolActivity(toolName, progress, undefined),
               });
+              setIsStreaming(true);
             }
             // Don't add a message for every progress tick — just update streaming state
             if (progress) {
@@ -406,20 +618,18 @@ export function useChat() {
               case 'init':
                 handleSystemInit(msg as SystemInitMessage);
                 {
-                  const initAny = msg as Record<string, unknown>;
+                  const initAny = msg as unknown as Record<string, unknown>;
                   if (initAny.fast_mode_state) {
-                    const fms = initAny.fast_mode_state as Record<string, unknown>;
-                    setFastModeState({
-                      enabled: (fms.enabled as boolean) ?? false,
-                      canToggle: (fms.canToggle as boolean) ?? true,
-                    });
+                    setFastModeState((previous) =>
+                      normalizeFastModeState(initAny.fast_mode_state, previous, { preserveEnabled: true }),
+                    );
                   }
                   if (Array.isArray(initAny.models)) {
                     setAvailableModels(
                       (initAny.models as Array<Record<string, unknown>>)
                         .map((m) => ({
                           value: (m.value as string) || (m.id as string) || '',
-                          displayName: (m.displayName as string) || (m.name as string) || (m.value as string) || '',
+                          displayName: (m.value as string) || (m.id as string) || (m.displayName as string) || (m.name as string) || '',
                         }))
                         .filter((m) => m.value),
                     );
@@ -436,14 +646,52 @@ export function useChat() {
               }
               case 'api_retry': {
                 const attempt = msgAny.attempt as number ?? 1;
-                addSystemMessage(`Retrying API call (attempt ${attempt})...`, `retry-${Date.now()}`);
+                const delayMs = readNumber(msgAny, 'retry_delay_ms', 'retryDelayMs') ?? 0;
+                if (delayMs > 0) {
+                  setRetryInfo({
+                    attempt,
+                    delayMs,
+                    retryAt: Date.now() + delayMs,
+                  });
+                }
+                const delayText = delayMs > 0 ? `, next attempt in ${formatShortDuration(delayMs)}` : '';
+                addSystemMessage(`Retrying API call (attempt ${attempt}${delayText})...`, `retry-${Date.now()}`);
                 break;
               }
-              case 'compact_boundary':
-                addSystemMessage('Context compacted to fit within limits.', `compact-${Date.now()}`);
+              case 'status': {
+                const status = msgAny.status;
+                if (status === 'compacting') {
+                  if (!isCompactingRef.current) {
+                    const id = typeof msgAny.uuid === 'string' ? msgAny.uuid : `compact-${Date.now()}`;
+                    compactSystemMessageIdRef.current = id;
+                    isCompactingRef.current = true;
+                    setMessages((prev) => startCompactSystemMessage(prev, id));
+                  }
+                } else if (status === null && compactSystemMessageIdRef.current) {
+                  const id = compactSystemMessageIdRef.current;
+                  isCompactingRef.current = false;
+                  setMessages((prev) => completeCompactSystemMessage(prev, id));
+                }
                 break;
-              // hook_started, hook_response, session_state_changed, files_persisted
-              // — handled by extension host, ignore in webview
+              }
+              case 'compact_boundary': {
+                const id = compactSystemMessageIdRef.current ??
+                  (typeof msgAny.uuid === 'string' ? msgAny.uuid : `compact-${Date.now()}`);
+                isCompactingRef.current = false;
+                setMessages((prev) => completeCompactSystemMessage(prev, id));
+                compactSystemMessageIdRef.current = null;
+                vscode.postMessage({ type: 'settings_refresh' });
+                break;
+              }
+              case 'permission_rule_added':
+                if (typeof msgAny.text === 'string') {
+                  addSystemMessage(msgAny.text, `permission-${Date.now()}`);
+                }
+                break;
+              case 'files_persisted':
+                addSystemMessage(formatFilesPersistedMessage(msgAny), `files-${Date.now()}`);
+                break;
+              // Other system events are handled by the extension host.
               default:
                 break;
             }
@@ -469,13 +717,24 @@ export function useChat() {
           setRateLimitInfo(null);
           setPromptSuggestions([]);
           setToolActivity(null);
+          setRetryInfo(null);
+          setContextUsage(createPendingContextUsage());
           streamingUuidRef.current = null;
+          resultTargetAssistantIdRef.current = null;
+          userInterruptedRef.current = false;
+          turnStartedAtRef.current = null;
+          compactSystemMessageIdRef.current = null;
+          isCompactingRef.current = false;
+          setTodos([]);
           resetStream();
         }
 
         // Bulk load session history on resume
         if (data.type === 'session_history' && Array.isArray(data.messages)) {
           const historyMsgs: ChatMessage[] = [];
+          setCost(EMPTY_COST);
+          setTodos([]);
+          let lastHistoryAssistantId: string | null = null;
           for (const entry of data.messages as Array<Record<string, unknown>>) {
             if (entry.type === 'user') {
               // Handle both { message: { content } } and direct content formats
@@ -483,9 +742,16 @@ export function useChat() {
                 ? entry.message as Record<string, unknown>
                 : null;
               const content = msg?.content ?? entry.content;
+              const toolResults = extractToolResultBlocks(content as UserMessage['message']['content']);
+              if (toolResults.length > 0) {
+                const attachedMessages = attachToolResults(historyMsgs, toolResults);
+                historyMsgs.splice(0, historyMsgs.length, ...attachedMessages);
+                continue;
+              }
+
               let text = '';
               if (typeof content === 'string') {
-                text = content;
+                text = stripInternalTextWrappers(content);
               } else if (Array.isArray(content)) {
                 // Collect all text blocks (not just the first)
                 const texts: string[] = [];
@@ -494,9 +760,9 @@ export function useChat() {
                     texts.push(b.text);
                   }
                 }
-                text = texts.join('\n') || '[tool interaction]';
+                text = stripInternalTextWrappers(texts.join('\n'));
               }
-              if (!text) text = '[message]';
+              if (!text) continue;
               historyMsgs.push({
                 id: (entry.uuid as string) || `user-hist-${historyMsgs.length}`,
                 role: 'user',
@@ -516,8 +782,13 @@ export function useChat() {
                 block: block as unknown as import('../types/messages').ContentBlock,
                 isStreaming: false,
               }));
+              const assistantId = (entry.uuid as string) || `asst-hist-${historyMsgs.length}`;
+              const nextTodos = extractTodosFromRenderableBlocks(blocks);
+              if (nextTodos) {
+                setTodos(nextTodos);
+              }
               historyMsgs.push({
-                id: (entry.uuid as string) || `asst-hist-${historyMsgs.length}`,
+                id: assistantId,
                 role: 'assistant',
                 blocks,
                 isStreaming: false,
@@ -525,6 +796,14 @@ export function useChat() {
                 parentToolUseId: (entry.parent_tool_use_id as string) || null,
                 model: (msg?.model as string) || undefined,
               });
+              lastHistoryAssistantId = assistantId;
+            } else if (entry.type === 'result') {
+              const historyCost = costFromResultEntry(entry);
+              if (historyCost) {
+                const updated = attachCostToAssistant(historyMsgs, lastHistoryAssistantId, historyCost);
+                historyMsgs.splice(0, historyMsgs.length, ...updated);
+                setCost(historyCost);
+              }
             }
           }
           if (historyMsgs.length > 0) {
@@ -547,6 +826,7 @@ export function useChat() {
     handleSystemInit,
     handleSessionTitle,
     addSystemMessage,
+    model,
     resetStream,
   ]);
 
@@ -554,7 +834,7 @@ export function useChat() {
     if (!text.trim()) return;
 
     // Optimistically add user message
-    const id = `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const id = createUserMessageId();
     setMessages((prev) => [
       ...prev,
       {
@@ -568,14 +848,29 @@ export function useChat() {
     ]);
     setError(null);
     setRateLimitInfo(null);
+    setRetryInfo(null);
     setPromptSuggestions([]);
+    if (!isStreaming) {
+      setToolActivity(null);
+    }
+    setIsStreaming(!isLocalUiCommand(text));
+    streamingUuidRef.current = null;
+    resultTargetAssistantIdRef.current = null;
+    userInterruptedRef.current = false;
+    turnStartedAtRef.current = Date.now();
 
-    vscode.postMessage({ type: 'send_prompt', text });
-  }, []);
+    vscode.postMessage({
+      type: 'send_prompt',
+      text,
+      uuid: id,
+      priority: isStreaming ? 'next' : undefined,
+    });
+  }, [isStreaming]);
 
   const editMessage = useCallback((uuid: string, newContent: string) => {
     const text = newContent.trim();
     if (!text) return;
+    const newId = isUuid(uuid) ? uuid : createUserMessageId();
 
     setMessages((prev) => {
       const index = prev.findIndex((message) => message.id === uuid);
@@ -585,6 +880,7 @@ export function useChat() {
         ...prev.slice(0, index),
         {
           ...prev[index]!,
+          id: newId,
           text,
           timestamp: Date.now(),
         },
@@ -592,12 +888,23 @@ export function useChat() {
     });
     setError(null);
     setRateLimitInfo(null);
+    setRetryInfo(null);
     setPromptSuggestions([]);
     setToolActivity(null);
+    setIsStreaming(!isLocalUiCommand(text));
+    streamingUuidRef.current = null;
+    resultTargetAssistantIdRef.current = null;
+    userInterruptedRef.current = false;
+    turnStartedAtRef.current = Date.now();
     resetStream();
 
-    vscode.postMessage({ type: 'send_prompt', text });
-  }, [resetStream]);
+    vscode.postMessage({
+      type: 'send_prompt',
+      text,
+      uuid: newId,
+      priority: isStreaming ? 'next' : undefined,
+    });
+  }, [isStreaming, resetStream]);
 
   const clearMessages = useCallback(() => {
     setMessages([]);
@@ -606,14 +913,59 @@ export function useChat() {
     setIsStreaming(false);
     setError(null);
     setRateLimitInfo(null);
+    setRetryInfo(null);
     setPromptSuggestions([]);
     setToolActivity(null);
     streamingUuidRef.current = null;
+    resultTargetAssistantIdRef.current = null;
+    userInterruptedRef.current = false;
+    turnStartedAtRef.current = null;
+    compactSystemMessageIdRef.current = null;
+    isCompactingRef.current = false;
+    setTodos([]);
+    setContextUsage(createPendingContextUsage(model));
     resetStream();
-  }, [resetStream]);
+  }, [model, resetStream]);
+
+  useEffect(() => {
+    vscode.postMessage({ type: 'settings_refresh' });
+  }, []);
+
+  useEffect(() => {
+    const canRefresh =
+      processState === 'starting' ||
+      processState === 'running' ||
+      processState === 'restarting' ||
+      isStreaming;
+
+    if (!canRefresh) {
+      return;
+    }
+
+    vscode.postMessage({ type: 'settings_refresh' });
+    const intervalId = window.setInterval(() => {
+      vscode.postMessage({ type: 'settings_refresh' });
+    }, isStreaming ? 5_000 : 12_000);
+
+    return () => window.clearInterval(intervalId);
+  }, [isStreaming, processState]);
 
   const interrupt = useCallback(() => {
+    userInterruptedRef.current = true;
+    setRetryInfo(null);
     vscode.postMessage({ type: 'interrupt' });
+    const durationMs = turnStartedAtRef.current ? Date.now() - turnStartedAtRef.current : 0;
+    const interruptedCost = {
+      ...EMPTY_COST,
+      durationMs,
+    };
+    setCost(interruptedCost);
+    setMessages((prev) => appendInterruptedTurnCompletion(prev, interruptedCost));
+    activeToolUseIdsRef.current.clear();
+    streamingUuidRef.current = null;
+    resultTargetAssistantIdRef.current = null;
+    turnStartedAtRef.current = null;
+    setToolActivity(null);
     setIsStreaming(false);
   }, []);
 
@@ -634,9 +986,250 @@ export function useChat() {
     effortLevel,
     setEffortLevel,
     toolActivity,
+    todos,
+    retryInfo,
+    contextUsage,
     sendMessage,
     editMessage,
     clearMessages,
     interrupt,
   };
+}
+
+function isLocalUiCommand(text: string): boolean {
+  return /^\/providers?\s*$/i.test(text.trim());
+}
+
+function createUserMessageId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    const random = Math.floor(Math.random() * 16);
+    const value = char === 'x' ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function attachCostToAssistant(
+  messages: ChatMessage[],
+  assistantId: string | null,
+  cost: SessionCost,
+): ChatMessage[] {
+  if (assistantId) {
+    const index = messages.findIndex((message) => message.id === assistantId && message.role === 'assistant');
+    if (index >= 0) {
+      return messages.map((message, msgIndex) =>
+        msgIndex === index ? { ...message, cost } : message,
+      );
+    }
+  }
+
+  for (let index = messages.length - 1; index >= 0; index--) {
+    if (messages[index]?.role === 'assistant') {
+      return messages.map((message, msgIndex) =>
+        msgIndex === index ? { ...message, cost } : message,
+      );
+    }
+  }
+
+  return messages;
+}
+
+function appendInterruptedTurnCompletion(messages: ChatMessage[], cost: SessionCost): ChatMessage[] {
+  const timestamp = Date.now();
+  const lastUserIndex = findLastRoleIndex(messages, 'user');
+  const targetAssistantIndex = findLastAssistantIndexAfter(messages, lastUserIndex);
+
+  if (targetAssistantIndex >= 0) {
+    const target = messages[targetAssistantIndex]!;
+    const previousCost = target.cost;
+    const nextCost = {
+      ...cost,
+      durationMs: Math.max(cost.durationMs, previousCost?.durationMs ?? 0),
+    };
+    return messages.map((message, index) =>
+      index === targetAssistantIndex
+        ? {
+            ...message,
+            interrupted: true,
+            isStreaming: false,
+            blocks: message.blocks?.map((block) => ({ ...block, isStreaming: false })),
+            cost: nextCost,
+          }
+        : message,
+    );
+  }
+
+  return [
+    ...messages,
+    {
+      id: `asst-turn-${timestamp}`,
+      role: 'assistant' as const,
+      blocks: [],
+      isStreaming: false,
+      timestamp: timestamp + 1,
+      parentToolUseId: null,
+      cost,
+      interrupted: true,
+    },
+  ];
+}
+
+function findLastRoleIndex(messages: ChatMessage[], role: ChatMessage['role']): number {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    if (messages[index]?.role === role) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function findLastAssistantIndexAfter(messages: ChatMessage[], afterIndex: number): number {
+  for (let index = messages.length - 1; index > afterIndex; index--) {
+    if (messages[index]?.role === 'assistant') {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function isUserInterruptText(text: string): boolean {
+  const normalized = text.trim().toLowerCase();
+  return normalized === '[request interrupted by user]' ||
+    normalized === 'request interrupted by user' ||
+    normalized.startsWith('[request interrupted by user ');
+}
+
+function isUserAbortAssistantBlocks(blocks: ChatMessage['blocks']): boolean {
+  const text = (blocks ?? [])
+    .filter((item) => item.block.type === 'text')
+    .map((item) => (item.block as { text?: string }).text ?? '')
+    .join('\n')
+    .trim();
+  if (!text) return false;
+  return isUserAbortText(text);
+}
+
+function isUserAbortResult(msg: ResultMessage): boolean {
+  const record = msg as unknown as Record<string, unknown>;
+  const result = typeof record.result === 'string' ? record.result : '';
+  const errors = Array.isArray(msg.errors) ? msg.errors.join('\n') : '';
+  return isUserAbortText(`${result}\n${errors}`);
+}
+
+function isUserAbortText(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return normalized.includes('request interrupted by user') ||
+    normalized.includes('operation was aborted') ||
+    normalized.includes('request was aborted') ||
+    normalized.includes('apiuserabort') ||
+    normalized.includes('aborterror');
+}
+
+function formatShortDuration(ms: number): string {
+  const seconds = Math.max(0, Math.ceil(ms / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remaining = seconds % 60;
+  return remaining > 0 ? `${minutes}m ${remaining}s` : `${minutes}m`;
+}
+
+function costFromResultEntry(entry: Record<string, unknown>): SessionCost | null {
+  if (entry.type !== 'result') return null;
+  const usage = normalizeUsage(entry as unknown as ResultMessage);
+  return {
+    totalCostUSD: readNumber(entry, 'total_cost_usd', 'totalCostUsd', 'totalCostUSD') ?? 0,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    cacheReadTokens: usage.cacheReadTokens,
+    cacheCreationTokens: usage.cacheCreationTokens,
+    numTurns: readNumber(entry, 'num_turns', 'numTurns') ?? 0,
+    durationMs: readNumber(entry, 'duration_ms', 'durationMs') ?? 0,
+  };
+}
+
+function extractTodosFromRenderableBlocks(blocks: ChatMessage['blocks'] | undefined): TodoItem[] | null {
+  if (!blocks) return null;
+
+  for (let index = blocks.length - 1; index >= 0; index--) {
+    const block = blocks[index]?.block;
+    if (!block || block.type !== 'tool_use') continue;
+    const tool = block as { name?: string; input?: Record<string, unknown> };
+    if (tool.name !== 'TodoWrite') continue;
+    const rawTodos = tool.input?.todos;
+    if (!Array.isArray(rawTodos)) return null;
+    const todos = rawTodos
+      .map(normalizeTodoItem)
+      .filter((todo): todo is TodoItem => Boolean(todo));
+    return todos.every((todo) => todo.status === 'completed') ? [] : todos;
+  }
+
+  return null;
+}
+
+function normalizeTodoItem(item: unknown): TodoItem | null {
+  if (!item || typeof item !== 'object') return null;
+  const record = item as Record<string, unknown>;
+  const content = typeof record.content === 'string' ? record.content : '';
+  const status = record.status;
+  if (!content || (status !== 'pending' && status !== 'in_progress' && status !== 'completed')) {
+    return null;
+  }
+  const activeForm = typeof record.activeForm === 'string' ? record.activeForm : undefined;
+  return { content, status, activeForm };
+}
+
+function normalizeUsage(msg: ResultMessage): NormalizedUsage {
+  const usage = (msg.usage ?? {}) as Record<string, unknown>;
+  const modelUsage = ((msg as unknown as { modelUsage?: unknown; model_usage?: unknown }).modelUsage ??
+    (msg as unknown as { model_usage?: unknown }).model_usage) as Record<string, Record<string, unknown>> | undefined;
+  const aggregate = aggregateModelUsage(modelUsage);
+
+  return {
+    inputTokens: readNumber(usage, 'inputTokens', 'input_tokens') ?? aggregate.inputTokens,
+    outputTokens: readNumber(usage, 'outputTokens', 'output_tokens') ?? aggregate.outputTokens,
+    cacheReadTokens:
+      readNumber(usage, 'cacheReadInputTokens', 'cache_read_input_tokens') ?? aggregate.cacheReadTokens,
+    cacheCreationTokens:
+      readNumber(usage, 'cacheCreationInputTokens', 'cache_creation_input_tokens') ??
+      aggregate.cacheCreationTokens,
+  };
+}
+
+function aggregateModelUsage(modelUsage: Record<string, Record<string, unknown>> | undefined): NormalizedUsage {
+  const total: NormalizedUsage = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheCreationTokens: 0,
+  };
+
+  if (!modelUsage || typeof modelUsage !== 'object') {
+    return total;
+  }
+
+  for (const usage of Object.values(modelUsage)) {
+    total.inputTokens += readNumber(usage, 'inputTokens', 'input_tokens') ?? 0;
+    total.outputTokens += readNumber(usage, 'outputTokens', 'output_tokens') ?? 0;
+    total.cacheReadTokens += readNumber(usage, 'cacheReadInputTokens', 'cache_read_input_tokens') ?? 0;
+    total.cacheCreationTokens +=
+      readNumber(usage, 'cacheCreationInputTokens', 'cache_creation_input_tokens') ?? 0;
+  }
+
+  return total;
+}
+
+function readNumber(record: Record<string, unknown>, ...keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return undefined;
 }

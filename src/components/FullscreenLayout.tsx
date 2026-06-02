@@ -129,7 +129,7 @@ export function useUnseenDivider(messageCount: number): {
     // • click-to-select at bottom: useDragToScroll.check() calls
     //   scrollTo(current) to break sticky so streaming content doesn't shift
     //   under the selection, then onScroll(false, …) — but scrollTop is still
-    //   at max (Sarah Deaton, #gakrcli-code-feedback 2026-03-15)
+    //   at max (internal feedback report 2026-03-15)
     // pendingDelta: scrollBy accumulates without updating scrollTop. Without
     // it, wheeling up from max would see scrollTop==max and suppress the pill.
     const max = Math.max(0, handle.getScrollHeight() - handle.getViewportHeight());

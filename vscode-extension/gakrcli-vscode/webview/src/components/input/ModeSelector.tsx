@@ -77,6 +77,7 @@ export function ModeSelector({ currentMode, onSelectMode, onClose }: ModeSelecto
   return (
     <div
       ref={ref}
+      className="glass-menu"
       style={{
         position: 'absolute',
         bottom: '100%',
@@ -84,19 +85,15 @@ export function ModeSelector({ currentMode, onSelectMode, onClose }: ModeSelecto
         marginBottom: 4,
         width: 256,
         borderRadius: 'var(--corner-radius-medium, 6px)',
-        border: '1px solid var(--app-input-border)',
-        background: 'var(--app-menu-background, var(--vscode-editor-background))',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
         zIndex: 50,
         overflow: 'hidden',
       }}
     >
-      <div style={{
+      <div className="glass-menu-header" style={{
         padding: '6px 12px',
         fontSize: 11,
         fontWeight: 600,
         color: 'var(--app-secondary-foreground)',
-        borderBottom: '1px solid var(--app-input-border)',
       }}>
         Permission Mode
       </div>
@@ -106,6 +103,7 @@ export function ModeSelector({ currentMode, onSelectMode, onClose }: ModeSelecto
         return (
           <button
             key={option.value}
+            className={isActive ? 'glass-list-row-active' : 'glass-list-row'}
             onClick={() => {
               onSelectMode(option.value);
               onClose();

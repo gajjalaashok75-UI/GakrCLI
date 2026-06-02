@@ -1,4 +1,4 @@
-# Gakr Quick Start for Windows (v0.5.3)
+# Gakr Quick Start for Windows (v0.5.5)
 
 This guide uses Windows PowerShell.
 
@@ -141,3 +141,4 @@ npm uninstall -g @gakr-gakr/gakrcli
 Use:
 
 - [Advanced Setup](advanced-setup.md)
+- [Provider Reference](PROVIDERS.md)

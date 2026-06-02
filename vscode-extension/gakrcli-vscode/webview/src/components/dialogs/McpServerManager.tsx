@@ -119,10 +119,10 @@ export function McpServerManager({ isOpen, onClose }: McpServerManagerProps) {
   const totalToolCount = servers.reduce((sum, s) => sum + (s.tools?.length || 0), 0);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-[var(--vscode-editor-background)] border border-[var(--vscode-panel-border)] rounded-lg shadow-xl w-[560px] max-h-[80vh] flex flex-col">
+    <div className="glass-dialog-backdrop fixed inset-0 z-50 flex items-center justify-center">
+      <div className="glass-dialog rounded-lg w-[560px] max-h-[80vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--vscode-panel-border)]">
+        <div className="glass-dialog-section flex items-center justify-between px-4 py-3 border-b">
           <div>
             <h2 className="text-sm font-semibold text-[var(--vscode-foreground)]">MCP Servers</h2>
             <p className="text-xs text-[var(--vscode-descriptionForeground)] mt-0.5">
@@ -138,7 +138,7 @@ export function McpServerManager({ isOpen, onClose }: McpServerManagerProps) {
         </div>
 
         {/* IDE Server Banner */}
-        <div className="px-4 py-2 bg-[var(--vscode-textBlockQuote-background)] border-b border-[var(--vscode-panel-border)]">
+        <div className="glass-dialog-section px-4 py-2 border-b">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-xs font-medium text-[var(--vscode-foreground)]">IDE Server</span>
@@ -261,47 +261,47 @@ export function McpServerManager({ isOpen, onClose }: McpServerManagerProps) {
 
         {/* Add Server Form */}
         {showAddForm ? (
-          <div className="px-4 py-3 border-t border-[var(--vscode-panel-border)] space-y-2">
+          <div className="glass-dialog-section px-4 py-3 border-t space-y-2">
             <input
               type="text"
               placeholder="Server name"
               value={newServerName}
               onChange={(e) => setNewServerName(e.target.value)}
-              className="w-full px-2 py-1 text-xs rounded bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] placeholder-[var(--vscode-input-placeholderForeground)]"
+              className="glass-input w-full px-2 py-1 text-xs rounded placeholder-[var(--vscode-input-placeholderForeground)]"
             />
             <input
               type="text"
               placeholder="Command (e.g., npx -y @modelcontextprotocol/server-filesystem)"
               value={newServerCommand}
               onChange={(e) => setNewServerCommand(e.target.value)}
-              className="w-full px-2 py-1 text-xs rounded bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] placeholder-[var(--vscode-input-placeholderForeground)]"
+              className="glass-input w-full px-2 py-1 text-xs rounded placeholder-[var(--vscode-input-placeholderForeground)]"
             />
             <div className="flex gap-2">
               <button
                 onClick={handleAdd}
-                className="text-xs px-3 py-1 rounded bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)]"
+                className="glass-control text-xs px-3 py-1 rounded text-[var(--vscode-button-foreground)]"
               >
                 Add Server
               </button>
               <button
                 onClick={() => setShowAddForm(false)}
-                className="text-xs px-3 py-1 rounded border border-[var(--vscode-panel-border)] text-[var(--vscode-foreground)] hover:bg-[var(--vscode-list-hoverBackground)]"
+                className="glass-control text-xs px-3 py-1 rounded text-[var(--vscode-foreground)]"
               >
                 Cancel
               </button>
             </div>
           </div>
         ) : (
-          <div className="px-4 py-2.5 border-t border-[var(--vscode-panel-border)] flex justify-between items-center">
+          <div className="glass-dialog-section px-4 py-2.5 border-t flex justify-between items-center">
             <button
               onClick={() => setShowAddForm(true)}
-              className="text-xs px-3 py-1 rounded bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)]"
+              className="glass-control text-xs px-3 py-1 rounded text-[var(--vscode-button-foreground)]"
             >
               + Add Server
             </button>
             <button
               onClick={() => vscode.postMessage({ type: 'mcp_refresh_status' })}
-              className="text-xs px-3 py-1 rounded border border-[var(--vscode-panel-border)] text-[var(--vscode-foreground)] hover:bg-[var(--vscode-list-hoverBackground)]"
+              className="glass-control text-xs px-3 py-1 rounded text-[var(--vscode-foreground)]"
             >
               Refresh
             </button>

@@ -11,10 +11,10 @@
 
 html {
   /* Brand */
-  --app-brand-accent: #ffffff;
-  --app-brand-button: #ffffff;
-  --app-brand-on-accent: #1a1a1a;
-  --app-brand-surface: #141413;
+  --app-brand-accent: #6bbfe6;
+  --app-brand-button: #4aa8d8;
+  --app-brand-on-accent: #04111a;
+  --app-brand-surface: #080b0f;
 
   /* Spacing */
   --app-spacing-small: 4px;
@@ -34,43 +34,43 @@ html {
 
   /* Foreground / background */
   --app-primary-foreground: var(--vscode-foreground);
-  --app-primary-background: var(--vscode-sideBar-background);
-  --app-primary-border-color: var(--vscode-sideBarActivityBarTop-border);
+  --app-primary-background: color-mix(in srgb, var(--vscode-sideBar-background) 92%, #075985 8%);
+  --app-primary-border-color: color-mix(in srgb, var(--vscode-sideBarActivityBarTop-border, #38bdf8) 72%, #7dd3fc 28%);
   --app-secondary-foreground: var(--vscode-descriptionForeground);
-  --app-secondary-background: var(--vscode-editor-background);
+  --app-secondary-background: color-mix(in srgb, var(--vscode-editor-background) 94%, #0ea5e9 6%);
 
   /* Input */
   --app-input-foreground: var(--vscode-input-foreground);
-  --app-input-background: var(--vscode-input-background);
-  --app-input-border: var(--vscode-inlineChatInput-border);
-  --app-input-active-border: var(--vscode-inputOption-activeBorder);
+  --app-input-background: color-mix(in srgb, var(--vscode-input-background) 90%, #075985 10%);
+  --app-input-border: color-mix(in srgb, var(--vscode-inlineChatInput-border, var(--vscode-panel-border, #38bdf8)) 74%, #7dd3fc 26%);
+  --app-input-active-border: color-mix(in srgb, var(--vscode-inputOption-activeBorder, #38bdf8) 68%, #bae6fd 32%);
   --app-input-placeholder-foreground: var(--vscode-input-placeholderForeground);
   --app-input-secondary-foreground: var(--vscode-input-foreground);
-  --app-input-secondary-background: var(--vscode-menu-background);
+  --app-input-secondary-background: color-mix(in srgb, var(--vscode-menu-background) 90%, #082f49 10%);
 
   /* Tool / code */
-  --app-tool-background: var(--vscode-editor-background);
+  --app-tool-background: color-mix(in srgb, var(--vscode-editor-background) 94%, #082f49 6%);
 
   /* List */
   --app-list-padding: 0px;
   --app-list-item-padding: 4px 8px;
   --app-list-border-color: transparent;
   --app-list-border-radius: 4px;
-  --app-list-hover-background: var(--vscode-list-hoverBackground);
-  --app-list-active-background: var(--vscode-list-activeSelectionBackground);
+  --app-list-hover-background: color-mix(in srgb, var(--vscode-list-hoverBackground) 86%, #0ea5e9 14%);
+  --app-list-active-background: color-mix(in srgb, var(--vscode-list-activeSelectionBackground) 80%, #38bdf8 20%);
   --app-list-active-foreground: var(--vscode-list-activeSelectionForeground);
   --app-list-gap: 2px;
 
   /* Menu */
-  --app-menu-background: var(--vscode-menu-background);
-  --app-menu-border: var(--vscode-menu-border);
+  --app-menu-background: color-mix(in srgb, var(--vscode-menu-background) 90%, #06131f 10%);
+  --app-menu-border: color-mix(in srgb, var(--vscode-menu-border, var(--vscode-panel-border, #38bdf8)) 74%, #7dd3fc 26%);
   --app-menu-foreground: var(--vscode-menu-foreground);
   --app-menu-selection-background: var(--vscode-menu-selectionBackground);
   --app-menu-selection-foreground: var(--vscode-menu-selectionForeground);
 
   /* Status / alerts */
   --app-warning-foreground: var(--vscode-menu-foreground);
-  --app-warning-background: var(--vscode-input-background);
+  --app-warning-background: color-mix(in srgb, var(--vscode-input-background) 84%, #f59e0b 16%);
   --app-warning-accent: #e5a54b;
   --app-error-foreground: var(--vscode-errorForeground);
   --app-success-foreground: var(--vscode-gitDecoration-addedResourceForeground);
@@ -83,7 +83,7 @@ html {
   --app-badge-background: var(--vscode-badge-background);
 
   /* Header */
-  --app-header-background: var(--vscode-sideBar-background);
+  --app-header-background: color-mix(in srgb, var(--vscode-sideBar-background) 92%, #082f49 8%);
 
   /* Splitter */
   --app-splitter-background: var(--vscode-inlineChatInput-border);
@@ -98,14 +98,34 @@ html {
   --app-editor-highlight-background: var(--vscode-editor-lineHighlightBackground);
 
   /* Buttons */
-  --app-ghost-button-hover-background: var(--vscode-toolbar-hoverBackground);
+  --app-ghost-button-hover-background: color-mix(in srgb, var(--vscode-toolbar-hoverBackground) 84%, #38bdf8 16%);
   --app-button-foreground: var(--vscode-button-foreground);
   --app-button-background: var(--vscode-button-background);
   --app-button-hover-background: var(--vscode-button-hoverBackground);
 
   /* Accent */
-  --app-accent-color: var(--vscode-inputOption-activeBorder);
-  --app-transparent-inner-border: #ffffff1a;
+  --app-accent-color: #4aa8d8;
+  --app-transparent-inner-border: #9bd8f01f;
+
+  /* Liquid glass */
+  --app-glass-sky: #4aa8d8;
+  --app-glass-cyan: #7cc9e8;
+  --app-glass-blue: #1d4f7a;
+  --app-glass-mint: #4bbdb8;
+  --app-glass-amber: #fbbf24;
+  --app-glass-danger: #fb7185;
+  --app-glass-black: #05070a;
+  --app-glass-ink: #081018;
+  --app-glass-surface: color-mix(in srgb, var(--vscode-editor-background) 90%, #06131f 10%);
+  --app-glass-surface-soft: color-mix(in srgb, var(--vscode-sideBar-background) 88%, #082f49 12%);
+  --app-glass-surface-raised: color-mix(in srgb, var(--vscode-editorWidget-background, var(--vscode-editor-background)) 88%, #06131f 12%);
+  --app-glass-border: color-mix(in srgb, var(--vscode-panel-border, #38bdf8) 76%, #7cc9e8 24%);
+  --app-glass-border-strong: color-mix(in srgb, var(--vscode-focusBorder, #38bdf8) 62%, #9bd8f0 38%);
+  --app-glass-highlight: rgba(155, 216, 240, 0.12);
+  --app-glass-shine: rgba(155, 216, 240, 0.2);
+  --app-glass-shadow: 0 16px 46px rgba(0, 0, 0, 0.5);
+  --app-glass-shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.36);
+  --app-glass-blur: blur(16px) saturate(1.18);
 
   /* Spinner */
   --app-spinner-foreground: var(--app-brand-accent);
@@ -125,14 +145,29 @@ html {
   --app-banner-tint: #4a63af;
 
   /* Root background (panel vs sidebar) */
-  --app-root-background: var(--app-primary-background);
+  --app-root-background: color-mix(in srgb, var(--vscode-sideBar-background) 90%, #06131f 10%);
 }
 
 /* Light theme overrides */
 .vscode-light {
-  --app-transparent-inner-border: #00000012;
-  --app-spinner-foreground: var(--app-brand-button);
-  --app-root-background: var(--app-secondary-background);
+  --app-brand-on-accent: #042f4d;
+  --app-primary-background: color-mix(in srgb, var(--vscode-sideBar-background) 82%, #e0f2fe 18%);
+  --app-secondary-background: color-mix(in srgb, var(--vscode-editor-background) 86%, #e0f2fe 14%);
+  --app-input-background: color-mix(in srgb, var(--vscode-input-background) 82%, #e0f2fe 18%);
+  --app-input-secondary-background: color-mix(in srgb, var(--vscode-menu-background) 84%, #bae6fd 16%);
+  --app-menu-background: color-mix(in srgb, var(--vscode-menu-background) 86%, #e0f2fe 14%);
+  --app-tool-background: color-mix(in srgb, var(--vscode-editor-background) 88%, #e0f2fe 12%);
+  --app-glass-surface: color-mix(in srgb, var(--vscode-editor-background) 76%, #e0f2fe 24%);
+  --app-glass-surface-soft: color-mix(in srgb, var(--vscode-sideBar-background) 78%, #e0f2fe 22%);
+  --app-glass-surface-raised: color-mix(in srgb, var(--vscode-editorWidget-background, var(--vscode-editor-background)) 80%, #bae6fd 20%);
+  --app-glass-border: color-mix(in srgb, var(--vscode-panel-border, #0284c7) 44%, #38bdf8 56%);
+  --app-glass-border-strong: color-mix(in srgb, var(--vscode-focusBorder, #0284c7) 42%, #0284c7 58%);
+  --app-glass-highlight: rgba(2, 132, 199, 0.12);
+  --app-glass-shadow: 0 14px 34px rgba(14, 116, 144, 0.16);
+  --app-glass-shadow-soft: 0 8px 20px rgba(14, 116, 144, 0.14);
+  --app-transparent-inner-border: #0284c729;
+  --app-spinner-foreground: var(--app-glass-sky);
+  --app-root-background: color-mix(in srgb, var(--app-secondary-background) 84%, #e0f2fe 16%);
 }
 
 /* ============================================================
@@ -156,7 +191,10 @@ body {
   max-width: 100%;
   margin: 0;
   padding: 0;
-  background-color: var(--app-root-background);
+  background:
+    radial-gradient(circle at 12% 6%, color-mix(in srgb, var(--app-glass-sky) 10%, transparent) 0 18%, transparent 42%),
+    radial-gradient(circle at 88% 14%, color-mix(in srgb, var(--app-glass-mint) 7%, transparent) 0 16%, transparent 40%),
+    linear-gradient(145deg, var(--app-glass-black), var(--app-root-background) 42%, color-mix(in srgb, var(--app-root-background) 94%, #0ea5e9 6%));
   color: var(--app-primary-foreground);
 }
 
@@ -164,6 +202,9 @@ body {
   display: flex;
   flex: 1;
   max-width: 100%;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--app-glass-sky) 10%, transparent), transparent 24%, transparent 76%, color-mix(in srgb, var(--app-glass-cyan) 7%, transparent)),
+    linear-gradient(180deg, color-mix(in srgb, var(--app-glass-highlight) 44%, transparent), transparent 170px);
 }
 
 /* ============================================================
@@ -180,17 +221,17 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--vscode-scrollbarSlider-background, rgba(128,128,128,0.4));
+  background: color-mix(in srgb, var(--vscode-scrollbarSlider-background, rgba(128,128,128,0.4)) 62%, var(--app-glass-sky) 38%);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--vscode-scrollbarSlider-hoverBackground, rgba(128,128,128,0.7));
+  background: color-mix(in srgb, var(--vscode-scrollbarSlider-hoverBackground, rgba(128,128,128,0.7)) 58%, var(--app-glass-cyan) 42%);
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--vscode-scrollbarSlider-background, rgba(128,128,128,0.4)) transparent;
+  scrollbar-color: color-mix(in srgb, var(--vscode-scrollbarSlider-background, rgba(128,128,128,0.4)) 62%, var(--app-glass-sky) 38%) transparent;
 }
 
 /* ============================================================
@@ -217,13 +258,67 @@ textarea.input {
   outline: none;
 }
 
+.gakr-shell {
+  isolation: isolate;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 78%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-glass-border-strong) 36%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-glass-highlight) 54%, transparent), transparent 150px),
+    linear-gradient(135deg, color-mix(in srgb, var(--app-glass-blue) 7%, transparent), transparent 36%),
+    linear-gradient(90deg, rgba(0,0,0,0.16), transparent 32%, rgba(0,0,0,0.14)),
+    var(--app-root-background);
+}
+
+.gakr-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--app-glass-sky) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--app-glass-sky) 4%, transparent) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(180deg, #000 0 28%, transparent 78%);
+  opacity: 0.22;
+}
+
+.gakr-header-shell {
+  box-shadow: 0 1px 0 var(--app-glass-border), 0 10px 28px rgba(2, 8, 23, 0.18);
+}
+
+.gakr-chat-header {
+  border-bottom: 1px solid var(--app-glass-border);
+  background:
+    linear-gradient(180deg, var(--app-glass-highlight), transparent 62%),
+    linear-gradient(90deg, color-mix(in srgb, var(--app-glass-sky) 8%, transparent), transparent 34%, color-mix(in srgb, var(--app-glass-sky) 5%, transparent)),
+    color-mix(in srgb, var(--app-header-background) 88%, rgba(0,0,0,0.3));
+  backdrop-filter: var(--app-glass-blur);
+  -webkit-backdrop-filter: var(--app-glass-blur);
+}
+
+.gakr-chat-header button {
+  border: 1px solid transparent;
+}
+
+.gakr-chat-header button:hover,
+.gakr-chat-header button:focus-visible {
+  border-color: color-mix(in srgb, var(--app-glass-border) 70%, transparent);
+  background: color-mix(in srgb, var(--app-glass-sky) 16%, var(--app-ghost-button-hover-background)) !important;
+  box-shadow: inset 0 1px 0 var(--app-glass-highlight);
+}
+
 /* ============================================================
    Input container
    ============================================================ */
 
 .input-container {
-  background: var(--app-input-secondary-background);
-  border: 1px solid var(--app-input-border);
+  background:
+    linear-gradient(180deg, var(--app-glass-highlight), transparent 48%),
+    linear-gradient(135deg, color-mix(in srgb, var(--app-glass-sky) 7%, transparent), transparent 58%),
+    color-mix(in srgb, var(--app-input-secondary-background) 88%, rgba(0,0,0,0.2));
+  border: 1px solid var(--app-glass-border);
   border-radius: var(--corner-radius-large);
   color: var(--app-input-foreground);
   display: flex;
@@ -232,7 +327,10 @@ textarea.input {
   min-width: 0;
   margin: 0;
   padding: 0;
-  box-shadow: 0 1px 2px #0000001a;
+  box-shadow: var(--app-glass-shadow-soft), inset 0 1px 0 var(--app-glass-highlight);
+  backdrop-filter: var(--app-glass-blur);
+  -webkit-backdrop-filter: var(--app-glass-blur);
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
 .input-wrapper {
@@ -241,13 +339,116 @@ textarea.input {
   margin: 0 auto;
 }
 
-/* Focus ring — orange by default, changes per permission mode */
+.composer-shell {
+  flex-shrink: 0;
+  min-width: 0;
+  padding: 12px 16px;
+  background:
+    linear-gradient(180deg, transparent, color-mix(in srgb, var(--app-root-background) 82%, transparent) 22%),
+    linear-gradient(90deg, transparent, color-mix(in srgb, var(--app-glass-sky) 5%, transparent), transparent);
+}
+
+.composer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  width: 100%;
+  max-width: 680px;
+  min-width: 0;
+  margin: 6px auto 0;
+  padding: 0 4px;
+  overflow: visible;
+}
+
+.composer-footer-left,
+.composer-footer-right {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.composer-footer-left {
+  flex: 1 1 260px;
+}
+
+.composer-footer-right {
+  flex: 0 1 auto;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.composer-footer button {
+  max-width: 100%;
+}
+
+.composer-footer button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.prompt-suggestion-chip,
+.composer-utility-button,
+.glass-control {
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 58%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-glass-highlight) 44%, transparent), transparent),
+    color-mix(in srgb, var(--app-glass-surface) 72%, rgba(0,0,0,0.26));
+  box-shadow: inset 0 1px 0 var(--app-glass-highlight);
+}
+
+.prompt-suggestion-chip:hover,
+.composer-utility-button:hover,
+.glass-control:hover,
+.glass-control:focus-visible {
+  color: var(--app-primary-foreground) !important;
+  border-color: var(--app-glass-border-strong);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-glass-sky) 12%, transparent), transparent),
+    color-mix(in srgb, var(--app-ghost-button-hover-background) 80%, rgba(0,0,0,0.22));
+}
+
+.glass-control[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--app-glass-amber) 44%, var(--app-glass-border)) !important;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-glass-amber) 13%, transparent), transparent),
+    color-mix(in srgb, var(--app-glass-surface) 80%, rgba(0,0,0,0.18)) !important;
+}
+
+@media (max-width: 520px) {
+  .composer-shell {
+    padding: 8px 10px 10px;
+  }
+
+  .composer-footer {
+    align-items: flex-start;
+    padding: 0;
+  }
+
+  .composer-footer-left,
+  .composer-footer-right {
+    width: 100%;
+  }
+
+  .composer-footer-right {
+    justify-content: flex-start;
+    margin-left: 0;
+  }
+}
+
+/* Focus ring — sky by default, changes per permission mode */
 .input-container:focus-within {
   --focus-ring-color: var(--app-brand-accent);
-  border-color: var(--focus-ring-color);
+  border-color: color-mix(in srgb, var(--focus-ring-color) 72%, #ffffff 28%);
   box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--focus-ring-color) 12%, transparent),
-    0 1px 2px color-mix(in srgb, var(--focus-ring-color), transparent 80%);
+    0 0 0 3px color-mix(in srgb, var(--focus-ring-color) 18%, transparent),
+    0 12px 32px color-mix(in srgb, var(--focus-ring-color) 18%, transparent),
+    inset 0 1px 0 var(--app-glass-highlight);
+  transform: translateY(-1px);
 }
 
 .input-container[data-permission-mode="acceptEdits"]:focus-within {
@@ -270,15 +471,20 @@ textarea.input {
 .user-message-bubble {
   white-space: pre-wrap;
   word-break: break-word;
-  border: 1px solid var(--app-input-border);
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 84%, var(--app-glass-cyan) 16%);
   border-radius: var(--corner-radius-medium); /* 6px */
-  background-color: var(--app-input-background);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--app-glass-sky) 13%, transparent), transparent 62%),
+    color-mix(in srgb, var(--app-input-background) 86%, rgba(0,0,0,0.2));
   display: inline-block;
   overflow-x: hidden;
   overflow-y: hidden;
   user-select: text;
   max-width: 100%;
-  padding: 4px 6px;
+  padding: 5px 8px;
+  box-shadow: 0 6px 18px rgba(2, 8, 23, 0.16), inset 0 1px 0 var(--app-glass-highlight);
+  backdrop-filter: blur(12px) saturate(1.25);
+  -webkit-backdrop-filter: blur(12px) saturate(1.25);
 }
 
 /* ============================================================
@@ -301,7 +507,8 @@ textarea.input {
    ============================================================ */
 
 .thinking-block {
-  width: fit-content;
+  width: 100%;
+  max-width: 100%;
   margin-top: 4px;
   margin-bottom: 12px;
 }
@@ -343,6 +550,8 @@ details[open] .thinking-toggle {
   color: var(--app-secondary-foreground);
   margin-top: 4px;
   font-weight: 400;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 /* ============================================================
@@ -352,18 +561,33 @@ details[open] .thinking-toggle {
 .code-block-wrapper {
   position: relative;
   margin: 8px 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 64%, transparent);
+  border-radius: var(--corner-radius-medium);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-glass-sky) 8%, transparent), transparent 42%),
+    color-mix(in srgb, var(--app-tool-background) 92%, #020617 8%);
+  box-shadow: inset 0 1px 0 var(--app-glass-highlight);
+}
+
+.code-block-header {
+  border-bottom: 1px solid color-mix(in srgb, var(--app-glass-border) 62%, transparent);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--app-glass-sky) 12%, transparent), transparent 58%),
+    color-mix(in srgb, var(--app-tool-background) 82%, transparent);
 }
 
 .code-block-wrapper pre {
   overflow-x: auto;
   white-space: pre;
   box-sizing: border-box;
-  border-radius: 4px; /* corner-radius-small */
+  border-radius: 0;
   max-width: 100%;
   margin: 0;
   padding: 8px;
   font-family: var(--app-monospace-font-family);
   font-size: var(--app-monospace-font-size);
+  background: color-mix(in srgb, var(--app-tool-background) 92%, #020617 8%);
 }
 
 /* ============================================================
@@ -372,11 +596,14 @@ details[open] .thinking-toggle {
 
 .mention-chip {
   display: inline;
-  background-color: var(--app-mention-chip-background);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-glass-cyan) 20%, transparent), transparent),
+    var(--app-mention-chip-background);
   color: var(--app-mention-chip-foreground);
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
-  border-radius: 3px;
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 44%, transparent);
+  border-radius: 4px;
   padding: 1px 4px;
 }
 
@@ -393,7 +620,9 @@ details[open] .thinking-toggle {
    ============================================================ */
 
 .tool-result {
-  background-color: var(--app-tool-background);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-glass-sky) 8%, transparent), transparent),
+    var(--app-tool-background);
   white-space: pre;
   overflow-x: auto;
   box-sizing: border-box;
@@ -429,6 +658,53 @@ details[open] .thinking-toggle {
   40% { opacity: 1; }
 }
 
+@keyframes thinkingShine {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(0.94) rotate(0deg);
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  45% {
+    opacity: 1;
+    transform: scale(1.08) rotate(8deg);
+    filter: drop-shadow(0 0 8px color-mix(in srgb, var(--app-glass-cyan) 70%, transparent));
+  }
+}
+
+.thinking-status {
+  color: var(--app-secondary-foreground);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 0;
+  font-size: 12px;
+}
+
+.thinking-status-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--app-brand-accent);
+  animation: thinkingShine 1.35s ease-in-out infinite;
+}
+
+.thinking-status-icon svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.thinking-status-label {
+  font-style: italic;
+}
+
+@keyframes caretBlink {
+  0%, 45% { opacity: 0.75; }
+  46%, 100% { opacity: 0; }
+}
+
 /* Error banner slide-down */
 @keyframes slideDown {
   0% { opacity: 0; transform: translateY(-4px); }
@@ -457,7 +733,9 @@ details[open] .thinking-toggle {
   overflow-y: auto;
   overflow-x: hidden;
   display: flex;
-  background-color: var(--app-primary-background);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-glass-sky) 4%, transparent), transparent 220px),
+    color-mix(in srgb, var(--app-primary-background) 92%, rgba(0,0,0,0.16));
   position: relative;
   flex-direction: column;
   flex: 1;
@@ -468,6 +746,20 @@ details[open] .thinking-toggle {
 
 .messages-container:focus {
   outline: none;
+}
+
+.message-actions-row {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 4px;
+  min-height: 22px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.group:hover .message-actions-row,
+.group:focus-within .message-actions-row {
+  opacity: 1;
 }
 
 /* ============================================================
@@ -482,6 +774,12 @@ details[open] .thinking-toggle {
   align-items: flex-start;
   gap: 0;
   padding: 8px 0;
+}
+
+.message:has(.tool-call-card),
+.message:has(.tool-result-card) {
+  padding-top: 2px;
+  padding-bottom: 2px;
 }
 
 .message:first-child {
@@ -507,6 +805,15 @@ details[open] .thinking-toggle {
   position: relative;
   max-width: 480px;
   top: -30px;
+  padding: 18px 22px !important;
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 54%, transparent);
+  border-radius: var(--corner-radius-large);
+  background:
+    linear-gradient(180deg, var(--app-glass-highlight), transparent 58%),
+    color-mix(in srgb, var(--app-glass-surface-soft) 72%, transparent);
+  box-shadow: var(--app-glass-shadow-soft), inset 0 1px 0 var(--app-glass-highlight);
+  backdrop-filter: var(--app-glass-blur);
+  -webkit-backdrop-filter: var(--app-glass-blur);
 }
 
 /* ============================================================
@@ -564,6 +871,135 @@ details[open] .thinking-toggle {
   height: 1.85em;
   margin-top: 4px;
   margin-left: 0;
+  color: var(--app-glass-cyan);
+}
+
+.gakrcli-spinner-glyph {
+  width: 16px;
+  flex: 0 0 16px;
+  color: var(--app-spinner-foreground);
+  font-size: 13px;
+  line-height: 1;
+  text-align: center;
+  text-shadow: 0 0 10px color-mix(in srgb, var(--app-spinner-foreground) 45%, transparent);
+}
+
+.gakrcli-spinner-label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--app-glass-cyan);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gakrcli-spinner-timer {
+  flex: 0 0 auto;
+  color: var(--app-secondary-foreground);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.78;
+}
+
+.assistant-turn-footer {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 6px;
+  color: var(--app-secondary-foreground);
+  font-size: 12px;
+  font-style: italic;
+  opacity: 0.72;
+}
+
+.turn-completion-mark {
+  color: var(--app-glass-cyan);
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.turn-completion-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-interrupt-row {
+  margin-top: 14px;
+  color: var(--app-secondary-foreground);
+  font-size: 12px;
+  font-style: italic;
+  opacity: 0.7;
+}
+
+.todo-viewer {
+  margin: 4px 16px 0;
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 46%, transparent);
+  border-radius: var(--corner-radius-small);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-glass-highlight) 28%, transparent), transparent),
+    color-mix(in srgb, var(--app-glass-surface) 58%, transparent);
+  overflow: hidden;
+}
+
+.todo-viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--app-glass-border) 38%, transparent);
+  color: var(--app-secondary-foreground);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.todo-viewer-list {
+  display: grid;
+  gap: 1px;
+  padding: 4px;
+}
+
+.todo-viewer-row {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  min-height: 24px;
+  padding: 2px 4px;
+  color: var(--app-primary-foreground);
+  font-size: 12px;
+}
+
+.todo-viewer-mark {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  border: 1px solid var(--app-secondary-foreground);
+  opacity: 0.7;
+}
+
+.todo-viewer-row[data-status="in_progress"] .todo-viewer-mark {
+  border-color: var(--app-glass-amber);
+  background: var(--app-glass-amber);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--app-glass-amber) 50%, transparent);
+}
+
+.todo-viewer-row[data-status="completed"] {
+  color: var(--app-secondary-foreground);
+  text-decoration: line-through;
+}
+
+.todo-viewer-row[data-status="completed"] .todo-viewer-mark {
+  border-color: var(--app-success-foreground);
+  background: var(--app-success-foreground);
+}
+
+.todo-viewer-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ============================================================
@@ -573,12 +1009,236 @@ details[open] .thinking-toggle {
 .input-footer {
   display: flex;
   color: var(--app-secondary-foreground);
-  border-top: .5px solid var(--app-input-border);
+  border-top: .5px solid color-mix(in srgb, var(--app-glass-border) 62%, transparent);
   z-index: 6;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
   padding: 5px;
+  background: color-mix(in srgb, var(--app-glass-surface) 48%, transparent);
+}
+
+.input-footer > .glass-control,
+.input-footer > div {
+  min-width: 0;
+}
+
+.input-footer .glass-control {
+  max-width: min(210px, 100%);
+}
+
+.input-footer .sendButton {
+  margin-left: auto;
+}
+
+.context-usage-indicator {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  height: 26px;
+  padding: 2px 7px;
+  border-radius: var(--corner-radius-small);
+  color: var(--app-secondary-foreground);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  outline: none;
+}
+
+.context-usage-ring {
+  position: relative;
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background:
+    conic-gradient(
+      var(--context-usage-color) 0 var(--context-usage-percent),
+      color-mix(in srgb, var(--app-glass-border) 28%, transparent) var(--context-usage-percent) 100%
+    );
+  box-shadow: 0 0 8px color-mix(in srgb, var(--context-usage-color) 25%, transparent);
+}
+
+.context-usage-ring-core {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-glass-surface) 86%, rgba(0,0,0,0.28));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--app-glass-highlight) 54%, transparent);
+}
+
+.context-usage-label {
+  font-variant-numeric: tabular-nums;
+  color: var(--app-primary-foreground);
+}
+
+.context-usage-capacity {
+  max-width: 48px;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--app-secondary-foreground) 82%, transparent);
+  text-overflow: ellipsis;
+}
+
+.context-usage-bars {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 24px;
+  flex: 0 0 auto;
+}
+
+.context-usage-bars span,
+.context-usage-popover-meter span {
+  display: block;
+  height: 2px;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      90deg,
+      var(--context-usage-color) 0 var(--context-usage-percent),
+      color-mix(in srgb, var(--app-glass-border) 28%, transparent) var(--context-usage-percent) 100%
+    );
+}
+
+.context-usage-bars span:last-child,
+.context-usage-popover-meter span:last-child {
+  opacity: 0.58;
+}
+
+.context-usage-indicator[data-known="false"] .context-usage-bars span {
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--context-usage-color) 58%, transparent),
+      color-mix(in srgb, var(--context-usage-color) 18%, transparent),
+      color-mix(in srgb, var(--context-usage-color) 58%, transparent)
+    );
+  background-size: 200% 100%;
+  animation: context-usage-pending 1.4s ease-in-out infinite;
+}
+
+.context-usage-popover {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 7px);
+  z-index: 80;
+  width: min(280px, calc(100vw - 28px));
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 70%, transparent);
+  border-radius: var(--corner-radius-medium);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-glass-highlight) 32%, transparent), transparent),
+    color-mix(in srgb, var(--app-glass-surface-raised) 92%, rgba(0,0,0,0.28));
+  box-shadow: var(--app-glass-shadow-soft);
+  color: var(--app-primary-foreground);
+  line-height: 1.35;
+  white-space: normal;
+  pointer-events: none;
+}
+
+.context-usage-popover-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--app-primary-foreground);
+}
+
+.context-usage-popover-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 8px 0;
+}
+
+.context-usage-popover-meter span {
+  height: 3px;
+}
+
+.context-usage-popover-line {
+  margin-top: 3px;
+  color: var(--app-secondary-foreground);
+  font-size: 11px;
+}
+
+@keyframes context-usage-pending {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+.compact-boundary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  margin: 18px 0 16px;
+  color: color-mix(in srgb, var(--app-secondary-foreground) 78%, transparent);
+  font-size: 12px;
+  line-height: 1;
+  user-select: none;
+}
+
+.compact-boundary-line {
+  min-width: 28px;
+  height: 1px;
+  flex: 1 1 0;
+  background: color-mix(in srgb, var(--app-glass-border) 30%, transparent);
+}
+
+.compact-boundary-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: min(100%, 360px);
+  white-space: nowrap;
+}
+
+.compact-boundary-label span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compact-boundary[data-state="active"] {
+  color: color-mix(in srgb, var(--app-secondary-foreground) 70%, var(--app-glass-sky) 30%);
+}
+
+.compact-boundary[data-state="done"] {
+  color: color-mix(in srgb, var(--app-secondary-foreground) 72%, var(--app-glass-mint) 28%);
+}
+
+.compact-boundary-spinner {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  border: 1.5px solid color-mix(in srgb, currentColor 28%, transparent);
+  border-top-color: currentColor;
+  animation: compact-boundary-spin 900ms linear infinite;
+}
+
+@keyframes compact-boundary-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.message-usage-summary {
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 44%, transparent);
+  border-radius: var(--corner-radius-small);
+  padding: 2px 6px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-glass-highlight) 30%, transparent), transparent),
+    color-mix(in srgb, var(--app-glass-surface) 48%, transparent);
 }
 
 /* ============================================================
@@ -591,9 +1251,9 @@ details[open] .thinking-toggle {
   color: var(--app-secondary-foreground);
   cursor: pointer;
   display: inline-flex;
-  background: 0 0;
-  border: none;
-  border-radius: 2px;
+  background: color-mix(in srgb, var(--app-glass-surface) 34%, transparent);
+  border: 1px solid transparent;
+  border-radius: var(--corner-radius-small);
   flex-shrink: 1;
   align-items: center;
   gap: 4px;
@@ -614,7 +1274,9 @@ details[open] .thinking-toggle {
 }
 
 .footer-button:hover {
-  background-color: var(--app-ghost-button-hover-background);
+  border-color: color-mix(in srgb, var(--app-glass-border) 54%, transparent);
+  background-color: color-mix(in srgb, var(--app-ghost-button-hover-background) 76%, var(--app-glass-sky) 24%);
+  color: var(--app-primary-foreground);
 }
 
 .footer-button:active:not(:disabled) {
@@ -624,6 +1286,22 @@ details[open] .thinking-toggle {
 .footer-button svg {
   flex-shrink: 0;
   height: 1em;
+}
+
+.toolbar-icon-button {
+  border: 1px solid transparent !important;
+  background: color-mix(in srgb, var(--app-glass-surface) 28%, transparent);
+}
+
+.toolbar-icon-button:hover,
+.toolbar-icon-button:focus-visible {
+  border-color: color-mix(in srgb, var(--app-glass-border) 54%, transparent) !important;
+  color: var(--app-primary-foreground) !important;
+}
+
+.add-content-menu-item:hover,
+.add-content-menu-item:focus-visible {
+  background: color-mix(in srgb, var(--app-list-hover-background) 80%, var(--app-glass-sky) 20%) !important;
 }
 
 /* ============================================================
@@ -646,27 +1324,39 @@ details[open] .thinking-toggle {
   border-radius: 5px;
 }
 
-/* Default send button: orange */
+/* Default send button: sky glass */
 .sendButton {
   color: var(--app-brand-on-accent);
-  background-color: var(--app-brand-button);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #ffffff 38%, transparent), transparent 56%),
+    linear-gradient(135deg, var(--app-brand-button), color-mix(in srgb, var(--app-glass-blue) 58%, var(--app-glass-cyan) 42%));
+  border: 1px solid color-mix(in srgb, var(--app-glass-border-strong) 68%, transparent);
+  box-shadow:
+    0 6px 16px color-mix(in srgb, var(--app-glass-sky) 24%, transparent),
+    inset 0 1px 0 rgba(255,255,255,0.42);
 }
 
 /* Permission mode variants */
 .sendButton[data-permission-mode="acceptEdits"] {
-  color: var(--app-primary-background);
-  background-color: var(--app-primary-foreground);
+  color: #052e2b;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #ffffff 34%, transparent), transparent),
+    linear-gradient(135deg, var(--app-glass-mint), var(--app-glass-cyan));
 }
 
 .sendButton[data-permission-mode="plan"] {
   color: var(--app-button-foreground);
-  background-color: var(--vscode-focusBorder, var(--app-button-background));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #ffffff 30%, transparent), transparent),
+    linear-gradient(135deg, var(--vscode-focusBorder, var(--app-button-background)), var(--app-glass-sky));
 }
 
 .sendButton[data-permission-mode="bypassPermissions"],
 .sendButton[data-permission-mode="auto"] {
   color: var(--app-button-foreground);
-  background-color: var(--app-error-foreground);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #ffffff 24%, transparent), transparent),
+    linear-gradient(135deg, var(--app-error-foreground), var(--app-glass-danger));
 }
 
 .sendButton:disabled, .menuButton:disabled {
@@ -675,7 +1365,10 @@ details[open] .thinking-toggle {
 }
 
 .sendButton:hover:not(:disabled) {
-  filter: brightness(1.1);
+  filter: brightness(1.08) saturate(1.12);
+  box-shadow:
+    0 8px 22px color-mix(in srgb, var(--app-glass-sky) 34%, transparent),
+    inset 0 1px 0 rgba(255,255,255,0.5);
 }
 
 .sendButton:active:not(:disabled) {
@@ -733,6 +1426,466 @@ details[open] .thinking-toggle {
 }
 
 /* ============================================================
+   Glass panels for sessions, pickers, and tool execution
+   ============================================================ */
+
+.session-list-glass {
+  border: 1px solid var(--app-glass-border);
+  border-top: none;
+  background:
+    linear-gradient(180deg, var(--app-glass-highlight), transparent 44%),
+    linear-gradient(135deg, color-mix(in srgb, var(--app-glass-sky) 6%, transparent), transparent 70%),
+    color-mix(in srgb, var(--app-glass-surface-raised) 88%, rgba(0,0,0,0.22));
+  box-shadow: var(--app-glass-shadow), inset 0 1px 0 var(--app-glass-highlight);
+  backdrop-filter: var(--app-glass-blur);
+  -webkit-backdrop-filter: var(--app-glass-blur);
+}
+
+.session-search-input {
+  color: var(--app-input-foreground);
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 62%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-glass-highlight) 72%, transparent), transparent),
+    color-mix(in srgb, var(--app-input-background) 78%, transparent);
+}
+
+.session-search-input:focus {
+  border-color: var(--app-glass-border-strong);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-glass-sky) 14%, transparent);
+}
+
+.session-card {
+  margin: 2px 6px;
+  border: 1px solid transparent;
+}
+
+.session-card:hover,
+.session-card:focus-visible {
+  border-color: color-mix(in srgb, var(--app-glass-border) 48%, transparent);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--app-glass-sky) 8%, transparent), transparent 66%),
+    color-mix(in srgb, var(--app-list-hover-background) 82%, rgba(0,0,0,0.12));
+}
+
+.session-card-active {
+  border-color: color-mix(in srgb, var(--app-glass-border-strong) 68%, transparent);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--app-glass-cyan) 10%, transparent), transparent 72%),
+    var(--app-list-active-background);
+  box-shadow: inset 2px 0 0 var(--app-glass-cyan);
+}
+
+.tool-call-card,
+.tool-result-card {
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 38%, transparent);
+  border-radius: 6px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-glass-sky) 3%, transparent), transparent 58%),
+    color-mix(in srgb, var(--app-tool-background) 88%, rgba(0,0,0,0.22));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--app-glass-highlight) 48%, transparent);
+}
+
+.tool-call-header,
+.tool-result-summary {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--app-glass-mint) 4%, transparent), transparent 72%),
+    color-mix(in srgb, var(--app-glass-surface-raised) 72%, rgba(0,0,0,0.2));
+  cursor: pointer;
+  min-height: 30px;
+}
+
+.tool-call-header:hover,
+.tool-call-header:focus-visible,
+.tool-call-header[aria-expanded="true"],
+.tool-result-summary:hover,
+.tool-result-summary:focus-visible {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--app-glass-sky) 8%, transparent), transparent 72%),
+    color-mix(in srgb, var(--app-list-hover-background) 74%, rgba(0,0,0,0.18));
+  color: var(--app-primary-foreground);
+}
+
+.tool-call-body {
+  border-top: 1px solid color-mix(in srgb, var(--app-glass-border) 52%, transparent);
+}
+
+.tool-call-preview {
+  flex: 1 1 auto;
+}
+
+.tool-detail-section + .tool-detail-section {
+  margin-top: 6px;
+}
+
+.tool-detail-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 4px;
+}
+
+.tool-result-inline-preview {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--app-secondary-foreground);
+  opacity: 0.58;
+  font-size: 11px;
+}
+
+.tool-input-pre,
+.tool-result-pre {
+  border: 1px solid color-mix(in srgb, var(--app-transparent-inner-border) 80%, transparent);
+  background: color-mix(in srgb, var(--app-tool-background) 92%, #020617 8%);
+  color: var(--app-primary-foreground);
+}
+
+.tool-detail-pre {
+  max-height: 132px;
+}
+
+.tool-result-error {
+  border-color: color-mix(in srgb, var(--app-error-foreground) 64%, transparent);
+  box-shadow: inset 2px 0 0 var(--app-error-foreground);
+}
+
+.permission-glass-dialog {
+  background:
+    linear-gradient(180deg, var(--app-glass-highlight), transparent 45%),
+    color-mix(in srgb, var(--app-glass-surface-raised) 90%, rgba(0,0,0,0.24));
+  box-shadow: var(--app-glass-shadow), inset 0 1px 0 var(--app-glass-highlight);
+  backdrop-filter: var(--app-glass-blur);
+  -webkit-backdrop-filter: var(--app-glass-blur);
+}
+
+.permission-modal-backdrop {
+  background: rgba(0, 0, 0, 0.48);
+}
+
+.permission-card-shell {
+  width: min(410px, calc(100vw - 28px));
+  max-height: min(78vh, 560px);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 72%, transparent);
+  border-radius: 18px;
+  padding: 20px 14px 14px;
+}
+
+.permission-card-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 4px;
+  color: var(--vscode-editor-foreground);
+  font-size: 18px;
+  line-height: 1.5;
+  font-weight: 650;
+}
+
+.permission-card-count {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  background: color-mix(in srgb, var(--app-glass-surface) 82%, transparent);
+}
+
+.permission-card-meta {
+  padding: 4px 4px 12px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+}
+
+.permission-card-code {
+  margin: 0 0 12px;
+  max-height: 130px;
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--app-transparent-inner-border) 70%, transparent);
+  border-radius: 8px;
+  padding: 11px 12px;
+  background: color-mix(in srgb, var(--vscode-input-background) 82%, rgba(0, 0, 0, 0.38));
+  color: var(--vscode-descriptionForeground);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.permission-card-body {
+  max-height: 100px;
+  overflow: auto;
+  padding: 0 4px;
+}
+
+.permission-card-note,
+.permission-card-warning {
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.permission-card-warning {
+  color: var(--vscode-errorForeground);
+}
+
+.permission-choice-list {
+  display: grid;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.permission-choice-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, auto) 1fr;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 7px 10px;
+  background: color-mix(in srgb, var(--app-glass-surface) 78%, rgba(255, 255, 255, 0.02));
+  color: var(--vscode-editor-foreground);
+  cursor: pointer;
+  text-align: left;
+}
+
+.permission-choice-row:hover,
+.permission-choice-row:focus-visible {
+  border-color: color-mix(in srgb, var(--app-glass-border-strong) 58%, transparent);
+  background: color-mix(in srgb, var(--app-list-hover-background) 88%, transparent);
+  outline: none;
+}
+
+.permission-choice-row:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.permission-choice-index,
+.permission-choice-hint {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+.permission-choice-label {
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.permission-choice-hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.permission-choice-muted {
+  opacity: 0.68;
+}
+
+.elicitation-card-shell {
+  display: flex;
+  flex-direction: column;
+  width: min(440px, calc(100vw - 28px));
+  max-height: min(82vh, 590px);
+  padding: 0;
+}
+
+.elicitation-card-header {
+  flex: 0 0 auto;
+  padding: 20px 14px 0;
+}
+
+.elicitation-step-count {
+  display: inline-flex;
+  margin-left: 8px;
+  border-left: 1px solid color-mix(in srgb, var(--app-transparent-inner-border) 72%, transparent);
+  padding-left: 8px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.elicitation-card-shell form {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 14px 14px;
+}
+
+.elicitation-question-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 4px 2px;
+}
+
+.elicitation-question-body label {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.elicitation-question-body .space-y-1 {
+  display: grid;
+  gap: 8px;
+}
+
+.elicitation-question-body .space-y-1 > label {
+  min-height: 56px;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.elicitation-question-body .space-y-1 > label > div:last-child {
+  min-width: 0;
+}
+
+.elicitation-question-body .space-y-1 > label > div:last-child > div:first-child {
+  overflow-wrap: anywhere;
+}
+
+.elicitation-dialog-actions {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--app-transparent-inner-border) 58%, transparent);
+  padding: 12px 4px 0;
+}
+
+.elicitation-dialog-button {
+  min-width: 72px;
+  height: 32px;
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 68%, transparent);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: color-mix(in srgb, var(--app-glass-surface) 78%, rgba(255, 255, 255, 0.02));
+  color: var(--vscode-editor-foreground);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.elicitation-dialog-button:hover,
+.elicitation-dialog-button:focus-visible {
+  border-color: color-mix(in srgb, var(--vscode-focusBorder) 82%, transparent);
+  outline: none;
+}
+
+.elicitation-dialog-button.primary {
+  background: color-mix(in srgb, var(--vscode-focusBorder) 34%, var(--app-glass-surface));
+  border-color: color-mix(in srgb, var(--vscode-focusBorder) 78%, transparent);
+}
+
+.elicitation-dialog-button.muted {
+  color: var(--vscode-descriptionForeground);
+}
+
+.elicitation-dialog-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.onboarding-glass-card {
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 60%, transparent);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--app-glass-sky) 7%, transparent), transparent 64%),
+    color-mix(in srgb, var(--app-glass-surface) 88%, rgba(0,0,0,0.16));
+  box-shadow: var(--app-glass-shadow-soft), inset 0 1px 0 var(--app-glass-highlight);
+  backdrop-filter: var(--app-glass-blur);
+  -webkit-backdrop-filter: var(--app-glass-blur);
+}
+
+.glass-dialog-backdrop {
+  background:
+    radial-gradient(circle at 50% 18%, color-mix(in srgb, var(--app-glass-sky) 10%, transparent), transparent 38%),
+    rgba(0, 0, 0, 0.58) !important;
+}
+
+.glass-dialog {
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 74%, transparent) !important;
+  background:
+    linear-gradient(180deg, var(--app-glass-highlight), transparent 42%),
+    linear-gradient(135deg, color-mix(in srgb, var(--app-glass-sky) 6%, transparent), transparent 68%),
+    color-mix(in srgb, var(--app-glass-surface-raised) 90%, rgba(0,0,0,0.28)) !important;
+  box-shadow: var(--app-glass-shadow), inset 0 1px 0 var(--app-glass-highlight) !important;
+  backdrop-filter: var(--app-glass-blur);
+  -webkit-backdrop-filter: var(--app-glass-blur);
+}
+
+.glass-dialog-section {
+  border-color: color-mix(in srgb, var(--app-glass-border) 58%, transparent) !important;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--app-glass-sky) 5%, transparent), transparent 62%),
+    color-mix(in srgb, var(--app-glass-surface) 76%, rgba(0,0,0,0.18)) !important;
+}
+
+.glass-input {
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 68%, transparent) !important;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-glass-highlight) 36%, transparent), transparent),
+    color-mix(in srgb, var(--app-input-background) 86%, rgba(0,0,0,0.22)) !important;
+  color: var(--app-input-foreground) !important;
+}
+
+.glass-input:focus {
+  border-color: var(--app-glass-border-strong) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-glass-sky) 12%, transparent);
+}
+
+.glass-menu {
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 72%, transparent) !important;
+  background:
+    linear-gradient(180deg, var(--app-glass-highlight), transparent 42%),
+    color-mix(in srgb, var(--app-menu-background) 88%, rgba(0,0,0,0.28)) !important;
+  box-shadow: var(--app-glass-shadow-soft), inset 0 1px 0 var(--app-glass-highlight) !important;
+  backdrop-filter: var(--app-glass-blur);
+  -webkit-backdrop-filter: var(--app-glass-blur);
+}
+
+.glass-menu-header {
+  border-bottom: 1px solid color-mix(in srgb, var(--app-glass-border) 56%, transparent) !important;
+  background: color-mix(in srgb, var(--app-glass-surface) 58%, transparent);
+}
+
+.glass-list-row {
+  border: 1px solid transparent !important;
+}
+
+.glass-list-row:hover,
+.glass-list-row:focus-visible {
+  border-color: color-mix(in srgb, var(--app-glass-border) 42%, transparent) !important;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--app-glass-sky) 8%, transparent), transparent 70%),
+    color-mix(in srgb, var(--app-list-hover-background) 84%, rgba(0,0,0,0.14)) !important;
+}
+
+.glass-list-row-active {
+  border-color: color-mix(in srgb, var(--app-glass-border-strong) 58%, transparent) !important;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--app-glass-cyan) 9%, transparent), transparent 70%),
+    color-mix(in srgb, var(--app-list-active-background) 82%, rgba(0,0,0,0.16)) !important;
+}
+
+.input-container [style*="--app-panel-background"],
+.input-container [style*="--app-menu-background"],
+.input-container [style*="var(--app-menu-background)"] {
+  border-color: var(--app-glass-border) !important;
+  background:
+    linear-gradient(180deg, var(--app-glass-highlight), transparent 42%),
+    color-mix(in srgb, var(--app-menu-background) 86%, transparent) !important;
+  box-shadow: var(--app-glass-shadow-soft), inset 0 1px 0 var(--app-glass-highlight) !important;
+  backdrop-filter: var(--app-glass-blur);
+  -webkit-backdrop-filter: var(--app-glass-blur);
+}
+
+/* ============================================================
    Markdown prose overrides
    ============================================================ */
 
@@ -740,6 +1893,18 @@ details[open] .thinking-toggle {
   white-space: pre-wrap;
   margin-top: 0.1em;
   margin-bottom: 0.2em;
+}
+
+.streaming-caret {
+  display: inline-block;
+  width: 7px;
+  height: 1.15em;
+  margin-left: 2px;
+  vertical-align: -0.18em;
+  border-radius: 1px;
+  background: var(--app-primary-foreground);
+  opacity: 0.75;
+  animation: caretBlink 1s steps(2, start) infinite;
 }
 
 .markdown-body h1, .markdown-body h2, .markdown-body h3,
@@ -754,10 +1919,70 @@ details[open] .thinking-toggle {
   margin: 0.5em 0;
 }
 
+.markdown-body ul {
+  list-style: disc;
+}
+
+.markdown-body ol {
+  list-style: decimal;
+}
+
+.markdown-body ul ul {
+  list-style: circle;
+}
+
+.markdown-body ul ul ul {
+  list-style: square;
+}
+
+.markdown-body li {
+  margin: 0.2em 0;
+  padding-left: 0.15em;
+}
+
+.markdown-body li::marker {
+  color: color-mix(in srgb, var(--app-secondary-foreground) 84%, var(--app-glass-cyan) 16%);
+}
+
+.markdown-body li.list-none {
+  list-style: none;
+}
+
 .markdown-body hr {
   border: none;
-  border-top: 1px solid var(--app-primary-border-color);
+  border-top: 1px solid color-mix(in srgb, var(--app-glass-border) 58%, transparent);
   margin: 1em 0;
+}
+
+.markdown-body code:not(pre code) {
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 42%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-glass-sky) 12%, transparent), transparent),
+    color-mix(in srgb, var(--app-tool-background) 86%, transparent);
+}
+
+.markdown-body table {
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--app-glass-border) 64%, transparent) !important;
+  border-radius: var(--corner-radius-medium);
+  background: color-mix(in srgb, var(--app-glass-surface) 62%, transparent);
+}
+
+.markdown-body th {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-glass-sky) 14%, transparent), transparent),
+    color-mix(in srgb, var(--app-glass-surface-raised) 76%, transparent) !important;
+}
+
+.markdown-body th,
+.markdown-body td {
+  border-color: color-mix(in srgb, var(--app-glass-border) 50%, transparent) !important;
+}
+
+.markdown-body blockquote {
+  border-color: var(--app-glass-cyan) !important;
+  background: color-mix(in srgb, var(--app-glass-cyan) 8%, transparent);
+  border-radius: 0 var(--corner-radius-small) var(--corner-radius-small) 0;
 }
 
 /* highlight.js overrides */

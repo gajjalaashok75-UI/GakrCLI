@@ -21,6 +21,8 @@ interface MessageActionsProps {
   onRetry?: (uuid: string) => void;
   /** Callback for stop */
   onStop?: () => void;
+  /** Tooltip/accessible label for copy action */
+  copyLabel?: string;
 }
 
 export const MessageActions: React.FC<MessageActionsProps> = ({
@@ -33,6 +35,7 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
   onEdit,
   onRetry,
   onStop,
+  copyLabel = 'Copy message',
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(content);
@@ -134,9 +137,9 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
       )}
 
       {/* Copy button — on all assistant messages */}
-      {messageRole === 'assistant' && (
+      {(messageRole === 'assistant' || messageRole === 'user') && content && (
         <ActionButton
-          label={showCopied ? 'Copied!' : 'Copy message'}
+          label={showCopied ? 'Copied!' : copyLabel}
           icon={
             showCopied ? (
               <svg className="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 16 16">

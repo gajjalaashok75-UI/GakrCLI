@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { WebviewManager } from './webview/webviewManager';
 import { GakrCLIWebviewProvider, GakrCLIPanelSerializer } from './webview/webviewProvider';
 import { ProcessManager, ProcessState } from './process/processManager';
+import { SELF_HANDLED } from './process/controlRouter';
 import { createDiffContentProviders } from './diff/diffContentProvider';
 import { DiffManager } from './diff/diffManager';
 import { createCanUseToolHandler } from './diff/diffHandler';
@@ -17,7 +18,6 @@ import type { RewindFilesResponse } from './checkpoint/checkpointManager';
 import { AuthManager } from './auth/authManager';
 import { SettingsSync } from './settings/settingsSync';
 import { loadProfileFile } from './settings/profileFile';
-import { resolveCliLaunchCommand } from './settings/cliExecutable';
 import { McpIdeServer } from './mcp/mcpIdeServer';
 import { buildToggleRequest, buildInstallCommand, buildReloadRequest } from './plugins/pluginBridge';
 import { WorktreeManager } from './worktree/worktreeManager';
@@ -26,6 +26,7 @@ import { AtMentionProvider } from './mentions/atMentionProvider';
 
 let webviewManager: WebviewManager | undefined;
 let diffManagerInstance: DiffManager | undefined;
+let processManager: ProcessManager | undefined;
 
 /** Get the active DiffManager instance (available after activation). */
 export function getDiffManager(): DiffManager | undefined {
@@ -53,7 +54,12 @@ export function activate(context: vscode.ExtensionContext) {
 
   // === Permission system: create rules store and handler ===
   const permissionRules = new PermissionRules(context);
-  const permissionHandler = new PermissionHandler(webviewManager, permissionRules, output);
+  const permissionHandler = new PermissionHandler(
+    webviewManager,
+    permissionRules,
+    output,
+    (pending) => statusBarManager.setPendingPermission(pending),
+  );
   context.subscriptions.push(permissionHandler);
 
   const provider = new GakrCLIWebviewProvider(webviewManager);
@@ -68,23 +74,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Broadcast session changes to all webviews
   sessionTracker.onSessionsChanged(() => {
-    const grouped = sessionTracker.getGroupedSessions();
-    webviewManager!.broadcast({
-      type: 'sessionsData',
-      grouped: grouped.map((g) => ({
-        group: g.group,
-        sessions: g.sessions.map((s) => ({
-          id: s.id,
-          title: s.title,
-          model: s.model,
-          timestamp: s.timestamp.toISOString(),
-          createdAt: s.createdAt.toISOString(),
-          messageCount: s.messageCount,
-          cwd: s.cwd,
-          gitBranch: s.gitBranch,
-        })),
-      })),
-    } as never);
+    webviewManager!.broadcast(sessionGroupsPayload() as never);
   });
 
   // Check if secondary sidebar is supported (VS Code 1.106+)
@@ -136,7 +126,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(statusBarManager);
 
   // Terminal manager for terminal mode
-  const terminalManager = new TerminalManager();
+  const terminalManager = new TerminalManager(context.extensionPath);
   context.subscriptions.push(terminalManager);
 
   // === Checkpoint manager (Story 10) ===
@@ -180,11 +170,190 @@ export function activate(context: vscode.ExtensionContext) {
   // ==========================================
   // ProcessManager — spawned on first user message
   // ==========================================
-  let processManager: ProcessManager | undefined;
   let isSpawning = false;
   let crashRestartCount = 0;
   let lastCrashTime = 0;
   let currentSessionId: string | undefined;
+  let activeSessionTitle: string | undefined;
+  let activeSessionTitleIsFallback = false;
+  let sessionRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+
+  context.subscriptions.push({
+    dispose: () => {
+      if (sessionRefreshTimer) {
+        clearTimeout(sessionRefreshTimer);
+        sessionRefreshTimer = undefined;
+      }
+    },
+  });
+
+  function sessionGroupsPayload() {
+    const grouped = sessionTracker.getGroupedSessions();
+    return {
+      type: 'sessionsData',
+      grouped: grouped.map((g) => ({
+        group: g.group,
+        sessions: g.sessions.map((s) => ({
+          id: s.id,
+          title: s.title,
+          model: s.model,
+          timestamp: s.timestamp.toISOString(),
+          createdAt: s.createdAt.toISOString(),
+          messageCount: s.messageCount,
+          cwd: s.cwd,
+          gitBranch: s.gitBranch,
+        })),
+      })),
+    };
+  }
+
+  async function refreshSessions(panelId?: string): Promise<void> {
+    await sessionTracker.scanAllSessions();
+    const payload = sessionGroupsPayload();
+    if (panelId) {
+      webviewManager!.sendToPanel(panelId, payload as never);
+    } else {
+      webviewManager!.broadcast(payload as never);
+    }
+  }
+
+  function scheduleSessionRefresh(delayMs = 350): void {
+    if (sessionRefreshTimer) {
+      clearTimeout(sessionRefreshTimer);
+    }
+    sessionRefreshTimer = setTimeout(() => {
+      sessionRefreshTimer = undefined;
+      refreshSessions().catch((err) => {
+        output.warn(`[GakrCLI] Failed to refresh sessions: ${err instanceof Error ? err.message : String(err)}`);
+      });
+    }, delayMs);
+  }
+
+  function compactTitleText(text: string): string {
+    return text.replace(/\s+/g, ' ').trim().slice(0, 120);
+  }
+
+  function titleFromCliUserMessage(msgObj: Record<string, unknown>): string | undefined {
+    if (msgObj.isSynthetic || msgObj.isMeta) return undefined;
+    const message = msgObj.message as Record<string, unknown> | undefined;
+    const content = message?.content;
+    let text = '';
+    if (typeof content === 'string') {
+      text = content;
+    } else if (Array.isArray(content)) {
+      const textBlock = content.find((block) =>
+        Boolean(block) &&
+        typeof block === 'object' &&
+        (block as Record<string, unknown>).type === 'text' &&
+        typeof (block as Record<string, unknown>).text === 'string',
+      ) as Record<string, unknown> | undefined;
+      text = typeof textBlock?.text === 'string' ? textBlock.text : '';
+    }
+
+    const title = compactTitleText(text);
+    if (
+      !title ||
+      title.startsWith('<command-message>') ||
+      title.startsWith('<command-name>') ||
+      title.startsWith('<local-command')
+    ) {
+      return undefined;
+    }
+    return title;
+  }
+
+  function publishSessionTitle(sessionId: string, title: string, source: 'fallback' | 'ai' | 'known'): void {
+    const compactTitle = compactTitleText(title);
+    if (!compactTitle) return;
+
+    const isFallback = source === 'fallback';
+    const isNewSession = currentSessionId !== sessionId;
+    if (!isNewSession && isFallback && activeSessionTitle && !activeSessionTitleIsFallback) {
+      return;
+    }
+    if (!isNewSession && isFallback && activeSessionTitle) {
+      return;
+    }
+
+    currentSessionId = sessionId;
+    activeSessionTitle = compactTitle;
+    activeSessionTitleIsFallback = isFallback;
+    sessionTracker.updateSessionTitle(sessionId, compactTitle);
+    webviewManager!.broadcast({
+      type: 'sessionTitleUpdate',
+      sessionId,
+      title: compactTitle,
+    } as never);
+  }
+
+  function handleProcessMessage(msg: unknown): void {
+    output.info(`[CLIâ†’Webview] ${JSON.stringify(msg).substring(0, 300)}`);
+    webviewManager!.broadcast({ type: 'cli_output', data: msg } as never);
+
+    const msgObj = msg as Record<string, unknown>;
+    if (msgObj.type === 'control_cancel_request' && typeof msgObj.request_id === 'string') {
+      permissionHandler.handleCancel(msgObj.request_id);
+      statusBarManager.setPendingPermission(false);
+    }
+
+    if (msgObj.type === 'result' || msgObj.subtype === 'result') {
+      if (!webviewManager!.hasVisibleWebview()) {
+        statusBarManager.setCompletedWhileHidden(true);
+      }
+      scheduleSessionRefresh(250);
+    }
+
+    const sessionId = typeof msgObj.session_id === 'string' ? msgObj.session_id : undefined;
+    if (sessionId && sessionId !== currentSessionId) {
+      currentSessionId = sessionId;
+      const knownSession = sessionTracker.getSession(sessionId);
+      activeSessionTitle = knownSession?.title && knownSession.title !== 'Untitled Session'
+        ? knownSession.title
+        : undefined;
+      activeSessionTitleIsFallback = Boolean(activeSessionTitle);
+      if (activeSessionTitle) {
+        publishSessionTitle(sessionId, activeSessionTitle, 'known');
+      }
+    }
+
+    if (sessionId && msgObj.type === 'user') {
+      const title = titleFromCliUserMessage(msgObj);
+      if (title) {
+        publishSessionTitle(sessionId, title, 'fallback');
+        scheduleSessionRefresh(450);
+      }
+    }
+
+    if (msgObj.type === 'system' && msgObj.subtype === 'ai-title' && typeof msgObj.title === 'string' && sessionId) {
+      publishSessionTitle(sessionId, msgObj.title, 'ai');
+      scheduleSessionRefresh(150);
+    }
+
+    if (msgObj.type === 'assistant' && typeof msgObj.uuid === 'string' && sessionId) {
+      checkpointManager.registerAssistantMessage(msgObj.uuid, sessionId);
+      webviewManager!.broadcast({
+        type: 'checkpoint_state',
+        checkpoints: checkpointManager.getWebviewState(),
+      });
+    }
+
+    if (msgObj.type === 'system' && msgObj.subtype === 'files_persisted' && typeof msgObj.uuid === 'string') {
+      const files = (msgObj.files as Array<{ filename: string; file_id: string }>) ?? [];
+      checkpointManager.markFilesPersisted(msgObj.uuid, files);
+      webviewManager!.broadcast({
+        type: 'checkpoint_state',
+        checkpoints: checkpointManager.getWebviewState(),
+      });
+    }
+
+    if (msgObj.type === 'system' && msgObj.subtype === 'session_state_changed') {
+      const state = msgObj.state as 'idle' | 'running' | 'requires_action';
+      const stateSessionId = msgObj.session_id as string;
+      if (state && stateSessionId) {
+        checkpointManager.handleSessionStateChanged(state, stateSessionId);
+      }
+    }
+  }
 
   /** Map effort level string to max_thinking_tokens value */
   function effortToTokens(level: string): number | null {
@@ -230,8 +399,376 @@ export function activate(context: vscode.ExtensionContext) {
       })),
       currentProviderId: current.id,
       currentModel: current.model,
-      currentBaseUrl: settingsSync.baseUrl,
+      currentBaseUrl:
+        settingsSync.baseUrl ??
+        current.env.OPENAI_BASE_URL ??
+        current.env.ANTHROPIC_BASE_URL ??
+        current.env.GEMINI_BASE_URL ??
+        current.env.MISTRAL_BASE_URL,
+      models: current.modelOptions,
       ...(error ? { error } : {}),
+    };
+  }
+
+  async function providerStatePayloadWithDiscoveredModels(error?: string) {
+    const payload = providerStatePayload(error);
+    try {
+      const models = await authManager.discoverCurrentProviderModels();
+      return {
+        ...payload,
+        models,
+      };
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      output.warn(`[GakrCLI] Failed to discover provider models: ${detail}`);
+      return payload;
+    }
+  }
+
+  async function sendProviderState(panelId?: string, error?: string) {
+    const runtime = await readSdkRuntimeState();
+    const immediate = runtime ? providerStatePayloadFromRuntime(runtime, error) : providerStatePayload(error);
+    if (panelId) {
+      webviewManager!.sendToPanel(panelId, immediate as never);
+    } else {
+      webviewManager!.broadcast(immediate as never);
+    }
+
+    if (runtime) {
+      const discovered = await providerStatePayloadWithDiscoveredModels(error);
+      const runtimeModels = Array.isArray(immediate.models) ? immediate.models : [];
+      const discoveredModels = Array.isArray(discovered.models) ? discovered.models : [];
+      if (discoveredModels.length > runtimeModels.length) {
+        const enriched = {
+          ...immediate,
+          models: discoveredModels,
+        };
+        if (panelId) {
+          webviewManager!.sendToPanel(panelId, enriched as never);
+        } else {
+          webviewManager!.broadcast(enriched as never);
+        }
+      }
+      return;
+    }
+
+    const discovered = await providerStatePayloadWithDiscoveredModels(error);
+    if (JSON.stringify(discovered.models ?? []) === JSON.stringify(immediate.models ?? [])) {
+      return;
+    }
+    if (panelId) {
+      webviewManager!.sendToPanel(panelId, discovered as never);
+    } else {
+      webviewManager!.broadcast(discovered as never);
+    }
+  }
+
+  async function readSdkRuntimeState(): Promise<Record<string, unknown> | undefined> {
+    if (!processManager || processManager.state !== ProcessState.Ready) {
+      return undefined;
+    }
+    try {
+      const runtime = await processManager.sendControlRequest({ subtype: 'get_runtime_state' });
+      return runtime && typeof runtime === 'object' ? runtime : undefined;
+    } catch (err) {
+      output.warn(`[GakrCLI] Failed to read SDK runtime state: ${err instanceof Error ? err.message : String(err)}`);
+      return undefined;
+    }
+  }
+
+  async function broadcastReadyState(): Promise<void> {
+    await Promise.all([
+      sendProviderState().catch((err) => {
+        output.warn(`[GakrCLI] Failed to hydrate provider state before ready: ${err instanceof Error ? err.message : String(err)}`);
+      }),
+      sendRuntimeSettingsState().catch((err) => {
+        output.warn(`[GakrCLI] Failed to hydrate runtime settings before ready: ${err instanceof Error ? err.message : String(err)}`);
+      }),
+    ]);
+    webviewManager!.broadcast({ type: 'process_state', state: 'running' });
+  }
+
+  function providerStatePayloadFromRuntime(runtime: Record<string, unknown>, error?: string) {
+    const providers = Array.isArray(runtime.providers)
+      ? runtime.providers as Array<Record<string, unknown>>
+      : [];
+    const activeProfile = runtime.activeProfile as Record<string, unknown> | undefined;
+    const provider = runtime.provider as Record<string, unknown> | undefined;
+    const models = Array.isArray(runtime.models)
+      ? runtime.models as Array<Record<string, unknown>>
+      : [];
+    const model = typeof runtime.model === 'string'
+      ? runtime.model
+      : typeof activeProfile?.model === 'string'
+        ? activeProfile.model
+        : undefined;
+
+    return {
+      type: 'provider_state',
+      providers: providers.map((p) => ({
+        id: String(p.id ?? p.provider ?? ''),
+        label: String(p.label ?? p.name ?? p.id ?? ''),
+        requiresApiKey: Boolean(p.requiresApiKey),
+        requiresBaseUrl: false,
+        supportsModel: true,
+        defaultBaseUrl: typeof p.defaultBaseUrl === 'string' ? p.defaultBaseUrl : undefined,
+      })).filter((p) => p.id),
+      currentProviderId: String(activeProfile?.provider ?? provider?.provider ?? provider?.id ?? ''),
+      currentModel: model,
+      currentBaseUrl: typeof activeProfile?.baseUrl === 'string' ? activeProfile.baseUrl : undefined,
+      models: models.map((m) => ({
+        value: String(m.value ?? ''),
+        displayName: String(m.displayName ?? m.value ?? ''),
+      })).filter((m) => m.value),
+      ...(error ? { error } : {}),
+    };
+  }
+
+  async function sendRuntimeSettingsState(panelId?: string, error?: string, startIfNeeded = true) {
+    const pm = startIfNeeded ? await ensureProcess() : processManager;
+
+    const [runtime, settings, context] = pm
+      ? await Promise.all([
+          pm.sendControlRequest({ subtype: 'get_runtime_state' }).catch(() => undefined),
+          pm.sendControlRequest({ subtype: 'get_settings' }).catch(() => undefined),
+          pm.sendControlRequest({ subtype: 'get_context_usage' }).catch(() => undefined),
+        ])
+      : [undefined, undefined, undefined] as const;
+    const payload = buildSettingsStatePayload(runtime, settings, context, error);
+
+    if (panelId) {
+      webviewManager!.sendToPanel(panelId, payload as never);
+    } else {
+      webviewManager!.broadcast(payload as never);
+    }
+  }
+
+  function buildSettingsStatePayload(
+    runtime: Record<string, unknown> | undefined,
+    settings: Record<string, unknown> | undefined,
+    contextUsage: Record<string, unknown> | undefined,
+    error?: string,
+  ) {
+    const applied = settings?.applied && typeof settings.applied === 'object'
+      ? settings.applied as Record<string, unknown>
+      : {};
+
+    return {
+      type: 'settings_state',
+      supportedSettings: [
+        { key: 'model', label: 'Model', kind: 'select' },
+        { key: 'permissionMode', label: 'Permission mode', kind: 'select' },
+        { key: 'effort', label: 'Reasoning effort', kind: 'select' },
+        { key: 'maxThinkingTokens', label: 'Max thinking tokens', kind: 'number' },
+        { key: 'fastMode', label: 'Fast mode', kind: 'boolean' },
+      ],
+      settings: settings ?? { effective: {}, sources: [], applied },
+      runtime: runtime ?? {},
+      contextUsage: buildContextUsageForWebview(contextUsage, runtime),
+      models: Array.isArray(runtime?.models) ? runtime?.models : [],
+      providers: Array.isArray(runtime?.providers) ? runtime?.providers : [],
+      profiles: Array.isArray(runtime?.profiles) ? runtime?.profiles : [],
+      mcpServers: Array.isArray(runtime?.mcpServers) ? runtime?.mcpServers : [],
+      plugins: Array.isArray(runtime?.plugins) ? runtime?.plugins : [],
+      current: {
+        model: typeof runtime?.model === 'string' ? runtime.model : applied.model,
+        permissionMode: typeof runtime?.permissionMode === 'string' ? runtime.permissionMode : applied.permissionMode,
+        effort: (runtime?.reasoning as Record<string, unknown> | undefined)?.effort ?? applied.effort ?? null,
+        maxThinkingTokens: (runtime?.reasoning as Record<string, unknown> | undefined)?.maxThinkingTokens ?? null,
+        fastMode: (runtime?.fastModeState as Record<string, unknown> | undefined)?.enabled ?? applied.fastMode ?? false,
+      },
+      ...(error ? { error } : {}),
+    };
+  }
+
+  function buildContextUsageForWebview(
+    contextUsage: Record<string, unknown> | undefined,
+    runtime: Record<string, unknown> | undefined,
+  ): Record<string, unknown> | undefined {
+    if (hasContextCapacity(contextUsage)) {
+      return contextUsage;
+    }
+
+    const fallback = deriveContextUsageFromRuntimeUsage(runtime);
+    if (!fallback) {
+      return contextUsage;
+    }
+
+    return {
+      ...(contextUsage ?? {}),
+      ...fallback,
+      source: 'usage_summary',
+    };
+  }
+
+  function hasContextCapacity(contextUsage: Record<string, unknown> | undefined): boolean {
+    if (!contextUsage) return false;
+    return readPositiveNumber(contextUsage.rawMaxTokens, contextUsage.raw_max_tokens, contextUsage.maxTokens, contextUsage.max_tokens) !== null;
+  }
+
+  function deriveContextUsageFromRuntimeUsage(runtime: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+    const usage = runtime?.usage && typeof runtime.usage === 'object'
+      ? runtime.usage as Record<string, unknown>
+      : undefined;
+    const modelUsage = usage?.modelUsage && typeof usage.modelUsage === 'object'
+      ? usage.modelUsage as Record<string, unknown>
+      : undefined;
+    if (!modelUsage) return undefined;
+
+    const runtimeModel = typeof runtime?.model === 'string' ? runtime.model : undefined;
+    const selected = selectModelUsage(modelUsage, runtimeModel);
+    if (!selected) return undefined;
+
+    const { model, usage: selectedUsage } = selected;
+    const inputTokens = readNumber(selectedUsage.inputTokens, selectedUsage.input_tokens) ?? 0;
+    const outputTokens = readNumber(selectedUsage.outputTokens, selectedUsage.output_tokens) ?? 0;
+    const cacheRead = readNumber(selectedUsage.cacheReadInputTokens, selectedUsage.cache_read_input_tokens) ?? 0;
+    const cacheCreation = readNumber(selectedUsage.cacheCreationInputTokens, selectedUsage.cache_creation_input_tokens) ?? 0;
+    const contextWindow = readPositiveNumber(selectedUsage.contextWindow, selectedUsage.context_window);
+    if (!contextWindow) return undefined;
+
+    const totalTokens = Math.max(0, Math.round(inputTokens + outputTokens + cacheRead + cacheCreation));
+    return {
+      categories: [],
+      totalTokens,
+      maxTokens: contextWindow,
+      rawMaxTokens: contextWindow,
+      percentage: Math.max(0, Math.min(100, Math.round((totalTokens / contextWindow) * 100))),
+      gridRows: [],
+      model,
+      memoryFiles: [],
+      mcpTools: [],
+      agents: [],
+      isAutoCompactEnabled: Boolean(runtime?.autoCompactEnabled ?? runtime?.isAutoCompactEnabled),
+      apiUsage: {
+        input_tokens: Math.max(0, Math.round(inputTokens)),
+        output_tokens: Math.max(0, Math.round(outputTokens)),
+        cache_creation_input_tokens: Math.max(0, Math.round(cacheCreation)),
+        cache_read_input_tokens: Math.max(0, Math.round(cacheRead)),
+      },
+    };
+  }
+
+  function selectModelUsage(
+    modelUsage: Record<string, unknown>,
+    preferredModel: string | undefined,
+  ): { model: string; usage: Record<string, unknown> } | undefined {
+    const entries = Object.entries(modelUsage)
+      .map(([model, value]) => ({
+        model,
+        usage: value && typeof value === 'object' ? value as Record<string, unknown> : undefined,
+      }))
+      .filter((entry): entry is { model: string; usage: Record<string, unknown> } => Boolean(entry.usage));
+    if (entries.length === 0) return undefined;
+
+    const preferred = preferredModel
+      ? entries.find((entry) => entry.model === preferredModel)
+      : undefined;
+    if (preferred) return preferred;
+
+    return entries.reduce((best, entry) => {
+      const bestTokens = contextTokenTotal(best.usage);
+      const entryTokens = contextTokenTotal(entry.usage);
+      return entryTokens > bestTokens ? entry : best;
+    }, entries[0]!);
+  }
+
+  function contextTokenTotal(usage: Record<string, unknown>): number {
+    return (
+      (readNumber(usage.inputTokens, usage.input_tokens) ?? 0) +
+      (readNumber(usage.outputTokens, usage.output_tokens) ?? 0) +
+      (readNumber(usage.cacheReadInputTokens, usage.cache_read_input_tokens) ?? 0) +
+      (readNumber(usage.cacheCreationInputTokens, usage.cache_creation_input_tokens) ?? 0)
+    );
+  }
+
+  function readNumber(...values: unknown[]): number | null {
+    for (const value of values) {
+      if (typeof value === 'number' && Number.isFinite(value)) return value;
+      if (typeof value === 'string' && value.trim()) {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed)) return parsed;
+      }
+    }
+    return null;
+  }
+
+  function readPositiveNumber(...values: unknown[]): number | null {
+    const value = readNumber(...values);
+    return value && value > 0 ? value : null;
+  }
+
+  async function sendMcpState(panelId?: string) {
+    const meta = mcpIdeServer.getServerMetadata();
+    let servers: unknown[] = [];
+    if (processManager) {
+      const response = await processManager.sendControlRequest({ subtype: 'mcp_status' }).catch(() => undefined);
+      if (response && Array.isArray(response.mcpServers)) {
+        servers = response.mcpServers;
+      }
+    }
+    const payload = {
+      type: 'mcp_servers_state',
+      servers: servers.map(normalizeMcpServerForWebview),
+      ideServer: {
+        running: mcpIdeServer.isRunning(),
+        port: meta?.port ?? null,
+        toolCount: meta?.tools.length ?? 0,
+      },
+    };
+    if (panelId) {
+      webviewManager!.sendToPanel(panelId, payload as never);
+    } else {
+      webviewManager!.broadcast(payload as never);
+    }
+  }
+
+  function normalizeMcpServerForWebview(server: unknown) {
+    const record = server && typeof server === 'object' ? server as Record<string, unknown> : {};
+    const config = record.config && typeof record.config === 'object' ? record.config as Record<string, unknown> : {};
+    const type = String(config.type ?? record.type ?? (config.url ? 'sse' : 'stdio'));
+    return {
+      name: String(record.name ?? ''),
+      status: String(record.status ?? 'pending'),
+      type: type === 'http' ? 'streamable-http' : type,
+      url: typeof config.url === 'string' ? config.url : undefined,
+      command: typeof config.command === 'string' ? config.command : undefined,
+      args: Array.isArray(config.args) ? config.args : undefined,
+      tools: Array.isArray(record.tools) ? record.tools : [],
+      error: typeof record.error === 'string' ? record.error : undefined,
+    };
+  }
+
+  async function sendPluginState(panelId?: string) {
+    let installed: unknown[] = [];
+    if (processManager) {
+      const response = await processManager.sendControlRequest({ subtype: 'reload_plugins' }).catch(() => undefined);
+      if (response && Array.isArray(response.plugins)) {
+        installed = response.plugins;
+      }
+    }
+    const payload = {
+      type: 'plugins_state',
+      installed: installed.map(normalizePluginForWebview),
+      marketplace: [],
+    };
+    if (panelId) {
+      webviewManager!.sendToPanel(panelId, payload as never);
+    } else {
+      webviewManager!.broadcast(payload as never);
+    }
+  }
+
+  function normalizePluginForWebview(plugin: unknown) {
+    const record = plugin && typeof plugin === 'object' ? plugin as Record<string, unknown> : {};
+    return {
+      name: String(record.name ?? ''),
+      version: String(record.version ?? ''),
+      description: typeof record.error === 'string' ? record.error : String(record.source ?? record.repository ?? ''),
+      scope: 'user',
+      status: String(record.status ?? 'disabled'),
+      commands: Array.isArray(record.commands) ? record.commands : [],
+      error: typeof record.error === 'string' ? record.error : undefined,
     };
   }
 
@@ -265,7 +802,6 @@ export function activate(context: vscode.ExtensionContext) {
     webviewManager!.broadcast({ type: 'process_state', state: 'starting' });
 
     const config = vscode.workspace.getConfiguration('gakrcliCode');
-    const launchCommand = resolveCliLaunchCommand(config, workspaceFolder.uri.fsPath);
     // Use the permission handler's current mode (reflects user's UI selection),
     // falling back to the config default only on first launch
     const handlerMode = permissionHandler.getMode();
@@ -273,18 +809,20 @@ export function activate(context: vscode.ExtensionContext) {
       ? handlerMode
       : config.get<string>('initialPermissionMode')) as
       | 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions' | 'dontAsk' | undefined;
+    const allowDangerouslySkipPermissions =
+      config.get<boolean>('allowDangerouslySkipPermissions', false) ||
+      permissionMode === 'bypassPermissions';
 
     // Use AuthManager to build env vars (merges provider env + user env vars)
     const env = authManager.buildProcessEnv();
-    const model = settingsSync.selectedModel;
+    const model = authManager.getCurrentProvider().model;
     const ideServerMeta = mcpIdeServer.getServerMetadata();
 
     processManager = new ProcessManager({
       cwd: workspaceFolder.uri.fsPath,
-      executable: launchCommand.executable,
-      executableArgs: launchCommand.args,
       model,
       permissionMode,
+      allowDangerouslySkipPermissions,
       sessionId: options.sessionId,
       env,
       ideMcpServer: ideServerMeta ? { port: ideServerMeta.port, ideName: 'VS Code' } : undefined,
@@ -321,7 +859,6 @@ export function activate(context: vscode.ExtensionContext) {
           fields: (req.fields as unknown[]) ?? [],
         } as never);
         // Response is sent asynchronously when user submits/cancels the dialog
-        const { SELF_HANDLED } = await import('./process/controlRouter');
         return SELF_HANDLED;
       },
     );
@@ -330,62 +867,7 @@ export function activate(context: vscode.ExtensionContext) {
     permissionHandler.setWriteToStdin((msg) => processManager?.ndjsonTransport?.write(msg));
 
     // Forward ALL CLI messages to the webview
-    processManager.onMessage((msg) => {
-      output.info(`[CLI→Webview] ${JSON.stringify(msg).substring(0, 300)}`);
-      webviewManager!.broadcast({ type: 'cli_output', data: msg });
-
-      // StatusBar: set pending permission on permission_request, clear on response
-      const msgObj = msg as Record<string, unknown>;
-      if (msgObj.type === 'control_request') {
-        const req = msgObj.request as Record<string, unknown> | undefined;
-        if (req?.subtype === 'can_use_tool') {
-          statusBarManager.setPendingPermission(true);
-        }
-      }
-
-      // StatusBar: detect result while panel is hidden → orange dot
-      if (msgObj.type === 'result' || msgObj.subtype === 'result') {
-        if (!webviewManager!.hasVisibleWebview()) {
-          statusBarManager.setCompletedWhileHidden(true);
-        }
-      }
-
-      // Track session ID for auto-restart
-      if (typeof msgObj.session_id === 'string') {
-        currentSessionId = msgObj.session_id;
-      }
-
-      // ai-title: update session tracker so the session list shows the new title
-      if (msgObj.type === 'system' && msgObj.subtype === 'ai-title' && typeof msgObj.title === 'string' && typeof msgObj.session_id === 'string') {
-        sessionTracker.updateSessionTitle(msgObj.session_id, msgObj.title);
-      }
-
-      // --- Checkpoint tracking (Story 10) ---
-      if (msgObj.type === 'assistant' && typeof msgObj.uuid === 'string' && typeof msgObj.session_id === 'string') {
-        checkpointManager.registerAssistantMessage(msgObj.uuid, msgObj.session_id);
-        webviewManager!.broadcast({
-          type: 'checkpoint_state',
-          checkpoints: checkpointManager.getWebviewState(),
-        });
-      }
-
-      if (msgObj.type === 'system' && msgObj.subtype === 'files_persisted' && typeof msgObj.uuid === 'string') {
-        const files = (msgObj.files as Array<{ filename: string; file_id: string }>) ?? [];
-        checkpointManager.markFilesPersisted(msgObj.uuid, files);
-        webviewManager!.broadcast({
-          type: 'checkpoint_state',
-          checkpoints: checkpointManager.getWebviewState(),
-        });
-      }
-
-      if (msgObj.type === 'system' && msgObj.subtype === 'session_state_changed') {
-        const state = msgObj.state as 'idle' | 'running' | 'requires_action';
-        const sessionId = msgObj.session_id as string;
-        if (state && sessionId) {
-          checkpointManager.handleSessionStateChanged(state, sessionId);
-        }
-      }
-    });
+    processManager.onMessage(handleProcessMessage);
 
     processManager.onError((err) => {
       output.error(`[GakrCLI] Error: ${err.message}`);
@@ -419,13 +901,14 @@ export function activate(context: vscode.ExtensionContext) {
         }
       }
 
+      permissionHandler.cancelAll();
       webviewManager!.broadcast({ type: 'process_state', state: 'stopped' });
     });
 
     processManager.onStateChange((state) => {
       output.info(`[GakrCLI] State: ${state}`);
       if (state === ProcessState.Ready) {
-        webviewManager!.broadcast({ type: 'process_state', state: 'running' });
+        void broadcastReadyState();
       }
     });
 
@@ -446,13 +929,20 @@ export function activate(context: vscode.ExtensionContext) {
         output.info(`[GakrCLI] Connected! Init response keys: ${Object.keys(initData).join(', ')}`);
 
         // Broadcast slash commands to webview — ALWAYS broadcast (even if empty, for debugging)
-        const commands = Array.isArray(initData.commands) ? initData.commands : [];
+        const commands = Array.isArray(initData.commands)
+          ? initData.commands
+          : Array.isArray(initData.slash_commands)
+            ? initData.slash_commands
+            : [];
         webviewManager!.broadcast({
           type: 'slash_commands_available',
-          commands: commands.map((c: Record<string, unknown>) => ({
-            name: (c.name as string) || (c.command as string) || '',
-            description: (c.description as string) || '',
-            argumentHint: (c.argument_hint as string) || (c.argumentHint as string) || (c.args as string) || '',
+          commands: commands.map((c: string | Record<string, unknown>) => ({
+            name: typeof c === 'string' ? c : (c.name as string) || (c.command as string) || '',
+            description: typeof c === 'string' ? '' : (c.description as string) || '',
+            argumentHint:
+              typeof c === 'string'
+                ? ''
+                : (c.argument_hint as string) || (c.argumentHint as string) || (c.args as string) || '',
           })),
         } as never);
         output.info(`[GakrCLI] Broadcast ${commands.length} slash commands`);
@@ -461,7 +951,7 @@ export function activate(context: vscode.ExtensionContext) {
         const models = Array.isArray(initData.models) ? initData.models : [];
         const fastModeState = initData.fast_mode_state ?? { enabled: false, canToggle: true };
         const account = initData.account as Record<string, unknown> | undefined;
-        const permMode = initData.permission_mode ?? initData.permissionMode ?? permissionHandler.currentMode;
+        const permMode = initData.permission_mode ?? initData.permissionMode ?? permissionHandler.getMode();
         webviewManager!.broadcast({
           type: 'cli_output',
           data: {
@@ -495,10 +985,29 @@ export function activate(context: vscode.ExtensionContext) {
   // Handle user sending a prompt
   webviewManager.onMessage('send_prompt', async (message) => {
     output.info(`[Webview→CLI] send_prompt: ${message.text.substring(0, 100)}`);
+    const trimmedPrompt = message.text.trim();
 
     // GakrCLI-specific: /provider opens the provider picker dialog
-    if (['/provider', '/providers'].includes(message.text.trim())) {
+    if (['/provider', '/providers'].includes(trimmedPrompt)) {
       webviewManager!.broadcast({ type: 'open_provider_picker' } as never);
+      return;
+    }
+
+    const allowMatch = /^(?:\/allow|allow)\s+([A-Za-z][\w.-]*)$/i.exec(trimmedPrompt);
+    if (allowMatch) {
+      const toolName = allowMatch[1]!;
+      const resolved = permissionHandler.allowTool(toolName);
+      webviewManager!.broadcast({
+        type: 'cli_output',
+        data: {
+          type: 'system',
+          subtype: 'permission_rule_added',
+          text: resolved > 0
+            ? `Allowed ${toolName} and approved ${resolved} pending request${resolved === 1 ? '' : 's'}.`
+            : `Allowed ${toolName} for future requests.`,
+        },
+      } as never);
+      statusBarManager.setPendingPermission(false);
       return;
     }
 
@@ -512,6 +1021,8 @@ export function activate(context: vscode.ExtensionContext) {
         role: 'user',
         content: message.text,
       },
+      uuid: typeof message.uuid === 'string' ? message.uuid : undefined,
+      priority: message.priority,
     });
   });
 
@@ -535,12 +1046,16 @@ export function activate(context: vscode.ExtensionContext) {
   // Handle set_model from webview
   webviewManager.onMessage('set_model', async (message) => {
     const msg = message as unknown as { model: string };
-    output.info(`[Webview→CLI] set_model: ${msg.model}`);
+    const model = authManager.normalizeModelForCurrentProvider(msg.model);
+    output.info(`[Webview→CLI] set_model: ${model}`);
+    await authManager.updateModel(model);
+    void sendProviderState();
     if (processManager) {
-      processManager.write({
-        type: 'control_request',
-        request_id: `set-model-${Date.now()}`,
-        request: { subtype: 'set_model', model: msg.model },
+      void processManager.sendControlRequest({ subtype: 'set_model', model }).then(() => {
+        void sendRuntimeSettingsState();
+      }).catch((err) => {
+        const detail = err instanceof Error ? err.message : String(err);
+        output.warn(`[GakrCLI] Failed to set model: ${detail}`);
       });
     }
   });
@@ -549,12 +1064,18 @@ export function activate(context: vscode.ExtensionContext) {
   webviewManager.onMessage('set_effort_level', async (message) => {
     const msg = message as unknown as { level: string };
     output.info(`[Webview→CLI] set_effort_level: ${msg.level}`);
-    if (processManager) {
-      processManager.write({
-        type: 'control_request',
-        request_id: `set-effort-${Date.now()}`,
-        request: { subtype: 'set_max_thinking_tokens', max_thinking_tokens: effortToTokens(msg.level) },
+    try {
+      const pm = await ensureProcess();
+      if (!pm) return;
+      await pm.sendControlRequest({
+        subtype: 'apply_flag_settings',
+        settings: { effort: msg.level, maxThinkingTokens: effortToTokens(msg.level) },
       });
+      void sendRuntimeSettingsState();
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      output.warn(`[GakrCLI] Failed to set effort level: ${detail}`);
+      void sendRuntimeSettingsState(undefined, detail);
     }
   });
 
@@ -562,18 +1083,37 @@ export function activate(context: vscode.ExtensionContext) {
   webviewManager.onMessage('toggle_fast_mode', async (message) => {
     const msg = message as unknown as { enabled: boolean };
     output.info(`[Webview→CLI] toggle_fast_mode: ${msg.enabled}`);
-    if (processManager) {
-      processManager.write({
-        type: 'control_request',
-        request_id: `fast-mode-${Date.now()}`,
-        request: { subtype: 'apply_flag_settings', settings: { fastMode: msg.enabled } },
+    try {
+      const pm = await ensureProcess();
+      if (!pm) return;
+      await pm.sendControlRequest({
+        subtype: 'apply_flag_settings',
+        settings: { fastMode: msg.enabled },
       });
+      void sendRuntimeSettingsState();
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      output.warn(`[GakrCLI] Failed to toggle fast mode: ${detail}`);
+      void sendRuntimeSettingsState(undefined, detail);
+    }
+  });
+
+  webviewManager.onMessage('set_permission_mode', async (message) => {
+    const msg = message as unknown as { mode: string };
+    if (processManager) {
+      await processManager.sendControlRequest({
+        subtype: 'set_permission_mode',
+        mode: msg.mode,
+      });
+      void sendRuntimeSettingsState();
     }
   });
 
   // Handle interrupt/stop
   webviewManager.onMessage('interrupt', async () => {
     output.info('[Webview→CLI] interrupt');
+    permissionHandler.cancelAll();
+    statusBarManager.setPendingPermission(false);
     if (processManager) {
       processManager.kill('SIGINT');
     }
@@ -586,7 +1126,10 @@ export function activate(context: vscode.ExtensionContext) {
       processManager.dispose();
       processManager = undefined;
     }
+    permissionHandler.cancelAll();
     currentSessionId = undefined;
+    activeSessionTitle = undefined;
+    activeSessionTitleIsFallback = false;
     crashRestartCount = 0;
     checkpointManager.clear();
     webviewManager!.broadcast({ type: 'clearMessages' } as never);
@@ -597,24 +1140,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Handle get sessions request
   webviewManager.onMessage('get_sessions', async (_message, panelId) => {
     output.info('[Webview] get_sessions');
-    const grouped = sessionTracker.getGroupedSessions();
-    const payload = {
-      type: 'sessionsData',
-      grouped: grouped.map((g) => ({
-        group: g.group,
-        sessions: g.sessions.map((s) => ({
-          id: s.id,
-          title: s.title,
-          model: s.model,
-          timestamp: s.timestamp.toISOString(),
-          createdAt: s.createdAt.toISOString(),
-          messageCount: s.messageCount,
-          cwd: s.cwd,
-          gitBranch: s.gitBranch,
-        })),
-      })),
-    };
-    webviewManager!.sendToPanel(panelId, payload as never);
+    await refreshSessions(panelId);
   });
 
   // Handle resume session
@@ -625,7 +1151,9 @@ export function activate(context: vscode.ExtensionContext) {
       processManager.dispose();
       processManager = undefined;
     }
+    permissionHandler.cancelAll();
 
+    currentSessionId = message.sessionId;
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) {
       vscode.window.showErrorMessage('GakrCLI: No workspace folder open');
@@ -633,10 +1161,13 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     const config = vscode.workspace.getConfiguration('gakrcliCode');
-    const launchCommand = resolveCliLaunchCommand(config, workspaceFolder.uri.fsPath);
-    const model = config.get<string>('selectedModel');
+    const model = authManager.getCurrentProvider().model;
     const permissionMode = config.get<string>('initialPermissionMode') as
       | 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions' | 'dontAsk' | undefined;
+    const allowDangerouslySkipPermissions =
+      config.get<boolean>('allowDangerouslySkipPermissions', false) ||
+      permissionMode === 'bypassPermissions' ||
+      permissionHandler.getMode() === 'bypassPermissions';
 
     const env = authManager.buildProcessEnv();
 
@@ -657,10 +1188,9 @@ export function activate(context: vscode.ExtensionContext) {
 
     processManager = new ProcessManager({
       cwd: workspaceFolder.uri.fsPath,
-      executable: launchCommand.executable,
-      executableArgs: launchCommand.args,
-      model: model !== 'default' ? model : undefined,
+      model,
       permissionMode,
+      allowDangerouslySkipPermissions,
       sessionId: message.sessionId,
       env,
       ideMcpServer: ideServerMeta ? { port: ideServerMeta.port, ideName: 'VS Code' } : undefined,
@@ -693,45 +1223,26 @@ export function activate(context: vscode.ExtensionContext) {
           message: req.message,
           fields: (req.fields as unknown[]) ?? [],
         } as never);
-        const { SELF_HANDLED } = await import('./process/controlRouter');
         return SELF_HANDLED;
       },
     );
     permissionHandler.setWriteToStdin((msg) => processManager?.ndjsonTransport?.write(msg));
 
-    processManager.onMessage((msg) => {
-      output.info(`[CLI→Webview] ${JSON.stringify(msg).substring(0, 300)}`);
-      webviewManager!.broadcast({ type: 'cli_output', data: msg });
-
-      // StatusBar: set pending permission on permission_request, clear on response
-      const msgObj = msg as Record<string, unknown>;
-      if (msgObj.type === 'control_request') {
-        const req = msgObj.request as Record<string, unknown> | undefined;
-        if (req?.subtype === 'can_use_tool') {
-          statusBarManager.setPendingPermission(true);
-        }
-      }
-
-      // StatusBar: detect result while panel is hidden → orange dot
-      if (msgObj.type === 'result' || msgObj.subtype === 'result') {
-        if (!webviewManager!.hasVisibleWebview()) {
-          statusBarManager.setCompletedWhileHidden(true);
-        }
-      }
-    });
+    processManager.onMessage(handleProcessMessage);
     processManager.onError((err) => {
       output.error(`[GakrCLI] Error: ${err.message}`);
       webviewManager!.broadcast({ type: 'process_state', state: 'crashed' });
     });
     processManager.onExit((code, signal) => {
       output.info(`[GakrCLI] CLI exited: code=${code}, signal=${signal}`);
+      permissionHandler.cancelAll();
       webviewManager!.broadcast({ type: 'process_state', state: 'stopped' });
       isSpawning = false;
     });
     processManager.onStateChange((state) => {
       output.info(`[GakrCLI] State: ${state}`);
       if (state === ProcessState.Ready) {
-        webviewManager!.broadcast({ type: 'process_state', state: 'running' });
+        void broadcastReadyState();
       }
     });
     processManager.onStderr((line) => {
@@ -765,6 +1276,9 @@ export function activate(context: vscode.ExtensionContext) {
       sessionId: message.sessionId,
       success: ok,
     } as never);
+    if (ok) {
+      await refreshSessions();
+    }
   });
 
   // ==========================================
@@ -819,14 +1333,8 @@ export function activate(context: vscode.ExtensionContext) {
       const forkOptions = checkpointManager.buildForkOptions(msg.messageUuid);
       const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
       if (!workspaceFolder) return;
-      const launchCommand = resolveCliLaunchCommand(
-        vscode.workspace.getConfiguration('gakrcliCode'),
-        workspaceFolder.uri.fsPath,
-      );
       const forkPm = new ProcessManager({
         cwd: workspaceFolder.uri.fsPath,
-        executable: launchCommand.executable,
-        executableArgs: launchCommand.args,
         sessionId: forkOptions.sessionId,
         forkSession: forkOptions.forkSession,
         env: authManager.buildProcessEnv(),
@@ -845,14 +1353,8 @@ export function activate(context: vscode.ExtensionContext) {
       const forkOptions = checkpointManager.buildForkOptions(msg.messageUuid);
       const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
       if (!workspaceFolder) return;
-      const launchCommand = resolveCliLaunchCommand(
-        vscode.workspace.getConfiguration('gakrcliCode'),
-        workspaceFolder.uri.fsPath,
-      );
       const forkPm = new ProcessManager({
         cwd: workspaceFolder.uri.fsPath,
-        executable: launchCommand.executable,
-        executableArgs: launchCommand.args,
         sessionId: forkOptions.sessionId,
         forkSession: forkOptions.forkSession,
         env: authManager.buildProcessEnv(),
@@ -882,7 +1384,7 @@ export function activate(context: vscode.ExtensionContext) {
   // ==========================================
 
   webviewManager.onMessage('get_provider_state', async (_message, panelId) => {
-    webviewManager!.sendToPanel(panelId, providerStatePayload() as never);
+    await sendProviderState(panelId);
   });
 
   webviewManager.onMessage('set_provider', async (message) => {
@@ -898,7 +1400,7 @@ export function activate(context: vscode.ExtensionContext) {
       baseUrl: msg.baseUrl,
     });
     if (!validation.valid) {
-      webviewManager!.broadcast(providerStatePayload(validation.errors.join('; ')) as never);
+      await sendProviderState(undefined, validation.errors.join('; '));
       return;
     }
     await authManager.updateProvider({
@@ -907,7 +1409,43 @@ export function activate(context: vscode.ExtensionContext) {
       baseUrl: msg.baseUrl,
       model: msg.model,
     });
-    webviewManager!.broadcast(providerStatePayload() as never);
+    await sendProviderState();
+    void sendRuntimeSettingsState();
+  });
+
+  webviewManager.onMessage('settings_refresh', async (_message, panelId) => {
+    await sendRuntimeSettingsState(panelId, undefined, false);
+  });
+
+  webviewManager.onMessage('settings_update', async (message, panelId) => {
+    const msg = message as unknown as { settings?: Record<string, unknown> };
+    const settings = msg.settings ?? {};
+    output.info(`[Webview] settings_update: ${Object.keys(settings).join(', ')}`);
+
+    try {
+      const pm = await ensureProcess();
+      if (!pm) return;
+
+      if (typeof settings.model === 'string') {
+        const model = authManager.normalizeModelForCurrentProvider(settings.model);
+        await authManager.updateModel(model);
+        settings.model = model;
+      }
+      if (typeof settings.permissionMode === 'string') {
+        await permissionHandler.setMode(settings.permissionMode as never);
+      }
+
+      await pm.sendControlRequest({
+        subtype: 'apply_flag_settings',
+        settings,
+      });
+      await sendProviderState();
+      await sendRuntimeSettingsState(panelId);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      output.warn(`[GakrCLI] Failed to apply settings: ${detail}`);
+      await sendRuntimeSettingsState(panelId, detail);
+    }
   });
 
   // ==========================================
@@ -915,27 +1453,16 @@ export function activate(context: vscode.ExtensionContext) {
   // ==========================================
 
   webviewManager.onMessage('mcp_refresh_status', async (_message, panelId) => {
-    const meta = mcpIdeServer.getServerMetadata();
-    webviewManager!.sendToPanel(panelId, {
-      type: 'mcp_servers_state',
-      servers: [],
-      ideServer: {
-        running: mcpIdeServer.isRunning(),
-        port: meta?.port ?? null,
-        toolCount: meta?.tools.length ?? 0,
-      },
-    } as never);
+    await sendMcpState(panelId);
   });
 
   webviewManager.onMessage('mcp_reconnect', async (message) => {
     const msg = message as unknown as { serverName: string };
     output.info(`[Webview] mcp_reconnect: ${msg.serverName}`);
     if (processManager) {
-      processManager.write({
-        type: 'control_request',
-        request_id: `mcp-reconnect-${Date.now()}`,
-        request: { subtype: 'mcp_reconnect', serverName: msg.serverName },
-      });
+      await processManager.sendControlRequest({ subtype: 'mcp_reconnect', serverName: msg.serverName });
+      await sendMcpState();
+      void sendRuntimeSettingsState();
     }
   });
 
@@ -943,11 +1470,9 @@ export function activate(context: vscode.ExtensionContext) {
     const msg = message as unknown as { serverName: string; enabled: boolean };
     output.info(`[Webview] mcp_toggle: ${msg.serverName} enabled=${msg.enabled}`);
     if (processManager) {
-      processManager.write({
-        type: 'control_request',
-        request_id: `mcp-toggle-${Date.now()}`,
-        request: { subtype: 'mcp_toggle', serverName: msg.serverName, enabled: msg.enabled },
-      });
+      await processManager.sendControlRequest({ subtype: 'mcp_toggle', serverName: msg.serverName, enabled: msg.enabled });
+      await sendMcpState();
+      void sendRuntimeSettingsState();
     }
   });
 
@@ -955,11 +1480,9 @@ export function activate(context: vscode.ExtensionContext) {
     const msg = message as unknown as { name: string; config: Record<string, unknown> };
     output.info(`[Webview] mcp_add_server: ${msg.name}`);
     if (processManager) {
-      processManager.write({
-        type: 'control_request',
-        request_id: `mcp-add-${Date.now()}`,
-        request: { subtype: 'mcp_set_servers', servers: { [msg.name]: msg.config } },
-      });
+      await processManager.sendControlRequest({ subtype: 'mcp_set_servers', servers: { [msg.name]: msg.config } });
+      await sendMcpState();
+      void sendRuntimeSettingsState();
     }
   });
 
@@ -967,11 +1490,9 @@ export function activate(context: vscode.ExtensionContext) {
     const msg = message as unknown as { serverName: string };
     output.info(`[Webview] mcp_remove_server: ${msg.serverName}`);
     if (processManager) {
-      processManager.write({
-        type: 'control_request',
-        request_id: `mcp-remove-${Date.now()}`,
-        request: { subtype: 'mcp_toggle', serverName: msg.serverName, enabled: false },
-      });
+      await processManager.sendControlRequest({ subtype: 'mcp_toggle', serverName: msg.serverName, enabled: false });
+      await sendMcpState();
+      void sendRuntimeSettingsState();
     }
   });
 
@@ -984,6 +1505,7 @@ export function activate(context: vscode.ExtensionContext) {
         processManager = undefined;
         currentSessionId = undefined;
         crashRestartCount = 0;
+        permissionHandler.cancelAll();
         webviewManager!.broadcast({ type: 'process_state', state: 'stopped' });
       }
     }),
@@ -1063,6 +1585,7 @@ export function activate(context: vscode.ExtensionContext) {
       currentSessionId = undefined;
       crashRestartCount = 0;
       checkpointManager.clear();
+      permissionHandler.cancelAll();
       webviewManager!.broadcast({ type: 'clearMessages' } as never);
       webviewManager!.broadcast({ type: 'process_state', state: 'stopped' });
       webviewManager!.broadcast({ type: 'checkpoint_state', checkpoints: [] });
@@ -1132,21 +1655,17 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   // Plugin webview message handlers
-  webviewManager.onMessage('plugin_refresh', async () => {
-    if (processManager) {
-      processManager.write({
-        type: 'control_request',
-        request_id: `plugin-state-${Date.now()}`,
-        request: { subtype: 'get_settings' },
-      });
-    }
+  webviewManager.onMessage('plugin_refresh', async (_message, panelId) => {
+    await sendPluginState(panelId);
   });
 
   webviewManager.onMessage('plugin_toggle', async (message) => {
     const msg = message as unknown as { name: string; enabled: boolean };
     if (processManager) {
-      processManager.write(buildToggleRequest(msg.name, msg.enabled) as unknown as Record<string, unknown>);
-      processManager.write(buildReloadRequest() as unknown as Record<string, unknown>);
+      await processManager.sendControlRequest((buildToggleRequest(msg.name, msg.enabled) as unknown as { request: Record<string, unknown> }).request);
+      await processManager.sendControlRequest((buildReloadRequest() as unknown as { request: Record<string, unknown> }).request);
+      await sendPluginState();
+      void sendRuntimeSettingsState();
     }
   });
 
@@ -1203,7 +1722,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (processManager) {
         processManager.write({ type: 'user', message: { role: 'user', content: '/logout' } });
       }
-      webviewManager!.broadcast(providerStatePayload() as never);
+      await sendProviderState();
       vscode.window.showInformationMessage('GakrCLI: VS Code provider credentials cleared.');
     }),
   );
@@ -1268,7 +1787,15 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Handle elicitation response from webview → forward to CLI
   webviewManager.onMessage('elicitation_response', async (message) => {
-    const msg = message as unknown as { requestId: string; values: Record<string, unknown> };
+    const msg = message as unknown as {
+      requestId: string;
+      values?: Record<string, unknown>;
+      response?: Record<string, unknown>;
+    };
+    const values = msg.values ?? msg.response ?? {};
+    if (permissionHandler.handleAskUserQuestionResponse(msg.requestId, values)) {
+      return;
+    }
     output.info(`[Webview→CLI] elicitation_response: ${msg.requestId}`);
     if (processManager) {
       processManager.write({
@@ -1276,7 +1803,7 @@ export function activate(context: vscode.ExtensionContext) {
         response: {
           subtype: 'success',
           request_id: msg.requestId,
-          response: msg.values,
+          response: values,
         },
       });
     }
@@ -1285,6 +1812,9 @@ export function activate(context: vscode.ExtensionContext) {
   // Handle elicitation cancel from webview → forward error response to CLI
   webviewManager.onMessage('elicitation_cancel', async (message) => {
     const msg = message as unknown as { requestId: string };
+    if (permissionHandler.handleAskUserQuestionCancel(msg.requestId)) {
+      return;
+    }
     output.info(`[Webview→CLI] elicitation_cancel: ${msg.requestId}`);
     if (processManager) {
       processManager.write({
@@ -1452,7 +1982,15 @@ export function activate(context: vscode.ExtensionContext) {
       openLabel: 'Attach',
     });
     if (!uris || uris.length === 0) return;
-    const files = uris.map((uri) => ({
+    const seenPaths = new Set<string>();
+    const files = uris.filter((uri) => {
+      const key = uri.fsPath.toLowerCase();
+      if (seenPaths.has(key)) {
+        return false;
+      }
+      seenPaths.add(key);
+      return true;
+    }).map((uri) => ({
       type: 'file' as const,
       name: path.basename(uri.fsPath) || uri.fsPath,
       content: uri.fsPath,
@@ -1467,8 +2005,22 @@ export function activate(context: vscode.ExtensionContext) {
       processManager.dispose();
       processManager = undefined;
     }
+    permissionHandler.cancelAll();
     crashRestartCount = 0;
-    await ensureProcess();
+    await ensureProcess(currentSessionId ? { sessionId: currentSessionId } : undefined);
+  });
+
+  webviewManager.onMessage('refresh_runtime', async () => {
+    output.info('[Webview] refresh_runtime');
+    const sessionId = currentSessionId;
+    webviewManager!.broadcast({ type: 'process_state', state: 'restarting' as never });
+    if (processManager) {
+      processManager.dispose();
+      processManager = undefined;
+    }
+    permissionHandler.cancelAll();
+    crashRestartCount = 0;
+    await ensureProcess(sessionId ? { sessionId } : undefined);
   });
 
   // Dispose ProcessManager on extension deactivation

@@ -1,4 +1,4 @@
-# GakrCLI Advanced Setup (v0.5.3)
+# GakrCLI Advanced Setup (v0.5.5)
 
 This guide is for users who want source builds, Bun workflows, provider profiles, diagnostics, or more control over runtime behavior.
 
@@ -34,6 +34,8 @@ bun run dev
 ```
 
 ## Provider Examples
+
+For the complete current provider list, see [PROVIDERS.md](PROVIDERS.md).
 
 ### OpenAI
 
@@ -351,7 +353,7 @@ bun run hardening:strict   # Typecheck + hardening
 - Check environment variable name matches provider
 
 **Windows Input Prompt Hang**
-- Update to GakrCLI 0.5.3 or later
+- Update to GakrCLI 0.5.5 or later
 - Ensure all dependencies are installed
 
 ### Debug Mode

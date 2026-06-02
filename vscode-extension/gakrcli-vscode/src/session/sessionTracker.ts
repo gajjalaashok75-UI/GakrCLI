@@ -4,6 +4,24 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as readline from 'readline';
 
+const MAX_SANITIZED_LENGTH = 200;
+
+export function sanitizeProjectPathForSessions(cwd: string): string {
+  const sanitized = cwd.replace(/[^a-zA-Z0-9]/g, '-');
+  if (sanitized.length <= MAX_SANITIZED_LENGTH) {
+    return sanitized;
+  }
+  return `${sanitized.slice(0, MAX_SANITIZED_LENGTH)}-${simpleHash(cwd)}`;
+}
+
+function simpleHash(str: string): string {
+  let hash = 0;
+  for (let index = 0; index < str.length; index++) {
+    hash = ((hash << 5) - hash + str.charCodeAt(index)) | 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
 export interface SessionInfo {
   /** UUID — matches the JSONL filename without extension */
   id: string;
@@ -37,6 +55,7 @@ export interface GroupedSessions {
 export class SessionTracker implements vscode.Disposable {
   private sessions: Map<string, SessionInfo> = new Map();
   private watcher: vscode.FileSystemWatcher | undefined;
+  private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly _onSessionsChanged = new vscode.EventEmitter<SessionInfo[]>();
   public readonly onSessionsChanged = this._onSessionsChanged.event;
   private disposables: vscode.Disposable[] = [];
@@ -58,7 +77,7 @@ export class SessionTracker implements vscode.Disposable {
 
   /**
    * Derive the project directory name for the current workspace.
-   * Convention: absolute path with all / replaced by - .
+   * This mirrors the root CLI session storage sanitizer.
    * Example: /Users/harsh/workspace/myproject -> -Users-harsh-workspace-myproject
    */
   getProjectDirForWorkspace(): string | undefined {
@@ -66,22 +85,53 @@ export class SessionTracker implements vscode.Disposable {
     if (!folders || folders.length === 0) {
       return undefined;
     }
-    return folders[0].uri.fsPath.replace(/\//g, '-');
+    return sanitizeProjectPathForSessions(folders[0].uri.fsPath);
   }
 
   /** Scan all JSONL files in the current workspace's project directory. */
   async scanAllSessions(): Promise<void> {
     const projectDir = this.getProjectDirForWorkspace();
-    if (!projectDir) {
-      return;
-    }
-    const projectPath = path.join(this.getProjectsDir(), projectDir);
-    if (!fs.existsSync(projectPath)) {
+    const workspaceRoots = this.getWorkspaceRoots();
+    if (!projectDir || workspaceRoots.length === 0) {
       return;
     }
 
-    const files = fs.readdirSync(projectPath).filter(f => f.endsWith('.jsonl'));
-    await Promise.all(files.map(f => this.parseSessionFile(path.join(projectPath, f))));
+    this.sessions.clear();
+    const projectsDir = this.getProjectsDir();
+    const expectedProjectPath = path.join(projectsDir, projectDir);
+    const candidateDirs = new Map<string, boolean>();
+    if (fs.existsSync(expectedProjectPath)) {
+      candidateDirs.set(expectedProjectPath, false);
+    }
+
+    // SDK sessions created before the in-process transcript pointer is reset can
+    // land under VS Code's process cwd. Recover those by scanning sibling
+    // project dirs and keeping only transcripts whose recorded cwd matches the
+    // active workspace.
+    if (fs.existsSync(projectsDir)) {
+      for (const entry of fs.readdirSync(projectsDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const dirPath = path.join(projectsDir, entry.name);
+        if (!candidateDirs.has(dirPath)) {
+          candidateDirs.set(dirPath, true);
+        }
+      }
+    }
+
+    const parseTasks: Promise<void>[] = [];
+    for (const [dirPath, requireWorkspaceMatch] of candidateDirs) {
+      let files: string[] = [];
+      try {
+        files = fs.readdirSync(dirPath).filter(f => f.endsWith('.jsonl'));
+      } catch {
+        continue;
+      }
+      parseTasks.push(...files.map(f =>
+        this.parseSessionFile(path.join(dirPath, f), { requireWorkspaceMatch }),
+      ));
+    }
+
+    await Promise.all(parseTasks);
     this._onSessionsChanged.fire(this.getSessionList());
   }
 
@@ -89,7 +139,10 @@ export class SessionTracker implements vscode.Disposable {
    * Parse a single JSONL file to extract session metadata.
    * Uses readline to stream line-by-line (never loads entire file into memory).
    */
-  async parseSessionFile(filePath: string): Promise<void> {
+  async parseSessionFile(
+    filePath: string,
+    options: { requireWorkspaceMatch?: boolean } = {},
+  ): Promise<void> {
     const filename = path.basename(filePath, '.jsonl');
     const projectDir = path.basename(path.dirname(filePath));
 
@@ -140,7 +193,7 @@ export class SessionTracker implements vscode.Disposable {
         }
 
         // Count user messages (skip meta messages)
-        if (entry.type === 'user' && !entry.isMeta) {
+        if (entry.type === 'user' && !entry.isMeta && !isToolResultUserMessage(entry)) {
           messageCount++;
           // Extract fallback title from first non-meta user message
           if (!fallbackTitle) {
@@ -161,6 +214,7 @@ export class SessionTracker implements vscode.Disposable {
               // Skip command/caveat messages as fallback titles
               if (
                 text &&
+                !text.startsWith('<command-message>') &&
                 !text.startsWith('<command-name>') &&
                 !text.startsWith('<local-command')
               ) {
@@ -199,6 +253,10 @@ export class SessionTracker implements vscode.Disposable {
       return; // Empty or completely unparseable file
     }
 
+    if (options.requireWorkspaceMatch && !this.isWorkspaceSession(cwd)) {
+      return;
+    }
+
     this.sessions.set(filename, {
       id: filename,
       title: title || fallbackTitle || 'Untitled Session',
@@ -213,32 +271,54 @@ export class SessionTracker implements vscode.Disposable {
     });
   }
 
-  /** Watch for new/changed/deleted JSONL files in the project directory. */
-  private startWatching(): void {
-    const projectDir = this.getProjectDirForWorkspace();
-    if (!projectDir) {
-      return;
+  private getWorkspaceRoots(): string[] {
+    return (vscode.workspace.workspaceFolders ?? [])
+      .map(folder => this.normalizeWorkspacePath(folder.uri.fsPath))
+      .filter((root): root is string => Boolean(root));
+  }
+
+  private isWorkspaceSession(cwd: string): boolean {
+    if (!cwd) {
+      return false;
     }
+    const normalizedCwd = this.normalizeWorkspacePath(cwd);
+    return this.getWorkspaceRoots().some(root =>
+      normalizedCwd === root || normalizedCwd.startsWith(root + path.sep),
+    );
+  }
+
+  private normalizeWorkspacePath(value: string): string {
+    return path.resolve(value).toLowerCase();
+  }
+
+  /** Watch for new/changed/deleted JSONL files in all GakrCLI project dirs. */
+  private startWatching(): void {
+    if (this.getWorkspaceRoots().length === 0) return;
+    const projectsDir = this.getProjectsDir();
     const pattern = new vscode.RelativePattern(
-      vscode.Uri.file(path.join(this.getProjectsDir(), projectDir)),
-      '*.jsonl',
+      vscode.Uri.file(projectsDir),
+      '*/*.jsonl',
     );
     this.watcher = vscode.workspace.createFileSystemWatcher(pattern);
 
-    this.watcher.onDidCreate(async (uri) => {
-      await this.parseSessionFile(uri.fsPath);
-      this._onSessionsChanged.fire(this.getSessionList());
-    });
-    this.watcher.onDidChange(async (uri) => {
-      await this.parseSessionFile(uri.fsPath);
-      this._onSessionsChanged.fire(this.getSessionList());
-    });
+    this.watcher.onDidCreate(() => this.scheduleRefresh());
+    this.watcher.onDidChange(() => this.scheduleRefresh());
     this.watcher.onDidDelete((uri) => {
       this.sessions.delete(path.basename(uri.fsPath, '.jsonl'));
-      this._onSessionsChanged.fire(this.getSessionList());
+      this.scheduleRefresh();
     });
 
     this.disposables.push(this.watcher);
+  }
+
+  private scheduleRefresh(): void {
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+    }
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = undefined;
+      void this.scanAllSessions();
+    }, 250);
   }
 
   /** All sessions sorted by timestamp descending. */
@@ -375,6 +455,11 @@ export class SessionTracker implements vscode.Disposable {
         else if (type === 'assistant') {
           messages.push(entry);
         }
+        // Include result messages so resumed chats can restore per-turn completion
+        // metadata such as "worked for 5s".
+        else if (type === 'result') {
+          messages.push(entry);
+        }
       }
     } catch (err) {
       console.error(`SessionTracker: failed to load messages for ${sessionId}:`, err);
@@ -393,10 +478,26 @@ export class SessionTracker implements vscode.Disposable {
   }
 
   dispose(): void {
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = undefined;
+    }
     for (const d of this.disposables) {
       d.dispose();
     }
     this.disposables = [];
     this.sessions.clear();
   }
+}
+
+function isToolResultUserMessage(entry: Record<string, unknown>): boolean {
+  const message = entry.message as Record<string, unknown> | undefined;
+  const content = message?.content;
+  return Array.isArray(content) && content.some((block) =>
+    Boolean(
+      block &&
+      typeof block === 'object' &&
+      (block as Record<string, unknown>).type === 'tool_result',
+    ),
+  );
 }

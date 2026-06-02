@@ -1,8 +1,75 @@
-node_modules/
-dist/
+
+
 *.vsix
-.vscode-test/
 webview/node_modules/
 webview/dist/
 .worktrees/
+# Dependencies
+node_modules/
+package-lock.json
+bun.lockb
+cook/
+COOK.md
+compiled/
+# Build outputs
+dist/
+*.tsbuildinfo
+*.map
+
+# Web landing page build artifacts
+web/dist/
+web/*.tsbuildinfo
+# Environment variables (secrets)
+.env
+.env.local
+.env.*.local
+.env.*
+!.env.example
+
+# User/workspace-specific config
+.claude
+.gakrcli/
 .gakrcli-profile.json
+.opengakrcli/
+.gakrcli-profile.json
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.sublime-workspace
+*.sublime-project
+
+# Python cache and test artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Test and coverage reports
+coverage/
+reports/
+*.log
+*.temp
+
+# OS-specific files
+.Zone.Identifier
+
+# Temporary files
+references/
+temp/
+tmp/
+*.tmp
+
+# Graphify cache (generated)
+src/utils/graphify-out/cache/
+
+# Build cache
+src/utils/graphify-out/

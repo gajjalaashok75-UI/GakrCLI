@@ -20,6 +20,8 @@ export interface ReadyMessage {
 export interface SendPromptMessage {
   type: 'send_prompt';
   text: string;
+  uuid?: string;
+  priority?: 'now' | 'next' | 'later';
   attachments?: Attachment[];
   mentions?: Mention[];
 }
@@ -227,6 +229,7 @@ export interface OpenWalkthroughMessage { type: 'open_walkthrough'; }
 
 // Connection
 export interface RetryConnectionMessage { type: 'retry_connection'; }
+export interface RefreshRuntimeMessage { type: 'refresh_runtime'; }
 
 // Clipboard
 export interface CopyMessageMessage { type: 'copy_message'; content: string; }
@@ -237,6 +240,8 @@ export interface ElicitationCancelMessage { type: 'elicitation_cancel'; requestI
 
 // Fast mode toggle
 export interface ToggleFastModeMessage { type: 'toggle_fast_mode'; enabled: boolean; }
+export interface SettingsRefreshMessage { type: 'settings_refresh'; }
+export interface SettingsUpdateMessage { type: 'settings_update'; settings: Record<string, unknown>; }
 
 // Plan review
 export interface PlanReviewSubmitMessage { type: 'plan_review_submit'; requestId: string; action: Record<string, unknown>; }
@@ -295,10 +300,13 @@ export type WebviewToHostMessage =
   | HideOnboardingMessage
   | OpenWalkthroughMessage
   | RetryConnectionMessage
+  | RefreshRuntimeMessage
   | PlanReviewSubmitMessage
   | TeleportAcceptMessage
   | TeleportRejectMessage
-  | ToggleFastModeMessage;
+  | ToggleFastModeMessage
+  | SettingsRefreshMessage
+  | SettingsUpdateMessage;
 
 // ============================================================
 // Extension Host -> Webview messages
@@ -341,6 +349,10 @@ export interface PermissionRequestMessage {
 export interface CancelRequestMessage {
   type: 'cancel_request';
   requestId: string;
+}
+
+export interface PermissionsClearedMessage {
+  type: 'permissions_cleared';
 }
 
 /** Elicitation request from CLI → show structured question */
@@ -497,6 +509,29 @@ export interface ProviderStateMessage {
   currentProviderId: string;
   currentModel?: string;
   currentBaseUrl?: string;
+  models?: Array<{ value: string; displayName: string }>;
+  error?: string;
+}
+
+/** Host -> Webview: effective permission mode after validation */
+export interface PermissionModeStateMessage {
+  type: 'permission_mode_state';
+  mode: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk';
+  rejectedMode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk';
+}
+
+export interface SettingsStateMessage {
+  type: 'settings_state';
+  supportedSettings: Array<{ key: string; label: string; kind: string }>;
+  settings: Record<string, unknown>;
+  runtime: Record<string, unknown>;
+  contextUsage?: Record<string, unknown>;
+  models?: Array<{ value: string; displayName?: string }>;
+  providers?: Array<Record<string, unknown>>;
+  profiles?: Array<Record<string, unknown>>;
+  mcpServers?: Array<Record<string, unknown>>;
+  plugins?: Array<Record<string, unknown>>;
+  current?: Record<string, unknown>;
   error?: string;
 }
 
@@ -506,6 +541,7 @@ export type HostToWebviewMessage =
   | CliOutputMessage
   | PermissionRequestMessage
   | CancelRequestMessage
+  | PermissionsClearedMessage
   | ElicitationRequestMessage
   | SessionStateMessage
   | ContextUsageMessage
@@ -518,6 +554,8 @@ export type HostToWebviewMessage =
   | RewindPreviewMessage
   | RewindResultMessage
   | ProviderStateMessage
+  | PermissionModeStateMessage
+  | SettingsStateMessage
   | AtMentionResultsMessage
   | FilePickerResultMessage
   | ActiveFileChangedMessage

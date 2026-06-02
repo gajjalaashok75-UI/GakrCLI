@@ -1168,7 +1168,7 @@ export class QueryEngine {
   }
 
   interrupt(): void {
-    this.abortController.abort()
+    this.abortController.abort('interrupt')
   }
 
   getMessages(): readonly Message[] {
@@ -1292,6 +1292,15 @@ export class QueryEngine {
    */
   setThinkingConfig(config: ThinkingConfig): void {
     this.config.thinkingConfig = config
+  }
+
+  /**
+   * Replace the slash command registry used for prompt processing.
+   * SDK mode loads commands after async init, so the engine starts with an
+   * empty registry and receives the canonical CLI registry before each turn.
+   */
+  setCommands(commands: Command[]): void {
+    this.config.commands = commands
   }
 
   /**

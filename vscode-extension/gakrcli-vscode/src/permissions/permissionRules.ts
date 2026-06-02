@@ -17,7 +17,11 @@ export class PermissionRules {
   }
 
   has(toolName: string): boolean {
-    return this.rules.has(toolName);
+    if (this.rules.has(toolName)) {
+      return true;
+    }
+    const normalized = toolName.toLowerCase();
+    return Array.from(this.rules).some((rule) => rule.toLowerCase() === normalized);
   }
 
   add(toolName: string): void {

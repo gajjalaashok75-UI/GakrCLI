@@ -1,0 +1,68 @@
+import { useState, type CSSProperties } from 'react';
+import type { WebviewContextUsage } from '../../utils/contextUsage';
+import {
+  buildContextUsageTooltip,
+  formatContextTokens,
+} from '../../utils/contextUsage';
+
+interface ContextUsageIndicatorProps {
+  usage: WebviewContextUsage | null;
+}
+
+export function ContextUsageIndicator({ usage }: ContextUsageIndicatorProps) {
+  const [isHovering, setIsHovering] = useState(false);
+  if (!usage) {
+    return null;
+  }
+
+  const capacity = usage.rawMaxTokens || usage.maxTokens;
+  const tooltipLines = buildContextUsageTooltip(usage).split('\n');
+  const tone = !usage.isKnown
+    ? 'var(--app-glass-sky)'
+    : usage.percentage >= 90
+    ? 'var(--app-glass-danger)'
+    : usage.percentage >= 75
+      ? 'var(--app-glass-amber)'
+      : 'var(--app-glass-mint)';
+  const capacityLabel = usage.isKnown ? formatContextTokens(capacity) : 'live';
+
+  return (
+    <div
+      className="context-usage-indicator glass-control"
+      data-known={usage.isKnown ? 'true' : 'false'}
+      aria-label={tooltipLines.join(', ')}
+      role="status"
+      onMouseEnter={() => setIsHovering(true)}
+      onMouseLeave={() => setIsHovering(false)}
+      onFocus={() => setIsHovering(true)}
+      onBlur={() => setIsHovering(false)}
+      tabIndex={0}
+      style={{
+        '--context-usage-percent': `${usage.percentage}%`,
+        '--context-usage-color': tone,
+      } as CSSProperties}
+    >
+      <span className="context-usage-ring" aria-hidden="true">
+        <span className="context-usage-ring-core" />
+      </span>
+      <span className="context-usage-label">{usage.percentage}%</span>
+      <span className="context-usage-capacity">{capacityLabel}</span>
+      <span className="context-usage-bars" aria-hidden="true">
+        <span />
+        <span />
+      </span>
+      {isHovering && (
+        <div className="context-usage-popover" role="tooltip">
+          <div className="context-usage-popover-title">{tooltipLines[0] ?? 'Context usage'}</div>
+          <div className="context-usage-popover-meter" aria-hidden="true">
+            <span />
+            <span />
+          </div>
+          {tooltipLines.slice(1).map((line) => (
+            <div key={line} className="context-usage-popover-line">{line}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

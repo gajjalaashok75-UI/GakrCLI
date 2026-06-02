@@ -11,6 +11,7 @@ import type { WebviewManager } from '../webview/webviewManager';
 import type { PermissionRules } from './permissionRules';
 import type { ControlRequestPermission, ControlRequestSetPermissionMode } from '../types/messages';
 import type { PermissionMode, PermissionResult } from '../types/session';
+import { SELF_HANDLED } from '../process/controlRouter';
 
 /** File edit tool names that are handled by DiffManager, not PermissionHandler */
 const FILE_EDIT_TOOLS = new Set([
@@ -27,6 +28,8 @@ const ACCEPT_EDITS_TOOLS = new Set([
   ...FILE_EDIT_TOOLS,
 ]);
 
+const ASK_USER_QUESTION_TOOL_NAME = 'AskUserQuestion';
+
 /** Callback to write a control_response to the CLI's stdin */
 export type WriteToStdinFn = (message: unknown) => void;
 
@@ -39,6 +42,7 @@ interface PendingRequest {
 export class PermissionHandler implements vscode.Disposable {
   private currentMode: PermissionMode = 'default';
   private readonly pendingRequests = new Map<string, PendingRequest>();
+  private readonly pendingAskUserQuestions = new Map<string, PendingRequest>();
   private readonly disposables: vscode.Disposable[] = [];
   private writeToStdin: WriteToStdinFn | undefined;
 
@@ -46,6 +50,7 @@ export class PermissionHandler implements vscode.Disposable {
     private readonly webviewManager: WebviewManager,
     private readonly rules: PermissionRules,
     private readonly output: vscode.OutputChannel,
+    private readonly onPendingChange?: (pending: boolean) => void,
   ) {
     // Listen for permission_response from webview
     this.disposables.push(
@@ -61,7 +66,7 @@ export class PermissionHandler implements vscode.Disposable {
     // Listen for set_permission_mode from webview
     this.disposables.push(
       webviewManager.onMessage('set_permission_mode', (message) => {
-        this.setMode(message.mode as PermissionMode);
+        void this.setMode(message.mode as PermissionMode);
       }),
     );
   }
@@ -84,24 +89,28 @@ export class PermissionHandler implements vscode.Disposable {
   /**
    * Set the permission mode. Called from CLI (set_permission_mode) or webview.
    */
-  setMode(mode: PermissionMode): void {
-    // Bypass mode is gated behind the allowDangerouslySkipPermissions setting
+  async setMode(mode: PermissionMode): Promise<PermissionMode> {
+    const previousMode = this.currentMode;
+    this.currentMode = mode;
+    this.broadcastModeState();
+
     if (mode === 'bypassPermissions') {
       const config = vscode.workspace.getConfiguration('gakrcliCode');
       const allowed = config.get<boolean>('allowDangerouslySkipPermissions', false);
       if (!allowed) {
+        await config.update(
+          'allowDangerouslySkipPermissions',
+          true,
+          vscode.ConfigurationTarget.Global,
+        );
         this.output.appendLine(
-          '[PermissionHandler] Bypass mode blocked — allowDangerouslySkipPermissions is false',
+          '[PermissionHandler] Enabled allowDangerouslySkipPermissions for bypassPermissions mode',
         );
-        vscode.window.showWarningMessage(
-          'GakrCLI: Bypass permissions mode is disabled. Enable "gakrcliCode.allowDangerouslySkipPermissions" in settings first.',
-        );
-        return;
       }
     }
 
-    this.output.appendLine(`[PermissionHandler] Mode changed: ${this.currentMode} → ${mode}`);
-    this.currentMode = mode;
+    this.output.appendLine(`[PermissionHandler] Mode changed: ${previousMode} -> ${mode}`);
+    return this.currentMode;
   }
 
   /**
@@ -115,21 +124,31 @@ export class PermissionHandler implements vscode.Disposable {
   ): Promise<PermissionResult | symbol> {
     const { tool_name } = request;
 
+    if (this.isAskUserQuestionRequest(request)) {
+      return this.handleAskUserQuestionRequest(request, signal, requestId);
+    }
+
     // Check auto-approve conditions
     const autoResult = this.checkAutoApprove(request);
     if (autoResult) {
       this.output.appendLine(
         `[PermissionHandler] Auto-approved: ${tool_name} (mode=${this.currentMode})`,
       );
+      this.webviewManager.broadcast({
+        type: 'cancel_request',
+        requestId,
+      });
+      this.onPendingChange?.(this.pendingRequests.size > 0);
       return autoResult;
     }
 
-    // Not auto-approved — forward to webview as permission_request
+    // Not auto-approved: forward to webview as permission_request
     this.output.appendLine(
       `[PermissionHandler] Requesting permission for: ${tool_name}`,
     );
 
     this.pendingRequests.set(requestId, { requestId, request, signal });
+    this.onPendingChange?.(true);
 
     // Listen for abort (control_cancel_request)
     signal.addEventListener('abort', () => {
@@ -138,6 +157,7 @@ export class PermissionHandler implements vscode.Disposable {
         type: 'cancel_request',
         requestId,
       });
+      this.onPendingChange?.(this.pendingRequests.size > 0);
     });
 
     // Send permission_request to webview
@@ -157,7 +177,6 @@ export class PermissionHandler implements vscode.Disposable {
 
     // Response is handled asynchronously via handlePermissionResponse
     // Return a sentinel so ControlRouter knows not to send an automatic response
-    const { SELF_HANDLED } = await import('../process/controlRouter');
     return SELF_HANDLED;
   }
 
@@ -165,19 +184,136 @@ export class PermissionHandler implements vscode.Disposable {
    * Handle a set_permission_mode control_request from the CLI.
    */
   handleSetPermissionMode(request: ControlRequestSetPermissionMode): Record<string, unknown> {
-    this.setMode(request.mode);
+    void this.setMode(request.mode);
     return { mode: request.mode };
   }
 
+  private broadcastModeState(rejectedMode?: PermissionMode): void {
+    this.webviewManager.broadcast({
+      type: 'permission_mode_state',
+      mode: this.currentMode,
+      rejectedMode,
+    });
+  }
+
   /**
-   * Handle a control_cancel_request — dismiss the permission dialog.
+   * Handle a control_cancel_request: dismiss the permission dialog.
    */
   handleCancel(requestId: string): void {
     this.pendingRequests.delete(requestId);
+    this.pendingAskUserQuestions.delete(requestId);
     this.webviewManager.broadcast({
       type: 'cancel_request',
       requestId,
     });
+    this.webviewManager.broadcast({
+      type: 'dismiss_elicitation',
+      requestId,
+    } as never);
+    this.onPendingChange?.(this.pendingRequests.size > 0);
+  }
+
+  cancelAll(): void {
+    const requestIds = Array.from(this.pendingRequests.keys());
+    const questionRequestIds = Array.from(this.pendingAskUserQuestions.keys());
+    this.pendingRequests.clear();
+    this.pendingAskUserQuestions.clear();
+    for (const requestId of requestIds) {
+      this.webviewManager.broadcast({
+        type: 'cancel_request',
+        requestId,
+      });
+    }
+    for (const requestId of questionRequestIds) {
+      this.webviewManager.broadcast({
+        type: 'dismiss_elicitation',
+        requestId,
+      } as never);
+    }
+    this.webviewManager.broadcast({
+      type: 'permissions_cleared',
+    } as never);
+    this.onPendingChange?.(false);
+  }
+
+  allowTool(toolName: string): number {
+    const normalized = toolName.trim();
+    if (!normalized) {
+      return 0;
+    }
+
+    this.rules.add(normalized);
+    let resolved = 0;
+
+    for (const pending of Array.from(this.pendingRequests.values())) {
+      if (pending.request.tool_name.toLowerCase() === normalized.toLowerCase()) {
+        this.handlePermissionResponse(pending.requestId, true, true);
+        resolved++;
+      }
+    }
+
+    return resolved;
+  }
+
+  handleAskUserQuestionResponse(
+    requestId: string,
+    values: Record<string, unknown>,
+  ): boolean {
+    const pending = this.pendingAskUserQuestions.get(requestId);
+    if (!pending) {
+      return false;
+    }
+
+    this.pendingAskUserQuestions.delete(requestId);
+    const input = (pending.request.input ?? {}) as Record<string, unknown>;
+    const questions = this.getAskUserQuestions(input);
+    const answers: Record<string, string> = {};
+
+    for (const question of questions) {
+      const questionText = String(question.question ?? '');
+      if (!questionText) continue;
+
+      const value = values[questionText];
+      if (Array.isArray(value)) {
+        const answer = value.map(String).filter(Boolean).join(', ');
+        if (answer) answers[questionText] = answer;
+      } else if (typeof value === 'string' && value.trim()) {
+        answers[questionText] = value.trim();
+      }
+    }
+
+    this.output.appendLine(
+      `[PermissionHandler] Answered AskUserQuestion request: ${requestId}`,
+    );
+    this.sendControlResponse(requestId, {
+      behavior: 'allow',
+      updatedInput: {
+        ...input,
+        answers,
+      },
+      toolUseID: pending.request.tool_use_id,
+      decisionClassification: 'user_temporary',
+    });
+    return true;
+  }
+
+  handleAskUserQuestionCancel(requestId: string): boolean {
+    const pending = this.pendingAskUserQuestions.get(requestId);
+    if (!pending) {
+      return false;
+    }
+
+    this.pendingAskUserQuestions.delete(requestId);
+    this.output.appendLine(
+      `[PermissionHandler] Cancelled AskUserQuestion request: ${requestId}`,
+    );
+    this.sendControlResponse(requestId, {
+      behavior: 'deny',
+      message: 'User declined to answer questions',
+      toolUseID: pending.request.tool_use_id,
+      decisionClassification: 'user_reject',
+    });
+    return true;
   }
 
   private checkAutoApprove(request: ControlRequestPermission): PermissionResult | null {
@@ -223,6 +359,79 @@ export class PermissionHandler implements vscode.Disposable {
     return null;
   }
 
+  private handleAskUserQuestionRequest(
+    request: ControlRequestPermission,
+    signal: AbortSignal,
+    requestId: string,
+  ): symbol {
+    this.output.appendLine(
+      `[PermissionHandler] Forwarding AskUserQuestion to clarification dialog: ${requestId}`,
+    );
+
+    this.pendingAskUserQuestions.set(requestId, { requestId, request, signal });
+
+    signal.addEventListener('abort', () => {
+      this.pendingAskUserQuestions.delete(requestId);
+      this.webviewManager.broadcast({
+        type: 'dismiss_elicitation',
+        requestId,
+      } as never);
+    }, { once: true });
+
+    const input = (request.input ?? {}) as Record<string, unknown>;
+    const questions = this.getAskUserQuestions(input);
+    this.webviewManager.broadcast({
+      type: 'show_elicitation',
+      requestId,
+      message: 'GakrCLI needs your input',
+      fields: questions.map((question) => this.toAskUserQuestionField(question)),
+    } as never);
+
+    return SELF_HANDLED;
+  }
+
+  private isAskUserQuestionRequest(request: ControlRequestPermission): boolean {
+    return request.tool_name === ASK_USER_QUESTION_TOOL_NAME &&
+      this.getAskUserQuestions((request.input ?? {}) as Record<string, unknown>).length > 0;
+  }
+
+  private getAskUserQuestions(input: Record<string, unknown>): Array<Record<string, unknown>> {
+    return Array.isArray(input.questions)
+      ? input.questions.filter((q): q is Record<string, unknown> => Boolean(q && typeof q === 'object'))
+      : [];
+  }
+
+  private toAskUserQuestionField(question: Record<string, unknown>): Record<string, unknown> {
+    const questionText = String(question.question ?? 'Question');
+    const options = Array.isArray(question.options)
+      ? question.options
+          .filter((option): option is Record<string, unknown> => Boolean(option && typeof option === 'object'))
+          .map((option) => {
+            const label = String(option.label ?? option.value ?? '');
+            return {
+              value: label,
+              label,
+              description: typeof option.description === 'string' ? option.description : undefined,
+            };
+          })
+          .filter((option) => option.value)
+      : [];
+
+    return {
+      name: questionText,
+      label: questionText,
+      required: true,
+      type: options.length > 0
+        ? {
+            type: question.multiSelect ? 'multiselect' : 'select',
+            options,
+          }
+        : {
+            type: 'text',
+          },
+    };
+  }
+
   private handlePermissionResponse(
     requestId: string,
     allowed: boolean,
@@ -237,6 +446,7 @@ export class PermissionHandler implements vscode.Disposable {
     }
 
     this.pendingRequests.delete(requestId);
+    this.onPendingChange?.(this.pendingRequests.size > 0);
 
     if (alwaysAllow && allowed) {
       this.rules.add(pending.request.tool_name);
@@ -299,5 +509,7 @@ export class PermissionHandler implements vscode.Disposable {
     }
     this.disposables.length = 0;
     this.pendingRequests.clear();
+    this.pendingAskUserQuestions.clear();
+    this.onPendingChange?.(false);
   }
 }
