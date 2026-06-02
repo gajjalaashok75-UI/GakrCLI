@@ -23,6 +23,15 @@ import {
   normalizeTextContentBlock,
   stripInternalTextWrappers,
 } from '../utils/chatMessageTransforms';
+import {
+  createPendingContextUsage,
+  normalizeContextUsage,
+  type WebviewContextUsage,
+} from '../utils/contextUsage';
+import {
+  completeCompactSystemMessage,
+  startCompactSystemMessage,
+} from '../utils/compactSystemMessage';
 import { normalizeFastModeState } from '../utils/fastModeState';
 
 const EMPTY_COST: SessionCost = {
@@ -130,6 +139,7 @@ export function useChat() {
   const [toolActivity, setToolActivity] = useState<ToolActivity | null>(null);
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [retryInfo, setRetryInfo] = useState<RetryInfo | null>(null);
+  const [contextUsage, setContextUsage] = useState<WebviewContextUsage | null>(() => createPendingContextUsage());
 
   const { processStreamEvent, resetStream } = useStream();
   const streamingUuidRef = useRef<string | null>(null);
@@ -137,6 +147,8 @@ export function useChat() {
   const activeToolUseIdsRef = useRef<Set<string>>(new Set());
   const userInterruptedRef = useRef(false);
   const turnStartedAtRef = useRef<number | null>(null);
+  const compactSystemMessageIdRef = useRef<string | null>(null);
+  const isCompactingRef = useRef(false);
 
   const handleUserMessage = useCallback((msg: UserMessage) => {
     const id = msg.uuid || `user-${Date.now()}`;
@@ -388,11 +400,16 @@ export function useChat() {
     }
     userInterruptedRef.current = false;
     turnStartedAtRef.current = null;
+    vscode.postMessage({ type: 'settings_refresh' });
   }, [resetStream]);
 
   const handleSystemInit = useCallback((msg: SystemInitMessage) => {
     setSessionId(msg.session_id);
     setModel(msg.model);
+    setContextUsage((previous) => ({
+      ...(previous ?? createPendingContextUsage()),
+      model: msg.model,
+    }));
   }, []);
 
   const handleSessionTitle = useCallback((title: string) => {
@@ -472,9 +489,8 @@ export function useChat() {
           );
         }
 
-        if (typeof current.model === 'string' && current.model.trim()) {
-          setModel(current.model);
-        }
+        const currentModel = typeof current.model === 'string' && current.model.trim() ? current.model : null;
+        if (currentModel) setModel(currentModel);
         if (typeof current.effort === 'string') {
           setEffortLevel(current.effort);
         }
@@ -488,6 +504,12 @@ export function useChat() {
               .filter((m) => m.value),
           );
         }
+        setContextUsage((previous) =>
+          normalizeContextUsage(
+            data.contextUsage,
+            previous ?? createPendingContextUsage(currentModel ?? model),
+          ),
+        );
         return;
       }
 
@@ -496,7 +518,7 @@ export function useChat() {
       if (!msg || typeof msg !== 'object') return;
 
       try {
-        const msgAny = msg as Record<string, unknown>;
+        const msgAny = msg as unknown as Record<string, unknown>;
 
         switch (msgAny.type) {
           case 'stream_event':
@@ -514,7 +536,7 @@ export function useChat() {
           case 'result':
             handleResultMessage(msg as ResultMessage);
             {
-              const resultAny = msg as Record<string, unknown>;
+              const resultAny = msg as unknown as Record<string, unknown>;
               if (resultAny.fast_mode_state) {
                 setFastModeState((previous) =>
                   normalizeFastModeState(resultAny.fast_mode_state, previous, { preserveEnabled: true }),
@@ -596,7 +618,7 @@ export function useChat() {
               case 'init':
                 handleSystemInit(msg as SystemInitMessage);
                 {
-                  const initAny = msg as Record<string, unknown>;
+                  const initAny = msg as unknown as Record<string, unknown>;
                   if (initAny.fast_mode_state) {
                     setFastModeState((previous) =>
                       normalizeFastModeState(initAny.fast_mode_state, previous, { preserveEnabled: true }),
@@ -636,9 +658,31 @@ export function useChat() {
                 addSystemMessage(`Retrying API call (attempt ${attempt}${delayText})...`, `retry-${Date.now()}`);
                 break;
               }
-              case 'compact_boundary':
-                addSystemMessage('Context compacted to fit within limits.', `compact-${Date.now()}`);
+              case 'status': {
+                const status = msgAny.status;
+                if (status === 'compacting') {
+                  if (!isCompactingRef.current) {
+                    const id = typeof msgAny.uuid === 'string' ? msgAny.uuid : `compact-${Date.now()}`;
+                    compactSystemMessageIdRef.current = id;
+                    isCompactingRef.current = true;
+                    setMessages((prev) => startCompactSystemMessage(prev, id));
+                  }
+                } else if (status === null && compactSystemMessageIdRef.current) {
+                  const id = compactSystemMessageIdRef.current;
+                  isCompactingRef.current = false;
+                  setMessages((prev) => completeCompactSystemMessage(prev, id));
+                }
                 break;
+              }
+              case 'compact_boundary': {
+                const id = compactSystemMessageIdRef.current ??
+                  (typeof msgAny.uuid === 'string' ? msgAny.uuid : `compact-${Date.now()}`);
+                isCompactingRef.current = false;
+                setMessages((prev) => completeCompactSystemMessage(prev, id));
+                compactSystemMessageIdRef.current = null;
+                vscode.postMessage({ type: 'settings_refresh' });
+                break;
+              }
               case 'permission_rule_added':
                 if (typeof msgAny.text === 'string') {
                   addSystemMessage(msgAny.text, `permission-${Date.now()}`);
@@ -674,10 +718,13 @@ export function useChat() {
           setPromptSuggestions([]);
           setToolActivity(null);
           setRetryInfo(null);
+          setContextUsage(createPendingContextUsage());
           streamingUuidRef.current = null;
           resultTargetAssistantIdRef.current = null;
           userInterruptedRef.current = false;
           turnStartedAtRef.current = null;
+          compactSystemMessageIdRef.current = null;
+          isCompactingRef.current = false;
           setTodos([]);
           resetStream();
         }
@@ -779,6 +826,7 @@ export function useChat() {
     handleSystemInit,
     handleSessionTitle,
     addSystemMessage,
+    model,
     resetStream,
   ]);
 
@@ -872,9 +920,35 @@ export function useChat() {
     resultTargetAssistantIdRef.current = null;
     userInterruptedRef.current = false;
     turnStartedAtRef.current = null;
+    compactSystemMessageIdRef.current = null;
+    isCompactingRef.current = false;
     setTodos([]);
+    setContextUsage(createPendingContextUsage(model));
     resetStream();
-  }, [resetStream]);
+  }, [model, resetStream]);
+
+  useEffect(() => {
+    vscode.postMessage({ type: 'settings_refresh' });
+  }, []);
+
+  useEffect(() => {
+    const canRefresh =
+      processState === 'starting' ||
+      processState === 'running' ||
+      processState === 'restarting' ||
+      isStreaming;
+
+    if (!canRefresh) {
+      return;
+    }
+
+    vscode.postMessage({ type: 'settings_refresh' });
+    const intervalId = window.setInterval(() => {
+      vscode.postMessage({ type: 'settings_refresh' });
+    }, isStreaming ? 5_000 : 12_000);
+
+    return () => window.clearInterval(intervalId);
+  }, [isStreaming, processState]);
 
   const interrupt = useCallback(() => {
     userInterruptedRef.current = true;
@@ -914,6 +988,7 @@ export function useChat() {
     toolActivity,
     todos,
     retryInfo,
+    contextUsage,
     sendMessage,
     editMessage,
     clearMessages,

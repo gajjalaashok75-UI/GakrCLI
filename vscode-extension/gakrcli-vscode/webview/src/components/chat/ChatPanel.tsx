@@ -13,6 +13,7 @@ import type { PermissionModeValue } from '../input/ModeSelector';
 import { vscode } from '../../vscode';
 import { ProviderBadge } from '../input/ProviderBadge';
 import { ModelSelector } from '../input/ModelSelector';
+import { ContextUsageIndicator } from '../input/ContextUsageIndicator';
 import { FastModeToggle } from '../input/FastModeToggle';
 import { EffortSelector } from '../input/EffortSelector';
 import { CompanyAnnouncement } from './CompanyAnnouncement';
@@ -29,6 +30,7 @@ import { OnboardingChecklist } from '../onboarding/OnboardingChecklist';
 import type { AtMentionResult } from '../../hooks/useAtMentions';
 import type { ToolActivity } from '../../hooks/useChat';
 import { getDisplaySessionTitle } from '../../utils/chatTitle';
+import type { WebviewContextUsage } from '../../utils/contextUsage';
 
 export function ChatPanel() {
   const {
@@ -47,6 +49,7 @@ export function ChatPanel() {
     toolActivity,
     todos,
     retryInfo,
+    contextUsage,
     sendMessage,
     editMessage,
     interrupt,
@@ -278,6 +281,7 @@ export function ChatPanel() {
               effortLevel={effortLevel}
               onEffortChange={setEffortLevel}
               toolActivity={toolActivity}
+              contextUsage={contextUsage}
               permissionMode={permissionMode}
               onOpenMcpManager={() => setShowMcpManager(true)}
               onOpenPluginManager={() => setShowPluginManager(true)}
@@ -415,6 +419,7 @@ interface InputAreaProps {
   onEffortChange: (level: string) => void;
   permissionMode?: string;
   toolActivity: ToolActivity | null;
+  contextUsage: WebviewContextUsage | null;
   statusControl?: React.ReactNode;
   footerControls?: React.ReactNode;
   onOpenMcpManager: () => void;
@@ -429,6 +434,7 @@ function InputArea({
   effortLevel,
   onEffortChange,
   toolActivity,
+  contextUsage,
   permissionMode,
   statusControl,
   footerControls,
@@ -828,6 +834,7 @@ function InputArea({
 
         {statusControl}
         {footerControls}
+        <ContextUsageIndicator usage={contextUsage} />
 
         {/* Spacer */}
         <div style={{ flex: 1 }} />

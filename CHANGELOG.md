@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [unreleased - 0.5.5]
 
 ### Fixed (2026-06-01)
+- **VS Code Context Meter And Autocompact UI**: Added a live SDK-backed composer context meter between model and reasoning controls, kept pending context data visible while refreshing, and rendered compacting/compacted transcript dividers from SDK status and compact-boundary events.
 - **VS Code Live Chat Title**: Derived a live header title from the first visible user prompt while new sessions are still waiting for host/session title updates, matching resumed chat titles.
 - **VS Code Live Session Parity**: Matched live webview chats to resumed history by hiding unresolved stopped tool placeholders and deriving the header title immediately from the first visible user prompt.
 - **VS Code Codex-Style Tool Rows**: Tightened webview tool-row spacing, headers, borders, and expanded detail heights so collapsed and opened tool results take less vertical space.

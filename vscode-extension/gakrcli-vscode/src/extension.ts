@@ -524,15 +524,16 @@ export function activate(context: vscode.ExtensionContext) {
     };
   }
 
-  async function sendRuntimeSettingsState(panelId?: string, error?: string) {
-    const pm = await ensureProcess();
-    if (!pm) return;
+  async function sendRuntimeSettingsState(panelId?: string, error?: string, startIfNeeded = true) {
+    const pm = startIfNeeded ? await ensureProcess() : processManager;
 
-    const [runtime, settings, context] = await Promise.all([
-      pm.sendControlRequest({ subtype: 'get_runtime_state' }).catch(() => undefined),
-      pm.sendControlRequest({ subtype: 'get_settings' }).catch(() => undefined),
-      pm.sendControlRequest({ subtype: 'get_context_usage' }).catch(() => undefined),
-    ]);
+    const [runtime, settings, context] = pm
+      ? await Promise.all([
+          pm.sendControlRequest({ subtype: 'get_runtime_state' }).catch(() => undefined),
+          pm.sendControlRequest({ subtype: 'get_settings' }).catch(() => undefined),
+          pm.sendControlRequest({ subtype: 'get_context_usage' }).catch(() => undefined),
+        ])
+      : [undefined, undefined, undefined] as const;
     const payload = buildSettingsStatePayload(runtime, settings, context, error);
 
     if (panelId) {
@@ -1296,7 +1297,7 @@ export function activate(context: vscode.ExtensionContext) {
   });
 
   webviewManager.onMessage('settings_refresh', async (_message, panelId) => {
-    await sendRuntimeSettingsState(panelId);
+    await sendRuntimeSettingsState(panelId, undefined, false);
   });
 
   webviewManager.onMessage('settings_update', async (message, panelId) => {
