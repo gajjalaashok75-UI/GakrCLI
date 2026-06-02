@@ -6,6 +6,10 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ### Fixed (2026-06-01)
 
+- Restored visible unordered, ordered, and nested list markers in assistant markdown output after Tailwind's base reset removed default bullets.
+- Normalized unique anchored deletion edits so stale surrounding anchors do not break safe block removals, while still rejecting ambiguous duplicate deletion targets.
+- Moved the live context usage indicator from the input toolbar into the lower composer control row beside permission, provider, and Fast mode controls.
+- Allowed unique multiline edit targets to match when only leading indentation differs, preventing brittle HTML/CSS replacement failures while still refusing ambiguous relaxed matches.
 - Preserved the last known live context value across empty SDK refreshes and guarded sandbox stderr annotation so Bash results keep working when the sandbox runtime does not expose its optional helper.
 - Kept the composer context meter updating from SDK runtime usage and local SDK token estimates when full context analysis is unavailable, and replaced the native title tooltip with a glass hover panel and fill-line meter.
 - Added a live SDK-backed context meter between the model selector and reasoning effort control, kept it visible while token capacity is still refreshing, and rendered Codex-style compacting/compacted dividers from SDK status and compact-boundary events.
