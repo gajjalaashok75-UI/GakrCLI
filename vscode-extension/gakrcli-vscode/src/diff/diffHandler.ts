@@ -7,9 +7,9 @@ import type { OutputChannel } from 'vscode';
 import type { ControlRequestHandler } from '../process/controlRouter';
 import { SELF_HANDLED } from '../process/controlRouter';
 import type { DiffManager } from './diffManager';
-import type { NdjsonTransport } from '../process/ndjsonTransport';
 import type { PermissionHandler } from '../permissions/permissionHandler';
 import type { ControlRequestPermission } from '../types/messages';
+import type { ControlResponseTransport } from './diffManager';
 
 /**
  * Create a can_use_tool handler that routes file edit tools to DiffManager
@@ -19,13 +19,13 @@ import type { ControlRequestPermission } from '../types/messages';
  * both DiffManager and PermissionHandler send responses asynchronously.
  *
  * @param diffManager The DiffManager instance for showing diffs
- * @param getTransport Function that returns the current NdjsonTransport
+ * @param getTransport Function that returns the current response transport
  * @param outputChannel Output channel for logging
  * @param permissionHandler Optional PermissionHandler for non-file-edit tools
  */
 export function createCanUseToolHandler(
   diffManager: DiffManager,
-  getTransport: () => NdjsonTransport | undefined,
+  getTransport: () => ControlResponseTransport | undefined,
   outputChannel: OutputChannel,
   permissionHandler?: PermissionHandler,
 ): ControlRequestHandler {

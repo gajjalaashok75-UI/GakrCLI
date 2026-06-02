@@ -5,7 +5,74 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [unreleased - 0.5.5]
+
+### Fixed (2026-06-01)
+- **Edit Tool Anchored Deletions**: Normalized unique anchored deletion edits so stale surrounding anchors do not break safe block removals, while still rejecting ambiguous duplicate deletion targets.
+- **VS Code Markdown List Markers**: Restored visible unordered, ordered, and nested list markers in assistant markdown output after Tailwind's base reset removed default bullets.
+- **VS Code Context Meter Placement**: Moved the live context usage indicator from the input toolbar into the lower composer control row beside permission, provider, and Fast mode controls.
+- **Edit Tool Indentation Matching**: Allowed unique multiline edit targets to match when only leading indentation differs, preventing brittle HTML/CSS replacement failures while still refusing ambiguous relaxed matches.
+- **VS Code Context Meter And Bash Stability**: Preserved the last known live context value across empty SDK refreshes and guarded sandbox stderr annotation so Bash results keep working when the sandbox runtime does not expose its optional helper.
+- **VS Code Live Context Meter Refresh**: Kept the composer context meter updating from SDK runtime usage and local SDK token estimates when full context analysis is unavailable, and replaced the native title tooltip with a glass hover panel and fill-line meter.
+- **VS Code Context Meter And Autocompact UI**: Added a live SDK-backed composer context meter between model and reasoning controls, kept pending context data visible while refreshing, and rendered compacting/compacted transcript dividers from SDK status and compact-boundary events.
+- **VS Code Live Chat Title**: Derived a live header title from the first visible user prompt while new sessions are still waiting for host/session title updates, matching resumed chat titles.
+- **VS Code Live Session Parity**: Matched live webview chats to resumed history by hiding unresolved stopped tool placeholders and deriving the header title immediately from the first visible user prompt.
+- **VS Code Codex-Style Tool Rows**: Tightened webview tool-row spacing, headers, borders, and expanded detail heights so collapsed and opened tool results take less vertical space.
+- **VS Code Tool Details And Copy Actions**: Bounded expanded tool input panels with their own scroll area and moved assistant copy actions to the end of each assistant turn, copying the full turn text instead of each intermediate text fragment.
+- **VS Code Tool Transcript Density**: Paired tool calls with their matching results inside one expandable webview row, keeping command/result details hidden until clicked while preserving compact previews for hover and scan.
+- **VS Code Hidden Thinking Display**: Hid streamed and resumed thinking blocks from the GakrCLI webview transcript while keeping a compact shining thinking indicator active during hidden reasoning, reducing long-scroll conversations around tool use.
+- **SDK And VS Code Session Persistence**: Kept SDK transcript writes inside the query-scoped async context, forced fresh SDK sessions to use the workspace transcript directory, and refreshed VS Code chat titles/history from live SDK user/result events.
+- **SDK Headless Permission Flow**: Kept forced `ask` decisions on the SDK host-permission path instead of returning an unresolved ask decision to the tool runner, so interactive tools such as `AskUserQuestion` can receive webview answers through `canUseTool`/`onPermissionRequest`.
+- **SDK Session Transcript Routing**: Reset the SDK transcript file pointer immediately after session resolution so new in-process VS Code turns write under the active workspace session directory instead of reusing a stale process-cwd transcript path.
+- **SDK Slash Command Registry**: Loaded the canonical CLI slash command registry into headless SDK runtime snapshots and query processing, deduping hidden/model-only commands so VS Code can show the full command menu without local fallbacks.
+- **SDK Early Runtime Snapshot Stability**: Guarded headless runtime state reads before config initialization and treated stubbed plugin command stores as empty, preventing VS Code startup from reporting crashed/connection lost during SDK initialize.
+- **VS Code Session History And Fast Mode**: Recovered misplaced SDK transcripts by matching recorded JSONL `cwd` to the open workspace, refreshed history on demand, normalized Fast mode from both SDK string and object states, and routed extension permission decisions through an explicit SDK `canUseTool` callback.
+- **VS Code Chat Hover And Fast Mode State**: Scoped stop-generation hover actions to the actively streaming assistant turn, kept completed turns on copy-only hover, and preserved the user's Fast mode toggle across per-turn runtime/result updates.
+
+## [released - 0.5.4]
+### Fixed (2026-05-31)
+- **VS Code Resume And Fast Mode State**: Restored result records during resumed chat replay so per-turn completion text survives session reloads, and synced Fast mode from SDK runtime settings snapshots after webview toggles.
+- **VS Code Clarification Dialog**: Changed AskUserQuestion/clarification prompts to a one-question stepper with scrollable content and pinned Skip, Back, Next, and Submit actions.
+- **VS Code AskUserQuestion Routing**: Treated `AskUserQuestion` as a clarification flow instead of a tool permission prompt, rendering the question fields in the webview and returning collected answers through the SDK permission response path.
+
+### Changed (2026-05-30)
+- **VS Code Permission Prompt Reliability**: Routed pending-permission status through the real permission dialog lifecycle, added a webview fallback for SDK tool permission requests, and cleared pending permission UI/status on stop, restart, session changes, and shutdown.
+- **VS Code Runtime Refresh And Stop Polish**: Added a header refresh button that restarts the SDK runtime while preserving the current session, kept startup in Starting until provider/model state hydrates, and folded stopped-turn interruption/duration UI into the assistant turn so the cursor and copy action settle correctly.
+- **VS Code Stop And Model Picker Fixes**: Made the webview stop button render the GakrCLI interruption prompt immediately and allowed provider model discovery to enrich SDK runtime state instead of stopping at a single fallback model.
+- **VS Code Interrupt Prompt Parity**: Added the terminal-style `Interrupted · What should Gakr do instead?` row for user-stopped webview turns while keeping the turn completion duration after the interruption.
+- **VS Code Turn Completion UI**: Replaced the chat footer cost/token pill with the GakrCLI-style per-turn duration line, kept stopped requests quiet with only the finished duration, and made assistant copy actions available on hover for every completed response.
+- **VS Code Chat Runtime Feedback**: Added SDK-backed todo state for the webview, GakrCLI-style spinner glyphs and live turn timers, retry countdown text, per-turn usage attachment fixes, and interrupt cleanup so stopped requests no longer render synthetic abort messages.
+- **VS Code Settings Entry Point**: Kept the top-right Settings button as a lightweight placeholder dialog with a working SDK-backed refresh action while runtime setting edits continue through the composer controls.
+- **SDK Runtime Control Surface**: Added a headless SDK runtime snapshot and mutation API for provider/profile/model state, settings, permission mode, reasoning effort, fast mode, context usage, slash commands, MCP, plugins, and usage summaries so IDE hosts can manage GakrCLI without launching a child CLI wrapper.
+- **VS Code SDK Webview Wiring**: Routed VS Code settings, provider/model, MCP, plugin, fast mode, effort, and runtime refresh flows through SDK control methods and added SDK-backed webview state broadcasts for native UI surfaces.
+- **VS Code Permission UI**: Reworked permission and clarification dialogs into compact centered prompts with command/details previews and numbered actions matching the native Codex-style approval flow.
+- **VS Code SDK Runtime**: Replaced the native VS Code chat runtime's hardcoded CLI wrapper process with direct `@gakr-gakr/gakrcli/sdk` usage, preserving the existing webview, permission, diff, MCP, resume, and model-control behavior through the SDK query surface.
+- **VS Code SDK Packaging**: Declared `@gakr-gakr/gakrcli` as the extension runtime dependency, kept the SDK import external in the extension bundle, and packaged the published npm SDK dependency instead of relying on root checkout files.
+- **VS Code Provider Model Discovery**: Added SDK-first model discovery through `query().supportedModels()` with live OpenAI-compatible `/models` fallback, and covered active provider profile, active model, model promotion, and nullable SDK capability responses with regression tests.
+
+### Fixed (2026-05-29)
+- **VS Code Provider Model Parity**: Wired the VS Code wrapper to the active `~/.gakrcli.json` provider profile before falling back to legacy `.gakrcli-profile.json`, kept model switches persisted through the GakrCLI `/model` profile path, showed full model IDs in the picker, and added footer runtime status for Sleep, Starting, Idle, and Running states.
+- **VS Code Dynamic Model Picker**: Matched the terminal `/model` flow more closely by fetching OpenAI-compatible provider models from `/v1/models` with `/models` fallback, removing broad static model-list fallback from the picker, and updating selected models immediately while preserving full provider-prefixed IDs.
+- **VS Code Runtime Usage UI**: Moved cost, duration, and token usage into the assistant message hover actions beside copy controls, keeping usage tied to the completed conversation instead of showing a permanent centered footer pill.
+
+### Changed (2026-05-28)
+- **VS Code Webview Glass Theme**: Tuned the extension webview toward a darker black-glass look with low-brightness sky-blue shine, covering chat, sessions, tool output, provider/model selectors, MCP and plugin dialogs, permission prompts, and onboarding panels.
+- **VS Code Chat Composer Layout**: Reworked the chat composer footer so the inline input row starts with add and attachment controls, MCP and plugins live under the add menu, permission/provider/fast controls remain in the outside footer row, and model/provider popups stay bounded in the webview.
+- **VS Code Conversation Usage Stats**: Moved runtime usage details to the end of the conversation and expanded the display to include cost, input/output tokens, cache tokens, turns, and duration.
+- **VS Code Webview Boundary**: Added a subtle full-shell border and removed the duplicate standalone attach button now that file/photo upload lives in the add menu.
+
+### Fixed (2026-05-28)
+- **VS Code Bypass Permission Mode**: Wired Bypass mode through the wrapper launch flags by enabling the required GakrCLI allow flag when selected and passing `--allow-dangerously-skip-permissions` into new and resumed processes.
+- **VS Code Model Selector**: Rendered the model menu through a bounded webview portal, kept the active model label populated from the provider/profile state, and allowed explicit model selections to override the `.gakrcli-profile.json` fallback model.
+- **VS Code File Attachments**: Deduplicated attached files from the picker through send-time prompt construction and compacted the attachment bar for larger file sets.
+- **VS Code Model Picker Bounds**: Clamped the model picker to the webview viewport so it stays visible in narrow panes.
+- **VS Code Provider Profile State**: Kept startup, resume, and provider display aligned with the active `.gakrcli-profile.json` fallback model and base URL when extension provider settings are not explicitly set.
+- **VS Code Permission Mode Sync**: Reported the effective permission mode back to the webview so blocked Bypass attempts snap back to the active mode.
+
+### Fixed (2026-05-27 16:49:02 +05:30)
+- **VS Code Permission Prompts**: Launched headless VS Code wrapper sessions with the stdio permission prompt tool so WebSearch, Bash, and other gated tools surface approval dialogs in the webview, with `/allow ToolName` and `allow ToolName` fallback handling for pending and future requests.
+- **VS Code Chat Rendering**: Deduplicated streamed and final assistant payloads, filtered internal command wrappers and raw thinking tags, limited copy actions to the latest assistant response, and kept thinking output readable without horizontal truncation.
+- **VS Code Slash Commands and Provider Picker**: Deduplicated slash commands, matched searches by command name only, allowed unknown slash-style prompts to send normally, and made the provider picker scroll within the webview.
 
 ## [0.5.4] - 2026-05-27
 
@@ -26,6 +93,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **VS Code Extension Status**: Bumped the VS Code extension to 0.2.1, refreshed provider availability detection for current profiles, added global profile fallback detection, and aligned chat launches with the active workspace.
 - **VS Code IDE Bridge**: Wired VS Code chat sessions to the root GakrCLI `sse-ide` MCP loader so `/ide`, workspace context, diagnostics, and terminal-backed IDE tools work from headless extension sessions.
 - **VS Code Dev Host Launch**: Switched source-checkout VS Code sessions to launch the real CLI with `node dist/cli.mjs`, allowed wrapper commands with inline arguments, and surfaced initialize timeouts or early exits instead of leaving the webview stuck on "Starting GakrCLI...".
+- **VS Code Wrapper Startup**: Resolved relative `node dist/cli.mjs` wrapper commands against the GakrCLI source checkout from any opened workspace, passed IDE MCP config through a temporary JSON file on Windows, and included stderr details when the headless wrapper exits before initialization.
 - **VS Code IDE Matching on Windows**: Normalized Windows workspace path comparisons for `/ide`, exported `GAKR_CODE_SSE_PORT` into VS Code terminals, and kept new terminals aligned with the active extension bridge.
 - **VS Code Provider/Profile Parity**: Expanded the extension wrapper to cover the root provider preset catalog, resolved workspace profiles through ancestor directories, and fell back to `~/.gakrcli/.gakrcli-profile.json` when no project profile is present.
 - **VS Code Chat Interaction Polish**: Right-aligned user messages in the webview and wired edited prompts back through the live CLI session so resend-after-edit works again.

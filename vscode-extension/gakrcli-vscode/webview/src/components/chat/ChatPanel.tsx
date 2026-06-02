@@ -8,30 +8,33 @@ import { useActiveFile } from '../../hooks/useActiveFile';
 import { ChatHeader } from '../header/ChatHeader';
 import { SessionList } from '../header/SessionList';
 import { MessageList } from './MessageList';
-import { CostDisplay } from '../shared/CostDisplay';
 import { PermissionModeIndicator } from '../input/PermissionModeIndicator';
 import type { PermissionModeValue } from '../input/ModeSelector';
 import { vscode } from '../../vscode';
 import { ProviderBadge } from '../input/ProviderBadge';
 import { ModelSelector } from '../input/ModelSelector';
+import { ContextUsageIndicator } from '../input/ContextUsageIndicator';
 import { FastModeToggle } from '../input/FastModeToggle';
 import { EffortSelector } from '../input/EffortSelector';
 import { CompanyAnnouncement } from './CompanyAnnouncement';
 import { SpinnerStatus } from './SpinnerStatus';
+import { TodoListViewer } from './TodoListViewer';
 import { ErrorBanner } from './ErrorBanner';
 import { AtMentionPicker } from '../input/AtMentionPicker';
 import { SlashCommandMenu } from '../input/SlashCommandMenu';
 import { AttachmentBar, type AttachmentItem } from '../input/AttachmentBar';
 import { McpServerManager } from '../dialogs/McpServerManager';
 import { PluginManager } from '../dialogs/PluginManager';
+import { SettingsDialog } from '../dialogs/SettingsDialog';
 import { OnboardingChecklist } from '../onboarding/OnboardingChecklist';
 import type { AtMentionResult } from '../../hooks/useAtMentions';
 import type { ToolActivity } from '../../hooks/useChat';
+import { getDisplaySessionTitle } from '../../utils/chatTitle';
 
 export function ChatPanel() {
   const {
     messages,
-    cost,
+    sessionTitle: chatSessionTitle,
     isStreaming,
     model,
     error,
@@ -40,10 +43,12 @@ export function ChatPanel() {
     processState,
     fastModeState,
     setFastModeState,
-    availableModels,
     effortLevel,
     setEffortLevel,
     toolActivity,
+    todos,
+    retryInfo,
+    contextUsage,
     sendMessage,
     editMessage,
     interrupt,
@@ -73,6 +78,9 @@ export function ChatPanel() {
   const [announcements, setAnnouncements] = useState<Array<{ id: string; message: string; severity?: 'info' | 'warning' | 'error'; dismissible?: boolean }>>([]);
   const [showMcpManager, setShowMcpManager] = useState(false);
   const [showPluginManager, setShowPluginManager] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [providerModel, setProviderModel] = useState<string | null>(null);
+  const [providerModels, setProviderModels] = useState<Array<{ value: string; displayName: string }>>([]);
   const [showOnboarding, setShowOnboarding] = useState(() => {
     return !localStorage.getItem('gakrcli.onboarding.dismissed');
   });
@@ -98,6 +106,30 @@ export function ChatPanel() {
     return unsub;
   }, []);
 
+  useEffect(() => {
+    return vscode.onMessage('permission_mode_state', (message) => {
+      if (typeof message.mode === 'string') {
+        setPermissionMode(message.mode as PermissionModeValue);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    vscode.postMessage({ type: 'get_provider_state' });
+    return vscode.onMessage('provider_state', (message) => {
+      setProviderModel(typeof message.currentModel === 'string' ? message.currentModel : null);
+      const models = Array.isArray(message.models)
+        ? (message.models as Array<Record<string, unknown>>)
+          .map((m) => ({
+            value: (m.value as string) || '',
+            displayName: (m.displayName as string) || (m.value as string) || '',
+          }))
+          .filter((m) => m.value)
+        : [];
+      setProviderModels(models);
+    });
+  }, []);
+
   // Listen for open_plugin_manager and hide_onboarding messages
   useEffect(() => {
     const handler = (e: MessageEvent) => {
@@ -120,9 +152,11 @@ export function ChatPanel() {
   }, []);
 
   const isStarting = processState === 'starting';
+  const displaySessionTitle = getDisplaySessionTitle(messages, sessionTitle, chatSessionTitle);
 
   return (
     <div
+      className="gakr-shell"
       style={{
         display: 'flex',
         overflow: 'hidden',
@@ -131,17 +165,18 @@ export function ChatPanel() {
         flex: 1,
         lineHeight: 1.5,
         height: '100vh',
-        backgroundColor: 'var(--app-root-background)',
         color: 'var(--app-primary-foreground)',
       }}
     >
       {/* Header + Session list overlay wrapper */}
-      <div style={{ position: 'relative', flexShrink: 0, zIndex: 10 }}>
+      <div className="gakr-header-shell" style={{ position: 'relative', flexShrink: 0, zIndex: 10 }}>
         <ChatHeader
-          sessionTitle={sessionTitle}
+          sessionTitle={displaySessionTitle}
           isSessionListOpen={isSessionListOpen}
           onToggleSessionList={() => setSessionListOpen(!isSessionListOpen)}
           onNewConversation={() => { userSetModeRef.current = false; newConversation(); }}
+          onRefreshRuntime={() => vscode.postMessage({ type: 'refresh_runtime' })}
+          onOpenSettings={() => setShowSettings(true)}
         />
 
         {/* Session list overlay */}
@@ -190,11 +225,15 @@ export function ChatPanel() {
       {/* Spinner status during tool execution */}
       <SpinnerStatus
         isActive={isStreaming}
+        activityLabel={toolActivity?.description}
+        retryInfo={retryInfo}
         customVerbs={[]}
         customTips={[]}
         tipsEnabled={true}
         reducedMotion={false}
       />
+
+      <TodoListViewer todos={todos} />
 
       {/* Prompt suggestions */}
       {promptSuggestions.length > 0 && !isStreaming && (
@@ -202,13 +241,12 @@ export function ChatPanel() {
           {promptSuggestions.map((s, i) => (
             <button
               key={i}
+              className="prompt-suggestion-chip"
               onClick={() => sendMessage(s)}
               style={{
                 padding: '2px 10px',
                 fontSize: 11,
                 borderRadius: 'var(--corner-radius-small)',
-                border: '1px solid var(--app-input-border)',
-                background: 'transparent',
                 color: 'var(--app-secondary-foreground)',
                 cursor: 'pointer',
               }}
@@ -228,7 +266,7 @@ export function ChatPanel() {
       />
 
       {/* Input area */}
-      <div style={{ padding: '12px 16px', flexShrink: 0 }}>
+      <div className="composer-shell">
         <div className="input-wrapper">
           <div
             className="input-container"
@@ -243,19 +281,27 @@ export function ChatPanel() {
               onEffortChange={setEffortLevel}
               toolActivity={toolActivity}
               permissionMode={permissionMode}
+              onOpenMcpManager={() => setShowMcpManager(true)}
+              onOpenPluginManager={() => setShowPluginManager(true)}
+              statusControl={<ProcessStatusBadge status={processStatus} isStreaming={isStreaming} />}
+              footerControls={(
+                <ModelSelector
+                  currentModel={providerModel ?? model}
+                  availableModels={providerModels}
+                />
+              )}
             />
           </div>
         </div>
 
-        {/* Footer: permission mode + cost + provider */}
-        <div style={{ marginTop: 6, paddingLeft: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className="composer-footer">
+          <div className="composer-footer-left">
             <PermissionModeIndicator
               currentMode={permissionMode}
               onModeChange={handleModeChange}
             />
-            <ProviderBadge />
-            <ModelSelector currentModel={model} availableModels={availableModels} />
+            <ProviderBadge showModel={false} />
+            <ContextUsageIndicator usage={contextUsage} />
             <FastModeToggle
               isEnabled={fastModeState.enabled}
               canToggle={fastModeState.canToggle}
@@ -266,41 +312,97 @@ export function ChatPanel() {
               }}
             />
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <button
-              onClick={() => setShowMcpManager(true)}
-              title="MCP Servers"
-              style={{
-                fontSize: 10, padding: '1px 5px', cursor: 'pointer',
-                background: 'transparent', border: '1px solid var(--app-input-border)',
-                borderRadius: 'var(--corner-radius-small)',
-                color: 'var(--app-secondary-foreground)',
-              }}
-            >
-              MCP
-            </button>
-            <button
-              onClick={() => setShowPluginManager(true)}
-              title="Plugins"
-              style={{
-                fontSize: 10, padding: '1px 5px', cursor: 'pointer',
-                background: 'transparent', border: '1px solid var(--app-input-border)',
-                borderRadius: 'var(--corner-radius-small)',
-                color: 'var(--app-secondary-foreground)',
-              }}
-            >
-              Plugins
-            </button>
-            <CostDisplay cost={cost} className="" />
-          </div>
         </div>
       </div>
 
       {/* Dialogs */}
       <McpServerManager isOpen={showMcpManager} onClose={() => setShowMcpManager(false)} />
       <PluginManager isOpen={showPluginManager} onClose={() => setShowPluginManager(false)} />
+      <SettingsDialog isOpen={showSettings} onClose={() => setShowSettings(false)} />
     </div>
   );
+}
+
+function ProcessStatusBadge({
+  status,
+  isStreaming,
+}: {
+  status: string;
+  isStreaming: boolean;
+}) {
+  const label = getProcessStatusLabel(status, isStreaming);
+  const tone = getProcessStatusTone(status, isStreaming);
+
+  return (
+    <div
+      className="glass-control"
+      title={`GakrCLI status: ${label}`}
+      aria-label={`GakrCLI status: ${label}`}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        padding: '2px 8px',
+        fontSize: 11,
+        borderRadius: 'var(--corner-radius-small)',
+        color: 'var(--app-secondary-foreground)',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <span
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: '999px',
+          background: tone,
+          boxShadow: isStreaming ? `0 0 8px ${tone}` : undefined,
+          flex: '0 0 auto',
+        }}
+      />
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function getProcessStatusLabel(status: string, isStreaming: boolean): string {
+  if (isStreaming) return 'Running';
+  switch (status) {
+    case 'running':
+      return 'Active';
+    case 'starting':
+      return 'Starting';
+    case 'restarting':
+      return 'Restarting';
+    case 'stopped':
+    case 'idle':
+      return 'Sleep';
+    case 'crashed':
+      return 'Crashed';
+    case 'auth_error':
+      return 'Auth';
+    case 'rate_limited':
+      return 'Limited';
+    default:
+      return 'Sleep';
+  }
+}
+
+function getProcessStatusTone(status: string, isStreaming: boolean): string {
+  if (isStreaming) return '#f6c85f';
+  switch (status) {
+    case 'running':
+      return '#5fbf8f';
+    case 'starting':
+    case 'restarting':
+      return '#6aa9ff';
+    case 'crashed':
+    case 'auth_error':
+      return '#f26d6d';
+    case 'rate_limited':
+      return '#f6c85f';
+    default:
+      return '#7f8c99';
+  }
 }
 
 // ============================================================================
@@ -316,9 +418,26 @@ interface InputAreaProps {
   onEffortChange: (level: string) => void;
   permissionMode?: string;
   toolActivity: ToolActivity | null;
+  statusControl?: React.ReactNode;
+  footerControls?: React.ReactNode;
+  onOpenMcpManager: () => void;
+  onOpenPluginManager: () => void;
 }
 
-function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, onEffortChange, toolActivity, permissionMode }: InputAreaProps) {
+function InputArea({
+  isStreaming,
+  isStarting,
+  onSend,
+  onInterrupt,
+  effortLevel,
+  onEffortChange,
+  toolActivity,
+  permissionMode,
+  statusControl,
+  footerControls,
+  onOpenMcpManager,
+  onOpenPluginManager,
+}: InputAreaProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [inputValue, setInputValue] = useState('');
   const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
@@ -327,6 +446,8 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
   const { filteredCommands, isLoaded: slashCommandsLoaded } = useSlashCommands();
   const [slashMenuVisible, setSlashMenuVisible] = useState(false);
   const [slashQuery, setSlashQuery] = useState('');
+  const slashCommands = filteredCommands(slashQuery);
+  const hasVisibleSlashMenu = slashMenuVisible && (!slashCommandsLoaded || slashCommands.length > 0);
   const { results: atResults, isLoading: atLoading, query: queryAtMentions, clear: clearAtMentions } = useAtMentions();
   const [atPickerVisible, setAtPickerVisible] = useState(false);
   const atStartPosRef = useRef(-1);
@@ -344,7 +465,7 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
           name: f.name,
           content: f.content,
         }));
-        setAttachments((prev) => [...prev, ...newAttachments]);
+        setAttachments((prev) => mergeAttachments(prev, newAttachments));
       }
     };
     window.addEventListener('message', handler);
@@ -354,8 +475,8 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
   const doSend = useCallback(() => {
     const text = inputValue.trim();
     if (!text && attachments.length === 0) return;
-    if (isStreaming || isStarting) return;
-    onSend(text);
+    if (isStarting) return;
+    onSend(buildMessageText(text, attachments));
     setInputValue('');
     setAttachments([]);
     setSlashMenuVisible(false);
@@ -364,11 +485,11 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [inputValue, attachments, isStreaming, isStarting, onSend, clearAtMentions]);
+  }, [inputValue, attachments, isStarting, onSend, clearAtMentions]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // If a picker is open, let it handle arrow keys / enter
-    if (atPickerVisible || slashMenuVisible) {
+    if (atPickerVisible || hasVisibleSlashMenu) {
       if (['ArrowUp', 'ArrowDown', 'Enter', 'Tab'].includes(e.key)) {
         return; // pickers handle these via capture listener
       }
@@ -382,7 +503,7 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
 
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (isStreaming) {
+      if (isStreaming && !inputValue.trim() && attachments.length === 0) {
         // Enter during streaming interrupts the current turn.
         onInterrupt();
       } else {
@@ -484,19 +605,6 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
     }
   }, [onSend]);
 
-  const handleSlashButtonClick = useCallback(() => {
-    if (slashMenuVisible) {
-      setSlashMenuVisible(false);
-    } else {
-      setSlashMenuVisible(true);
-      setSlashQuery('');
-    }
-  }, [slashMenuVisible]);
-
-  const handlePaperclipClick = useCallback(() => {
-    vscode.postMessage({ type: 'file_picker_request' });
-  }, []);
-
   const [addMenuVisible, setAddMenuVisible] = useState(false);
   const addMenuRef = useRef<HTMLDivElement>(null);
 
@@ -530,7 +638,7 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
 
   const placeholder = isStarting
     ? 'Starting GakrCLI...'
-    : 'How can I help? (@ to mention files, / for commands)';
+    : 'How can I help? @ to mention files';
 
   // Keep the textarea enabled during streaming so the user can keep drafting.
   // Only disable during initial CLI startup
@@ -549,8 +657,8 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
         onDismiss={() => { setAtPickerVisible(false); clearAtMentions(); }}
       />
       <SlashCommandMenu
-        commands={filteredCommands(slashQuery)}
-        isVisible={slashMenuVisible}
+        commands={slashCommands}
+        isVisible={hasVisibleSlashMenu}
         isLoaded={slashCommandsLoaded}
         query={slashQuery}
         onSelect={handleSlashSelect}
@@ -600,17 +708,17 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
           className="sendButton"
           disabled={sendDisabled}
           onClick={() => {
-            if (isStreaming) {
+            if (isStreaming && !inputValue.trim() && attachments.length === 0) {
               onInterrupt();
             } else {
               doSend();
             }
           }}
-          title={isStreaming ? 'Stop generation (Escape)' : 'Send message (Enter)'}
+          title={isStreaming && !inputValue.trim() && attachments.length === 0 ? 'Stop generation (Escape)' : 'Send message (Enter)'}
           data-permission-mode={permissionMode}
           style={{ flexShrink: 0, margin: '0 6px 8px 0' }}
         >
-          {isStreaming ? (
+          {isStreaming && !inputValue.trim() && attachments.length === 0 ? (
             /* Stop icon */
             <svg className="stopIcon" viewBox="0 0 16 16" fill="currentColor">
               <rect x="3" y="3" width="10" height="10" rx="2" />
@@ -627,16 +735,6 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
       {/* Toolbar row */}
       <div className="input-footer">
         {/* Left: action buttons */}
-        <ToolbarIconButton onClick={handleSlashButtonClick} title="Slash commands" disabled={textareaDisabled}>
-          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13 }}>/</span>
-        </ToolbarIconButton>
-
-        <ToolbarIconButton onClick={handlePaperclipClick} title="Attach file" disabled={textareaDisabled}>
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M13.5 7.5l-6 6a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" />
-          </svg>
-        </ToolbarIconButton>
-
         <div style={{ position: 'relative' }} ref={addMenuRef}>
           <ToolbarIconButton onClick={handleAddClick} title="Add content" disabled={textareaDisabled}>
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
@@ -661,7 +759,7 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
             >
               <AddContentMenuItem
                 icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M13.5 7.5l-6 6a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" /></svg>}
-                label="Upload from computer"
+                label="Add files and photos"
                 onClick={() => {
                   vscode.postMessage({ type: 'file_picker_request' });
                   setAddMenuVisible(false);
@@ -711,9 +809,28 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
                   }
                 }}
               />
+              <AddContentMenuItem
+                icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 4h10M3 8h10M3 12h10"/><circle cx="1.5" cy="4" r=".5" fill="currentColor"/><circle cx="1.5" cy="8" r=".5" fill="currentColor"/><circle cx="1.5" cy="12" r=".5" fill="currentColor"/></svg>}
+                label="MCP servers"
+                onClick={() => {
+                  setAddMenuVisible(false);
+                  onOpenMcpManager();
+                }}
+              />
+              <AddContentMenuItem
+                icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6.5 2.5h3v3h-3zM2.5 10.5h3v3h-3zM10.5 10.5h3v3h-3zM8 5.5v2.2M4 10.5V8h8v2.5"/></svg>}
+                label="Plugins"
+                onClick={() => {
+                  setAddMenuVisible(false);
+                  onOpenPluginManager();
+                }}
+              />
             </div>
           )}
         </div>
+
+        {statusControl}
+        {footerControls}
 
         {/* Spacer */}
         <div style={{ flex: 1 }} />
@@ -791,6 +908,61 @@ function InputArea({ isStreaming, isStarting, onSend, onInterrupt, effortLevel, 
   );
 }
 
+function buildMessageText(text: string, attachments: AttachmentItem[]): string {
+  const attachmentRefs = uniqueAttachments(attachments)
+    .map(formatAttachmentReference)
+    .filter((ref): ref is string => Boolean(ref));
+
+  if (attachmentRefs.length === 0) {
+    return text;
+  }
+
+  const prefix = attachmentRefs.join(' ');
+  return text ? `${prefix}\n${text}` : prefix;
+}
+
+function mergeAttachments(prev: AttachmentItem[], incoming: AttachmentItem[]): AttachmentItem[] {
+  const seen = new Set(prev.map(attachmentKey));
+  const next = [...prev];
+
+  for (const attachment of incoming) {
+    const key = attachmentKey(attachment);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    next.push(attachment);
+  }
+
+  return next;
+}
+
+function uniqueAttachments(attachments: AttachmentItem[]): AttachmentItem[] {
+  return mergeAttachments([], attachments);
+}
+
+function attachmentKey(attachment: AttachmentItem): string {
+  return `${attachment.type}:${attachment.content || attachment.name}`.toLowerCase();
+}
+
+function formatAttachmentReference(attachment: AttachmentItem): string | null {
+  if (attachment.type === 'file' || attachment.type === 'image') {
+    return quoteAtReference(attachment.content);
+  }
+  if (attachment.type === 'url') {
+    return attachment.content;
+  }
+  if (attachment.type === 'text') {
+    return attachment.content;
+  }
+  return null;
+}
+
+function quoteAtReference(value: string): string {
+  const escaped = value.replace(/"/g, '\\"');
+  return `@"${escaped}"`;
+}
+
 function ToolbarIconButton({
   onClick,
   title,
@@ -804,6 +976,7 @@ function ToolbarIconButton({
 }) {
   return (
     <button
+      className="toolbar-icon-button"
       onClick={onClick}
       disabled={disabled}
       title={title}
@@ -816,7 +989,6 @@ function ToolbarIconButton({
         height: 26,
         borderRadius: 'var(--corner-radius-small)',
         border: 'none',
-        background: 'transparent',
         cursor: disabled ? 'not-allowed' : 'pointer',
         color: 'var(--app-secondary-foreground)',
         opacity: disabled ? 0.4 : 1,
@@ -845,6 +1017,7 @@ function AddContentMenuItem({
 }) {
   return (
     <button
+      className="add-content-menu-item"
       onClick={onClick}
       style={{
         display: 'flex',
@@ -853,7 +1026,6 @@ function AddContentMenuItem({
         width: '100%',
         padding: '6px 12px',
         border: 'none',
-        background: 'transparent',
         color: 'var(--app-primary-foreground)',
         fontSize: 12,
         cursor: 'pointer',

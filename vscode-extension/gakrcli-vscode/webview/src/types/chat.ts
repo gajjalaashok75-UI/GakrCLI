@@ -30,6 +30,20 @@ export interface ChatMessage {
   parentToolUseId: string | null;
   /** Model that generated this message (for assistant messages) */
   model?: string;
+  /** Final cost and usage for the conversation after this assistant turn completed */
+  cost?: SessionCost;
+  /** Whether this assistant turn was stopped by the user */
+  interrupted?: boolean;
+  /** Specialized rendering for inline system status markers */
+  systemKind?: 'compact-start' | 'compact-done';
+}
+
+export type TodoStatus = 'pending' | 'in_progress' | 'completed';
+
+export interface TodoItem {
+  content: string;
+  status: TodoStatus;
+  activeForm?: string;
 }
 
 /** Accumulated state of a single streaming assistant turn */

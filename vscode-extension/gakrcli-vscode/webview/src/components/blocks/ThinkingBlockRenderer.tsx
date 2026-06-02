@@ -9,7 +9,7 @@ interface ThinkingBlockRendererProps {
 
 export const ThinkingBlockRenderer: React.FC<ThinkingBlockRendererProps> = ({ block, showSummaries }) => {
   const displayText = showSummaries && block.summary ? block.summary : block.thinking;
-  const label = showSummaries && block.summary ? block.summary : 'Thinking…';
+  const label = showSummaries && block.summary ? block.summary : 'Thinking...';
 
   if (block.isStreaming) {
     return (
@@ -18,7 +18,7 @@ export const ThinkingBlockRenderer: React.FC<ThinkingBlockRendererProps> = ({ bl
           <svg className="thinking-toggle" viewBox="0 0 16 16" fill="currentColor" style={{ animation: 'pulse 1.5s ease-in-out infinite' }}>
             <circle cx="8" cy="8" r="3"/>
           </svg>
-          Thinking…
+          Thinking...
         </div>
         <div className="thinking-content" style={{ fontSize: 12 }}>
           {block.thinking}

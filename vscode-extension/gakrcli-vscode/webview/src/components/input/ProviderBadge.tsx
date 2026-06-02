@@ -39,7 +39,11 @@ const BUILTIN_PROVIDERS = [
   { id: 'codex', label: 'Codex (ChatGPT)', requiresApiKey: false, requiresBaseUrl: false, supportsModel: true, defaultBaseUrl: 'https://api.codex.openai.com/v1' },
 ];
 
-export function ProviderBadge() {
+interface ProviderBadgeProps {
+  showModel?: boolean;
+}
+
+export function ProviderBadge({ showModel = true }: ProviderBadgeProps) {
   const [currentProviderId, setCurrentProviderId] = useState('anthropic');
   const [currentLabel, setCurrentLabel] = useState('Anthropic');
   const [currentModel, setCurrentModel] = useState<string | undefined>();
@@ -94,29 +98,30 @@ export function ProviderBadge() {
     vscode.postMessage({ type: 'get_provider_state' });
   };
 
-  const modelLabel = currentModel ? ` · ${currentModel}` : '';
+  const modelLabel = showModel && currentModel ? ` - ${currentModel}` : '';
 
   return (
     <>
       <button
+        className="glass-control"
         onClick={() => setPickerOpen(true)}
-        title="Change provider"
+        title={showModel && currentModel ? `Change provider - ${currentModel}` : 'Change provider'}
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: 4,
           padding: '2px 6px',
           fontSize: 11,
-          background: 'transparent',
-          border: '1px solid var(--app-input-border)',
           borderRadius: 'var(--corner-radius-small)',
           color: 'var(--app-secondary-foreground)',
           cursor: 'pointer',
           whiteSpace: 'nowrap',
+          minWidth: 0,
+          maxWidth: 260,
         }}
       >
         <ProviderIcon providerId={currentProviderId} />
-        <span>{currentLabel}{modelLabel}</span>
+        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{currentLabel}{modelLabel}</span>
         <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor" style={{ opacity: 0.6 }}>
           <path d="M1 2.5l3 3 3-3" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" />
         </svg>

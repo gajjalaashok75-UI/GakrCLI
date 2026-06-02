@@ -89,7 +89,121 @@ export function findActualString(
     return fileContent.substring(searchIndex, searchIndex + searchString.length)
   }
 
+  const leadingWhitespaceFlexibleMatch = findLeadingWhitespaceFlexibleString(
+    fileContent,
+    searchString,
+  )
+  if (leadingWhitespaceFlexibleMatch !== null) {
+    return leadingWhitespaceFlexibleMatch
+  }
+
   return null
+}
+
+type LineSpan = {
+  body: string
+  eol: string
+  start: number
+  bodyEnd: number
+  end: number
+}
+
+function findLeadingWhitespaceFlexibleString(
+  fileContent: string,
+  searchString: string,
+): string | null {
+  const searchLines = splitLineSpans(searchString)
+  if (searchLines.length < 2) {
+    return null
+  }
+
+  const searchBodies = searchLines.map(line => stripLeadingHorizontalWhitespace(line.body))
+  if (searchBodies.every(body => body.length === 0)) {
+    return null
+  }
+
+  const fileLines = splitLineSpans(fileContent)
+  if (fileLines.length < searchLines.length) {
+    return null
+  }
+
+  const matches: string[] = []
+  for (let fileLineIndex = 0; fileLineIndex <= fileLines.length - searchLines.length; fileLineIndex++) {
+    let matched = true
+
+    for (let searchLineIndex = 0; searchLineIndex < searchLines.length; searchLineIndex++) {
+      const fileLine = fileLines[fileLineIndex + searchLineIndex]
+      const expectedBody = searchBodies[searchLineIndex]
+      if (
+        !fileLine ||
+        stripLeadingHorizontalWhitespace(fileLine.body) !== expectedBody
+      ) {
+        matched = false
+        break
+      }
+    }
+
+    if (matched) {
+      const firstLine = fileLines[fileLineIndex]
+      const lastLine = fileLines[fileLineIndex + searchLines.length - 1]
+      if (!firstLine || !lastLine) {
+        continue
+      }
+
+      const lastSearchLine = searchLines[searchLines.length - 1]
+      const end = lastSearchLine?.eol ? lastLine.end : lastLine.bodyEnd
+      matches.push(fileContent.slice(firstLine.start, end))
+      if (matches.length > 1) {
+        return null
+      }
+    }
+  }
+
+  return matches[0] ?? null
+}
+
+function splitLineSpans(value: string): LineSpan[] {
+  const lines: LineSpan[] = []
+  let start = 0
+
+  while (start < value.length) {
+    let newlineIndex = -1
+    for (let index = start; index < value.length; index++) {
+      const char = value[index]
+      if (char === '\n' || char === '\r') {
+        newlineIndex = index
+        break
+      }
+    }
+
+    if (newlineIndex === -1) {
+      lines.push({
+        body: value.slice(start),
+        eol: '',
+        start,
+        bodyEnd: value.length,
+        end: value.length,
+      })
+      break
+    }
+
+    const isCrLf = value[newlineIndex] === '\r' && value[newlineIndex + 1] === '\n'
+    const eol = isCrLf ? '\r\n' : value[newlineIndex]!
+    lines.push({
+      body: value.slice(start, newlineIndex),
+      eol,
+      start,
+      bodyEnd: newlineIndex,
+      end: newlineIndex + eol.length,
+    })
+    start = newlineIndex + eol.length
+  }
+
+  return lines
+}
+
+function stripLeadingHorizontalWhitespace(value: string): string {
+  return value.replace(/^[ \t]+/, '')
 }
 
 /**
@@ -611,6 +725,16 @@ export function normalizeFileEditInput({
           ? new_string
           : stripTrailingWhitespace(new_string)
 
+        const anchoredDeletionEdit = normalizeAnchoredDeletionEdit({
+          fileContent,
+          old_string,
+          new_string: normalizedNewString,
+          replace_all,
+        })
+        if (anchoredDeletionEdit) {
+          return anchoredDeletionEdit
+        }
+
         // If exact string match works, keep it as is
         if (fileContent.includes(old_string)) {
           return {
@@ -654,6 +778,75 @@ export function normalizeFileEditInput({
   }
 
   return { file_path, edits }
+}
+
+function normalizeAnchoredDeletionEdit({
+  fileContent,
+  old_string,
+  new_string,
+  replace_all,
+}: {
+  fileContent: string
+  old_string: string
+  new_string: string
+  replace_all: boolean | undefined
+}): EditInput | null {
+  if (replace_all || !new_string || old_string === new_string) {
+    return null
+  }
+
+  const candidates: string[] = []
+  if (old_string.endsWith(new_string)) {
+    candidates.push(old_string.slice(0, old_string.length - new_string.length))
+  }
+  if (old_string.startsWith(new_string)) {
+    candidates.push(old_string.slice(new_string.length))
+  }
+
+  for (const candidate of candidates) {
+    if (!isSubstantialDeletionCandidate(candidate)) {
+      continue
+    }
+
+    const actualCandidate = findActualString(fileContent, candidate)
+    if (
+      actualCandidate &&
+      countOccurrences(fileContent, actualCandidate) === 1
+    ) {
+      return {
+        old_string: actualCandidate,
+        new_string: '',
+        replace_all,
+      }
+    }
+  }
+
+  return null
+}
+
+function isSubstantialDeletionCandidate(value: string): boolean {
+  const nonEmptyLines = value
+    .split(/\r\n|\n|\r/)
+    .filter(line => line.trim().length > 0)
+
+  return value.trim().length >= 40 && nonEmptyLines.length >= 2
+}
+
+function countOccurrences(value: string, search: string): number {
+  if (!search) {
+    return 0
+  }
+
+  let count = 0
+  let start = 0
+  while (true) {
+    const index = value.indexOf(search, start)
+    if (index === -1) {
+      return count
+    }
+    count++
+    start = index + search.length
+  }
 }
 
 /**

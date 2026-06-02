@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react';
-import { fuzzySearch } from '../utils/fuzzySearch';
 
 export interface SlashCommandDef {
   name: string;
@@ -13,17 +12,36 @@ interface UseSlashCommandsReturn {
   isLoaded: boolean;
 }
 
-/** GakrCLI-specific commands that are always available */
-const GAKRCLI_COMMANDS: SlashCommandDef[] = [
-  { name: 'provider', description: 'Set up and save a third-party provider profile', argumentHint: '' },
-  { name: 'providers', description: 'Set up and save a third-party provider profile', argumentHint: '' },
-];
+/** Compatibility hook for legacy local fallbacks; SDK-provided commands are authoritative. */
+export const GAKRCLI_COMMANDS: SlashCommandDef[] = [];
 
-/** Merge GakrCLI-specific commands into the list (avoiding duplicates) */
-function mergeGakrCLICommands(cmds: SlashCommandDef[]): SlashCommandDef[] {
-  const existing = new Set(cmds.map((c) => c.name));
-  const toAdd = GAKRCLI_COMMANDS.filter((c) => !existing.has(c.name));
-  return [...cmds, ...toAdd];
+/** Normalize and dedupe host-provided commands. */
+export function mergeGakrCLICommands(cmds: SlashCommandDef[]): SlashCommandDef[] {
+  const byName = new Map<string, SlashCommandDef>();
+  for (const command of cmds) {
+    const name = command.name.trim().replace(/^\//, '');
+    if (!name || byName.has(name)) {
+      continue;
+    }
+    byName.set(name, { ...command, name });
+  }
+
+  for (const command of GAKRCLI_COMMANDS) {
+    if (!byName.has(command.name)) {
+      byName.set(command.name, command);
+    }
+  }
+
+  return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function filterSlashCommands(commands: SlashCommandDef[], query: string): SlashCommandDef[] {
+  if (!query) return commands;
+
+  const q = (query.startsWith('/') ? query.slice(1) : query).trim().toLowerCase();
+  return commands
+    .filter((cmd) => cmd.name.toLowerCase().startsWith(q))
+    .slice(0, 50);
 }
 
 /**
@@ -38,7 +56,8 @@ export function useSlashCommands(): UseSlashCommandsReturn {
     const handler = (event: MessageEvent) => {
       const message = event.data;
       if (message.type === 'slash_commands_available') {
-        setCommands(mergeGakrCLICommands(message.commands));
+        const hostCommands = normalizeCommands(message.commands);
+        setCommands(mergeGakrCLICommands(hostCommands));
         setIsLoaded(true);
       }
       // Also extract slash_commands from system/init message
@@ -47,19 +66,18 @@ export function useSlashCommands(): UseSlashCommandsReturn {
       if (message.type === 'cli_output') {
         const data = message.data as Record<string, unknown> | undefined;
         if (data?.type === 'system' && data.subtype === 'init' && Array.isArray(data.slash_commands)) {
-          // slash_commands in system/init are just strings (command names), not objects
-          // Only use them as fallback if we have no commands yet
-          if (commands.length === 0) {
-            const cmds = (data.slash_commands as string[]).map((name) => ({
-              name: typeof name === 'string' ? name : (name as Record<string, unknown>).name as string || '',
-              description: typeof name === 'object' ? (name as Record<string, unknown>).description as string || '' : '',
-              argumentHint: typeof name === 'object' ? (name as Record<string, unknown>).argument_hint as string || '' : '',
-            })).filter((c) => c.name);
+          setCommands((current) => {
+            const hasOnlyBuiltins = current.every((cmd) =>
+              GAKRCLI_COMMANDS.some((builtin) => builtin.name === cmd.name),
+            );
+            if (!hasOnlyBuiltins) return current;
+            const cmds = normalizeCommands(data.slash_commands);
             if (cmds.length > 0) {
-              setCommands(mergeGakrCLICommands(cmds));
               setIsLoaded(true);
+              return mergeGakrCLICommands(cmds);
             }
-          }
+            return current;
+          });
         }
       }
     };
@@ -70,14 +88,38 @@ export function useSlashCommands(): UseSlashCommandsReturn {
 
   const filteredCommands = useMemo(() => {
     return (query: string): SlashCommandDef[] => {
-      if (!query) return commands;
-
-      // Strip leading / if present
-      const q = query.startsWith('/') ? query.slice(1) : query;
-      const matches = fuzzySearch(q, commands, (cmd) => cmd.name);
-      return matches.map((m) => m.item);
+      return filterSlashCommands(commands, query);
     };
   }, [commands]);
 
   return { commands, filteredCommands, isLoaded };
+}
+
+export function normalizeCommands(value: unknown): SlashCommandDef[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((command): SlashCommandDef => {
+      if (typeof command === 'string') {
+        return {
+          name: command.replace(/^\//, ''),
+          description: '',
+          argumentHint: '',
+        };
+      }
+
+      if (command && typeof command === 'object') {
+        const record = command as Record<string, unknown>;
+        return {
+          name: String(record.name ?? record.command ?? '').replace(/^\//, ''),
+          description: String(record.description ?? ''),
+          argumentHint: String(record.argument_hint ?? record.argumentHint ?? ''),
+        };
+      }
+
+      return { name: '', description: '', argumentHint: '' };
+    })
+    .filter((command) => command.name);
 }

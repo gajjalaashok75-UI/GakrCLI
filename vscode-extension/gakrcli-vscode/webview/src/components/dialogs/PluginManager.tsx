@@ -108,10 +108,10 @@ export function PluginManager({ isOpen, onClose }: PluginManagerProps) {
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-[var(--vscode-editor-background)] border border-[var(--vscode-panel-border)] rounded-lg shadow-xl w-[600px] max-h-[80vh] flex flex-col">
+    <div className="glass-dialog-backdrop fixed inset-0 z-50 flex items-center justify-center">
+      <div className="glass-dialog rounded-lg w-[600px] max-h-[80vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--vscode-panel-border)]">
+        <div className="glass-dialog-section flex items-center justify-between px-4 py-3 border-b">
           <h2 className="text-sm font-semibold text-[var(--vscode-foreground)]">Plugins</h2>
           <button
             onClick={onClose}
@@ -122,7 +122,7 @@ export function PluginManager({ isOpen, onClose }: PluginManagerProps) {
         </div>
 
         {/* Tabs + Search */}
-        <div className="px-4 pt-2 pb-1 border-b border-[var(--vscode-panel-border)]">
+        <div className="glass-dialog-section px-4 pt-2 pb-1 border-b">
           <div className="flex items-center gap-4 mb-2">
             <button
               onClick={() => setTab('installed')}
@@ -150,7 +150,7 @@ export function PluginManager({ isOpen, onClose }: PluginManagerProps) {
             placeholder={tab === 'installed' ? 'Search installed plugins...' : 'Search marketplace...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-2 py-1.5 text-xs rounded bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] placeholder-[var(--vscode-input-placeholderForeground)]"
+            className="glass-input w-full px-2 py-1.5 text-xs rounded placeholder-[var(--vscode-input-placeholderForeground)]"
           />
         </div>
 
@@ -169,8 +169,8 @@ export function PluginManager({ isOpen, onClose }: PluginManagerProps) {
                   {filteredPlugins.map((plugin) => (
                     <li
                       key={plugin.name}
-                      className={`px-4 py-2.5 cursor-pointer hover:bg-[var(--vscode-list-hoverBackground)] ${
-                        selectedPlugin?.name === plugin.name ? 'bg-[var(--vscode-list-activeSelectionBackground)]' : ''
+                      className={`px-4 py-2.5 cursor-pointer ${
+                        selectedPlugin?.name === plugin.name ? 'glass-list-row-active' : 'glass-list-row'
                       }`}
                       onClick={() => setSelectedPlugin(plugin)}
                     >
@@ -238,7 +238,7 @@ export function PluginManager({ isOpen, onClose }: PluginManagerProps) {
                             <select
                               value={installScope}
                               onChange={(e) => setInstallScope(e.target.value as InstallScope)}
-                              className="text-[10px] px-1 py-0.5 rounded bg-[var(--vscode-dropdown-background)] text-[var(--vscode-dropdown-foreground)] border border-[var(--vscode-dropdown-border)]"
+                              className="glass-input text-[10px] px-1 py-0.5 rounded"
                             >
                               <option value="user">User</option>
                               <option value="project">Project</option>
@@ -246,7 +246,7 @@ export function PluginManager({ isOpen, onClose }: PluginManagerProps) {
                             </select>
                             <button
                               onClick={() => handleInstall(plugin.name)}
-                              className="text-[10px] px-2 py-0.5 rounded bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)]"
+                              className="glass-control text-[10px] px-2 py-0.5 rounded text-[var(--vscode-button-foreground)]"
                             >
                               Install
                             </button>
@@ -262,7 +262,7 @@ export function PluginManager({ isOpen, onClose }: PluginManagerProps) {
 
           {/* Detail panel */}
           {selectedPlugin && tab === 'installed' && (
-            <div className="w-[220px] border-l border-[var(--vscode-panel-border)] p-3 overflow-y-auto">
+            <div className="glass-dialog-section w-[220px] border-l p-3 overflow-y-auto">
               <h3 className="text-xs font-semibold text-[var(--vscode-foreground)] mb-2">{selectedPlugin.name}</h3>
               <div className="space-y-2 text-[11px] text-[var(--vscode-descriptionForeground)]">
                 <div><span className="font-medium">Version:</span> {selectedPlugin.version}</div>
@@ -314,7 +314,7 @@ export function PluginManager({ isOpen, onClose }: PluginManagerProps) {
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-2 border-t border-[var(--vscode-panel-border)] flex justify-between items-center">
+        <div className="glass-dialog-section px-4 py-2 border-t flex justify-between items-center">
           <button
             onClick={() => vscode.postMessage({ type: 'plugin_browse_marketplace' })}
             className="text-xs text-[var(--vscode-textLink-foreground)] hover:underline"
@@ -323,7 +323,7 @@ export function PluginManager({ isOpen, onClose }: PluginManagerProps) {
           </button>
           <button
             onClick={() => vscode.postMessage({ type: 'plugin_refresh' })}
-            className="text-xs px-3 py-1 rounded border border-[var(--vscode-panel-border)] text-[var(--vscode-foreground)] hover:bg-[var(--vscode-list-hoverBackground)]"
+            className="glass-control text-xs px-3 py-1 rounded text-[var(--vscode-foreground)]"
           >
             Refresh
           </button>

@@ -10,7 +10,7 @@ const buildOptions = {
   entryPoints: [resolve(extensionRoot, 'src/extension.ts')],
   bundle: true,
   outfile: resolve(extensionRoot, 'dist/extension.js'),
-  external: ['vscode'],
+  external: ['vscode', '@gakr-gakr/gakrcli/sdk'],
   format: 'cjs',
   platform: 'node',
   target: 'node18',

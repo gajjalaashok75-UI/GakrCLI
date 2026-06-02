@@ -18,12 +18,11 @@ export function OnboardingChecklist({ visible, onDismiss, onOpenWalkthrough }: O
 
   return (
     <div
+      className="onboarding-glass-card"
       style={{
-        border: '1px solid var(--vscode-panel-border, #444)',
         borderRadius: 6,
         padding: '12px 16px',
         marginBottom: 12,
-        background: 'var(--vscode-editor-background)',
         fontSize: 13,
       }}
     >

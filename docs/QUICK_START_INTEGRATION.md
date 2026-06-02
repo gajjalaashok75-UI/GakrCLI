@@ -1,31 +1,42 @@
 # GakrCLI + VS Code Extension Quick Start
 
-This guide covers the current CLI package (`0.5.3`) and the VS Code extension package (`0.2.0`).
+This guide covers:
 
-## Install
+- GakrCLI CLI package: `0.5.5`
+- GakrCLI VS Code extension: `0.2.3`
+
+## Install The CLI
 
 ```bash
-npm install -g @gakr-gakr/gakrcli
+npm install -g @gakr-gakr/gakrcli@0.5.5
 gakrcli --version
 ```
 
-Install the VS Code extension from the marketplace or from the extension folder:
+## Install The VS Code Extension
+
+From Marketplace:
+
+```bash
+code --install-extension gakr-gakr.gakrcli-vscode
+```
+
+From a local VSIX:
 
 ```bash
 cd vscode-extension/gakrcli-vscode
-npm run package
-code --install-extension gakrcli-vscode-0.2.0.vsix
+npx @vscode/vsce package
+code --install-extension gakrcli-vscode-0.2.3.vsix
 ```
 
 ## Configure A Provider
 
-The easiest path is to start GakrCLI and run `/provider`.
+The recommended path is:
 
 ```bash
 gakrcli
 ```
 
-Then inside the CLI:
+Then inside GakrCLI:
 
 ```text
 /provider
@@ -61,32 +72,36 @@ export GEMINI_MODEL=gemini-3-flash-preview
 ## Use In VS Code
 
 1. Open a workspace folder.
-2. Open the GakrCLI activity-bar view.
-3. Use `GakrCLI: Launch in Terminal` or `GakrCLI: Launch in Workspace Root`.
-4. Use `Ctrl+Shift+L` (`Cmd+Shift+L` on macOS) to open the chat panel.
+2. Run `GakrCLI: Open` from the Command Palette.
+3. Use `@` to mention files and `/` to open slash commands.
+4. Use the lower composer row to switch permission mode, provider, context meter, and Fast mode.
+5. Expand tool rows when you want to inspect commands, inputs, and results.
 
-The extension shows whether the configured `gakrcli` command is available, which workspace it will launch from, and the provider status it can infer from the workspace profile or environment.
+The native webview uses the GakrCLI SDK. Terminal mode is still available with `GakrCLI: Open in Terminal`.
 
-## Extension Settings
+## Validate Before Publishing
 
-- `gakrcli.launchCommand`: command used to launch GakrCLI, default `gakrcli`.
-- `gakrcli.terminalName`: integrated terminal name, default `GakrCLI`.
-- `gakrcli.useOpenAIShim`: optionally injects `GAKR_CODE_USE_OPENAI=1` into launched terminals.
-- `gakrcli.permissionMode`: `default`, `acceptEdits`, `bypassPermissions`, or `plan`.
-
-## Validate Before Push
-
-From the repo root:
+From the repository root:
 
 ```bash
-bun run typecheck
-bun test
-bun run smoke
+bun.cmd run build
+bun.cmd test src/tools/FileEditTool/utils.test.ts
+npm.cmd pack --dry-run
+```
+
+From `vscode-extension/gakrcli-vscode/webview`:
+
+```bash
+npm.cmd run build
 ```
 
 From `vscode-extension/gakrcli-vscode`:
 
 ```bash
-npm run test
-npm run lint
+npm.cmd test
+npm.cmd run build:extension
+npx.cmd @vscode/vsce package
+npx.cmd @vscode/vsce ls --tree
 ```
+
+Typecheck is not a required publication gate for this release because there is known broader TypeScript debt outside the validated publishing path.

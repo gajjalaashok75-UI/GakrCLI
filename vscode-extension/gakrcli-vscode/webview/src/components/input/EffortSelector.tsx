@@ -32,13 +32,13 @@ export function EffortSelector({ currentEffort, disabled, onEffortChange }: Effo
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-flex' }}>
       <button
+        className="glass-control"
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
         title={`Effort: ${current.label}`}
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           width: 26, height: 26, borderRadius: 'var(--corner-radius-small)',
-          border: 'none', background: 'transparent',
           cursor: disabled ? 'not-allowed' : 'pointer',
           color: 'var(--app-secondary-foreground)',
           opacity: disabled ? 0.4 : 1, padding: 0, fontSize: 13, fontFamily: 'monospace',
@@ -47,14 +47,13 @@ export function EffortSelector({ currentEffort, disabled, onEffortChange }: Effo
         {current.bar}
       </button>
       {isOpen && (
-        <div style={{
+        <div className="glass-menu" style={{
           position: 'absolute', bottom: '100%', right: 0, marginBottom: 4,
-          width: 160, background: 'var(--app-menu-background)',
-          border: '1px solid var(--app-input-border)',
+          width: 160,
           borderRadius: 'var(--corner-radius-medium)',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.3)', zIndex: 50,
+          zIndex: 50,
         }}>
-          <div style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, color: 'var(--app-secondary-foreground)', borderBottom: '1px solid var(--app-input-border)' }}>
+          <div className="glass-menu-header" style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, color: 'var(--app-secondary-foreground)' }}>
             Effort Level
           </div>
           {EFFORTS.map((e) => (
@@ -68,6 +67,7 @@ export function EffortSelector({ currentEffort, disabled, onEffortChange }: Effo
                 }
                 setIsOpen(false);
               }}
+              className={e.value === currentEffort ? 'glass-list-row-active' : 'glass-list-row'}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8, width: '100%',
                 padding: '7px 12px', fontSize: 12, textAlign: 'left',

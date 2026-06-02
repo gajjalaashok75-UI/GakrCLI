@@ -811,6 +811,26 @@ function refreshConfig(): void {
   BaseSandboxManager.updateConfig(newConfig)
 }
 
+function annotateStderrWithSandboxFailures(
+  command: string,
+  stderr: string,
+): string {
+  const annotate = (
+    BaseSandboxManager as unknown as {
+      annotateStderrWithSandboxFailures?: (
+        command: string,
+        stderr: string,
+      ) => string
+    }
+  ).annotateStderrWithSandboxFailures
+
+  if (typeof annotate !== 'function') {
+    return stderr
+  }
+
+  return annotate.call(BaseSandboxManager, command, stderr)
+}
+
 /**
  * Reset sandbox state and clear memoized values
  */
@@ -967,8 +987,7 @@ export const SandboxManager: ISandboxManager = {
   getLinuxSocksSocketPath: BaseSandboxManager.getLinuxSocksSocketPath,
   waitForNetworkInitialization: BaseSandboxManager.waitForNetworkInitialization,
   getSandboxViolationStore: BaseSandboxManager.getSandboxViolationStore,
-  annotateStderrWithSandboxFailures:
-    BaseSandboxManager.annotateStderrWithSandboxFailures,
+  annotateStderrWithSandboxFailures,
   cleanupAfterCommand: (): void => {
     BaseSandboxManager.cleanupAfterCommand()
     scrubBareGitRepoFiles()
