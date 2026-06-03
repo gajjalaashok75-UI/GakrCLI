@@ -279,7 +279,7 @@ function isSessionMemoryPath(absolutePath: string): boolean {
 
 /**
  * Check if file is within the current project's directory.
- * Path format: ~/.gakrcli/projects/{sanitized-cwd}/...
+ * Path format: ~/.gakrcli/workspace/projects/{sanitized-cwd}/...
  */
 function isProjectDirPath(absolutePath: string): boolean {
   const projectDir = getProjectDir(getCwd())
@@ -1629,7 +1629,7 @@ export function checkReadableInternalPath(
   }
 
   // Project directory (for reading past session memories)
-  // Path format: ~/.gakrcli/projects/{sanitized-cwd}/...
+  // Path format: ~/.gakrcli/workspace/projects/{sanitized-cwd}/...
   if (isProjectDirPath(normalizedPath)) {
     return {
       behavior: 'allow',

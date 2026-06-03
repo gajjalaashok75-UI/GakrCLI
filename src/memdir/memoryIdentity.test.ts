@@ -10,6 +10,12 @@ test('memory prompts use GakrCLI identity and docs names', () => {
   ].join('\n')
 
   expect(promptText).toContain('GAKRCLI.md')
+  expect(promptText).toContain('Workspace files vs project auto-memory')
+  expect(promptText).toContain('Project-specific auto-memory lives at')
+  expect(promptText).toContain('Workspace-level memory and identity live at')
+  expect(promptText).toContain('RULEBOOK.md')
+  expect(promptText).toContain('IDENTITY.md')
+  expect(promptText).toContain('SOUL.md')
   expect(promptText).not.toContain('CLAUDE.md')
   expect(promptText).not.toContain('Claude Code')
 })

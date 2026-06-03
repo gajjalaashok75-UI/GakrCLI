@@ -673,7 +673,9 @@ class QueryImpl implements Query {
           }))
 
           await self.refreshSlashCommands()
-          self.engine.setCommands(self.slashCommandRegistry)
+          if (typeof self.engine.setCommands === 'function') {
+            self.engine.setCommands(self.slashCommandRegistry)
+          }
 
           // Inject agents into the engine
           if (self.userAgents && Object.keys(self.userAgents).length > 0) {

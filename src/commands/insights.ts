@@ -19,14 +19,13 @@ import {
   LEGACY_AGENT_TOOL_NAME,
 } from '../tools/AgentTool/constants.js'
 import type { LogOption } from '../types/logs.js'
-import { getGakrcliConfigHomeDir } from '../utils/envUtils.js'
+import { getGakrcliConfigHomeDir, getProjectsDir } from '../utils/envUtils.js'
 import { toError } from '../utils/errors.js'
 import { execFileNoThrow } from '../utils/execFileNoThrow.js'
 import { logError } from '../utils/log.js'
 import { extractTextContent } from '../utils/messages.js'
 import { getDefaultOpusModel } from '../utils/model/model.js'
 import {
-  getProjectsDir,
   getSessionFilesWithMtime,
   getSessionIdFromLog,
   loadAllLogsFromSessionFile,
@@ -86,7 +85,7 @@ const getRemoteHostSessionCount: (hs: string) => Promise<number> =
           'ssh',
           [
             `${homespace}.coder`,
-            'find /root/.gakrcli/projects -name "*.jsonl" 2>/dev/null | wc -l',
+            'find /root/.gakrcli/workspace/projects -name "*.jsonl" 2>/dev/null | wc -l',
           ],
           { timeout: 30000 },
         )
@@ -110,7 +109,11 @@ const collectFromRemoteHost: (
           // SCP the projects folder
           const scpResult = await execFileNoThrow(
             'scp',
-            ['-rq', `${homespace}.coder:/root/.gakrcli/projects/`, tempDir],
+            [
+              '-rq',
+              `${homespace}.coder:/root/.gakrcli/workspace/projects/`,
+              tempDir,
+            ],
             { timeout: 300000 },
           )
           if (scpResult.code !== 0) {
@@ -1416,7 +1419,7 @@ Include 3 friction categories with 2 examples each.`,
 RESPOND WITH ONLY A VALID JSON OBJECT:
 {
   "gakr_md_additions": [
-    {"addition": "A specific line or block to add to GAKR.md based on workflow patterns. E.g., 'Always run tests after modifying auth-related files'", "why": "1 sentence explaining why this would help based on actual sessions", "prompt_scaffold": "Instructions for where to add this in GAKR.md. E.g., 'Add under ## Testing section'"}
+    {"addition": "A specific line or block to add to GAKRCLI.md based on workflow patterns. E.g., 'Always run tests after modifying auth-related files'", "why": "1 sentence explaining why this would help based on actual sessions", "prompt_scaffold": "Instructions for where to add this in GAKRCLI.md. E.g., 'Add under ## Testing section'"}
   ],
   "features_to_try": [
     {"feature": "Feature name from GAKR FEATURES REFERENCE above", "one_liner": "What it does", "why_for_you": "Why this would help YOU based on your sessions", "example_code": "Actual command or config to copy"}
@@ -2068,8 +2071,8 @@ function generateHtmlReport(
         ? `
     <h2 id="section-features">Existing Gakr Features to Try</h2>
     <div class="gakrcli-md-section">
-      <h3>Suggested GAKR.md Additions</h3>
-      <p style="font-size: 12px; color: #64748b; margin-bottom: 12px;">Just copy this into Gakr to add it to your GAKR.md.</p>
+      <h3>Suggested GAKRCLI.md Additions</h3>
+      <p style="font-size: 12px; color: #64748b; margin-bottom: 12px;">Just copy this into Gakr to add it to your GAKRCLI.md.</p>
       <div class="gakrcli-md-actions">
         <button class="copy-all-btn" onclick="copyAllCheckedGakrMd()">Copy All Checked</button>
       </div>
@@ -2077,7 +2080,7 @@ function generateHtmlReport(
         .map(
           (add, i) => `
         <div class="gakrcli-md-item">
-          <input type="checkbox" id="cmd-${i}" class="cmd-checkbox" checked data-text="${escapeHtml(add.prompt_scaffold || add.where || 'Add to GAKR.md')}\\n\\n${escapeHtml(add.addition)}">
+          <input type="checkbox" id="cmd-${i}" class="cmd-checkbox" checked data-text="${escapeHtml(add.prompt_scaffold || add.where || 'Add to GAKRCLI.md')}\\n\\n${escapeHtml(add.addition)}">
           <label for="cmd-${i}">
             <code class="cmd-code">${escapeHtml(add.addition)}</code>
             <button class="copy-btn" onclick="copyCmdItem(${i})">Copy</button>
@@ -2805,7 +2808,7 @@ export async function generateUsageReport(options?: {
 
   // Optionally collect data from remote hosts first (ant-only)
   if (process.env.USER_TYPE === 'ant' && options?.collectRemote) {
-    const destDir = join(getGakrcliConfigHomeDir(), 'projects')
+    const destDir = getProjectsDir()
     const { hosts, totalCopied } = await collectAllRemoteHostData(destDir)
     remoteStats = { hosts, totalCopied }
   }

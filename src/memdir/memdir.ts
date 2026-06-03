@@ -19,7 +19,7 @@ import { GREP_TOOL_NAME } from '../tools/GrepTool/prompt.js'
 import { isReplModeEnabled } from '../tools/REPLTool/constants.js'
 import { logForDebugging } from '../utils/debug.js'
 import { hasEmbeddedSearchTools } from '../utils/embeddedTools.js'
-import { isEnvTruthy } from '../utils/envUtils.js'
+import { getGakrcliWorkspaceDir, isEnvTruthy } from '../utils/envUtils.js'
 import { formatFileSize } from '../utils/format.js'
 import { getProjectDir } from '../utils/sessionStorage.js'
 import { getInitialSettings } from '../utils/settings/settings.js'
@@ -123,9 +123,35 @@ export const DIRS_EXIST_GUIDANCE =
  * (once per session via systemPromptSection cache) so the model can always
  * write without checking existence first. FsOperations.mkdir is recursive
  * by default and already swallows EEXIST, so the full parent chain
- * (~/.gakrcli/projects/<slug>/memory/) is created in one call with no
+ * (~/.gakrcli/workspace/projects/<slug>/memory/) is created in one call with no
  * try/catch needed for the happy path.
  */
+export function buildWorkspacePersistenceLines(
+  projectMemoryDir: string,
+): string[] {
+  const workspaceDir = getGakrcliWorkspaceDir()
+  return [
+    '## Workspace files vs project auto-memory',
+    '',
+    `Project-specific auto-memory lives at \`${projectMemoryDir}\`. Use it for context tied to this repository or working directory, such as project decisions, incidents, external references, and user feedback that only applies here.`,
+    '',
+    `Workspace-level memory and identity live at \`${workspaceDir}\`. These files are loaded across projects and may be updated directly when the information is durable across the whole assistant workspace:`,
+    '',
+    '- `RULEBOOK.md`: stable rules, autonomy boundaries, memory policy, and harness-vs-assistant interpretation.',
+    '- `MEMORY.md`: curated cross-project memory that should apply across all projects.',
+    '- `USER.md`: durable user profile, names, preferences, and collaboration style.',
+    '- `IDENTITY.md`: assistant name, nature, avatar, and identity chosen by the user.',
+    '- `SOUL.md`: assistant personality, tone, values, and working style.',
+    '- `TOOLS.md`: local environment, shell, provider, model, service, and tool notes.',
+    '- `DREAMS.md`: long-running ideas, reflections, and future improvements.',
+    '- `GAKRCLI.md`: workspace overview and broad operating instructions.',
+    '',
+    'When a new fact or rule clearly belongs in a workspace file, update that workspace file instead of duplicating it in project auto-memory. Read the target file first, make a concrete minimal edit, and preserve existing user-written content.',
+    'Do not update `IDENTITY.md`, `SOUL.md`, or `RULEBOOK.md` for weak inferences. Use them when the user explicitly gives identity, behavior, or durable rule guidance, or when a repeated correction makes the durable rule clear.',
+    '',
+  ]
+}
+
 export async function ensureMemoryDirExists(memoryDir: string): Promise<void> {
   const fs = getFsImplementation()
   try {
@@ -242,6 +268,7 @@ export function buildMemoryLines(
     '',
     'If the user explicitly asks you to remember something, save it immediately as whichever type fits best. If they ask you to forget something, find and remove the relevant entry.',
     '',
+    ...buildWorkspacePersistenceLines(memoryDir),
     ...TYPES_SECTION_INDIVIDUAL,
     ...WHAT_NOT_TO_SAVE_SECTION,
     '',
@@ -354,6 +381,7 @@ function buildAssistantDailyLogPrompt(skipIndex = false): string {
     '- Pointers to external systems (dashboards, Linear projects, Slack channels)',
     '- Anything the user explicitly asks you to remember',
     '',
+    ...buildWorkspacePersistenceLines(memoryDir),
     ...WHAT_NOT_TO_SAVE_SECTION,
     '',
     ...(skipIndex

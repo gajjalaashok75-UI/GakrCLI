@@ -35,7 +35,7 @@ export interface SessionInfo {
   createdAt: Date;
   /** Count of user + assistant messages, excluding isMeta and file-history-snapshot */
   messageCount: number;
-  /** Project directory name in ~/.gakrcli/projects/ */
+  /** Project directory name in ~/.gakrcli/workspace/projects/ */
   projectDir: string;
   /** Absolute path to the .jsonl file */
   filePath: string;
@@ -70,9 +70,16 @@ export class SessionTracker implements vscode.Disposable {
     this.startWatching();
   }
 
-  /** ~/.gakrcli/projects/ */
+  /** ~/.gakrcli/workspace/projects/ */
   private getProjectsDir(): string {
-    return path.join(process.env.GAKR_CONFIG_DIR || path.join(os.homedir(), '.gakrcli'), 'projects');
+    const workspaceDir =
+      process.env.GAKRCLI_WORKSPACE_DIR ||
+      process.env.GAKR_WORKSPACE_DIR ||
+      path.join(
+        process.env.GAKR_CONFIG_DIR || path.join(os.homedir(), '.gakrcli'),
+        'workspace',
+      );
+    return path.join(workspaceDir, 'projects');
   }
 
   /**
@@ -382,7 +389,7 @@ export class SessionTracker implements vscode.Disposable {
     return this.sessions.get(id);
   }
 
-  /** Delete a session by removing its JSONL file. Only deletes inside ~/.gakrcli/projects/. */
+  /** Delete a session by removing its JSONL file. Only deletes inside ~/.gakrcli/workspace/projects/. */
   async deleteSession(id: string): Promise<boolean> {
     const session = this.sessions.get(id);
     if (!session) {

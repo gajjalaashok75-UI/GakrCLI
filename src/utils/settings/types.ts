@@ -975,7 +975,7 @@ export const SettingsSchema = lazySchema(() =>
         .string()
         .optional()
         .describe(
-          'Custom directory path for auto-memory storage. Supports ~/ prefix for home directory expansion. Ignored if set in projectSettings (checked-in .gakrcli/settings.json) for security. When unset, defaults to ~/.gakrcli/projects/<sanitized-cwd>/memory/.',
+          'Custom directory path for auto-memory storage. Supports ~/ prefix for home directory expansion. Ignored if set in projectSettings (checked-in .gakrcli/settings.json) for security. When unset, defaults to ~/.gakrcli/workspace/projects/<sanitized-cwd>/memory/.',
         ),
       autoDreamEnabled: z
         .boolean()
@@ -1084,10 +1084,10 @@ export const SettingsSchema = lazySchema(() =>
         .array(z.string())
         .optional()
         .describe(
-          'Glob patterns or absolute paths of GAKR.md files to exclude from loading. ' +
+          'Glob patterns or absolute paths of GAKRCLI.md files to exclude from loading. ' +
             'Patterns are matched against absolute file paths using picomatch. ' +
             'Only applies to User, Project, and Local memory types (Managed/policy files cannot be excluded). ' +
-            'Examples: "/home/user/monorepo/GAKR.md", "**/code/GAKR.md", "**/some-dir/.gakrcli/rules/**"',
+            'Examples: "/home/user/monorepo/GAKRCLI.md", "**/code/GAKRCLI.md", "**/some-dir/.gakrcli/rules/**"',
         ),
       pluginTrustMessage: z
         .string()

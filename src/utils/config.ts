@@ -17,7 +17,11 @@ import { registerCleanup } from './cleanupRegistry.js'
 import { logForDebugging } from './debug.js'
 import { logForDiagnosticsNoPII } from './diagLogs.js'
 import { getGlobalGakrcliFile } from './env.js'
-import { getGakrcliConfigHomeDir, isEnvTruthy } from './envUtils.js'
+import {
+  getGakrcliConfigHomeDir,
+  getGakrcliWorkspaceDir,
+  isEnvTruthy,
+} from './envUtils.js'
 import { ConfigParseError, getErrnoCode } from './errors.js'
 import { writeFileSyncAndFlush_DEPRECATED } from './file.js'
 import { getFsImplementation } from './fsOperations.js'
@@ -1851,13 +1855,15 @@ export function getMemoryPath(memoryType: MemoryType): string {
 
   switch (memoryType) {
     case 'User':
-      return join(getGakrcliConfigHomeDir(), 'GAKR.md')
+      return join(getGakrcliConfigHomeDir(), 'GAKRCLI.md')
     case 'Local':
       return join(cwd, 'gakrcli.local.md')
     case 'Project':
-      return join(cwd, 'GAKR.md')
+      return join(cwd, 'GAKRCLI.md')
     case 'Managed':
-      return join(getManagedFilePath(), 'GAKR.md')
+      return join(getManagedFilePath(), 'GAKRCLI.md')
+    case 'Workspace':
+      return join(getGakrcliWorkspaceDir(), 'GAKRCLI.md')
     case 'AutoMem':
       return getAutoMemEntrypoint()
   }

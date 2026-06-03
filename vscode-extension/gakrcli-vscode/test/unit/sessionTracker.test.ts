@@ -309,7 +309,7 @@ describe('SessionTracker — workspace recovery scan', () => {
   const testDir = path.join(os.tmpdir(), 'gakrcli-session-recovery-test-' + Date.now());
   const workspaceRoot = path.join(testDir, 'workspace');
   const configDir = path.join(testDir, 'config');
-  const projectsDir = path.join(configDir, 'projects');
+  const projectsDir = path.join(configDir, 'workspace', 'projects');
   const oldConfigDir = process.env.GAKR_CONFIG_DIR;
   const oldWorkspaceFolders = vscode.workspace.workspaceFolders;
 

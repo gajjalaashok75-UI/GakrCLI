@@ -5,6 +5,17 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [unreleased - 0.5.6]
+
+### Added (2026-06-03)
+- **OpenClaw-Style Workspace Persistence**: Added root workspace files under `~/.gakrcli/workspace/` for GakrCLI identity, rulebook, soul, user profile, tools, memory, dreams, heartbeat, and first-run bootstrap context.
+- **Workspace Location Metadata**: Added canonical `~/.gakrcli/workspace/<file>` location and update-target guidance to every packaged workspace file so model-driven updates can route durable facts to the right file.
+
+### Changed (2026-06-03)
+- **Workspace And Project Memory Routing**: Moved project memory under `~/.gakrcli/workspace/projects/<project>/memory/` while keeping root `MEMORY.md` as global cross-project memory.
+- **Bootstrap Completion Flow**: Kept `BOOTSTRAP.md` as a first-run-only context file and added startup cleanup when identity setup was completed but bootstrap deletion was missed.
+- **Release Versions**: Bumped GakrCLI to `0.5.6` and the VS Code extension to `0.2.4`.
+
 ## [unreleased - 0.5.5]
 
 ### Fixed (2026-06-01)

@@ -10,6 +10,7 @@
  */
 
 import { feature } from 'bun:bundle'
+import { buildWorkspacePersistenceLines } from '../../memdir/memdir.js'
 import {
   MEMORY_FRONTMATTER_EXAMPLE,
   TYPES_SECTION_COMBINED,
@@ -51,6 +52,7 @@ export function buildExtractAutoOnlyPrompt(
   newMessageCount: number,
   existingMemories: string,
   skipIndex = false,
+  memoryDir = 'the project auto-memory directory',
 ): string {
   const howToSave = skipIndex
     ? [
@@ -86,6 +88,7 @@ export function buildExtractAutoOnlyPrompt(
     '',
     'If the user explicitly asks you to remember something, save it immediately as whichever type fits best. If they ask you to forget something, find and remove the relevant entry.',
     '',
+    ...buildWorkspacePersistenceLines(memoryDir),
     ...TYPES_SECTION_INDIVIDUAL,
     ...WHAT_NOT_TO_SAVE_SECTION,
     '',
@@ -102,12 +105,14 @@ export function buildExtractCombinedPrompt(
   newMessageCount: number,
   existingMemories: string,
   skipIndex = false,
+  memoryDir = 'the project auto-memory directory',
 ): string {
   if (!feature('TEAMMEM')) {
     return buildExtractAutoOnlyPrompt(
       newMessageCount,
       existingMemories,
       skipIndex,
+      memoryDir,
     )
   }
 
@@ -145,6 +150,7 @@ export function buildExtractCombinedPrompt(
     '',
     'If the user explicitly asks you to remember something, save it immediately as whichever type fits best. If they ask you to forget something, find and remove the relevant entry.',
     '',
+    ...buildWorkspacePersistenceLines(memoryDir),
     ...TYPES_SECTION_COMBINED,
     ...WHAT_NOT_TO_SAVE_SECTION,
     '- You MUST avoid saving sensitive data within shared team memories. For example, never save API keys or user credentials.',

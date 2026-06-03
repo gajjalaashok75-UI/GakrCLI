@@ -525,7 +525,7 @@ export const FileEditTool = buildTool({
     })
 
     // 7. Log events
-    if (absoluteFilePath.endsWith(`${sep}GAKR.md`)) {
+    if (absoluteFilePath.endsWith(`${sep}GAKRCLI.md`)) {
       logEvent('tengu_write_gakrclimd', {})
     }
     countLinesChanged(patch)

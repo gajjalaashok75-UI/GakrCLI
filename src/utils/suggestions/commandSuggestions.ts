@@ -560,7 +560,7 @@ export function applyCommandSuggestion(
   }
 }
 
-// Helper function at bottom of file per GAKR.md
+// Helper function at bottom of file per GAKRCLI.md
 function cleanWord(word: string) {
   return word.toLowerCase().replace(/[^a-z0-9]/g, '')
 }
