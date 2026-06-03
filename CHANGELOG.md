@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added (2026-06-03)
 - **Context Building Test Coverage**: Added 22 unit tests for workspace context priority ordering (`WORKSPACE_CONTEXT_FILE_ORDER`), `renderWorkspaceContext` output structure, HTML comment stripping, and `parseMemoryFileContent` frontmatter/globs/contentDiffersFromDisk handling in `src/utils/gakrclimd.test.ts`.
 - **Internal Helpers Exported for Testing**: Exported `WORKSPACE_CONTEXT_FILE_ORDER`, `compareWorkspaceFiles`, `renderWorkspaceContext`, and `parseMemoryFileContent` from `src/utils/gakrclimd.ts` to enable direct unit verification of context-building internals.
+- **Memory Extraction Prompt Overhaul**: Added concise 10-turn parallel directive, daily file path (`YYYY-MM-DD.md`), workspace routing, per-file ~50 KB cap, MEMORY.md index line-cap guard, absolute path requirements, TEAMMEM flag check, and frontmatter schema example to extraction prompt in `src/services/extractMemories/prompts.ts`.
+- **Raised Auto-Update Budget**: Increased `maxTurns` from 5 to 10 in `src/services/extractMemories/extractMemories.ts` to support parallel multi-file writes (up to 10 files) across workspace and project memory in a single extraction run.
+- **Documented MEMORY.md Cap Behavior**: Clarified in `src/memdir/memdir.ts` that workspace-root `MEMORY.md` is uncapped (daily journal), while per-file topic entries keep the ~50 KB cap and project `MEMORY.md` index files respect the 200-line / 25 KB truncation.
 
 ## [unreleased - 0.5.5]
 
