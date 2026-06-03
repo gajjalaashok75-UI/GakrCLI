@@ -1,6 +1,6 @@
 /**
  * Extracts durable memories from the current session transcript
- * and writes them to the auto-memory directory (~/.gakrcli/projects/<path>/memory/).
+ * and writes them to the auto-memory directory (~/.gakrcli/workspace/projects/<path>/memory/).
  *
  * It runs once at the end of each complete query loop (when the model produces
  * a final response with no tool calls) via handleStopHooks in stopHooks.ts.
@@ -56,6 +56,7 @@ import {
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../analytics/growthbook.js'
 import { logEvent } from '../analytics/index.js'
 import { sanitizeToolNameForAnalytics } from '../analytics/metadata.js'
+import { isWorkspacePersistencePath } from '../../utils/workspace.js'
 import {
   buildExtractAutoOnlyPrompt,
   buildExtractCombinedPrompt,
@@ -139,7 +140,10 @@ function hasMemoryWritesSince(
     }
     for (const block of content) {
       const filePath = getWrittenFilePath(block)
-      if (filePath !== undefined && isAutoMemPath(filePath)) {
+      if (
+        filePath !== undefined &&
+        (isAutoMemPath(filePath) || isWorkspacePersistencePath(filePath))
+      ) {
         return true
       }
     }
@@ -209,14 +213,17 @@ export function createAutoMemCanUseTool(memoryDir: string): CanUseToolFn {
       'file_path' in input
     ) {
       const filePath = input.file_path
-      if (typeof filePath === 'string' && isAutoMemPath(filePath)) {
+      if (
+        typeof filePath === 'string' &&
+        (isAutoMemPath(filePath) || isWorkspacePersistencePath(filePath))
+      ) {
         return { behavior: 'allow' as const, updatedInput: input }
       }
     }
 
     return denyAutoMemTool(
       tool,
-      `only ${FILE_READ_TOOL_NAME}, ${GREP_TOOL_NAME}, ${GLOB_TOOL_NAME}, read-only ${BASH_TOOL_NAME}, and ${FILE_EDIT_TOOL_NAME}/${FILE_WRITE_TOOL_NAME} within ${memoryDir} are allowed`,
+      `only ${FILE_READ_TOOL_NAME}, ${GREP_TOOL_NAME}, ${GLOB_TOOL_NAME}, read-only ${BASH_TOOL_NAME}, and ${FILE_EDIT_TOOL_NAME}/${FILE_WRITE_TOOL_NAME} within ${memoryDir} or the known root workspace markdown files are allowed`,
     )
   }
 }
@@ -405,11 +412,13 @@ export function initExtractMemories(): void {
               newMessageCount,
               existingMemories,
               skipIndex,
+              memoryDir,
             )
           : buildExtractAutoOnlyPrompt(
               newMessageCount,
               existingMemories,
               skipIndex,
+              memoryDir,
             )
 
       const result = await runForkedAgent({

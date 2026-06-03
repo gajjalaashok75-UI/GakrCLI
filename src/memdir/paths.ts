@@ -7,7 +7,7 @@ import {
 } from '../bootstrap/state.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
 import {
-  getGakrcliConfigHomeDir,
+  getGakrcliWorkspaceDir,
   isEnvDefinedFalsy,
   isEnvTruthy,
 } from '../utils/envUtils.js'
@@ -80,13 +80,13 @@ export function isExtractModeActive(): boolean {
  * Returns the base directory for persistent memory storage.
  * Resolution order:
  *   1. GAKR_CODE_REMOTE_MEMORY_DIR env var (explicit override, set in CCR)
- *   2. ~/.gakrcli (default config home)
+ *   2. ~/.gakrcli/workspace (default workspace)
  */
 export function getMemoryBaseDir(): string {
   if (process.env.GAKR_CODE_REMOTE_MEMORY_DIR) {
     return process.env.GAKR_CODE_REMOTE_MEMORY_DIR
   }
-  return getGakrcliConfigHomeDir()
+  return getGakrcliWorkspaceDir()
 }
 
 const AUTO_MEM_DIRNAME = 'memory'

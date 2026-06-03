@@ -42,7 +42,7 @@ type Binding = {
  * `setToolJSX`, `sendOSNotification`) are always current.
  *
  * Module-level `let` is a deliberate exception to the no-module-scope-state
- * rule (src/GAKR.md): the dispatcher closure must persist across calls so
+ * rule (src/GAKRCLI.md): the dispatcher closure must persist across calls so
  * its internal screenshot blob survives, but `ToolUseContext` is per-call.
  * Tests will need to either inject the cache or run serially.
  */

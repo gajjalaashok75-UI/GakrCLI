@@ -309,7 +309,7 @@ export function saveMcpServerUserConfig(
       // include undefined, but updateSettingsForSource's mergeWith customizer
       // needs explicit undefined to delete — cast is deliberate internal
       // plumbing (same rationale as deletePluginOptions in
-      // pluginOptionsStorage.ts:184, see GAKR.md's 10% case).
+      // pluginOptionsStorage.ts:184, see GAKRCLI.md's 10% case).
       const scrubbed = Object.fromEntries(
         keysToScrubFromSettings.map(k => [k, undefined]),
       ) as Record<string, undefined>

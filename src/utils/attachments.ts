@@ -1703,7 +1703,8 @@ function isInstructionsMemoryType(
     type === 'User' ||
     type === 'Project' ||
     type === 'Local' ||
-    type === 'Managed'
+    type === 'Managed' ||
+    type === 'Workspace'
   )
 }
 

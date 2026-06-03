@@ -2,7 +2,7 @@ import { feature } from 'bun:bundle'
 import type { UUID } from 'crypto'
 import type { Dirent } from 'fs'
 // Sync fs primitives for readFileTailSync — separate from fs/promises
-// imports above. Named (not wildcard) per GAKR.md style; no collisions
+// imports above. Named (not wildcard) per GAKRCLI.md style; no collisions
 // with the async-suffixed names.
 import { closeSync, fstatSync, openSync, readSync } from 'fs'
 import {
@@ -69,7 +69,10 @@ import { updateSessionName } from './concurrentSessions.js'
 import { getCwd } from './cwd.js'
 import { logForDebugging } from './debug.js'
 import { logForDiagnosticsNoPII } from './diagLogs.js'
-import { getGakrcliConfigHomeDir, isEnvTruthy } from './envUtils.js'
+import {
+  getProjectsDir as getConfiguredProjectsDir,
+  isEnvTruthy,
+} from './envUtils.js'
 import { isFsInaccessible } from './errors.js'
 import type { FileHistorySnapshot } from './fileHistory.js'
 import { formatFileSize } from './format.js'
@@ -196,7 +199,7 @@ export function isEphemeralToolProgress(dataType: unknown): boolean {
 }
 
 export function getProjectsDir(): string {
-  return join(getGakrcliConfigHomeDir(), 'projects')
+  return getConfiguredProjectsDir()
 }
 
 export function getTranscriptPath(): string {

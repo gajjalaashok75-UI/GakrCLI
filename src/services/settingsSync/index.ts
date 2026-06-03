@@ -483,7 +483,7 @@ async function writeFileForSync(
  *
  * After writing, invalidates relevant caches:
  * - resetSettingsCache() for settings files
- * - clearMemoryFileCaches() for memory files (GAKR.md)
+ * - clearMemoryFileCaches() for memory files (GAKRCLI.md)
  */
 async function applyRemoteEntriesToLocal(
   entries: Record<string, string>,

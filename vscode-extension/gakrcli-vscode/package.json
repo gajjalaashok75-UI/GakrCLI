@@ -2,7 +2,7 @@
 	"name": "gakrcli-vscode",
 	"displayName": "GakrCLI VS Code",
 	"description": "GakrCLI VS Code: AI coding assistant powered by any LLM",
-	"version": "0.2.3",
+	"version": "0.2.4",
 	"publisher": "gakr-gakr",
 	"license": "MIT",
 	"repository": {
@@ -508,6 +508,6 @@
 		"vitest": "^1.6.0"
 	},
 	"dependencies": {
-		"@gakr-gakr/gakrcli": "^0.5.5"
+		"@gakr-gakr/gakrcli": "^0.5.6"
 	}
 }

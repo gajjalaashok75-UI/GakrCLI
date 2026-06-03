@@ -60,7 +60,7 @@ export type SettingsSyncUploadResult = {
  */
 export const SYNC_KEYS = {
   USER_SETTINGS: '~/.gakrcli/settings.json',
-  USER_MEMORY: '~/.gakrcli/GAKR.md',
+  USER_MEMORY: '~/.gakrcli/GAKRCLI.md',
   projectSettings: (projectId: string) =>
     `projects/${projectId}/.gakrcli/settings.local.json`,
   projectMemory: (projectId: string) => `projects/${projectId}/gakrcli.local.md`,

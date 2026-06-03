@@ -1033,7 +1033,7 @@ export function Config({
     }
   }] : []), ...(shouldShowExternalIncludesToggle ? [{
     id: 'showExternalIncludesDialog',
-    label: 'External GAKR.md includes',
+    label: 'External GAKRCLI.md includes',
     value: (() => {
       const projectConfig = getCurrentProjectConfig();
       if (projectConfig.hasgakrcliMdExternalIncludesApproved) {

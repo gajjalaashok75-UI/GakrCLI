@@ -449,7 +449,7 @@ export async function getSystemPrompt(
 ): Promise<string[]> {
   if (isEnvTruthy(process.env.GAKR_CODE_SIMPLE)) {
     return [
-      `You are GakrCLI, an open-source coding agent and CLI.\n\nCWD: ${getCwd()}\nDate: ${getSessionStartDate()}`,
+      `You operate inside GakrCLI, an open-source command-line interface, agent harness, and orchestration runtime for coding agents. Your assistant identity may be defined by workspace files such as IDENTITY.md and SOUL.md.\n\nCWD: ${getCwd()}\nDate: ${getSessionStartDate()}`,
 
     ]
   }

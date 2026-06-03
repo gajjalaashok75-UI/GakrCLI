@@ -52,6 +52,7 @@ import {
   generateTmuxSessionName,
   worktreeBranchName,
 } from './utils/worktree.js'
+import { ensureGakrcliWorkspace } from './utils/workspace.js'
 
 export async function setup(
   cwd: string,
@@ -77,6 +78,8 @@ export async function setup(
     )
     process.exit(1)
   }
+
+  await ensureGakrcliWorkspace()
 
   // Set custom session ID if provided
   if (customSessionId) {

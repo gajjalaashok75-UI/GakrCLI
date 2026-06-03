@@ -169,7 +169,7 @@ export function computeRestoredAttributionState(
 
 /**
  * Compute standalone agent context (name/color) for session resume.
- * Used for computing initial state before render (per GAKR.md guidelines).
+ * Used for computing initial state before render (per GAKRCLI.md guidelines).
  * Returns undefined if no name/color is set on the session.
  */
 export function computeStandaloneAgentContext(
@@ -515,7 +515,7 @@ export async function processResumedConversation(
     saveMode(context.modeApi?.isCoordinatorMode() ? 'coordinator' : 'normal')
   }
 
-  // Compute initial state before render (per GAKR.md guidelines)
+  // Compute initial state before render (per GAKRCLI.md guidelines)
   const restoredAttribution = opts.includeAttribution
     ? computeRestoredAttributionState(result)
     : undefined

@@ -11,7 +11,7 @@ describe('Memory System', () => {
     test('returns all files when feature flag is disabled (default)', () => {
       const memoryFiles: MemoryFileInfo[] = [
         { path: '/project/MEMORY.md', content: 'A', type: 'Project' },
-        { path: '/user/GAKR.md', content: 'B', type: 'User' },
+        { path: '/user/GAKRCLI.md', content: 'B', type: 'User' },
         { path: '/auto/memory.md', content: 'C', type: 'AutoMem' },
       ]
       const result = filterInjectedMemoryFiles(memoryFiles)

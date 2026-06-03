@@ -124,9 +124,9 @@ export type BaseAgentDefinition = {
   memory?: AgentMemoryScope // Persistent memory scope
   isolation?: 'worktree' | 'remote' // Run in an isolated git worktree, or remotely in CCR (ant-only)
   pendingSnapshotUpdate?: { snapshotTimestamp: string }
-  /** Omit GAKR.md hierarchy from the agent's userContext. Read-only agents
+  /** Omit GAKRCLI.md hierarchy from the agent's userContext. Read-only agents
    * (Explore, Plan) don't need commit/PR/lint guidelines — the main agent has
-   * full GAKR.md and interprets their output. Saves ~5-15 Gtok/week across
+   * full GAKRCLI.md and interprets their output. Saves ~5-15 Gtok/week across
    * 34M+ Explore spawns. Kill-switch: tengu_slim_subagent_gakrclimd. */
   omitgakrcliMd?: boolean
 }
