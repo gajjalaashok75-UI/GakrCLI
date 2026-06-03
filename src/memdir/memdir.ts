@@ -32,10 +32,10 @@ import {
 } from './memoryTypes.js'
 
 export const ENTRYPOINT_NAME = 'MEMORY.md'
-export const MAX_ENTRYPOINT_LINES = 200
-// ~125 chars/line at 200 lines. At p97 today; catches long-line indexes that
-// slip past the line cap (p100 observed: 197KB under 200 lines).
-export const MAX_ENTRYPOINT_BYTES = 25_000
+export const MAX_ENTRYPOINT_LINES = 400
+// ~125 chars/line at 400 lines. Doubled to allow rich index content without
+// silently truncating valuable context.
+export const MAX_ENTRYPOINT_BYTES = 50_000
 const AUTO_MEM_DISPLAY_NAME = 'auto memory'
 
 export type EntrypointTruncation = {

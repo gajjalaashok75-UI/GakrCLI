@@ -432,7 +432,7 @@ export function initExtractMemories(): void {
         skipTranscript: true,
         // Well-behaved extractions complete in 2-4 turns (read → write).
         // A hard cap prevents verification rabbit-holes from burning turns.
-        maxTurns: 5,
+        maxTurns: 10,
       })
 
       // Advance the cursor only after a successful run. If the agent errors
