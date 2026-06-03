@@ -355,7 +355,7 @@ function stripHtmlCommentSpans(raw: string): string {
  * pass and returned alongside the parsed file (so processMemoryFile doesn't
  * need to lex the same content a second time).
  */
-function parseMemoryFileContent(
+export function parseMemoryFileContent(
   rawContent: string,
   filePath: string,
   type: MemoryType,
@@ -1178,7 +1178,7 @@ export function filterInjectedMemoryFiles(
   return files.filter(f => f.type !== 'AutoMem' && f.type !== 'TeamMem')
 }
 
-const WORKSPACE_CONTEXT_FILE_ORDER = new Map<string, number>([
+export const WORKSPACE_CONTEXT_FILE_ORDER = new Map<string, number>([
   ['gakrcli.md', 10],
   ['agents.md', 11],
   ['rulebook.md', 15],
@@ -1196,7 +1196,7 @@ function getMemoryFileBasename(filePath: string): string {
   return basename(filePath).trim().toLowerCase()
 }
 
-function compareWorkspaceFiles(
+export function compareWorkspaceFiles(
   left: MemoryFileInfo,
   right: MemoryFileInfo,
 ): number {
@@ -1215,7 +1215,7 @@ function compareWorkspaceFiles(
   return left.path.localeCompare(right.path)
 }
 
-function renderWorkspaceContext(files: MemoryFileInfo[]): string | null {
+export function renderWorkspaceContext(files: MemoryFileInfo[]): string | null {
   const ordered = files
     .filter(file => file.content.trim().length > 0)
     .sort(compareWorkspaceFiles)

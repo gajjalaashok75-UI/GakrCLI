@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Bootstrap Completion Flow**: Kept `BOOTSTRAP.md` as a first-run-only context file and added startup cleanup when identity setup was completed but bootstrap deletion was missed.
 - **Release Versions**: Bumped GakrCLI to `0.5.6` and the VS Code extension to `0.2.4`.
 
+### Added (2026-06-03)
+- **Context Building Test Coverage**: Added 22 unit tests for workspace context priority ordering (`WORKSPACE_CONTEXT_FILE_ORDER`), `renderWorkspaceContext` output structure, HTML comment stripping, and `parseMemoryFileContent` frontmatter/globs/contentDiffersFromDisk handling in `src/utils/gakrclimd.test.ts`.
+- **Internal Helpers Exported for Testing**: Exported `WORKSPACE_CONTEXT_FILE_ORDER`, `compareWorkspaceFiles`, `renderWorkspaceContext`, and `parseMemoryFileContent` from `src/utils/gakrclimd.ts` to enable direct unit verification of context-building internals.
+
 ## [unreleased - 0.5.5]
 
 ### Fixed (2026-06-01)
