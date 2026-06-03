@@ -7,15 +7,24 @@
  * extractMemories.ts skips that turn (hasMemoryWritesSince). This prompt
  * fires only when the main agent didn't write, so the save-criteria here
  * overlap the system prompt's harmlessly.
+ *
+ * The forked agent's cacheSafeParams carry: user context (USER.md content
+ * including name/role), GAKRCLI_WORKSPACE snapshot (all ~/.gakrcli/workspace
+ * /*.md files), the current date, and the current working directory. Use
+ * these to make extraction contextual and file-targeted.
  */
 
 import { feature } from 'bun:bundle'
-import { buildWorkspacePersistenceLines } from '../../memdir/memdir.js'
 import {
-  MEMORY_FRONTMATTER_EXAMPLE,
-  TYPES_SECTION_COMBINED,
-  TYPES_SECTION_INDIVIDUAL,
-  WHAT_NOT_TO_SAVE_SECTION,
+ buildWorkspacePersistenceLines,
+ MAX_ENTRYPOINT_LINES,
+ MAX_ENTRYPOINT_BYTES,
+} from '../../memdir/memdir.js'
+import {
+ MEMORY_FRONTMATTER_EXAMPLE,
+ TYPES_SECTION_COMBINED,
+ TYPES_SECTION_INDIVIDUAL,
+ WHAT_NOT_TO_SAVE_SECTION,
 } from '../../memdir/memoryTypes.js'
 import { BASH_TOOL_NAME } from '../../tools/BashTool/toolName.js'
 import { FILE_EDIT_TOOL_NAME } from '../../tools/FileEditTool/constants.js'
@@ -32,16 +41,24 @@ function opener(newMessageCount: number, existingMemories: string): string {
     existingMemories.length > 0
       ? `\n\n## Existing memory files\n\n${existingMemories}\n\nCheck this list before writing — update an existing file rather than creating a duplicate.`
       : ''
-  return [
-    `You are now acting as the memory extraction subagent. Analyze the most recent ~${newMessageCount} messages above and use them to update your persistent memory systems.`,
-    '',
-    `Available tools: ${FILE_READ_TOOL_NAME}, ${GREP_TOOL_NAME}, ${GLOB_TOOL_NAME}, read-only ${BASH_TOOL_NAME} (ls/find/cat/stat/wc/head/tail and similar), and ${FILE_EDIT_TOOL_NAME}/${FILE_WRITE_TOOL_NAME} for paths inside the memory directory only. ${BASH_TOOL_NAME} rm is not permitted. All other tools — MCP, Agent, write-capable ${BASH_TOOL_NAME}, etc — will be denied.`,
-    '',
-    `You have a limited turn budget. ${FILE_EDIT_TOOL_NAME} requires a prior ${FILE_READ_TOOL_NAME} of the same file, so the efficient strategy is: turn 1 — issue all ${FILE_READ_TOOL_NAME} calls in parallel for every file you might update; turn 2 — issue all ${FILE_WRITE_TOOL_NAME}/${FILE_EDIT_TOOL_NAME} calls in parallel. Do not interleave reads and writes across multiple turns.`,
-    '',
-    `You MUST only use content from the last ~${newMessageCount} messages to update your persistent memories. Do not waste any turns attempting to investigate or verify that content further — no grepping source files, no reading code to confirm a pattern exists, no git commands.` +
-      manifest,
-  ].join('\n')
+return [
+  `You are now acting as the memory extraction subagent. Analyze the most recent ~${newMessageCount} messages above and use them to update your persistent memory systems.`,
+  '',
+  `You have a 10-turn budget for up to 10 total file operations (parallel reads on turn 1, parallel writes on turn 2). You can update workspace files and project memory files in the same run.`,
+  '',
+  `**Paths:**`,
+  `- Daily session files: \`~/.gakrcli/workspace/memory/<YYYY-MM-DD>.md\` — append raw events from this session, keyed by date`,
+  `- Workspace files: \`~/.gakrcli/workspace/<filename>.md\` (GAKRCLI.md, SOUL.md, USER.md, etc.) — read these for target files`,
+  `- Project memory: \`~/.gakrcli/workspace/projects/<project-name>/memory/\``,
+  `- Team memory: \`~/.gakrcli/workspace/projects/<project-name>/memory/team/\` (only if \`TEAMMEM\` feature flag is enabled — do not write there otherwise)`,
+  '',
+  `**Rules:**`,
+  `- Each individual file must stay under ~50 KB.`,
+  `- \`MEMORY.md\` index has a line cap — prune old entries when reaching it.`,
+  `- Use \`YYYY-MM-DD.md\` (ISO) for daily files.`,
+  `- Full profile/format rules are in your workspace \`.md\` files — follow those schemas.`,
+  manifest,
+].join('\n')
 }
 
 /**
