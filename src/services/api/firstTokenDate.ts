@@ -6,7 +6,7 @@ import { logError } from '../../utils/log.js'
 import { getgakrcliCodeUserAgent } from '../../utils/userAgent.js'
 
 /**
- * Fetch the user's first Gakr token date and store in config.
+ * Fetch the user's first GakrCLI token date and store in config.
  * This is called after successful login to cache when they started using Gakr.
  */
 export async function fetchAndStoregakrcliCodeFirstTokenDate(): Promise<void> {

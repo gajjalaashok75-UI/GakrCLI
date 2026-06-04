@@ -86,7 +86,7 @@ async function createWorkflowFile(
         ...context,
       })
       throw new Error(
-        `Failed to create workflow file ${workflowPath}: A Gakr workflow file already exists in this repository. Please remove it first or update it manually.`,
+        `Failed to create workflow file ${workflowPath}: A GakrCLI workflow file already exists in this repository. Please remove it first or update it manually.`,
       )
     }
 
@@ -225,7 +225,7 @@ export async function setupGitHubActions(
         workflows.push({
           path: '.github/workflows/gakrcli.yml',
           content: WORKFLOW_CONTENT,
-          message: 'Gakr PR Assistant workflow',
+          message: 'GakrCLI PR Assistant workflow',
         })
       }
 
@@ -233,7 +233,7 @@ export async function setupGitHubActions(
         workflows.push({
           path: '.github/workflows/gakrcli-code-review.yml',
           content: CODE_REVIEW_PLUGIN_WORKFLOW_CONTENT,
-          message: 'Gakr Code Review workflow',
+          message: 'GakrCLI Code Review workflow',
         })
       }
 

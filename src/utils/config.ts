@@ -401,9 +401,9 @@ export type GlobalConfig = {
   showSpinnerTree?: boolean // Whether to show the teammate spinner tree instead of pills
 
   // First start time tracking
-  firstStartTime?: string // ISO timestamp when Gakr was first started on this machine
+  firstStartTime?: string // ISO timestamp when GakrCLI was first started on this machine
 
-  messageIdleNotifThresholdMs: number // How long the user has to have been idle to get a notification that Gakr is done generating
+  messageIdleNotifThresholdMs: number // How long the user has to have been idle to get a notification that GakrCLI is done generating
 
   githubActionSetupCount?: number // Number of times the user has set up the GitHub Action
   slackAppInstallCount?: number // Number of times the user has clicked to install the Slack app
@@ -424,8 +424,8 @@ export type GlobalConfig = {
   inputNeededNotifEnabled?: boolean
   agentPushNotifEnabled?: boolean
 
-  // Gakr usage tracking
-  gakrcliCodeFirstTokenDate?: string // ISO timestamp of the user's first Gakr OAuth token
+  // GakrCLI usage tracking
+  gakrcliCodeFirstTokenDate?: string // ISO timestamp of the user's first GakrCLI OAuth token
 
   // Model switch callout tracking (ant-only)
   modelSwitchCalloutDismissed?: boolean // Whether user chose "Don't show again"
@@ -527,9 +527,9 @@ export type GlobalConfig = {
   officialMarketplaceAutoInstallLastAttemptTime?: number // Timestamp of last attempt
   officialMarketplaceAutoInstallNextRetryTime?: number // Earliest time to retry again
 
-  // Gakr in Chrome settings
-  hasCompletedgakrcliInChromeOnboarding?: boolean // Whether Gakr in Chrome onboarding has been shown
-  gakrcliInChromeDefaultEnabled?: boolean // Whether Gakr in Chrome is enabled by default (undefined means platform default)
+  // GakrCLI in Chrome settings
+  hasCompletedgakrcliInChromeOnboarding?: boolean // Whether GakrCLI in Chrome onboarding has been shown
+  gakrcliInChromeDefaultEnabled?: boolean // Whether GakrCLI in Chrome is enabled by default (undefined means platform default)
   cachedChromeExtensionInstalled?: boolean // Cached result of whether Chrome extension is installed
 
   // Chrome extension pairing state (persisted across sessions)
@@ -543,7 +543,7 @@ export type GlobalConfig = {
   lspRecommendationNeverPlugins?: string[] // Plugin IDs to never suggest
   lspRecommendationIgnoredCount?: number // Track ignored recommendations (stops after 5)
 
-  // Gakr hint protocol state (<gakrcli-code-hint /> tags from CLIs/SDKs).
+  // GakrCLI hint protocol state (<gakrcli-code-hint /> tags from CLIs/SDKs).
   // Nested by hint type so future types (docs, mcp, ...) slot in without new
   // top-level keys.
   gakrcliCodeHints?: {
@@ -1252,7 +1252,7 @@ function saveConfigWithLock<A extends object>(
     const lockTime = Date.now() - startTime
     if (lockTime > 100) {
       logForDebugging(
-        'Lock acquisition took longer than expected - another Gakr instance may be running',
+        'Lock acquisition took longer than expected - another GakrCLI instance may be running',
       )
       logEvent('tengu_config_lock_contention', {
         lock_time_ms: lockTime,

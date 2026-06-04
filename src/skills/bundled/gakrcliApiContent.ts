@@ -35,11 +35,11 @@ import typescriptgakrcliApiToolUse from './gakrcli-api/typescript/gakrcli-api/to
 //   - gakrcli-api/shared/models.md (full model catalog with legacy versions and alias mappings)
 export const SKILL_MODEL_VARS = {
   OPUS_ID: 'gakrcli-opus-4-6',
-  OPUS_NAME: 'Gakr Opus 4.6',
+  OPUS_NAME: 'GakrCLI Opus 4.6',
   SONNET_ID: 'gakrcli-sonnet-4-6',
-  SONNET_NAME: 'Gakr Sonnet 4.6',
+  SONNET_NAME: 'GakrCLI Sonnet 4.6',
   HAIKU_ID: 'gakrcli-haiku-4-5',
-  HAIKU_NAME: 'Gakr Haiku 4.5',
+  HAIKU_NAME: 'GakrCLI Haiku 4.5',
   // Previous Sonnet ID — used in "do not append date suffixes" example in SKILL.md.
   PREV_SONNET_ID: 'gakrcli-sonnet-4-5',
 } satisfies Record<string, string>

@@ -71,7 +71,7 @@ export const ThinkingAdaptiveSchema = lazySchema(() =>
     .object({
       type: z.literal('adaptive'),
     })
-    .describe('Gakr decides when and how much to think (Opus 4.6+).'),
+    .describe('GakrCLI decides when and how much to think (Opus 4.6+).'),
 )
 
 export const ThinkingEnabledSchema = lazySchema(() =>
@@ -1064,7 +1064,7 @@ export const ModelInfoSchema = lazySchema(() =>
         .boolean()
         .optional()
         .describe(
-          'Whether this model supports adaptive thinking (Gakr decides when and how much to think)',
+          'Whether this model supports adaptive thinking (GakrCLI decides when and how much to think)',
         ),
       supportsFastMode: z
         .boolean()

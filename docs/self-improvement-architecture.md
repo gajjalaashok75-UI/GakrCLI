@@ -1,10 +1,10 @@
-# Gakr Self-Improvement System Architecture
+# GakrCLI Self-Improvement System Architecture
 
 **Status**: This document describes a planned architecture for the self-improvement system. Some components may not be fully implemented yet.
 
 ## Overview
 
-The Self-Improvement System enables Gakr to learn from every interaction, optimize its performance, and autonomously enhance its capabilities. This is a meta-system that observes, analyzes, recommends, and (safely) acts on its own behavior.
+The Self-Improvement System enables GakrCLI to learn from every interaction, optimize its performance, and autonomously enhance its capabilities. This is a meta-system that observes, analyzes, recommends, and (safely) acts on its own behavior.
 
 ## Core Principles
 
@@ -324,7 +324,7 @@ enum RecommendationAction {
 - **Collaborative learning**: Opt-in sharing of anonymized patterns to benefit all users
 - **Cross-project insights**: Learn from patterns across all your repositories
 - **Predictive optimization**: Pre-warm caches based on task prediction
-- **Self-modification**: Propose code changes to Gakr itself (with extreme caution!)
+- **Self-modification**: Propose code changes to GakrCLI itself (with extreme caution!)
 
 ---
 

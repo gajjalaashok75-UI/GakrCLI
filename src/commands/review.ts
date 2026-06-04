@@ -3,7 +3,7 @@ import type { Command } from '../commands.js'
 import { isUltrareviewEnabled } from './review/ultrareviewEnabled.js'
 
 // Legal wants the explicit surface name plus a docs link visible before the
-// user triggers, so the description carries "Gakr on the web" + URL.
+// user triggers, so the description carries "GakrCLI on the web" + URL.
 const CCR_TERMS_URL = 'https://github.com/gakr-gakr/gakr/docs/en/gakrcli-code-on-the-web'
 
 const LOCAL_REVIEW_PROMPT = (args: string) => `
@@ -48,7 +48,7 @@ const review: Command = {
 const ultrareview: Command = {
   type: 'local-jsx',
   name: 'ultrareview',
-  description: `~10–20 min · Finds and verifies bugs in your branch. Runs in Gakr on the web. See ${CCR_TERMS_URL}`,
+  description: `~10–20 min · Finds and verifies bugs in your branch. Runs in GakrCLI on the web. See ${CCR_TERMS_URL}`,
   isEnabled: () => isUltrareviewEnabled(),
   load: () => import('./review/ultrareviewCommand.js'),
 }

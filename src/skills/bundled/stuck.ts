@@ -1,15 +1,15 @@
 import { registerBundledSkill } from '../bundledSkills.js'
 
-// Prompt text contains `ps` commands as instructions for Gakr to run,
+// Prompt text contains `ps` commands as instructions for GakrCLI to run,
 // not commands this file executes.
 // eslint-disable-next-line custom-rules/no-direct-ps-commands
-const STUCK_PROMPT = `# /stuck - diagnose frozen/slow Gakr sessions
+const STUCK_PROMPT = `# /stuck - diagnose frozen/slow GakrCLI sessions
 
-The user thinks another Gakr session on this machine is frozen, stuck, or very slow. Investigate locally and report the findings in the chat.
+The user thinks another GakrCLI session on this machine is frozen, stuck, or very slow. Investigate locally and report the findings in the chat.
 
 ## What to look for
 
-Scan for other Gakr processes, excluding the current one. PID is in \`process.pid\`, but for shell commands just exclude the PID you see running this prompt. Process names are typically \`gakrcli\` for installed builds or \`cli\` for native dev builds.
+Scan for other GakrCLI processes, excluding the current one. PID is in \`process.pid\`, but for shell commands just exclude the PID you see running this prompt. Process names are typically \`gakrcli\` for installed builds or \`cli\` for native dev builds.
 
 Signs of a stuck session:
 - **High CPU (>=90%) sustained** - likely an infinite loop. Sample twice, 1-2 seconds apart, to confirm it is not a transient spike.
@@ -21,7 +21,7 @@ Signs of a stuck session:
 
 ## Investigation steps
 
-1. **List all Gakr processes** on macOS/Linux:
+1. **List all GakrCLI processes** on macOS/Linux:
    \`\`\`
    ps -axo pid=,pcpu=,rss=,etime=,state=,comm=,command= | grep -E '(gakrcli|cli)' | grep -v grep
    \`\`\`
@@ -43,7 +43,7 @@ If every session looks healthy, tell the user that directly. If you found a stuc
 
 Use a concise report:
 
-1. **Summary** - one short line: hostname, Gakr version, and a terse symptom.
+1. **Summary** - one short line: hostname, GakrCLI version, and a terse symptom.
 2. **Details** - include PID, CPU%, RSS, state, uptime, command line, child processes, diagnosis, and relevant debug log tail or sample output.
 
 ## Notes
@@ -56,7 +56,7 @@ export function registerStuckSkill(): void {
   registerBundledSkill({
     name: 'stuck',
     description:
-      'Investigate frozen/stuck/slow Gakr sessions on this machine and report local diagnostics.',
+      'Investigate frozen/stuck/slow GakrCLI sessions on this machine and report local diagnostics.',
     userInvocable: true,
     async getPromptForCommand(args) {
       let prompt = STUCK_PROMPT

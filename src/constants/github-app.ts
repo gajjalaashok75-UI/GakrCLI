@@ -1,4 +1,4 @@
-export const PR_TITLE = 'Add Gakr GitHub Workflow'
+export const PR_TITLE = 'Add GakrCLI GitHub Workflow'
 
 export const GITHUB_ACTION_SETUP_DOCS_URL =
   'https://github.com/anthropics/gakrcli-code-action/blob/main/docs/setup.md'
@@ -28,7 +28,7 @@ jobs:
       pull-requests: read
       issues: read
       id-token: write
-      actions: read # Required for Gakr to read CI results on PRs
+      actions: read # Required for GakrCLI to read CI results on PRs
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -41,11 +41,11 @@ jobs:
         with:
           anthropic_api_key: \${{ secrets.ANTHROPIC_API_KEY }}
 
-          # This is an optional setting that allows Gakr to read CI results on PRs
+          # This is an optional setting that allows GakrCLI to read CI results on PRs
           additional_permissions: |
             actions: read
 
-          # Optional: Give a custom prompt to Gakr. If this is not specified, Gakr will perform the instructions specified in the comment that tagged it.
+          # Optional: Give a custom prompt to Gakr. If this is not specified, GakrCLI will perform the instructions specified in the comment that tagged it.
           # prompt: 'Update the pull request description to include a summary of changes.'
 
           # Optional: Add gakrcli_args to customize behavior and configuration
@@ -55,9 +55,9 @@ jobs:
 
 `
 
-export const PR_BODY = `## 🤖 Installing Gakr GitHub App
+export const PR_BODY = `## 🤖 Installing GakrCLI GitHub App
 
-This PR adds a GitHub Actions workflow that enables Gakr integration in our repository.
+This PR adds a GitHub Actions workflow that enables GakrCLI integration in our repository.
 
 ### What is Gakr?
 
@@ -71,21 +71,21 @@ This PR adds a GitHub Actions workflow that enables Gakr integration in our repo
 
 ### How it works
 
-Once this PR is merged, we'll be able to interact with Gakr by mentioning @gakrcli in a pull request or issue comment.
-Once the workflow is triggered, Gakr will analyze the comment and surrounding context, and execute on the request in a GitHub action.
+Once this PR is merged, we'll be able to interact with GakrCLI by mentioning @gakrcli in a pull request or issue comment.
+Once the workflow is triggered, GakrCLI will analyze the comment and surrounding context, and execute on the request in a GitHub action.
 
 ### Important Notes
 
 - **This workflow won't take effect until this PR is merged**
 - **@gakrcli mentions won't work until after the merge is complete**
-- The workflow runs automatically whenever Gakr is mentioned in PR or issue comments
-- Gakr gets access to the entire PR or issue context including files, diffs, and previous comments
+- The workflow runs automatically whenever GakrCLI is mentioned in PR or issue comments
+- GakrCLI gets access to the entire PR or issue context including files, diffs, and previous comments
 
 ### Security
 
 - Our Anthropic API key is securely stored as a GitHub Actions secret
 - Only users with write access to the repository can trigger the workflow
-- All Gakr runs are stored in the GitHub Actions run history
+- All GakrCLI runs are stored in the GitHub Actions run history
 - Gakr's default tools are limited to reading/writing files and interacting with our repo by creating comments, branches, and commits.
 - We can add more allowed tools by adding them to the workflow file like:
 
@@ -93,11 +93,11 @@ Once the workflow is triggered, Gakr will analyze the comment and surrounding co
 allowed_tools: Bash(npm install),Bash(npm run build),Bash(npm run lint),Bash(npm run test)
 \`\`\`
 
-There's more information in the [Gakr action repo](https://github.com/anthropics/gakrcli-code-action).
+There's more information in the [GakrCLI action repo](https://github.com/anthropics/gakrcli-code-action).
 
 After merging this PR, let's try mentioning @gakrcli in a comment on any PR to get started!`
 
-export const CODE_REVIEW_PLUGIN_WORKFLOW_CONTENT = `name: Gakr Review
+export const CODE_REVIEW_PLUGIN_WORKFLOW_CONTENT = `name: GakrCLI Review
 
 on:
   pull_request:
@@ -130,7 +130,7 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Run Gakr Review
+      - name: Run GakrCLI Review
         id: gakrcli-review
         uses: anthropics/gakrcli-code-action@v1
         with:

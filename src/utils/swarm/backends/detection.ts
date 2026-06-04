@@ -3,7 +3,7 @@ import { execFileNoThrow } from '../../../utils/execFileNoThrow.js'
 import { TMUX_COMMAND } from '../constants.js'
 
 /**
- * Captured at module load time to detect if the user started Gakr from within tmux.
+ * Captured at module load time to detect if the user started GakrCLI from within tmux.
  * Shell.ts may override TMUX env var later, so we capture the original value.
  */
 // eslint-disable-next-line custom-rules/no-process-env-top-level
@@ -53,7 +53,7 @@ export async function isInsideTmux(): Promise<boolean> {
   }
 
   // Check the original TMUX env var (captured at module load)
-  // This tells us if the user started Gakr from within their tmux session
+  // This tells us if the user started GakrCLI from within their tmux session
   // If TMUX is not set, we are NOT inside tmux - period.
   isInsideTmuxCached = !!ORIGINAL_USER_TMUX
   return isInsideTmuxCached

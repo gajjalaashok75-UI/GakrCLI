@@ -30,7 +30,7 @@ const CHILD_ENV_ALLOWLIST = new Set([
   'LANG', 'LC_ALL', 'LC_CTYPE',
   // Node.js runtime
   'NODE_OPTIONS', 'NODE_PATH', 'NODE_ENV',
-  // Gakr session / bridge (non-secret)
+  // GakrCLI session / bridge (non-secret)
   'GAKR_CODE_ENVIRONMENT_KIND',
   'GAKR_CODE_FORCE_SANDBOX',
   'GAKR_CODE_BUBBLEWRAP',

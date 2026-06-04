@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Gakr — gakrcli Code with any LLM
+ * GakrCLI — gakrcli Code with any LLM
  *
  * If dist/cli.mjs exists (built), run that.
  * Otherwise, tell the user to build first or use `bun run dev`.

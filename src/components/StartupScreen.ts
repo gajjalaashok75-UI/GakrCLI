@@ -1,5 +1,5 @@
 /**
- * Gakr startup screen — filled-block text logo with blue gradient.
+ * GakrCLI startup screen — filled-block text logo with blue gradient.
  * Called once at CLI startup before the Ink UI renders.
  */
 
@@ -62,7 +62,7 @@ function paintLine(text: string, stops: readonly RGB[], lineT: number): string {
 
 // ─── Filled Block Text Logo ───────────────────────────────────────────────────
 
-const LOGO_GAKR = [
+const LOGO_GakrCLI = [
   ` \u2588\u2588\u2588\u2588\u2588\u2588   \u2591\u2588\u2588\u2588\u2588\u2588\u2591   \u2588\u2588   \u2588\u2588   \u2588\u2588\u2588\u2588\u2588\u2588`,
   `\u2588\u2588        \u2588\u2591   \u2591\u2588   \u2588\u2588  \u2588\u2588    \u2588\u2588   \u2588\u2588`,
   `\u2588\u2588  \u2588\u2588\u2588   \u2588\u2588\u2588\u2588\u2588\u2588\u2588   \u2588\u2588\u2588\u2588\u2588     \u2588\u2588\u2588\u2588\u2588\u2588`,

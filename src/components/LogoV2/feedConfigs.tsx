@@ -41,7 +41,7 @@ export function createWhatsNewFeed(releaseNotes: string[]): FeedConfig {
   });
   const emptyMessage = "external" === 'ant' ? 'Unable to fetch latest gakrcli-cli-internal commits' : 'Check /release-notes for recent updates';
   return {
-    title: "external" === 'ant' ? "Gakr Updates [ANT-ONLY: Latest CC commits]" : "Gakr Updates",
+    title: "external" === 'ant' ? "GakrCLI Updates [ANT-ONLY: Latest CC commits]" : "GakrCLI Updates",
     lines,
     footer: lines.length > 0 ? '/release-notes for more' : undefined,
     emptyMessage
@@ -73,7 +73,7 @@ export function createProjectOnboardingFeed(steps: Step[]): FeedConfig {
 }
 export function createGuestPassesFeed(): FeedConfig {
   const reward = getCachedReferrerReward();
-  const subtitle = reward ? `Share Gakr and earn ${formatCreditAmount(reward)} of extra usage` : 'Share Gakr with friends';
+  const subtitle = reward ? `Share GakrCLI and earn ${formatCreditAmount(reward)} of extra usage` : 'Share GakrCLI with friends';
   return {
     title: '3 guest passes',
     lines: [],

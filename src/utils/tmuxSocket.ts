@@ -4,17 +4,17 @@
  * This module manages an isolated tmux socket for Gakr's operations.
  *
  * WHY THIS EXISTS:
- * Without isolation, Gakr could accidentally affect the user's tmux sessions.
+ * Without isolation, GakrCLI could accidentally affect the user's tmux sessions.
  * For example, running `tmux kill-session` via the Bash tool would kill the
- * user's current session if they started Gakr from within tmux.
+ * user's current session if they started GakrCLI from within tmux.
  *
  * HOW IT WORKS:
- * 1. Gakr creates its own tmux socket: `gakrcli-<PID>` (e.g., `gakrcli-12345`)
+ * 1. GakrCLI creates its own tmux socket: `gakrcli-<PID>` (e.g., `gakrcli-12345`)
  * 2. ALL Tmux tool commands use this socket via the `-L` flag
  * 3. ALL Bash tool commands inherit TMUX env var pointing to this socket
  *    (set in Shell.ts via getgakrcliTmuxEnv())
  *
- * This means ANY tmux command run through Gakr - whether via the Tmux tool
+ * This means ANY tmux command run through GakrCLI - whether via the Tmux tool
  * directly or via Bash - will operate on Gakr's isolated socket, NOT the
  * user's tmux session.
  *
@@ -316,7 +316,7 @@ async function doInitialize(): Promise<void> {
   // Set GAKR_CODE_SKIP_PROMPT_HISTORY in the tmux GLOBAL environment (-g).
   // Without -g this would only apply to the 'base' session, and new sessions
   // created by TungstenTool (e.g. 'test', 'verify') would not inherit it.
-  // Any Gakr instance spawned on this socket will inherit this env var,
+  // Any GakrCLI instance spawned on this socket will inherit this env var,
   // preventing test/verification sessions from polluting the user's real
   // command history and --resume session list.
   await execTmux([

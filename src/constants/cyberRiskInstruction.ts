@@ -10,8 +10,8 @@
  * This instruction is owned by the Safeguards team and has been carefully
  * crafted and evaluated to balance security utility with safety. Changes
  * to this text can have significant implications for:
- *   - How Gakr handles penetration testing and CTF requests
- *   - What security tools and techniques Gakr will assist with
+ *   - How GakrCLI handles penetration testing and CTF requests
+ *   - What security tools and techniques GakrCLI will assist with
  *   - The boundary between defensive and offensive security assistance
  *
  * If you need to modify this instruction:

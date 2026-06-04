@@ -207,7 +207,7 @@ export const VideoSearchTool = buildTool({
   maxResultSizeChars: 100_000,
   shouldDefer: true,
   async description(input) {
-    return `Gakr wants to search videos for: ${input.query}`
+    return `GakrCLI wants to search videos for: ${input.query}`
   },
   userFacingName() {
     return 'Video Search'

@@ -634,7 +634,7 @@ function cacheToStats(
 }
 
 /**
- * Aggregates stats from all Gakr sessions across all projects.
+ * Aggregates stats from all GakrCLI sessions across all projects.
  * Uses a disk cache to avoid reprocessing historical data.
  */
 export async function aggregategakrcliCodeStats(): Promise<gakrcliCodeStats> {

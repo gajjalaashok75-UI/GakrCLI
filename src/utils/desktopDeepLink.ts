@@ -28,7 +28,7 @@ function isDevMode(): boolean {
 }
 
 /**
- * Builds a deep link URL for Gakr Desktop to resume a CLI session.
+ * Builds a deep link URL for GakrCLI Desktop to resume a CLI session.
  * Format: gakrcli://resume?session={sessionId}&cwd={cwd}
  * In dev mode: gakrcli-dev://resume?session={sessionId}&cwd={cwd}
  */
@@ -41,7 +41,7 @@ function buildDesktopDeepLink(sessionId: string): string {
 }
 
 /**
- * Check if Gakr Desktop app is installed.
+ * Check if GakrCLI Desktop app is installed.
  * On macOS, checks for /Applications/Gakr.app.
  * On Linux, checks if xdg-open can handle gakrcli:// protocol.
  * On Windows, checks if the protocol handler exists.
@@ -81,7 +81,7 @@ async function isDesktopInstalled(): Promise<boolean> {
 }
 
 /**
- * Detect the installed Gakr Desktop version.
+ * Detect the installed GakrCLI Desktop version.
  * On macOS, reads CFBundleShortVersionString from the app plist.
  * On Windows, finds the highest app-X.Y.Z directory in the Squirrel install.
  * Returns null if version cannot be determined.
@@ -200,7 +200,7 @@ async function openDeepLink(deepLinkUrl: string): Promise<boolean> {
 }
 
 /**
- * Build and open a deep link to resume the current session in Gakr Desktop.
+ * Build and open a deep link to resume the current session in GakrCLI Desktop.
  * Returns an object with success status and any error message.
  */
 export async function openCurrentSessionInDesktop(): Promise<{
@@ -216,7 +216,7 @@ export async function openCurrentSessionInDesktop(): Promise<{
     return {
       success: false,
       error:
-        'Gakr Desktop is not installed. Install it from https://gakr.ai/download',
+        'GakrCLI Desktop is not installed. Install it from https://gakr.ai/download',
     }
   }
 
@@ -227,7 +227,7 @@ export async function openCurrentSessionInDesktop(): Promise<{
   if (!opened) {
     return {
       success: false,
-      error: 'Failed to open Gakr Desktop. Please try opening it manually.',
+      error: 'Failed to open GakrCLI Desktop. Please try opening it manually.',
       deepLinkUrl,
     }
   }

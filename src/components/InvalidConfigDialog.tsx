@@ -20,7 +20,7 @@ interface InvalidConfigDialogProps {
 }
 
 /**
- * Dialog shown when the Gakr config file contains invalid JSON
+ * Dialog shown when the GakrCLI config file contains invalid JSON
  */
 function InvalidConfigDialog(t0) {
   const $ = _c(19);

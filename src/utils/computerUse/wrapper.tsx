@@ -54,7 +54,7 @@ function tuc(): ToolUseContext {
   return currentToolUseContext!;
 }
 function formatLockHeld(holder: string): string {
-  return `Computer use is in use by another Gakr session (${holder.slice(0, 8)}…). Wait for that session to finish or run /exit there.`;
+  return `Computer use is in use by another GakrCLI session (${holder.slice(0, 8)}…). Wait for that session to finish or run /exit there.`;
 }
 export function buildSessionContext(): ComputerUseSessionContext {
   return {
@@ -219,7 +219,7 @@ export function buildSessionContext(): ComputerUseSessionContext {
           tuc().abortController.abort();
         });
         tuc().sendOSNotification?.({
-          message: escRegistered ? 'Gakr is using your computer · press Esc to stop' : 'Gakr is using your computer · press Ctrl+C to stop',
+          message: escRegistered ? 'GakrCLI is using your computer · press Esc to stop' : 'GakrCLI is using your computer · press Ctrl+C to stop',
           notificationType: 'computer_use_enter'
         });
       }

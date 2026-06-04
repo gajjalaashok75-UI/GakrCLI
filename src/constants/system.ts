@@ -10,9 +10,9 @@ import { getWorkload } from '../utils/workloadContext.js'
 const DEFAULT_PREFIX =
   `You are GakrCLI, an open-source coding agent and CLI.`
 const AGENT_SDK_GAKR_CODE_PRESET_PREFIX =
-  `You are GakrCLI, an open-source coding agent and CLI, running within the Gakr Agent SDK.`
+  `You are GakrCLI, an open-source coding agent and CLI, running within the GakrCLI Agent SDK.`
 const AGENT_SDK_PREFIX =
-  `You are a GakrCLI agent running in GakrCLI, built on the Gakr Agent SDK.`
+  `You are a GakrCLI agent running in GakrCLI, built on the GakrCLI Agent SDK.`
 
 const CLI_SYSPROMPT_PREFIX_VALUES = [
   DEFAULT_PREFIX,

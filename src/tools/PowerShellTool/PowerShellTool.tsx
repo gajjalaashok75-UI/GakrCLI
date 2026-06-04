@@ -572,7 +572,7 @@ export const PowerShellTool = buildTool({
 
       let stdout = stripEmptyLines(stdoutAccumulator.toString());
 
-      // Gakr hints protocol: CLIs/SDKs gated on gakrcliCODE=1 emit a
+      // GakrCLI hints protocol: CLIs/SDKs gated on gakrcliCODE=1 emit a
       // `<gakrcli-code-hint />` tag to stderr (merged into stdout here). Scan,
       // record for usegakrcliCodeHintRecommendation to surface, then strip
       // so the model never sees the tag — a zero-token side channel.
@@ -852,7 +852,7 @@ async function* runPowerShellCommand({
     }, ASSISTANT_BLOCKING_BUDGET_MS).unref();
   }
 
-  // Handle Gakr asking to run it in the background explicitly
+  // Handle GakrCLI asking to run it in the background explicitly
   // When explicitly requested via run_in_background, always honor the request
   // regardless of the command type (isAutobackgroundingAllowed only applies to automatic backgrounding)
   if (run_in_background === true && !isBackgroundTasksDisabled) {

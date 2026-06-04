@@ -51,7 +51,7 @@ export const syncHookResponseSchema = lazySchema(() =>
   z.object({
     continue: z
       .boolean()
-      .describe('Whether Gakr should continue after hook (default: true)')
+      .describe('Whether GakrCLI should continue after hook (default: true)')
       .optional(),
     suppressOutput: z
       .boolean()

@@ -108,7 +108,7 @@ export async function ensureLocalPackageEnvironment(): Promise<boolean> {
 }
 
 /**
- * Install or update Gakr CLI package in the local directory
+ * Install or update GakrCLI CLI package in the local directory
  * @param channel - Release channel to use (latest or stable)
  * @param specificVersion - Optional specific version to install (overrides channel)
  */
@@ -136,7 +136,7 @@ export async function installOrUpdategakrcliPackage(
 
     if (result.code !== 0) {
       const error = new Error(
-        `Failed to install Gakr CLI package: ${result.stderr}`,
+        `Failed to install GakrCLI CLI package: ${result.stderr}`,
       )
       logError(error)
       return result.code === 190 ? 'in_progress' : 'install_failed'

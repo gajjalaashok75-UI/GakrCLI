@@ -423,7 +423,7 @@ export async function mcpAddFromDesktopHandler(options: {
     } = await import('../../utils/gakrcliDesktop.js');
     const servers = await readgakrcliDesktopMcpServers();
     if (Object.keys(servers).length === 0) {
-      cliOk('No MCP servers found in Gakr Desktop configuration or configuration file does not exist.');
+      cliOk('No MCP servers found in GakrCLI Desktop configuration or configuration file does not exist.');
     }
     const {
       unmount

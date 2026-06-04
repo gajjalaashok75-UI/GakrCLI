@@ -541,7 +541,7 @@ export async function ripGrep(
         logError(error)
       }
 
-      // If we timed out with no results, throw an error so Gakr knows the search
+      // If we timed out with no results, throw an error so GakrCLI knows the search
       // didn't complete rather than thinking there were no matches
       if (isTimeout && lines.length === 0) {
         reject(

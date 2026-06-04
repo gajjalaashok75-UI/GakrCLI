@@ -72,12 +72,12 @@ export function DesktopHandoff(t0) {
         setState("checking");
         const installStatus = await getDesktopInstallStatus();
         if (installStatus.status === "not-installed") {
-          setDownloadMessage("Gakr Desktop is not installed.");
+          setDownloadMessage("GakrCLI Desktop is not installed.");
           setState("prompt-download");
           return;
         }
         if (installStatus.status === "version-too-old") {
-          setDownloadMessage(`Gakr Desktop needs to be updated (found v${installStatus.version}, need v1.1.2396+).`);
+          setDownloadMessage(`GakrCLI Desktop needs to be updated (found v${installStatus.version}, need v1.1.2396+).`);
           setState("prompt-download");
           return;
         }
@@ -86,7 +86,7 @@ export function DesktopHandoff(t0) {
         setState("opening");
         const result = await openCurrentSessionInDesktop();
         if (!result.success) {
-          setError(result.error ?? "Failed to open Gakr Desktop");
+          setError(result.error ?? "Failed to open GakrCLI Desktop");
           setState("error");
           return;
         }
@@ -162,10 +162,10 @@ export function DesktopHandoff(t0) {
   let t4;
   if ($[17] === Symbol.for("react.memo_cache_sentinel")) {
     t4 = {
-      checking: "Checking for Gakr Desktop\u2026",
+      checking: "Checking for GakrCLI Desktop\u2026",
       flushing: "Saving session\u2026",
-      opening: "Opening Gakr Desktop\u2026",
-      success: "Opening in Gakr Desktop\u2026"
+      opening: "Opening GakrCLI Desktop\u2026",
+      success: "Opening in GakrCLI Desktop\u2026"
     };
     $[17] = t4;
   } else {
@@ -184,7 +184,7 @@ export function DesktopHandoff(t0) {
   return t6;
 }
 async function _temp2(onDone_0) {
-  onDone_0("Session transferred to Gakr Desktop", {
+  onDone_0("Session transferred to GakrCLI Desktop", {
     display: "system"
   });
   await gracefulShutdown(0, "other");

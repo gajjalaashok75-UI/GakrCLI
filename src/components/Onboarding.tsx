@@ -75,7 +75,7 @@ export function Onboarding({
          */}
         <OrderedList>
           <OrderedList.Item>
-            <Text>Gakr can make mistakes</Text>
+            <Text>GakrCLI can make mistakes</Text>
             <Text dimColor wrap="wrap">
               You should always review Gakr&apos;s responses, especially when
               <Newline />

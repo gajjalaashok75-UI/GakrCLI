@@ -70,7 +70,7 @@ export function IdeOnboardingDialog(t0) {
   }
   let t6;
   if ($[8] !== ideName) {
-    t6 = <>{t5}<Text>Welcome to Gakr for {ideName}</Text></>;
+    t6 = <>{t5}<Text>Welcome to GakrCLI for {ideName}</Text></>;
     $[8] = ideName;
     $[9] = t6;
   } else {
@@ -86,7 +86,7 @@ export function IdeOnboardingDialog(t0) {
   }
   let t9;
   if ($[11] === Symbol.for("react.memo_cache_sentinel")) {
-    t9 = <Text>• Gakr has context of {t8}{" "}and <Text color="suggestion">⧉ selected lines</Text></Text>;
+    t9 = <Text>• GakrCLI has context of {t8}{" "}and <Text color="suggestion">⧉ selected lines</Text></Text>;
     $[11] = t9;
   } else {
     t9 = $[11];

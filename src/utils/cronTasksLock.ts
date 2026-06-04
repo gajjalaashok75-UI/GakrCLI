@@ -1,6 +1,6 @@
 // Scheduler lease lock for .gakrcli/scheduled_tasks.json.
 //
-// When multiple Gakr sessions run in the same project directory, only one
+// When multiple GakrCLI sessions run in the same project directory, only one
 // should drive the cron scheduler. The first session to acquire this lock
 // becomes the scheduler; others stay passive and periodically probe the lock.
 // If the owner dies (PID no longer running), a passive session takes over.
