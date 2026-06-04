@@ -531,6 +531,54 @@ If `autoMemoryDirectory` is set in trusted settings or `GAKR_COWORK_MEMORY_PATH_
 
 Auto-memory content is not all injected every turn. The `MEMORY.md` index may be loaded into instruction context, and relevant topic files can be surfaced later as attachments.
 
+### Main Agent Versus Auto-Update Memory Fork
+
+The main agent and the background memory extraction agent start from the same cache-critical context, but they use it for different jobs.
+
+The main agent context includes:
+
+- the system prompt from `getSystemPrompt()`
+- `systemContext` from `getSystemContext()`, including the startup git snapshot when enabled
+- `userContext` from `getUserContext()`, including rendered workspace/project instruction files, workspace `MEMORY.md`, project/team memory entrypoints, and `currentDate`
+- the active conversation messages after compaction/collapse projection
+- current-turn and continuation attachments such as tool results, IDE context, relevant memory topic files, diagnostics, queued commands, skill/MCP deltas, and reminders
+- the live `ToolUseContext`, including the available tools, MCP tools, agents, model/provider options, permission state, file-read state, and runtime callbacks
+
+The auto-update memory fork is launched from `initExtractMemories()` after a completed main query loop. It receives `createCacheSafeParams(context)`, which copies the parent's:
+
+- `systemPrompt`
+- `userContext`
+- `systemContext`
+- `toolUseContext`
+- model-facing parent `messages`
+
+`runForkedAgent()` then creates the fork request as:
+
+```text
+initialMessages = parent model-facing messages + extraction prompt message
+query({
+  messages: initialMessages,
+  systemPrompt: parent systemPrompt,
+  userContext: parent userContext,
+  systemContext: parent systemContext,
+  toolUseContext: isolated clone of parent toolUseContext,
+  querySource: "extract_memories"
+})
+```
+
+So the fork sees the same workspace files, root `MEMORY.md`, project/team `MEMORY.md` indexes, current date, system prompt, tool schemas, and conversation prefix that the main agent used. It also sees one extra user prompt from `src/services/extractMemories/prompts.ts` that tells it to analyze only the recent messages and update persistent memory.
+
+The fork is intentionally different in these ways:
+
+- It appends a memory-extraction instruction instead of answering the user.
+- Its mutable tool state is isolated with `createSubagentContext()`, so file-read state, tool decisions, nested-memory triggers, and abort handling do not mutate the main loop directly.
+- Permission prompts are avoided for the background fork; it uses `createAutoMemCanUseTool()` to allow only the memory-safe read/search/write operations it needs.
+- It skips transcript recording (`skipTranscript: true`) so the background write pass does not race with or pollute the main conversation transcript.
+- It has a hard `maxTurns: 10` cap.
+- It skips running when the main agent already wrote memory files in the same message range.
+
+The fork should not create dated session files such as `DD-MM-YYYY.md` or `YYYY-MM-DD.md`. It should update semantic topic files under the project private memory directory, the team memory directory when enabled, and the relevant `MEMORY.md` index. Cross-project durable facts still belong in root workspace files such as `~/.gakrcli/workspace/MEMORY.md`, `USER.md`, or `RULEBOOK.md`.
+
 ## Current User Turn
 
 For each user prompt, `processUserInput()` builds the user message and immediate attachments. This can include:
