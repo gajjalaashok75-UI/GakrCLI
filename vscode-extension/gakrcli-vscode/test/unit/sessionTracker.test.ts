@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import * as vscode from 'vscode';
+import * as vscode from '../__mocks__/vscode';
 import { SessionTracker, sanitizeProjectPathForSessions } from '../../src/session/sessionTracker';
 
 describe('SessionTracker project path sanitizer', () => {

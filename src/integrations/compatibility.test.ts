@@ -34,6 +34,8 @@ const EXPECTED_PRESETS = [
   'custom',
   'nvidia-nim',
   'minimax',
+  'opencode-go',
+  'opencode',
   'venice',
   'xai',
   'xiaomi-mimo',

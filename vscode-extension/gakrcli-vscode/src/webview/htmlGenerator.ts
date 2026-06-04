@@ -1,5 +1,6 @@
-import * as vscode from 'vscode';
+import type * as VSCode from 'vscode';
 import * as crypto from 'crypto';
+import { vscode } from '../vscodeCompat';
 
 /** Generate a cryptographic nonce for Content Security Policy. */
 export function generateNonce(): string {
@@ -64,8 +65,8 @@ export function getFontConfig(): {
 }
 
 export interface HtmlGeneratorOptions {
-  webview: vscode.Webview;
-  extensionUri: vscode.Uri;
+  webview: VSCode.Webview;
+  extensionUri: VSCode.Uri;
   isSidebar: boolean;
   isFullEditor?: boolean;
   isSessionListOnly?: boolean;

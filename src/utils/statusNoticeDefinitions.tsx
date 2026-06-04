@@ -15,6 +15,7 @@ import { isJetBrainsPluginInstalledCachedSync } from './jetbrains.js';
 import type { PermissionMode } from './permissions/PermissionMode.js';
 import { modelSupportsAutoMode } from './betas.js';
 import { getAPIProvider } from './model/providers.js';
+import type { LocalModelContextWarning } from './statusNoticeLocalModel.js';
 
 // Types
 export type StatusNoticeType = 'warning' | 'info';
@@ -24,6 +25,8 @@ export type StatusNoticeContext = {
   memoryFiles: MemoryFileInfo[];
   permissionMode?: PermissionMode;
   mainLoopModel?: string;
+  isLocalModel?: boolean;
+  localModelContextLoad?: LocalModelContextWarning | null;
 };
 export type StatusNoticeDefinition = {
   id: string;
@@ -36,7 +39,12 @@ export type StatusNoticeDefinition = {
 const largeMemoryFilesNotice: StatusNoticeDefinition = {
   id: 'large-memory-files',
   type: 'warning',
-  isActive: ctx => getLargeMemoryFiles(ctx.memoryFiles).length > 0,
+  isActive: ctx => {
+    if (ctx.isLocalModel && ctx.localModelContextLoad) {
+      return false;
+    }
+    return getLargeMemoryFiles(ctx.memoryFiles).length > 0;
+  },
   render: ctx => {
     const largeMemoryFiles = getLargeMemoryFiles(ctx.memoryFiles);
     return <>
@@ -146,6 +154,9 @@ const largeAgentDescriptionsNotice: StatusNoticeDefinition = {
   id: 'large-agent-descriptions',
   type: 'warning',
   isActive: context => {
+    if (context.isLocalModel && context.localModelContextLoad) {
+      return false;
+    }
     const totalTokens = getAgentDescriptionsTotalTokens(context.agentDefinitions);
     return totalTokens > AGENT_DESCRIPTIONS_THRESHOLD;
   },
@@ -243,8 +254,29 @@ const dangerouslySkipPermissionsNotice: StatusNoticeDefinition = {
     </Box>
 };
 
+const localModelContextLoadNotice: StatusNoticeDefinition = {
+  id: 'local-model-context-load',
+  type: 'warning',
+  isActive: context => context.localModelContextLoad != null,
+  render: context => {
+    const warning = context.localModelContextLoad;
+    if (!warning) {
+      return null;
+    }
+    return <Box flexDirection="column">
+        <Box flexDirection="row">
+          <Text color="warning">{figures.warning}</Text>
+          <Text color="warning">
+            Local model context load is high: {warning.lines.join(' · ')}
+            <Text dimColor> Use /doctor for details.</Text>
+          </Text>
+        </Box>
+      </Box>;
+  }
+};
+
 // All notice definitions
-export const statusNoticeDefinitions: StatusNoticeDefinition[] = [largeMemoryFilesNotice, largeAgentDescriptionsNotice, gakrcliAiSubscriberExternalTokenNotice, apiKeyConflictNotice, bothAuthMethodsNotice, jetbrainsPluginNotice, thirdPartyPermissiveModeNotice, dangerouslySkipPermissionsNotice];
+export const statusNoticeDefinitions: StatusNoticeDefinition[] = [largeMemoryFilesNotice, largeAgentDescriptionsNotice, localModelContextLoadNotice, gakrcliAiSubscriberExternalTokenNotice, apiKeyConflictNotice, bothAuthMethodsNotice, jetbrainsPluginNotice, thirdPartyPermissiveModeNotice, dangerouslySkipPermissionsNotice];
 
 // Helper functions for external use
 export function getActiveNotices(context: StatusNoticeContext): StatusNoticeDefinition[] {

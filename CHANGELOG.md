@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed (2026-06-04)
 - **Semantic Memory Storage Only**: Removed dated session memory/log guidance from the main memory prompt, KAIROS assistant-mode memory prompt, extraction prompt, and auto-dream consolidation prompt. Memory updates now target semantic topic files plus the appropriate `MEMORY.md` index only.
 - **Open-Build KAIROS Activation**: Enabled the KAIROS build flag for local assistant-mode startup, added open-build assistant/gate/session-discovery shims, kept remote assistant session attachment out of the open-build startup path, and covered forced mode plus unavailable cloud discovery with focused tests.
+- **Runtime Wiring And Verification**: Wired the new open-build KAIROS, permission-mode, provider routing, semantic memory, settings watcher, skill watcher, auto-compact, and VS Code runtime changes together with focused regression coverage and full-suite verification.
+- **VS Code Test Runtime Compatibility**: Added a shared VS Code compatibility loader so extension unit tests can exercise runtime modules without depending on the real `vscode` host module.
 
 ## [unreleased - 0.5.5]
 

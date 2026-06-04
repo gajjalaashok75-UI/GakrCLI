@@ -1,11 +1,13 @@
 import { roughTokenCountEstimation } from '../services/tokenEstimation.js'
 import type { Tool, ToolPermissionContext } from '../Tool.js'
 import type { AgentDefinitionsResult } from '../tools/AgentTool/loadAgentsDir.js'
+import { TOOL_SEARCH_TOOL_NAME } from '../tools/ToolSearchTool/constants.js'
 import { countMcpToolTokens } from './analyzeContext.js'
 import {
   getLargeMemoryFiles,
   getMemoryFiles,
   MAX_MEMORY_CHARACTER_COUNT,
+  type MemoryFileInfo,
 } from './gakrclimd.js'
 import { getMainLoopModel } from './model/model.js'
 import { permissionRuleValueToString } from './permissions/permissionRuleParser.js'
@@ -18,7 +20,30 @@ import {
 import { plural } from './stringUtils.js'
 
 // Thresholds (matching status notices and existing patterns)
-const MCP_TOOLS_THRESHOLD = 25_000 // 15k tokens
+const MCP_TOOLS_THRESHOLD = 25_000
+
+type McpToolTokenDetail = {
+  name: string
+  serverName?: string
+  tokens: number
+  isLoaded?: boolean
+}
+
+export type CheckContextWarningsOptions = {
+  memoryFiles?: MemoryFileInfo[]
+  mcpTokenStrategy?: 'api' | 'estimate'
+  includeUnreachableRules?: boolean
+}
+
+async function safeWarning(
+  run: () => Promise<ContextWarning | null>,
+): Promise<ContextWarning | null> {
+  try {
+    return await run()
+  } catch {
+    return null
+  }
+}
 
 export type ContextWarning = {
   type:
@@ -40,8 +65,10 @@ export type ContextWarnings = {
   unreachableRulesWarning: ContextWarning | null
 }
 
-async function checkgakrcliMdFiles(): Promise<ContextWarning | null> {
-  const largeFiles = getLargeMemoryFiles(await getMemoryFiles())
+async function checkgakrcliMdFiles(
+  memoryFiles?: MemoryFileInfo[],
+): Promise<ContextWarning | null> {
+  const largeFiles = getLargeMemoryFiles(memoryFiles ?? (await getMemoryFiles()))
 
   // This already filters for files > 40k chars each
   if (largeFiles.length === 0) {
@@ -116,10 +143,136 @@ async function checkAgentDescriptions(
 /**
  * Check MCP tools token count
  */
+async function estimateMcpToolTokens(
+  tools: Tool[],
+  getToolPermissionContext: () => Promise<ToolPermissionContext>,
+  agentInfo: AgentDefinitionsResult | null,
+): Promise<{
+  mcpToolTokens: number
+  mcpToolDetails: McpToolTokenDetail[]
+}> {
+  const mcpTools = tools.filter(tool => tool.isMcp)
+  const estimates = await Promise.all(
+    mcpTools.map(async tool => {
+      let description = ''
+      try {
+        description = await tool.prompt({
+          getToolPermissionContext,
+          tools,
+          agents: agentInfo?.activeAgents ?? [],
+        })
+      } catch {
+        description = ''
+      }
+
+      let definitionForEstimate: string
+      try {
+        definitionForEstimate = JSON.stringify({
+          name: tool.name,
+          description,
+          input_schema: tool.inputJSONSchema ?? {},
+        })
+      } catch {
+        definitionForEstimate = JSON.stringify({
+          name: tool.name,
+          description,
+          input_schema: {},
+        })
+      }
+
+      return {
+        name: tool.name,
+        serverName: tool.mcpInfo?.serverName ?? tool.name.split('__')[1],
+        tokens: roughTokenCountEstimation(definitionForEstimate),
+        isLoaded: true,
+      }
+    }),
+  )
+
+  let isDeferred = false
+  if (tools.some(tool => tool.name === TOOL_SEARCH_TOOL_NAME)) {
+    const model = getMainLoopModel()
+    const { isToolSearchEnabled } = await import('./toolSearch.js')
+    try {
+      isDeferred = await isToolSearchEnabled(
+        model,
+        tools,
+        getToolPermissionContext,
+        agentInfo?.activeAgents ?? [],
+        'analyzeMcp',
+      )
+    } catch {
+      isDeferred = false
+    }
+  }
+  const { isDeferredTool } = await import('../tools/ToolSearchTool/prompt.js')
+
+  const mcpToolDetails = estimates.map((detail, index) => ({
+    ...detail,
+    isLoaded: !isDeferred || !isDeferredTool(mcpTools[index]!),
+  }))
+
+  const mcpToolTokens = mcpToolDetails
+    .filter(detail => detail.isLoaded)
+    .reduce((total, detail) => total + detail.tokens, 0)
+
+  return { mcpToolTokens, mcpToolDetails }
+}
+
+function buildMcpToolsWarning(
+  mcpToolTokens: number,
+  mcpToolDetails: McpToolTokenDetail[],
+  estimated: boolean,
+): ContextWarning | null {
+  if (mcpToolTokens <= MCP_TOOLS_THRESHOLD) {
+    return null
+  }
+
+  const toolsByServer = new Map<string, { count: number; tokens: number }>()
+
+  for (const tool of mcpToolDetails) {
+    if (tool.isLoaded === false) {
+      continue
+    }
+
+    const serverName = tool.serverName ?? tool.name.split('__')[1] ?? 'unknown'
+    const current = toolsByServer.get(serverName) || { count: 0, tokens: 0 }
+    toolsByServer.set(serverName, {
+      count: current.count + 1,
+      tokens: current.tokens + tool.tokens,
+    })
+  }
+
+  const sortedServers = Array.from(toolsByServer.entries()).sort(
+    (a, b) => b[1].tokens - a[1].tokens,
+  )
+
+  const details = sortedServers
+    .slice(0, 5)
+    .map(
+      ([name, info]) =>
+        `${name}: ${info.count} tools (~${info.tokens.toLocaleString()} tokens)`,
+    )
+
+  if (sortedServers.length > 5) {
+    details.push(`(${sortedServers.length - 5} more servers)`)
+  }
+
+  return {
+    type: 'mcp_tools',
+    severity: 'warning',
+    message: `Large MCP tools context (~${mcpToolTokens.toLocaleString()} tokens${estimated ? ' estimated' : ''} > ${MCP_TOOLS_THRESHOLD.toLocaleString()})`,
+    details,
+    currentValue: mcpToolTokens,
+    threshold: MCP_TOOLS_THRESHOLD,
+  }
+}
+
 async function checkMcpTools(
   tools: Tool[],
   getToolPermissionContext: () => Promise<ToolPermissionContext>,
   agentInfo: AgentDefinitionsResult | null,
+  tokenStrategy: CheckContextWarningsOptions['mcpTokenStrategy'] = 'api',
 ): Promise<ContextWarning | null> {
   const mcpTools = tools.filter(tool => tool.isMcp)
 
@@ -127,6 +280,15 @@ async function checkMcpTools(
   // when doctor command runs, as it executes before MCP connections are established
   if (mcpTools.length === 0) {
     return null
+  }
+
+  if (tokenStrategy === 'estimate') {
+    const { mcpToolTokens, mcpToolDetails } = await estimateMcpToolTokens(
+      tools,
+      getToolPermissionContext,
+      agentInfo,
+    )
+    return buildMcpToolsWarning(mcpToolTokens, mcpToolDetails, true)
   }
 
   try {
@@ -139,70 +301,14 @@ async function checkMcpTools(
       model,
     )
 
-    if (mcpToolTokens <= MCP_TOOLS_THRESHOLD) {
-      return null
-    }
-
-    // Group tools by server
-    const toolsByServer = new Map<string, { count: number; tokens: number }>()
-
-    for (const tool of mcpToolDetails) {
-      // Extract server name from tool name (format: mcp__servername__toolname)
-      const parts = tool.name.split('__')
-      const serverName = parts[1] || 'unknown'
-
-      const current = toolsByServer.get(serverName) || { count: 0, tokens: 0 }
-      toolsByServer.set(serverName, {
-        count: current.count + 1,
-        tokens: current.tokens + tool.tokens,
-      })
-    }
-
-    // Sort servers by token count
-    const sortedServers = Array.from(toolsByServer.entries()).sort(
-      (a, b) => b[1].tokens - a[1].tokens,
-    )
-
-    const details = sortedServers
-      .slice(0, 5)
-      .map(
-        ([name, info]) =>
-          `${name}: ${info.count} tools (~${info.tokens.toLocaleString()} tokens)`,
-      )
-
-    if (sortedServers.length > 5) {
-      details.push(`(${sortedServers.length - 5} more servers)`)
-    }
-
-    return {
-      type: 'mcp_tools',
-      severity: 'warning',
-      message: `Large MCP tools context (~${mcpToolTokens.toLocaleString()} tokens > ${MCP_TOOLS_THRESHOLD.toLocaleString()})`,
-      details,
-      currentValue: mcpToolTokens,
-      threshold: MCP_TOOLS_THRESHOLD,
-    }
+    return buildMcpToolsWarning(mcpToolTokens, mcpToolDetails, false)
   } catch (_error) {
-    // If token counting fails, fall back to character-based estimation
-    const estimatedTokens = mcpTools.reduce((total, tool) => {
-      const chars = (tool.name?.length || 0) + tool.description.length
-      return total + roughTokenCountEstimation(chars.toString())
-    }, 0)
-
-    if (estimatedTokens <= MCP_TOOLS_THRESHOLD) {
-      return null
-    }
-
-    return {
-      type: 'mcp_tools',
-      severity: 'warning',
-      message: `Large MCP tools context (~${estimatedTokens.toLocaleString()} tokens estimated > ${MCP_TOOLS_THRESHOLD.toLocaleString()})`,
-      details: [
-        `${mcpTools.length} MCP tools detected (token count estimated)`,
-      ],
-      currentValue: estimatedTokens,
-      threshold: MCP_TOOLS_THRESHOLD,
-    }
+    const { mcpToolTokens, mcpToolDetails } = await estimateMcpToolTokens(
+      tools,
+      getToolPermissionContext,
+      agentInfo,
+    )
+    return buildMcpToolsWarning(mcpToolTokens, mcpToolDetails, true)
   }
 }
 
@@ -247,13 +353,24 @@ export async function checkContextWarnings(
   tools: Tool[],
   agentInfo: AgentDefinitionsResult | null,
   getToolPermissionContext: () => Promise<ToolPermissionContext>,
+  options: CheckContextWarningsOptions = {},
 ): Promise<ContextWarnings> {
+  const includeUnreachableRules = options.includeUnreachableRules ?? true
   const [gakrcliMdWarning, agentWarning, mcpWarning, unreachableRulesWarning] =
     await Promise.all([
-      checkgakrcliMdFiles(),
-      checkAgentDescriptions(agentInfo),
-      checkMcpTools(tools, getToolPermissionContext, agentInfo),
-      checkUnreachableRules(getToolPermissionContext),
+      safeWarning(() => checkgakrcliMdFiles(options.memoryFiles)),
+      safeWarning(() => checkAgentDescriptions(agentInfo)),
+      safeWarning(() =>
+        checkMcpTools(
+          tools,
+          getToolPermissionContext,
+          agentInfo,
+          options.mcpTokenStrategy,
+        ),
+      ),
+      includeUnreachableRules
+        ? safeWarning(() => checkUnreachableRules(getToolPermissionContext))
+        : Promise.resolve(null),
     ])
 
   return {

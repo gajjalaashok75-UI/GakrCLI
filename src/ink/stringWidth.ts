@@ -17,7 +17,7 @@ const EMOJI_REGEX = emojiRegex()
  * which correctly treats ambiguous-width characters as narrow (width 1) as
  * recommended by the Unicode standard for Western contexts.
  */
-function stringWidthJavaScript(str: string): number {
+export function stringWidthJavaScript(str: string): number {
   if (typeof str !== 'string' || str.length === 0) {
     return 0
   }
@@ -70,7 +70,17 @@ function stringWidthJavaScript(str: string): number {
     // Check for emoji first (most emoji sequences are width 2)
     EMOJI_REGEX.lastIndex = 0
     if (EMOJI_REGEX.test(grapheme)) {
-      width += getEmojiWidth(grapheme)
+      const graphemeWidth = getEmojiWidth(grapheme)
+      // Many text-presentation symbols are matched by emoji-regex but render
+      // as narrow unless qualified by VS16.
+      if (graphemeWidth === 2 && [...grapheme].length === 1) {
+        const codePoint = grapheme.codePointAt(0)!
+        if (codePoint >= 0x2000 && codePoint <= 0x2bff) {
+          width += eastAsianWidth(codePoint, { ambiguousAsWide: false })
+          continue
+        }
+      }
+      width += graphemeWidth
       continue
     }
 

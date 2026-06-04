@@ -465,6 +465,10 @@ function getSdkContext(): SdkContext | undefined {
   return sdkContextStorage.getStore()
 }
 
+export function isSdkContextActive(): boolean {
+  return getSdkContext() !== undefined
+}
+
 export function getSessionId(): SessionId {
   const ctx = getSdkContext()
   return ctx?.sessionId ?? STATE.sessionId

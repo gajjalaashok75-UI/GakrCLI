@@ -39,6 +39,13 @@ import {
 import { containsVulnerableUncPath } from '../shell/readOnlyCommandValidation.js'
 import { getToolResultsDir } from '../toolResultStorage.js'
 import { windowsPathToPosixPath } from '../windowsPaths.js'
+
+export function isGakrCommitMessagePath(absolutePath: string): boolean {
+  return (
+    normalize(absolutePath).toLowerCase() ===
+    normalize(join(getOriginalCwd(), '.git', 'GAKR_COMMIT_MSG')).toLowerCase()
+  )
+}
 import type {
   PermissionDecision,
   PermissionResult,
@@ -1247,6 +1254,21 @@ export function checkWritePermissionForTool<Input extends AnyObject>(
   )
   if (internalEditResult.behavior !== 'passthrough') {
     return internalEditResult
+  }
+
+  if (
+    (toolPermissionContext.mode === 'bypassPermissions' ||
+      toolPermissionContext.mode === 'fullAccess') &&
+    isGakrCommitMessagePath(absolutePathForEdit)
+  ) {
+    return {
+      behavior: 'allow',
+      updatedInput: input,
+      decisionReason: {
+        type: 'other',
+        reason: 'GakrCLI commit message file is allowed for writing',
+      },
+    }
   }
 
   // 1.6. Check for .gakrcli/** allow rules BEFORE safety checks
