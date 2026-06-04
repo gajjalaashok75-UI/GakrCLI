@@ -19,3 +19,16 @@ test('memory prompts use GakrCLI identity and docs names', () => {
   expect(promptText).not.toContain('CLAUDE.md')
   expect(promptText).not.toContain('Claude Code')
 })
+
+test('memory prompts use semantic files instead of dated session files', () => {
+  const promptText = buildMemoryLines(
+    'auto memory',
+    '/tmp/gakrcli-memory/',
+  ).join('\n')
+
+  expect(promptText).toContain('Organize memory semantically by topic')
+  expect(promptText).toContain('MEMORY.md')
+  expect(promptText).not.toContain('Daily session files')
+  expect(promptText).not.toContain('YYYY-MM-DD.md')
+  expect(promptText).not.toContain('DD-MM-YYYY.md')
+})

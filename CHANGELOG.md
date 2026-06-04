@@ -19,9 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added (2026-06-03)
 - **Context Building Test Coverage**: Added 22 unit tests for workspace context priority ordering (`WORKSPACE_CONTEXT_FILE_ORDER`), `renderWorkspaceContext` output structure, HTML comment stripping, and `parseMemoryFileContent` frontmatter/globs/contentDiffersFromDisk handling in `src/utils/gakrclimd.test.ts`.
 - **Internal Helpers Exported for Testing**: Exported `WORKSPACE_CONTEXT_FILE_ORDER`, `compareWorkspaceFiles`, `renderWorkspaceContext`, and `parseMemoryFileContent` from `src/utils/gakrclimd.ts` to enable direct unit verification of context-building internals.
-- **Memory Extraction Prompt Overhaul**: Added concise 10-turn parallel directive, daily file path (`YYYY-MM-DD.md`), workspace routing, per-file ~50 KB cap, MEMORY.md index line-cap guard, absolute path requirements, TEAMMEM flag check, and frontmatter schema example to extraction prompt in `src/services/extractMemories/prompts.ts`.
+- **Memory Extraction Prompt Overhaul**: Added concise 10-turn parallel directive, workspace routing, per-file ~50 KB cap, MEMORY.md index line-cap guard, absolute path requirements, TEAMMEM flag check, and frontmatter schema example to extraction prompt in `src/services/extractMemories/prompts.ts`.
 - **Raised Auto-Update Budget**: Increased `maxTurns` from 5 to 10 in `src/services/extractMemories/extractMemories.ts` to support parallel multi-file writes (up to 10 files) across workspace and project memory in a single extraction run.
-- **Doubled MEMORY.md Index Truncation Limits**: Raised `MAX_ENTRYPOINT_LINES` from 200 to 400 and `MAX_ENTRYPOINT_BYTES` from 25 KB to 50 KB in `src/memdir/memdir.ts` for richer project `MEMORY.md` index content. Workspace-root `MEMORY.md` remains uncapped as a daily journal; per-file topic entries still advise ~50 KB max.
+- **Doubled MEMORY.md Index Truncation Limits**: Raised `MAX_ENTRYPOINT_LINES` from 200 to 400 and `MAX_ENTRYPOINT_BYTES` from 25 KB to 50 KB in `src/memdir/memdir.ts` for richer project `MEMORY.md` index content. Workspace-root `MEMORY.md` remains uncapped as cross-project memory; per-file topic entries still advise ~50 KB max.
+- **Context Building Documentation**: Documented the exact context shared by the main agent and the auto-update memory fork, including inherited system/user context, parent message prefix, isolated tool state, transcript skipping, and memory-safe tool restrictions.
+
+### Changed (2026-06-04)
+- **Semantic Memory Storage Only**: Removed dated session memory/log guidance from the main memory prompt, KAIROS assistant-mode memory prompt, extraction prompt, and auto-dream consolidation prompt. Memory updates now target semantic topic files plus the appropriate `MEMORY.md` index only.
 
 ## [unreleased - 0.5.5]
 
