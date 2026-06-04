@@ -615,7 +615,8 @@ export async function main() {
     // prints usage.
     if (feature('KAIROS') && _pendingAssistantChat) {
         const rawArgs = process.argv.slice(2);
-        if (rawArgs[0] === 'assistant') {
+        const remoteAssistantSessionsSupported = assistantModule?.supportsRemoteAssistantSessions?.() !== false;
+        if (rawArgs[0] === 'assistant' && remoteAssistantSessionsSupported) {
             const nextArg = rawArgs[1];
             if (nextArg && !nextArg.startsWith('-')) {
                 _pendingAssistantChat.sessionId = nextArg;

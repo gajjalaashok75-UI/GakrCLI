@@ -35,7 +35,6 @@ const featureFlags: Record<string, boolean> = {
   // ── Disabled: require Anthropic infrastructure or missing source ─────
   VOICE_MODE: false,              // Push-to-talk STT via claude.ai OAuth endpoint
   PROACTIVE: false,               // Autonomous agent mode (missing proactive/ module)
-  KAIROS: false,                  // Persistent assistant/session mode (cloud backend)
   BRIDGE_MODE: false,             // Remote desktop bridge via CCR infrastructure
   DAEMON: false,                  // Background daemon process (stubbed in open build)
   AGENT_TRIGGERS: false,          // Scheduled remote agent triggers
@@ -72,6 +71,7 @@ const featureFlags: Record<string, boolean> = {
   VERIFICATION_AGENT: true,           // Built-in read-only agent for test/verification
   PROMPT_CACHE_BREAK_DETECTION: true, // Detect & log unexpected prompt cache invalidations
   HOOK_PROMPTS: true,                 // Allow tools to request interactive user prompts
+  KAIROS: true,                       // Local assistant-mode behavior (cloud backend pieces are shimmed)
 }
 
 // ── Pre-process: replace feature() calls with boolean literals ──────
