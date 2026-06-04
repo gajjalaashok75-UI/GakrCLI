@@ -1,5 +1,5 @@
 /**
- * MDM (Mobile Device Management) profile enforcement for Gakr managed settings.
+ * MDM (Mobile Device Management) profile enforcement for GakrCLI managed settings.
  *
  * Reads enterprise settings from OS-level MDM configuration:
  * - macOS: `com.anthropic.gakrclicode` preference domain

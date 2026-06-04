@@ -96,7 +96,7 @@ type VoiceStreamMessage =
 // ─── Availability ──────────────────────────────────────────────────────
 
 export function isVoiceStreamAvailable(): boolean {
-  // voice_stream uses the same OAuth as Gakr — available when the
+  // voice_stream uses the same OAuth as GakrCLI — available when the
   // user is authenticated with Anthropic (Gakr.ai subscriber or has
   // valid OAuth tokens).
   if (!isAnthropicAuthEnabled()) {

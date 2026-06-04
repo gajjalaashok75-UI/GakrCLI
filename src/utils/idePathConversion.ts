@@ -20,7 +20,7 @@ export interface IDEPathConverter {
 }
 
 /**
- * Converter for Windows IDE + WSL Gakr scenario
+ * Converter for Windows IDE + WSL GakrCLI scenario
  */
 export class WindowsToWSLConverter implements IDEPathConverter {
   constructor(private wslDistroName: string | undefined) {}

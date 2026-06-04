@@ -145,7 +145,7 @@ export function TeleportError(t0) {
         }
         let t9;
         if ($[16] === Symbol.for("react.memo_cache_sentinel")) {
-          t9 = <Box flexDirection="column"><Text dimColor={true}>Teleport requires a Gakr.ai account.</Text><Text dimColor={true}>Your Gakr Pro/Max subscription will be used by Gakr.</Text></Box>;
+          t9 = <Box flexDirection="column"><Text dimColor={true}>Teleport requires a Gakr.ai account.</Text><Text dimColor={true}>Your GakrCLI Pro/Max subscription will be used by Gakr.</Text></Box>;
           $[16] = t9;
         } else {
           t9 = $[16];
@@ -153,7 +153,7 @@ export function TeleportError(t0) {
         let t10;
         if ($[17] === Symbol.for("react.memo_cache_sentinel")) {
           t10 = <Dialog title="Log in to Gakr" onCancel={onCancel}>{t9}<Select options={[{
-              label: "Login with Gakr account",
+              label: "Login with GakrCLI account",
               value: "login"
             }, {
               label: "Exit",

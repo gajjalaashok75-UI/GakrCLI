@@ -112,7 +112,7 @@ export function OAuthFlowStep({
         timersRef.current.add(timer_0);
       }, {
         loginWithgakrcliAi: true,
-        // Always use Gakr AI for subscription tokens
+        // Always use GakrCLI AI for subscription tokens
         inferenceOnly: true,
         expiresIn: 365 * 24 * 60 * 60 // 1 year
       });
@@ -207,7 +207,7 @@ export function OAuthFlowStep({
             {!showPastePrompt && <Box>
                 <Spinner />
                 <Text>
-                  Opening browser to sign in with your Gakr account…
+                  Opening browser to sign in with your GakrCLI account…
                 </Text>
               </Box>}
 

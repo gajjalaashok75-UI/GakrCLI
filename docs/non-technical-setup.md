@@ -1,4 +1,4 @@
-# Gakr for Non-Technical Users (v0.5.5)
+# GakrCLI for Non-Technical Users (v0.5.5)
 
 This guide is for people who want the easiest setup path.
 
@@ -6,9 +6,9 @@ You do not need to build from source. You do not need Bun. You do not need to un
 
 If you can copy and paste commands into a terminal, you can set this up.
 
-## What Gakr Does
+## What GakrCLI Does
 
-Gakr lets you use an AI coding assistant with different model providers such as:
+GakrCLI lets you use an AI coding assistant with different model providers such as:
 
 - OpenAI
 - DeepSeek
@@ -33,7 +33,7 @@ You need:
 
 ## Fastest Path
 
-1. Install Gakr with npm
+1. Install GakrCLI with npm
 2. Set 3 environment variables
 3. Run `gakrcli`
 

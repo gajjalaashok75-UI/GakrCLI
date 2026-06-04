@@ -32,7 +32,7 @@ type DeprecationEntry = {
  */
 const DEPRECATED_MODELS: Record<string, DeprecationEntry> = {
   'gakrcli-3-opus': {
-    modelName: 'Gakr 3 Opus',
+    modelName: 'GakrCLI 3 Opus',
     retirementDates: {
       firstParty: 'January 5, 2026',
       bedrock: 'January 15, 2026',
@@ -41,7 +41,7 @@ const DEPRECATED_MODELS: Record<string, DeprecationEntry> = {
     },
   },
   'gakrcli-3-7-sonnet': {
-    modelName: 'Gakr 3.7 Sonnet',
+    modelName: 'GakrCLI 3.7 Sonnet',
     retirementDates: {
       firstParty: 'February 19, 2026',
       bedrock: 'April 28, 2026',
@@ -50,7 +50,7 @@ const DEPRECATED_MODELS: Record<string, DeprecationEntry> = {
     },
   },
   'gakrcli-3-5-haiku': {
-    modelName: 'Gakr 3.5 Haiku',
+    modelName: 'GakrCLI 3.5 Haiku',
     retirementDates: {
       firstParty: 'February 19, 2026',
       bedrock: null,

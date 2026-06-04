@@ -4568,7 +4568,7 @@ export function hasInstructionsLoadedHook(): boolean {
  * - Eager load at session start (getMemoryFiles in gakrclimd.ts)
  * - Eager reload after compaction (getMemoryFiles cache cleared by
  *   runPostCompactCleanup; next call reports load_reason: 'compact')
- * - Lazy load when Gakr touches a file that triggers nested GAKRCLI.md or
+ * - Lazy load when GakrCLI touches a file that triggers nested GAKRCLI.md or
  *   conditional rules with paths: frontmatter (memoryFilesToAttachments in
  *   attachments.ts)
  */

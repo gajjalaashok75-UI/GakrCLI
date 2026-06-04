@@ -342,7 +342,7 @@ export const FileEditTool = buildTool({
       }
     }
 
-    // Additional validation for Gakr settings files
+    // Additional validation for GakrCLI settings files
     const settingsValidationResult = validateInputForSettingsFileEdit(
       fullFilePath,
       file,

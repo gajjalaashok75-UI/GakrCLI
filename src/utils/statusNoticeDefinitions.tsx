@@ -75,7 +75,7 @@ const gakrcliAiSubscriberExternalTokenNotice: StatusNoticeDefinition = {
     return <Box flexDirection="row" marginTop={1}>
         <Text color="warning">{figures.warning}</Text>
         <Text color="warning">
-          Auth conflict: Using {authTokenInfo.source} instead of Gakr account
+          Auth conflict: Using {authTokenInfo.source} instead of GakrCLI account
           subscription token. Either unset {authTokenInfo.source}, or run
           `/logout`.
         </Text>
@@ -102,7 +102,7 @@ const apiKeyConflictNotice: StatusNoticeDefinition = {
     return <Box flexDirection="row" marginTop={1}>
         <Text color="warning">{figures.warning}</Text>
         <Text color="warning">
-          Auth conflict: Using {apiKeySource} instead of Gakr account login.
+          Auth conflict: Using {apiKeySource} instead of GakrCLI account login.
           Either unset {apiKeySource}, or run `/logout`.
         </Text>
       </Box>;

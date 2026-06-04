@@ -4,7 +4,7 @@
  */
 
 /**
- * A session ID uniquely identifies a Gakr session.
+ * A session ID uniquely identifies a GakrCLI session.
  * Returned by getSessionId().
  */
 export type SessionId = string & { readonly __brand: 'SessionId' }

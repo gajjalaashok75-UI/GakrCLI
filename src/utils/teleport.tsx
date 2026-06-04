@@ -95,7 +95,7 @@ type TitleAndBranch = {
 };
 
 /**
- * Generates a title and branch name for a coding session using Gakr Haiku
+ * Generates a title and branch name for a coding session using GakrCLI Haiku
  * @param description The description/prompt for the session
  * @returns Promise<TitleAndBranch> The generated title and branch name
  */
@@ -438,7 +438,7 @@ export async function teleportResumeCodeSession(sessionId: string, onProgress?: 
       logEvent('tengu_teleport_resume_error', {
         error_type: 'no_access_token' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
       });
-      throw new Error('Gakr web sessions require authentication with a Gakr.ai account. API key authentication is not sufficient. Please run /login to authenticate, or check your authentication status with /status.');
+      throw new Error('GakrCLI web sessions require authentication with a Gakr.ai account. API key authentication is not sufficient. Please run /login to authenticate, or check your authentication status with /status.');
     }
 
     // Get organization UUID
@@ -608,7 +608,7 @@ export async function teleportFromSessionsAPI(sessionId: string, orgUUID: string
       logEvent('tengu_teleport_error_session_not_found_404', {
         sessionId: sessionId as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
       });
-      throw new TeleportOperationError(`${sessionId} not found.`, `${sessionId} not found.\n${chalk.dim('Run /status in Gakr to check your account.')}`);
+      throw new TeleportOperationError(`${sessionId} not found.`, `${sessionId} not found.\n${chalk.dim('Run /status in GakrCLI to check your account.')}`);
     }
     logError(err);
     throw new Error(`Failed to fetch session from Sessions API: ${err.message}`);

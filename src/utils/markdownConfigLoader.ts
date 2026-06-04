@@ -26,7 +26,7 @@ import {
 import { getManagedFilePath } from './settings/managedPath.js'
 import { isRestrictedToPluginOnly } from './settings/pluginOnlyPolicy.js'
 
-// Gakr configuration directory names
+// GakrCLI configuration directory names
 export const GAKR_CONFIG_DIRECTORIES = [
   'commands',
   'agents',

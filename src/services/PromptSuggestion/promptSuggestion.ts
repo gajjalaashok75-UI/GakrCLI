@@ -266,8 +266,8 @@ THE TEST: Would they think "I was just about to type that"?
 EXAMPLES:
 User asked "fix the bug and run tests", bug is fixed → "run the tests"
 After code written → "try it out"
-Gakr offers options → suggest the one the user would likely pick, based on conversation
-Gakr asks to continue → "yes" or "go ahead"
+GakrCLI offers options → suggest the one the user would likely pick, based on conversation
+GakrCLI asks to continue → "yes" or "go ahead"
 Task complete, obvious follow-up → "commit this" or "push it"
 After error or misunderstanding → silence (let them assess/correct)
 

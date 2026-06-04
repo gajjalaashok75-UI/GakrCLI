@@ -5,7 +5,7 @@ import {
 } from './attribution.js'
 
 describe('getDefaultCommitCoAuthorName', () => {
-  it('does not label unknown non-Gakr provider models as Opus', () => {
+  it('does not label unknown non-GakrCLI provider models as Opus', () => {
     expect(
       getDefaultCommitCoAuthorName({
         model: 'gpt-5.5',
@@ -15,7 +15,7 @@ describe('getDefaultCommitCoAuthorName', () => {
     ).toBe('GakrCLI (gpt-5.5)')
   })
 
-  it('does not apply internal GakrCLI formatting to non-Gakr providers', () => {
+  it('does not apply internal GakrCLI formatting to non-GakrCLI providers', () => {
     expect(
       getDefaultCommitCoAuthorName({
         model: 'gpt-5.5',
@@ -32,7 +32,7 @@ describe('getDefaultCommitCoAuthorName', () => {
         apiProvider: 'firstParty',
         isInternalRepo: false,
       }),
-    ).toBe('Gakr Opus 4.6')
+    ).toBe('GakrCLI Opus 4.6')
   })
 
   it('sanitizes unknown internal GakrCLI co-author names', () => {

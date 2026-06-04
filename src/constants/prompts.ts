@@ -115,7 +115,7 @@ export const SYSTEM_PROMPT_DYNAMIC_BOUNDARY =
   '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__'
 
 // @[MODEL LAUNCH]: Update the latest frontier model.
-const FRONTIER_MODEL_NAME = 'Gakr Opus 4.6'
+const FRONTIER_MODEL_NAME = 'GakrCLI Opus 4.6'
 
 // @[MODEL LAUNCH]: Update the model family IDs below to the latest in each tier.
 const GAKR_4_5_OR_4_6_MODEL_IDS = {

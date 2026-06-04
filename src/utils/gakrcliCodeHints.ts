@@ -1,7 +1,7 @@
 /**
- * Gakr hints protocol.
+ * GakrCLI hints protocol.
  *
- * CLIs and SDKs running under Gakr can emit a self-closing
+ * CLIs and SDKs running under GakrCLI can emit a self-closing
  * `<gakrcli-code-hint />` tag to stderr (merged into stdout by the shell
  * tools). The harness scans tool output for these tags, strips them before
  * the output reaches the model, and surfaces an install prompt to the

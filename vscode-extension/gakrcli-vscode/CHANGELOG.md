@@ -40,7 +40,7 @@ All notable changes to GakrCLI VS Code are documented here.
 - Routed pending-permission status through the real permission dialog lifecycle, added a webview fallback for SDK tool permission requests, and cleared pending permission UI/status on stop, restart, session changes, and shutdown.
 - Added a header refresh button that restarts the SDK runtime while preserving the current session, delayed Active status until provider/model state is hydrated, and folded stopped-turn interruption/duration UI into the assistant turn so the cursor and copy action settle correctly.
 - Made the stop button show the GakrCLI interruption prompt immediately and fixed provider model refresh so discovered provider catalogs can replace single-model SDK fallbacks.
-- Added the terminal-style `Interrupted · What should Gakr do instead?` row for stopped webview turns, followed by the GakrCLI-style completion duration.
+- Added the terminal-style `Interrupted · What should GakrCLI do instead?` row for stopped webview turns, followed by the GakrCLI-style completion duration.
 - Replaced assistant footer usage stats with the GakrCLI-style turn completion line, kept stopped turns from showing synthetic interruption bubbles, and made copy controls appear on hover for every assistant response.
 - Added GakrCLI-style spinner glyphs, live turn timers, API retry countdowns, SDK todo-list state, stable per-turn usage attachment, and interrupt cleanup so stopped requests do not render synthetic abort chat bubbles.
 - Kept the top-right Settings button as a lightweight coming-soon dialog with a working runtime refresh action and Close button.

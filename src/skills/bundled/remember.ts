@@ -23,8 +23,8 @@ For each substantive entry in auto-memory, determine the best destination:
 
 | Destination | What belongs there | Examples |
 |---|---|---|
-| **GAKRCLI.md** | Project conventions and instructions for Gakr that all contributors should follow | "use bun not npm", "API routes use kebab-case", "test command is bun test", "prefer functional style" |
-| **gakrcli.local.md** | Personal instructions for Gakr specific to this user, not applicable to other contributors | "I prefer concise responses", "always explain trade-offs", "don't auto-commit", "run tests before committing" |
+| **GAKRCLI.md** | Project conventions and instructions for GakrCLI that all contributors should follow | "use bun not npm", "API routes use kebab-case", "test command is bun test", "prefer functional style" |
+| **gakrcli.local.md** | Personal instructions for GakrCLI specific to this user, not applicable to other contributors | "I prefer concise responses", "always explain trade-offs", "don't auto-commit", "run tests before committing" |
 | **Team memory** | Org-wide knowledge that applies across repositories (only if team memory is configured) | "deploy PRs go through #deploy-queue", "staging is at staging.internal", "platform team owns infra" |
 | **Stay in auto-memory** | Working notes, temporary context, or entries that don't clearly fit elsewhere | Session-specific observations, uncertain patterns |
 

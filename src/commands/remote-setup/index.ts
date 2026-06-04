@@ -6,7 +6,7 @@ const web = {
   type: 'local-jsx',
   name: 'web-setup',
   description:
-    'Setup Gakr on the web (requires connecting your GitHub account)',
+    'Setup GakrCLI on the web (requires connecting your GitHub account)',
   availability: ['gakrcli-ai'],
   isEnabled: () =>
     getFeatureValue_CACHED_MAY_BE_STALE('tengu_cobalt_lantern', false) &&

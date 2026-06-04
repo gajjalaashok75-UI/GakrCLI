@@ -31,7 +31,7 @@ const FRICTION_PATTERNS = [
   // Direct corrections about Gakr's output
   /\bthat'?s (wrong|incorrect|not (what|right|correct))\b/i,
   /\bnot what I (asked|wanted|meant|said)\b/i,
-  // Referencing prior instructions Gakr missed
+  // Referencing prior instructions GakrCLI missed
   /\bI (said|asked|wanted|told you|already said)\b/i,
   // Questioning Gakr's actions
   /\bwhy did you\b/i,

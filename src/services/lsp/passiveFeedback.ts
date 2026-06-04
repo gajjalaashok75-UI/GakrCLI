@@ -9,9 +9,9 @@ import { registerPendingLSPDiagnostic } from './LSPDiagnosticRegistry.js'
 import type { LSPServerManager } from './LSPServerManager.js'
 
 /**
- * Map LSP severity to Gakr diagnostic severity
+ * Map LSP severity to GakrCLI diagnostic severity
  *
- * Maps LSP severity numbers to Gakr diagnostic severity strings.
+ * Maps LSP severity numbers to GakrCLI diagnostic severity strings.
  * Accepts numeric severity values (1=Error, 2=Warning, 3=Information, 4=Hint)
  * or undefined, defaulting to 'Error' for invalid/missing values.
  */
@@ -35,7 +35,7 @@ function mapLSPSeverity(
 }
 
 /**
- * Convert LSP diagnostics to Gakr diagnostic format
+ * Convert LSP diagnostics to GakrCLI diagnostic format
  *
  * Converts LSP PublishDiagnosticsParams to DiagnosticFile[] format
  * used by Gakr's attachment system.
@@ -187,7 +187,7 @@ export function registerLSPNotificationHandlers(
               `Received diagnostics from ${serverName}: ${diagnosticParams.diagnostics.length} diagnostic(s) for ${diagnosticParams.uri}`,
             )
 
-            // Convert LSP diagnostics to Gakr format (can throw on invalid URIs)
+            // Convert LSP diagnostics to GakrCLI format (can throw on invalid URIs)
             const diagnosticFiles =
               formatDiagnosticsForAttachment(diagnosticParams)
 

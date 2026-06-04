@@ -93,7 +93,7 @@ export const getHookEventMetadata = memoize(
         },
       },
       Stop: {
-        summary: 'Right before Gakr concludes its response',
+        summary: 'Right before GakrCLI concludes its response',
         description:
           'Exit code 0 - stdout/stderr not shown\nExit code 2 - show stderr to model and continue conversation\nOther exit codes - show stderr to user only',
       },
@@ -229,7 +229,7 @@ export const getHookEventMetadata = memoize(
       InstructionsLoaded: {
         summary: 'When an instruction file (GAKRCLI.md or rule) is loaded',
         description:
-          'Input to command is JSON with file_path, memory_type (User, Project, Local, Managed), load_reason (session_start, nested_traversal, path_glob_match, include, compact), globs (optional — the paths: frontmatter patterns that matched), trigger_file_path (optional — the file Gakr touched that caused the load), and parent_file_path (optional — the file that @-included this one).\nExit code 0 - command completes successfully\nOther exit codes - show stderr to user only\nThis hook is observability-only and does not support blocking.',
+          'Input to command is JSON with file_path, memory_type (User, Project, Local, Managed), load_reason (session_start, nested_traversal, path_glob_match, include, compact), globs (optional — the paths: frontmatter patterns that matched), trigger_file_path (optional — the file GakrCLI touched that caused the load), and parent_file_path (optional — the file that @-included this one).\nExit code 0 - command completes successfully\nOther exit codes - show stderr to user only\nThis hook is observability-only and does not support blocking.',
         matcherMetadata: {
           fieldToMatch: 'load_reason',
           values: [

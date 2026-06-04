@@ -336,8 +336,8 @@ function getBigQueryExportingReader() {
 function isBigQueryMetricsEnabled() {
   // BigQuery metrics are enabled for:
   // 1. API customers (excluding Gakr.ai subscribers and Bedrock/Vertex)
-  // 2. Gakr for Enterprise (C4E) users
-  // 3. Gakr for Teams users
+  // 2. GakrCLI for Enterprise (C4E) users
+  // 3. GakrCLI for Teams users
   const subscriptionType = getSubscriptionType()
   const isC4EOrTeamUser =
     isgakrcliAISubscriber() &&

@@ -3,7 +3,7 @@ const plugin = {
   type: 'local-jsx',
   name: 'plugin',
   aliases: ['plugins', 'marketplace'],
-  description: 'Manage Gakr plugins',
+  description: 'Manage GakrCLI plugins',
   immediate: true,
   load: () => import('./plugin.js')
 } satisfies Command;

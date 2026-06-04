@@ -189,7 +189,7 @@ const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp'])
 
 /**
  * Detects if a file path is a session-related file for analytics logging.
- * Only matches files within the Gakr config directory (e.g., ~/.gakrcli).
+ * Only matches files within the GakrCLI config directory (e.g., ~/.gakrcli).
  * Returns the type of session file or null if not a session file.
  */
 function detectSessionFileType(
@@ -197,7 +197,7 @@ function detectSessionFileType(
 ): 'session_memory' | 'session_transcript' | null {
   const configDir = getGakrcliConfigHomeDir()
 
-  // Only match files within the Gakr config directory
+  // Only match files within the GakrCLI config directory
   if (!filePath.startsWith(configDir)) {
     return null
   }

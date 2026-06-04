@@ -64,7 +64,7 @@ export const PermissionsSchema = lazySchema(() =>
             : EXTERNAL_PERMISSION_MODES,
         )
         .optional()
-        .describe('Default permission mode when Gakr needs access'),
+        .describe('Default permission mode when GakrCLI needs access'),
       disableBypassPermissionsMode: z
         .enum(['disable'])
         .optional()
@@ -265,7 +265,7 @@ export const SettingsSchema = lazySchema(() =>
       $schema: z
         .literal(GAKR_CODE_SETTINGS_SCHEMA_URL)
         .optional()
-        .describe('JSON Schema reference for Gakr settings'),
+        .describe('JSON Schema reference for GakrCLI settings'),
       apiKeyHelper: z
         .string()
         .optional()
@@ -339,7 +339,7 @@ export const SettingsSchema = lazySchema(() =>
         ),
       env: EnvironmentVariablesSchema()
         .optional()
-        .describe('Environment variables to set for Gakr sessions'),
+        .describe('Environment variables to set for GakrCLI sessions'),
       // Attribution for commits and PRs
       attribution: z
         .object({
@@ -361,7 +361,7 @@ export const SettingsSchema = lazySchema(() =>
         .optional()
         .describe(
           'Customize attribution text for commits and PRs. ' +
-            'Each field defaults to the standard Gakr attribution if not set.',
+            'Each field defaults to the standard GakrCLI attribution if not set.',
         ),
       includeCoAuthoredBy: z
         .boolean()
@@ -643,12 +643,12 @@ export const SettingsSchema = lazySchema(() =>
             'these exact sources are blocked from being added as marketplaces. The check happens BEFORE ' +
             'downloading, so blocked sources never touch the filesystem.',
         ),
-      // Force a specific login method: 'gakrcliai' for Gakr Pro/Max, 'console' for Console billing
+      // Force a specific login method: 'gakrcliai' for GakrCLI Pro/Max, 'console' for Console billing
       forceLoginMethod: z
         .enum(['gakrcliai', 'console'])
         .optional()
         .describe(
-          'Force a specific login method: "gakrcliai" for Gakr Pro/Max, "console" for Console billing',
+          'Force a specific login method: "gakrcliai" for GakrCLI Pro/Max, "console" for Console billing',
         ),
       // Organization UUID to use for OAuth login (will be added as URL param to authorization URL)
       forceLoginOrgUUID: z
@@ -667,7 +667,7 @@ export const SettingsSchema = lazySchema(() =>
         .string()
         .optional()
         .describe(
-          'Preferred language for Gakr responses and voice dictation (e.g., "japanese", "spanish")',
+          'Preferred language for GakrCLI responses and voice dictation (e.g., "japanese", "spanish")',
         ),
       skipWebFetchPreflight: z
         .boolean()
@@ -915,7 +915,7 @@ export const SettingsSchema = lazySchema(() =>
               .boolean()
               .optional()
               .describe(
-                'Start Gakr in assistant mode (custom system prompt, brief view, scheduled check-in skills)',
+                'Start GakrCLI in assistant mode (custom system prompt, brief view, scheduled check-in skills)',
               ),
             assistantName: z
               .string()
@@ -979,7 +979,7 @@ export const SettingsSchema = lazySchema(() =>
         .boolean()
         .optional()
         .describe(
-          'Enable auto-memory for this project. When false, Gakr will not read from or write to the auto-memory directory.',
+          'Enable auto-memory for this project. When false, GakrCLI will not read from or write to the auto-memory directory.',
         ),
       autoMemoryDirectory: z
         .string()

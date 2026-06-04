@@ -1583,7 +1583,7 @@ export async function powershellToolHasPermission(
     // gate, `Set-Location ./.gakrcli; Set-Content ./settings.json '...'` would
     // pass: Set-Content is checked in isolation, matches ACCEPT_EDITS_ALLOWED_CMDLETS,
     // and auto-allows — but PowerShell runs it from the changed cwd, writing to
-    // .gakrcli/settings.json (a Gakr config file the path validator didn't check).
+    // .gakrcli/settings.json (a GakrCLI config file the path validator didn't check).
     // This matches BashTool's compoundCommandHasCd guard.
     if (statement !== null && !hasCdSubCommand && !hasSymlinkCreate) {
       const subModeResult = checkPermissionMode(

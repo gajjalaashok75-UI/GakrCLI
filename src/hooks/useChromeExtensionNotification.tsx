@@ -24,7 +24,7 @@ async function _temp() {
   if (true && !isgakrcliAISubscriber()) {
     return {
       key: "chrome-requires-subscription",
-      jsx: <Text color="error">Gakr in Chrome requires a gakr.ai subscription</Text>,
+      jsx: <Text color="error">GakrCLI in Chrome requires a gakr.ai subscription</Text>,
       priority: "immediate",
       timeoutMs: 5000
     };
@@ -41,7 +41,7 @@ async function _temp() {
   if (chromeFlag === undefined) {
     return {
       key: "gakrcli-in-chrome-default-enabled",
-      text: "Gakr in Chrome enabled \xB7 /chrome",
+      text: "GakrCLI in Chrome enabled \xB7 /chrome",
       priority: "low"
     };
   }
