@@ -22,6 +22,9 @@ type FlagGuard = {
 
 const FLAG_REQUIRES_SOURCE: FlagGuard[] = [
   { flag: 'MCP_SKILLS', source: 'src/skills/mcpSkills.ts' },
+  { flag: 'KAIROS', source: 'src/assistant/index.ts' },
+  { flag: 'KAIROS', source: 'src/assistant/gate.ts' },
+  { flag: 'KAIROS', source: 'src/assistant/sessionDiscovery.ts' },
 ]
 
 test('build feature flags are not enabled without their source files', () => {

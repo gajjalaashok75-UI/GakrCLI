@@ -8,3 +8,5 @@ export function AssistantSessionChooser(_props: {
 }) {
   return null
 }
+
+export default AssistantSessionChooser
