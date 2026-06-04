@@ -4,9 +4,10 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import * as vscode from 'vscode';
+import type * as VSCode from 'vscode';
 import type { IdeLockfile, JsonRpcRequest, JsonRpcResponse } from './types';
 import { IDE_TOOLS } from './types';
+import { vscode } from '../vscodeCompat';
 
 // ── Pure helpers (exported for testing) ──────────────────────────
 
@@ -114,13 +115,13 @@ export function formatSseEvent(event: string, data: string): string {
 
 // ── VS Code-specific implementation ──────────────────────────────
 
-export class McpIdeServer implements vscode.Disposable {
+export class McpIdeServer implements VSCode.Disposable {
   private server: http.Server | null = null;
   private lockfilePath: string | null = null;
   private token: string = '';
   private port: number = 0;
   private sseClients = new Map<string, http.ServerResponse>();
-  private disposables: vscode.Disposable[] = [];
+  private disposables: VSCode.Disposable[] = [];
 
   constructor(private readonly workspaceFolder: string) {}
 
@@ -305,12 +306,12 @@ export class McpIdeServer implements vscode.Disposable {
     const minSeverityOrder = severityOrder[minSeverity] ?? 3;
 
     // Filter by URI if provided
-    let diagnosticEntries: [vscode.Uri, readonly vscode.Diagnostic[]][];
+    let diagnosticEntries: [VSCode.Uri, readonly VSCode.Diagnostic[]][];
     if (args.uri) {
       const uri = vscode.Uri.parse(args.uri as string);
       diagnosticEntries = [[uri, vscode.languages.getDiagnostics(uri)]];
     } else {
-      diagnosticEntries = vscode.languages.getDiagnostics() as [vscode.Uri, vscode.Diagnostic[]][];
+      diagnosticEntries = vscode.languages.getDiagnostics() as [VSCode.Uri, VSCode.Diagnostic[]][];
     }
 
     for (const [uri, diagnostics] of diagnosticEntries) {

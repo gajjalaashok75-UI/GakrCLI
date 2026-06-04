@@ -22,11 +22,13 @@ import {
   logEvent,
 } from 'src/services/analytics/index.js'
 import {
+  getCwdState,
   getOriginalCwd,
   getPlanSlugCache,
   getPromptId,
   getSessionId,
   getSessionProjectDir,
+  isSdkContextActive,
   isSessionPersistenceDisabled,
   switchSession,
 } from '../bootstrap/state.js'
@@ -1059,7 +1061,7 @@ class Project {
           // replacement records lost → FROZEN misclassification.
           userType: getUserType(),
           entrypoint: getEntrypoint(),
-          cwd: getCwd(),
+          cwd: getTranscriptCwd(),
           sessionId,
           version: VERSION,
           gitBranch,
@@ -1389,6 +1391,10 @@ class Project {
 export type TeamInfo = {
   teamName?: string
   agentName?: string
+}
+
+function getTranscriptCwd(): string {
+  return isSdkContextActive() ? getCwdState() : getCwd()
 }
 
 // Filter out already-recorded messages before passing to insertMessageChain.

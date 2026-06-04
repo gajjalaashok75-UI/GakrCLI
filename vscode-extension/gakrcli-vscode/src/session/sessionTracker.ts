@@ -1,8 +1,9 @@
-import * as vscode from 'vscode';
+import type * as VSCode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as readline from 'readline';
+import { vscode } from '../vscodeCompat';
 
 const MAX_SANITIZED_LENGTH = 200;
 
@@ -52,13 +53,13 @@ export interface GroupedSessions {
   sessions: SessionInfo[];
 }
 
-export class SessionTracker implements vscode.Disposable {
+export class SessionTracker implements VSCode.Disposable {
   private sessions: Map<string, SessionInfo> = new Map();
-  private watcher: vscode.FileSystemWatcher | undefined;
+  private watcher: VSCode.FileSystemWatcher | undefined;
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly _onSessionsChanged = new vscode.EventEmitter<SessionInfo[]>();
   public readonly onSessionsChanged = this._onSessionsChanged.event;
-  private disposables: vscode.Disposable[] = [];
+  private disposables: VSCode.Disposable[] = [];
 
   constructor() {
     this.disposables.push(this._onSessionsChanged);

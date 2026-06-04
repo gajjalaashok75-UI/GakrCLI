@@ -485,6 +485,8 @@ export type InProcessRunnerConfig = {
   abortController: AbortController
   /** Optional model override for this teammate */
   model?: string
+  /** True when model came from an explicit Agent tool model argument. */
+  modelWasToolSpecified?: boolean
   /** Optional system prompt override for this teammate */
   systemPrompt?: string
   /** How to apply the system prompt: 'replace' or 'append' to default */
@@ -893,6 +895,7 @@ export async function runInProcessTeammate(
     toolUseContext,
     abortController,
     model,
+    modelWasToolSpecified,
     systemPrompt,
     systemPromptMode,
     allowedTools,
@@ -1195,7 +1198,10 @@ export async function runInProcessTeammate(
             forkContextMessages,
             querySource: 'agent:custom',
             override: { abortController: currentWorkAbortController },
-            model: model as ModelAlias | undefined,
+            model: modelWasToolSpecified
+              ? (model as ModelAlias | undefined)
+              : undefined,
+            agentName: identity.agentName,
             preserveToolUseResults: true,
             availableTools: toolUseContext.options.tools,
             allowedTools,

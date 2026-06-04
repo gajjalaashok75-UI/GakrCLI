@@ -277,6 +277,10 @@ class SDKSessionImpl implements SDKSession {
   }
 
   async *sendMessage(content: string): AsyncIterable<SDKMessage> {
+    if (this._abortController?.signal.aborted) {
+      throw new Error('SDK session aborted')
+    }
+
     const sdkContext = {
       sessionId: this._sessionId as SessionId,
       sessionProjectDir: this._sessionProjectDir,

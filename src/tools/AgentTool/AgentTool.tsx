@@ -11,6 +11,7 @@ import { startAgentSummarization } from '../../services/AgentSummary/agentSummar
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js';
 import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from '../../services/analytics/index.js';
 import { clearDumpState } from '../../services/api/dumpPrompts.js';
+import { resolveAgentProvider, resolveOutOfProcessTeammateProvider } from '../../services/api/agentRouting.js';
 import { completeAgentTask as completeAsyncAgent, createActivityDescriptionResolver, createProgressTracker, enqueueAgentNotification, failAgentTask as failAsyncAgent, getProgressUpdate, getTokenCountFromTracker, isLocalAgentTask, killAsyncAgent, registerAgentForeground, registerAsyncAgent, unregisterAgentForeground, updateAgentProgress as updateAsyncAgentProgress, updateProgressFromMessage } from '../../tasks/LocalAgentTask/LocalAgentTask.js';
 import { checkRemoteAgentEligibility, formatPreconditionError, getRemoteTaskSessionUrl, registerRemoteAgentTask } from '../../tasks/RemoteAgentTask/RemoteAgentTask.js';
 import { assembleToolPool } from '../../tools.js';
@@ -25,7 +26,9 @@ import type { CacheSafeParams } from '../../utils/forkedAgent.js';
 import { lazySchema } from '../../utils/lazySchema.js';
 import { createUserMessage, extractTextContent, isSyntheticMessage, normalizeMessages } from '../../utils/messages.js';
 import { getAgentModel } from '../../utils/model/agent.js';
+import { isModelAllowed } from '../../utils/model/modelAllowlist.js';
 import { permissionModeSchema } from '../../utils/permissions/PermissionMode.js';
+import { getInitialSettings } from '../../utils/settings/settings.js';
 import type { PermissionResult } from '../../utils/permissions/PermissionResult.js';
 import { filterDeniedAgents, getDenyRuleForAgent } from '../../utils/permissions/permissions.js';
 import { enqueueSdkEvent } from '../../utils/sdkEventQueue.js';
@@ -79,12 +82,21 @@ function getAutoBackgroundMs(): number {
 
 // Multi-agent type constants are defined inline inside gated blocks to enable dead code elimination
 
+const AGENT_MODEL_OVERRIDE_DESCRIPTION = "Optional model override for this agent. Accepts sonnet, opus, haiku, inherit, or a provider-supported model ID. Takes precedence over the agent definition's model frontmatter. If omitted, uses the agent definition's model, or inherits from the parent.";
+
+const agentModelOverrideSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._/:+-]*$/)
+  .describe(AGENT_MODEL_OVERRIDE_DESCRIPTION);
+
 // Base input schema without multi-agent parameters
 const baseInputSchema = lazySchema(() => z.object({
   description: z.string().describe('A short (3-5 word) description of the task'),
   prompt: z.string().describe('The task for the agent to perform'),
   subagent_type: z.string().optional().describe('The type of specialized agent to use for this task'),
-  model: z.enum(['sonnet', 'opus', 'haiku']).optional().describe("Optional model override for this agent. Takes precedence over the agent definition's model frontmatter. If omitted, uses the agent definition's model, or inherits from the parent."),
+  model: agentModelOverrideSchema.optional().describe(AGENT_MODEL_OVERRIDE_DESCRIPTION),
   run_in_background: z.boolean().optional().describe('Set to true to run this agent in the background. You will be notified when it completes.')
 }));
 
@@ -288,6 +300,18 @@ export const AgentTool = buildTool({
       if (agentDef?.color) {
         setAgentColor(subagent_type!, agentDef.color);
       }
+      const rawTeammateModel = model ?? agentDef?.model;
+      const resolvedTeammateModel = rawTeammateModel === undefined ? undefined : getAgentModel(agentDef?.model, toolUseContext.options.mainLoopModel, model, permissionMode);
+      const routedTeammateProvider = resolveOutOfProcessTeammateProvider({
+        cliModel: model,
+        agentName: name,
+        agentType: subagent_type,
+        agentDefinitionModel: agentDef?.model,
+        settings: getInitialSettings()
+      });
+      if (routedTeammateProvider && !isModelAllowed(routedTeammateProvider.model)) {
+        throw new Error(`Model '${routedTeammateProvider.model}' is not available. Your organization restricts model selection.`);
+      }
       const result = await spawnTeammate({
         name,
         prompt,
@@ -295,7 +319,8 @@ export const AgentTool = buildTool({
         team_name: teamName,
         use_splitpane: true,
         plan_mode_required: spawnMode === 'plan',
-        model: model ?? agentDef?.model,
+        model: routedTeammateProvider?.model ?? resolvedTeammateModel,
+        modelWasToolSpecified: model !== undefined,
         agent_type: subagent_type,
         invokingRequestId: assistantMessage?.requestId
       }, toolUseContext);
@@ -417,9 +442,11 @@ export const AgentTool = buildTool({
 
     // Resolve agent params for logging (these are already resolved in runAgent)
     const resolvedAgentModel = getAgentModel(selectedAgent.model, toolUseContext.options.mainLoopModel, isForkPath ? undefined : model, permissionMode);
+    const providerOverride = resolveAgentProvider(name, selectedAgent.agentType, getInitialSettings());
+    const effectiveAgentModel = providerOverride ? providerOverride.model : resolvedAgentModel;
     logEvent('tengu_agent_tool_selected', {
       agent_type: selectedAgent.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      model: resolvedAgentModel as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+      model: effectiveAgentModel as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       source: selectedAgent.source as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       color: selectedAgent.color as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       is_built_in_agent: isBuiltInAgent(selectedAgent),
@@ -532,7 +559,7 @@ export const AgentTool = buildTool({
         }
 
         // Apply environment details enhancement
-        enhancedSystemPrompt = await enhanceSystemPromptWithEnvDetails([agentPrompt], resolvedAgentModel, additionalWorkingDirectories);
+        enhancedSystemPrompt = await enhanceSystemPromptWithEnvDetails([agentPrompt], effectiveAgentModel, additionalWorkingDirectories);
       } catch (error) {
         logForDebugging(`Failed to get system prompt for agent ${selectedAgent.agentType}: ${errorMessage(error)}`);
       }
