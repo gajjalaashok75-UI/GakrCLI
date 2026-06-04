@@ -29,6 +29,7 @@ web/*.tsbuildinfo
 # IDE and editor files
 .vscode/
 .idea/
+vscode-extension/gakrcli-vscode/surprise.html
 *.swp
 *.swo
 *~

@@ -43,7 +43,6 @@ Each session starts fresh, but the workspace files persist. Use them:
 - `RULEBOOK.md` for stable rules and interpretation guidance
 - `USER.md` for durable user profile and preferences
 - `MEMORY.md` for curated cross-project memory
-- `DREAMS.md` for longer-running ideas
 
 If you change this file, tell the user. It defines how you show up.
 
