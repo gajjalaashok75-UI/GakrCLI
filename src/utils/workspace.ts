@@ -9,13 +9,10 @@ export const WORKSPACE_CONTEXT_FILENAMES = [
   'GAKRCLI.md',
   'RULEBOOK.md',
   'SOUL.md',
-  'TOOLS.md',
   'IDENTITY.md',
   'USER.md',
-  'HEARTBEAT.md',
   'BOOTSTRAP.md',
   'MEMORY.md',
-  'DREAMS.md',
 ] as const
 
 export const WORKSPACE_PERSISTENCE_FILENAMES =
@@ -76,7 +73,6 @@ GakrCLI injects the workspace files into prompt context. Use that provided conte
 Continuity lives in files:
 
 - MEMORY.md is durable, curated memory for stable facts, preferences, decisions, and lessons.
-- DREAMS.md is for longer-running reflections, ideas, and future improvements.
 - projects/ stores per-project sessions, transcripts, memory, and generated state.
 
 When the user asks you to remember something, update the relevant memory file. Before writing a memory file, read it first and make a concrete edit.
@@ -90,7 +86,7 @@ When the user asks you to remember something, update the relevant memory file. B
 
 ## Make It Yours
 
-This is a starting point. Update GAKRCLI.md, RULEBOOK.md, SOUL.md, TOOLS.md, MEMORY.md, and DREAMS.md as the workspace develops.
+This is a starting point. Update GAKRCLI.md, RULEBOOK.md, SOUL.md, USER.md, IDENTITY.md, and MEMORY.md as the workspace develops.
 `,
   'RULEBOOK.md': `# RULEBOOK.md - Workspace Rules
 
@@ -125,10 +121,7 @@ This file defines durable rules for how the workspace should interpret GakrCLI, 
 - IDENTITY.md: assistant identity selected with the user.
 - SOUL.md: personality, tone, values, and working style.
 - USER.md: durable user profile and preferences.
-- TOOLS.md: local tool and environment notes.
 - MEMORY.md: curated cross-project memory.
-- DREAMS.md: long-running ideas and reflections.
-- HEARTBEAT.md: periodic work only when the user wants it.
 
 ## Workspace vs Project Memory
 
@@ -172,26 +165,6 @@ Earn trust through care. The user gave you access to their machine and projects;
 
 If you change SOUL.md, tell the user. It defines how you show up.
 `,
-  'TOOLS.md': `# TOOLS.md - Local Tool Notes
-
-This file stores environment-specific notes that should persist across sessions.
-
-## Workspace Location
-
-- Location: ~/.gakrcli/workspace/TOOLS.md
-- Scope: workspace-wide, loaded across projects
-- Update this file for local environment, shell, provider, model, service, and tool notes.
-
-Use it for:
-
-- Shell, build, and test conventions
-- Local service ports
-- Repository-specific commands
-- Provider/model preferences
-- Safe shortcuts and known pitfalls
-
-Keep shared tool behavior in skills, rules, or project docs. Keep local setup details here.
-`,
   'IDENTITY.md': `# IDENTITY.md - Who Am I?
 
 This file names the assistant/persona operating inside the GakrCLI harness. GakrCLI is the CLI, agent harness, and orchestration runtime; it is not the assistant's personal name unless the user chooses that.
@@ -227,16 +200,6 @@ Learn about the person you are helping. Update this only with stable information
 
 Respect the difference between useful context and a dossier. Keep it helpful and minimal.
 `,
-  'HEARTBEAT.md': `# HEARTBEAT.md
-
-# Keep this file empty, or with only comments/headings, when no periodic work is needed.
-
-# Location: ~/.gakrcli/workspace/HEARTBEAT.md
-# Scope: workspace-wide periodic work.
-# Update this file only when the user wants recurring checks or reminders.
-
-# Add short periodic tasks below only when the user wants GakrCLI to check something over time.
-`,
   'BOOTSTRAP.md': `# BOOTSTRAP.md - First Run
 
 You just started in a fresh GakrCLI workspace. GakrCLI is the CLI, agent harness, and orchestration runtime; your workspace assistant identity still needs to be set.
@@ -255,7 +218,7 @@ Learn enough to update:
 - USER.md with durable user preferences and identity details they want remembered
 - SOUL.md with important behavior preferences or boundaries
 - RULEBOOK.md if they give durable rules about how to interpret the harness, identity, memory, or autonomy
-- TOOLS.md with local setup notes if they provide any
+- MEMORY.md with durable cross-project memories if they provide any
 
 When the bootstrap is complete, delete BOOTSTRAP.md in the same turn. GakrCLI records that deletion as setup completion and will not recreate it.
 `,
@@ -274,18 +237,6 @@ This is the overall workspace memory for all projects. Project-specific memory l
 - Update this file for curated memories that should apply across all projects.
 
 Before changing this file, read it first and make a specific update.
-`,
-  'DREAMS.md': `# DREAMS.md - Reflections
-
-Use this file for longer-running ideas, reflections, and future improvements.
-
-## Workspace Location
-
-- Location: ~/.gakrcli/workspace/DREAMS.md
-- Scope: workspace-wide, loaded across projects
-- Update this file for long-running ideas, reflections, and future improvements.
-
-Good entries include patterns noticed across sessions, ideas to revisit, and improvements that are not yet concrete tasks.
 `,
 }
 

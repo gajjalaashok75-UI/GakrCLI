@@ -31,10 +31,7 @@ This file defines durable rules for how the workspace interprets GakrCLI, the as
 - `IDENTITY.md`: assistant identity selected with the user.
 - `SOUL.md`: personality, tone, values, and working style.
 - `USER.md`: durable user profile and preferences.
-- `TOOLS.md`: local tool and environment notes.
 - `MEMORY.md`: curated cross-project memory.
-- `DREAMS.md`: long-running ideas and reflections.
-- `HEARTBEAT.md`: periodic work only when the user wants it.
 
 ## Workspace vs Project Memory
 

@@ -1185,11 +1185,8 @@ export const WORKSPACE_CONTEXT_FILE_ORDER = new Map<string, number>([
   ['soul.md', 20],
   ['identity.md', 30],
   ['user.md', 40],
-  ['tools.md', 50],
   ['bootstrap.md', 60],
   ['memory.md', 70],
-  ['dreams.md', 80],
-  ['heartbeat.md', 90],
 ])
 
 function getMemoryFileBasename(filePath: string): string {
@@ -1239,7 +1236,7 @@ export function renderWorkspaceContext(files: MemoryFileInfo[]): string | null {
   const lines = [
     '## GakrCLI Workspace Context',
     '',
-    'GakrCLI loaded these user-editable workspace files from the active workspace. GakrCLI is the CLI, agent harness, and orchestration runtime; the workspace files define the assistant identity, operating style, user profile, tool notes, bootstrap state, rules, and durable memory. Internalize and follow them unless higher-priority instructions override.',
+    'GakrCLI loaded these user-editable workspace files from the active workspace. GakrCLI is the CLI, agent harness, and orchestration runtime; the workspace files define the assistant identity, operating style, user profile, bootstrap state, rules, and durable memory. Internalize and follow them unless higher-priority instructions override.',
     '',
     '<GAKRCLI_WORKSPACE>',
     '',

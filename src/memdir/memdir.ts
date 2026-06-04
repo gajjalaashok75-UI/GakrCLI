@@ -141,8 +141,6 @@ export function buildWorkspacePersistenceLines(
     '- `USER.md`: durable user profile, names, preferences, and collaboration style.',
     '- `IDENTITY.md`: assistant name, nature, avatar, and identity chosen by the user.',
     '- `SOUL.md`: assistant personality, tone, values, and working style.',
-    '- `TOOLS.md`: local environment, shell, provider, model, service, and tool notes.',
-    '- `DREAMS.md`: long-running ideas, reflections, and future improvements.',
     '- `GAKRCLI.md`: workspace overview and broad operating instructions.',
     '',
     'When a new fact or rule clearly belongs in a workspace file, update that workspace file instead of duplicating it in project auto-memory. Read the target file first, make a concrete minimal edit, and preserve existing user-written content.',

@@ -54,8 +54,14 @@ describe('Memory System', () => {
       expect(identity).toBeLessThan(user)
     })
 
-    test('heartbeat.md has highest order number (lowest priority)', () => {
-      expect(WORKSPACE_CONTEXT_FILE_ORDER.get('heartbeat.md')).toBe(90)
+    test('memory.md has highest canonical order number (lowest priority)', () => {
+      expect(WORKSPACE_CONTEXT_FILE_ORDER.get('memory.md')).toBe(70)
+    })
+
+    test('removed workspace template files are no longer canonical', () => {
+      expect(WORKSPACE_CONTEXT_FILE_ORDER.get('tools.md')).toBeUndefined()
+      expect(WORKSPACE_CONTEXT_FILE_ORDER.get('dreams.md')).toBeUndefined()
+      expect(WORKSPACE_CONTEXT_FILE_ORDER.get('heartbeat.md')).toBeUndefined()
     })
 
     test('unknown filenames default to MAX_SAFE_INTEGER', () => {

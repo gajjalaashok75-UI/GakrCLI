@@ -9,8 +9,9 @@
  * overlap the system prompt's harmlessly.
  *
  * The forked agent's cacheSafeParams carry: user context (USER.md content
- * including name/role), GAKRCLI_WORKSPACE snapshot (all ~/.gakrcli/workspace
- * /*.md files), the current date, and the current working directory. Use
+ * including name/role), GAKRCLI_WORKSPACE snapshot (canonical workspace
+ * files such as GAKRCLI.md, RULEBOOK.md, SOUL.md, USER.md, IDENTITY.md,
+ * BOOTSTRAP.md, and MEMORY.md), the current date, and the current working directory. Use
  * these to make extraction contextual and file-targeted.
  */
 
@@ -47,7 +48,7 @@ return [
   `You have a 10-turn budget for up to 10 total file operations (parallel reads on turn 1, parallel writes on turn 2). You can update workspace files and project memory files in the same run.`,
   '',
   `**Paths:**`,
-  `- Workspace files: \`~/.gakrcli/workspace/<filename>.md\` (GAKRCLI.md, SOUL.md, USER.md, etc.) — read these for target files`,
+  `- Workspace files: \`~/.gakrcli/workspace/<filename>.md\` (GAKRCLI.md, RULEBOOK.md, SOUL.md, USER.md, IDENTITY.md, BOOTSTRAP.md, MEMORY.md) — read these for target files`,
   `- Project memory: \`~/.gakrcli/workspace/projects/<project-name>/memory/\` — semantic topic files plus \`MEMORY.md\` index`,
   `- Team memory: \`~/.gakrcli/workspace/projects/<project-name>/memory/team/\` — semantic topic files plus \`MEMORY.md\` index (only if \`TEAMMEM\` feature flag is enabled — do not write there otherwise)`,
   '',
