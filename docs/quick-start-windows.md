@@ -1,4 +1,4 @@
-# GakrCLI Quick Start for Windows (v0.5.5)
+# GakrCLI Quick Start for Windows (v0.5.6)
 
 This guide uses Windows PowerShell.
 

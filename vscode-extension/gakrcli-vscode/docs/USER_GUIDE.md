@@ -1,6 +1,8 @@
 # GakrCLI VS Code User Guide
 
-This guide covers GakrCLI VS Code 0.2.3.
+This guide covers GakrCLI VS Code 0.2.4.
+
+For the full manifest-level command, setting, keybinding, view, and package reference, see [REFERENCE.md](REFERENCE.md).
 
 ## First Run
 
