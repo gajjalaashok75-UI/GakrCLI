@@ -40,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Local MCP Channels**: Enabled the open-build `--channels` path for approved channel plugins such as Telegram and allowed third-party-provider sessions to register channel delivery without gakr.ai OAuth, while still requiring explicit session opt-in.
 - **External Channel Reply Guidance**: Wrapped external channel messages with explicit delivery instructions so Telegram-originated messages are answered through the channel MCP reply/send tools instead of terminal-only assistant prose.
 - **Channel CLI Guidance**: Exposed `--channels` in `--help` and added actionable examples when `--channels` or `--dangerously-load-development-channels` is passed without a required server argument.
+- **MCP Schema Dialects**: Made MCP tool input validation support draft-07, draft 2019-09, and draft 2020-12 JSON Schemas, including newer schema keywords from plugin MCP servers such as Playwright.
 
 ## [unreleased - 0.5.5]
 

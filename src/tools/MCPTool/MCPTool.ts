@@ -1,4 +1,6 @@
 import { Ajv } from 'ajv'
+import Ajv2019 from 'ajv/dist/2019.js'
+import Ajv2020 from 'ajv/dist/2020.js'
 import { z } from 'zod/v4'
 import { buildTool, type ToolDef, type ValidationResult } from '../../Tool.js'
 import { lazySchema } from '../../utils/lazySchema.js'
@@ -39,20 +41,89 @@ export type Output = z.infer<OutputSchema>
 export type { MCPProgress } from '../../types/tools.js'
 
 const ajv = new Ajv({ strict: false })
+const ajv2019 = new Ajv2019({ strict: false })
+const ajv2020 = new Ajv2020({ strict: false })
 
 // Cache compiled validators to avoid recompiling on every validateInput call.
 // AJV compilation is expensive — schemas don't change between calls.
 // Uses WeakMap to allow garbage collection of schemas from disconnected/refreshed
 // MCP tools, preventing memory leaks from accumulating strong references.
-const compiledValidatorCache = new WeakMap<object, ReturnType<typeof ajv.compile>>()
+const compiledValidatorCache = new WeakMap<
+  object,
+  {
+    validate: ReturnType<typeof ajv.compile>
+    errorsText: typeof ajv.errorsText
+  }
+>()
+
+function schemaId(schema: object): string | undefined {
+  return '$schema' in schema && typeof schema.$schema === 'string'
+    ? schema.$schema
+    : undefined
+}
+
+function hasKeyword(value: unknown, keywords: ReadonlySet<string>): boolean {
+  if (!value || typeof value !== 'object') return false
+  if (Array.isArray(value)) return value.some(item => hasKeyword(item, keywords))
+  for (const [key, child] of Object.entries(value)) {
+    if (keywords.has(key)) return true
+    if (hasKeyword(child, keywords)) return true
+  }
+  return false
+}
+
+const DRAFT_2020_KEYWORDS = new Set([
+  '$dynamicAnchor',
+  '$dynamicRef',
+  'prefixItems',
+  'unevaluatedItems',
+  'unevaluatedProperties',
+])
+
+const DRAFT_2019_KEYWORDS = new Set([
+  '$recursiveAnchor',
+  '$recursiveRef',
+  'dependentRequired',
+  'dependentSchemas',
+  'unevaluatedItems',
+  'unevaluatedProperties',
+])
+
+function candidateCompilers(schema: object) {
+  const id = schemaId(schema)
+  const preferred = id?.includes('2020-12')
+    ? ajv2020
+    : id?.includes('2019-09')
+      ? ajv2019
+      : hasKeyword(schema, DRAFT_2020_KEYWORDS)
+        ? ajv2020
+        : hasKeyword(schema, DRAFT_2019_KEYWORDS)
+          ? ajv2019
+          : ajv
+  return [preferred, ajv, ajv2019, ajv2020].filter(
+    (compiler, index, all) => all.indexOf(compiler) === index,
+  )
+}
 
 function getCompiledValidator(schema: object) {
-  let validator = compiledValidatorCache.get(schema)
-  if (!validator) {
-    validator = ajv.compile(schema)
-    compiledValidatorCache.set(schema, validator)
+  let compiled = compiledValidatorCache.get(schema)
+  if (!compiled) {
+    let lastError: unknown
+    for (const compiler of candidateCompilers(schema)) {
+      try {
+        compiled = {
+          validate: compiler.compile(schema),
+          errorsText: compiler.errorsText.bind(compiler),
+        }
+        break
+      } catch (error) {
+        lastError = error
+      }
+    }
+    if (!compiled) throw lastError
+    compiledValidatorCache.set(schema, compiled)
   }
-  return validator
+  return compiled
 }
 
 export const MCPTool = buildTool({
@@ -93,11 +164,11 @@ export const MCPTool = buildTool({
   async validateInput(input, context): Promise<ValidationResult> {
     if (this.inputJSONSchema) {
       try {
-        const validate = getCompiledValidator(this.inputJSONSchema)
+        const { validate, errorsText } = getCompiledValidator(this.inputJSONSchema)
         if (!validate(input)) {
           return {
             result: false,
-            message: ajv.errorsText(validate.errors),
+            message: errorsText(validate.errors),
             errorCode: 400,
           }
         }
