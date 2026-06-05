@@ -52,11 +52,22 @@ function hostMatchesRule(hostname: string, rule: string): boolean {
 }
 
 function stripHtmlTags(text: string): string {
-  return text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+  return decodeHtmlEntities(
+    text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(),
+  )
+}
+
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
 }
 
 function normalizeSearchUrl(rawUrl: string): string | undefined {
-  let url = rawUrl.trim()
+  let url = decodeHtmlEntities(rawUrl.trim())
   if (!url) {
     return undefined
   }
@@ -117,7 +128,7 @@ async function fetchHtmlFallback(
     `https://duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
   ]
 
-  for (const url of endpoints) {
+  const searches = endpoints.map(async url => {
     try {
       const response = await fetch(url, {
         headers: {
@@ -129,11 +140,12 @@ async function fetchHtmlFallback(
       })
 
       if (!response.ok) {
-        continue
+        return []
       }
 
       const html = await response.text()
-      const titleRegex = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g
+      const titleRegex =
+        /<a\b(?=[^>]*\bclass=["'][^"']*\bresult__a\b[^"']*["'])(?=[^>]*\bhref=["']([^"']+)["'])[^>]*>([\s\S]*?)<\/a>/g
       const snippetRegex = /class="result__snippet"[^>]*>([\s\S]*?)<\/(?:a|div)>/g
 
       const titles: Array<{ title: string; url: string }> = []
@@ -165,11 +177,16 @@ async function fetchHtmlFallback(
         .filter(hit => passesDomainFilters(hit.url, input))
         .slice(0, maxResults)
 
-      if (hits.length > 0) {
-        return hits
-      }
+      return hits
     } catch {
-      // Try the next fallback endpoint.
+      return []
+    }
+  })
+
+  const settled = await Promise.allSettled(searches)
+  for (const result of settled) {
+    if (result.status === 'fulfilled' && result.value.length > 0) {
+      return result.value
     }
   }
 

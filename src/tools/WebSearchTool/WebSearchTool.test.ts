@@ -31,11 +31,10 @@ describe('buildEmptyAdapterResultHint', () => {
     }
   })
 
-  test('mentions the native-provider escape hatch', () => {
+  test('mentions DuckDuckGo as the no-key default', () => {
     const msg = buildEmptyAdapterResultHint('nvidia-nim', 'duckduckgo')
-    expect(msg).toMatch(/Anthropic/)
-    expect(msg).toMatch(/Vertex/)
-    expect(msg).toMatch(/Foundry/)
+    expect(msg).toContain('DuckDuckGo')
+    expect(msg).toContain('default no-key')
   })
 })
 
@@ -53,10 +52,9 @@ describe('buildAdapterUnavailableError', () => {
     expect(msg).toContain('duckduckgo: 429 Too Many Requests')
   })
 
-  test('points the user at a working native-search provider', () => {
+  test('points the user at a dedicated search API key', () => {
     const msg = buildAdapterUnavailableError('nvidia-nim', 'timeout')
-    expect(msg).toMatch(/Anthropic/)
-    expect(msg).toMatch(/Codex/)
+    expect(msg).toContain('dedicated search API key')
   })
 })
 

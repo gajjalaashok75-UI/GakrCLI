@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed (2026-06-05)
 - **Command, Tool, Agent, And Skill Registry Hardening**: Mirrored the reference registry's defensive command and tool-pool checks so malformed or partial entries cannot break loading, kept GakrCLI-specific tools/agents/skills covered by focused tests, and left retired or unfinished commands hidden.
 - **Optional Chrome Skill Loading**: Deferred GakrCLI-in-Chrome skill setup until the optional package is available and auto-enabled, preventing missing optional Chrome dependencies from breaking bundled skill registration.
+- **DuckDuckGo Web Search Fallback**: Made WebSearch auto mode use configured API-key providers first and always fall back to DuckDuckGo without requiring a provider API key, routed the DDG adapter through the resilient community search path, and fixed DuckDuckGo HTML parsing for current result markup used by web, image, and video searches.
 
 ## [unreleased - 0.5.5]
 
