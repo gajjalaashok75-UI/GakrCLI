@@ -71,6 +71,35 @@ const coordinatorModeModule = feature('COORDINATOR_MODE') ? require('./coordinat
 /* eslint-disable @typescript-eslint/no-require-imports */
 const assistantModule = feature('KAIROS') ? require('./assistant/index.js') : null;
 const kairosGate = feature('KAIROS') ? require('./assistant/gate.js') : null;
+const CHANNELS_EXAMPLE = 'node dist/cli.mjs --channels plugin:telegram@gakrcli-plugins-official';
+
+export function appendCliErrorGuidance(message: string): string {
+    const trimmed = message.trimEnd();
+    if (trimmed.includes("option '--channels <servers...>' argument missing")) {
+        return [
+            trimmed,
+            '',
+            'Example:',
+            `  ${CHANNELS_EXAMPLE}`,
+            '',
+            'Use --channels only with one or more channel servers. For the official Telegram plugin, use:',
+            '  --channels plugin:telegram@gakrcli-plugins-official',
+            '',
+        ].join('\n');
+    }
+    if (trimmed.includes("option '--dangerously-load-development-channels <servers...>' argument missing")) {
+        return [
+            trimmed,
+            '',
+            'Example:',
+            '  node dist/cli.mjs --dangerously-load-development-channels server:my-local-channel',
+            '',
+            'This flag is only for local channel development. Use --channels for approved plugins.',
+            '',
+        ].join('\n');
+    }
+    return message;
+}
 import { relative, resolve } from 'path';
 import { isAnalyticsDisabled } from 'src/services/analytics/config.js';
 import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js';
@@ -3518,9 +3547,12 @@ async function run() {
         program.addOption(new Option('--assistant', 'Force assistant mode (Agent SDK daemon use)').hideHelp());
     }
     if (feature('KAIROS') || feature('KAIROS_CHANNELS')) {
-        program.addOption(new Option('--channels <servers...>', 'MCP servers whose channel notifications (inbound push) should register this session. Space-separated server names.').hideHelp());
+        program.addOption(new Option('--channels <servers...>', 'Enable inbound channel delivery for approved MCP channel servers. Example: --channels plugin:telegram@gakrcli-plugins-official'));
         program.addOption(new Option('--dangerously-load-development-channels <servers...>', 'Load channel servers not on the approved allowlist. For local channel development only. Shows a confirmation dialog at startup.').hideHelp());
     }
+    program.configureOutput({
+        writeErr: message => process.stderr.write(appendCliErrorGuidance(message)),
+    });
     // Teammate identity options (set by leader when spawning tmux teammates)
     // These replace the GAKR_CODE_* environment variables
     program.addOption(new Option('--agent-id <id>', 'Teammate agent ID').hideHelp());
