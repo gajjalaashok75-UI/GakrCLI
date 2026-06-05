@@ -2225,7 +2225,6 @@ async function loadPluginsFromMarketplaces({
       return cacheOnly
         ? loadPluginFromMarketplaceEntryCacheOnly(
             result.entry,
-            result.marketplaceInstallLocation,
             pluginId,
             enabledValue === true,
             errors,
@@ -2270,7 +2269,6 @@ async function loadPluginsFromMarketplaces({
  */
 async function loadPluginFromMarketplaceEntryCacheOnly(
   entry: PluginMarketplaceEntry,
-  marketplaceInstallLocation: string,
   pluginId: string,
   enabled: boolean,
   errorsOut: PluginError[],
@@ -2278,39 +2276,21 @@ async function loadPluginFromMarketplaceEntryCacheOnly(
 ): Promise<LoadedPlugin | null> {
   let pluginPath: string
 
-  if (typeof entry.source === 'string') {
-    // Local relative path — read from the marketplace source dir directly.
-    // Skip copyPluginToVersionedCache; startup doesn't need a fresh copy.
-    let marketplaceDir: string
-    try {
-      marketplaceDir = (await stat(marketplaceInstallLocation)).isDirectory()
-        ? marketplaceInstallLocation
-        : join(marketplaceInstallLocation, '..')
-    } catch {
-      errorsOut.push({
-        type: 'plugin-cache-miss',
-        source: pluginId,
-        plugin: entry.name,
-        installPath: marketplaceInstallLocation,
-      })
-      return null
-    }
-    pluginPath = join(marketplaceDir, entry.source)
-    // finishLoadingPluginFromPath reads pluginPath — its error handling
-    // surfaces ENOENT as a load failure, no need to pre-check here.
-  } else {
-    // External source (npm/github/url/git-subdir) — use recorded installPath.
-    if (!installPath || !(await pathExists(installPath))) {
-      errorsOut.push({
-        type: 'plugin-cache-miss',
-        source: pluginId,
-        plugin: entry.name,
-        installPath: installPath ?? '(not recorded)',
-      })
-      return null
-    }
-    pluginPath = installPath
+  // Cache-only means "use the materialized installation", even for
+  // marketplace-relative sources. The full loader copies those sources into a
+  // versioned cache and records that path in installed_plugins.json; startup,
+  // /reload-plugins downstream consumers, and MCP config should all see the
+  // same installed files instead of drifting back to the marketplace checkout.
+  if (!installPath || !(await pathExists(installPath))) {
+    errorsOut.push({
+      type: 'plugin-cache-miss',
+      source: pluginId,
+      plugin: entry.name,
+      installPath: installPath ?? '(not recorded)',
+    })
+    return null
   }
+  pluginPath = installPath
 
   // Zip cache extraction — must still happen in cacheOnly mode (invariant 4)
   if (isPluginZipCacheEnabled() && pluginPath.endsWith('.zip')) {
@@ -2343,6 +2323,22 @@ async function loadPluginFromMarketplaceEntryCacheOnly(
     enabled,
     errorsOut,
     pluginPath,
+  )
+}
+
+export async function loadPluginFromMarketplaceEntryCacheOnlyForTesting(
+  entry: PluginMarketplaceEntry,
+  pluginId: string,
+  enabled: boolean,
+  errorsOut: PluginError[],
+  installPath: string | undefined,
+): Promise<LoadedPlugin | null> {
+  return loadPluginFromMarketplaceEntryCacheOnly(
+    entry,
+    pluginId,
+    enabled,
+    errorsOut,
+    installPath,
   )
 }
 

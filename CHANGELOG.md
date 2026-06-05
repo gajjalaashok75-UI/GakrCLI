@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Optional Chrome Skill Loading**: Deferred GakrCLI-in-Chrome skill setup until the optional package is available and auto-enabled, preventing missing optional Chrome dependencies from breaking bundled skill registration.
 - **DuckDuckGo Web Search Fallback**: Made WebSearch auto mode use configured API-key providers first and always fall back to DuckDuckGo without requiring a provider API key, routed the DDG adapter through the resilient community search path, and fixed DuckDuckGo HTML parsing for current result markup used by web, image, and video searches.
 - **Official Plugin Checkout Hygiene**: Ignored the local `gakrcli-plugins-official/` checkout used for bundled-plugin development so plugin-repo edits can be committed and pushed independently from the GakrCLI root repository.
+- **Plugin Reload Cache Path Consistency**: Made cache-only plugin reload/startup paths use the installed `installed_plugins.json` cache path for marketplace-relative plugins, keeping MCP servers such as Telegram on the versioned plugin cache instead of drifting back to the marketplace checkout.
 
 ## [unreleased - 0.5.5]
 
