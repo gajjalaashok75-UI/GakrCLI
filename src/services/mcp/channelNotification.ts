@@ -114,7 +114,14 @@ export function wrapChannelMessage(
     .filter(([k]) => SAFE_META_KEY.test(k))
     .map(([k, v]) => ` ${k}="${escapeXmlAttr(v)}"`)
     .join('')
-  return `<${CHANNEL_TAG} source="${escapeXmlAttr(serverName)}"${attrs}>\n${content}\n</${CHANNEL_TAG}>`
+  return [
+    '<channel_delivery_instruction>',
+    'This message came from an external channel. If you answer it, use that channel MCP server\'s reply/send tool with the chat_id or destination in the channel tag. Do not answer channel messages with normal assistant prose, and do not add a visible terminal response after the channel reply tool call.',
+    '</channel_delivery_instruction>',
+    `<${CHANNEL_TAG} source="${escapeXmlAttr(serverName)}"${attrs}>`,
+    content,
+    `</${CHANNEL_TAG}>`,
+  ].join('\n')
 }
 
 /**
