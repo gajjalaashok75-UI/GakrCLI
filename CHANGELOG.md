@@ -30,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Runtime Wiring And Verification**: Wired the new open-build KAIROS, permission-mode, provider routing, semantic memory, settings watcher, skill watcher, auto-compact, and VS Code runtime changes together with focused regression coverage and full-suite verification.
 - **VS Code Test Runtime Compatibility**: Added a shared VS Code compatibility loader so extension unit tests can exercise runtime modules without depending on the real `vscode` host module.
 
+### Fixed (2026-06-05)
+- **Command, Tool, Agent, And Skill Registry Hardening**: Mirrored the reference registry's defensive command and tool-pool checks so malformed or partial entries cannot break loading, kept GakrCLI-specific tools/agents/skills covered by focused tests, and left retired or unfinished commands hidden.
+- **Optional Chrome Skill Loading**: Deferred GakrCLI-in-Chrome skill setup until the optional package is available and auto-enabled, preventing missing optional Chrome dependencies from breaking bundled skill registration.
+
 ## [unreleased - 0.5.5]
 
 ### Fixed (2026-06-01)

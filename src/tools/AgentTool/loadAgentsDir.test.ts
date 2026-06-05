@@ -6,6 +6,7 @@ import {
   clearAgentDefinitionsCache,
   getAgentDefinitionsWithOverrides,
 } from './loadAgentsDir.js'
+import { getBuiltInAgents } from './builtInAgents.js'
 import { loadMarkdownFilesForSubdir } from '../../utils/markdownConfigLoader.js'
 import {
   acquireSharedMutationLock,
@@ -15,6 +16,7 @@ import {
 const originalEnv = {
   GAKR_CONFIG_DIR: process.env.GAKR_CONFIG_DIR,
   GAKR_CODE_SIMPLE: process.env.GAKR_CODE_SIMPLE,
+  GAKR_CODE_ENTRYPOINT: process.env.GAKR_CODE_ENTRYPOINT,
   GAKR_CODE_USE_NATIVE_FILE_SEARCH:
     process.env.GAKR_CODE_USE_NATIVE_FILE_SEARCH,
 }
@@ -36,6 +38,7 @@ afterEach(async () => {
     await rm(tempDir, { recursive: true, force: true })
     restoreEnv('GAKR_CONFIG_DIR')
     restoreEnv('GAKR_CODE_SIMPLE')
+    restoreEnv('GAKR_CODE_ENTRYPOINT')
     restoreEnv('GAKR_CODE_USE_NATIVE_FILE_SEARCH')
     clearAgentDefinitionsCache()
     loadMarkdownFilesForSubdir.cache.clear?.()
@@ -72,6 +75,24 @@ ${prompt}
 }
 
 describe('agent definition loading', () => {
+  test('registers root built-in agents for normal CLI entrypoints', () => {
+    delete process.env.GAKR_CODE_ENTRYPOINT
+
+    const agentTypes = getBuiltInAgents().map(agent => agent.agentType)
+
+    expect(agentTypes).toContain('general-purpose')
+    expect(agentTypes).toContain('statusline-setup')
+    expect(agentTypes).toContain('gakrcli-code-guide')
+  })
+
+  test('hides the GakrCLI guide agent for SDK entrypoints', () => {
+    process.env.GAKR_CODE_ENTRYPOINT = 'sdk-ts'
+
+    const agentTypes = getBuiltInAgents().map(agent => agent.agentType)
+
+    expect(agentTypes).not.toContain('gakrcli-code-guide')
+  })
+
   test('loads user agents from the GakrCLI config dir in simple mode', async () => {
     await writeAgent(
       join(process.env.GAKR_CONFIG_DIR!, 'agents', 'user-agent.md'),

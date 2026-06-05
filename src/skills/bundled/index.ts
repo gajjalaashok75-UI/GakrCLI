@@ -1,7 +1,6 @@
 import { feature } from 'bun:bundle'
 import { shouldAutoEnablegakrcliInChrome } from 'src/utils/gakrcliInChrome/setup.js'
 import { registerBatchSkill } from './batch.js'
-import { registergakrcliInChromeSkill } from './gakrcliInChrome.js'
 import { registerDebugSkill } from './debug.js'
 import { registerKeybindingsSkill } from './keybindings.js'
 import { registerLoopSkill } from './loop.js'
@@ -62,7 +61,14 @@ export function initBundledSkills(): void {
     registergakrcliApiSkill()
   }
   if (shouldAutoEnablegakrcliInChrome()) {
-    registergakrcliInChromeSkill()
+    try {
+      /* eslint-disable @typescript-eslint/no-require-imports */
+      const { registergakrcliInChromeSkill } = require('./gakrcliInChrome.js')
+      /* eslint-enable @typescript-eslint/no-require-imports */
+      registergakrcliInChromeSkill()
+    } catch {
+      // Optional Chrome automation package is not present in all builds.
+    }
   }
   if (feature('RUN_SKILL_GENERATOR')) {
     /* eslint-disable @typescript-eslint/no-require-imports */

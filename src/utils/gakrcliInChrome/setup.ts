@@ -1,4 +1,3 @@
-import { BROWSER_TOOLS } from '@ant/gakrcli-for-chrome-mcp'
 import { chmod, mkdir, readFile, writeFile } from 'fs/promises'
 import { homedir } from 'os'
 import { join } from 'path'
@@ -35,6 +34,19 @@ const CHROME_EXTENSION_RECONNECT_URL = 'https://clau.de/chrome/reconnect'
 
 const NATIVE_HOST_IDENTIFIER = 'com.anthropic.gakrcli_code_browser_extension'
 const NATIVE_HOST_MANIFEST_NAME = `${NATIVE_HOST_IDENTIFIER}.json`
+
+function getBrowserTools(): Array<{ name: string }> {
+  try {
+    /* eslint-disable @typescript-eslint/no-require-imports */
+    const { BROWSER_TOOLS } = require('@ant/gakrcli-for-chrome-mcp') as {
+      BROWSER_TOOLS: Array<{ name: string }>
+    }
+    /* eslint-enable @typescript-eslint/no-require-imports */
+    return BROWSER_TOOLS
+  } catch {
+    throw new Error('GakrCLI in Chrome package is not available in this build')
+  }
+}
 
 export function shouldEnablegakrcliInChrome(chromeFlag?: boolean): boolean {
   // Disable by default in non-interactive sessions (e.g., SDK, CI)
@@ -94,7 +106,7 @@ export function setupgakrcliInChrome(): {
   systemPrompt: string
 } {
   const isNativeBuild = isInBundledMode()
-  const allowedTools = BROWSER_TOOLS.map(
+  const allowedTools = getBrowserTools().map(
     tool => `mcp__gakrcli-in-chrome__${tool.name}`,
   )
 
