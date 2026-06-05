@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test'
-import { builtInCommandNames, formatDescriptionWithSource } from './commands.js'
+import {
+  builtInCommandNames,
+  formatDescriptionWithSource,
+  meetsAvailabilityRequirement,
+} from './commands.js'
 import { isCommand } from './types/command.js'
 
 describe('builtInCommandNames', () => {
@@ -11,8 +15,18 @@ describe('builtInCommandNames', () => {
     expect(builtInCommandNames()).toContain('commit-message')
   })
 
+  test('includes GakrCLI-specific diagnostic commands', () => {
+    expect(builtInCommandNames()).toContain('benchmark')
+    expect(builtInCommandNames()).toContain('cache-probe')
+  })
+
   test('does not include removed GitHub Models onboarding command', () => {
     expect(builtInCommandNames()).not.toContain('onboard-github')
+  })
+
+  test('does not include unfinished self-improvement prototype commands', () => {
+    expect(builtInCommandNames()).not.toContain('diagnose')
+    expect(builtInCommandNames()).not.toContain('improve')
   })
 })
 
@@ -67,5 +81,18 @@ describe('formatDescriptionWithSource', () => {
     } as any
 
     expect(formatDescriptionWithSource(command)).toBe('(MyPlugin) ')
+  })
+})
+
+describe('meetsAvailabilityRequirement', () => {
+  test('tolerates malformed command entries while command registries are loading', () => {
+    expect(meetsAvailabilityRequirement(null)).toBe(true)
+    expect(meetsAvailabilityRequirement(undefined)).toBe(true)
+    expect(
+      meetsAvailabilityRequirement({
+        name: 'partial',
+        type: 'local',
+      } as any),
+    ).toBe(true)
   })
 })

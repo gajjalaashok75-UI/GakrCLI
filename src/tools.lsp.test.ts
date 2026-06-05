@@ -52,7 +52,9 @@ mock.module('./services/lsp/manager.js', () => ({
   waitForInitialization: async () => {},
 }))
 
-const { getAllBaseTools, getTools } = await import('./tools.js')
+const { assembleToolPool, getAllBaseTools, getTools } = await import(
+  './tools.js'
+)
 
 afterAll(() => {
   try {
@@ -68,6 +70,24 @@ beforeEach(() => {
 
 test('LSPTool is part of the base tool pool', () => {
   expect(getAllBaseTools().map(tool => tool.name)).toContain('LSP')
+})
+
+test('GakrCLI search tools are part of the base tool pool', () => {
+  const toolNames = getAllBaseTools().map(tool => tool.name)
+
+  expect(toolNames).toContain('WebSearch')
+  expect(toolNames).toContain('ImageSearch')
+  expect(toolNames).toContain('VideoSearch')
+})
+
+test('assembled tool pool ignores malformed MCP tool entries', () => {
+  const permissionContext = getEmptyToolPermissionContext()
+  const tools = assembleToolPool(permissionContext, [
+    null,
+    undefined,
+  ] as any)
+
+  expect(tools.every(tool => tool && typeof tool.name === 'string')).toBe(true)
 })
 
 test('LSPTool is filtered from usable tools until a server is connected', () => {
