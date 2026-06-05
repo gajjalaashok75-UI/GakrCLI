@@ -42,7 +42,7 @@ main.tsx
      -> ensureGakrcliWorkspace()
         -> create ~/.gakrcli/workspace
         -> create ~/.gakrcli/workspace/projects
-        -> seed GAKRCLI.md, RULEBOOK.md, SOUL.md, IDENTITY.md, USER.md, TOOLS.md, MEMORY.md, DREAMS.md, HEARTBEAT.md
+        -> seed GAKRCLI.md, RULEBOOK.md, SOUL.md, IDENTITY.md, USER.md, MEMORY.md
         -> seed BOOTSTRAP.md only until first-run setup completes
 
 main.tsx / QueryEngine.ts
@@ -81,18 +81,15 @@ The important detail is that `setup()` creates the workspace, but `getUserContex
 - workspace markdown files from `assets/workspace/`
 - workspace state at `~/.gakrcli/workspace/.gakrcli/workspace-state.json`
 
-The workspace files are:
+The workspace context files are:
 
 - `GAKRCLI.md`
 - `RULEBOOK.md`
 - `SOUL.md`
-- `TOOLS.md`
 - `IDENTITY.md`
 - `USER.md`
-- `HEARTBEAT.md`
 - `BOOTSTRAP.md`
 - `MEMORY.md`
-- `DREAMS.md`
 
 There is intentionally no `BOOT.md` in this GakrCLI flow.
 
@@ -114,7 +111,7 @@ During the first run, `BOOTSTRAP.md` is loaded into workspace context and tells 
 
 After `BOOTSTRAP.md` is deleted, `ensureGakrcliWorkspace()` records `setupCompletedAt` and does not recreate it. On later runs it is absent from disk, so it is not loaded into context.
 
-If the model saves both assistant identity and user identity but forgets to delete `BOOTSTRAP.md`, the next `ensureGakrcliWorkspace()` pass treats that as completed bootstrap, deletes `BOOTSTRAP.md`, records `setupCompletedAt`, and stops loading bootstrap context.
+If the model saves both assistant identity and user identity but forgets to delete `BOOTSTRAP.md`, the next `ensureGakrcliWorkspace()` pass treats that as completed bootstrap only when `IDENTITY.md` has a completed `- **Name:** ...` line and `USER.md` has either a completed `- **Name:** ...` line or a completed `- **What to call them:** ...` line. It then deletes `BOOTSTRAP.md`, records `setupCompletedAt`, and stops loading bootstrap context.
 
 The order entry in `gakrclimd.ts`:
 
@@ -159,11 +156,9 @@ Workspace root files can also be updated directly when the durable information b
 - `USER.md`: durable user profile and collaboration preferences
 - `IDENTITY.md`: assistant name, nature, avatar, and identity
 - `SOUL.md`: assistant personality, tone, values, and working style
-- `TOOLS.md`: local environment and tool notes
-- `DREAMS.md`: long-running ideas and reflections
 - `GAKRCLI.md`: workspace overview and broad operating instructions
 
-The memory prompt tells the model to update these workspace files instead of duplicating global facts in project auto-memory. Project-specific facts stay under `~/.gakrcli/workspace/projects/<project>/memory/`.
+The memory prompt tells the model to update these workspace files instead of duplicating global facts in project auto-memory. Project-specific facts stay under `~/.gakrcli/workspace/projects/<project>/memory/`. `BOOTSTRAP.md` is part of first-run setup, not a durable memory target.
 
 The canonical root workspace update targets are:
 
@@ -173,10 +168,7 @@ The canonical root workspace update targets are:
 ~/.gakrcli/workspace/SOUL.md
 ~/.gakrcli/workspace/IDENTITY.md
 ~/.gakrcli/workspace/USER.md
-~/.gakrcli/workspace/TOOLS.md
 ~/.gakrcli/workspace/MEMORY.md
-~/.gakrcli/workspace/DREAMS.md
-~/.gakrcli/workspace/HEARTBEAT.md
 ```
 
 `BOOTSTRAP.md` is also located at `~/.gakrcli/workspace/BOOTSTRAP.md` while first-run setup is active, but it is not a durable update target after setup completes.
@@ -275,10 +267,7 @@ C:\Users\gajja\.gakrcli\workspace\RULEBOOK.md
 C:\Users\gajja\.gakrcli\workspace\SOUL.md
 C:\Users\gajja\.gakrcli\workspace\IDENTITY.md
 C:\Users\gajja\.gakrcli\workspace\USER.md
-C:\Users\gajja\.gakrcli\workspace\TOOLS.md
 C:\Users\gajja\.gakrcli\workspace\MEMORY.md
-C:\Users\gajja\.gakrcli\workspace\DREAMS.md
-C:\Users\gajja\.gakrcli\workspace\HEARTBEAT.md
 C:\Users\gajja\.gakrcli\workspace\BOOTSTRAP.md
 C:\Users\gajja\Documents\data-science\Gakrcli\GAKRCLI.md
 ```
@@ -296,7 +285,7 @@ callModel({
     "# Tone and style\n...",
     "# Output efficiency\n...",
     "Here is useful information about the environment you are running in:\n<env>\nPrimary working directory: C:\\Users\\gajja\\Documents\\data-science\\Gakrcli\nIs a git repository: true\nPlatform: win32\nOS Version: ...\n</env>\n...",
-    "gitStatus: This is the git status at the start of the conversation...\n\nCurrent branch: main\n\nMain branch: main\n\nStatus:\n M src/utils/workspace.ts\n?? docs/context-building.md\n\nRecent commits:\n..."
+    "gitStatus: This is the git status at the start of the conversation...\n\nCurrent branch: <current-branch>\n\nMain branch (you will usually use this for PRs): <default-branch>\n\nStatus:\n...\n\nRecent commits:\n..."
   ],
   messages: [
     {
@@ -309,7 +298,7 @@ Codebase and user instructions are shown below. Be sure to adhere to these instr
 
 ## GakrCLI Workspace Context
 
-GakrCLI loaded these user-editable workspace files from the active workspace. GakrCLI is the CLI, agent harness, and orchestration runtime; the workspace files define the assistant identity, operating style, user profile, tool notes, bootstrap state, rules, and durable memory. Internalize and follow them unless higher-priority instructions override.
+GakrCLI loaded these user-editable workspace files from the active workspace. GakrCLI is the CLI, agent harness, and orchestration runtime; the workspace files define the assistant identity, operating style, user profile, bootstrap state, rules, and durable memory. Internalize and follow them unless higher-priority instructions override.
 
 <GAKRCLI_WORKSPACE>
 
@@ -348,11 +337,6 @@ GakrCLI is the command-line interface, agent harness, and orchestration runtime.
 # USER.md - About The User
 ...
 
-## C:\\Users\\gajja\\.gakrcli\\workspace\\TOOLS.md
-
-# TOOLS.md - Local Tool Notes
-...
-
 ## C:\\Users\\gajja\\.gakrcli\\workspace\\BOOTSTRAP.md
 
 # BOOTSTRAP.md - First Run
@@ -364,16 +348,6 @@ This is a fresh workspace. Time to set the assistant identity.
 # MEMORY.md - Durable Memory
 ...
 
-## C:\\Users\\gajja\\.gakrcli\\workspace\\DREAMS.md
-
-# DREAMS.md - Reflections
-...
-
-## C:\\Users\\gajja\\.gakrcli\\workspace\\HEARTBEAT.md
-
-# HEARTBEAT.md
-...
-
 </GAKRCLI_WORKSPACE>
 
 Contents of C:\\Users\\gajja\\Documents\\data-science\\Gakrcli\\GAKRCLI.md (project instructions, checked into the codebase):
@@ -381,7 +355,7 @@ Contents of C:\\Users\\gajja\\Documents\\data-science\\Gakrcli\\GAKRCLI.md (proj
 <project instructions...>
 
 # currentDate
-Today's date is 2026-06-03.
+Today's date is YYYY-MM-DD.
 
       IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.
 </system-reminder>
@@ -434,7 +408,7 @@ BOOTSTRAP.md: first-run workspace setup...
 ...
 ```
 
-The workspace block still contains `GAKRCLI.md`, `RULEBOOK.md`, `SOUL.md`, `IDENTITY.md`, `USER.md`, `TOOLS.md`, `MEMORY.md`, `DREAMS.md`, and `HEARTBEAT.md`.
+The workspace block still contains `GAKRCLI.md`, `RULEBOOK.md`, `SOUL.md`, `IDENTITY.md`, `USER.md`, and `MEMORY.md`.
 
 ### After A Tool Call
 
@@ -704,7 +678,7 @@ On a fresh install, the model sees:
 - system context such as git status
 - hidden user context containing workspace files
 - `BOOTSTRAP.md` content
-- empty/new workspace `IDENTITY.md`, `USER.md`, `RULEBOOK.md`, `SOUL.md`, `MEMORY.md`, etc.
+- empty/new workspace `IDENTITY.md`, `USER.md`, `RULEBOOK.md`, `SOUL.md`, and `MEMORY.md`
 - current date
 - current user prompt
 - any attachments from the prompt
@@ -718,7 +692,7 @@ After `BOOTSTRAP.md` is deleted:
 - `BOOTSTRAP.md` is not reseeded
 - no bootstrap hint is rendered
 - no bootstrap content is loaded
-- workspace `GAKRCLI.md`, `RULEBOOK.md`, `SOUL.md`, `IDENTITY.md`, `USER.md`, `TOOLS.md`, `MEMORY.md`, `DREAMS.md`, and `HEARTBEAT.md` continue to load
+- workspace `GAKRCLI.md`, `RULEBOOK.md`, `SOUL.md`, `IDENTITY.md`, `USER.md`, and `MEMORY.md` continue to load
 - project auto-memory continues under `~/.gakrcli/workspace/projects/<project>/memory/`
 - later turns may surface relevant memory topic files as attachments
 
