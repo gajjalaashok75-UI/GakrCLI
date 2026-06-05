@@ -72,6 +72,7 @@ const featureFlags: Record<string, boolean> = {
   PROMPT_CACHE_BREAK_DETECTION: true, // Detect & log unexpected prompt cache invalidations
   HOOK_PROMPTS: true,                 // Allow tools to request interactive user prompts
   KAIROS: false,                       // Local assistant-mode behavior (cloud backend pieces are shimmed)
+  KAIROS_CHANNELS: true,               // Local MCP channel delivery without assistant-mode cloud pieces
 }
 
 // ── Pre-process: replace feature() calls with boolean literals ──────

@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Official Plugin Checkout Hygiene**: Ignored the local `gakrcli-plugins-official/` checkout used for bundled-plugin development so plugin-repo edits can be committed and pushed independently from the GakrCLI root repository.
 - **Plugin Reload Cache Path Consistency**: Made cache-only plugin reload/startup paths use the installed `installed_plugins.json` cache path for marketplace-relative plugins, keeping MCP servers such as Telegram on the versioned plugin cache instead of drifting back to the marketplace checkout.
 - **MCP Reconnect Footer Status**: Cleared stale MCP failure/auth footer notifications once the current MCP client list no longer has matching failures, so a successfully reconnected plugin server no longer leaves `1 MCP server failed · /mcp` behind.
+- **Local MCP Channels**: Enabled the open-build `--channels` path for approved channel plugins such as Telegram and allowed third-party-provider sessions to register channel delivery without gakr.ai OAuth, while still requiring explicit session opt-in.
 
 ## [unreleased - 0.5.5]
 
