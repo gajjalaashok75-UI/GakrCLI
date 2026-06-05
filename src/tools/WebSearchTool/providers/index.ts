@@ -3,7 +3,7 @@
  *
  * WEB_SEARCH_PROVIDER controls which backend to use:
  *
- *   "auto"      (default) — try providers in priority order, fall through on failure
+ *   "auto"      (default) — try configured API-key providers first, then DuckDuckGo
  *   "custom"    — use WEB_SEARCH_API / WEB_PROVIDER preset only (fail loudly)
  *   "firecrawl" — use Firecrawl only (fail loudly)
  *   "tavily"    — use Tavily only (fail loudly)
@@ -46,15 +46,15 @@ export { extractHits } from './custom.js'
 // ---------------------------------------------------------------------------
 // All registered providers — order matters for auto mode
 // ---------------------------------------------------------------------------
-// Priority: firecrawl → tavily → exa → you → jina → brave → bing → mojeek → linkup → ddg
-// DDG is last because it's free but rate-limited.
+// Priority: configured API-key providers, then DuckDuckGo.
+// DuckDuckGo is always included as the no-key default/fallback.
 // Brave sits ahead of Bing because it runs an independent index and Bing's
 // hosted API was sunsetted in 2025 for new users.
 // NOTE: customProvider is intentionally excluded from the auto chain.
 //       It is only available when WEB_SEARCH_PROVIDER=custom is explicitly set.
 //       This prevents the generic outbound provider from silently becoming the default backend.
 
-const ALL_PROVIDERS: SearchProvider[] = [
+const API_KEY_PROVIDERS: SearchProvider[] = [
   firecrawlProvider,
   tavilyProvider,
   exaProvider,
@@ -64,11 +64,17 @@ const ALL_PROVIDERS: SearchProvider[] = [
   bingProvider,
   mojeekProvider,
   linkupProvider,
-  duckduckgoProvider,
 ]
 
+function getAutoProviderChain(): SearchProvider[] {
+  return [
+    ...API_KEY_PROVIDERS.filter(p => p.isConfigured()),
+    duckduckgoProvider,
+  ]
+}
+
 export function getAvailableProviders(): SearchProvider[] {
-  return ALL_PROVIDERS.filter(p => p.isConfigured())
+  return getAutoProviderChain()
 }
 
 // ---------------------------------------------------------------------------
@@ -115,11 +121,11 @@ export function getProviderMode(): ProviderMode {
 /**
  * Returns the list of providers to try, in order.
  * - Specific mode → single provider
- * - Auto → priority order (ALL_PROVIDERS, filtered by isConfigured)
+ * - Auto → configured API providers first, then DuckDuckGo
  */
 export function getProviderChain(mode: ProviderMode): SearchProvider[] {
   if (mode === 'auto') {
-    return ALL_PROVIDERS.filter(p => p.isConfigured())
+    return getAutoProviderChain()
   }
   if (mode === 'native') {
     return []
