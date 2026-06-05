@@ -44,6 +44,15 @@ This directory is the structured documentation entry point for the GakrCLI CLI, 
 | [build/kairos-and-internal-flags.md](build/kairos-and-internal-flags.md) | Kairos, assistant mode, and private/incomplete flag notes. |
 | [build/feature-flag-change-checklist.md](build/feature-flag-change-checklist.md) | Checklist for safely changing build flags. |
 
+## Agent Swarms And Coordinator Mode
+
+| Document | Purpose |
+| --- | --- |
+| [swarm/README.md](swarm/README.md) | Swarm overview and documentation map. |
+| [swarm/usage.md](swarm/usage.md) | How to enable agent teams, create teams, spawn teammates, message, assign tasks, and clean up. |
+| [swarm/architecture.md](swarm/architecture.md) | Backend selection, spawn flow, team files, mailboxes, permissions, and source map. |
+| [swarm/coordinator-mode.md](swarm/coordinator-mode.md) | Coordinator mode, worker agents, and how it differs from teammate swarms. |
+
 ## Integrations
 
 | Folder/File | Purpose |
