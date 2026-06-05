@@ -34,6 +34,16 @@ This directory is the structured documentation entry point for the GakrCLI CLI, 
 | [SYSTEM_FLOW_DIAGRAMS.md](SYSTEM_FLOW_DIAGRAMS.md) | Text flow diagrams for major runtime paths. |
 | [self-improvement-architecture.md](self-improvement-architecture.md) | Self-improvement and feedback architecture. |
 
+## Build And Feature Flags
+
+| Document | Purpose |
+| --- | --- |
+| [build/README.md](build/README.md) | Build documentation entry point. |
+| [build/feature-flags-overview.md](build/feature-flags-overview.md) | How build-time feature flags work. |
+| [build/feature-flags-reference.md](build/feature-flags-reference.md) | Full reference for current `scripts/build.ts` feature flags. |
+| [build/kairos-and-internal-flags.md](build/kairos-and-internal-flags.md) | Kairos, assistant mode, and private/incomplete flag notes. |
+| [build/feature-flag-change-checklist.md](build/feature-flag-change-checklist.md) | Checklist for safely changing build flags. |
+
 ## Integrations
 
 | Folder/File | Purpose |
