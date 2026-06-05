@@ -1,6 +1,6 @@
 # GakrCLI VS Code Architecture
 
-This document describes the extension architecture for version 0.2.3.
+This document describes the extension architecture for version 0.2.4.
 
 ## Native Webview Flow
 
@@ -68,9 +68,9 @@ The extension declares `@gakr-gakr/gakrcli` as a dependency. During source-check
 
 For this release:
 
-- GakrCLI root package: `0.5.5`
-- VS Code extension: `0.2.3`
-- Extension dependency: `@gakr-gakr/gakrcli@^0.5.5`
+- GakrCLI root package: `0.5.6`
+- VS Code extension: `0.2.4`
+- Extension dependency: `@gakr-gakr/gakrcli@^0.5.6`
 
 ## Important Files
 
@@ -84,3 +84,5 @@ For this release:
 | `webview/src/utils/` | Tested webview transformation helpers. |
 | `resources/` | Marketplace icon and walkthrough markdown. |
 | `gakrcli-settings.schema.json` | JSON schema contribution for GakrCLI settings. |
+
+For the command, keybinding, setting, and view contributions, see [REFERENCE.md](REFERENCE.md).

@@ -4,7 +4,7 @@
 
 # GakrCLI VS Code
 
-**Version 0.2.3**
+**Version 0.2.4**
 
 Native VS Code chat for GakrCLI, powered by the `@gakr-gakr/gakrcli` SDK.
 
@@ -23,13 +23,13 @@ code --install-extension gakr-gakr.gakrcli-vscode
 From a local package:
 
 ```bash
-code --install-extension gakrcli-vscode-0.2.3.vsix
+code --install-extension gakrcli-vscode-0.2.4.vsix
 ```
 
 The extension package depends on `@gakr-gakr/gakrcli`. For terminal mode, install the CLI globally too:
 
 ```bash
-npm install -g @gakr-gakr/gakrcli@0.5.5
+npm install -g @gakr-gakr/gakrcli@0.5.6
 ```
 
 ## Open GakrCLI
@@ -189,11 +189,12 @@ Dry-run package inspection:
 npx @vscode/vsce ls --tree
 ```
 
-Release note: `gakrcli-vscode@0.2.3` depends on `@gakr-gakr/gakrcli@0.5.5`, so publish the root npm package first, then refresh this extension lockfile before building the final VSIX.
+Release note: `gakrcli-vscode@0.2.4` depends on `@gakr-gakr/gakrcli@0.5.6`, so publish the root npm package first, then refresh this extension lockfile before building the final VSIX.
 
 ## More Docs
 
 - [User guide](docs/USER_GUIDE.md)
+- [Command and settings reference](docs/REFERENCE.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Publishing checklist](docs/PUBLISHING.md)
 - [Root GakrCLI README](../../README.md)
