@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Open-Build Feature Flag Inventory**: Declared every `feature(...)` gate used in `src/` in `scripts/build.ts`, defaulting newly documented unavailable or unvalidated functionality to `false` so missing flags are explicit without changing runtime behavior.
 - **Knowledge Graph Persistence Durability**: Persisted the Orama knowledge index through the flushed atomic file-write helper, allowed that helper to accept buffer payloads, and made cleanup registration support synchronous handlers so SQLite close hooks match their actual behavior.
 
+### Fixed (2026-06-06)
+- **Wiki Status Dispatch**: Routed `/wiki status` and common info aliases to the wiki status output instead of the generic help text.
+
 ### Added (2026-06-03)
 - **OpenClaw-Style Workspace Persistence**: Added root workspace files under `~/.gakrcli/workspace/` for GakrCLI identity, rulebook, soul, user profile, tools, memory, dreams, heartbeat, and first-run bootstrap context.
 - **Workspace Location Metadata**: Added canonical `~/.gakrcli/workspace/<file>` location and update-target guidance to every packaged workspace file so model-driven updates can route durable facts to the right file.
