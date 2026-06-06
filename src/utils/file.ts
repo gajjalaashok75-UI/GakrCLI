@@ -361,7 +361,7 @@ export function readFileSyncCached(filePath: string): string {
  */
 export function writeFileSyncAndFlush_DEPRECATED(
   filePath: string,
-  content: string,
+  content: string | NodeJS.ArrayBufferView,
   options: { encoding: BufferEncoding; mode?: number } = { encoding: 'utf-8' },
 ): void {
   const fs = getFsImplementation()
@@ -421,8 +421,10 @@ export function writeFileSyncAndFlush_DEPRECATED(
     }
 
     fsWriteFileSync(tempPath, content, writeOptions)
+    const contentSize =
+      typeof content === 'string' ? content.length : content.byteLength
     logForDebugging(
-      `Temp file written successfully, size: ${content.length} bytes`,
+      `Temp file written successfully, size: ${contentSize} bytes`,
     )
 
     // For existing files or if mode was not set atomically, apply permissions

@@ -35,6 +35,7 @@ const featureFlags: Record<string, boolean> = {
   // ── Disabled: require Anthropic infrastructure or missing source ─────
   VOICE_MODE: false,              // Push-to-talk STT via claude.ai OAuth endpoint
   PROACTIVE: false,               // Autonomous agent mode (missing proactive/ module)
+  KAIROS: false,                  // Persistent assistant/session mode (cloud backend)
   BRIDGE_MODE: false,             // Remote desktop bridge via CCR infrastructure
   DAEMON: false,                  // Background daemon process (stubbed in open build)
   AGENT_TRIGGERS: false,          // Scheduled remote agent triggers
@@ -47,6 +48,65 @@ const featureFlags: Record<string, boolean> = {
   CHICAGO_MCP: false,             // Computer-use MCP (native Swift modules stubbed)
   COWORKER_TYPE_TELEMETRY: false, // Telemetry for agent/coworker type classification
   MCP_SKILLS: false,              // Dynamic MCP skill discovery (src/skills/mcpSkills.ts not mirrored; enabling this causes "fetchMcpSkillsForClient is not a function" when MCP servers with resources connect — see #856)
+  AGENT_MEMORY_SNAPSHOT: false,   // Agent memory snapshot persistence not enabled in open build
+  AGENT_TRIGGERS_REMOTE: false,   // Remote scheduled trigger support requires hosted infrastructure
+  ALLOW_TEST_VERSIONS: false,     // Internal version bypass for test builds only
+  ANTI_DISTILLATION_CC: false,    // First-party anti-distillation API header
+  AUTO_THEME: false,              // Automatic terminal theme detection
+  BASH_CLASSIFIER: false,         // Bash safety classifier service integration
+  BREAK_CACHE_COMMAND: false,     // Prompt-cache break debugging injection
+  BUILDING_GAKR_APPS: false,      // Internal Gakr app-building mode
+  BYOC_ENVIRONMENT_RUNNER: false, // Bring-your-own-cloud environment runner
+  CCR_AUTO_CONNECT: false,        // Cloud/CCR automatic bridge connection
+  CCR_MIRROR: false,              // Cloud/CCR mirror transport mode
+  CCR_REMOTE_SETUP: false,        // Remote setup web command for CCR
+  COMPACTION_REMINDERS: false,    // Extra compact/reminder prompting
+  CONNECTOR_TEXT: false,          // Connector text-block handling
+  CONVERSATION_ARC: false,        // Native knowledge graph prompt injection; disabled until validated
+  DIRECT_CONNECT: false,          // Direct remote connection flow
+  DOWNLOAD_USER_SETTINGS: false,  // Hosted user-settings download
+  ENHANCED_TELEMETRY_BETA: false, // Enhanced telemetry beta metadata
+  EXPERIMENTAL_SKILL_SEARCH: false, // Remote/experimental skill index search
+  FILE_PERSISTENCE: false,        // File persistence/checkpoint feature gate
+  HARD_FAIL: false,               // Hard-fail diagnostic mode
+  HISTORY_SNIP: false,            // History snipping command
+  HOOK_CHAINS: false,             // Chained hook execution
+  HYBRID_CONTEXT_STRATEGY: false, // Hybrid context strategy for API requests
+  IMPROVEMENT_SYSTEM: false,      // Self-improvement command system
+  IS_LIBC_GLIBC: false,           // libc-specific native build flag
+  IS_LIBC_MUSL: false,            // libc-specific native build flag
+  KAIROS_BRIEF: false,            // Assistant brief-only mode
+  KAIROS_DREAM: false,            // Assistant dream/proactive mode
+  KAIROS_GITHUB_WEBHOOKS: false,  // GitHub webhook subscription flow
+  KAIROS_PUSH_NOTIFICATION: false, // Hosted assistant push notifications
+  LODESTONE: false,               // Lodestone integration
+  MCP_RICH_OUTPUT: false,         // Rich MCP output rendering
+  MEMORY_SHAPE_TELEMETRY: false,  // Memory-shape telemetry
+  MULTI_TURN_CONTEXT: false,      // Native multi-turn context tracker; disabled until validated
+  NATIVE_CLIENT_ATTESTATION: false, // Native client attestation header
+  NATIVE_CLIPBOARD_IMAGE: false,  // Native clipboard image support
+  NEW_INIT: false,                // New init flow
+  OVERFLOW_TEST_TOOL: false,      // Internal overflow test tool
+  PERFETTO_TRACING: false,        // Perfetto tracing instrumentation
+  POWERSHELL_AUTO_MODE: false,    // PowerShell-specific auto-mode classifier path
+  REACTIVE_COMPACT: false,        // Reactive compaction UI/logic
+  REVIEW_ARTIFACT: false,         // Review artifact generation
+  RUN_SKILL_GENERATOR: false,     // Skill generator runtime
+  SELF_HOSTED_RUNNER: false,      // Self-hosted runner integration
+  SKILL_IMPROVEMENT: false,       // Skill improvement workflows
+  SKIP_DETECTION_WHEN_AUTOUPDATES_DISABLED: false, // Internal update/detection behavior
+  SLOW_OPERATION_LOGGING: false,  // Slow-operation tracing
+  SSH_REMOTE: false,              // SSH remote connection flow
+  STREAMLINED_OUTPUT: false,      // Alternate streamlined terminal output
+  TEMPLATES: false,               // Template generation workflows
+  TERMINAL_PANEL: false,          // Terminal panel UI
+  TORCH: false,                   // Torch command/tooling
+  TREE_SITTER_BASH: false,        // Tree-sitter Bash parser
+  TREE_SITTER_BASH_SHADOW: false, // Shadow comparison for tree-sitter Bash parser
+  ULTRAPLAN: false,               // Ultraplan workflow UI
+  UNATTENDED_RETRY: false,        // Unattended retry behavior
+  UPLOAD_USER_SETTINGS: false,    // Hosted user-settings upload
+  WORKFLOW_SCRIPTS: false,        // Local workflow script commands/tools
 
   // ── Enabled: upstream defaults ──────────────────────────────────────
   COORDINATOR_MODE: true,             // Multi-agent coordinator with worker delegation
@@ -71,7 +131,6 @@ const featureFlags: Record<string, boolean> = {
   VERIFICATION_AGENT: true,           // Built-in read-only agent for test/verification
   PROMPT_CACHE_BREAK_DETECTION: true, // Detect & log unexpected prompt cache invalidations
   HOOK_PROMPTS: true,                 // Allow tools to request interactive user prompts
-  KAIROS: false,                       // Local assistant-mode behavior (cloud backend pieces are shimmed)
   KAIROS_CHANNELS: true,               // Local MCP channel delivery without assistant-mode cloud pieces
 }
 
