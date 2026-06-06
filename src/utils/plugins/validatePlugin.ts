@@ -232,7 +232,7 @@ export async function validatePluginManifest(
           path: key,
           message:
             `Field '${key}' belongs in the marketplace entry (marketplace.json), ` +
-            `not plugin.json. It's harmless here but unused — Gakr ` +
+            `not plugin.json. It's harmless here but unused — GakrCLI ` +
             `ignores it at load time.`,
         })
       }
@@ -261,7 +261,7 @@ export async function validatePluginManifest(
       warnings.push({
         path: 'name',
         message:
-          `Plugin name "${manifest.name}" is not kebab-case. Gakr accepts ` +
+          `Plugin name "${manifest.name}" is not kebab-case. GakrCLI accepts ` +
           `it, but the Gakr.ai marketplace sync requires kebab-case ` +
           `(lowercase letters, digits, and hyphens only, e.g., "my-plugin").`,
       })
@@ -580,7 +580,7 @@ function validateComponentFile(
     warnings.push({
       path: 'description',
       message:
-        `No description in frontmatter. A description helps users and Gakr ` +
+        `No description in frontmatter. A description helps users and GakrCLI ` +
         `understand when to use this ${fileType}.`,
     })
   }

@@ -104,7 +104,7 @@ export function MCPRemoteServerMenu({
       } else if (result.client.type === 'needs-auth') {
         onComplete?.('Authentication successful, but server still requires authentication. You may need to manually restart Gakr.');
       } else {
-        onComplete?.('Authentication successful, but server reconnection failed. You may need to manually restart Gakr for the changes to take effect.');
+        onComplete?.('Authentication successful, but server reconnection failed. You may need to manually restart GakrCLI for the changes to take effect.');
       }
     } catch (err) {
       logEvent('tengu_gakrcliai_mcp_auth_completed', {
@@ -157,7 +157,7 @@ export function MCPRemoteServerMenu({
     isActive: isAuthenticating
   });
 
-  // Escape to cancel Gakr AI authentication
+  // Escape to cancel GakrCLI AI authentication
   useKeybinding('confirm:no', () => {
     setIsgakrcliAIAuthenticating(false);
     setgakrcliAIAuthUrl(null);
@@ -166,7 +166,7 @@ export function MCPRemoteServerMenu({
     isActive: isgakrcliAIAuthenticating
   });
 
-  // Escape to cancel Gakr AI clear auth
+  // Escape to cancel GakrCLI AI clear auth
   useKeybinding('confirm:no', () => {
     setIsgakrcliAIClearingAuth(false);
     setgakrcliAIClearAuthUrl(null);
@@ -285,7 +285,7 @@ export function MCPRemoteServerMenu({
         } else {
           // result.client.type === 'failed'
           logMCPDebug(server.name, `Reconnection failed after authentication`);
-          onComplete?.('Authentication successful, but server reconnection failed. You may need to manually restart Gakr for the changes to take effect.');
+          onComplete?.('Authentication successful, but server reconnection failed. You may need to manually restart GakrCLI for the changes to take effect.');
         }
       }
     } catch (err_1) {

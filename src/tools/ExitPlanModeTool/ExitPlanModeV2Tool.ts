@@ -59,7 +59,7 @@ const permissionSetupModule = feature('TRANSCRIPT_CLASSIFIER')
 
 /**
  * Schema for prompt-based permission requests.
- * Used by Gakr to request semantic permissions when exiting plan mode.
+ * Used by GakrCLI to request semantic permissions when exiting plan mode.
  */
 const allowedPromptSchema = lazySchema(() =>
   z.object({

@@ -7,20 +7,26 @@ function buildSchemaTemplate(projectName: string): string {
   return `# GakrCLI Wiki Schema
 
 This wiki stores durable, human-readable project knowledge for ${projectName}.
+The wiki is a persistent LLM-maintained knowledge layer, not a one-time RAG
+answer cache.
 
 ## Goals
 
 - Keep useful project knowledge in markdown, not only in chat history
-- Prefer synthesized facts over raw copy-paste
+- Compile knowledge once and keep it current as new sources arrive
+- Prefer synthesized, cross-linked facts over raw copy-paste
 - Keep source attribution explicit
 - Make pages easy for both humans and agents to update
+- Preserve contradictions, stale claims, and open questions instead of hiding them
 
 ## Structure
 
-- \`index.md\`: top-level navigation and major topics
-- \`log.md\`: append-only update log
-- \`pages/\`: durable topic and architecture pages
-- \`sources/\`: source ingestion notes and summaries
+- \`raw/\`: immutable curated inputs copied or dropped in by the user
+- \`sources/\`: generated source notes and summaries created from raw/project files
+- \`pages/\`: durable topic, entity, concept, comparison, and architecture pages
+- \`index.md\`: content-oriented catalog of wiki pages and source notes
+- \`log.md\`: append-only chronological update log with parseable headings
+- \`schema.md\`: this operating contract for future wiki-maintenance sessions
 
 ## Page Rules
 
@@ -29,10 +35,32 @@ This wiki stores durable, human-readable project knowledge for ${projectName}.
   - \`## Summary\`
   - \`## Key Facts\`
   - \`## Relationships\`
+  - \`## Contradictions\`
   - \`## Open Questions\`
   - \`## Sources\`
 - Add or update facts only when they are grounded in project files or explicit source notes
 - Prefer editing an existing page over creating duplicates
+- Link related pages with relative markdown links
+- Keep source references visible enough that future answers can cite them
+
+## Workflows
+
+### Ingest
+
+When a new source is added, read it, write or update a source note, update
+relevant pages, refresh \`index.md\`, and append a dated \`ingest\` entry to
+\`log.md\`. A single useful source may update many pages.
+
+### Query
+
+When answering a question, read \`index.md\` first, open relevant pages and
+source notes, synthesize an answer with citations, and file durable discoveries
+back into \`pages/\` when they should compound over time.
+
+### Lint
+
+Periodically check for stale claims, contradictions, orphan pages, missing
+cross-references, missing concept/entity pages, and useful follow-up sources.
 `
 }
 
@@ -40,14 +68,16 @@ function buildIndexTemplate(projectName: string): string {
   return `# ${projectName} Wiki
 
 This wiki is maintained by GakrCLI as a durable project knowledge layer.
+Read this file first, then drill into the linked pages and source notes.
 
 ## Core Pages
 
-- [Architecture](./pages/architecture.md)
+- [Architecture](./pages/architecture.md) - High-level architecture notes and open questions.
 
 ## Sources
 
-- Source notes live in [sources/](./sources/)
+- Raw curated inputs live in [raw/](./raw/)
+- Generated source notes live in [sources/](./sources/)
 
 ## Recent Updates
 
@@ -58,7 +88,9 @@ This wiki is maintained by GakrCLI as a durable project knowledge layer.
 function buildLogTemplate(timestamp: string): string {
   return `# Wiki Update Log
 
-- ${timestamp}: Wiki initialized by GakrCLI
+## [${timestamp}] init | Wiki initialized
+
+- Created the initial GakrCLI wiki scaffold.
 `
 }
 
@@ -76,6 +108,10 @@ High-level architecture notes for ${projectName}.
 ## Relationships
 
 - Link this page to major subsystems as the wiki grows.
+
+## Contradictions
+
+- None recorded yet.
 
 ## Open Questions
 
@@ -114,7 +150,7 @@ export async function initializeWiki(cwd: string): Promise<WikiInitResult> {
   const createdDirectories: string[] = []
   const createdFiles: string[] = []
 
-  for (const dir of [paths.root, paths.pagesDir, paths.sourcesDir]) {
+  for (const dir of [paths.root, paths.rawDir, paths.pagesDir, paths.sourcesDir]) {
     await mkdir(dir, { recursive: true })
     createdDirectories.push(dir)
   }

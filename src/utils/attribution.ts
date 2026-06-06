@@ -52,8 +52,8 @@ function formatGakrcliCoAuthorName(model: string): string {
       }
       const publicModelName = getPublicModelName(model)
       return sanitizeCoAuthorNamePart(
-        publicModelName.startsWith('Gakr ')
-          ? `GakrCLI ${publicModelName.slice('Gakr '.length)}`
+        publicModelName.startsWith('GakrCLI ')
+          ? `GakrCLI ${publicModelName.slice('GakrCLI '.length)}`
           : publicModelName,
       )
     }
@@ -62,8 +62,8 @@ function formatGakrcliCoAuthorName(model: string): string {
   }
   const coAuthorName = publicName.startsWith('GakrCLI ')
     ? publicName
-    : publicName.startsWith('Gakr ')
-    ? `GakrCLI ${publicName.slice('Gakr '.length)}`
+    : publicName.startsWith('GakrCLI ')
+    ? `GakrCLI ${publicName.slice('GakrCLI '.length)}`
     : `GakrCLI ${publicName}`
   return sanitizeCoAuthorNamePart(coAuthorName)
 }
@@ -98,7 +98,7 @@ export function getDefaultCommitCoAuthorName({
   // actual configured model instead of claiming GakrCLI Opus.
   if (apiProvider === 'firstParty') {
     // @[MODEL LAUNCH]: Update this fallback when the default public GakrCLI model changes.
-    return 'Gakr Opus 4.6'
+    return 'GakrCLI Opus 4.6'
   }
 
   const sanitizedModel = sanitizeCoAuthorNamePart(model)

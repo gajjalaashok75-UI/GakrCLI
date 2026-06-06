@@ -3,7 +3,7 @@ import { c as _c } from "react-compiler-runtime";
  * ViewHookMode shows read-only details for a single configured hook.
  *
  * The /hooks menu is read-only; this view replaces the former delete-hook
- * confirmation screen and directs users to settings.json or Gakr for edits.
+ * confirmation screen and directs users to settings.json or GakrCLI for edits.
  */
 import * as React from 'react';
 import { Box, Text } from '../../ink.js';
@@ -133,7 +133,7 @@ export function ViewHookMode(t0) {
   }
   let t14;
   if ($[32] === Symbol.for("react.memo_cache_sentinel")) {
-    t14 = <Text dimColor={true}>To modify or remove this hook, edit settings.json directly or ask Gakr to help.</Text>;
+    t14 = <Text dimColor={true}>To modify or remove this hook, edit settings.json directly or ask GakrCLI to help.</Text>;
     $[32] = t14;
   } else {
     t14 = $[32];

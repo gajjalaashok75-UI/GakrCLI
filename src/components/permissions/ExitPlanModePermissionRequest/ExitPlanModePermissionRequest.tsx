@@ -48,7 +48,26 @@ import type { PastedContent } from '../../../utils/config.js';
 import type { ImageDimensions } from '../../../utils/imageResizer.js';
 import { maybeResizeAndDownsampleImageBlock } from '../../../utils/imageResizer.js';
 import { cacheImagePath, storeImage } from '../../../utils/imageStore.js';
-type ResponseValue = 'yes-bypass-permissions' | 'yes-accept-edits' | 'yes-accept-edits-keep-context' | 'yes-default-keep-context' | 'yes-resume-auto-mode' | 'yes-auto-clear-context' | 'ultraplan' | 'no';
+type ResponseValue = 'yes-bypass-permissions' | 'yes-full-access' | 'yes-accept-edits' | 'yes-bypass-permissions-keep-context' | 'yes-full-access-keep-context' | 'yes-accept-edits-keep-context' | 'yes-default-keep-context' | 'yes-resume-auto-mode' | 'yes-auto-clear-context' | 'ultraplan' | 'no';
+type DangerousPlanExitMode = Extract<PermissionMode, 'bypassPermissions' | 'fullAccess'>;
+
+/** @internal Exported for testing. */
+export function getDangerousPlanExitMode({
+  isBypassPermissionsModeAvailable,
+  prePlanMode
+}: {
+  isBypassPermissionsModeAvailable: boolean | undefined;
+  prePlanMode?: PermissionMode;
+}): DangerousPlanExitMode | null {
+  if (!isBypassPermissionsModeAvailable) {
+    return null;
+  }
+  return prePlanMode === 'fullAccess' ? 'fullAccess' : 'bypassPermissions';
+}
+
+function getDangerousPlanExitLabel(mode: DangerousPlanExitMode): string {
+  return mode === 'fullAccess' ? 'full access' : 'bypass permissions';
+}
 
 /**
  * Build permission updates for plan approval, including prompt-based rules if provided.
@@ -146,20 +165,24 @@ export function ExitPlanModePermissionRequest({
   const usage = toolUseConfirm.assistantMessage.message.usage;
   const {
     mode,
+    prePlanMode,
     isAutoModeAvailable,
     isBypassPermissionsModeAvailable
   } = toolPermissionContext;
+  const dangerousPlanExitMode = getDangerousPlanExitMode({
+    isBypassPermissionsModeAvailable,
+    prePlanMode
+  });
   const planAuthorName = modelDisplayString(toolUseConfirm.assistantMessage.message.model);
   const options = useMemo(() => buildPlanApprovalOptions({
     showClearContext,
     showUltraplan,
     usedPercent: showClearContext ? getContextUsedPercent(usage, mode) : null,
     isAutoModeAvailable,
-    isBypassPermissionsModeAvailable,
-    assistantDisplayName: PRODUCT_DISPLAY_NAME,
+    dangerousPlanExitMode,
     planAuthorName,
     onFeedbackChange: setPlanFeedback
-  }), [showClearContext, showUltraplan, usage, mode, isAutoModeAvailable, isBypassPermissionsModeAvailable, planAuthorName]);
+  }), [showClearContext, showUltraplan, usage, mode, isAutoModeAvailable, dangerousPlanExitMode, planAuthorName]);
   function onImagePaste(base64Image: string, mediaType?: string, filename?: string, dimensions?: ImageDimensions, _sourcePath?: string) {
     const pasteId = nextPasteIdRef.current++;
     const newContent: PastedContent = {
@@ -337,7 +360,7 @@ export function ExitPlanModePermissionRequest({
     // The REPL will handle context clear and trigger a fresh query
     // Keep-context options skip this block and go through the normal flow below
     const isResumeAutoOption = feature('TRANSCRIPT_CLASSIFIER') ? value === 'yes-resume-auto-mode' : false;
-    const isKeepContextOption = value === 'yes-accept-edits-keep-context' || value === 'yes-default-keep-context' || isResumeAutoOption;
+    const isKeepContextOption = value === 'yes-bypass-permissions-keep-context' || value === 'yes-full-access-keep-context' || value === 'yes-accept-edits-keep-context' || value === 'yes-default-keep-context' || isResumeAutoOption;
     if (value !== 'no') {
       autoNameSessionFromPlan(currentPlan, setAppState, !isKeepContextOption);
     }
@@ -346,6 +369,8 @@ export function ExitPlanModePermissionRequest({
       let mode: PermissionMode = 'default';
       if (value === 'yes-bypass-permissions') {
         mode = 'bypassPermissions';
+      } else if (value === 'yes-full-access') {
+        mode = 'fullAccess';
       } else if (value === 'yes-accept-edits') {
         mode = 'acceptEdits';
       } else if (feature('TRANSCRIPT_CLASSIFIER') && value === 'yes-auto-clear-context' && isAutoModeGateEnabled()) {
@@ -432,7 +457,9 @@ export function ExitPlanModePermissionRequest({
     // Without this fallback the function would return without resolving the
     // dialog, leaving the query loop blocked and safety state corrupted.
     const keepContextModes: Record<string, PermissionMode> = {
-      'yes-accept-edits-keep-context': toolPermissionContext.isBypassPermissionsModeAvailable ? 'bypassPermissions' : 'acceptEdits',
+      'yes-bypass-permissions-keep-context': 'bypassPermissions',
+      'yes-full-access-keep-context': 'fullAccess',
+      'yes-accept-edits-keep-context': dangerousPlanExitMode ?? 'acceptEdits',
       'yes-default-keep-context': 'default',
       ...(feature('TRANSCRIPT_CLASSIFIER') ? {
         'yes-resume-auto-mode': 'default' as const
@@ -458,6 +485,7 @@ export function ExitPlanModePermissionRequest({
     // Handle standard approval options
     const standardModes: Record<string, PermissionMode> = {
       'yes-bypass-permissions': 'bypassPermissions',
+      'yes-full-access': 'fullAccess',
       'yes-accept-edits': 'acceptEdits'
     };
     const standardMode = standardModes[value];
@@ -680,8 +708,7 @@ export function buildPlanApprovalOptions({
   showUltraplan,
   usedPercent,
   isAutoModeAvailable,
-  isBypassPermissionsModeAvailable,
-  assistantDisplayName,
+  dangerousPlanExitMode,
   planAuthorName,
   onFeedbackChange
 }: {
@@ -689,8 +716,7 @@ export function buildPlanApprovalOptions({
   showUltraplan: boolean;
   usedPercent: number | null;
   isAutoModeAvailable: boolean | undefined;
-  isBypassPermissionsModeAvailable: boolean | undefined;
-  assistantDisplayName: string;
+  dangerousPlanExitMode: DangerousPlanExitMode | null;
   planAuthorName: string;
   onFeedbackChange: (v: string) => void;
 }): OptionWithDescription<ResponseValue>[] {
@@ -702,12 +728,19 @@ export function buildPlanApprovalOptions({
         label: `Yes, clear context${usedLabel} and use auto mode`,
         value: 'yes-auto-clear-context'
       });
-    } else if (isBypassPermissionsModeAvailable) {
+    }
+    if (dangerousPlanExitMode) {
       options.push({
-        label: `Yes, clear context${usedLabel} and bypass permissions`,
-        value: 'yes-bypass-permissions'
+        label: `Yes, clear context${usedLabel} and ${getDangerousPlanExitLabel(dangerousPlanExitMode)}`,
+        value: dangerousPlanExitMode === 'fullAccess' ? 'yes-full-access' : 'yes-bypass-permissions'
       });
-    } else {
+      if (dangerousPlanExitMode !== 'fullAccess') {
+        options.push({
+          label: `Yes, clear context${usedLabel} and full access`,
+          value: 'yes-full-access'
+        });
+      }
+    } else if (!feature('TRANSCRIPT_CLASSIFIER') || !isAutoModeAvailable) {
       options.push({
         label: `Yes, clear context${usedLabel} and auto-accept edits`,
         value: 'yes-accept-edits'
@@ -721,12 +754,19 @@ export function buildPlanApprovalOptions({
       label: 'Yes, and use auto mode',
       value: 'yes-resume-auto-mode'
     });
-  } else if (isBypassPermissionsModeAvailable) {
+  }
+  if (dangerousPlanExitMode) {
     options.push({
-      label: 'Yes, and bypass permissions',
-      value: 'yes-accept-edits-keep-context'
+      label: `Yes, and ${getDangerousPlanExitLabel(dangerousPlanExitMode)}`,
+      value: dangerousPlanExitMode === 'fullAccess' ? 'yes-full-access-keep-context' : 'yes-bypass-permissions-keep-context'
     });
-  } else {
+    if (dangerousPlanExitMode !== 'fullAccess') {
+      options.push({
+        label: 'Yes, and full access',
+        value: 'yes-full-access-keep-context'
+      });
+    }
+  } else if (!feature('TRANSCRIPT_CLASSIFIER') || !isAutoModeAvailable) {
     options.push({
       label: 'Yes, auto-accept edits',
       value: 'yes-accept-edits-keep-context'
@@ -738,7 +778,7 @@ export function buildPlanApprovalOptions({
   });
   if (showUltraplan) {
     options.push({
-      label: `No, refine with Ultraplan on ${assistantDisplayName} on the web`,
+      label: `No, refine with Ultraplan on ${PRODUCT_DISPLAY_NAME} on the web`,
       value: 'ultraplan'
     });
   }

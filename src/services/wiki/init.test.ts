@@ -34,9 +34,10 @@ test('initializeWiki creates the expected wiki scaffold', async () => {
   expect(await readFile(paths.schemaFile, 'utf8')).toContain(
     '# GakrCLI Wiki Schema',
   )
+  expect(await readFile(paths.schemaFile, 'utf8')).toContain('## Workflows')
   expect(await readFile(paths.indexFile, 'utf8')).toContain('Wiki')
   expect(await readFile(paths.logFile, 'utf8')).toContain(
-    'Wiki initialized by GakrCLI',
+    '] init | Wiki initialized',
   )
   expect(await readFile(join(paths.pagesDir, 'architecture.md'), 'utf8')).toContain(
     '# Architecture',

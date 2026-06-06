@@ -1,4 +1,4 @@
-import { realpath } from 'fs/promises'
+import { realpath, stat } from 'fs/promises'
 import ignore from 'ignore'
 import memoize from 'lodash-es/memoize.js'
 import { execa } from 'execa'
@@ -125,6 +125,16 @@ async function getFileIdentity(filePath: string): Promise<string | null> {
   }
 }
 
+async function directoryExists(path: string | null): Promise<boolean> {
+  if (!path) return false
+  try {
+    return (await stat(path)).isDirectory()
+  } catch (error) {
+    if (isFsInaccessible(error)) return false
+    throw error
+  }
+}
+
 // Internal type to track skill with its file path for deduplication
 type SkillWithPath = {
   skill: Command
@@ -155,7 +165,7 @@ function parseHooksFromFrontmatter(
 }
 
 /**
- * Parse paths frontmatter from a skill, using the same format as GAKR.md rules.
+ * Parse paths frontmatter from a skill, using the same format as GAKRCLI.md rules.
  * Returns undefined if no paths are specified or if all patterns are match-all.
  */
 function parseSkillPaths(frontmatter: FrontmatterData): string[] | undefined {
@@ -730,26 +740,37 @@ export const getSkillDirCommands = memoize(
       : join(homedir(), '.gakrcli', 'skills')
     const managedSkillsDir = join(getManagedFilePath(), '.gakrcli', 'skills')
     const projectSkillsDirs = getProjectDirsUpToHome('skills', cwd)
+    const hasUserSkillsDir =
+      (await directoryExists(userSkillsDir)) ||
+      (await directoryExists(userGakrSkillsDir))
 
-    // Check for skills in npm global installation
+    // Check for skills in npm global installation only when user/config skills
+    // are absent. initUserDirs copies package assets into ~/.gakrcli/skills, so
+    // loading both sources duplicates the same seed skills in model context.
     let npmGlobalSkillsDir: string | null = null
-    try {
-      const npmConfigResult = await execa('npm', ['config', 'get', 'prefix'], {
-        reject: false,
-      })
-      if (!process.env.GAKR_CONFIG_DIR && npmConfigResult.exitCode === 0) {
-        const npmPrefix = npmConfigResult.stdout.trim()
-        npmGlobalSkillsDir = join(
-          npmPrefix,
-          'node_modules',
-          '@gakr-gakr',
-          'gakrcli',
-          'assets',
-          'skills',
-        )
+    if (hasUserSkillsDir) {
+      logForDebugging(
+        `Skipping npm global asset skills because user skills directory exists: ${userSkillsDir}`,
+      )
+    } else {
+      try {
+        const npmConfigResult = await execa('npm', ['config', 'get', 'prefix'], {
+          reject: false,
+        })
+        if (!process.env.GAKR_CONFIG_DIR && npmConfigResult.exitCode === 0) {
+          const npmPrefix = npmConfigResult.stdout.trim()
+          npmGlobalSkillsDir = join(
+            npmPrefix,
+            'node_modules',
+            '@gakr-gakr',
+            'gakrcli',
+            'assets',
+            'skills',
+          )
+        }
+      } catch (error) {
+        // Ignore errors when checking npm global location
       }
-    } catch (error) {
-      // Ignore errors when checking npm global location
     }
 
     const allSkillDirs = [managedSkillsDir, userSkillsDir, ...(userGakrSkillsDir ? [userGakrSkillsDir] : []), ...(npmGlobalSkillsDir ? [npmGlobalSkillsDir] : []), ...projectSkillsDirs]
@@ -900,10 +921,34 @@ export const getSkillDirCommands = memoize(
       logForDebugging(`Deduplicated ${duplicatesRemoved} skills (same file)`)
     }
 
+    const seenSkillNames = new Map<string, Command['source']>()
+    const nameDeduplicatedSkills: Command[] = []
+    for (const skill of deduplicatedSkills) {
+      const key = skill.name.toLowerCase()
+      const existingSource = seenSkillNames.get(key)
+      if (existingSource !== undefined) {
+        logForDebugging(
+          `Skipping duplicate skill '${skill.name}' from ${skill.source} (same name already loaded from ${existingSource})`,
+        )
+        continue
+      }
+
+      seenSkillNames.set(key, skill.source)
+      nameDeduplicatedSkills.push(skill)
+    }
+
+    const nameDuplicatesRemoved =
+      deduplicatedSkills.length - nameDeduplicatedSkills.length
+    if (nameDuplicatesRemoved > 0) {
+      logForDebugging(
+        `Deduplicated ${nameDuplicatesRemoved} skills (same name)`,
+      )
+    }
+
     // Separate conditional skills (with paths frontmatter) from unconditional ones
     const unconditionalSkills: Command[] = []
     const newConditionalSkills: Command[] = []
-    for (const skill of deduplicatedSkills) {
+    for (const skill of nameDeduplicatedSkills) {
       if (
         skill.type === 'prompt' &&
         skill.paths &&
@@ -1120,7 +1165,7 @@ export function getDynamicSkills(): Command[] {
  * dynamic skills map, making them available to the model.
  *
  * Uses the `ignore` library (gitignore-style matching), matching the behavior
- * of GAKR.md conditional rules.
+ * of GAKRCLI.md conditional rules.
  *
  * @param filePaths Array of file paths being operated on
  * @param cwd Current working directory (paths are matched relative to cwd)

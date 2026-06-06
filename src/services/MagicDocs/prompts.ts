@@ -51,7 +51,7 @@ What NOT to document:
 - Exhaustive lists of files, functions, or parameters
 - Step-by-step implementation details
 - Low-level code mechanics
-- Information already in GAKR.md or other project docs
+- Information already in GAKRCLI.md or other project docs
 
 Use the Edit tool with file_path: {{docPath}}
 

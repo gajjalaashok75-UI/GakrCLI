@@ -113,7 +113,7 @@ export function modelSupportsISP(model: string): boolean {
 
 function vertexModelSupportsWebSearch(model: string): boolean {
   const canonical = getCanonicalName(model)
-  // Web search only supported on Gakr 4.0+ models on Vertex
+  // Web search only supported on GakrCLI 4.0+ models on Vertex
   return (
     canonical.includes('gakrcli-opus-4') ||
     canonical.includes('gakrcli-sonnet-4') ||
@@ -121,7 +121,7 @@ function vertexModelSupportsWebSearch(model: string): boolean {
   )
 }
 
-// Context management is supported on Gakr 4+ models
+// Context management is supported on GakrCLI 4+ models
 export function modelSupportsContextManagement(model: string): boolean {
   const canonical = getCanonicalName(model)
   const provider = getAPIProvider()
@@ -196,7 +196,7 @@ export function modelSupportsAutoMode(model: string): boolean {
 
 /**
  * Get the correct tool search beta header for the current API provider.
- * - Gakr API / Foundry: advanced-tool-use-2025-11-20
+ * - GakrCLI API / Foundry: advanced-tool-use-2025-11-20
  * - Vertex AI / Bedrock: tool-search-tool-2025-10-19
  */
 export function getToolSearchBetaHeader(): string {
@@ -342,7 +342,7 @@ export const getAllModelBetas = memoize((model: string): string[] => {
     betaHeaders.push(TOKEN_EFFICIENT_TOOLS_BETA_HEADER)
   }
 
-  // Add web search beta for Vertex Gakr 4.0+ models only
+  // Add web search beta for Vertex GakrCLI 4.0+ models only
   if (provider === 'vertex' && vertexModelSupportsWebSearch(model)) {
     betaHeaders.push(WEB_SEARCH_BETA_HEADER)
   }

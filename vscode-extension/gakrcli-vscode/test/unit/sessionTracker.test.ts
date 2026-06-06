@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import * as vscode from 'vscode';
+import * as vscode from '../__mocks__/vscode';
 import { SessionTracker, sanitizeProjectPathForSessions } from '../../src/session/sessionTracker';
 
 describe('SessionTracker project path sanitizer', () => {
@@ -309,7 +309,7 @@ describe('SessionTracker — workspace recovery scan', () => {
   const testDir = path.join(os.tmpdir(), 'gakrcli-session-recovery-test-' + Date.now());
   const workspaceRoot = path.join(testDir, 'workspace');
   const configDir = path.join(testDir, 'config');
-  const projectsDir = path.join(configDir, 'projects');
+  const projectsDir = path.join(configDir, 'workspace', 'projects');
   const oldConfigDir = process.env.GAKR_CONFIG_DIR;
   const oldWorkspaceFolders = vscode.workspace.workspaceFolders;
 

@@ -1,5 +1,5 @@
 /**
- * Marketplace manager for Gakr plugins
+ * Marketplace manager for GakrCLI plugins
  *
  * This module provides functionality to:
  * - Manage known marketplace sources (URLs, GitHub repos, npm packages, local files)
@@ -316,7 +316,7 @@ export async function loadKnownMarketplacesConfigSafe(): Promise<KnownMarketplac
     return await loadKnownMarketplacesConfig()
   } catch {
     // Inner function already logged via logForDebugging. Don't logError here —
-    // corrupted user config isn't a Gakr bug, shouldn't hit the error file.
+    // corrupted user config isn't a GakrCLI bug, shouldn't hit the error file.
     return {}
   }
 }
@@ -2152,7 +2152,7 @@ export const getMarketplace = memoize(
       throw new Error(
         `Marketplace "${name}" has a relative source path (${entry.source.path}) ` +
           `in known_marketplaces.json — this is stale state from an older ` +
-          `Gakr version. Run 'gakrcli plugin marketplace remove ${name}' and ` +
+          `GakrCLI version. Run 'gakrcli plugin marketplace remove ${name}' and ` +
           `re-add it from the original project directory.`,
       )
     }

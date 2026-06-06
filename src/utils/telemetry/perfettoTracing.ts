@@ -1,5 +1,5 @@
 /**
- * Perfetto Tracing for Gakr (Ant-only)
+ * Perfetto Tracing for GakrCLI (Ant-only)
  *
  * This module generates traces in the Chrome Trace Event format that can be
  * viewed in ui.perfetto.dev or Chrome's chrome://tracing.
@@ -16,7 +16,7 @@
  * 1. Enable via GAKR_CODE_PERFETTO_TRACE=1 or GAKR_CODE_PERFETTO_TRACE=<path>
  * 2. Optionally set GAKR_CODE_PERFETTO_WRITE_INTERVAL_S=<positive integer> to write the
  *    trace file periodically (default: write only on exit).
- * 3. Run Gakr normally
+ * 3. Run GakrCLI normally
  * 4. Trace file is written to ~/.gakrcli/traces/trace-<session-id>.json
  *    or to the specified path
  * 5. Open in ui.perfetto.dev to visualize

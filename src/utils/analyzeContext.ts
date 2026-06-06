@@ -341,7 +341,7 @@ async function countMemoryFileTokens(): Promise<{
   memoryFileDetails: MemoryFile[]
   gakrcliMdTokens: number
 }> {
-  // Simple mode disables GAKR.md loading, so don't report tokens for them
+  // Simple mode disables GAKRCLI.md loading, so don't report tokens for them
   if (isEnvTruthy(process.env.GAKR_CODE_SIMPLE)) {
     return { memoryFileDetails: [], gakrcliMdTokens: 0 }
   }

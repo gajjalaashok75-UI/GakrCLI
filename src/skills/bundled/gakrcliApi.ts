@@ -181,8 +181,8 @@ export function registergakrcliApiSkill(): void {
   registerBundledSkill({
     name: 'gakrcli-api',
     description:
-      'Build apps with the Gakr API or Anthropic SDK.\n' +
-      'TRIGGER when: code imports `anthropic`/`@anthropic-ai/sdk`/`gakrcli_agent_sdk`, or user asks to use Gakr API, Anthropic SDKs, or Agent SDK.\n' +
+      'Build apps with the GakrCLI API or Anthropic SDK.\n' +
+      'TRIGGER when: code imports `anthropic`/`@anthropic-ai/sdk`/`gakrcli_agent_sdk`, or user asks to use GakrCLI API, Anthropic SDKs, or Agent SDK.\n' +
       'DO NOT TRIGGER when: code imports `openai`/other AI SDK, general programming, or ML/data-science tasks.',
     allowedTools: ['Read', 'Grep', 'Glob', 'WebFetch'],
     userInvocable: true,

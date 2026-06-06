@@ -205,7 +205,7 @@ export function createPermissionRequestMessage(
   }
 
   // Default message without listing allowed commands
-  const message = `Gakr requested permissions to use ${toolName}, but you haven't granted it yet.`
+  const message = `GakrCLI requested permissions to use ${toolName}, but you haven't granted it yet.`
 
   return message
 }
@@ -1182,7 +1182,7 @@ async function hasPermissionsToUseToolInner(
 
   // 1b. Check if the entire tool should always ask for permission
   const askRule = getAskRuleForTool(appState.toolPermissionContext, tool)
-  if (askRule) {
+  if (askRule && appState.toolPermissionContext.mode !== 'fullAccess') {
     // When autoAllowBashIfSandboxed is on, sandboxed commands skip the ask rule and
     // auto-allow via Bash's checkPermissions. Commands that won't be sandboxed (excluded
     // commands, dangerouslyDisableSandbox) still need to respect the ask rule.
@@ -1243,6 +1243,7 @@ async function hasPermissionsToUseToolInner(
   // just as deny rules are respected at step 1d.
   if (
     toolPermissionResult?.behavior === 'ask' &&
+    appState.toolPermissionContext.mode !== 'fullAccess' &&
     toolPermissionResult.decisionReason?.type === 'rule' &&
     toolPermissionResult.decisionReason.rule.ruleBehavior === 'ask'
   ) {
@@ -1254,6 +1255,7 @@ async function hasPermissionsToUseToolInner(
   // checkPathSafetyForAutoEdit returns {type:'safetyCheck'} for these paths.
   if (
     toolPermissionResult?.behavior === 'ask' &&
+    appState.toolPermissionContext.mode !== 'fullAccess' &&
     toolPermissionResult.decisionReason?.type === 'safetyCheck'
   ) {
     return toolPermissionResult
@@ -1267,6 +1269,7 @@ async function hasPermissionsToUseToolInner(
   // - Plan mode when the user originally started with bypass mode (isBypassPermissionsModeAvailable)
   const shouldBypassPermissions =
     appState.toolPermissionContext.mode === 'bypassPermissions' ||
+    appState.toolPermissionContext.mode === 'fullAccess' ||
     (appState.toolPermissionContext.mode === 'plan' &&
       appState.toolPermissionContext.isBypassPermissionsModeAvailable)
   if (shouldBypassPermissions) {

@@ -931,7 +931,7 @@ export function Config({
     }
   }] : []), {
     id: 'gakrcliInChromeDefaultEnabled',
-    label: 'Gakr in Chrome enabled by default',
+    label: 'GakrCLI in Chrome enabled by default',
     value: globalConfig.gakrcliInChromeDefaultEnabled ?? true,
     type: 'boolean' as const,
     onChange(enabled_5: boolean) {
@@ -1033,7 +1033,7 @@ export function Config({
     }
   }] : []), ...(shouldShowExternalIncludesToggle ? [{
     id: 'showExternalIncludesDialog',
-    label: 'External GAKR.md includes',
+    label: 'External GAKRCLI.md includes',
     value: (() => {
       const projectConfig = getCurrentProjectConfig();
       if (projectConfig.hasgakrcliMdExternalIncludesApproved) {
@@ -1159,7 +1159,7 @@ export function Config({
     });
     // Check for API key changes
     // On homespace, ANTHROPIC_API_KEY is preserved in process.env for child
-    // processes but ignored by Gakr itself (see auth.ts).
+    // processes but ignored by GakrCLI itself (see auth.ts).
     const effectiveApiKey = isRunningOnHomespace() ? undefined : process.env.ANTHROPIC_API_KEY;
     const initialUsingCustomKey = Boolean(effectiveApiKey && initialConfig.current.customApiKeyResponses?.approved?.includes(normalizeApiKeyForConfig(effectiveApiKey)));
     const currentUsingCustomKey = Boolean(effectiveApiKey && globalConfig.customApiKeyResponses?.approved?.includes(normalizeApiKeyForConfig(effectiveApiKey)));

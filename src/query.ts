@@ -8,6 +8,7 @@ import { FallbackTriggeredError } from './services/api/withRetry.js'
 import {
   calculateTokenWarningState,
   isAutoCompactEnabled,
+  MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES,
   type AutoCompactTrackingState,
 } from './services/compact/autoCompact.js'
 import { buildPostCompactMessages } from './services/compact/compact.js'
@@ -170,6 +171,15 @@ function* yieldMissingToolResultBlocks(
 const MAX_OUTPUT_TOKENS_RECOVERY_LIMIT = 3
 const MAX_CONTINUATION_NUDGES = 3
 
+function formatAutoCompactRetryDelay(delayMs: number): string {
+  const totalSeconds = Math.max(1, Math.ceil(delayMs / 1000))
+  if (totalSeconds < 60) {
+    return `${totalSeconds} second${totalSeconds === 1 ? '' : 's'}`
+  }
+  const totalMinutes = Math.ceil(totalSeconds / 60)
+  return `${totalMinutes} minute${totalMinutes === 1 ? '' : 's'}`
+}
+
 /**
  * Is this a max_output_tokens error message? If so, the streaming loop should
  * withhold it from SDK callers until we know whether the recovery loop can
@@ -197,6 +207,10 @@ export type QueryParams = {
   maxOutputTokensOverride?: number
   maxTurns?: number
   skipCacheWrite?: boolean
+  autoCompactTracking?: AutoCompactTrackingState
+  onAutoCompactTrackingChange?: (
+    tracking: AutoCompactTrackingState | undefined,
+  ) => void
   // API task_budget (output_config.task_budget, beta task-budgets-2026-03-13).
   // Distinct from the tokenBudget +500k auto-continue feature. `total` is the
   // budget for the whole agentic turn; `remaining` is computed per iteration
@@ -289,7 +303,7 @@ async function* queryLoop(
     messages: params.messages,
     toolUseContext: params.toolUseContext,
     maxOutputTokensOverride: params.maxOutputTokensOverride,
-    autoCompactTracking: undefined,
+    autoCompactTracking: params.autoCompactTracking,
     stopHookActive: undefined,
     maxOutputTokensRecoveryCount: 0,
     hasAttemptedReactiveCompact: false,
@@ -299,6 +313,12 @@ async function* queryLoop(
     transition: undefined,
   }
   const budgetTracker = feature('TOKEN_BUDGET') ? createBudgetTracker() : null
+
+  const updateAutoCompactTracking = (
+    tracking: AutoCompactTrackingState | undefined,
+  ) => {
+    params.onAutoCompactTrackingChange?.(tracking)
+  }
 
   // task_budget.remaining tracking across compaction boundaries. Undefined
   // until first compact fires — while context is uncompacted the server can
@@ -509,7 +529,14 @@ async function* queryLoop(
     )
 
     queryCheckpoint('query_autocompact_start')
-    const { compactionResult, consecutiveFailures } = await deps.autocompact(
+    const {
+      compactionResult,
+      consecutiveFailures,
+      nextRetryAtMs,
+      lastFailureAtMs,
+      circuitBreakerActive,
+      circuitBreakerTripped,
+    } = await deps.autocompact(
       messagesForQuery,
       toolUseContext,
       {
@@ -582,6 +609,7 @@ async function* queryLoop(
         turnCounter: 0,
         consecutiveFailures: 0,
       }
+      updateAutoCompactTracking(tracking)
 
       const postCompactMessages = buildPostCompactMessages(compactionResult)
 
@@ -591,13 +619,31 @@ async function* queryLoop(
 
       // Continue on with the current query call using the post compact messages
       messagesForQuery = postCompactMessages
-    } else if (consecutiveFailures !== undefined) {
+    } else if (
+      consecutiveFailures !== undefined ||
+      nextRetryAtMs !== undefined ||
+      lastFailureAtMs !== undefined ||
+      circuitBreakerActive !== undefined ||
+      circuitBreakerTripped !== undefined
+    ) {
       // Autocompact failed — propagate failure count so the circuit breaker
       // can stop retrying on the next iteration.
-      tracking = {
+      const nextTracking: AutoCompactTrackingState = {
         ...(tracking ?? { compacted: false, turnId: '', turnCounter: 0 }),
-        consecutiveFailures,
       }
+      if (consecutiveFailures !== undefined) {
+        nextTracking.consecutiveFailures = consecutiveFailures
+      }
+      if (nextRetryAtMs !== undefined) {
+        nextTracking.nextRetryAtMs = nextRetryAtMs
+      } else {
+        delete nextTracking.nextRetryAtMs
+      }
+      if (lastFailureAtMs !== undefined) {
+        nextTracking.lastFailureAtMs = lastFailureAtMs
+      }
+      tracking = nextTracking
+      updateAutoCompactTracking(tracking)
     }
 
     //TODO: no need to set toolUseContext.messages during set-up since it is updated here
@@ -718,7 +764,8 @@ async function* queryLoop(
     // with a clear message instead of burning an API call that will 500.
     if (
       tracking?.consecutiveFailures !== undefined &&
-      tracking.consecutiveFailures >= 3 &&
+      tracking.consecutiveFailures >=
+        MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES &&
       isAutoCompactEnabled()
     ) {
       const model = toolUseContext.options.mainLoopModel
@@ -728,10 +775,20 @@ async function* queryLoop(
         model,
       )
       if (isAboveAutoCompactThreshold) {
+        const nowMs = Date.now()
+        const retryDelayMs =
+          tracking.nextRetryAtMs !== undefined
+            ? tracking.nextRetryAtMs - nowMs
+            : undefined
+        const content =
+          retryDelayMs !== undefined && retryDelayMs > 0
+            ? 'The conversation is over the auto-compact threshold, but automatic compaction is cooling down after repeated failures. ' +
+              'GakrCLI stopped before sending another oversized request. ' +
+              `Retry after ${formatAutoCompactRetryDelay(retryDelayMs)}, run /compact, or start a new session with /new.`
+            : 'The conversation is over the auto-compact threshold and automatic compaction has failed repeatedly. ' +
+              'GakrCLI stopped before sending another oversized request. Run /compact, undo recent large tool output, or start a new session with /new.'
         yield createAssistantAPIErrorMessage({
-          content:
-            'The conversation has exceeded the context limit and automatic compaction has failed. ' +
-            'Press esc twice to go up a few messages and try again, or start a new session with /new.',
+          content,
           error: 'invalid_request',
         })
         return { reason: 'blocking_limit' }
@@ -1786,7 +1843,11 @@ async function* queryLoop(
     }
 
     if (tracking?.compacted) {
-      tracking.turnCounter++
+      tracking = {
+        ...tracking,
+        turnCounter: tracking.turnCounter + 1,
+      }
+      updateAutoCompactTracking(tracking)
       logEvent('tengu_post_autocompact_turn', {
         turnId:
           tracking.turnId as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -1810,7 +1871,7 @@ async function* queryLoop(
     })
 
     // Get queued commands snapshot before processing attachments.
-    // These will be sent as attachments so Gakr can respond to them in the current turn.
+    // These will be sent as attachments so GakrCLI can respond to them in the current turn.
     //
     // Drain pending notifications. LocalShellTask completions are 'next'
     // (when MONITOR_TOOL is on) and drain without Sleep. Other task types

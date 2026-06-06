@@ -115,7 +115,7 @@ export const SYSTEM_PROMPT_DYNAMIC_BOUNDARY =
   '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__'
 
 // @[MODEL LAUNCH]: Update the latest frontier model.
-const FRONTIER_MODEL_NAME = 'Gakr Opus 4.6'
+const FRONTIER_MODEL_NAME = 'GakrCLI Opus 4.6'
 
 // @[MODEL LAUNCH]: Update the model family IDs below to the latest in each tier.
 const GAKR_4_5_OR_4_6_MODEL_IDS = {
@@ -449,7 +449,7 @@ export async function getSystemPrompt(
 ): Promise<string[]> {
   if (isEnvTruthy(process.env.GAKR_CODE_SIMPLE)) {
     return [
-      `You are GakrCLI, an open-source coding agent and CLI.\n\nCWD: ${getCwd()}\nDate: ${getSessionStartDate()}`,
+      `You operate inside GakrCLI, an open-source command-line interface, agent harness, and orchestration runtime for coding agents. Your assistant identity may be defined by workspace files such as IDENTITY.md and SOUL.md.\n\nCWD: ${getCwd()}\nDate: ${getSessionStartDate()}`,
 
     ]
   }

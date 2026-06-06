@@ -481,7 +481,7 @@ it is:
 GakrCLI-credentials
 ```
 
-If Gakr is running with a non-production OAuth suffix or a non-default
+If GakrCLI is running with a non-production OAuth suffix or a non-default
 `GAKR_CONFIG_DIR`, the service name gets a suffix such as
 `-staging-oauth`, `-local-oauth`, `-custom-oauth`, and/or an eight-character
 hash of the config directory. On Windows the same service name is sanitized and
@@ -689,7 +689,7 @@ other secure-storage entries, such as MCP OAuth credentials, intact.
 | `OPENAI_BASE_URL` | For Codex OAuth profiles, set to the official Codex backend. |
 | `OPENAI_MODEL` | Codex aliases such as `codexplan` or `codexspark`. |
 | `CODEX_CREDENTIAL_SOURCE` | Profile marker. `oauth` means secrets are stored separately in secure storage. |
-| `GAKR_CONFIG_DIR` | Overrides the Gakr config directory. |
+| `GAKR_CONFIG_DIR` | Overrides the GakrCLI config directory. |
 | `GAKR_ENABLE_LEGACY_WINDOWS_PASSWORDVAULT` | Enables best-effort legacy Windows PasswordVault compatibility. |
 
 ## Error Handling

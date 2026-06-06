@@ -336,8 +336,8 @@ export const FileWriteTool = buildTool({
       limit: undefined,
     })
 
-    // Log when writing to GAKR.md
-    if (fullFilePath.endsWith(`${sep}GAKR.md`)) {
+    // Log when writing to GAKRCLI.md
+    if (fullFilePath.endsWith(`${sep}GAKRCLI.md`)) {
       logEvent('tengu_write_gakrclimd', {})
     }
 

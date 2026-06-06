@@ -3,20 +3,28 @@ import {
   acquireSharedMutationLock,
   releaseSharedMutationLock,
 } from '../../test/sharedMutationLock.js'
+import { resetModelStringsForTestingOnly } from '../../bootstrap/state.js'
 
 describe('getAgentModel provider-aware fallback', () => {
   beforeEach(async () => {
     await acquireSharedMutationLock('utils/model/agent.test.ts')
+    resetModelStringsForTestingOnly()
   })
 
   // Restore all mocks after each test
   afterEach(() => {
     try {
       mock.restore()
+      resetModelStringsForTestingOnly()
     } finally {
       releaseSharedMutationLock()
     }
   })
+
+  async function importAgentModule(): Promise<typeof import('./agent.js')> {
+    const stamp = `${Date.now()}-${Math.random()}`
+    return import(`./agent.ts?agent-test=${stamp}`)
+  }
 
   describe('Gakrcli-native providers', () => {
     test('haiku alias resolves to haiku model for official Anthropic API', async () => {
@@ -25,10 +33,12 @@ describe('getAgentModel provider-aware fallback', () => {
         getAPIProvider: () => 'firstParty',
         getAPIProviderForStatsig: () => 'firstParty',
         isFirstPartyAnthropicBaseUrl: () => true,
+        isGithubNativeAnthropicMode: () => false,
+        usesAnthropicAccountFlow: () => true,
       }))
 
       // Import after mock is set up
-      const { getAgentModel } = await import('./agent.js')
+      const { getAgentModel } = await importAgentModule()
       const result = getAgentModel('haiku', 'claude-sonnet-4-6', undefined, 'default')
 
       // Should resolve haiku alias, not inherit parent
@@ -41,9 +51,11 @@ describe('getAgentModel provider-aware fallback', () => {
         getAPIProvider: () => 'bedrock',
         getAPIProviderForStatsig: () => 'bedrock',
         isFirstPartyAnthropicBaseUrl: () => false,
+        isGithubNativeAnthropicMode: () => false,
+        usesAnthropicAccountFlow: () => false,
       }))
 
-      const { getAgentModel } = await import('./agent.js')
+      const { getAgentModel } = await importAgentModule()
       const result = getAgentModel('haiku', 'claude-sonnet-4-6', undefined, 'default')
 
       // Should resolve haiku alias for Bedrock
@@ -55,9 +67,11 @@ describe('getAgentModel provider-aware fallback', () => {
         getAPIProvider: () => 'vertex',
         getAPIProviderForStatsig: () => 'vertex',
         isFirstPartyAnthropicBaseUrl: () => false,
+        isGithubNativeAnthropicMode: () => false,
+        usesAnthropicAccountFlow: () => false,
       }))
 
-      const { getAgentModel } = await import('./agent.js')
+      const { getAgentModel } = await importAgentModule()
       const result = getAgentModel('haiku', 'claude-sonnet-4-6', undefined, 'default')
 
       // Should resolve haiku alias for Vertex
@@ -69,9 +83,11 @@ describe('getAgentModel provider-aware fallback', () => {
         getAPIProvider: () => 'foundry',
         getAPIProviderForStatsig: () => 'foundry',
         isFirstPartyAnthropicBaseUrl: () => false,
+        isGithubNativeAnthropicMode: () => false,
+        usesAnthropicAccountFlow: () => false,
       }))
 
-      const { getAgentModel } = await import('./agent.js')
+      const { getAgentModel } = await importAgentModule()
       const result = getAgentModel('haiku', 'claude-sonnet-4-6', undefined, 'default')
 
       // Should resolve haiku alias for Foundry
@@ -85,9 +101,11 @@ describe('getAgentModel provider-aware fallback', () => {
         getAPIProvider: () => 'openai',
         getAPIProviderForStatsig: () => 'openai',
         isFirstPartyAnthropicBaseUrl: () => false,
+        isGithubNativeAnthropicMode: () => false,
+        usesAnthropicAccountFlow: () => false,
       }))
 
-      const { getAgentModel } = await import('./agent.js')
+      const { getAgentModel } = await importAgentModule()
       const result = getAgentModel('haiku', 'gpt-4o-mini', undefined, 'default')
 
       // Should inherit parent model for OpenAI (no haiku concept)
@@ -99,9 +117,11 @@ describe('getAgentModel provider-aware fallback', () => {
         getAPIProvider: () => 'gemini',
         getAPIProviderForStatsig: () => 'gemini',
         isFirstPartyAnthropicBaseUrl: () => false,
+        isGithubNativeAnthropicMode: () => false,
+        usesAnthropicAccountFlow: () => false,
       }))
 
-      const { getAgentModel } = await import('./agent.js')
+      const { getAgentModel } = await importAgentModule()
       const result = getAgentModel('haiku', 'gemini-2.5-pro', undefined, 'default')
 
       // Should inherit parent model for Gemini
@@ -114,9 +134,11 @@ describe('getAgentModel provider-aware fallback', () => {
         getAPIProvider: () => 'firstParty',
         getAPIProviderForStatsig: () => 'firstParty',
         isFirstPartyAnthropicBaseUrl: () => false,
+        isGithubNativeAnthropicMode: () => false,
+        usesAnthropicAccountFlow: () => false,
       }))
 
-      const { getAgentModel } = await import('./agent.js')
+      const { getAgentModel } = await importAgentModule()
       const result = getAgentModel('haiku', 'claude-sonnet-4-6', undefined, 'default')
 
       // Should inherit parent for custom Anthropic-compatible URL
@@ -128,9 +150,11 @@ describe('getAgentModel provider-aware fallback', () => {
         getAPIProvider: () => 'openai',
         getAPIProviderForStatsig: () => 'openai',
         isFirstPartyAnthropicBaseUrl: () => false,
+        isGithubNativeAnthropicMode: () => false,
+        usesAnthropicAccountFlow: () => false,
       }))
 
-      const { getAgentModel } = await import('./agent.js')
+      const { getAgentModel } = await importAgentModule()
       const result = getAgentModel('sonnet', 'gpt-4o-mini', undefined, 'default')
 
       // Should inherit parent model for OpenAI
@@ -142,9 +166,11 @@ describe('getAgentModel provider-aware fallback', () => {
         getAPIProvider: () => 'mistral',
         getAPIProviderForStatsig: () => 'mistral',
         isFirstPartyAnthropicBaseUrl: () => false,
+        isGithubNativeAnthropicMode: () => false,
+        usesAnthropicAccountFlow: () => false,
       }))
 
-      const { getAgentModel } = await import('./agent.js')
+      const { getAgentModel } = await importAgentModule()
       const result = getAgentModel('haiku', 'mistral-small-latest', undefined, 'default')
 
       // Should inherit parent model for Mistral (no haiku concept)
@@ -156,9 +182,11 @@ describe('getAgentModel provider-aware fallback', () => {
         getAPIProvider: () => 'github',
         getAPIProviderForStatsig: () => 'github',
         isFirstPartyAnthropicBaseUrl: () => false,
+        isGithubNativeAnthropicMode: () => false,
+        usesAnthropicAccountFlow: () => false,
       }))
 
-      const { getAgentModel } = await import('./agent.js')
+      const { getAgentModel } = await importAgentModule()
       const result = getAgentModel('haiku', 'gpt-4o-mini', undefined, 'default')
 
       // Should inherit parent model for GitHub Copilot
@@ -170,9 +198,11 @@ describe('getAgentModel provider-aware fallback', () => {
         getAPIProvider: () => 'nvidia-nim',
         getAPIProviderForStatsig: () => 'nvidia-nim',
         isFirstPartyAnthropicBaseUrl: () => false,
+        isGithubNativeAnthropicMode: () => false,
+        usesAnthropicAccountFlow: () => false,
       }))
 
-      const { getAgentModel } = await import('./agent.js')
+      const { getAgentModel } = await importAgentModule()
       const result = getAgentModel('haiku', 'meta/llama-3.1-8b-instruct', undefined, 'default')
 
       // Should inherit parent model for NVIDIA NIM (no haiku concept)
@@ -184,9 +214,11 @@ describe('getAgentModel provider-aware fallback', () => {
         getAPIProvider: () => 'minimax',
         getAPIProviderForStatsig: () => 'minimax',
         isFirstPartyAnthropicBaseUrl: () => false,
+        isGithubNativeAnthropicMode: () => false,
+        usesAnthropicAccountFlow: () => false,
       }))
 
-      const { getAgentModel } = await import('./agent.js')
+      const { getAgentModel } = await importAgentModule()
       const result = getAgentModel('haiku', 'MiniMax-M2.5-highspeed', undefined, 'default')
 
       // Should inherit parent model for MiniMax (no haiku concept)
@@ -198,9 +230,11 @@ describe('getAgentModel provider-aware fallback', () => {
         getAPIProvider: () => 'codex',
         getAPIProviderForStatsig: () => 'codex',
         isFirstPartyAnthropicBaseUrl: () => false,
+        isGithubNativeAnthropicMode: () => false,
+        usesAnthropicAccountFlow: () => false,
       }))
 
-      const { getAgentModel } = await import('./agent.js')
+      const { getAgentModel } = await importAgentModule()
       const result = getAgentModel('haiku', 'gpt-5.5-mini', undefined, 'default')
 
       // Should inherit parent model for Codex provider (no haiku concept)
@@ -214,9 +248,11 @@ describe('getAgentModel provider-aware fallback', () => {
         getAPIProvider: () => 'openai',
         getAPIProviderForStatsig: () => 'openai',
         isFirstPartyAnthropicBaseUrl: () => false,
+        isGithubNativeAnthropicMode: () => false,
+        usesAnthropicAccountFlow: () => false,
       }))
 
-      const { getAgentModel } = await import('./agent.js')
+      const { getAgentModel } = await importAgentModule()
       const result = getAgentModel('inherit', 'gpt-4o', undefined, 'default')
 
       expect(result).toBe('gpt-4o')
@@ -229,9 +265,11 @@ describe('getAgentModel provider-aware fallback', () => {
         getAPIProvider: () => 'firstParty',
         getAPIProviderForStatsig: () => 'firstParty',
         isFirstPartyAnthropicBaseUrl: () => true,
+        isGithubNativeAnthropicMode: () => false,
+        usesAnthropicAccountFlow: () => true,
       }))
 
-      const { checkIsGakrcliNativeProvider } = await import('./agent.js')
+      const { checkIsGakrcliNativeProvider } = await importAgentModule()
       expect(checkIsGakrcliNativeProvider()).toBe(true)
     })
 
@@ -240,9 +278,11 @@ describe('getAgentModel provider-aware fallback', () => {
         getAPIProvider: () => 'bedrock',
         getAPIProviderForStatsig: () => 'bedrock',
         isFirstPartyAnthropicBaseUrl: () => false,
+        isGithubNativeAnthropicMode: () => false,
+        usesAnthropicAccountFlow: () => false,
       }))
 
-      const { checkIsGakrcliNativeProvider } = await import('./agent.js')
+      const { checkIsGakrcliNativeProvider } = await importAgentModule()
       expect(checkIsGakrcliNativeProvider()).toBe(true)
     })
 
@@ -251,9 +291,11 @@ describe('getAgentModel provider-aware fallback', () => {
         getAPIProvider: () => 'vertex',
         getAPIProviderForStatsig: () => 'vertex',
         isFirstPartyAnthropicBaseUrl: () => false,
+        isGithubNativeAnthropicMode: () => false,
+        usesAnthropicAccountFlow: () => false,
       }))
 
-      const { checkIsGakrcliNativeProvider } = await import('./agent.js')
+      const { checkIsGakrcliNativeProvider } = await importAgentModule()
       expect(checkIsGakrcliNativeProvider()).toBe(true)
     })
 
@@ -262,9 +304,11 @@ describe('getAgentModel provider-aware fallback', () => {
         getAPIProvider: () => 'foundry',
         getAPIProviderForStatsig: () => 'foundry',
         isFirstPartyAnthropicBaseUrl: () => false,
+        isGithubNativeAnthropicMode: () => false,
+        usesAnthropicAccountFlow: () => false,
       }))
 
-      const { checkIsGakrcliNativeProvider } = await import('./agent.js')
+      const { checkIsGakrcliNativeProvider } = await importAgentModule()
       expect(checkIsGakrcliNativeProvider()).toBe(true)
     })
 
@@ -273,9 +317,11 @@ describe('getAgentModel provider-aware fallback', () => {
         getAPIProvider: () => 'openai',
         getAPIProviderForStatsig: () => 'openai',
         isFirstPartyAnthropicBaseUrl: () => false,
+        isGithubNativeAnthropicMode: () => false,
+        usesAnthropicAccountFlow: () => false,
       }))
 
-      const { checkIsGakrcliNativeProvider } = await import('./agent.js')
+      const { checkIsGakrcliNativeProvider } = await importAgentModule()
       expect(checkIsGakrcliNativeProvider()).toBe(false)
     })
 
@@ -284,9 +330,11 @@ describe('getAgentModel provider-aware fallback', () => {
         getAPIProvider: () => 'firstParty',
         getAPIProviderForStatsig: () => 'firstParty',
         isFirstPartyAnthropicBaseUrl: () => false,
+        isGithubNativeAnthropicMode: () => false,
+        usesAnthropicAccountFlow: () => false,
       }))
 
-      const { checkIsGakrcliNativeProvider } = await import('./agent.js')
+      const { checkIsGakrcliNativeProvider } = await importAgentModule()
       expect(checkIsGakrcliNativeProvider()).toBe(false)
     })
   })

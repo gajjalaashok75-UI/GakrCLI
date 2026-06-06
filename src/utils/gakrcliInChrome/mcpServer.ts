@@ -102,18 +102,18 @@ export function createChromeContext(
     }
   }
   return {
-    serverName: 'Gakr in Chrome',
+    serverName: 'GakrCLI in Chrome',
     logger,
     socketPath: getSecureSocketPath(),
     getSocketPaths: getAllSocketPaths,
     clientTypeId: 'gakrcli-code',
     onAuthenticationError: () => {
       logger.warn(
-        'Authentication error occurred. Please ensure you are logged into the Gakr browser extension with the same gakr.ai account as Gakr.',
+        'Authentication error occurred. Please ensure you are logged into the GakrCLI browser extension with the same gakr.ai account as Gakr.',
       )
     },
     onToolCallDisconnected: () => {
-      return `Browser extension is not connected. Please ensure the Gakr browser extension is installed and running (${EXTENSION_DOWNLOAD_URL}), and that you are logged into gakr.ai with the same account as Gakr. If this is your first time connecting to Chrome, you may need to restart Chrome for the installation to take effect. If you continue to experience issues, please report a bug: ${BUG_REPORT_URL}`
+      return `Browser extension is not connected. Please ensure the GakrCLI browser extension is installed and running (${EXTENSION_DOWNLOAD_URL}), and that you are logged into gakr.ai with the same account as Gakr. If this is your first time connecting to Chrome, you may need to restart Chrome for the installation to take effect. If you continue to experience issues, please report a bug: ${BUG_REPORT_URL}`
     },
     onExtensionPaired: (deviceId: string, name: string) => {
       saveGlobalConfig(config => {
@@ -266,9 +266,9 @@ export async function rungakrcliInChromeMcpServer(): Promise<void> {
   process.stdin.on('end', () => void shutdownAndExit())
   process.stdin.on('error', () => void shutdownAndExit())
 
-  logForDebugging('[Gakr in Chrome] Starting MCP server')
+  logForDebugging('[GakrCLI in Chrome] Starting MCP server')
   await server.connect(transport)
-  logForDebugging('[Gakr in Chrome] MCP server started')
+  logForDebugging('[GakrCLI in Chrome] MCP server started')
 }
 
 class DebugLogger implements Logger {

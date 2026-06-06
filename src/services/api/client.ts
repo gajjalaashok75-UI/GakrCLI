@@ -69,10 +69,10 @@ const importRuntimeModule = new Function(
  *
  * Vertex AI:
  * - Model-specific region variables (highest priority):
- *   - VERTEX_REGION_GAKR_3_5_HAIKU: Region for Gakr 3.5 Haiku model
- *   - VERTEX_REGION_GAKR_HAIKU_4_5: Region for Gakr Haiku 4.5 model
- *   - VERTEX_REGION_GAKR_3_5_SONNET: Region for Gakr 3.5 Sonnet model
- *   - VERTEX_REGION_GAKR_3_7_SONNET: Region for Gakr 3.7 Sonnet model
+ *   - VERTEX_REGION_GAKR_3_5_HAIKU: Region for GakrCLI 3.5 Haiku model
+ *   - VERTEX_REGION_GAKR_HAIKU_4_5: Region for GakrCLI Haiku 4.5 model
+ *   - VERTEX_REGION_GAKR_3_5_SONNET: Region for GakrCLI 3.5 Sonnet model
+ *   - VERTEX_REGION_GAKR_3_7_SONNET: Region for GakrCLI 3.7 Sonnet model
  * - CLOUD_ML_REGION: Optional. The default GCP region to use for all models
  *   If specific model region not specified above
  * - ANTHROPIC_VERTEX_PROJECT_ID: Required. Your GCP project ID

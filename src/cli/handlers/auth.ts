@@ -119,8 +119,8 @@ export async function authLogin({
   gakrcliai?: boolean
 }): Promise<void> {
   const settings = getInitialSettings()
-  // Determine which OAuth flow to use: Gakr subscription (true) or Console (false, now removed).
-  // Default to Gakr subscription. The --gakrcliai flag is the only option and is true by default.
+  // Determine which OAuth flow to use: GakrCLI subscription (true) or Console (false, now removed).
+  // Default to GakrCLI subscription. The --gakrcliai flag is the only option and is true by default.
   // If forceLoginMethod is set (enterprise setting), respect it, but only 'gakrai' is valid.
   const forceLoginMethod = settings.forceLoginMethod
   const loginWithgakrcliAi = forceLoginMethod
@@ -318,6 +318,6 @@ export async function authLogout(): Promise<void> {
     process.stderr.write('Failed to log out.\n')
     process.exit(1)
   }
-  process.stdout.write('Successfully logged out from your Gakr account.\n')
+  process.stdout.write('Successfully logged out from your GakrCLI account.\n')
   process.exit(0)
 }

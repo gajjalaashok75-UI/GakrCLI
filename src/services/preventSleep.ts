@@ -1,5 +1,5 @@
 /**
- * Prevents macOS from sleeping while Gakr is working.
+ * Prevents macOS from sleeping while GakrCLI is working.
  *
  * Uses the built-in `caffeinate` command to create a power assertion that
  * prevents idle sleep. This keeps the Mac awake during API requests and

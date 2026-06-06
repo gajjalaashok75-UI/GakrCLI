@@ -72,7 +72,7 @@ export function ConsoleOAuthFlow({
   const settings = getSettings_DEPRECATED() || {};
   const forceLoginMethod = forceLoginMethodProp ?? settings.forceLoginMethod;
   const orgUUID = settings.forceLoginOrgUUID;
-  const forcedMethodMessage = forceLoginMethod === 'gakrcliai' ? 'Login method pre-selected: Subscription Plan (Gakr Pro/Max)' : null;
+  const forcedMethodMessage = forceLoginMethod === 'gakrcliai' ? 'Login method pre-selected: Subscription Plan (GakrCLI Pro/Max)' : null;
   const terminal = useTerminalNotification();
   const [oauthStatus, setOAuthStatus] = useState<OAuthStatus>(() => {
     if (initialStatus) {
@@ -96,7 +96,7 @@ export function ConsoleOAuthFlow({
   const [cursorOffset, setCursorOffset] = useState(0);
   const [oauthService] = useState(() => new OAuthService());
   const [loginWithgakrcliAi, setLoginWithgakrcliAi] = useState(() => {
-    // Use Gakr AI auth for setup-token mode to support user:inference scope
+    // Use GakrCLI AI auth for setup-token mode to support user:inference scope
     return mode === 'setup-token' || forceLoginMethod === 'gakrcliai';
   });
   // After a few seconds we suggest the user to copy/paste url if the
@@ -260,7 +260,7 @@ export function ConsoleOAuthFlow({
           state: 'success'
         });
         void sendNotification({
-          message: 'Gakr login successful',
+          message: 'GakrCLI login successful',
           notificationType: 'auth_success'
         }, terminal);
       }
@@ -382,13 +382,13 @@ function OAuthStatusMessage({
     case 'idle': {
       const promptText =
         startingMessage ||
-        'Gakr can be used with your Gakr subscription or 3rd-party platform.'
+        'GakrCLI can be used with your GakrCLI subscription or 3rd-party platform.'
 
       const loginOptions = [
         {
           label: (
             <Text>
-              Gakr account with subscription ·{' '}
+              GakrCLI account with subscription ·{' '}
               <Text dimColor>Pro, Max, Team, or Enterprise</Text>
               {'\n'}
             </Text>

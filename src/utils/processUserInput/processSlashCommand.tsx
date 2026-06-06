@@ -543,7 +543,7 @@ async function getMessagesForSlashCommand(commandName: string, args: string, set
           precedingInputBlocks
         })
       }), createUserMessage({
-        content: `This skill can only be invoked by Gakr, not directly by users. Ask Gakr to use the "${commandName}" skill for you.`
+        content: `This skill can only be invoked by Gakr, not directly by users. Ask GakrCLI to use the "${commandName}" skill for you.`
       })],
       shouldQuery: false,
       command
@@ -836,6 +836,16 @@ export async function processPromptSlashCommand(commandName: string, args: strin
   }
   return getMessagesForPromptSlashCommand(command, args, context, [], imageContentBlocks);
 }
+
+/**
+ * Decide what text, if any, should be scanned for @-mention attachments when
+ * a prompt command runs. MCP skill bodies are remote/untrusted, so their
+ * contents must not cause local files or resources to be auto-attached.
+ */
+export function attachmentScanInputForCommand(command: { loadedFrom?: string }, text: string): string | null {
+  return command.loadedFrom === 'mcp' ? null : text;
+}
+
 async function getMessagesForPromptSlashCommand(command: CommandBase & PromptCommand, args: string, context: ToolUseContext, precedingInputBlocks: ContentBlockParam[] = [], imageContentBlocks: ContentBlockParam[] = [], uuid?: string): Promise<SlashCommandResult> {
   // In coordinator mode (main thread only), skip loading the full skill content
   // and permissions. The coordinator only has Agent + TaskStop tools, so the
@@ -906,7 +916,8 @@ async function getMessagesForPromptSlashCommand(command: CommandBase & PromptCom
   // content itself from triggering discovery — it's meta-content, not user
   // intent, and a large SKILL.md (e.g. 110KB) would fire chunked AKI queries
   // adding seconds of latency to every skill invocation.
-  const attachmentMessages = await toArray(getAttachmentMessages(result.filter((block): block is TextBlockParam => block.type === 'text').map(block => block.text).join(' '), context, null, [],
+  const attachmentScanInput = attachmentScanInputForCommand(command, result.filter((block): block is TextBlockParam => block.type === 'text').map(block => block.text).join(' '));
+  const attachmentMessages = await toArray(getAttachmentMessages(attachmentScanInput, context, null, [],
   // queuedCommands - handled by query.ts for mid-turn attachments
   context.messages, 'repl_main_thread', {
     skipSkillDiscovery: true

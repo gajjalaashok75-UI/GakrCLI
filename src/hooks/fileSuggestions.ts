@@ -441,7 +441,7 @@ function collectDirectoryNames(
 }
 
 /**
- * Gets additional files from Gakr config directories
+ * Gets additional files from GakrCLI config directories
  */
 async function getgakrcliConfigFiles(cwd: string): Promise<string[]> {
   const markdownFileArrays = await Promise.all(

@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { mkdtemp, rm, writeFile } from 'fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { initializeWiki } from './init.js'
@@ -25,6 +25,7 @@ test('getWikiStatus reports uninitialized wiki state', async () => {
   const status = await getWikiStatus(cwd)
 
   expect(status.initialized).toBe(false)
+  expect(status.rawSourceCount).toBe(0)
   expect(status.pageCount).toBe(0)
   expect(status.sourceCount).toBe(0)
   expect(status.hasSchema).toBe(false)
@@ -37,12 +38,15 @@ test('getWikiStatus counts pages and sources for initialized wiki', async () => 
   await initializeWiki(cwd)
   const paths = getWikiPaths(cwd)
 
+  await mkdir(join(paths.rawDir, 'articles'), { recursive: true })
+  await writeFile(join(paths.rawDir, 'articles', 'source.txt'), 'Raw source\n', 'utf8')
   await writeFile(join(paths.pagesDir, 'runtime.md'), '# Runtime\n', 'utf8')
   await writeFile(join(paths.sourcesDir, 'notes.md'), '# Notes\n', 'utf8')
 
   const status = await getWikiStatus(cwd)
 
   expect(status.initialized).toBe(true)
+  expect(status.rawSourceCount).toBe(1)
   expect(status.pageCount).toBe(2)
   expect(status.sourceCount).toBe(1)
   expect(status.hasSchema).toBe(true)

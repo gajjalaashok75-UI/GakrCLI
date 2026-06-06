@@ -8,8 +8,15 @@ import type { ProviderMode } from './index.js'
 
 const savedWebSearchEnv = {
   WEB_SEARCH_PROVIDER: process.env.WEB_SEARCH_PROVIDER,
+  FIRECRAWL_API_KEY: process.env.FIRECRAWL_API_KEY,
   TAVILY_API_KEY: process.env.TAVILY_API_KEY,
+  EXA_API_KEY: process.env.EXA_API_KEY,
+  YOU_API_KEY: process.env.YOU_API_KEY,
+  JINA_API_KEY: process.env.JINA_API_KEY,
   BRAVE_API_KEY: process.env.BRAVE_API_KEY,
+  BING_API_KEY: process.env.BING_API_KEY,
+  MOJEEK_API_KEY: process.env.MOJEEK_API_KEY,
+  LINKUP_API_KEY: process.env.LINKUP_API_KEY,
 }
 
 function restoreWebSearchEnv() {
@@ -18,6 +25,14 @@ function restoreWebSearchEnv() {
       delete process.env[key]
     } else {
       process.env[key] = value
+    }
+  }
+}
+
+function clearApiProviderKeys() {
+  for (const key of Object.keys(savedWebSearchEnv)) {
+    if (key !== 'WEB_SEARCH_PROVIDER') {
+      delete process.env[key]
     }
   }
 }
@@ -80,6 +95,22 @@ describe('getProviderChain', () => {
     const chain = getProviderChain('auto')
     expect(chain.length).toBeGreaterThan(0)
     expect(chain.some(p => p.name === 'duckduckgo')).toBe(true)
+  })
+
+  test('auto mode uses DuckDuckGo as the only provider when no API keys are configured', () => {
+    clearApiProviderKeys()
+    const chain = getProviderChain('auto')
+    expect(chain.map(provider => provider.name)).toEqual(['duckduckgo'])
+  })
+
+  test('auto mode tries configured API providers before DuckDuckGo fallback', () => {
+    clearApiProviderKeys()
+    process.env.TAVILY_API_KEY = 'test-key'
+    const chain = getProviderChain('auto')
+    expect(chain.map(provider => provider.name)).toEqual([
+      'tavily',
+      'duckduckgo',
+    ])
   })
 
   test('auto mode does NOT include custom provider', () => {

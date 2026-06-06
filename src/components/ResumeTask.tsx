@@ -119,17 +119,17 @@ export function ResumeTask({
     return <Box flexDirection="column" padding={1}>
         <Box flexDirection="row">
           <Spinner />
-          <Text bold>Loading Gakr sessions…</Text>
+          <Text bold>Loading GakrCLI sessions…</Text>
         </Box>
         <Text dimColor>
-          {retrying ? 'Retrying…' : 'Fetching your Gakr sessions…'}
+          {retrying ? 'Retrying…' : 'Fetching your GakrCLI sessions…'}
         </Text>
       </Box>;
   }
   if (loadErrorType) {
     return <Box flexDirection="column" padding={1}>
         <Text bold color="error">
-          Error loading Gakr sessions
+          Error loading GakrCLI sessions
         </Text>
 
         {renderErrorSpecificGuidance(loadErrorType)}
@@ -143,7 +143,7 @@ export function ResumeTask({
   if (sessions.length === 0) {
     return <Box flexDirection="column" padding={1}>
         <Text bold>
-          No Gakr sessions found
+          No GakrCLI sessions found
           {currentRepo && <Text> for {currentRepo}</Text>}
         </Text>
         <Box marginTop={1}>
@@ -249,19 +249,19 @@ function renderErrorSpecificGuidance(errorType: LoadErrorType): React.ReactNode 
         </Box>;
     case 'auth':
       return <Box marginY={1} flexDirection="column">
-          <Text dimColor>Teleport requires a Gakr account</Text>
+          <Text dimColor>Teleport requires a GakrCLI account</Text>
           <Text dimColor>
-            Run <Text bold>/login</Text> and select &quot;Gakr account with
+            Run <Text bold>/login</Text> and select &quot;GakrCLI account with
             subscription&quot;
           </Text>
         </Box>;
     case 'api':
       return <Box marginY={1} flexDirection="column">
-          <Text dimColor>Sorry, Gakr encountered an error</Text>
+          <Text dimColor>Sorry, GakrCLI encountered an error</Text>
         </Box>;
     case 'other':
       return <Box marginY={1} flexDirection="row">
-          <Text dimColor>Sorry, Gakr encountered an error</Text>
+          <Text dimColor>Sorry, GakrCLI encountered an error</Text>
         </Box>;
   }
 }

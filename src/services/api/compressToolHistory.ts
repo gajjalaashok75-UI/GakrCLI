@@ -12,7 +12,7 @@
  * - microCompact: time/cache-based, runs from query.ts, binary clear/keep,
  *   limited to GakrCLI (cache editing) or idle gaps (time-based).
  * - compressToolHistory: size-based, runs at the shim layer, tiered
- *   compression, covers the gap for active sessions on non-Gakr providers.
+ *   compression, covers the gap for active sessions on non-GakrCLI providers.
  *
  * Reuses isCompactableTool from microCompact to avoid touching tools the
  * project already classifies as unsafe to compress (e.g. Task, Agent).

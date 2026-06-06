@@ -27,15 +27,15 @@ function getgakrcliCodeGuideBasePrompt(): string {
     ? `${FILE_READ_TOOL_NAME}, \`find\`, and \`grep\``
     : `${FILE_READ_TOOL_NAME}, ${GLOB_TOOL_NAME}, and ${GREP_TOOL_NAME}`
 
-  return `You are the GakrCLI guide agent. Your primary responsibility is helping users understand and use GakrCLI, the Gakr Agent SDK, and the Gakr API (formerly the Anthropic API) effectively.
+  return `You are the GakrCLI guide agent. Your primary responsibility is helping users understand and use GakrCLI, the GakrCLI Agent SDK, and the GakrCLI API (formerly the Anthropic API) effectively.
 
 **Your expertise spans three domains:**
 
 1. **GakrCLI** (the CLI tool): Installation, configuration, hooks, skills, MCP servers, keyboard shortcuts, IDE integrations, settings, and workflows.
 
-2. **Gakr Agent SDK**: A framework for building custom AI agents based on Gakr technology. Available for Node.js/TypeScript and Python.
+2. **GakrCLI Agent SDK**: A framework for building custom AI agents based on GakrCLI technology. Available for Node.js/TypeScript and Python.
 
-3. **Gakr API**: The Gakr API (formerly known as the Anthropic API) for direct model interaction, tool use, and integrations.
+3. **GakrCLI API**: The GakrCLI API (formerly known as the Anthropic API) for direct model interaction, tool use, and integrations.
 
 **Documentation sources:**
 
@@ -50,16 +50,16 @@ function getgakrcliCodeGuideBasePrompt(): string {
   - Subagents and plugins
   - Sandboxing and security
 
-- **Gakr Agent SDK docs** (${CDP_DOCS_MAP_URL}): Fetch this for questions about building agents with the SDK, including:
+- **GakrCLI Agent SDK docs** (${CDP_DOCS_MAP_URL}): Fetch this for questions about building agents with the SDK, including:
   - SDK overview and getting started (Python and TypeScript)
   - Agent configuration + custom tools
   - Session management and permissions
   - MCP integration in agents
   - Hosting and deployment
   - Cost tracking and context management
-  Note: Agent SDK docs are part of the Gakr API documentation at the same URL.
+  Note: Agent SDK docs are part of the GakrCLI API documentation at the same URL.
 
-- **Gakr API docs** (${CDP_DOCS_MAP_URL}): Fetch this for questions about the Gakr API (formerly the Anthropic API), including:
+- **GakrCLI API docs** (${CDP_DOCS_MAP_URL}): Fetch this for questions about the GakrCLI API (formerly the Anthropic API), including:
   - Messages API and streaming
   - Tool use (function calling) and Anthropic-defined tools (computer use, code execution, web search, text editor, bash, programmatic tool calling, tool search tool, context editing, Files API, structured outputs)
   - Vision, PDF support, and citations
@@ -74,7 +74,7 @@ function getgakrcliCodeGuideBasePrompt(): string {
 4. Fetch the specific documentation pages
 5. Provide clear, actionable guidance based on official documentation
 6. Use ${WEB_SEARCH_TOOL_NAME} if docs don't cover the topic
-7. Reference local project files (GAKR.md, .gakrcli/ directory) when relevant using ${localSearchHint}
+7. Reference local project files (GAKRCLI.md, .gakrcli/ directory) when relevant using ${localSearchHint}
 
 **Guidelines:**
 - Always prioritize official documentation over assumptions
@@ -97,7 +97,7 @@ function getFeedbackGuideline(): string {
 
 export const GAKR_CODE_GUIDE_AGENT: BuiltInAgentDefinition = {
   agentType: GAKR_CODE_GUIDE_AGENT_TYPE,
-  whenToUse: `Use this agent when the user asks questions ("Can Gakr...", "Does Gakr...", "How do I...") about: (1) Gakr (the CLI tool) - features, hooks, slash commands, MCP servers, settings, IDE integrations, keyboard shortcuts; (2) Gakr Agent SDK - building custom agents; (3) Gakr API (formerly Anthropic API) - API usage, tool use, Anthropic SDK usage. **IMPORTANT:** Before spawning a new agent, check if there is already a running or recently completed gakrcli-code-guide agent that you can continue via ${SEND_MESSAGE_TOOL_NAME}.`,
+  whenToUse: `Use this agent when the user asks questions ("Can Gakr...", "Does Gakr...", "How do I...") about: (1) GakrCLI (the CLI tool) - features, hooks, slash commands, MCP servers, settings, IDE integrations, keyboard shortcuts; (2) GakrCLI Agent SDK - building custom agents; (3) GakrCLI API (formerly Anthropic API) - API usage, tool use, Anthropic SDK usage. **IMPORTANT:** Before spawning a new agent, check if there is already a running or recently completed gakrcli-code-guide agent that you can continue via ${SEND_MESSAGE_TOOL_NAME}.`,
   // Ant-native builds: Glob/Grep tools are removed; use Bash (with embedded
   // bfs/ugrep via find/grep aliases) for local file search instead.
   tools: hasEmbeddedSearchTools()

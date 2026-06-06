@@ -535,4 +535,4 @@ export const myProvider: SearchProvider = {
 }
 ```
 
-2. Register in `providers/index.ts` — add import and push to `ALL_PROVIDERS`.
+2. Register in `providers/index.ts` — import it and add it to `API_KEY_PROVIDERS`. DuckDuckGo is appended automatically as the no-key fallback in auto mode.

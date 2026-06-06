@@ -54,7 +54,7 @@ Analyze the project to detect what's in different subdirectories. The project ma
    - Check MCP configuration (.mcp.json) for browser automation tools:
      - Playwright MCP server
      - Chrome DevTools MCP server
-     - Gakr Chrome Extension MCP (browser-use via Gakr's Chrome extension)
+     - GakrCLI Chrome Extension MCP (browser-use via GakrCLI's Chrome extension)
    - For Python projects, check for playwright, pytest-playwright
 
 ## Phase 2: Verification Tool Setup
@@ -72,7 +72,7 @@ Based on what was detected in Phase 1, help the user set up appropriate verifica
    - Options to offer:
      - **Playwright** (Recommended) - Full browser automation library, works headless, great for CI
      - **Chrome DevTools MCP** - Uses Chrome DevTools Protocol via MCP
-     - **Gakr Chrome Extension** - Uses the Gakr Chrome extension for browser interaction (requires the extension installed in Chrome)
+     - **GakrCLI Chrome Extension** - Uses the GakrCLI Chrome extension for browser interaction (requires the extension installed in Chrome)
      - **None** - Skip browser automation (will use basic HTTP checks only)
 
 3. **If user chooses to install Playwright**, run the appropriate command based on package manager:
@@ -81,10 +81,10 @@ Based on what was detected in Phase 1, help the user set up appropriate verifica
    - For pnpm: \`pnpm add -D @playwright/test && pnpm exec playwright install\`
    - For bun: \`bun add -D @playwright/test && bun playwright install\`
 
-4. **If user chooses Chrome DevTools MCP or Gakr Chrome Extension**:
+4. **If user chooses Chrome DevTools MCP or GakrCLI Chrome Extension**:
    - These require MCP server configuration rather than package installation
    - Ask if they want you to add the MCP server configuration to .mcp.json
-   - For Gakr Chrome Extension, inform them they need the extension installed from the Chrome Web Store
+   - For GakrCLI Chrome Extension, inform them they need the extension installed from the Chrome Web Store
 
 5. **MCP Server Setup** (if applicable):
    - If user selected an MCP-based option, configure the appropriate entry in .mcp.json
@@ -162,7 +162,7 @@ Based on the areas detected in Phase 1, you may need to create multiple verifier
 
 ## Phase 4: Generate Verifier Skill
 
-**All verifier skills are created in the project root's \`.gakrcli/skills/\` directory.** This ensures they are automatically loaded when Gakr runs in the project.
+**All verifier skills are created in the project root's \`.gakrcli/skills/\` directory.** This ensures they are automatically loaded when GakrCLI runs in the project.
 
 Write the skill file to \`.gakrcli/skills/<verifier-name>/SKILL.md\`.
 

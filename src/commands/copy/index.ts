@@ -8,7 +8,7 @@ const copy = {
   type: 'local-jsx',
   name: 'copy',
   description:
-    "Copy Gakr's last response to clipboard (or /copy N for the Nth-latest)",
+    "Copy GakrCLI's last response to clipboard (or /copy N for the Nth-latest)",
   load: () => import('./copy.js'),
 } satisfies Command
 

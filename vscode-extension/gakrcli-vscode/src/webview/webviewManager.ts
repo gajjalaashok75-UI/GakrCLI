@@ -1,7 +1,8 @@
-import * as vscode from 'vscode';
+import type * as VSCode from 'vscode';
 import { WebviewBridge } from './webviewBridge';
 import { generateWebviewHtml } from './htmlGenerator';
 import { getThemeKind, getFontConfig } from './htmlGenerator';
+import { vscode } from '../vscodeCompat';
 import type {
   WebviewToHostMessage,
   HostToWebviewMessage,
@@ -30,11 +31,11 @@ type MessageHandler<T extends WebviewToHostMessage['type']> = (
  * - Broadcasts session state across all panels
  * - Handles panel serialization/deserialization for persistence
  */
-export class WebviewManager implements vscode.Disposable {
+export class WebviewManager implements VSCode.Disposable {
   private readonly bridges = new Map<string, WebviewBridge>();
-  private readonly panelMap = new Map<string, vscode.WebviewPanel>();
+  private readonly panelMap = new Map<string, VSCode.WebviewPanel>();
   private readonly sessionPanels = new Map<string, string>(); // sessionId -> panelId
-  private readonly disposables: vscode.Disposable[] = [];
+  private readonly disposables: VSCode.Disposable[] = [];
   private readonly globalHandlers = new Map<string, MessageHandler<never>[]>();
 
   /** Track session states for badge updates and cross-panel sync */
@@ -42,9 +43,9 @@ export class WebviewManager implements vscode.Disposable {
   private activeSessionId?: string;
 
   constructor(
-    private readonly extensionUri: vscode.Uri,
-    private readonly context: vscode.ExtensionContext,
-    private readonly output: vscode.OutputChannel,
+    private readonly extensionUri: VSCode.Uri,
+    private readonly context: VSCode.ExtensionContext,
+    private readonly output: VSCode.OutputChannel,
   ) {
     // Listen for theme changes and broadcast to all panels
     this.disposables.push(
@@ -78,13 +79,13 @@ export class WebviewManager implements vscode.Disposable {
   onMessage<T extends WebviewToHostMessage['type']>(
     type: T,
     handler: MessageHandler<T>,
-  ): vscode.Disposable {
+  ): VSCode.Disposable {
     const handlers = this.globalHandlers.get(type) || [];
     handlers.push(handler as MessageHandler<never>);
     this.globalHandlers.set(type, handlers);
 
     // Also register on all existing bridges
-    const bridgeDisposables: vscode.Disposable[] = [];
+    const bridgeDisposables: VSCode.Disposable[] = [];
     for (const bridge of this.bridges.values()) {
       bridgeDisposables.push(bridge.onMessage(type, handler));
     }
@@ -152,7 +153,7 @@ export class WebviewManager implements vscode.Disposable {
   createPanel(
     sessionId?: string,
     initialPrompt?: string,
-    viewColumn?: vscode.ViewColumn,
+    viewColumn?: VSCode.ViewColumn,
   ): { panelId: string; startedInNewColumn: boolean } {
     // If session already has an open panel, reveal it
     if (sessionId) {
@@ -173,7 +174,7 @@ export class WebviewManager implements vscode.Disposable {
 
     // Determine target column
     let startedInNewColumn = false;
-    let targetColumn: vscode.ViewColumn;
+    let targetColumn: VSCode.ViewColumn;
 
     if (viewColumn !== undefined) {
       targetColumn = viewColumn;
@@ -240,7 +241,7 @@ export class WebviewManager implements vscode.Disposable {
    *
    */
   setupPanel(
-    panel: vscode.WebviewPanel,
+    panel: VSCode.WebviewPanel,
     panelId: string,
     location: PanelLocation,
     sessionId?: string,
@@ -343,7 +344,7 @@ export class WebviewManager implements vscode.Disposable {
    *
    */
   resolveSidebarView(
-    webviewView: vscode.WebviewView,
+    webviewView: VSCode.WebviewView,
   ): string {
     const panelId = createPanelId();
 
@@ -445,8 +446,8 @@ export class WebviewManager implements vscode.Disposable {
   /**
    * Find an unused editor column.
    */
-  private findUnusedColumn(): vscode.ViewColumn {
-    const usedColumns = new Set<vscode.ViewColumn>();
+  private findUnusedColumn(): VSCode.ViewColumn {
+    const usedColumns = new Set<VSCode.ViewColumn>();
     vscode.window.tabGroups.all.forEach((group) => {
       if (group.viewColumn !== undefined) {
         usedColumns.add(group.viewColumn);

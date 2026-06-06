@@ -59,7 +59,7 @@ export function gakrcliMdExternalIncludesDialog(t0: Props) {
   const t5 = !isStandaloneDialog;
   let t6;
   if ($[5] === Symbol.for("react.memo_cache_sentinel")) {
-    t6 = <Text>This project's GAKR.md imports files outside the current working directory. Never allow this for third-party repositories.</Text>;
+    t6 = <Text>This project's GAKRCLI.md imports files outside the current working directory. Never allow this for third-party repositories.</Text>;
     $[5] = t6;
   } else {
     t6 = $[5];
@@ -74,7 +74,7 @@ export function gakrcliMdExternalIncludesDialog(t0: Props) {
   }
   let t8;
   if ($[8] === Symbol.for("react.memo_cache_sentinel")) {
-    t8 = <Text dimColor={true}>Important: Only use Gakr with files you trust. Accessing untrusted files may pose security risks{" "}<Link url="https://github.com/gakr-gakr/gakr/docs/en/security" />{" "}</Text>;
+    t8 = <Text dimColor={true}>Important: Only use GakrCLI with files you trust. Accessing untrusted files may pose security risks{" "}<Link url="https://github.com/gakr-gakr/gakr/docs/en/security" />{" "}</Text>;
     $[8] = t8;
   } else {
     t8 = $[8];
@@ -102,7 +102,7 @@ export function gakrcliMdExternalIncludesDialog(t0: Props) {
   }
   let t11;
   if ($[12] !== handleEscape || $[13] !== t10 || $[14] !== t4 || $[15] !== t5 || $[16] !== t7) {
-    t11 = <Dialog title="Allow external GAKR.md file imports?" color="warning" onCancel={handleEscape} hideBorder={t4} hideInputGuide={t5}>{t6}{t7}{t8}{t10}</Dialog>;
+    t11 = <Dialog title="Allow external GAKRCLI.md file imports?" color="warning" onCancel={handleEscape} hideBorder={t4} hideInputGuide={t5}>{t6}{t7}{t8}{t10}</Dialog>;
     $[12] = handleEscape;
     $[13] = t10;
     $[14] = t4;

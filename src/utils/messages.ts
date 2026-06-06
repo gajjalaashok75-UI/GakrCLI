@@ -237,7 +237,7 @@ export function AUTO_REJECT_MESSAGE(toolName: string): string {
   return `Permission to use ${toolName} has been denied. ${DENIAL_WORKAROUND_GUIDANCE}`
 }
 export function DONT_ASK_REJECT_MESSAGE(toolName: string): string {
-  return `Permission to use ${toolName} has been denied because Gakr is running in don't ask mode. ${DENIAL_WORKAROUND_GUIDANCE}`
+  return `Permission to use ${toolName} has been denied because GakrCLI is running in don't ask mode. ${DENIAL_WORKAROUND_GUIDANCE}`
 }
 export const NO_RESPONSE_REQUESTED = 'No response requested.'
 
@@ -1617,7 +1617,7 @@ function stripUnavailableToolReferencesFromUserMessage(
 /**
  * Appends a [id:...] message ID tag to the last text block of a user message.
  * Only mutates the API-bound copy, not the stored message.
- * This lets Gakr reference message IDs when calling the snip tool.
+ * This lets GakrCLI reference message IDs when calling the snip tool.
  */
 function appendMessageTagToUserMessage(message: UserMessage): UserMessage {
   if (message.isMeta) {

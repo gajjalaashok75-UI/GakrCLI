@@ -115,9 +115,9 @@ function renderChromeToolUseMessage(input: Record<string, unknown>, toolName: Ch
 }
 
 /**
- * Renders a clickable "View Tab" link for Gakr in Chrome MCP tools.
+ * Renders a clickable "View Tab" link for GakrCLI in Chrome MCP tools.
  * Returns null if:
- * - The tool is not a Gakr in Chrome MCP tool
+ * - The tool is not a GakrCLI in Chrome MCP tool
  * - The input doesn't have a valid tabId
  * - Hyperlinks are not supported
  */
@@ -215,7 +215,7 @@ export function renderChromeToolResultMessage(output: MCPToolResult, toolName: C
 }
 
 /**
- * Returns tool method overrides for Gakr in Chrome MCP tools. Use this to customize
+ * Returns tool method overrides for GakrCLI in Chrome MCP tools. Use this to customize
  * rendering for chrome tools in a single spread operation.
  */
 export function getgakrcliInChromeMCPToolOverrides(toolName: string): {
@@ -232,7 +232,7 @@ export function getgakrcliInChromeMCPToolOverrides(toolName: string): {
     userFacingName(_input?: Record<string, unknown>) {
       // Trim the _mcp postfix that show up in some of the tool names
       const displayName = toolName.replace(/_mcp$/, '');
-      return `Gakr in Chrome[${displayName}]`;
+      return `GakrCLI in Chrome[${displayName}]`;
     },
     renderToolUseMessage(input: Record<string, unknown>, {
       verbose

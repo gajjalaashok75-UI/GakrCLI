@@ -42,7 +42,7 @@ type LoadingStateProps = {
  * <LoadingState
  *   message="Loading sessions"
  *   bold
- *   subtitle="Fetching your Gakr sessions..."
+ *   subtitle="Fetching your GakrCLI sessions..."
  * />
  */
 export function LoadingState(t0) {

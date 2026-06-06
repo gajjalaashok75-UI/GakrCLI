@@ -1940,10 +1940,10 @@ ${serverOptions}
 DESCRIPTION
   Remote Control allows you to control sessions on your local device from
   gakr.ai/code (https://gakr.ai/code). Run this command in the
-  directory you want to work in, then connect from the Gakr app or web.
+  directory you want to work in, then connect from the GakrCLI app or web.
 ${serverDescription}
 NOTES
-  - You must be logged in with a Gakr account that has a subscription
+  - You must be logged in with a GakrCLI account that has a subscription
   - Run \`gakrcli\` first in the directory to accept the workspace trust dialog
 ${serverNote}`
   // biome-ignore lint/suspicious/noConsole: intentional help output
@@ -2122,7 +2122,7 @@ export async function bridgeMain(args: string[]): Promise<void> {
     })
     // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.log(
-      '\nRemote Control lets you access this CLI session from the web (gakr.ai/code)\nor the Gakr app, so you can pick up where you left off on any device.\n\nYou can disconnect remote access anytime by running /remote-control again.\n',
+      '\nRemote Control lets you access this CLI session from the web (gakr.ai/code)\nor the GakrCLI app, so you can pick up where you left off on any device.\n\nYou can disconnect remote access anytime by running /remote-control again.\n',
     )
     const answer = await new Promise<string>(resolve => {
       rl.question('Enable Remote Control? (y/n) ', resolve)
@@ -2248,7 +2248,7 @@ export async function bridgeMain(args: string[]): Promise<void> {
     })
     // biome-ignore lint/suspicious/noConsole: intentional dialog output
     console.log(
-      `\nGakr Remote Control is launching in spawn mode which lets you create new sessions in this project from Gakr on Web or your Mobile app. Learn more here: https://github.com/gakr-gakr/gakr/docs/en/remote-control\n\n` +
+      `\nGakrCLI Remote Control is launching in spawn mode which lets you create new sessions in this project from GakrCLI on Web or your Mobile app. Learn more here: https://github.com/gakr-gakr/gakr/docs/en/remote-control\n\n` +
         `Spawn mode for this project:\n` +
         `  [1] same-dir \u2014 sessions share the current directory (default)\n` +
         `  [2] worktree \u2014 each session gets an isolated git worktree\n\n` +

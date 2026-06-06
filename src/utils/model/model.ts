@@ -403,7 +403,7 @@ export function getDefaultMainLoopModel(): ModelName {
  */
 export function firstPartyNameToCanonical(name: ModelName): ModelShortName {
   name = name.toLowerCase()
-  // Special cases for Gakr 4+ models to differentiate versions
+  // Special cases for GakrCLI 4+ models to differentiate versions
   // Order matters: check more specific versions first (4-5 before 4)
   if (name.includes('gakrcli-opus-4-6')) {
     return 'gakrcli-opus-4-6'
@@ -429,7 +429,7 @@ export function firstPartyNameToCanonical(name: ModelName): ModelShortName {
   if (name.includes('gakrcli-haiku-4-5')) {
     return 'gakrcli-haiku-4-5'
   }
-  // Gakr 3.x models use a different naming scheme (gakrcli-3-{family})
+  // GakrCLI 3.x models use a different naming scheme (gakrcli-3-{family})
   if (name.includes('gakrcli-3-7-sonnet')) {
     return 'gakrcli-3-7-sonnet'
   }
@@ -541,7 +541,7 @@ export function renderModelSetting(setting: ModelName | ModelAlias): string {
  * if the model is not recognized as a public model.
  */
 export function getPublicModelDisplayName(model: ModelName): string | null {
-  // For OpenAI/Gemini/Codex providers, show the actual model name not a Gakr alias
+  // For OpenAI/Gemini/Codex providers, show the actual model name not a GakrCLI alias
   if (getAPIProvider() === 'openai' || getAPIProvider() === 'gemini' || getAPIProvider() === 'codex' || getAPIProvider() === 'github' || getAPIProvider() === 'xai') {
     // Return display names for known GitHub Copilot models
     const copilotModelNames: Record<string, string> = {
@@ -647,18 +647,18 @@ export function renderModelName(model: ModelName): string {
 
 /**
  * Returns a safe author name for public display (e.g., in git commit trailers).
- * Returns "Gakr {ModelName}" for publicly known models, or "Gakr ({model})"
+ * Returns "GakrCLI {ModelName}" for publicly known models, or "GakrCLI ({model})"
  * for unknown/internal models so the exact model name is preserved.
  *
  * @param model The full model name
- * @returns "Gakr {ModelName}" for public models, or "Gakr ({model})" for non-public models
+ * @returns "GakrCLI {ModelName}" for public models, or "GakrCLI ({model})" for non-public models
  */
 export function getPublicModelName(model: ModelName): string {
   const publicName = getPublicModelDisplayName(model)
   if (publicName) {
-    return `Gakr ${publicName}`
+    return `GakrCLI ${publicName}`
   }
-  return `Gakr (${model})`
+  return `GakrCLI (${model})`
 }
 
 /**
@@ -837,16 +837,16 @@ export function getMarketingNameForModel(modelId: string): string | undefined {
     return has1m ? 'Sonnet 4 (with 1M context)' : 'Sonnet 4'
   }
   if (canonical.includes('gakrcli-3-7-sonnet')) {
-    return 'Gakr 3.7 Sonnet'
+    return 'GakrCLI 3.7 Sonnet'
   }
   if (canonical.includes('gakrcli-3-5-sonnet')) {
-    return 'Gakr 3.5 Sonnet'
+    return 'GakrCLI 3.5 Sonnet'
   }
   if (canonical.includes('gakrcli-haiku-4-5')) {
     return 'Haiku 4.5'
   }
   if (canonical.includes('gakrcli-3-5-haiku')) {
-    return 'Gakr 3.5 Haiku'
+    return 'GakrCLI 3.5 Haiku'
   }
 
   return undefined

@@ -12,17 +12,18 @@ type Props = {
 };
 const EMPTY_MCP_CLIENTS: MCPServerConnection[] = [];
 export function useMcpConnectivityStatus(t0) {
-  const $ = _c(4);
+  const $ = _c(5);
   const {
     mcpClients: t1
   } = t0;
   const mcpClients = t1 === undefined ? EMPTY_MCP_CLIENTS : t1;
   const {
-    addNotification
+    addNotification,
+    removeNotification
   } = useNotifications();
   let t2;
   let t3;
-  if ($[0] !== addNotification || $[1] !== mcpClients) {
+  if ($[0] !== addNotification || $[1] !== mcpClients || $[2] !== removeNotification) {
     t2 = () => {
       try {
         if (getIsRemoteMode()) {
@@ -32,9 +33,10 @@ export function useMcpConnectivityStatus(t0) {
         const failedgakrcliAiClients = mcpClients.filter(_temp2);
         const needsAuthLocalServers = mcpClients.filter(_temp3);
         const needsAuthgakrcliAiServers = mcpClients.filter(_temp4);
-        if (failedLocalClients.length === 0 && failedgakrcliAiClients.length === 0 && needsAuthLocalServers.length === 0 && needsAuthgakrcliAiServers.length === 0) {
-          return;
-        }
+        if (failedLocalClients.length === 0) removeNotification("mcp-failed");
+        if (failedgakrcliAiClients.length === 0) removeNotification("mcp-gakrcliai-failed");
+        if (needsAuthLocalServers.length === 0) removeNotification("mcp-needs-auth");
+        if (needsAuthgakrcliAiServers.length === 0) removeNotification("mcp-gakrcliai-needs-auth");
         if (failedLocalClients.length > 0) {
           addNotification({
             key: "mcp-failed",
@@ -67,14 +69,15 @@ export function useMcpConnectivityStatus(t0) {
         logError(error);
       }
     };
-    t3 = [addNotification, mcpClients];
+    t3 = [addNotification, removeNotification, mcpClients];
     $[0] = addNotification;
     $[1] = mcpClients;
-    $[2] = t2;
-    $[3] = t3;
+    $[2] = removeNotification;
+    $[3] = t2;
+    $[4] = t3;
   } else {
-    t2 = $[2];
-    t3 = $[3];
+    t2 = $[3];
+    t3 = $[4];
   }
   useEffect(t2, t3);
 }

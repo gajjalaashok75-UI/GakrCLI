@@ -31,7 +31,7 @@ import { getInitialSettings } from 'src/utils/settings/settings.js'
 export async function update() {
   // Block updates for third-party providers. The update mechanism downloads
   // from the first-party distribution bucket, which would silently replace the
-  // Gakr build (with the OpenAI shim) with the upstream Gakr Code
+  // GakrCLI build (with the OpenAI shim) with the upstream GakrCLI Code
   // binary (without it).
   if (getAPIProvider() !== 'firstParty') {
     writeToStdout(
@@ -144,7 +144,7 @@ export async function update() {
     writeToStdout('\n')
 
     if (packageManager === 'homebrew') {
-      writeToStdout('Gakr is managed by Homebrew.\n')
+      writeToStdout('GakrCLI is managed by Homebrew.\n')
       const latest = await getLatestVersion(channel)
       if (latest && !gte(MACRO.DISPLAY_VERSION, latest)) {
         writeToStdout(`Update available: ${MACRO.DISPLAY_VERSION} → ${latest}\n`)
@@ -152,10 +152,10 @@ export async function update() {
         writeToStdout('To update, run:\n')
         writeToStdout(chalk.bold('  brew upgrade gakrcli-code') + '\n')
       } else {
-        writeToStdout('Gakr is up to date!\n')
+        writeToStdout('GakrCLI is up to date!\n')
       }
     } else if (packageManager === 'winget') {
-      writeToStdout('Gakr is managed by winget.\n')
+      writeToStdout('GakrCLI is managed by winget.\n')
       const latest = await getLatestVersion(channel)
       if (latest && !gte(MACRO.DISPLAY_VERSION, latest)) {
         writeToStdout(`Update available: ${MACRO.DISPLAY_VERSION} → ${latest}\n`)
@@ -165,10 +165,10 @@ export async function update() {
           chalk.bold('  winget upgrade Gakr.GakrCli') + '\n',
         )
       } else {
-        writeToStdout('Gakr is up to date!\n')
+        writeToStdout('GakrCLI is up to date!\n')
       }
     } else if (packageManager === 'apk') {
-      writeToStdout('Gakr is managed by apk.\n')
+      writeToStdout('GakrCLI is managed by apk.\n')
       const latest = await getLatestVersion(channel)
       if (latest && !gte(MACRO.DISPLAY_VERSION, latest)) {
         writeToStdout(`Update available: ${MACRO.DISPLAY_VERSION} → ${latest}\n`)
@@ -176,13 +176,13 @@ export async function update() {
         writeToStdout('To update, run:\n')
         writeToStdout(chalk.bold('  apk upgrade gakrcli-code') + '\n')
       } else {
-        writeToStdout('Gakr is up to date!\n')
+        writeToStdout('GakrCLI is up to date!\n')
       }
     } else {
       // pacman, deb, and rpm don't get specific commands because they each have
       // multiple frontends (pacman: yay/paru/makepkg, deb: apt/apt-get/aptitude/nala,
       // rpm: dnf/yum/zypper)
-      writeToStdout('Gakr is managed by a package manager.\n')
+      writeToStdout('GakrCLI is managed by a package manager.\n')
       writeToStdout('Please use your package manager to update.\n')
     }
 
@@ -249,7 +249,7 @@ export async function update() {
           : ''
         writeToStdout(
           chalk.yellow(
-            `Another Gakr process${pidInfo} is currently running. Please try again in a moment.`,
+            `Another GakrCLI process${pidInfo} is currently running. Please try again in a moment.`,
           ) + '\n',
         )
         await gracefulShutdown(0)
@@ -262,7 +262,7 @@ export async function update() {
 
       if (result.latestVersion === MACRO.DISPLAY_VERSION) {
         writeToStdout(
-          chalk.green(`Gakr is up to date (${MACRO.DISPLAY_VERSION})`) + '\n',
+          chalk.green(`GakrCLI is up to date (${MACRO.DISPLAY_VERSION})`) + '\n',
         )
       } else {
         writeToStdout(
@@ -328,7 +328,7 @@ export async function update() {
   // Check if versions match exactly, including any build metadata (like SHA)
   if (latestVersion === MACRO.DISPLAY_VERSION) {
     writeToStdout(
-      chalk.green(`Gakr is up to date (${MACRO.DISPLAY_VERSION})`) + '\n',
+      chalk.green(`GakrCLI is up to date (${MACRO.DISPLAY_VERSION})`) + '\n',
     )
     await gracefulShutdown(0)
   }

@@ -1,26 +1,26 @@
 /**
  * Path conversion utilities for IDE communication
- * Handles conversions between Gakr's environment and the IDE's environment
+ * Handles conversions between GakrCLI's environment and the IDE's environment
  */
 
 import { execFileSync } from 'child_process'
 
 export interface IDEPathConverter {
   /**
-   * Convert path from IDE format to Gakr's local format
+   * Convert path from IDE format to GakrCLI's local format
    * Used when reading workspace folders from IDE lockfile
    */
   toLocalPath(idePath: string): string
 
   /**
-   * Convert path from Gakr's local format to IDE format
+   * Convert path from GakrCLI's local format to IDE format
    * Used when sending paths to IDE (showDiffInIDE, etc.)
    */
   toIDEPath(localPath: string): string
 }
 
 /**
- * Converter for Windows IDE + WSL Gakr scenario
+ * Converter for Windows IDE + WSL GakrCLI scenario
  */
 export class WindowsToWSLConverter implements IDEPathConverter {
   constructor(private wslDistroName: string | undefined) {}

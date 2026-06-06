@@ -210,12 +210,12 @@ function Install({
   useEffect(() => {
     if (state.type === 'success') {
       // Give success message time to render before exiting
-      setTimeout(onDone, 2000, 'Gakr installation completed successfully', {
+      setTimeout(onDone, 2000, 'GakrCLI installation completed successfully', {
         display: 'system' as const
       });
     } else if (state.type === 'error') {
       // Give error message time to render before exiting
-      setTimeout(onDone, 3000, 'Gakr installation failed', {
+      setTimeout(onDone, 3000, 'GakrCLI installation failed', {
         display: 'system' as const
       });
     }
@@ -226,7 +226,7 @@ function Install({
       {state.type === 'cleaning-npm' && <Text color="warning">Cleaning up old npm installations...</Text>}
 
       {state.type === 'installing' && <Text color="gakrcli">
-          Installing Gakr native build {state.version}...
+          Installing GakrCLI native build {state.version}...
         </Text>}
 
       {state.type === 'setting-up' && <Text color="gakrcli">Setting up launcher and shell integration...</Text>}
@@ -237,7 +237,7 @@ function Install({
           <Box>
             <StatusIcon status="success" withSpace />
             <Text color="success" bold>
-              Gakr successfully installed!
+              GakrCLI successfully installed!
             </Text>
           </Box>
           <Box marginLeft={2} flexDirection="column" gap={1}>
@@ -279,7 +279,7 @@ function Install({
 export const install = {
   type: 'local-jsx' as const,
   name: 'install',
-  description: 'Install Gakr native build',
+  description: 'Install GakrCLI native build',
   argumentHint: '[options]',
   async call(onDone: (result: string, options?: {
     display?: CommandResultDisplay;

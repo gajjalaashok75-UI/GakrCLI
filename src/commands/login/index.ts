@@ -7,8 +7,8 @@ export default () =>
     type: 'local-jsx',
     name: 'login',
     description: hasAnthropicApiKeyAuth()
-      ? 'Switch Gakr accounts'
-      : 'Sign in with your Gakr account',
+      ? 'Switch GakrCLI accounts'
+      : 'Sign in with your GakrCLI account',
     isEnabled: () => !isEnvTruthy(process.env.DISABLE_LOGIN_COMMAND),
     load: () => import('./login.js'),
   }) satisfies Command

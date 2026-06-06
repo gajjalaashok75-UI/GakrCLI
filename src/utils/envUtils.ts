@@ -1,6 +1,6 @@
 import memoize from 'lodash-es/memoize.js'
 import { homedir } from 'os'
-import { join } from 'path'
+import { join, resolve } from 'path'
 
 export function resolveGakrcliConfigHomeDir(options?: {
   configDirEnv?: string
@@ -49,8 +49,17 @@ export function getTeamsDir(): string {
   return join(getGakrcliConfigHomeDir(), 'teams')
 }
 
+export function getGakrcliWorkspaceDir(): string {
+  const workspaceDirEnv =
+    process.env.GAKRCLI_WORKSPACE_DIR ?? process.env.GAKR_WORKSPACE_DIR
+  if (workspaceDirEnv) {
+    return resolve(workspaceDirEnv).normalize('NFC')
+  }
+  return join(getGakrcliConfigHomeDir(), 'workspace').normalize('NFC')
+}
+
 export function getProjectsDir(): string {
-  return join(getGakrcliConfigHomeDir(), 'projects')
+  return join(getGakrcliWorkspaceDir(), 'projects')
 }
 
 /**
@@ -159,7 +168,7 @@ export function isRunningOnHomespace(): boolean {
 }
 
 /**
- * Conservative check for whether Gakr is running inside a protected
+ * Conservative check for whether GakrCLI is running inside a protected
  * (privileged or ASL3+) COO namespace or cluster.
  *
  * Conservative means: when signals are ambiguous, assume protected. We would

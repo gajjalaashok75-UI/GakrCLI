@@ -41,7 +41,7 @@ export function modelSupportsEffort(model: string): boolean {
   if (modelUsesOpenAIEffort(model) && supportsCodexReasoningEffort(model)) {
     return true
   }
-  // Supported by a subset of Gakr 4 models
+  // Supported by a subset of GakrCLI 4 models
   if (m.includes('opus-4-6') || m.includes('sonnet-4-6')) {
     return true
   }

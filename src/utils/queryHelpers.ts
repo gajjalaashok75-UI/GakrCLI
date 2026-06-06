@@ -159,7 +159,7 @@ export function* normalizeMessage(message: Message): Generator<SDKMessage> {
         message.data.type === 'powershell_progress'
       ) {
         // Filter bash progress to send only one per minute
-        // Only emit for Gakr Remote for now
+        // Only emit for GakrCLI Remote for now
         if (
           !isEnvTruthy(process.env.GAKR_CODE_REMOTE) &&
           !process.env.GAKR_CODE_CONTAINER_ID

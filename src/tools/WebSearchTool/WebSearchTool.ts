@@ -120,8 +120,8 @@ function formatProviderOutput(po: ProviderOutput, query: string): Output {
 function buildEmptyAdapterResultHint(provider: string, providerName: string): string {
   return (
     `No results from "${providerName}" search backend for provider "${provider}". ` +
-    `The default DuckDuckGo backend is rate-limited from many networks (datacenter IPs, VPNs, repeated requests) and returns 0 results when blocked. ` +
-    `For reliable web search on this provider, set one of: ` +
+    `DuckDuckGo is the default no-key web search backend. ` +
+    `For a dedicated search API backend, set one of: ` +
     `FIRECRAWL_API_KEY, TAVILY_API_KEY, EXA_API_KEY, JINA_API_KEY, BING_API_KEY, MOJEEK_API_KEY, LINKUP_API_KEY, YOU_API_KEY — ` +
     `or switch to an Anthropic / Vertex / Foundry provider that supports the native web_search tool.`
   )
@@ -361,9 +361,9 @@ function buildAdapterUnavailableError(
   errMsg: string,
 ): string {
   return (
-    `Web search is unavailable for provider "${provider}". ` +
-    `The search adapter failed (${errMsg}). ` +
-    `Try switching to a provider with built-in web search (e.g. Anthropic, Codex) or try again later.`
+    `Web search failed while using the default adapter path for provider "${provider}". ` +
+    `The search adapter reported: ${errMsg}. ` +
+    `Try again with a broader query or configure a dedicated search API key.`
   )
 }
 
@@ -531,7 +531,8 @@ function isTransientError(err: unknown): boolean {
 /**
  * Returns true when we should use the adapter-based provider system.
  *
- * In auto mode: native/first-party/Codex paths take precedence.
+ * In auto mode: adapter providers take precedence so DuckDuckGo is the
+ * default no-key backend across model providers.
  *   → Only falls back to adapter if no native path is available.
  * In explicit adapter modes (tavily, ddg, custom, etc.): always true.
  * In native mode: never true.
@@ -541,13 +542,7 @@ function shouldUseAdapterProvider(): boolean {
   if (mode === 'native') return false
   if (mode !== 'auto') return true // explicit adapter mode (tavily, ddg, custom, etc.)
 
-  // Auto mode: native/first-party/Codex take precedence over adapter
-  if (isCodexResponsesWebSearchEnabled()) return false
-  const provider = getAPIProvider()
-  if (provider === 'firstParty' || provider === 'vertex' || provider === 'foundry') {
-    return false
-  }
-  // No native path available — fall back to adapter
+  // Auto mode uses configured API-key providers first, then DuckDuckGo.
   return getAvailableProviders().length > 0
 }
 

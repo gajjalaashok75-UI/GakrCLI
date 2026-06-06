@@ -5,6 +5,53 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [unreleased - 0.5.6]
+
+### Changed (2026-06-06)
+- **LLM Wiki Scaffold**: Expanded `/wiki` around the LLM Wiki pattern with a raw/source/page layout, parseable dated log headings, richer schema workflows, source-note titles in the rebuilt index, and raw/source/page counts in status output.
+- **Open-Build Feature Flag Inventory**: Declared every `feature(...)` gate used in `src/` in `scripts/build.ts`, defaulting newly documented unavailable or unvalidated functionality to `false` so missing flags are explicit without changing runtime behavior.
+- **Knowledge Graph Persistence Durability**: Persisted the Orama knowledge index through the flushed atomic file-write helper, allowed that helper to accept buffer payloads, and made cleanup registration support synchronous handlers so SQLite close hooks match their actual behavior.
+
+### Fixed (2026-06-06)
+- **Wiki Status Dispatch**: Routed `/wiki status` and common info aliases to the wiki status output instead of the generic help text.
+
+### Added (2026-06-03)
+- **OpenClaw-Style Workspace Persistence**: Added root workspace files under `~/.gakrcli/workspace/` for GakrCLI identity, rulebook, soul, user profile, tools, memory, dreams, heartbeat, and first-run bootstrap context.
+- **Workspace Location Metadata**: Added canonical `~/.gakrcli/workspace/<file>` location and update-target guidance to every packaged workspace file so model-driven updates can route durable facts to the right file.
+
+### Changed (2026-06-03)
+- **Workspace And Project Memory Routing**: Moved project memory under `~/.gakrcli/workspace/projects/<project>/memory/` while keeping root `MEMORY.md` as global cross-project memory.
+- **Bootstrap Completion Flow**: Kept `BOOTSTRAP.md` as a first-run-only context file and added startup cleanup when identity setup was completed but bootstrap deletion was missed.
+- **Release Versions**: Bumped GakrCLI to `0.5.6` and the VS Code extension to `0.2.4`.
+
+### Added (2026-06-03)
+- **Context Building Test Coverage**: Added 22 unit tests for workspace context priority ordering (`WORKSPACE_CONTEXT_FILE_ORDER`), `renderWorkspaceContext` output structure, HTML comment stripping, and `parseMemoryFileContent` frontmatter/globs/contentDiffersFromDisk handling in `src/utils/gakrclimd.test.ts`.
+- **Internal Helpers Exported for Testing**: Exported `WORKSPACE_CONTEXT_FILE_ORDER`, `compareWorkspaceFiles`, `renderWorkspaceContext`, and `parseMemoryFileContent` from `src/utils/gakrclimd.ts` to enable direct unit verification of context-building internals.
+- **Memory Extraction Prompt Overhaul**: Added concise 10-turn parallel directive, workspace routing, per-file ~50 KB cap, MEMORY.md index line-cap guard, absolute path requirements, TEAMMEM flag check, and frontmatter schema example to extraction prompt in `src/services/extractMemories/prompts.ts`.
+- **Raised Auto-Update Budget**: Increased `maxTurns` from 5 to 10 in `src/services/extractMemories/extractMemories.ts` to support parallel multi-file writes (up to 10 files) across workspace and project memory in a single extraction run.
+- **Doubled MEMORY.md Index Truncation Limits**: Raised `MAX_ENTRYPOINT_LINES` from 200 to 400 and `MAX_ENTRYPOINT_BYTES` from 25 KB to 50 KB in `src/memdir/memdir.ts` for richer project `MEMORY.md` index content. Workspace-root `MEMORY.md` remains uncapped as cross-project memory; per-file topic entries still advise ~50 KB max.
+- **Context Building Documentation**: Documented the exact context shared by the main agent and the auto-update memory fork, including inherited system/user context, parent message prefix, isolated tool state, transcript skipping, and memory-safe tool restrictions.
+
+### Changed (2026-06-04)
+- **Semantic Memory Storage Only**: Removed dated session memory/log guidance from the main memory prompt, KAIROS assistant-mode memory prompt, extraction prompt, and auto-dream consolidation prompt. Memory updates now target semantic topic files plus the appropriate `MEMORY.md` index only.
+- **Open-Build KAIROS Activation**: Enabled the KAIROS build flag for local assistant-mode startup, added open-build assistant/gate/session-discovery shims, kept remote assistant session attachment out of the open-build startup path, and covered forced mode plus unavailable cloud discovery with focused tests.
+- **Runtime Wiring And Verification**: Wired the new open-build KAIROS, permission-mode, provider routing, semantic memory, settings watcher, skill watcher, auto-compact, and VS Code runtime changes together with focused regression coverage and full-suite verification.
+- **VS Code Test Runtime Compatibility**: Added a shared VS Code compatibility loader so extension unit tests can exercise runtime modules without depending on the real `vscode` host module.
+
+### Fixed (2026-06-05)
+- **Command, Tool, Agent, And Skill Registry Hardening**: Mirrored the reference registry's defensive command and tool-pool checks so malformed or partial entries cannot break loading, kept GakrCLI-specific tools/agents/skills covered by focused tests, and left retired or unfinished commands hidden.
+- **Optional Chrome Skill Loading**: Deferred GakrCLI-in-Chrome skill setup until the optional package is available and auto-enabled, preventing missing optional Chrome dependencies from breaking bundled skill registration.
+- **DuckDuckGo Web Search Fallback**: Made WebSearch auto mode use configured API-key providers first and always fall back to DuckDuckGo without requiring a provider API key, routed the DDG adapter through the resilient community search path, and fixed DuckDuckGo HTML parsing for current result markup used by web, image, and video searches.
+- **Official Plugin Checkout Hygiene**: Ignored the local `gakrcli-plugins-official/` checkout used for bundled-plugin development so plugin-repo edits can be committed and pushed independently from the GakrCLI root repository.
+- **Plugin Reload Cache Path Consistency**: Made cache-only plugin reload/startup paths use the installed `installed_plugins.json` cache path for marketplace-relative plugins, keeping MCP servers such as Telegram on the versioned plugin cache instead of drifting back to the marketplace checkout.
+- **MCP Reconnect Footer Status**: Cleared stale MCP failure/auth footer notifications once the current MCP client list no longer has matching failures, so a successfully reconnected plugin server no longer leaves `1 MCP server failed · /mcp` behind.
+- **Local MCP Channels**: Enabled the open-build `--channels` path for approved channel plugins such as Telegram and allowed third-party-provider sessions to register channel delivery without gakr.ai OAuth, while still requiring explicit session opt-in.
+- **External Channel Reply Guidance**: Wrapped external channel messages with explicit delivery instructions so Telegram-originated messages are answered through the channel MCP reply/send tools instead of terminal-only assistant prose.
+- **Channel CLI Guidance**: Exposed `--channels` in `--help` and added actionable examples when `--channels` or `--dangerously-load-development-channels` is passed without a required server argument.
+- **MCP Schema Dialects**: Made MCP tool input validation support draft-07, draft 2019-09, and draft 2020-12 JSON Schemas, including newer schema keywords from plugin MCP servers such as Playwright.
+- **Skill Listing Deduplication**: Skipped npm-global packaged `assets/skills` when `~/.gakrcli/skills` already exists and deduped loaded skills by name, preventing copied package seed skills from consuming duplicate first-turn context.
+- **Agent Listing Deduplication**: Deduped loaded custom agents by name across built-in, plugin, user, project, flag, and managed sources so copied package seed agents do not appear twice or override user-level definitions in context.
+
 ## [unreleased - 0.5.5]
 
 ### Fixed (2026-06-01)
@@ -39,7 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **VS Code Permission Prompt Reliability**: Routed pending-permission status through the real permission dialog lifecycle, added a webview fallback for SDK tool permission requests, and cleared pending permission UI/status on stop, restart, session changes, and shutdown.
 - **VS Code Runtime Refresh And Stop Polish**: Added a header refresh button that restarts the SDK runtime while preserving the current session, kept startup in Starting until provider/model state hydrates, and folded stopped-turn interruption/duration UI into the assistant turn so the cursor and copy action settle correctly.
 - **VS Code Stop And Model Picker Fixes**: Made the webview stop button render the GakrCLI interruption prompt immediately and allowed provider model discovery to enrich SDK runtime state instead of stopping at a single fallback model.
-- **VS Code Interrupt Prompt Parity**: Added the terminal-style `Interrupted · What should Gakr do instead?` row for user-stopped webview turns while keeping the turn completion duration after the interruption.
+- **VS Code Interrupt Prompt Parity**: Added the terminal-style `Interrupted · What should GakrCLI do instead?` row for user-stopped webview turns while keeping the turn completion duration after the interruption.
 - **VS Code Turn Completion UI**: Replaced the chat footer cost/token pill with the GakrCLI-style per-turn duration line, kept stopped requests quiet with only the finished duration, and made assistant copy actions available on hover for every completed response.
 - **VS Code Chat Runtime Feedback**: Added SDK-backed todo state for the webview, GakrCLI-style spinner glyphs and live turn timers, retry countdown text, per-turn usage attachment fixes, and interrupt cleanup so stopped requests no longer render synthetic abort messages.
 - **VS Code Settings Entry Point**: Kept the top-right Settings button as a lightweight placeholder dialog with a working SDK-backed refresh action while runtime setting edits continue through the composer controls.

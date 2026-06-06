@@ -1,5 +1,5 @@
 /**
- * XDG Base Directory utilities for Gakr CLI Native Installer
+ * XDG Base Directory utilities for GakrCLI CLI Native Installer
  *
  * Implements the XDG Base Directory specification for organizing
  * native installer components across appropriate system directories.

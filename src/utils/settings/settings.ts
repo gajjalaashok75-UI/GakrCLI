@@ -865,7 +865,7 @@ export function getSettingsWithSources(): SettingsWithSources {
 /**
  * Get merged settings and validation errors from all sources
  * This function now uses session-level caching to avoid repeated file I/O.
- * Settings changes require Gakr restart, so cache is valid for entire session.
+ * Settings changes require GakrCLI restart, so cache is valid for entire session.
  * @returns Merged settings and all validation errors encountered
  */
 export function getSettingsWithErrors(): SettingsWithErrors {
@@ -900,6 +900,20 @@ export function hasSkipDangerousModePermissionPrompt(): boolean {
     getSettingsForSource('localSettings')?.skipDangerousModePermissionPrompt ||
     getSettingsForSource('flagSettings')?.skipDangerousModePermissionPrompt ||
     getSettingsForSource('policySettings')?.skipDangerousModePermissionPrompt
+  )
+}
+
+/**
+ * Returns true if any trusted settings source has accepted the full access
+ * mode dialog. projectSettings is intentionally excluded â€” a malicious
+ * project could otherwise auto-bypass the dialog (RCE risk).
+ */
+export function hasSkipFullAccessModePermissionPrompt(): boolean {
+  return !!(
+    getSettingsForSource('userSettings')?.skipFullAccessModePermissionPrompt ||
+    getSettingsForSource('localSettings')?.skipFullAccessModePermissionPrompt ||
+    getSettingsForSource('flagSettings')?.skipFullAccessModePermissionPrompt ||
+    getSettingsForSource('policySettings')?.skipFullAccessModePermissionPrompt
   )
 }
 

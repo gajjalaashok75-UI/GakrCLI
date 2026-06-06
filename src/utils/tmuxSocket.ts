@@ -1,21 +1,21 @@
 /**
  * TMUX SOCKET ISOLATION
  * =====================
- * This module manages an isolated tmux socket for Gakr's operations.
+ * This module manages an isolated tmux socket for GakrCLI's operations.
  *
  * WHY THIS EXISTS:
- * Without isolation, Gakr could accidentally affect the user's tmux sessions.
+ * Without isolation, GakrCLI could accidentally affect the user's tmux sessions.
  * For example, running `tmux kill-session` via the Bash tool would kill the
- * user's current session if they started Gakr from within tmux.
+ * user's current session if they started GakrCLI from within tmux.
  *
  * HOW IT WORKS:
- * 1. Gakr creates its own tmux socket: `gakrcli-<PID>` (e.g., `gakrcli-12345`)
+ * 1. GakrCLI creates its own tmux socket: `gakrcli-<PID>` (e.g., `gakrcli-12345`)
  * 2. ALL Tmux tool commands use this socket via the `-L` flag
  * 3. ALL Bash tool commands inherit TMUX env var pointing to this socket
  *    (set in Shell.ts via getgakrcliTmuxEnv())
  *
- * This means ANY tmux command run through Gakr - whether via the Tmux tool
- * directly or via Bash - will operate on Gakr's isolated socket, NOT the
+ * This means ANY tmux command run through GakrCLI - whether via the Tmux tool
+ * directly or via Bash - will operate on GakrCLI's isolated socket, NOT the
  * user's tmux session.
  *
  * IMPORTANT: The user's original TMUX env var is NOT used. After socket
@@ -85,7 +85,7 @@ let tmuxAvailable = false
 let tmuxToolUsed = false
 
 /**
- * Gets the socket name for Gakr's isolated tmux session.
+ * Gets the socket name for GakrCLI's isolated tmux session.
  * Format: gakrcli-<PID>
  */
 export function getgakrcliSocketName(): string {
@@ -120,11 +120,11 @@ export function isSocketInitialized(): boolean {
 }
 
 /**
- * Gets the TMUX environment variable value for Gakr's isolated socket.
+ * Gets the TMUX environment variable value for GakrCLI's isolated socket.
  *
  * CRITICAL: This value is used by Shell.ts to override the TMUX env var
  * in ALL child processes. This ensures that any `tmux` command run via
- * the Bash tool will operate on Gakr's socket, NOT the user's session.
+ * the Bash tool will operate on GakrCLI's socket, NOT the user's session.
  *
  * Format: "socket_path,server_pid,pane_index" (matches tmux's TMUX env var)
  * Example: "/tmp/tmux-501/gakrcli-12345,54321,0"
@@ -246,7 +246,7 @@ export async function ensureSocketInitialized(): Promise<void> {
 }
 
 /**
- * Kills the tmux server for Gakr's isolated socket.
+ * Kills the tmux server for GakrCLI's isolated socket.
  * Called during graceful shutdown to clean up resources.
  */
 async function killTmuxServer(): Promise<void> {
@@ -316,7 +316,7 @@ async function doInitialize(): Promise<void> {
   // Set GAKR_CODE_SKIP_PROMPT_HISTORY in the tmux GLOBAL environment (-g).
   // Without -g this would only apply to the 'base' session, and new sessions
   // created by TungstenTool (e.g. 'test', 'verify') would not inherit it.
-  // Any Gakr instance spawned on this socket will inherit this env var,
+  // Any GakrCLI instance spawned on this socket will inherit this env var,
   // preventing test/verification sessions from polluting the user's real
   // command history and --resume session list.
   await execTmux([

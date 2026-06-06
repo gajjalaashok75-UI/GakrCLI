@@ -7,14 +7,25 @@
  * extractMemories.ts skips that turn (hasMemoryWritesSince). This prompt
  * fires only when the main agent didn't write, so the save-criteria here
  * overlap the system prompt's harmlessly.
+ *
+ * The forked agent's cacheSafeParams carry: user context (USER.md content
+ * including name/role), GAKRCLI_WORKSPACE snapshot (canonical workspace
+ * files such as GAKRCLI.md, RULEBOOK.md, SOUL.md, USER.md, IDENTITY.md,
+ * BOOTSTRAP.md, and MEMORY.md), the current date, and the current working directory. Use
+ * these to make extraction contextual and file-targeted.
  */
 
 import { feature } from 'bun:bundle'
 import {
-  MEMORY_FRONTMATTER_EXAMPLE,
-  TYPES_SECTION_COMBINED,
-  TYPES_SECTION_INDIVIDUAL,
-  WHAT_NOT_TO_SAVE_SECTION,
+ buildWorkspacePersistenceLines,
+ MAX_ENTRYPOINT_LINES,
+ MAX_ENTRYPOINT_BYTES,
+} from '../../memdir/memdir.js'
+import {
+ MEMORY_FRONTMATTER_EXAMPLE,
+ TYPES_SECTION_COMBINED,
+ TYPES_SECTION_INDIVIDUAL,
+ WHAT_NOT_TO_SAVE_SECTION,
 } from '../../memdir/memoryTypes.js'
 import { BASH_TOOL_NAME } from '../../tools/BashTool/toolName.js'
 import { FILE_EDIT_TOOL_NAME } from '../../tools/FileEditTool/constants.js'
@@ -31,16 +42,23 @@ function opener(newMessageCount: number, existingMemories: string): string {
     existingMemories.length > 0
       ? `\n\n## Existing memory files\n\n${existingMemories}\n\nCheck this list before writing — update an existing file rather than creating a duplicate.`
       : ''
-  return [
-    `You are now acting as the memory extraction subagent. Analyze the most recent ~${newMessageCount} messages above and use them to update your persistent memory systems.`,
-    '',
-    `Available tools: ${FILE_READ_TOOL_NAME}, ${GREP_TOOL_NAME}, ${GLOB_TOOL_NAME}, read-only ${BASH_TOOL_NAME} (ls/find/cat/stat/wc/head/tail and similar), and ${FILE_EDIT_TOOL_NAME}/${FILE_WRITE_TOOL_NAME} for paths inside the memory directory only. ${BASH_TOOL_NAME} rm is not permitted. All other tools — MCP, Agent, write-capable ${BASH_TOOL_NAME}, etc — will be denied.`,
-    '',
-    `You have a limited turn budget. ${FILE_EDIT_TOOL_NAME} requires a prior ${FILE_READ_TOOL_NAME} of the same file, so the efficient strategy is: turn 1 — issue all ${FILE_READ_TOOL_NAME} calls in parallel for every file you might update; turn 2 — issue all ${FILE_WRITE_TOOL_NAME}/${FILE_EDIT_TOOL_NAME} calls in parallel. Do not interleave reads and writes across multiple turns.`,
-    '',
-    `You MUST only use content from the last ~${newMessageCount} messages to update your persistent memories. Do not waste any turns attempting to investigate or verify that content further — no grepping source files, no reading code to confirm a pattern exists, no git commands.` +
-      manifest,
-  ].join('\n')
+return [
+  `You are now acting as the memory extraction subagent. Analyze the most recent ~${newMessageCount} messages above and use them to update your persistent memory systems.`,
+  '',
+  `You have a 10-turn budget for up to 10 total file operations (parallel reads on turn 1, parallel writes on turn 2). You can update workspace files and project memory files in the same run.`,
+  '',
+  `**Paths:**`,
+  `- Workspace files: \`~/.gakrcli/workspace/<filename>.md\` (GAKRCLI.md, RULEBOOK.md, SOUL.md, USER.md, IDENTITY.md, BOOTSTRAP.md, MEMORY.md) — read these for target files`,
+  `- Project memory: \`~/.gakrcli/workspace/projects/<project-name>/memory/\` — semantic topic files plus \`MEMORY.md\` index`,
+  `- Team memory: \`~/.gakrcli/workspace/projects/<project-name>/memory/team/\` — semantic topic files plus \`MEMORY.md\` index (only if \`TEAMMEM\` feature flag is enabled — do not write there otherwise)`,
+  '',
+  `**Rules:**`,
+  `- Each individual file must stay under ~50 KB.`,
+  `- \`MEMORY.md\` index has a line cap — prune old entries when reaching it.`,
+  `- Do not create date-named session files or chronological memory logs. Save durable information in semantic topic files and keep \`MEMORY.md\` as the index.`,
+  `- Full profile/format rules are in your workspace \`.md\` files — follow those schemas.`,
+  manifest,
+].join('\n')
 }
 
 /**
@@ -51,6 +69,7 @@ export function buildExtractAutoOnlyPrompt(
   newMessageCount: number,
   existingMemories: string,
   skipIndex = false,
+  memoryDir = 'the project auto-memory directory',
 ): string {
   const howToSave = skipIndex
     ? [
@@ -75,7 +94,7 @@ export function buildExtractAutoOnlyPrompt(
         '',
         '**Step 2** — add a pointer to that file in `MEMORY.md`. `MEMORY.md` is an index, not a memory — each entry should be one line, under ~150 characters: `- [Title](file.md) — one-line hook`. It has no frontmatter. Never write memory content directly into `MEMORY.md`.',
         '',
-        '- `MEMORY.md` is always loaded into your system prompt — lines after 200 will be truncated, so keep the index concise',
+        '- `MEMORY.md` is always loaded into your conversation context — lines after 400 will be truncated, so keep the index concise',
         '- Organize memory semantically by topic, not chronologically',
         '- Update or remove memories that turn out to be wrong or outdated',
         '- Do not write duplicate memories. First check if there is an existing memory you can update before writing a new one.',
@@ -86,6 +105,7 @@ export function buildExtractAutoOnlyPrompt(
     '',
     'If the user explicitly asks you to remember something, save it immediately as whichever type fits best. If they ask you to forget something, find and remove the relevant entry.',
     '',
+    ...buildWorkspacePersistenceLines(memoryDir),
     ...TYPES_SECTION_INDIVIDUAL,
     ...WHAT_NOT_TO_SAVE_SECTION,
     '',
@@ -102,12 +122,14 @@ export function buildExtractCombinedPrompt(
   newMessageCount: number,
   existingMemories: string,
   skipIndex = false,
+  memoryDir = 'the project auto-memory directory',
 ): string {
   if (!feature('TEAMMEM')) {
     return buildExtractAutoOnlyPrompt(
       newMessageCount,
       existingMemories,
       skipIndex,
+      memoryDir,
     )
   }
 
@@ -134,7 +156,7 @@ export function buildExtractCombinedPrompt(
         '',
         "**Step 2** — add a pointer to that file in the same directory's `MEMORY.md`. Each directory (private and team) has its own `MEMORY.md` index — each entry should be one line, under ~150 characters: `- [Title](file.md) — one-line hook`. They have no frontmatter. Never write memory content directly into a `MEMORY.md`.",
         '',
-        '- Both `MEMORY.md` indexes are loaded into your system prompt — lines after 200 will be truncated, so keep them concise',
+        '- Both `MEMORY.md` indexes are loaded into your conversation context — lines after 400 will be truncated, so keep them concise',
         '- Organize memory semantically by topic, not chronologically',
         '- Update or remove memories that turn out to be wrong or outdated',
         '- Do not write duplicate memories. First check if there is an existing memory you can update before writing a new one.',
@@ -145,6 +167,7 @@ export function buildExtractCombinedPrompt(
     '',
     'If the user explicitly asks you to remember something, save it immediately as whichever type fits best. If they ask you to forget something, find and remove the relevant entry.',
     '',
+    ...buildWorkspacePersistenceLines(memoryDir),
     ...TYPES_SECTION_COMBINED,
     ...WHAT_NOT_TO_SAVE_SECTION,
     '- You MUST avoid saving sensitive data within shared team memories. For example, never save API keys or user credentials.',

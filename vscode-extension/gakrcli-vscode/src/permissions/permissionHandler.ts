@@ -6,12 +6,13 @@
 // auto-approved, forwards to webview as permission_request. Handles webview
 // responses (allow/deny/always-allow) and sends control_response back to CLI.
 
-import * as vscode from 'vscode';
+import type * as VSCode from 'vscode';
 import type { WebviewManager } from '../webview/webviewManager';
 import type { PermissionRules } from './permissionRules';
 import type { ControlRequestPermission, ControlRequestSetPermissionMode } from '../types/messages';
 import type { PermissionMode, PermissionResult } from '../types/session';
 import { SELF_HANDLED } from '../process/controlRouter';
+import { vscode } from '../vscodeCompat';
 
 /** File edit tool names that are handled by DiffManager, not PermissionHandler */
 const FILE_EDIT_TOOLS = new Set([
@@ -39,17 +40,17 @@ interface PendingRequest {
   signal: AbortSignal;
 }
 
-export class PermissionHandler implements vscode.Disposable {
+export class PermissionHandler implements VSCode.Disposable {
   private currentMode: PermissionMode = 'default';
   private readonly pendingRequests = new Map<string, PendingRequest>();
   private readonly pendingAskUserQuestions = new Map<string, PendingRequest>();
-  private readonly disposables: vscode.Disposable[] = [];
+  private readonly disposables: VSCode.Disposable[] = [];
   private writeToStdin: WriteToStdinFn | undefined;
 
   constructor(
     private readonly webviewManager: WebviewManager,
     private readonly rules: PermissionRules,
-    private readonly output: vscode.OutputChannel,
+    private readonly output: VSCode.OutputChannel,
     private readonly onPendingChange?: (pending: boolean) => void,
   ) {
     // Listen for permission_response from webview

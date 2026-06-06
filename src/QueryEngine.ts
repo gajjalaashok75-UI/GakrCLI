@@ -62,7 +62,11 @@ import {
 import { headlessProfilerCheckpoint } from './utils/headlessProfiler.js'
 import { registerStructuredOutputEnforcement } from './utils/hooks/hookHelpers.js'
 import { getInMemoryErrors } from './utils/log.js'
-import { countToolCalls, SYNTHETIC_MESSAGES } from './utils/messages.js'
+import {
+  countToolCalls,
+  isCompactBoundaryMessage,
+  SYNTHETIC_MESSAGES,
+} from './utils/messages.js'
 import {
   getMainLoopModel,
   parseUserSpecifiedModel,
@@ -308,7 +312,7 @@ export class QueryEngine {
     // When an SDK caller provides a custom system prompt AND has set
     // GAKR_COWORK_MEMORY_PATH_OVERRIDE, inject the memory-mechanics prompt.
     // The env var is an explicit opt-in signal — the caller has wired up
-    // a memory directory and needs Gakr to know how to use it (which
+    // a memory directory and needs GakrCLI to know how to use it (which
     // Write/Edit tools to call, MEMORY.md filename, loading semantics).
     // The caller can layer their own policy text via appendSystemPrompt.
     const memoryMechanicsPrompt =
@@ -427,6 +431,9 @@ export class QueryEngine {
 
     // Push new messages, including user input and any attachments
     this.mutableMessages.push(...messagesFromUserInput)
+    if (messagesFromUserInput.some(isCompactBoundaryMessage)) {
+      this.autoCompactTracking = undefined
+    }
 
     // Update params to reflect updates from processing /slash commands
     const messages = [...this.mutableMessages]
@@ -1321,7 +1328,7 @@ export class QueryEngine {
 }
 
 /**
- * Sends a single prompt to the Gakr API and returns the response.
+ * Sends a single prompt to the GakrCLI API and returns the response.
  * Assumes that GakrCLI is being used non-interactively -- will not
  * ask the user for permissions or further input.
  *

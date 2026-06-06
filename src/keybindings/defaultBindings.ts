@@ -5,7 +5,7 @@ import { getPlatform } from '../utils/platform.js'
 import type { KeybindingBlock } from './types.js'
 
 /**
- * Default keybindings that match current Gakr behavior.
+ * Default keybindings that match current GakrCLI behavior.
  * These are loaded first, then user keybindings.json overrides them.
  */
 

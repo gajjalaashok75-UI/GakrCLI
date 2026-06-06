@@ -1,7 +1,7 @@
 export const PRODUCT_DISPLAY_NAME = 'GakrCLI'
 export const PRODUCT_URL = 'https://gakrcli.com/gakrcli-code'
 
-// Gakr Remote session URLs
+// GakrCLI Remote session URLs
 export const GAKR_AI_BASE_URL = 'https://gakr.ai'
 export const GAKR_AI_STAGING_BASE_URL = 'https://gakrcli-ai.staging.ant.dev'
 export const GAKR_AI_LOCAL_BASE_URL = 'http://localhost:4000'
@@ -35,7 +35,7 @@ export function isRemoteSessionLocal(
 }
 
 /**
- * Get the base URL for Gakr AI based on environment.
+ * Get the base URL for GakrCLI AI based on environment.
  */
 export function getgakrcliAiBaseUrl(
   sessionId?: string,

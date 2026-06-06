@@ -1,7 +1,7 @@
 // biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
 /**
  * Hooks are user-defined shell commands that can be executed at various points
- * in Gakr's lifecycle.
+ * in GakrCLI's lifecycle.
  */
 import { basename } from 'path'
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
@@ -4535,7 +4535,12 @@ export type InstructionsLoadReason =
   | 'include'
   | 'compact'
 
-export type InstructionsMemoryType = 'User' | 'Project' | 'Local' | 'Managed'
+export type InstructionsMemoryType =
+  | 'User'
+  | 'Project'
+  | 'Local'
+  | 'Managed'
+  | 'Workspace'
 
 /**
  * Check if InstructionsLoaded hooks are configured (without executing them).
@@ -4555,7 +4560,7 @@ export function hasInstructionsLoadedHook(): boolean {
 }
 
 /**
- * Execute InstructionsLoaded hooks when an instruction file (GAKR.md or
+ * Execute InstructionsLoaded hooks when an instruction file (GAKRCLI.md or
  * .gakrcli/rules/*.md) is loaded into context. Fire-and-forget — this hook is
  * for observability/audit only and does not support blocking.
  *
@@ -4563,7 +4568,7 @@ export function hasInstructionsLoadedHook(): boolean {
  * - Eager load at session start (getMemoryFiles in gakrclimd.ts)
  * - Eager reload after compaction (getMemoryFiles cache cleared by
  *   runPostCompactCleanup; next call reports load_reason: 'compact')
- * - Lazy load when Gakr touches a file that triggers nested GAKR.md or
+ * - Lazy load when GakrCLI touches a file that triggers nested GAKRCLI.md or
  *   conditional rules with paths: frontmatter (memoryFilesToAttachments in
  *   attachments.ts)
  */

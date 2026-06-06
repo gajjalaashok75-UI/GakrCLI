@@ -43,7 +43,11 @@ ${excerpt}
 }
 
 function buildLogEntry(sourcePath: string, title: string, ingestedAt: string): string {
-  return `- ${ingestedAt}: Ingested \`${sourcePath}\` into source note "${title}"`
+  return `## [${ingestedAt}] ingest | ${title}
+
+- Source: \`${sourcePath}\`
+- Action: Created generated source note.
+`
 }
 
 async function resolveContainedSourcePath(cwd: string, rawPath: string): Promise<string> {
@@ -102,7 +106,7 @@ export async function ingestLocalWikiSource(
     }),
     'utf8',
   )
-  await appendFile(paths.logFile, `${buildLogEntry(relSourcePath, title, ingestedAt)}\n`, 'utf8')
+  await appendFile(paths.logFile, `\n${buildLogEntry(relSourcePath, title, ingestedAt)}`, 'utf8')
   await rebuildWikiIndex(cwd)
 
   return {

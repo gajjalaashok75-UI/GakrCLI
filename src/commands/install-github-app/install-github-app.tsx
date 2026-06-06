@@ -163,7 +163,7 @@ function InstallGitHubApp(props: {
         setState(prev_2 => ({
           ...prev_2,
           step: 'error',
-          error: 'A Gakr workflow file already exists in this repository.',
+          error: 'A GakrCLI workflow file already exists in this repository.',
           errorReason: 'Workflow file conflict',
           errorInstructions: ['The file .github/workflows/gakrcli.yml already exists', 'You can either:', '  1. Delete the existing file and run this command again', '  2. Update the existing file manually using the template from:', `     ${GITHUB_ACTION_SETUP_DOCS_URL}`]
         }));

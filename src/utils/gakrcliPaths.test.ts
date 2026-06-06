@@ -76,6 +76,32 @@ describe('GakrCLI paths', () => {
     ).toBe('/tmp/custom-gakrcli')
   })
 
+  test('defaults workspace projects under ~/.gakrcli/workspace', async () => {
+    delete process.env.GAKR_CONFIG_DIR
+    delete process.env.GAKRCLI_WORKSPACE_DIR
+    delete process.env.GAKR_WORKSPACE_DIR
+    const { getGakrcliWorkspaceDir, getProjectsDir } =
+      await importFreshEnvUtils()
+
+    expect(getGakrcliWorkspaceDir()).toBe(
+      join(homedir(), '.gakrcli', 'workspace'),
+    )
+    expect(getProjectsDir()).toBe(
+      join(homedir(), '.gakrcli', 'workspace', 'projects'),
+    )
+  })
+
+  test('workspace override controls projects directory', async () => {
+    process.env.GAKR_CONFIG_DIR = '/tmp/custom-gakrcli'
+    const workspaceOverride = join(homedir(), 'custom-workspace')
+    process.env.GAKRCLI_WORKSPACE_DIR = workspaceOverride
+    const { getGakrcliWorkspaceDir, getProjectsDir } =
+      await importFreshEnvUtils()
+
+    expect(getGakrcliWorkspaceDir()).toBe(workspaceOverride)
+    expect(getProjectsDir()).toBe(join(workspaceOverride, 'projects'))
+  })
+
   test('default plans directory uses ~/.gakrcli/plans', async () => {
     delete process.env.GAKR_CONFIG_DIR
     const { getDefaultPlansDirectory } = await importFreshPlans()

@@ -19,14 +19,13 @@ import {
   LEGACY_AGENT_TOOL_NAME,
 } from '../tools/AgentTool/constants.js'
 import type { LogOption } from '../types/logs.js'
-import { getGakrcliConfigHomeDir } from '../utils/envUtils.js'
+import { getGakrcliConfigHomeDir, getProjectsDir } from '../utils/envUtils.js'
 import { toError } from '../utils/errors.js'
 import { execFileNoThrow } from '../utils/execFileNoThrow.js'
 import { logError } from '../utils/log.js'
 import { extractTextContent } from '../utils/messages.js'
 import { getDefaultOpusModel } from '../utils/model/model.js'
 import {
-  getProjectsDir,
   getSessionFilesWithMtime,
   getSessionIdFromLog,
   loadAllLogsFromSessionFile,
@@ -86,7 +85,7 @@ const getRemoteHostSessionCount: (hs: string) => Promise<number> =
           'ssh',
           [
             `${homespace}.coder`,
-            'find /root/.gakrcli/projects -name "*.jsonl" 2>/dev/null | wc -l',
+            'find /root/.gakrcli/workspace/projects -name "*.jsonl" 2>/dev/null | wc -l',
           ],
           { timeout: 30000 },
         )
@@ -110,7 +109,11 @@ const collectFromRemoteHost: (
           // SCP the projects folder
           const scpResult = await execFileNoThrow(
             'scp',
-            ['-rq', `${homespace}.coder:/root/.gakrcli/projects/`, tempDir],
+            [
+              '-rq',
+              `${homespace}.coder:/root/.gakrcli/workspace/projects/`,
+              tempDir,
+            ],
             { timeout: 300000 },
           )
           if (scpResult.code !== 0) {
@@ -376,7 +379,7 @@ const LABEL_MAP: Record<string, string> = {
   wrong_approach: 'Wrong Approach',
   buggy_code: 'Buggy Code',
   user_rejected_action: 'User Rejected Action',
-  gakr_got_blocked: 'Gakr Got Blocked',
+  gakr_got_blocked: 'GakrCLI Got Blocked',
   user_stopped_early: 'User Stopped Early',
   wrong_file_or_location: 'Wrong File/Location',
   excessive_changes: 'Excessive Changes',
@@ -426,13 +429,13 @@ function getSessionMetaDir(): string {
   return join(getDataDir(), 'session-meta')
 }
 
-const FACET_EXTRACTION_PROMPT = `Analyze this Gakr session and extract structured facets.
+const FACET_EXTRACTION_PROMPT = `Analyze this GakrCLI session and extract structured facets.
 
 CRITICAL GUIDELINES:
 
 1. **goal_categories**: Count ONLY what the USER explicitly asked for.
-   - DO NOT count Gakr's autonomous codebase exploration
-   - DO NOT count work Gakr decided to do on its own
+   - DO NOT count GakrCLI's autonomous codebase exploration
+   - DO NOT count work GakrCLI decided to do on its own
    - ONLY count when user says "can you...", "please...", "I need...", "let's..."
 
 2. **user_satisfaction_counts**: Base ONLY on explicit user signals.
@@ -443,7 +446,7 @@ CRITICAL GUIDELINES:
    - "this is broken", "I give up" → frustrated
 
 3. **friction_counts**: Be specific about what went wrong.
-   - misunderstood_request: Gakr interpreted incorrectly
+   - misunderstood_request: GakrCLI interpreted incorrectly
    - wrong_approach: Right goal, wrong solution method
    - buggy_code: Code didn't work correctly
    - user_rejected_action: User said no/stop to a tool call
@@ -866,9 +869,9 @@ function formatTranscriptForFacets(log: LogOption): string {
   return lines.join('\n')
 }
 
-const SUMMARIZE_CHUNK_PROMPT = `Summarize this portion of a Gakr session transcript. Focus on:
+const SUMMARIZE_CHUNK_PROMPT = `Summarize this portion of a GakrCLI session transcript. Focus on:
 1. What the user asked for
-2. What Gakr did (tools used, files modified)
+2. What GakrCLI did (tools used, files modified)
 3. Any friction or issues
 4. The outcome
 
@@ -1054,7 +1057,7 @@ RESPOND WITH ONLY A VALID JSON OBJECT matching this schema:
 }
 
 /**
- * Detects parallel session usage (using multiple Gakr sessions concurrently).
+ * Detects parallel session usage (using multiple GakrCLI sessions concurrently).
  * Uses a sliding window to find the pattern: session1 -> session2 -> session1
  * within a 30-minute window.
  */
@@ -1335,32 +1338,32 @@ type InsightSection = {
 const INSIGHT_SECTIONS: InsightSection[] = [
   {
     name: 'project_areas',
-    prompt: `Analyze this Gakr usage data and identify project areas.
+    prompt: `Analyze this GakrCLI usage data and identify project areas.
 
 RESPOND WITH ONLY A VALID JSON OBJECT:
 {
   "areas": [
-    {"name": "Area name", "session_count": N, "description": "2-3 sentences about what was worked on and how Gakr was used."}
+    {"name": "Area name", "session_count": N, "description": "2-3 sentences about what was worked on and how GakrCLI was used."}
   ]
 }
 
-Include 4-5 areas. Skip internal Gakr operations.`,
+Include 4-5 areas. Skip internal GakrCLI operations.`,
     maxTokens: 8192,
   },
   {
     name: 'interaction_style',
-    prompt: `Analyze this Gakr usage data and describe the user's interaction style.
+    prompt: `Analyze this GakrCLI usage data and describe the user's interaction style.
 
 RESPOND WITH ONLY A VALID JSON OBJECT:
 {
-  "narrative": "2-3 paragraphs analyzing HOW the user interacts with Gakr. Use second person 'you'. Describe patterns: iterate quickly vs detailed upfront specs? Interrupt often or let Gakr run? Include specific examples. Use **bold** for key insights.",
+  "narrative": "2-3 paragraphs analyzing HOW the user interacts with Gakr. Use second person 'you'. Describe patterns: iterate quickly vs detailed upfront specs? Interrupt often or let GakrCLI run? Include specific examples. Use **bold** for key insights.",
   "key_pattern": "One sentence summary of most distinctive interaction style"
 }`,
     maxTokens: 8192,
   },
   {
     name: 'what_works',
-    prompt: `Analyze this Gakr usage data and identify what's working well for this user. Use second person ("you").
+    prompt: `Analyze this GakrCLI usage data and identify what's working well for this user. Use second person ("you").
 
 RESPOND WITH ONLY A VALID JSON OBJECT:
 {
@@ -1375,7 +1378,7 @@ Include 3 impressive workflows.`,
   },
   {
     name: 'friction_analysis',
-    prompt: `Analyze this Gakr usage data and identify friction points for this user. Use second person ("you").
+    prompt: `Analyze this GakrCLI usage data and identify friction points for this user. Use second person ("you").
 
 RESPOND WITH ONLY A VALID JSON OBJECT:
 {
@@ -1390,10 +1393,10 @@ Include 3 friction categories with 2 examples each.`,
   },
   {
     name: 'suggestions',
-    prompt: `Analyze this Gakr usage data and suggest improvements.
+    prompt: `Analyze this GakrCLI usage data and suggest improvements.
 
-## GAKR FEATURES REFERENCE (pick from these for features_to_try):
-1. **MCP Servers**: Connect Gakr to external tools, databases, and APIs via Model Context Protocol.
+## GakrCLI FEATURES REFERENCE (pick from these for features_to_try):
+1. **MCP Servers**: Connect GakrCLI to external tools, databases, and APIs via Model Context Protocol.
    - How to use: Run \`gakrcli mcp add <server-name> -- <command>\`
    - Good for: database queries, Slack integration, GitHub issue lookup, connecting to internal APIs
 
@@ -1405,35 +1408,35 @@ Include 3 friction categories with 2 examples each.`,
    - How to use: Add to \`.gakrcli/settings.json\` under "hooks" key.
    - Good for: auto-formatting code, running type checks, enforcing conventions
 
-4. **Headless Mode**: Run Gakr non-interactively from scripts and CI/CD.
+4. **Headless Mode**: Run GakrCLI non-interactively from scripts and CI/CD.
    - How to use: \`gakrcli -p "fix lint errors" --allowedTools "Edit,Read,Bash"\`
    - Good for: CI/CD integration, batch code fixes, automated reviews
 
-5. **Task Agents**: Gakr spawns focused sub-agents for complex exploration or parallel work.
-   - How to use: Gakr auto-invokes when helpful, or ask "use an agent to explore X"
+5. **Task Agents**: GakrCLI spawns focused sub-agents for complex exploration or parallel work.
+   - How to use: GakrCLI auto-invokes when helpful, or ask "use an agent to explore X"
    - Good for: codebase exploration, understanding complex systems
 
 RESPOND WITH ONLY A VALID JSON OBJECT:
 {
   "gakr_md_additions": [
-    {"addition": "A specific line or block to add to GAKR.md based on workflow patterns. E.g., 'Always run tests after modifying auth-related files'", "why": "1 sentence explaining why this would help based on actual sessions", "prompt_scaffold": "Instructions for where to add this in GAKR.md. E.g., 'Add under ## Testing section'"}
+    {"addition": "A specific line or block to add to GAKRCLI.md based on workflow patterns. E.g., 'Always run tests after modifying auth-related files'", "why": "1 sentence explaining why this would help based on actual sessions", "prompt_scaffold": "Instructions for where to add this in GAKRCLI.md. E.g., 'Add under ## Testing section'"}
   ],
   "features_to_try": [
-    {"feature": "Feature name from GAKR FEATURES REFERENCE above", "one_liner": "What it does", "why_for_you": "Why this would help YOU based on your sessions", "example_code": "Actual command or config to copy"}
+    {"feature": "Feature name from GakrCLI FEATURES REFERENCE above", "one_liner": "What it does", "why_for_you": "Why this would help YOU based on your sessions", "example_code": "Actual command or config to copy"}
   ],
   "usage_patterns": [
     {"title": "Short title", "suggestion": "1-2 sentence summary", "detail": "3-4 sentences explaining how this applies to YOUR work", "copyable_prompt": "A specific prompt to copy and try"}
   ]
 }
 
-IMPORTANT for gakr_md_additions: PRIORITIZE instructions that appear MULTIPLE TIMES in the user data. If user told Gakr the same thing in 2+ sessions (e.g., 'always run tests', 'use TypeScript'), that's a PRIME candidate - they shouldn't have to repeat themselves.
+IMPORTANT for gakr_md_additions: PRIORITIZE instructions that appear MULTIPLE TIMES in the user data. If user told GakrCLI the same thing in 2+ sessions (e.g., 'always run tests', 'use TypeScript'), that's a PRIME candidate - they shouldn't have to repeat themselves.
 
-IMPORTANT for features_to_try: Pick 2-3 from the GAKR FEATURES REFERENCE above. Include 2-3 items for each category.`,
+IMPORTANT for features_to_try: Pick 2-3 from the GakrCLI FEATURES REFERENCE above. Include 2-3 items for each category.`,
     maxTokens: 8192,
   },
   {
     name: 'on_the_horizon',
-    prompt: `Analyze this Gakr usage data and identify future opportunities.
+    prompt: `Analyze this GakrCLI usage data and identify future opportunities.
 
 RESPOND WITH ONLY A VALID JSON OBJECT:
 {
@@ -1450,7 +1453,7 @@ Include 3 opportunities. Think BIG - autonomous workflows, parallel agents, iter
     ? [
         {
           name: 'cc_team_improvements',
-          prompt: `Analyze this Gakr usage data and suggest product improvements for the Gakr team.
+          prompt: `Analyze this GakrCLI usage data and suggest product improvements for the GakrCLI team.
 
 RESPOND WITH ONLY A VALID JSON OBJECT:
 {
@@ -1464,7 +1467,7 @@ Include 2-3 improvements based on friction patterns observed.`,
         },
         {
           name: 'model_behavior_improvements',
-          prompt: `Analyze this Gakr usage data and suggest model behavior improvements.
+          prompt: `Analyze this GakrCLI usage data and suggest model behavior improvements.
 
 RESPOND WITH ONLY A VALID JSON OBJECT:
 {
@@ -1480,7 +1483,7 @@ Include 2-3 improvements based on friction patterns observed.`,
     : []),
   {
     name: 'fun_ending',
-    prompt: `Analyze this Gakr usage data and find a memorable moment.
+    prompt: `Analyze this GakrCLI usage data and find a memorable moment.
 
 RESPOND WITH ONLY A VALID JSON OBJECT:
 {
@@ -1625,7 +1628,7 @@ async function generateParallelInsights(
     .join('\n')
 
   const userInstructions = Array.from(facets.values())
-    .flatMap(f => f.user_instructions_to_gakr || [])
+    .flatMap(f => f.user_instructions_to_gakrcli  || [])
     .slice(0, 15)
     .map(i => `- ${i}`)
     .join('\n')
@@ -1734,15 +1737,15 @@ async function generateParallelInsights(
       .join('\n') || ''
 
   // Now generate "At a Glance" with access to other sections' outputs
-  const atAGlancePrompt = `You're writing an "At a Glance" summary for a Gakr usage insights report for Gakr users. The goal is to help them understand their usage and improve how they can use Gakr better, especially as models improve.
+  const atAGlancePrompt = `You're writing an "At a Glance" summary for a GakrCLI usage insights report for GakrCLI users. The goal is to help them understand their usage and improve how they can use GakrCLI better, especially as models improve.
 
 Use this 4-part structure:
 
-1. **What's working** - What is the user's unique style of interacting with Gakr and what are some impactful things they've done? You can include one or two details, but keep it high level since things might not be fresh in the user's memory. Don't be fluffy or overly complimentary. Also, don't focus on the tool calls they use.
+1. **What's working** - What is the user's unique style of interacting with GakrCLI and what are some impactful things they've done? You can include one or two details, but keep it high level since things might not be fresh in the user's memory. Don't be fluffy or overly complimentary. Also, don't focus on the tool calls they use.
 
-2. **What's hindering you** - Split into (a) Gakr's fault (misunderstandings, wrong approaches, bugs) and (b) user-side friction (not providing enough context, environment issues -- ideally more general than just one project). Be honest but constructive.
+2. **What's hindering you** - Split into (a) GakrCLI's fault (misunderstandings, wrong approaches, bugs) and (b) user-side friction (not providing enough context, environment issues -- ideally more general than just one project). Be honest but constructive.
 
-3. **Quick wins to try** - Specific Gakr features they could try from the examples below, or a workflow technique if you think it's really compelling. (Avoid stuff like "Ask Gakr to confirm before taking actions" or "Type out more context up front" which are less compelling.)
+3. **Quick wins to try** - Specific GakrCLI features they could try from the examples below, or a workflow technique if you think it's really compelling. (Avoid stuff like "Ask GakrCLI to confirm before taking actions" or "Type out more context up front" which are less compelling.)
 
 4. **Ambitious workflows for better models** - As we move to much more capable models over the next 3-6 months, what should they prepare for? What workflows that seem impossible now will become possible? Draw from the appropriate section below.
 
@@ -2066,10 +2069,10 @@ function generateHtmlReport(
       suggestions.gakr_md_additions &&
       suggestions.gakr_md_additions.length > 0
         ? `
-    <h2 id="section-features">Existing Gakr Features to Try</h2>
+    <h2 id="section-features">Existing GakrCLI Features to Try</h2>
     <div class="gakrcli-md-section">
-      <h3>Suggested GAKR.md Additions</h3>
-      <p style="font-size: 12px; color: #64748b; margin-bottom: 12px;">Just copy this into Gakr to add it to your GAKR.md.</p>
+      <h3>Suggested GAKRCLI.md Additions</h3>
+      <p style="font-size: 12px; color: #64748b; margin-bottom: 12px;">Just copy this into GakrCLI to add it to your GAKRCLI.md.</p>
       <div class="gakrcli-md-actions">
         <button class="copy-all-btn" onclick="copyAllCheckedGakrMd()">Copy All Checked</button>
       </div>
@@ -2077,7 +2080,7 @@ function generateHtmlReport(
         .map(
           (add, i) => `
         <div class="gakrcli-md-item">
-          <input type="checkbox" id="cmd-${i}" class="cmd-checkbox" checked data-text="${escapeHtml(add.prompt_scaffold || add.where || 'Add to GAKR.md')}\\n\\n${escapeHtml(add.addition)}">
+          <input type="checkbox" id="cmd-${i}" class="cmd-checkbox" checked data-text="${escapeHtml(add.prompt_scaffold || add.where || 'Add to GAKRCLI.md')}\\n\\n${escapeHtml(add.addition)}">
           <label for="cmd-${i}">
             <code class="cmd-code">${escapeHtml(add.addition)}</code>
             <button class="copy-btn" onclick="copyCmdItem(${i})">Copy</button>
@@ -2094,7 +2097,7 @@ function generateHtmlReport(
     ${
       suggestions.features_to_try && suggestions.features_to_try.length > 0
         ? `
-    <p style="font-size: 13px; color: #64748b; margin-bottom: 12px;">Just copy this into Gakr and it'll set it up for you.</p>
+    <p style="font-size: 13px; color: #64748b; margin-bottom: 12px;">Just copy this into GakrCLI and it'll set it up for you.</p>
     <div class="features-section">
       ${suggestions.features_to_try
         .map(
@@ -2129,7 +2132,7 @@ function generateHtmlReport(
       suggestions.usage_patterns && suggestions.usage_patterns.length > 0
         ? `
     <h2 id="section-patterns">New Ways to Use Gakr</h2>
-    <p style="font-size: 13px; color: #64748b; margin-bottom: 12px;">Just copy this into Gakr and it'll walk you through it.</p>
+    <p style="font-size: 13px; color: #64748b; margin-bottom: 12px;">Just copy this into GakrCLI and it'll walk you through it.</p>
     <div class="patterns-section">
       ${suggestions.usage_patterns
         .map(
@@ -2199,14 +2202,14 @@ function generateHtmlReport(
     ccImprovements.length > 0 || modelImprovements.length > 0
       ? `
     <h2 id="section-feedback" class="feedback-header">Closing the Loop: Feedback for Other Teams</h2>
-    <p class="feedback-intro">Suggestions for the Gakr product and model teams based on your usage patterns. Click to expand.</p>
+    <p class="feedback-intro">Suggestions for the GakrCLI product and model teams based on your usage patterns. Click to expand.</p>
     ${
       ccImprovements.length > 0
         ? `
     <div class="collapsible-section">
       <div class="collapsible-header" onclick="toggleCollapsible(this)">
         <span class="collapsible-arrow">▶</span>
-        <h3>Product Improvements for Gakr Team</h3>
+        <h3>Product Improvements for GakrCLI Team</h3>
       </div>
       <div class="collapsible-content">
         <div class="suggestions-section">
@@ -2484,13 +2487,13 @@ function generateHtmlReport(
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Gakr Insights</title>
+  <title>GakrCLI Insights</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>${css}</style>
 </head>
 <body>
   <div class="container">
-    <h1>Gakr Insights</h1>
+    <h1>GakrCLI Insights</h1>
     <p class="subtitle">${data.total_messages.toLocaleString()} messages across ${data.total_sessions} sessions${data.total_sessions_scanned && data.total_sessions_scanned > data.total_sessions ? ` (${data.total_sessions_scanned.toLocaleString()} total)` : ''} | ${data.date_range.start} to ${data.date_range.end}</p>
 
     ${atAGlanceHtml}
@@ -2556,7 +2559,7 @@ function generateHtmlReport(
         data.multi_clauding.overlap_events === 0
           ? `
         <p style="font-size: 14px; color: #64748b; padding: 8px 0;">
-          No parallel session usage detected. You typically work with one Gakr session at a time.
+          No parallel session usage detected. You typically work with one GakrCLI session at a time.
         </p>
       `
           : `
@@ -2575,7 +2578,7 @@ function generateHtmlReport(
           </div>
         </div>
         <p style="font-size: 13px; color: #475569; margin-top: 12px;">
-          You run multiple Gakr sessions simultaneously. Parallel session overlap is detected when sessions
+          You run multiple GakrCLI sessions simultaneously. Parallel session overlap is detected when sessions
           overlap in time, suggesting parallel workflows.
         </p>
       `
@@ -2609,7 +2612,7 @@ function generateHtmlReport(
 
     <div class="charts-row">
       <div class="chart-card">
-        <div class="chart-title">What Helped Most (Gakr's Capabilities)</div>
+        <div class="chart-title">What Helped Most (GakrCLI's Capabilities)</div>
         ${generateBarChart(data.success, '#16a34a')}
       </div>
       <div class="chart-card">
@@ -2805,7 +2808,7 @@ export async function generateUsageReport(options?: {
 
   // Optionally collect data from remote hosts first (ant-only)
   if (process.env.USER_TYPE === 'ant' && options?.collectRemote) {
-    const destDir = join(getGakrcliConfigHomeDir(), 'projects')
+    const destDir = getProjectsDir()
     const { hosts, totalCopied } = await collectAllRemoteHostData(destDir)
     remoteStats = { hosts, totalCopied }
   }
@@ -2993,7 +2996,7 @@ export async function generateUsageReport(options?: {
   const aggregated = aggregateData(substantiveSessions, substantiveFacets)
   aggregated.total_sessions_scanned = totalSessionsScanned
 
-  // Generate parallel insights from Gakr (6 sections)
+  // Generate parallel insights from GakrCLI (6 sections)
   const insights = await generateParallelInsights(aggregated, facets)
 
   // Generate HTML report
@@ -3038,7 +3041,7 @@ function safeKeys(obj: Record<string, unknown> | undefined | null): string[] {
 const usageReport: Command = {
   type: 'prompt',
   name: 'insights',
-  description: 'Generate a report analyzing your Gakr sessions',
+  description: 'Generate a report analyzing your GakrCLI sessions',
   contentLength: 0, // Dynamic content
   progressMessage: 'analyzing your sessions',
   source: 'builtin',
@@ -3118,7 +3121,7 @@ ${atAGlance.quick_wins ? `**Quick wins to try:** ${atAGlance.quick_wins} See _Fe
 ${atAGlance.ambitious_workflows ? `**Ambitious workflows:** ${atAGlance.ambitious_workflows} See _On the Horizon_.` : ''}`
       : '_No insights generated_'
 
-    const header = `# Gakr Insights
+    const header = `# GakrCLI Insights
 
 ${stats}
 ${data.date_range.start} to ${data.date_range.end}
@@ -3129,11 +3132,11 @@ ${remoteInfo}
 
 Your full shareable insights report is ready: ${reportUrl}${uploadHint}`
 
-    // Return prompt for Gakr to respond to
+    // Return prompt for GakrCLI to respond to
     return [
       {
         type: 'text',
-        text: `The user just ran /insights to generate a usage report analyzing their Gakr sessions.
+        text: `The user just ran /insights to generate a usage report analyzing their GakrCLI sessions.
 
 Here is the full insights data:
 ${jsonStringify(insights, null, 2)}

@@ -4,7 +4,7 @@
 
 # GakrCLI
 
-**Version 0.5.5**
+**Version 0.5.6**
 
 Any model. Every tool. One terminal-first coding agent.
 
@@ -17,7 +17,7 @@ The published npm package is `@gakr-gakr/gakrcli`. The executable command is `ga
 ## Install
 
 ```bash
-npm install -g @gakr-gakr/gakrcli@0.5.5
+npm install -g @gakr-gakr/gakrcli@0.5.6
 gakrcli
 ```
 
@@ -115,7 +115,7 @@ gakrcli
 
 ## Provider List
 
-GakrCLI 0.5.5 supports native providers, OpenAI-compatible vendors, gateways, and local runtimes. Use `/provider` for guided setup or set the documented environment variables manually.
+GakrCLI 0.5.6 supports native providers, OpenAI-compatible vendors, gateways, and local runtimes. Use `/provider` for guided setup or set the documented environment variables manually.
 
 - Anthropic Claude: `ANTHROPIC_API_KEY`, optional `ANTHROPIC_MODEL`.
 - OpenAI: `GAKR_CODE_USE_OPENAI=1`, `OPENAI_API_KEY`, optional `OPENAI_MODEL`.
@@ -249,7 +249,7 @@ for await (const message of q) {
 }
 ```
 
-Current SDK-facing improvements in 0.5.5:
+Current SDK-facing improvements in 0.5.6:
 
 - Stable context usage snapshots for active, new, and resumed sessions.
 - Autocompact status events for compacting and compacted transcript markers.
@@ -262,7 +262,7 @@ Read [docs/GAKRCLI_SDK.md](docs/GAKRCLI_SDK.md) for the full SDK guide.
 
 ## VS Code Extension
 
-The GakrCLI VS Code extension is published separately as `gakrcli-vscode` version `0.2.3`.
+The GakrCLI VS Code extension is published separately as `gakrcli-vscode` version `0.2.4`.
 
 It uses the GakrCLI SDK runtime for the native webview flow and falls back to terminal mode when requested. See [vscode-extension/gakrcli-vscode/README.md](vscode-extension/gakrcli-vscode/README.md), [vscode-extension/gakrcli-vscode/docs/USER_GUIDE.md](vscode-extension/gakrcli-vscode/docs/USER_GUIDE.md), and [vscode-extension/gakrcli-vscode/docs/ARCHITECTURE.md](vscode-extension/gakrcli-vscode/docs/ARCHITECTURE.md).
 
@@ -305,13 +305,14 @@ It should not include `.env`, `.gakrcli`, `.vscode`, source tests, workspace tra
 
 Publish order for this release:
 
-1. Build and dry-pack root `@gakr-gakr/gakrcli@0.5.5`.
+1. Build and dry-pack root `@gakr-gakr/gakrcli@0.5.6`.
 2. Publish the root npm package.
-3. Refresh the VS Code extension lockfile against the published `@gakr-gakr/gakrcli@0.5.5`.
-4. Build and package `gakrcli-vscode@0.2.3` as a VSIX.
+3. Refresh the VS Code extension lockfile against the published `@gakr-gakr/gakrcli@0.5.6`.
+4. Build and package `gakrcli-vscode@0.2.4` as a VSIX.
 
 ## Documentation
 
+- [Documentation index](docs/README.md)
 - [Provider reference](docs/PROVIDERS.md)
 - [Advanced setup](docs/advanced-setup.md)
 - [Windows quick start](docs/quick-start-windows.md)
@@ -319,8 +320,10 @@ Publish order for this release:
 - [Non-technical setup](docs/non-technical-setup.md)
 - [SDK guide](docs/GAKRCLI_SDK.md)
 - [Integration architecture](docs/integrations/overview.md)
+- [Project structure](docs/architecture/project-structure.md)
 - [System flow diagrams](docs/SYSTEM_FLOW_DIAGRAMS.md)
 - [Complete system architecture](docs/architecture/COMPLETE_SYSTEM_ARCHITECTURE.md)
+- [VS Code extension reference](vscode-extension/gakrcli-vscode/docs/REFERENCE.md)
 
 ## License
 

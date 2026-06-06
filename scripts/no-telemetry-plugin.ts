@@ -54,6 +54,10 @@ const _openBuildDefaults = {
   'tengu_hive_evidence': true,  // VERIFICATION_AGENT — read-only test/verification agent (upstream: false)
   'tengu_passport_quail': true, // EXTRACT_MEMORIES — enable memory extraction (upstream: false)
   'tengu_coral_fern': true,     // EXTRACT_MEMORIES — enable memory search in past context (upstream: false)
+  'tengu_harbor': true,         // KAIROS_CHANNELS — enable local MCP channel delivery (upstream: false)
+  'tengu_harbor_ledger': [
+    { marketplace: 'gakrcli-plugins-official', plugin: 'telegram' },
+  ],
 };
 
 /* ── Known runtime feature keys (reference only) ───────────────────────
