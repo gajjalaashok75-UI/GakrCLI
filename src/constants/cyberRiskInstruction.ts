@@ -1,7 +1,7 @@
 /**
  * CYBER_RISK_INSTRUCTION
  *
- * This instruction provides guidance for Gakr's behavior when handling
+ * This instruction provides guidance for GakrCLI's behavior when handling
  * security-related requests. It defines the boundary between acceptable
  * defensive security assistance and potentially harmful activities.
  *

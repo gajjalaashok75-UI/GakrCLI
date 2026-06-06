@@ -54,7 +54,7 @@ Analyze the project to detect what's in different subdirectories. The project ma
    - Check MCP configuration (.mcp.json) for browser automation tools:
      - Playwright MCP server
      - Chrome DevTools MCP server
-     - GakrCLI Chrome Extension MCP (browser-use via Gakr's Chrome extension)
+     - GakrCLI Chrome Extension MCP (browser-use via GakrCLI's Chrome extension)
    - For Python projects, check for playwright, pytest-playwright
 
 ## Phase 2: Verification Tool Setup

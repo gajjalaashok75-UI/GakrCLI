@@ -209,12 +209,12 @@ export async function createBashShellProvider(
       command: string,
     ): Promise<Record<string, string>> {
       // TMUX SOCKET ISOLATION (DEFERRED):
-      // We initialize Gakr's tmux socket ONLY AFTER the Tmux tool has been used
+      // We initialize GakrCLI's tmux socket ONLY AFTER the Tmux tool has been used
       // at least once, OR if the current command appears to use tmux.
       // This defers the startup cost until tmux is actually needed.
       //
       // Once the Tmux tool is used (or a tmux command runs), all subsequent Bash
-      // commands will use Gakr's isolated socket via the TMUX env var override.
+      // commands will use GakrCLI's isolated socket via the TMUX env var override.
       //
       // See tmuxSocket.ts for the full isolation architecture documentation.
       const commandUsesTmux = command.includes('tmux')
@@ -226,8 +226,8 @@ export async function createBashShellProvider(
       }
       const gakrcliTmuxEnv = getgakrcliTmuxEnv()
       const env: Record<string, string> = {}
-      // CRITICAL: Override TMUX to isolate ALL tmux commands to Gakr's socket.
-      // This is NOT the user's TMUX value - it points to Gakr's isolated socket.
+      // CRITICAL: Override TMUX to isolate ALL tmux commands to GakrCLI's socket.
+      // This is NOT the user's TMUX value - it points to GakrCLI's isolated socket.
       // When null (before socket initializes), user's TMUX is preserved.
       if (gakrcliTmuxEnv) {
         env.TMUX = gakrcliTmuxEnv

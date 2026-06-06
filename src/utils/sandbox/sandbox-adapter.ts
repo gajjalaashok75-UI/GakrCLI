@@ -256,7 +256,7 @@ export function convertToSandboxRuntimeConfig(
 
   // SECURITY: Git's is_git_directory() treats cwd as a bare repo if it has
   // HEAD + objects/ + refs/. An attacker planting these (plus a config with
-  // core.fsmonitor) escapes the sandbox when Gakr's unsandboxed git runs.
+  // core.fsmonitor) escapes the sandbox when GakrCLI's unsandboxed git runs.
   //
   // Unconditionally denying these paths makes sandbox-runtime mount
   // /dev/null at non-existent ones, which (a) leaves a 0-byte HEAD stub on
@@ -398,7 +398,7 @@ const bareGitRepoScrubPaths: string[] = []
 
 /**
  * Delete bare-repo files planted at cwd during a sandboxed command, before
- * Gakr's unsandboxed git calls can see them. See the SECURITY block above
+ * GakrCLI's unsandboxed git calls can see them. See the SECURITY block above
  * bareGitRepoFiles. anthropics/gakrcli-code#29316.
  */
 function scrubBareGitRepoFiles(): void {

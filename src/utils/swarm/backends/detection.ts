@@ -27,7 +27,7 @@ let isInITerm2Cached: boolean | null = null
 /**
  * Checks if we're currently running inside a tmux session (synchronous version).
  * Uses the original TMUX value captured at module load, not process.env.TMUX,
- * because Shell.ts overrides TMUX when Gakr's socket is initialized.
+ * because Shell.ts overrides TMUX when GakrCLI's socket is initialized.
  *
  * IMPORTANT: We ONLY check the TMUX env var. We do NOT run `tmux display-message`
  * as a fallback because that command will succeed if ANY tmux server is running
@@ -40,7 +40,7 @@ export function isInsideTmuxSync(): boolean {
 /**
  * Checks if we're currently running inside a tmux session.
  * Uses the original TMUX value captured at module load, not process.env.TMUX,
- * because Shell.ts overrides TMUX when Gakr's socket is initialized.
+ * because Shell.ts overrides TMUX when GakrCLI's socket is initialized.
  * Caches the result since this won't change during the process lifetime.
  *
  * IMPORTANT: We ONLY check the TMUX env var. We do NOT run `tmux display-message`

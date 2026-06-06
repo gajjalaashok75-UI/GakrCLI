@@ -1583,7 +1583,7 @@ function checkPathConstraintsForStatement(
   // STALE getCwd() snapshot. Example attack (finding #3):
   //   Set-Location ./.gakrcli; Set-Content ./settings.json '...'
   // Validator sees ./settings.json → /project/settings.json (not a config file).
-  // Runtime writes /project/.gakrcli/settings.json (Gakr's permission config).
+  // Runtime writes /project/.gakrcli/settings.json (GakrCLI's permission config).
   //
   // ALTERNATIVE APPROACH (rejected): simulate cwd through the statement chain
   // — after `Set-Location ./.gakrcli`, validate subsequent statements with
