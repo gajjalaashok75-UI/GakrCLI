@@ -31,7 +31,7 @@ For the normal CLI path, context building starts in two stages:
 1. `main.tsx` calls `setup(...)`.
 2. `setup()` calls `ensureGakrcliWorkspace()` before most runtime setup.
 3. Later, when the first model call is needed, `query()` receives `systemPrompt`, `systemContext`, `userContext`, tools, and the current message list.
-4. `query()` appends `systemContext` to the system prompt with `appendSystemContext(...)`.
+4. `query()` computes a `fullSystemPrompt` with `appendSystemContext(...)` for context accounting and compaction inputs. In the current main streaming call, `deps.callModel` receives `promptWithArc` as the direct `systemPrompt` argument, so verify the API path before assuming `systemContext` is serialized into every provider request.
 5. Before calling the model, `query()` prepends `userContext` to the messages with `prependUserContext(...)`.
 
 The practical call chain is:
@@ -65,7 +65,7 @@ main.tsx / QueryEngine.ts
      -> add currentDate
 
 query.ts
-  -> appendSystemContext(systemPrompt, systemContext)
+  -> appendSystemContext(systemPrompt, systemContext) for accounting/compaction
   -> prependUserContext(messagesForQuery, userContext)
   -> callModel({ systemPrompt, messages, tools, ... })
 ```
