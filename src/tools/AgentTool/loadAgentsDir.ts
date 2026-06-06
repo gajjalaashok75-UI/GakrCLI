@@ -194,16 +194,18 @@ export function getActiveAgentsFromList(
 ): AgentDefinition[] {
   const builtInAgents = allAgents.filter(a => a.source === 'built-in')
   const pluginAgents = allAgents.filter(a => a.source === 'plugin')
-  const userAgents = allAgents.filter(a => a.source === 'userSettings')
   const projectAgents = allAgents.filter(a => a.source === 'projectSettings')
+  const userAgents = allAgents.filter(a => a.source === 'userSettings')
+  const localAgents = allAgents.filter(a => a.source === 'localSettings')
   const managedAgents = allAgents.filter(a => a.source === 'policySettings')
   const flagAgents = allAgents.filter(a => a.source === 'flagSettings')
 
   const agentGroups = [
     builtInAgents,
     pluginAgents,
-    userAgents,
     projectAgents,
+    userAgents,
+    localAgents,
     flagAgents,
     managedAgents,
   ]
@@ -217,6 +219,19 @@ export function getActiveAgentsFromList(
   }
 
   return Array.from(agentMap.values())
+}
+
+function deduplicateAgentsByType(
+  agents: AgentDefinition[],
+): AgentDefinition[] {
+  const deduplicated = getActiveAgentsFromList(agents)
+  const duplicatesRemoved = agents.length - deduplicated.length
+  if (duplicatesRemoved > 0) {
+    logForDebugging(
+      `Deduplicated ${duplicatesRemoved} agents by name across loader sources`,
+    )
+  }
+  return deduplicated
 }
 
 /**
@@ -346,11 +361,11 @@ export const getAgentDefinitionsWithOverrides = memoize(
 
       const builtInAgents = getBuiltInAgents()
 
-      const allAgentsList: AgentDefinition[] = [
+      const allAgentsList = deduplicateAgentsByType([
         ...builtInAgents,
         ...pluginAgents,
         ...customAgents,
-      ]
+      ])
 
       const activeAgents = getActiveAgentsFromList(allAgentsList)
 

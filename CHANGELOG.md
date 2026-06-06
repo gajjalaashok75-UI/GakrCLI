@@ -42,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Channel CLI Guidance**: Exposed `--channels` in `--help` and added actionable examples when `--channels` or `--dangerously-load-development-channels` is passed without a required server argument.
 - **MCP Schema Dialects**: Made MCP tool input validation support draft-07, draft 2019-09, and draft 2020-12 JSON Schemas, including newer schema keywords from plugin MCP servers such as Playwright.
 - **Skill Listing Deduplication**: Skipped npm-global packaged `assets/skills` when `~/.gakrcli/skills` already exists and deduped loaded skills by name, preventing copied package seed skills from consuming duplicate first-turn context.
+- **Agent Listing Deduplication**: Deduped loaded custom agents by name across built-in, plugin, user, project, flag, and managed sources so copied package seed agents do not appear twice or override user-level definitions in context.
 
 ## [unreleased - 0.5.5]
 
