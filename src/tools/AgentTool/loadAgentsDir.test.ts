@@ -124,6 +124,40 @@ describe('agent definition loading', () => {
     ).toBe(true)
   })
 
+  test('deduplicates agents by name across user and project sources', async () => {
+    const projectDir = join(tempDir, 'project')
+    await writeAgent(
+      join(process.env.GAKR_CONFIG_DIR!, 'agents', 'duplicate-agent.md'),
+      'duplicate-agent',
+      'user prompt',
+    )
+    await writeAgent(
+      join(projectDir, '.gakrcli', 'agents', 'duplicate-agent.md'),
+      'duplicate-agent',
+      'project prompt',
+    )
+    await writeAgent(
+      join(projectDir, '.gakrcli', 'agents', 'project-only.md'),
+      'project-only',
+    )
+
+    const { activeAgents, allAgents } =
+      await getAgentDefinitionsWithOverrides(projectDir)
+    const activeDuplicate = activeAgents.filter(
+      agent => agent.agentType === 'duplicate-agent',
+    )
+    const allDuplicate = allAgents.filter(
+      agent => agent.agentType === 'duplicate-agent',
+    )
+
+    expect(activeDuplicate).toHaveLength(1)
+    expect(allDuplicate).toHaveLength(1)
+    expect(activeDuplicate[0]?.source).toBe('userSettings')
+    expect(activeAgents.some(agent => agent.agentType === 'project-only')).toBe(
+      true,
+    )
+  })
+
   test('ignores project agents from .claude', async () => {
     const projectDir = join(tempDir, 'project')
     await writeAgent(
