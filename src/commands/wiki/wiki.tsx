@@ -83,12 +83,12 @@ async function runWikiCommand(
   const [rawSubcommand = '', ...rest] = trimmedArgs.split(/\s+/)
   const normalized = rawSubcommand.toLowerCase()
 
-  if (COMMON_HELP_ARGS.includes(normalized) || COMMON_INFO_ARGS.includes(normalized)) {
+  if (COMMON_HELP_ARGS.includes(normalized)) {
     onDone(renderHelp(), { display: 'system' })
     return
   }
 
-  if (!normalized || normalized === 'status') {
+  if (!normalized || normalized === 'status' || COMMON_INFO_ARGS.includes(normalized)) {
     onDone(formatStatus(await getWikiStatus(cwd)), { display: 'system' })
     return
   }
