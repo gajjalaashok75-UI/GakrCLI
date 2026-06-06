@@ -31,6 +31,26 @@ async function listMarkdownFiles(dir: string): Promise<string[]> {
   return files
 }
 
+async function countFiles(dir: string): Promise<number> {
+  if (!(await pathExists(dir))) {
+    return 0
+  }
+
+  const entries = await readdir(dir, { withFileTypes: true })
+  let count = 0
+
+  for (const entry of entries) {
+    const fullPath = `${dir}/${entry.name}`
+    if (entry.isDirectory()) {
+      count += await countFiles(fullPath)
+    } else if (entry.isFile()) {
+      count += 1
+    }
+  }
+
+  return count
+}
+
 async function getLastUpdatedAt(pathsToCheck: string[]): Promise<string | null> {
   const mtimes: number[] = []
 
@@ -53,12 +73,13 @@ async function getLastUpdatedAt(pathsToCheck: string[]): Promise<string | null> 
 export async function getWikiStatus(cwd: string): Promise<WikiStatus> {
   const paths = getWikiPaths(cwd)
 
-  const [hasRoot, hasSchema, hasIndex, hasLog, pages, sources] =
+  const [hasRoot, hasSchema, hasIndex, hasLog, rawSourceCount, pages, sources] =
     await Promise.all([
       pathExists(paths.root),
       pathExists(paths.schemaFile),
       pathExists(paths.indexFile),
       pathExists(paths.logFile),
+      countFiles(paths.rawDir),
       listMarkdownFiles(paths.pagesDir),
       listMarkdownFiles(paths.sourcesDir),
     ])
@@ -66,6 +87,7 @@ export async function getWikiStatus(cwd: string): Promise<WikiStatus> {
   return {
     initialized: hasRoot && hasSchema && hasIndex && hasLog,
     root: paths.root,
+    rawSourceCount,
     pageCount: pages.length,
     sourceCount: sources.length,
     hasSchema,

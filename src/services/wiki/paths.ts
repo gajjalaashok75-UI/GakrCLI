@@ -9,6 +9,7 @@ export function getWikiPaths(cwd: string): WikiPaths {
 
   return {
     root,
+    rawDir: join(root, 'raw'),
     pagesDir: join(root, 'pages'),
     sourcesDir: join(root, 'sources'),
     schemaFile: join(root, 'schema.md'),

@@ -1,5 +1,6 @@
 export type WikiPaths = {
   root: string
+  rawDir: string
   pagesDir: string
   sourcesDir: string
   schemaFile: string
@@ -17,6 +18,7 @@ export type WikiInitResult = {
 export type WikiStatus = {
   initialized: boolean
   root: string
+  rawSourceCount: number
   pageCount: number
   sourceCount: number
   hasSchema: boolean

@@ -16,9 +16,9 @@ function renderHelp(): string {
 Manage the GakrCLI project wiki stored in .gakrcli/wiki.
 
 Commands:
-  /wiki init    Initialize the wiki structure in the current project
-  /wiki status  Show wiki status and page/source counts
-  /wiki ingest  Ingest a local file into wiki sources
+  /wiki init    Initialize the LLM-maintained wiki structure
+  /wiki status  Show wiki status and raw/page/source counts
+  /wiki ingest  Ingest a local file into generated source notes
 
 Examples:
   /wiki init
@@ -53,8 +53,9 @@ function formatStatus(status: Awaited<ReturnType<typeof getWikiStatus>>): string
     'GakrCLI wiki status',
     '',
     `Root: ${status.root}`,
+    `Raw files: ${status.rawSourceCount}`,
     `Pages: ${status.pageCount}`,
-    `Sources: ${status.sourceCount}`,
+    `Source notes: ${status.sourceCount}`,
     `Schema: ${status.hasSchema ? 'present' : 'missing'}`,
     `Index: ${status.hasIndex ? 'present' : 'missing'}`,
     `Log: ${status.hasLog ? 'present' : 'missing'}`,

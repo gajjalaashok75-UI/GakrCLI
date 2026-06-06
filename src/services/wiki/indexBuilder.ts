@@ -41,15 +41,16 @@ export async function rebuildWikiIndex(cwd: string): Promise<void> {
     }),
   )
 
-  const sourceLinks = sourceFiles.map(file => {
+  const sourceLinks = await Promise.all(sourceFiles.map(async file => {
     const rel = relative(paths.root, file).replace(/\\/g, '/')
-    const title = basename(file, '.md')
+    const title = await getPageTitle(file)
     return `- [${title}](./${rel})`
-  })
+  }))
 
   const content = `# ${basename(cwd)} Wiki
 
 This wiki is maintained by GakrCLI as a durable project knowledge layer.
+Read this file first, then drill into the linked pages and source notes.
 
 ## Core Pages
 

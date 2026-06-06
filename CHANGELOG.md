@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [unreleased - 0.5.6]
 
 ### Changed (2026-06-06)
+- **LLM Wiki Scaffold**: Expanded `/wiki` around the LLM Wiki pattern with a raw/source/page layout, parseable dated log headings, richer schema workflows, source-note titles in the rebuilt index, and raw/source/page counts in status output.
 - **Open-Build Feature Flag Inventory**: Declared every `feature(...)` gate used in `src/` in `scripts/build.ts`, defaulting newly documented unavailable or unvalidated functionality to `false` so missing flags are explicit without changing runtime behavior.
 - **Knowledge Graph Persistence Durability**: Persisted the Orama knowledge index through the flushed atomic file-write helper, allowed that helper to accept buffer payloads, and made cleanup registration support synchronous handlers so SQLite close hooks match their actual behavior.
 
