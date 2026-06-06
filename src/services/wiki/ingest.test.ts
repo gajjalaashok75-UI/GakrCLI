@@ -40,10 +40,12 @@ test('ingestLocalWikiSource creates a source note and updates log/index', async 
   expect(sourceNote).toContain('Path: `notes.md`')
 
   const log = await readFile(paths.logFile, 'utf8')
-  expect(log).toContain('Ingested `notes.md`')
+  expect(log).toContain('] ingest | Design Notes')
+  expect(log).toContain('Source: `notes.md`')
 
   const index = await readFile(paths.indexFile, 'utf8')
   expect(index).toContain('./sources/')
+  expect(index).toContain('[Design Notes]')
   expect(index).toContain(result.sourceNote.replace('.gakrcli/wiki/', './'))
 })
 
