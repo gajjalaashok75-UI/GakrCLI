@@ -6,6 +6,11 @@ import test from 'node:test'
 
 import { getSkillDirCommands, clearSkillCaches } from './loadSkillsDir.ts'
 import {
+  getAdditionalDirectoriesForgakrcliMd,
+  setAdditionalDirectoriesForgakrcliMd,
+} from '../bootstrap/state.js'
+import { setGakrcliConfigHomeDirForTesting } from '../utils/envUtils.js'
+import {
   acquireSharedMutationLock,
   releaseSharedMutationLock,
 } from '../test/sharedMutationLock.js'
@@ -16,6 +21,16 @@ function writeSkill(rootDir: string, skillPath: string): void {
   writeFileSync(
     join(skillDir, 'SKILL.md'),
     `---\ndescription: ${skillPath}\n---\n# ${skillPath}\n`,
+    'utf8',
+  )
+}
+
+function writeCommand(rootDir: string, commandName: string): void {
+  const commandsDir = join(rootDir, '.gakrcli', 'commands')
+  mkdirSync(commandsDir, { recursive: true })
+  writeFileSync(
+    join(commandsDir, `${commandName}.md`),
+    `---\ndescription: ${commandName}\n---\n# ${commandName}\n`,
     'utf8',
   )
 }
@@ -66,6 +81,117 @@ test('loads flat and nested skills with colon namespaces', async () => {
       }
       clearSkillCaches()
       rmSync(configDir, { recursive: true, force: true })
+    } finally {
+      releaseSharedMutationLock()
+    }
+  }
+})
+
+test('skips npm global asset skills when user skills directory exists', async () => {
+  await acquireSharedMutationLock('loadSkillsDir.test.ts')
+  const homeDir = mkdtempSync(join(tmpdir(), 'gakrcli-home-'))
+  const cwd = join(homeDir, 'workspace')
+  const originalConfigDir = process.env.GAKR_CONFIG_DIR
+  const originalHome = process.env.HOME
+  const originalUserProfile = process.env.USERPROFILE
+
+  try {
+    mkdirSync(cwd, { recursive: true })
+    writeSkill(homeDir, 'user-only')
+
+    delete process.env.GAKR_CONFIG_DIR
+    process.env.HOME = homeDir
+    process.env.USERPROFILE = homeDir
+    setGakrcliConfigHomeDirForTesting(join(homeDir, '.gakrcli'))
+    clearSkillCaches()
+
+    const skills = await getSkillDirCommands(cwd)
+    const skillNames = skills.map(skill => skill.name).sort()
+
+    assert.deepEqual(skillNames, ['user-only'])
+  } finally {
+    try {
+      if (originalConfigDir === undefined) {
+        delete process.env.GAKR_CONFIG_DIR
+      } else {
+        process.env.GAKR_CONFIG_DIR = originalConfigDir
+      }
+      if (originalHome === undefined) {
+        delete process.env.HOME
+      } else {
+        process.env.HOME = originalHome
+      }
+      if (originalUserProfile === undefined) {
+        delete process.env.USERPROFILE
+      } else {
+        process.env.USERPROFILE = originalUserProfile
+      }
+      setGakrcliConfigHomeDirForTesting(undefined)
+      clearSkillCaches()
+      rmSync(homeDir, { recursive: true, force: true })
+    } finally {
+      releaseSharedMutationLock()
+    }
+  }
+})
+
+test('deduplicates loaded skills by name across loader sources', async () => {
+  await acquireSharedMutationLock('loadSkillsDir.test.ts')
+  const homeDir = mkdtempSync(join(tmpdir(), 'gakrcli-home-'))
+  const configRoot = join(homeDir, 'config')
+  const projectRoot = join(homeDir, 'project')
+  const addDirRoot = join(homeDir, 'add-dir')
+  const cwd = join(projectRoot, 'workspace')
+  const originalConfigDir = process.env.GAKR_CONFIG_DIR
+  const originalHome = process.env.HOME
+  const originalUserProfile = process.env.USERPROFILE
+  const originalAdditionalDirs = getAdditionalDirectoriesForgakrcliMd()
+
+  try {
+    mkdirSync(cwd, { recursive: true })
+    writeSkill(configRoot, 'duplicate')
+    writeSkill(projectRoot, 'duplicate')
+    writeSkill(projectRoot, 'project-only')
+    writeSkill(addDirRoot, 'duplicate')
+    writeSkill(addDirRoot, 'add-dir-only')
+    writeCommand(projectRoot, 'duplicate')
+    writeCommand(projectRoot, 'legacy-only')
+
+    process.env.GAKR_CONFIG_DIR = join(configRoot, '.gakrcli')
+    process.env.HOME = homeDir
+    process.env.USERPROFILE = homeDir
+    setAdditionalDirectoriesForgakrcliMd([addDirRoot])
+    clearSkillCaches()
+
+    const skills = await getSkillDirCommands(cwd)
+    const skillNames = skills.map(skill => skill.name).sort()
+
+    assert.deepEqual(skillNames, [
+      'add-dir-only',
+      'duplicate',
+      'legacy-only',
+      'project-only',
+    ])
+  } finally {
+    try {
+      if (originalConfigDir === undefined) {
+        delete process.env.GAKR_CONFIG_DIR
+      } else {
+        process.env.GAKR_CONFIG_DIR = originalConfigDir
+      }
+      if (originalHome === undefined) {
+        delete process.env.HOME
+      } else {
+        process.env.HOME = originalHome
+      }
+      if (originalUserProfile === undefined) {
+        delete process.env.USERPROFILE
+      } else {
+        process.env.USERPROFILE = originalUserProfile
+      }
+      setAdditionalDirectoriesForgakrcliMd(originalAdditionalDirs)
+      clearSkillCaches()
+      rmSync(homeDir, { recursive: true, force: true })
     } finally {
       releaseSharedMutationLock()
     }
