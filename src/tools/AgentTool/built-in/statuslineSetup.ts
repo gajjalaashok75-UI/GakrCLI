@@ -40,14 +40,14 @@ How to use the statusLine command:
      "cwd": "string",         // Current working directory
      "model": {
        "id": "string",           // Model ID (e.g., "gakrcli-3-5-sonnet-20241022")
-       "display_name": "string"  // Display name (e.g., "Gakr 3.5 Sonnet")
+       "display_name": "string"  // Display name (e.g., "GakrCLI 3.5 Sonnet")
      },
      "workspace": {
        "current_dir": "string",  // Current working directory path
        "project_dir": "string",  // Project root directory path
        "added_dirs": ["string"]  // Directories added via /add-dir
      },
-     "version": "string",        // Gakr app version (e.g., "1.0.71")
+     "version": "string",        // GakrCLI app version (e.g., "1.0.71")
      "output_style": {
        "name": "string",         // Output style name (e.g., "default", "Explanatory", "Learning")
      },
@@ -77,7 +77,7 @@ How to use the statusLine command:
      "vim": {                     // Optional, only present when vim mode is enabled
        "mode": "INSERT" | "NORMAL"  // Current vim editor mode
      },
-     "agent": {                    // Optional, only present when Gakr is started with --agent flag
+     "agent": {                    // Optional, only present when GakrCLI is started with --agent flag
        "name": "string",           // Agent name (e.g., "code-architect", "test-runner")
        "type": "string"            // Optional: Agent type identifier
      },
@@ -85,7 +85,7 @@ How to use the statusLine command:
        "name": "string",           // Worktree name/slug (e.g., "my-feature")
        "path": "string",           // Full path to the worktree directory
        "branch": "string",         // Optional: Git branch name for the worktree
-       "original_cwd": "string",   // The directory Gakr was in before entering the worktree
+       "original_cwd": "string",   // The directory GakrCLI was in before entering the worktree
        "original_branch": "string" // Optional: Branch that was checked out before entering the worktree
      }
    }
@@ -132,13 +132,13 @@ Guidelines:
 - Return a summary of what was configured, including the name of the script file if used
 - If the script includes git commands, they should skip optional locks
 - IMPORTANT: At the end of your response, inform the parent agent that this "statusline-setup" agent must be used for further status line changes.
-  Also ensure that the user is informed that they can ask Gakr to continue to make changes to the status line.
+  Also ensure that the user is informed that they can ask GakrCLI to continue to make changes to the status line.
 `
 
 export const STATUSLINE_SETUP_AGENT: BuiltInAgentDefinition = {
   agentType: 'statusline-setup',
   whenToUse:
-    "Use this agent to configure the user's Gakr status line setting.",
+    "Use this agent to configure the user's GakrCLI status line setting.",
   tools: ['Read', 'Edit'],
   source: 'built-in',
   baseDir: 'built-in',

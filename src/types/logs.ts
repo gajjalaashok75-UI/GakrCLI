@@ -193,7 +193,7 @@ export type FileHistorySnapshotMessage = {
 }
 
 /**
- * Per-file attribution state tracking Gakr's character contributions.
+ * Per-file attribution state tracking GakrCLI's character contributions.
  */
 export type FileAttributionState = {
   contentHash: string // SHA-256 hash of file content
@@ -203,7 +203,7 @@ export type FileAttributionState = {
 
 /**
  * Attribution snapshot message stored in session transcript.
- * Tracks character-level contributions by Gakr for commit attribution.
+ * Tracks character-level contributions by GakrCLI for commit attribution.
  */
 export type AttributionSnapshotMessage = {
   type: 'attribution-snapshot'

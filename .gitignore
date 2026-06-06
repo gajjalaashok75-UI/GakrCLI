@@ -9,7 +9,8 @@ compiled/
 dist/
 *.tsbuildinfo
 *.map
-
+gakrcli-plugins-official/
+.playwright-mcp/
 # Web landing page build artifacts
 web/dist/
 web/*.tsbuildinfo
@@ -29,6 +30,7 @@ web/*.tsbuildinfo
 # IDE and editor files
 .vscode/
 .idea/
+vscode-extension/gakrcli-vscode/surprise.html
 *.swp
 *.swo
 *~

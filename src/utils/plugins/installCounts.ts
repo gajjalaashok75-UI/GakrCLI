@@ -2,7 +2,7 @@
  * Plugin install counts data layer
  *
  * This module fetches and caches plugin install counts from the official
- * Gakr plugins statistics repository. The cache is refreshed if older
+ * GakrCLI plugins statistics repository. The cache is refreshed if older
  * than 24 hours.
  *
  * Cache location: ~/.gakrcli/plugins/install-counts-cache.json

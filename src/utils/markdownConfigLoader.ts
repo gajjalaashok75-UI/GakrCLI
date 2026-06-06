@@ -26,7 +26,7 @@ import {
 import { getManagedFilePath } from './settings/managedPath.js'
 import { isRestrictedToPluginOnly } from './settings/pluginOnlyPolicy.js'
 
-// Gakr configuration directory names
+// GakrCLI configuration directory names
 export const GAKR_CONFIG_DIRECTORIES = [
   'commands',
   'agents',
@@ -39,6 +39,55 @@ export const GAKR_CONFIG_DIRECTORIES = [
 export type gakrcliConfigDirectory = (typeof GAKR_CONFIG_DIRECTORIES)[number]
 
 const PROJECT_CONFIG_DIR_NAMES = ['.gakrcli'] as const
+
+// Concurrency cap for parallel readFile + parseFrontmatter when loading
+// commands/agents/skills/etc. Unbounded Promise.all over large symlinked
+// markdown trees can open thousands of fds and freeze startup.
+const MARKDOWN_LOAD_BATCH_SIZE = 32
+
+// Max file size to ingest. Legitimate commands/agents/skills are small; larger
+// files are usually unrelated docs pulled in through symlinks.
+const DEFAULT_MAX_MARKDOWN_FILE_SIZE_BYTES = 256 * 1024
+
+function getMaxMarkdownFileSizeBytes(): number {
+  const raw = process.env.GAKR_CODE_MAX_MARKDOWN_FILE_SIZE_BYTES
+  if (!raw) return DEFAULT_MAX_MARKDOWN_FILE_SIZE_BYTES
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_MAX_MARKDOWN_FILE_SIZE_BYTES
+}
+
+export type OversizedMarkdownSkip = {
+  filePath: string
+  sizeBytes: number
+  maxBytes: number
+}
+
+const oversizedMarkdownSkips = new Map<string, OversizedMarkdownSkip>()
+let oversizedSkipStderrWarned = false
+
+export function getOversizedMarkdownSkips(): OversizedMarkdownSkip[] {
+  return Array.from(oversizedMarkdownSkips.values())
+}
+
+export function clearOversizedMarkdownSkipsForTesting(): void {
+  oversizedMarkdownSkips.clear()
+  oversizedSkipStderrWarned = false
+}
+
+function recordOversizedSkip(skip: OversizedMarkdownSkip): void {
+  if (oversizedMarkdownSkips.has(skip.filePath)) return
+  oversizedMarkdownSkips.set(skip.filePath, skip)
+  if (!oversizedSkipStderrWarned) {
+    oversizedSkipStderrWarned = true
+    process.stderr.write(
+      `gakrcli: skipping oversized markdown config file ${skip.filePath} ` +
+        `(${skip.sizeBytes} bytes > ${skip.maxBytes} max). Set ` +
+        `GAKR_CODE_MAX_MARKDOWN_FILE_SIZE_BYTES to raise the cap.\n`,
+    )
+  }
+}
 
 export type MarkdownFile = {
   filePath: string
@@ -585,27 +634,52 @@ async function loadMarkdownFiles(dir: string): Promise<
     cleanup()
   }
 
-  const results = await Promise.all(
-    files.map(async filePath => {
-      try {
-        const rawContent = await readFile(filePath, { encoding: 'utf-8' })
-        const { frontmatter, content } = parseFrontmatter(rawContent, filePath)
+  const maxFileSize = getMaxMarkdownFileSizeBytes()
+  const results: ({
+    filePath: string
+    frontmatter: FrontmatterData
+    content: string
+  } | null)[] = []
 
-        return {
-          filePath,
-          frontmatter,
-          content,
+  for (let i = 0; i < files.length; i += MARKDOWN_LOAD_BATCH_SIZE) {
+    const batch = files.slice(i, i + MARKDOWN_LOAD_BATCH_SIZE)
+    const batchResults = await Promise.all(
+      batch.map(async filePath => {
+        try {
+          const fileStat = await stat(filePath)
+          if (fileStat.size > maxFileSize) {
+            recordOversizedSkip({
+              filePath,
+              sizeBytes: fileStat.size,
+              maxBytes: maxFileSize,
+            })
+            logForDebugging(
+              `Skipping oversized markdown file ${filePath} (${fileStat.size} bytes > ${maxFileSize} max). Set GAKR_CODE_MAX_MARKDOWN_FILE_SIZE_BYTES to override.`,
+              { level: 'warn' },
+            )
+            return null
+          }
+
+          const rawContent = await readFile(filePath, { encoding: 'utf-8' })
+          const { frontmatter, content } = parseFrontmatter(rawContent, filePath)
+
+          return {
+            filePath,
+            frontmatter,
+            content,
+          }
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error)
+          logForDebugging(
+            `Failed to read/parse markdown file:  ${filePath}: ${errorMessage}`,
+          )
+          return null
         }
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error)
-        logForDebugging(
-          `Failed to read/parse markdown file:  ${filePath}: ${errorMessage}`,
-        )
-        return null
-      }
-    }),
-  )
+      }),
+    )
+    results.push(...batchResults)
+  }
 
   return results.filter(_ => _ !== null)
 }

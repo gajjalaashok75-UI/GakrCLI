@@ -342,7 +342,7 @@ export const FileEditTool = buildTool({
       }
     }
 
-    // Additional validation for Gakr settings files
+    // Additional validation for GakrCLI settings files
     const settingsValidationResult = validateInputForSettingsFileEdit(
       fullFilePath,
       file,
@@ -525,7 +525,7 @@ export const FileEditTool = buildTool({
     })
 
     // 7. Log events
-    if (absoluteFilePath.endsWith(`${sep}GAKR.md`)) {
+    if (absoluteFilePath.endsWith(`${sep}GAKRCLI.md`)) {
       logEvent('tengu_write_gakrclimd', {})
     }
     countLinesChanged(patch)

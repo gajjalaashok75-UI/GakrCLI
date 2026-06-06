@@ -193,7 +193,7 @@ export function LogoV2() {
       t14 = ChannelsNoticeModule && <ChannelsNoticeModule.ChannelsNotice />;
       t15 = isDebugMode() && <Box paddingLeft={2} flexDirection="column"><Text color="warning">Debug mode enabled</Text><Text dimColor={true}>Logging to: {isDebugToStdErr() ? "stderr" : getDebugLogPath()}</Text></Box>;
       t16 = <EmergencyTip />;
-      t17 = process.env.GAKR_CODE_TMUX_SESSION && <Box paddingLeft={2} flexDirection="column"><Text dimColor={true}>tmux session: {process.env.GAKR_CODE_TMUX_SESSION}</Text><Text dimColor={true}>{process.env.GAKR_CODE_TMUX_PREFIX_CONFLICTS ? `Detach: ${process.env.GAKR_CODE_TMUX_PREFIX} ${process.env.GAKR_CODE_TMUX_PREFIX} d (press prefix twice - Gakr uses ${process.env.GAKR_CODE_TMUX_PREFIX})` : `Detach: ${process.env.GAKR_CODE_TMUX_PREFIX} d`}</Text></Box>;
+      t17 = process.env.GAKR_CODE_TMUX_SESSION && <Box paddingLeft={2} flexDirection="column"><Text dimColor={true}>tmux session: {process.env.GAKR_CODE_TMUX_SESSION}</Text><Text dimColor={true}>{process.env.GAKR_CODE_TMUX_PREFIX_CONFLICTS ? `Detach: ${process.env.GAKR_CODE_TMUX_PREFIX} ${process.env.GAKR_CODE_TMUX_PREFIX} d (press prefix twice - GakrCLI uses ${process.env.GAKR_CODE_TMUX_PREFIX})` : `Detach: ${process.env.GAKR_CODE_TMUX_PREFIX} d`}</Text></Box>;
       $[15] = t11;
       $[16] = t12;
       $[17] = t13;
@@ -251,7 +251,7 @@ export function LogoV2() {
   const layoutMode = getLayoutMode(columns);
   const userTheme = resolveThemeSetting(getGlobalConfig().theme);
   const borderTitle = ` ${color("text", userTheme)("Gakr")} ${color("inactive", userTheme)(`v${version}`)} `;
-  const compactBorderTitle = color("text", userTheme)(" Gakr ");
+  const compactBorderTitle = color("text", userTheme)(" GakrCLI ");
   if (layoutMode === "compact") {
     let welcomeMessage = formatWelcomeMessage(username);
     if (stringWidth(welcomeMessage) > columns - 4) {
@@ -464,7 +464,7 @@ export function LogoV2() {
     t31 = ChannelsNoticeModule && <ChannelsNoticeModule.ChannelsNotice />;
     t32 = isDebugMode() && <Box paddingLeft={2} flexDirection="column"><Text color="warning">Debug mode enabled</Text><Text dimColor={true}>Logging to: {isDebugToStdErr() ? "stderr" : getDebugLogPath()}</Text></Box>;
     t33 = <EmergencyTip />;
-    t34 = process.env.GAKR_CODE_TMUX_SESSION && <Box paddingLeft={2} flexDirection="column"><Text dimColor={true}>tmux session: {process.env.GAKR_CODE_TMUX_SESSION}</Text><Text dimColor={true}>{process.env.GAKR_CODE_TMUX_PREFIX_CONFLICTS ? `Detach: ${process.env.GAKR_CODE_TMUX_PREFIX} ${process.env.GAKR_CODE_TMUX_PREFIX} d (press prefix twice - Gakr uses ${process.env.GAKR_CODE_TMUX_PREFIX})` : `Detach: ${process.env.GAKR_CODE_TMUX_PREFIX} d`}</Text></Box>;
+    t34 = process.env.GAKR_CODE_TMUX_SESSION && <Box paddingLeft={2} flexDirection="column"><Text dimColor={true}>tmux session: {process.env.GAKR_CODE_TMUX_SESSION}</Text><Text dimColor={true}>{process.env.GAKR_CODE_TMUX_PREFIX_CONFLICTS ? `Detach: ${process.env.GAKR_CODE_TMUX_PREFIX} ${process.env.GAKR_CODE_TMUX_PREFIX} d (press prefix twice - GakrCLI uses ${process.env.GAKR_CODE_TMUX_PREFIX})` : `Detach: ${process.env.GAKR_CODE_TMUX_PREFIX} d`}</Text></Box>;
     $[75] = t29;
     $[76] = t30;
     $[77] = t31;

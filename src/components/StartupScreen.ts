@@ -1,5 +1,5 @@
 /**
- * Gakr startup screen — filled-block text logo with blue gradient.
+ * GakrCLI startup screen — filled-block text logo with blue gradient.
  * Called once at CLI startup before the Ink UI renders.
  */
 

@@ -1,6 +1,6 @@
 /**
- * Adapter layer that wraps @anthropic-ai/sandbox-runtime with Gakr CLI-specific integrations.
- * This file provides the bridge between the external sandbox-runtime package and Gakr CLI's
+ * Adapter layer that wraps @anthropic-ai/sandbox-runtime with GakrCLI CLI-specific integrations.
+ * This file provides the bridge between the external sandbox-runtime package and GakrCLI CLI's
  * settings system, tool integration, and additional features.
  */
 
@@ -83,7 +83,7 @@ function permissionRuleExtractPrefix(permissionRule: string): string | null {
 /**
  * Resolve Gakr-specific path patterns for sandbox-runtime.
  *
- * Gakr uses special path prefixes in permission rules:
+ * GakrCLI uses special path prefixes in permission rules:
  * - `//path` → absolute from filesystem root (becomes `/path`)
  * - `/path` → relative to settings file directory (becomes `$SETTINGS_DIR/path`)
  * - `~/path` → passed through (sandbox-runtime handles this)
@@ -164,7 +164,7 @@ function shouldAllowManagedReadPathsOnly(): boolean {
 }
 
 /**
- * Convert Gakr settings format to SandboxRuntimeConfig format
+ * Convert GakrCLI settings format to SandboxRuntimeConfig format
  * (Function exported for testing)
  *
  * @param settings Merged settings (used for sandbox config like network, ripgrep, etc.)
@@ -220,7 +220,7 @@ export function convertToSandboxRuntimeConfig(
   }
 
   // Extract filesystem paths from Edit and Read rules
-  // Always include current directory and Gakr temp directory as writable
+  // Always include current directory and GakrCLI temp directory as writable
   // The temp directory is needed for Shell.ts cwd tracking files
   const allowWrite: string[] = ['.', getgakrcliTempDir()]
   const denyWrite: string[] = []
@@ -228,7 +228,7 @@ export function convertToSandboxRuntimeConfig(
   const allowRead: string[] = []
 
   // Always deny writes to settings.json files to prevent sandbox escape
-  // This blocks settings in the original working directory (where Gakr started)
+  // This blocks settings in the original working directory (where GakrCLI started)
   const settingsPaths = SETTING_SOURCES.map(source =>
     getSettingsFilePathForSource(source),
   ).filter((p): p is string => p !== undefined)
@@ -247,7 +247,7 @@ export function convertToSandboxRuntimeConfig(
   // Block writes to .gakrcli/skills in both original and current working directories.
   // The sandbox-runtime's getDangerousDirectories() protects .gakrcli/commands and
   // .gakrcli/agents but not .gakrcli/skills. Skills have the same privilege level
-  // (auto-discovered, auto-loaded, full Gakr capabilities) so they need the
+  // (auto-discovered, auto-loaded, full GakrCLI capabilities) so they need the
   // same OS-level sandbox protection.
   denyWrite.push(resolve(originalCwd, '.gakrcli', 'skills'))
   if (cwd !== originalCwd) {
@@ -256,7 +256,7 @@ export function convertToSandboxRuntimeConfig(
 
   // SECURITY: Git's is_git_directory() treats cwd as a bare repo if it has
   // HEAD + objects/ + refs/. An attacker planting these (plus a config with
-  // core.fsmonitor) escapes the sandbox when Gakr's unsandboxed git runs.
+  // core.fsmonitor) escapes the sandbox when GakrCLI's unsandboxed git runs.
   //
   // Unconditionally denying these paths makes sandbox-runtime mount
   // /dev/null at non-existent ones, which (a) leaves a 0-byte HEAD stub on
@@ -381,7 +381,7 @@ export function convertToSandboxRuntimeConfig(
 }
 
 // ============================================================================
-// Gakr CLI-specific state
+// GakrCLI CLI-specific state
 // ============================================================================
 
 let initializationPromise: Promise<void> | undefined
@@ -398,7 +398,7 @@ const bareGitRepoScrubPaths: string[] = []
 
 /**
  * Delete bare-repo files planted at cwd during a sandboxed command, before
- * Gakr's unsandboxed git calls can see them. See the SECURITY block above
+ * GakrCLI's unsandboxed git calls can see them. See the SECURITY block above
  * bareGitRepoFiles. anthropics/gakrcli-code#29316.
  */
 function scrubBareGitRepoFiles(): void {
@@ -852,7 +852,7 @@ async function reset(): Promise<void> {
 
 /**
  * Add a command to the excluded commands list (commands that should not be sandboxed)
- * This is a Gakr CLI-specific function that updates local settings.
+ * This is a GakrCLI CLI-specific function that updates local settings.
  */
 export function addToExcludedCommands(
   command: string,
@@ -951,7 +951,7 @@ export interface ISandboxManager {
 }
 
 /**
- * Gakr CLI sandbox manager - wraps sandbox-runtime with Gakr-specific features
+ * GakrCLI CLI sandbox manager - wraps sandbox-runtime with Gakr-specific features
  */
 export const SandboxManager: ISandboxManager = {
   // Custom implementations

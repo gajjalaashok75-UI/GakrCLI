@@ -81,7 +81,7 @@ import { clearToolSchemaCache } from './toolSchemaCache.js'
 const DEFAULT_API_KEY_HELPER_TTL = 5 * 60 * 1000
 
 /**
- * CCR and Gakr Desktop spawn the CLI with OAuth and should never fall back
+ * CCR and GakrCLI Desktop spawn the CLI with OAuth and should never fall back
  * to the user's ~/.gakrcli/settings.json API-key config (apiKeyHelper,
  * env.ANTHROPIC_API_KEY, env.ANTHROPIC_AUTH_TOKEN). Those settings exist for
  * the user's terminal CLI, not managed sessions. Without this guard, a user
@@ -1646,7 +1646,7 @@ export function isOverageProvisioningAllowed(): boolean {
   const accountInfo = getOauthAccountInfo()
   const billingType = accountInfo?.billingType
 
-  // Must be a Gakr subscriber with a supported subscription type
+  // Must be a GakrCLI subscriber with a supported subscription type
   if (!isgakrcliAISubscriber() || !billingType) {
     return false
   }
@@ -1738,15 +1738,15 @@ export function getSubscriptionName(): string {
 
   switch (subscriptionType) {
     case 'enterprise':
-      return 'Gakr Enterprise'
+      return 'GakrCLI Enterprise'
     case 'team':
-      return 'Gakr Team'
+      return 'GakrCLI Team'
     case 'max':
-      return 'Gakr Max'
+      return 'GakrCLI Max'
     case 'pro':
-      return 'Gakr Pro'
+      return 'GakrCLI Pro'
     default:
-      return 'Gakr API'
+      return 'GakrCLI API'
   }
 }
 

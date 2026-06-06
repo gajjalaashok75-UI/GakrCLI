@@ -1069,13 +1069,13 @@ export function getMcpConfigByName(name: string): ScopedMcpServerConfig | null {
 }
 
 /**
- * Get Gakr MCP configurations (excludes gakr.ai servers from the
+ * Get GakrCLI MCP configurations (excludes gakr.ai servers from the
  * returned set — they're fetched separately and merged by callers).
  * This is fast: only local file reads; no awaited network calls on the
  * critical path. The optional extraDedupTargets promise (e.g. the in-flight
  * gakr.ai connector fetch) is awaited only after loadAllPluginsCacheOnly() completes,
  * so the two overlap rather than serialize.
- * @returns Gakr server configurations with appropriate scopes
+ * @returns GakrCLI server configurations with appropriate scopes
  */
 export async function getgakrcliCodeMcpConfigs(
   dynamicServers: Record<string, ScopedMcpServerConfig> = {},

@@ -1,10 +1,11 @@
 /**
  * Files are loaded in the following order:
  *
- * 1. Managed memory (eg. /etc/gakrcli-code/GAKR.md) - Global instructions for all users
- * 2. User memory (~/.gakrcli/GAKR.md) - Private global instructions for all projects
- * 3. Project memory (GAKR.md, .gakrcli/GAKR.md, and .gakrcli/rules/*.md in project roots) - Instructions checked into the codebase
- * 4. Local memory (gakrcli.local.md in project roots) - Private project-specific instructions
+ * 1. Managed memory (eg. /etc/gakrcli-code/GAKRCLI.md) - Global instructions for all users
+ * 2. User memory (~/.gakrcli/GAKRCLI.md) - Private global instructions for all projects
+ * 3. Workspace memory (~/.gakrcli/workspace/*.md) - Persistent identity, user, and agent-home context
+ * 4. Project memory (GAKRCLI.md, .gakrcli/GAKRCLI.md, and .gakrcli/rules/*.md in project roots) - Instructions checked into the codebase
+ * 5. Local memory (gakrcli.local.md in project roots) - Private project-specific instructions
  *
  * Files are loaded in reverse order of priority, i.e. the latest files are highest priority
  * with the model paying more attention to them.
@@ -13,7 +14,7 @@
  * - User memory is loaded from the user's home directory
  * - Project and Local files are discovered by traversing from the current directory up to root
  * - Files closer to the current directory have higher priority (loaded later)
- * - GAKR.md, .gakrcli/GAKR.md, and all .md files in .gakrcli/rules/ are checked in each directory for Project memory
+ * - GAKRCLI.md, .gakrcli/GAKRCLI.md, and all .md files in .gakrcli/rules/ are checked in each directory for Project memory
  *
  * Memory @include directive:
  * - Memory files can include other files using @ notation
@@ -77,6 +78,10 @@ import { expandPath } from './path.js'
 import { pathInWorkingPath } from './permissions/filesystem.js'
 import { isSettingSourceEnabled } from './settings/constants.js'
 import { getInitialSettings } from './settings/settings.js'
+import {
+  ensureGakrcliWorkspace,
+  getWorkspaceBootstrapPaths,
+} from './workspace.js'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const teamMemPaths = feature('TEAMMEM')
@@ -350,7 +355,7 @@ function stripHtmlCommentSpans(raw: string): string {
  * pass and returned alongside the parsed file (so processMemoryFile doesn't
  * need to lex the same content a second time).
  */
-function parseMemoryFileContent(
+export function parseMemoryFileContent(
   rawContent: string,
   filePath: string,
   type: MemoryType,
@@ -546,7 +551,7 @@ function extractIncludePathsFromTokens(
 const MAX_INCLUDE_DEPTH = 5
 
 /**
- * Checks whether a GAKR.md file path is excluded by the gakrcliMdExcludes setting.
+ * Checks whether a GAKRCLI.md file path is excluded by the gakrcliMdExcludes setting.
  * Only applies to User, Project, and Local memory types.
  * Managed, AutoMem, and TeamMem types are never excluded.
  *
@@ -568,7 +573,7 @@ function isgakrcliMdExcluded(filePath: string, type: MemoryType): boolean {
 
   // Build an expanded pattern list that includes realpath-resolved versions of
   // absolute patterns. This handles symlinks like /tmp -> /private/tmp on macOS:
-  // the user writes "/tmp/project/GAKR.md" in their exclude, but the system
+  // the user writes "/tmp/project/GAKRCLI.md" in their exclude, but the system
   // resolves the CWD to "/private/tmp/project/...", so the file path uses the
   // real path. By resolving the patterns too, both sides match.
   const expandedPatterns = resolveExcludePatterns(patterns).filter(
@@ -855,6 +860,18 @@ export const getMemoryFiles = memoize(
       )
     }
 
+    await ensureGakrcliWorkspace()
+    for (const workspacePath of getWorkspaceBootstrapPaths()) {
+      result.push(
+        ...(await processMemoryFile(
+          workspacePath,
+          'Workspace',
+          processedPaths,
+          true,
+        )),
+      )
+    }
+
     // Then process Project and Local files
     const dirs: string[] = []
     const originalCwd = getOriginalCwd()
@@ -868,7 +885,7 @@ export const getMemoryFiles = memoize(
     // When running from a git worktree nested inside its main repo (e.g.,
     // .gakrcli/worktrees/<name>/ from `gakrcli -w`), the upward walk passes
     // through both the worktree root and the main repo root. Both contain
-    // checked-in files like GAKR.md and .gakrcli/rules/*.md, so the same
+    // checked-in files like GAKRCLI.md and .gakrcli/rules/*.md, so the same
     // content gets loaded twice. Skip Project-type (checked-in) files from
     // directories above the worktree but within the main repo — the worktree
     // already has its own checkout. gakrcli.local.md is gitignored so it only
@@ -892,9 +909,9 @@ export const getMemoryFiles = memoize(
         pathInWorkingPath(dir, canonicalRoot) &&
         !pathInWorkingPath(dir, gitRoot)
 
-      // Try reading GAKR.md (Project) - only if projectSettings is enabled
+      // Try reading GAKRCLI.md (Project) - only if projectSettings is enabled
       if (isSettingSourceEnabled('projectSettings') && !skipProject) {
-        const projectPath = join(dir, 'GAKR.md')
+        const projectPath = join(dir, 'GAKRCLI.md')
         result.push(
           ...(await processMemoryFile(
             projectPath,
@@ -904,8 +921,8 @@ export const getMemoryFiles = memoize(
           )),
         )
 
-        // Try reading .gakrcli/GAKR.md (Project)
-        const dotgakrcliPath = join(dir, '.gakrcli', 'GAKR.md')
+        // Try reading .gakrcli/GAKRCLI.md (Project)
+        const dotgakrcliPath = join(dir, '.gakrcli', 'GAKRCLI.md')
         result.push(
           ...(await processMemoryFile(
             dotgakrcliPath,
@@ -942,15 +959,15 @@ export const getMemoryFiles = memoize(
       }
     }
 
-    // Process GAKR.md from additional directories (--add-dir) if env var is enabled
-    // This is controlled by GAKR_CODE_ADDITIONAL_DIRECTORIES_GAKR_MD and defaults to off
+    // Process GAKRCLI.md from additional directories (--add-dir) if env var is enabled
+    // This is controlled by GAKR_CODE_ADDITIONAL_DIRECTORIES_GAKRCLI_MD and defaults to off
     // Note: we don't check isSettingSourceEnabled('projectSettings') here because --add-dir
     // is an explicit user action and the SDK defaults settingSources to [] when not specified
-    if (isEnvTruthy(process.env.GAKR_CODE_ADDITIONAL_DIRECTORIES_GAKR_MD)) {
+    if (isEnvTruthy(process.env.GAKR_CODE_ADDITIONAL_DIRECTORIES_GAKRCLI_MD)) {
       const additionalDirs = getAdditionalDirectoriesForgakrcliMd()
       for (const dir of additionalDirs) {
-        // Try reading GAKR.md from the additional directory
-        const projectPath = join(dir, 'GAKR.md')
+        // Try reading GAKRCLI.md from the additional directory
+        const projectPath = join(dir, 'GAKRCLI.md')
         result.push(
           ...(await processMemoryFile(
             projectPath,
@@ -960,8 +977,8 @@ export const getMemoryFiles = memoize(
           )),
         )
 
-        // Try reading .gakrcli/GAKR.md from the additional directory
-        const dotgakrcliPath = join(dir, '.gakrcli', 'GAKR.md')
+        // Try reading .gakrcli/GAKRCLI.md from the additional directory
+        const dotgakrcliPath = join(dir, '.gakrcli', 'GAKRCLI.md')
         result.push(
           ...(await processMemoryFile(
             dotgakrcliPath,
@@ -1040,6 +1057,7 @@ export const getMemoryFiles = memoize(
         project_count: typeCounts['Project'] ?? 0,
         local_count: typeCounts['Local'] ?? 0,
         managed_count: typeCounts['Managed'] ?? 0,
+        workspace_count: typeCounts['Workspace'] ?? 0,
         automem_count: typeCounts['AutoMem'] ?? 0,
         ...(feature('TEAMMEM')
           ? { teammem_count: typeCounts['TeamMem'] ?? 0 }
@@ -1051,7 +1069,7 @@ export const getMemoryFiles = memoize(
     // Fire InstructionsLoaded hook for each instruction file loaded
     // (fire-and-forget, audit/observability only).
     // AutoMem/TeamMem are intentionally excluded — they're a separate
-    // memory system, not "instructions" in the GAKR.md/rules sense.
+    // memory system, not "instructions" in the GAKRCLI.md/rules sense.
     // Gated on !forceIncludeExternal: the forceIncludeExternal=true variant
     // is only used by getExternalgakrcliMdIncludes() for approval checks, not
     // for building context — firing the hook there would double-fire on startup.
@@ -1090,7 +1108,8 @@ function isInstructionsMemoryType(
     type === 'User' ||
     type === 'Project' ||
     type === 'Local' ||
-    type === 'Managed'
+    type === 'Managed' ||
+    type === 'Workspace'
   )
 }
 
@@ -1159,11 +1178,109 @@ export function filterInjectedMemoryFiles(
   return files.filter(f => f.type !== 'AutoMem' && f.type !== 'TeamMem')
 }
 
+export const WORKSPACE_CONTEXT_FILE_ORDER = new Map<string, number>([
+  ['gakrcli.md', 10],
+  ['agents.md', 11],
+  ['rulebook.md', 15],
+  ['soul.md', 20],
+  ['identity.md', 30],
+  ['user.md', 40],
+  ['bootstrap.md', 60],
+  ['memory.md', 70],
+])
+
+function getMemoryFileBasename(filePath: string): string {
+  return basename(filePath).trim().toLowerCase()
+}
+
+export function compareWorkspaceFiles(
+  left: MemoryFileInfo,
+  right: MemoryFileInfo,
+): number {
+  const leftBase = getMemoryFileBasename(left.path)
+  const rightBase = getMemoryFileBasename(right.path)
+  const leftOrder =
+    WORKSPACE_CONTEXT_FILE_ORDER.get(leftBase) ?? Number.MAX_SAFE_INTEGER
+  const rightOrder =
+    WORKSPACE_CONTEXT_FILE_ORDER.get(rightBase) ?? Number.MAX_SAFE_INTEGER
+  if (leftOrder !== rightOrder) {
+    return leftOrder - rightOrder
+  }
+  if (leftBase !== rightBase) {
+    return leftBase.localeCompare(rightBase)
+  }
+  return left.path.localeCompare(right.path)
+}
+
+export function renderWorkspaceContext(files: MemoryFileInfo[]): string | null {
+  const ordered = files
+    .filter(file => file.content.trim().length > 0)
+    .sort(compareWorkspaceFiles)
+  if (ordered.length === 0) {
+    return null
+  }
+
+  const hasSoulFile = ordered.some(
+    file => getMemoryFileBasename(file.path) === 'soul.md',
+  )
+  const hasRulebookFile = ordered.some(
+    file => getMemoryFileBasename(file.path) === 'rulebook.md',
+  )
+  const hasMemoryFile = ordered.some(
+    file => getMemoryFileBasename(file.path) === 'memory.md',
+  )
+  const hasBootstrapFile = ordered.some(
+    file => getMemoryFileBasename(file.path) === 'bootstrap.md',
+  )
+
+  const lines = [
+    '## GakrCLI Workspace Context',
+    '',
+    'GakrCLI loaded these user-editable workspace files from the active workspace. GakrCLI is the CLI, agent harness, and orchestration runtime; the workspace files define the assistant identity, operating style, user profile, bootstrap state, rules, and durable memory. Internalize and follow them unless higher-priority instructions override.',
+    '',
+    '<GAKRCLI_WORKSPACE>',
+    '',
+    '# Project Context',
+    '',
+    'The following workspace context files have been loaded:',
+  ]
+
+  if (hasSoulFile) {
+    lines.push(
+      'SOUL.md: persona, tone, and working style. Follow it unless higher-priority instructions override.',
+    )
+  }
+  if (hasRulebookFile) {
+    lines.push(
+      'RULEBOOK.md: stable workspace rules, including how to interpret the GakrCLI harness versus the assistant identity.',
+    )
+  }
+  if (hasMemoryFile) {
+    lines.push(
+      'MEMORY.md: durable user preferences, decisions, and cross-project memory. Keep following it throughout the session unless higher-priority instructions override.',
+    )
+  }
+  if (hasBootstrapFile) {
+    lines.push(
+      'BOOTSTRAP.md: first-run workspace setup is active. If it is present, follow it before replying normally; do not wait for the user to ask. Once assistant identity and user identity are saved, delete BOOTSTRAP.md in the same turn.',
+    )
+  }
+  lines.push('')
+
+  for (const file of ordered) {
+    lines.push(`## ${file.path}`, '', file.content.trim(), '')
+  }
+
+  lines.push('</GAKRCLI_WORKSPACE>')
+  return lines.join('\n').trim()
+}
+
 export const getgakrcliMds = (
   memoryFiles: MemoryFileInfo[],
   filter?: (type: MemoryType) => boolean,
 ): string => {
   const memories: string[] = []
+  const workspaceFiles: MemoryFileInfo[] = []
   const skipProjectLevel = getFeatureValue_CACHED_MAY_BE_STALE(
     'tengu_paper_halyard',
     false,
@@ -1174,6 +1291,10 @@ export const getgakrcliMds = (
     if (skipProjectLevel && (file.type === 'Project' || file.type === 'Local'))
       continue
     if (file.content) {
+      if (file.type === 'Workspace') {
+        workspaceFiles.push(file)
+        continue
+      }
       const description =
         file.type === 'Project'
           ? ' (project instructions, checked into the codebase)'
@@ -1194,6 +1315,11 @@ export const getgakrcliMds = (
         memories.push(`Contents of ${file.path}${description}:\n\n${content}`)
       }
     }
+  }
+
+  const workspaceContext = renderWorkspaceContext(workspaceFiles)
+  if (workspaceContext) {
+    memories.unshift(workspaceContext)
   }
 
   if (memories.length === 0) {
@@ -1248,7 +1374,7 @@ export async function getManagedAndUserConditionalRules(
 
 /**
  * Gets memory files for a single nested directory (between CWD and target).
- * Loads GAKR.md, unconditional rules, and conditional rules for that directory.
+ * Loads GAKRCLI.md, unconditional rules, and conditional rules for that directory.
  *
  * @param dir The directory to process
  * @param targetPath The target file path (for conditional rule matching)
@@ -1262,9 +1388,9 @@ export async function getMemoryFilesForNestedDirectory(
 ): Promise<MemoryFileInfo[]> {
   const result: MemoryFileInfo[] = []
 
-  // Process project memory files (GAKR.md and .gakrcli/GAKR.md)
+  // Process project memory files (GAKRCLI.md and .gakrcli/GAKRCLI.md)
   if (isSettingSourceEnabled('projectSettings')) {
-    const projectPath = join(dir, 'GAKR.md')
+    const projectPath = join(dir, 'GAKRCLI.md')
     result.push(
       ...(await processMemoryFile(
         projectPath,
@@ -1273,7 +1399,7 @@ export async function getMemoryFilesForNestedDirectory(
         false,
       )),
     )
-    const dotgakrcliPath = join(dir, '.gakrcli', 'GAKR.md')
+    const dotgakrcliPath = join(dir, '.gakrcli', 'GAKRCLI.md')
     result.push(
       ...(await processMemoryFile(
         dotgakrcliPath,
@@ -1439,13 +1565,13 @@ export async function shouldShowgakrcliMdExternalIncludesWarning(): Promise<bool
 }
 
 /**
- * Check if a file path is a memory file (GAKR.md, gakrcli.local.md, or .gakrcli/rules/*.md)
+ * Check if a file path is a memory file (GAKRCLI.md, gakrcli.local.md, or .gakrcli/rules/*.md)
  */
 export function isMemoryFilePath(filePath: string): boolean {
   const name = basename(filePath)
 
-  // GAKR.md or gakrcli.local.md anywhere
-  if (name === 'GAKR.md' || name === 'gakrcli.local.md') {
+  // GAKRCLI.md or gakrcli.local.md anywhere
+  if (name === 'GAKRCLI.md' || name === 'gakrcli.local.md') {
     return true
   }
 

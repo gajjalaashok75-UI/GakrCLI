@@ -4,7 +4,7 @@ const mobile = {
   type: 'local-jsx',
   name: 'mobile',
   aliases: ['ios', 'android'],
-  description: 'Show QR code to download the Gakr mobile app',
+  description: 'Show QR code to download the GakrCLI mobile app',
   load: () => import('./mobile.js'),
 } satisfies Command
 

@@ -21,8 +21,8 @@ const TRANSPORT_KIND_PROVIDER_TYPE_LABELS: Partial<
 > = {
   'anthropic-native': 'Anthropic native API',
   'gemini-native': 'Gemini API',
-  bedrock: 'AWS Bedrock Gakr API',
-  vertex: 'Google Vertex Gakr API',
+  bedrock: 'AWS Bedrock GakrCLI API',
+  vertex: 'Google Vertex GakrCLI API',
   'anthropic-proxy': 'Anthropic-compatible API',
   local: 'OpenAI-compatible API',
   'openai-compatible': 'OpenAI-compatible API',

@@ -48,6 +48,65 @@ const featureFlags: Record<string, boolean> = {
   CHICAGO_MCP: false,             // Computer-use MCP (native Swift modules stubbed)
   COWORKER_TYPE_TELEMETRY: false, // Telemetry for agent/coworker type classification
   MCP_SKILLS: false,              // Dynamic MCP skill discovery (src/skills/mcpSkills.ts not mirrored; enabling this causes "fetchMcpSkillsForClient is not a function" when MCP servers with resources connect — see #856)
+  AGENT_MEMORY_SNAPSHOT: false,   // Agent memory snapshot persistence not enabled in open build
+  AGENT_TRIGGERS_REMOTE: false,   // Remote scheduled trigger support requires hosted infrastructure
+  ALLOW_TEST_VERSIONS: false,     // Internal version bypass for test builds only
+  ANTI_DISTILLATION_CC: false,    // First-party anti-distillation API header
+  AUTO_THEME: false,              // Automatic terminal theme detection
+  BASH_CLASSIFIER: false,         // Bash safety classifier service integration
+  BREAK_CACHE_COMMAND: false,     // Prompt-cache break debugging injection
+  BUILDING_GAKR_APPS: false,      // Internal GakrCLI app-building mode
+  BYOC_ENVIRONMENT_RUNNER: false, // Bring-your-own-cloud environment runner
+  CCR_AUTO_CONNECT: false,        // Cloud/CCR automatic bridge connection
+  CCR_MIRROR: false,              // Cloud/CCR mirror transport mode
+  CCR_REMOTE_SETUP: false,        // Remote setup web command for CCR
+  COMPACTION_REMINDERS: false,    // Extra compact/reminder prompting
+  CONNECTOR_TEXT: false,          // Connector text-block handling
+  CONVERSATION_ARC: false,        // Native knowledge graph prompt injection; disabled until validated
+  DIRECT_CONNECT: false,          // Direct remote connection flow
+  DOWNLOAD_USER_SETTINGS: false,  // Hosted user-settings download
+  ENHANCED_TELEMETRY_BETA: false, // Enhanced telemetry beta metadata
+  EXPERIMENTAL_SKILL_SEARCH: false, // Remote/experimental skill index search
+  FILE_PERSISTENCE: false,        // File persistence/checkpoint feature gate
+  HARD_FAIL: false,               // Hard-fail diagnostic mode
+  HISTORY_SNIP: false,            // History snipping command
+  HOOK_CHAINS: false,             // Chained hook execution
+  HYBRID_CONTEXT_STRATEGY: false, // Hybrid context strategy for API requests
+  IMPROVEMENT_SYSTEM: false,      // Self-improvement command system
+  IS_LIBC_GLIBC: false,           // libc-specific native build flag
+  IS_LIBC_MUSL: false,            // libc-specific native build flag
+  KAIROS_BRIEF: false,            // Assistant brief-only mode
+  KAIROS_DREAM: false,            // Assistant dream/proactive mode
+  KAIROS_GITHUB_WEBHOOKS: false,  // GitHub webhook subscription flow
+  KAIROS_PUSH_NOTIFICATION: false, // Hosted assistant push notifications
+  LODESTONE: false,               // Lodestone integration
+  MCP_RICH_OUTPUT: false,         // Rich MCP output rendering
+  MEMORY_SHAPE_TELEMETRY: false,  // Memory-shape telemetry
+  MULTI_TURN_CONTEXT: false,      // Native multi-turn context tracker; disabled until validated
+  NATIVE_CLIENT_ATTESTATION: false, // Native client attestation header
+  NATIVE_CLIPBOARD_IMAGE: false,  // Native clipboard image support
+  NEW_INIT: false,                // New init flow
+  OVERFLOW_TEST_TOOL: false,      // Internal overflow test tool
+  PERFETTO_TRACING: false,        // Perfetto tracing instrumentation
+  POWERSHELL_AUTO_MODE: false,    // PowerShell-specific auto-mode classifier path
+  REACTIVE_COMPACT: false,        // Reactive compaction UI/logic
+  REVIEW_ARTIFACT: false,         // Review artifact generation
+  RUN_SKILL_GENERATOR: false,     // Skill generator runtime
+  SELF_HOSTED_RUNNER: false,      // Self-hosted runner integration
+  SKILL_IMPROVEMENT: false,       // Skill improvement workflows
+  SKIP_DETECTION_WHEN_AUTOUPDATES_DISABLED: false, // Internal update/detection behavior
+  SLOW_OPERATION_LOGGING: false,  // Slow-operation tracing
+  SSH_REMOTE: false,              // SSH remote connection flow
+  STREAMLINED_OUTPUT: false,      // Alternate streamlined terminal output
+  TEMPLATES: false,               // Template generation workflows
+  TERMINAL_PANEL: false,          // Terminal panel UI
+  TORCH: false,                   // Torch command/tooling
+  TREE_SITTER_BASH: false,        // Tree-sitter Bash parser
+  TREE_SITTER_BASH_SHADOW: false, // Shadow comparison for tree-sitter Bash parser
+  ULTRAPLAN: false,               // Ultraplan workflow UI
+  UNATTENDED_RETRY: false,        // Unattended retry behavior
+  UPLOAD_USER_SETTINGS: false,    // Hosted user-settings upload
+  WORKFLOW_SCRIPTS: false,        // Local workflow script commands/tools
 
   // ── Enabled: upstream defaults ──────────────────────────────────────
   COORDINATOR_MODE: true,             // Multi-agent coordinator with worker delegation
@@ -72,6 +131,7 @@ const featureFlags: Record<string, boolean> = {
   VERIFICATION_AGENT: true,           // Built-in read-only agent for test/verification
   PROMPT_CACHE_BREAK_DETECTION: true, // Detect & log unexpected prompt cache invalidations
   HOOK_PROMPTS: true,                 // Allow tools to request interactive user prompts
+  KAIROS_CHANNELS: true,               // Local MCP channel delivery without assistant-mode cloud pieces
 }
 
 // ── Pre-process: replace feature() calls with boolean literals ──────
@@ -335,6 +395,12 @@ export const SeverityNumber = {};
         const pathMod = require('path')
         const srcDir = pathMod.resolve(__dirname, '..', 'src')
         const missingModules = new Set<string>()
+        // Relative missing imports are keyed by specifier + importer so
+        // identical specifiers in different folders do not stub real modules.
+        const missingRelativeImports = new Map<
+          string,
+          Array<{ importerPath: string; stubPath: string }>
+        >()
         const missingModuleExports = new Map<string, Set<string>>()
 
         // Known missing external packages
@@ -350,39 +416,62 @@ export const SeverityNumber = {};
 
         // Scan source to find imports that can't resolve
         function scanForMissingImports() {
-          function checkAndRegister(specifier: string, fileDir: string, namedPart: string) {
-                const names = namedPart.split(',')
-                  .map((s: string) => s.trim().replace(/^type\s+/, ''))
-                  .filter((s: string) => s && !s.startsWith('type '))
+          function checkAndRegister(
+            specifier: string,
+            importerFile: string,
+            namedPart: string,
+          ) {
+            const fileDir = pathMod.dirname(importerFile)
+            const names = namedPart.split(',')
+              .map((s: string) => s.trim().replace(/^type\s+/, ''))
+              .filter((s: string) => s && !s.startsWith('type '))
 
-                // Check src/tasks/ non-relative imports
-                if (specifier.startsWith('src/tasks/')) {
-                  const resolved = pathMod.resolve(__dirname, '..', specifier)
-                  const candidates = [
-                    resolved,
-                    `${resolved}.ts`, `${resolved}.tsx`,
-                    resolved.replace(/\.js$/, '.ts'), resolved.replace(/\.js$/, '.tsx'),
-                    pathMod.join(resolved, 'index.ts'), pathMod.join(resolved, 'index.tsx'),
-                  ]
-                  if (!candidates.some((c: string) => fs.existsSync(c))) {
-                    missingModules.add(specifier)
-                  }
-                }
-                // Check relative .js imports
-                else if (specifier.endsWith('.js') && (specifier.startsWith('./') || specifier.startsWith('../'))) {
-                  const resolved = pathMod.resolve(fileDir, specifier)
-                  const tsVariant = resolved.replace(/\.js$/, '.ts')
-                  const tsxVariant = resolved.replace(/\.js$/, '.tsx')
-                  if (!fs.existsSync(resolved) && !fs.existsSync(tsVariant) && !fs.existsSync(tsxVariant)) {
-                    missingModules.add(specifier)
-                  }
-                }
+            let stubKey: string | undefined
 
-                // Track named exports for missing modules
-                if (names.length > 0) {
-                  if (!missingModuleExports.has(specifier)) missingModuleExports.set(specifier, new Set())
-                  for (const n of names) missingModuleExports.get(specifier)!.add(n)
-                }
+            // Check src/tasks/ non-relative imports
+            if (specifier.startsWith('src/tasks/')) {
+              const resolved = pathMod.resolve(__dirname, '..', specifier)
+              const candidates = [
+                resolved,
+                `${resolved}.ts`, `${resolved}.tsx`,
+                resolved.replace(/\.js$/, '.ts'), resolved.replace(/\.js$/, '.tsx'),
+                pathMod.join(resolved, 'index.ts'), pathMod.join(resolved, 'index.tsx'),
+              ]
+              if (!candidates.some((c: string) => fs.existsSync(c))) {
+                missingModules.add(specifier)
+                stubKey = specifier
+              }
+            }
+            // Check relative .js imports
+            else if (
+              specifier.endsWith('.js') &&
+              (specifier.startsWith('./') || specifier.startsWith('../'))
+            ) {
+              const resolved = pathMod.resolve(fileDir, specifier)
+              const tsVariant = resolved.replace(/\.js$/, '.ts')
+              const tsxVariant = resolved.replace(/\.js$/, '.tsx')
+              if (
+                !fs.existsSync(resolved) &&
+                !fs.existsSync(tsVariant) &&
+                !fs.existsSync(tsxVariant)
+              ) {
+                const entries = missingRelativeImports.get(specifier) ?? []
+                entries.push({
+                  importerPath: pathMod.normalize(importerFile),
+                  stubPath: tsVariant,
+                })
+                missingRelativeImports.set(specifier, entries)
+                stubKey = tsVariant
+              }
+            }
+
+            // Track named exports for missing modules
+            if (names.length > 0 && stubKey) {
+              if (!missingModuleExports.has(stubKey)) {
+                missingModuleExports.set(stubKey, new Set())
+              }
+              for (const n of names) missingModuleExports.get(stubKey)!.add(n)
+            }
           }
 
           function walk(dir: string) {
@@ -391,7 +480,6 @@ export const SeverityNumber = {};
               if (ent.isDirectory()) { walk(full); continue }
               if (!/\.(ts|tsx)$/.test(ent.name)) continue
               const rawCode: string = fs.readFileSync(full, 'utf-8')
-              const fileDir = pathMod.dirname(full)
 
               // Strip comments before scanning for imports/requires.
               // The regex scanner matches require()/import() patterns
@@ -403,18 +491,18 @@ export const SeverityNumber = {};
 
               // Collect static imports: import { X } from '...'
               for (const m of code.matchAll(/import\s+(?:\{([^}]*)\}|(\w+))?\s*(?:,\s*\{([^}]*)\})?\s*from\s+['"](.*?)['"]/g)) {
-                checkAndRegister(m[4], fileDir, m[1] || m[3] || '')
+                checkAndRegister(m[4], full, m[1] || m[3] || '')
               }
 
               // Collect dynamic requires: require('...') — these are used
               // behind feature() gates and become live when flags are enabled.
               for (const m of code.matchAll(/require\(\s*['"](\.\.?\/[^'"]+)['"]\s*\)/g)) {
-                checkAndRegister(m[1], fileDir, '')
+                checkAndRegister(m[1], full, '')
               }
 
               // Collect dynamic imports: import('...')
               for (const m of code.matchAll(/import\(\s*['"](\.\.?\/[^'"]+)['"]\s*\)/g)) {
-                checkAndRegister(m[1], fileDir, '')
+                checkAndRegister(m[1], full, '')
               }
             }
           }
@@ -422,13 +510,28 @@ export const SeverityNumber = {};
         }
         scanForMissingImports()
 
-        // Register exact-match resolvers for each missing module
+        // Register exact-match resolvers for each missing non-relative module
         for (const mod of missingModules) {
           const escaped = mod.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
           build.onResolve({ filter: new RegExp(`^${escaped}$`) }, () => ({
             path: mod,
             namespace: 'missing-module-stub',
           }))
+        }
+
+        // Stub missing relative imports only from the file that references them.
+        for (const [specifier, entries] of missingRelativeImports) {
+          const escaped = specifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          build.onResolve({ filter: new RegExp(`^${escaped}$`) }, (args) => {
+            if (!args.importer) return
+            const importer = pathMod.normalize(args.importer)
+            const match = entries.find(entry => entry.importerPath === importer)
+            if (!match) return
+            return {
+              path: match.stubPath,
+              namespace: 'missing-module-stub',
+            }
+          })
         }
 
         build.onLoad(

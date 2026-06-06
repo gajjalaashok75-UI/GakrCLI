@@ -1,9 +1,10 @@
 // src/worktree/worktreeManager.ts
 // Manages git worktrees: create, detect, and list.
-import * as vscode from 'vscode';
+import type * as VSCode from 'vscode';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { vscode } from '../vscodeCompat';
 
 const execFileAsync = promisify(execFile);
 
@@ -60,8 +61,8 @@ export function buildGitWorktreeArgs(
 
 // ── VS Code WorktreeManager ─────────────────────────────────────
 
-export class WorktreeManager implements vscode.Disposable {
-  private disposables: vscode.Disposable[] = [];
+export class WorktreeManager implements VSCode.Disposable {
+  private disposables: VSCode.Disposable[] = [];
 
   constructor() {}
 

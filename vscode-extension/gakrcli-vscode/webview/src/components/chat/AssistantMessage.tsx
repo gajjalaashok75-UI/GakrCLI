@@ -53,7 +53,7 @@ export function AssistantMessage({
 
       {message.interrupted && !message.isStreaming && (
         <div className="assistant-interrupt-row">
-          Interrupted · What should Gakr do instead?
+          Interrupted · What should GakrCLI do instead?
         </div>
       )}
 

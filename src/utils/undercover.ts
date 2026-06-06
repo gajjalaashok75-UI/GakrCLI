@@ -1,7 +1,7 @@
 /**
  * Undercover mode — safety utilities for contributing to public/open-source repos.
  *
- * When active, Gakr adds safety instructions to commit/PR prompts and
+ * When active, GakrCLI adds safety instructions to commit/PR prompts and
  * strips all attribution to avoid leaking internal model codenames, project
  * names, or other Anthropic-internal information. The model is not told what
  * model it is.
@@ -10,7 +10,7 @@
  *   - GAKR_CODE_UNDERCOVER=1 — force ON (even in internal repos)
  *   - Otherwise AUTO: active UNLESS the repo remote matches the internal
  *     allowlist (INTERNAL_MODEL_REPOS in commitAttribution.ts). Safe default
- *     is ON — Gakr may push to public remotes from a CWD that isn't itself
+ *     is ON — GakrCLI may push to public remotes from a CWD that isn't itself
  *     a git checkout (e.g. /tmp crash repro).
  *   - There is NO force-OFF. This guards against model codename leaks — if
  *     we're not confident we're in an internal repo, we stay undercover.
@@ -62,10 +62,10 @@ GOOD:
 - "Refactor parser for better error messages"
 
 BAD (never write these):
-- "Fix bug found while testing with Gakr Capybara"
+- "Fix bug found while testing with GakrCLI Capybara"
 - "1-shotted by gakrcli-opus-4-6"
 - "Generated with Gakr"
-- "Co-Authored-By: Gakr Opus 4.6 <…>"
+- "Co-Authored-By: GakrCLI Opus 4.6 <…>"
 `
   }
   return ''

@@ -26,13 +26,13 @@ describe('resolveCliExecutable', () => {
 
   it('parses a configured wrapper with launch arguments', () => {
     const config = {
-      get: (_key: string, _defaultValue?: string) => 'node "C:\\Tools\\Gakr CLI\\dist\\cli.mjs"',
+      get: (_key: string, _defaultValue?: string) => 'node "C:\\Tools\\GakrCLI CLI\\dist\\cli.mjs"',
     };
 
     const launch = resolveCliLaunchCommand(config);
 
     expect(launch.executable).toBe('node');
-    expect(launch.args).toEqual(['C:\\Tools\\Gakr CLI\\dist\\cli.mjs']);
+    expect(launch.args).toEqual(['C:\\Tools\\GakrCLI CLI\\dist\\cli.mjs']);
   });
 
   it('resolves a relative source-wrapper CLI path from the extension checkout', () => {

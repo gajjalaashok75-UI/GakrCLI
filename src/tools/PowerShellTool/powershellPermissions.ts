@@ -4,6 +4,7 @@
  */
 
 import { resolve } from 'path'
+import { getOriginalCwd } from '../../bootstrap/state.js'
 import type { ToolPermissionContext, ToolUseContext } from '../../Tool.js'
 import type {
   PermissionDecisionReason,
@@ -17,6 +18,7 @@ import {
   createPermissionRequestMessage,
   getRuleByContentsForToolName,
 } from '../../utils/permissions/permissions.js'
+import { isGakrCommitMessagePath } from '../../utils/permissions/filesystem.js'
 import {
   matchWildcardPattern,
   parsePermissionRule,
@@ -110,6 +112,25 @@ const GIT_SAFETY_ARCHIVE_EXTRACTORS = new Set([
   'gunzip.exe',
   'expand-archive',
 ])
+
+export function isUnsafeDotGitWritePathForPowerShell(
+  path: string,
+  toolPermissionContext: ToolPermissionContext,
+): boolean {
+  if (!isDotGitPathPS(path)) {
+    return false
+  }
+
+  if (
+    (toolPermissionContext.mode === 'bypassPermissions' ||
+      toolPermissionContext.mode === 'fullAccess') &&
+    isGakrCommitMessagePath(resolve(getOriginalCwd(), path))
+  ) {
+    return false
+  }
+
+  return true
+}
 
 /**
  * Extract the command name from a PowerShell command string.
@@ -1241,12 +1262,25 @@ export async function powershellToolHasPermission(
     const found =
       allSubCommands.some(({ element }) => {
         for (const r of element.redirections ?? []) {
-          if (isDotGitPathPS(r.target)) return true
+          if (
+            isUnsafeDotGitWritePathForPowerShell(
+              r.target,
+              toolPermissionContext,
+            )
+          )
+            return true
         }
         const canonical = resolveToCanonical(element.name)
         if (!GIT_SAFETY_WRITE_CMDLETS.has(canonical)) return false
-        return element.args.flatMap(a => a.split(',')).some(isDotGitPathPS)
-      }) || getFileRedirections(parsed).some(r => isDotGitPathPS(r.target))
+        return element.args
+          .flatMap(a => a.split(','))
+          .some(path =>
+            isUnsafeDotGitWritePathForPowerShell(path, toolPermissionContext),
+          )
+      }) ||
+      getFileRedirections(parsed).some(r =>
+        isUnsafeDotGitWritePathForPowerShell(r.target, toolPermissionContext),
+      )
     if (found) {
       decisions.push({
         behavior: 'ask',
@@ -1549,7 +1583,7 @@ export async function powershellToolHasPermission(
     // gate, `Set-Location ./.gakrcli; Set-Content ./settings.json '...'` would
     // pass: Set-Content is checked in isolation, matches ACCEPT_EDITS_ALLOWED_CMDLETS,
     // and auto-allows — but PowerShell runs it from the changed cwd, writing to
-    // .gakrcli/settings.json (a Gakr config file the path validator didn't check).
+    // .gakrcli/settings.json (a GakrCLI config file the path validator didn't check).
     // This matches BashTool's compoundCommandHasCd guard.
     if (statement !== null && !hasCdSubCommand && !hasSymlinkCreate) {
       const subModeResult = checkPermissionMode(

@@ -33,6 +33,67 @@ describe('MCPTool.validateInput', () => {
     expect(invalid.result === false && invalid.message).toContain('name')
   })
 
+  test('validates draft 2020-12 MCP input schemas', async () => {
+    const schema = {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'object' as const,
+      properties: {
+        action: { enum: ['list', 'select', 'close'] },
+      },
+      required: ['action'],
+      additionalProperties: false,
+    }
+    const tool = { ...MCPTool, inputJSONSchema: schema }
+
+    const valid = await tool.validateInput!({ action: 'list' }, {} as never)
+    expect(valid.result).toBe(true)
+
+    const invalid = await tool.validateInput!({ action: 'missing' }, {} as never)
+    expect(invalid.result).toBe(false)
+    expect(invalid.result === false && invalid.errorCode).toBe(400)
+  })
+
+  test('validates draft 2019-09 MCP input schemas', async () => {
+    const schema = {
+      $schema: 'https://json-schema.org/draft/2019-09/schema',
+      type: 'object' as const,
+      properties: {
+        mode: { type: 'string' },
+      },
+      dependentRequired: {
+        mode: ['target'],
+      },
+      required: ['mode'],
+    }
+    const tool = { ...MCPTool, inputJSONSchema: schema }
+
+    const valid = await tool.validateInput!(
+      { mode: 'click', target: '#submit' },
+      {} as never,
+    )
+    expect(valid.result).toBe(true)
+
+    const invalid = await tool.validateInput!({ mode: 'click' }, {} as never)
+    expect(invalid.result).toBe(false)
+    expect(invalid.result === false && invalid.errorCode).toBe(400)
+  })
+
+  test('detects newer schema keywords even when an MCP server omits $schema', async () => {
+    const schema = {
+      type: 'array' as const,
+      prefixItems: [{ type: 'string' }, { type: 'number' }],
+      items: false,
+    }
+    const tool = { ...MCPTool, inputJSONSchema: schema }
+
+    const valid = await tool.validateInput!(['tab', 1], {} as never)
+    expect(valid.result).toBe(true)
+
+    const invalid = await tool.validateInput!(['tab', 1, 'extra'], {} as never)
+    expect(invalid.result).toBe(false)
+    expect(invalid.result === false && invalid.errorCode).toBe(400)
+  })
+
   test('rejects extra properties when additionalProperties is false', async () => {
     const schema = {
       type: 'object' as const,

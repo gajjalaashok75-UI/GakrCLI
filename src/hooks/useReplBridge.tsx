@@ -419,7 +419,7 @@ export function useReplBridge(messages: Message[], setMessages: (action: React.S
               // setAutoModeActive(true) side-effect BEFORE the throw) rather
               // than a graceful reject. Letting that throw escape would:
               // (1) leave STATE.autoModeActive=true while the mode is
-              //     unchanged (3-way invariant violation per src/GAKR.md)
+              //     unchanged (3-way invariant violation per src/GAKRCLI.md)
               // (2) fail to send a control_response → server kills WS
               // These mirror print.ts handleSetPermissionMode; the bridge
               // can't import the checks directly (bootstrap-isolation), so
@@ -610,7 +610,7 @@ export function useReplBridge(messages: Message[], setMessages: (action: React.S
             // GrowthBook hiccup doesn't hit the outer init-failure handler.
             const upgradeNudge = !perpetual ? await shouldShowAppUpgradeMessage().catch(() => false) : false;
             if (cancelled) return;
-            setMessages(prev_18 => [...prev_18, createBridgeStatusMessage(url, upgradeNudge ? 'Please upgrade to the latest version of the Gakr mobile app to see your Remote Control sessions.' : undefined)]);
+            setMessages(prev_18 => [...prev_18, createBridgeStatusMessage(url, upgradeNudge ? 'Please upgrade to the latest version of the GakrCLI mobile app to see your Remote Control sessions.' : undefined)]);
             logForDebugging(`[bridge:repl] Hook initialized, session=${handle_0.bridgeSessionId}`);
           }
         } catch (err) {

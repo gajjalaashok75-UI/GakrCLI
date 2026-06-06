@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { WebviewManager } from '../../src/webview/webviewManager';
 import { Uri } from '../__mocks__/vscode';
-import * as vscode from 'vscode';
+import * as vscode from '../__mocks__/vscode';
 
 // Mock ExtensionContext
 function createMockContext(): vscode.ExtensionContext {

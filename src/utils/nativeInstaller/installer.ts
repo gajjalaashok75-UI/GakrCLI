@@ -869,7 +869,7 @@ export async function checkInstall(
       const absoluteTarget = resolve(dirname(dirs.executable), target)
       if (!(await isPossiblegakrcliBinary(absoluteTarget))) {
         messages.push({
-          message: `Gakr symlink points to missing or invalid binary: ${target}`,
+          message: `GakrCLI symlink points to missing or invalid binary: ${target}`,
           userActionRequired: true,
           type: 'error',
         })
@@ -885,7 +885,7 @@ export async function checkInstall(
         // EINVAL (not a symlink) or other — check as regular binary
         if (!(await isPossiblegakrcliBinary(dirs.executable))) {
           messages.push({
-            message: `${dirs.executable} exists but is not a valid Gakr binary`,
+            message: `${dirs.executable} exists but is not a valid GakrCLI binary`,
             userActionRequired: true,
             type: 'error',
           })

@@ -30,7 +30,7 @@ const command = {
     lines.push('')
 
     if (recommendations.recommendations.length === 0) {
-      lines.push('No recommendations at this time. Keep using Gakr to gather more data!')
+      lines.push('No recommendations at this time. Keep using GakrCLI to gather more data!')
     } else {
       lines.push(chalk.dim(`📊 ${recommendations.recommendations.length} recommendations (${recommendations.highPriorityCount} high priority)`))
       lines.push('')

@@ -1,4 +1,4 @@
-import { useLayoutEffect } from 'react'
+import { useLayoutEffect, useRef } from 'react'
 import { useEventCallback } from 'usehooks-ts'
 import type { InputEvent, Key } from '../events/input-event.js'
 import useStdin from './use-stdin.js'
@@ -41,6 +41,7 @@ type Options = {
  */
 const useInput = (inputHandler: Handler, options: Options = {}) => {
   const { setRawMode, internal_exitOnCtrlC, internal_eventEmitter } = useStdin()
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // useLayoutEffect (not useEffect) so that raw mode is enabled synchronously
   // during React's commit phase, before render() returns. With useEffect, raw
@@ -52,10 +53,18 @@ const useInput = (inputHandler: Handler, options: Options = {}) => {
       return
     }
 
-    setRawMode(true)
+    if (resetTimerRef.current !== null) {
+      clearTimeout(resetTimerRef.current)
+      resetTimerRef.current = null
+    } else {
+      setRawMode(true)
+    }
 
     return () => {
-      setRawMode(false)
+      resetTimerRef.current = setTimeout(() => {
+        setRawMode(false)
+        resetTimerRef.current = null
+      }, 0)
     }
   }, [options.isActive, setRawMode])
 

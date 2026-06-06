@@ -13,6 +13,11 @@ export interface ProviderOverride {
   apiKey: string
 }
 
+export interface AgentRunModelRouting {
+  mainLoopModel: string
+  providerOverride?: ProviderOverride
+}
+
 /**
  * Normalize an agent identifier for case-insensitive, hyphen/underscore-agnostic matching.
  */
@@ -72,4 +77,122 @@ export function resolveAgentProvider(
     baseURL: modelConfig.base_url,
     apiKey: modelConfig.api_key,
   }
+}
+
+/**
+ * Resolve provider override directly from a requested model name.
+ * Checks for an exact match in agentModels. Does not fuzzy match or normalize case.
+ */
+export function resolveAgentModelProvider(
+  modelName: string | undefined,
+  settings: SettingsJson | null,
+): ProviderOverride | null {
+  if (!settings || !settings.agentModels || !modelName) return null
+
+  const trimmedModelName = modelName.trim()
+  const modelConfig = settings.agentModels[trimmedModelName]
+
+  if (!modelConfig) return null
+
+  return {
+    model: trimmedModelName,
+    baseURL: modelConfig.base_url,
+    apiKey: modelConfig.api_key,
+  }
+}
+
+export function resolveAgentRunModelRouting({
+  resolvedAgentModel,
+  toolSpecifiedModel,
+  agentName,
+  subagentType,
+  agentDefinitionModel,
+  settings,
+}: {
+  resolvedAgentModel: string
+  toolSpecifiedModel?: string
+  agentName?: string
+  subagentType?: string
+  agentDefinitionModel?: string
+  settings: SettingsJson | null
+}): AgentRunModelRouting {
+  const toolRequestedModel = toolSpecifiedModel?.trim()
+  if (toolRequestedModel) {
+    const providerOverride = resolveAgentModelProvider(toolRequestedModel, settings)
+    return {
+      mainLoopModel: providerOverride?.model ?? resolvedAgentModel,
+      ...(providerOverride && { providerOverride }),
+    }
+  }
+
+  const providerOverride =
+    resolveAgentProvider(agentName, subagentType, settings) ??
+    resolveAgentModelProvider(agentDefinitionModel, settings)
+
+  return {
+    mainLoopModel: providerOverride?.model ?? resolvedAgentModel,
+    ...(providerOverride && { providerOverride }),
+  }
+}
+
+/**
+ * Resolve provider routing for a teammate that will run as its own CLI process.
+ */
+export function resolveOutOfProcessTeammateProvider({
+  cliModel,
+  agentName,
+  agentType,
+  agentDefinitionModel,
+  settings,
+}: {
+  cliModel?: string
+  agentName?: string
+  agentType?: string
+  agentDefinitionModel?: string
+  settings: SettingsJson | null
+}): ProviderOverride | null {
+  const requestedModel = cliModel?.trim()
+  if (requestedModel) {
+    return resolveAgentModelProvider(requestedModel, settings)
+  }
+
+  return (
+    resolveAgentProvider(agentName, agentType, settings) ??
+    resolveAgentModelProvider(agentDefinitionModel, settings)
+  )
+}
+
+export function resolveOutOfProcessTeammateProviderFromCliArgs(
+  args: readonly string[],
+  settings: SettingsJson | null,
+): ProviderOverride | null {
+  if (hasCliFlag(args, '--provider')) return null
+
+  const agentName = parseCliFlag(args, '--agent-name')
+  const teamName = parseCliFlag(args, '--team-name')
+  if (!agentName || !teamName) return null
+
+  return resolveOutOfProcessTeammateProvider({
+    cliModel: parseCliFlag(args, '--model'),
+    agentName,
+    agentType: parseCliFlag(args, '--agent-type'),
+    settings,
+  })
+}
+
+function hasCliFlag(args: readonly string[], flag: string): boolean {
+  return args.some(arg => arg === flag || arg.startsWith(`${flag}=`))
+}
+
+function parseCliFlag(args: readonly string[], flag: string): string | undefined {
+  for (const arg of args) {
+    if (arg.startsWith(`${flag}=`)) {
+      const value = arg.slice(flag.length + 1)
+      return value || undefined
+    }
+  }
+  const idx = args.indexOf(flag)
+  if (idx === -1) return undefined
+  const value = args[idx + 1]
+  return value && !value.startsWith('--') ? value : undefined
 }

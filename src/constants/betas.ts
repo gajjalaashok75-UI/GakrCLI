@@ -8,7 +8,7 @@ export const CONTEXT_MANAGEMENT_BETA_HEADER = 'context-management-2025-06-27'
 export const STRUCTURED_OUTPUTS_BETA_HEADER = 'structured-outputs-2025-12-15'
 export const WEB_SEARCH_BETA_HEADER = 'web-search-2025-03-05'
 // Tool search beta headers differ by provider:
-// - Gakr API / Foundry: advanced-tool-use-2025-11-20
+// - GakrCLI API / Foundry: advanced-tool-use-2025-11-20
 // - Vertex AI / Bedrock: tool-search-tool-2025-10-19
 export const TOOL_SEARCH_BETA_HEADER_1P = 'advanced-tool-use-2025-11-20'
 export const TOOL_SEARCH_BETA_HEADER_3P = 'tool-search-tool-2025-10-19'

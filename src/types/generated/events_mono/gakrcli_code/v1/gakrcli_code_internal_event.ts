@@ -73,7 +73,7 @@ export interface SlackContext {
 }
 
 /**
- * gakrcliCodeInternalEvent represents events logged from Gakr via Statsig
+ * gakrcliCodeInternalEvent represents events logged from GakrCLI via Statsig
  * This schema matches the structure in gakrcli-cli-internal/src/services/statsig.ts
  * Source table: proj-product-data-nhme.raw_statsig_internal_tools.events
  */

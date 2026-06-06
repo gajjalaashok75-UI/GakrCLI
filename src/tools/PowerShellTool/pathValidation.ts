@@ -1583,7 +1583,7 @@ function checkPathConstraintsForStatement(
   // STALE getCwd() snapshot. Example attack (finding #3):
   //   Set-Location ./.gakrcli; Set-Content ./settings.json '...'
   // Validator sees ./settings.json → /project/settings.json (not a config file).
-  // Runtime writes /project/.gakrcli/settings.json (Gakr's permission config).
+  // Runtime writes /project/.gakrcli/settings.json (GakrCLI's permission config).
   //
   // ALTERNATIVE APPROACH (rejected): simulate cwd through the statement chain
   // — after `Set-Location ./.gakrcli`, validate subsequent statements with
@@ -1760,7 +1760,7 @@ function checkPathConstraintsForStatement(
           decisionReason?.type === 'other' ||
           decisionReason?.type === 'safetyCheck'
             ? decisionReason.reason
-            : `${canonical} targeting '${resolvedPath}' was blocked. For security, Gakr may only access files in the allowed working directories for this session: ${dirListStr}.`
+            : `${canonical} targeting '${resolvedPath}' was blocked. For security, GakrCLI may only access files in the allowed working directories for this session: ${dirListStr}.`
 
         if (decisionReason?.type === 'rule') {
           return {
@@ -1873,7 +1873,7 @@ function checkPathConstraintsForStatement(
             decisionReason?.type === 'other' ||
             decisionReason?.type === 'safetyCheck'
               ? decisionReason.reason
-              : `${canonical} targeting '${resolvedPath}' was blocked. For security, Gakr may only access files in the allowed working directories for this session: ${dirListStr}.`
+              : `${canonical} targeting '${resolvedPath}' was blocked. For security, GakrCLI may only access files in the allowed working directories for this session: ${dirListStr}.`
 
           if (decisionReason?.type === 'rule') {
             return {
@@ -1960,7 +1960,7 @@ function checkPathConstraintsForStatement(
               decisionReason?.type === 'other' ||
               decisionReason?.type === 'safetyCheck'
                 ? decisionReason.reason
-                : `Output redirection to '${resolvedPath}' was blocked. For security, Gakr may only write to files in the allowed working directories for this session: ${dirListStr}.`
+                : `Output redirection to '${resolvedPath}' was blocked. For security, GakrCLI may only write to files in the allowed working directories for this session: ${dirListStr}.`
 
             if (decisionReason?.type === 'rule') {
               return {
@@ -2013,7 +2013,7 @@ function checkPathConstraintsForStatement(
           decisionReason?.type === 'other' ||
           decisionReason?.type === 'safetyCheck'
             ? decisionReason.reason
-            : `Output redirection to '${resolvedPath}' was blocked. For security, Gakr may only write to files in the allowed working directories for this session: ${dirListStr}.`
+            : `Output redirection to '${resolvedPath}' was blocked. For security, GakrCLI may only write to files in the allowed working directories for this session: ${dirListStr}.`
 
         if (decisionReason?.type === 'rule') {
           return {

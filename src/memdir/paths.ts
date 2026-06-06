@@ -7,7 +7,7 @@ import {
 } from '../bootstrap/state.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
 import {
-  getGakrcliConfigHomeDir,
+  getGakrcliWorkspaceDir,
   isEnvDefinedFalsy,
   isEnvTruthy,
 } from '../utils/envUtils.js'
@@ -80,13 +80,13 @@ export function isExtractModeActive(): boolean {
  * Returns the base directory for persistent memory storage.
  * Resolution order:
  *   1. GAKR_CODE_REMOTE_MEMORY_DIR env var (explicit override, set in CCR)
- *   2. ~/.gakrcli (default config home)
+ *   2. ~/.gakrcli/workspace (default workspace)
  */
 export function getMemoryBaseDir(): string {
   if (process.env.GAKR_CODE_REMOTE_MEMORY_DIR) {
     return process.env.GAKR_CODE_REMOTE_MEMORY_DIR
   }
-  return getGakrcliConfigHomeDir()
+  return getGakrcliWorkspaceDir()
 }
 
 const AUTO_MEM_DIRNAME = 'memory'
@@ -233,22 +233,6 @@ export const getAutoMemPath = memoize(
   },
   () => getProjectRoot(),
 )
-
-/**
- * Returns the daily log file path for the given date (defaults to today).
- * Shape: <autoMemPath>/logs/YYYY/MM/YYYY-MM-DD.md
- *
- * Used by assistant mode (feature('KAIROS')): rather than maintaining
- * MEMORY.md as a live index, the agent appends to a date-named log file
- * as it works. A separate nightly /dream skill distills these logs into
- * topic files + MEMORY.md.
- */
-export function getAutoMemDailyLogPath(date: Date = new Date()): string {
-  const yyyy = date.getFullYear().toString()
-  const mm = (date.getMonth() + 1).toString().padStart(2, '0')
-  const dd = date.getDate().toString().padStart(2, '0')
-  return join(getAutoMemPath(), 'logs', yyyy, mm, `${yyyy}-${mm}-${dd}.md`)
-}
 
 /**
  * Returns the auto-memory entrypoint (MEMORY.md inside the auto-memory dir).

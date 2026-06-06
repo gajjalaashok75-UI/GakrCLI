@@ -157,6 +157,10 @@ const getPowerShellTool = () => {
 }
 /* eslint-enable @typescript-eslint/no-require-imports */
 
+function isDefinedTool(tool: Tool | null | undefined): tool is Tool {
+  return Boolean(tool)
+}
+
 /**
  * Predefined tool presets that can be used with --tools flag
  */
@@ -198,7 +202,7 @@ export function getAllBaseTools(): Tools {
     TaskOutputTool,
     BashTool,
     // Ant-native builds have bfs/ugrep embedded in the bun binary (same ARGV0
-    // trick as ripgrep). When available, find/grep in Gakr's shell are aliased
+    // trick as ripgrep). When available, find/grep in GakrCLI's shell are aliased
     // to these fast tools, so the dedicated Glob/Grep tools are unnecessary.
     ...(hasEmbeddedSearchTools() ? [] : [GlobTool, GrepTool]),
     ExitPlanModeV2Tool,
@@ -251,7 +255,7 @@ export function getAllBaseTools(): Tools {
     // Include ToolSearchTool when tool search might be enabled (optimistic check)
     // The actual decision to defer tools happens at request time in gakrcli.ts
     ...(isToolSearchEnabledOptimistic() ? [ToolSearchTool] : []),
-  ]
+  ].filter(isDefinedTool)
 }
 
 /**
@@ -284,7 +288,8 @@ export const getTools = (permissionContext: ToolPermissionContext): Tools => {
         feature('COORDINATOR_MODE') &&
         coordinatorModeModule?.isCoordinatorMode()
       ) {
-        replSimple.push(TaskStopTool, getSendMessageTool())
+        const sendMessageTool = getSendMessageTool()
+        if (sendMessageTool) replSimple.push(TaskStopTool, sendMessageTool)
       }
       return filterToolsByDenyRules(replSimple, permissionContext)
     }
@@ -296,7 +301,9 @@ export const getTools = (permissionContext: ToolPermissionContext): Tools => {
       feature('COORDINATOR_MODE') &&
       coordinatorModeModule?.isCoordinatorMode()
     ) {
-      simpleTools.push(AgentTool, TaskStopTool, getSendMessageTool())
+      simpleTools.push(AgentTool, TaskStopTool)
+      const sendMessageTool = getSendMessageTool()
+      if (sendMessageTool) simpleTools.push(sendMessageTool)
     }
     return filterToolsByDenyRules(simpleTools, permissionContext)
   }
@@ -311,7 +318,9 @@ export const getTools = (permissionContext: ToolPermissionContext): Tools => {
   const tools = getAllBaseTools().filter(tool => !specialTools.has(tool.name))
 
   // Filter out tools that are denied by the deny rules
-  let allowedTools = filterToolsByDenyRules(tools, permissionContext)
+  let allowedTools = filterToolsByDenyRules(tools, permissionContext).filter(
+    isDefinedTool,
+  )
 
   // When REPL mode is enabled, hide primitive tools from direct use.
   // They're still accessible inside REPL via the VM context.
@@ -353,7 +362,10 @@ export function assembleToolPool(
   const builtInTools = getTools(permissionContext)
 
   // Filter out MCP tools that are in the deny list
-  const allowedMcpTools = filterToolsByDenyRules(mcpTools, permissionContext)
+  const allowedMcpTools = filterToolsByDenyRules(
+    mcpTools,
+    permissionContext,
+  ).filter(isDefinedTool)
 
   // Sort each partition for prompt-cache stability, keeping built-ins as a
   // contiguous prefix. The server's gakrcli_code_system_cache_policy places a

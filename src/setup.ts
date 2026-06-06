@@ -52,6 +52,7 @@ import {
   generateTmuxSessionName,
   worktreeBranchName,
 } from './utils/worktree.js'
+import { ensureGakrcliWorkspace } from './utils/workspace.js'
 
 export async function setup(
   cwd: string,
@@ -72,11 +73,13 @@ export async function setup(
     // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.error(
       chalk.bold.red(
-        'Error: Gakr requires Node.js version 18 or higher.',
+        'Error: GakrCLI requires Node.js version 18 or higher.',
       ),
     )
     process.exit(1)
   }
+
+  await ensureGakrcliWorkspace()
 
   // Set custom session ID if provided
   if (customSessionId) {

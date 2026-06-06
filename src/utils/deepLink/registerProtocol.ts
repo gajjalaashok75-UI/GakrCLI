@@ -31,9 +31,9 @@ import { getUserBinDir, getXDGDataHome } from '../xdg.js'
 import { DEEP_LINK_PROTOCOL } from './parseDeepLink.js'
 
 export const MACOS_BUNDLE_ID = 'com.gakr-gakr.gakrcli-vscode-url-handler'
-const APP_NAME = 'Gakr URL Handler'
+const APP_NAME = 'GakrCLI URL Handler'
 const DESKTOP_FILE_NAME = 'gakrcli-code-url-handler.desktop'
-const MACOS_APP_NAME = 'Gakr URL Handler.app'
+const MACOS_APP_NAME = 'GakrCLI URL Handler.app'
 
 // Shared between register* (writes these paths/values) and
 // isProtocolHandlerCurrent (reads them back). Keep the writer and reader
@@ -66,7 +66,7 @@ function windowsCommandValue(gakrcliPath: string): string {
  * Creates a .app bundle where the CFBundleExecutable is a symlink to the
  * already-installed (and signed) `gakrcli` binary. When macOS opens a
  * `gakrcli-cli://` URL, it launches `gakrcli` through this app bundle.
- * Gakr then uses the url-handler NAPI module to read the URL from the
+ * GakrCLI then uses the url-handler NAPI module to read the URL from the
  * Apple Event and handles it normally.
  *
  * This approach avoids shipping a separate executable (which would need
@@ -108,7 +108,7 @@ async function registerMacos(gakrcliPath: string): Promise<void> {
   <array>
     <dict>
       <key>CFBundleURLName</key>
-      <string>Gakr Deep Link</string>
+      <string>GakrCLI Deep Link</string>
       <key>CFBundleURLSchemes</key>
       <array>
         <string>${DEEP_LINK_PROTOCOL}</string>

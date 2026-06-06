@@ -14,7 +14,7 @@
  *   render in default fg instead of white/pink. Output structure (line
  *   numbers, markers, backgrounds, word-diff) is identical.
  * - BAT_THEME env support is a stub: highlight.js has no bat theme set, so
- *   getSyntaxTheme always returns the default for the given Gakr theme.
+ *   getSyntaxTheme always returns the default for the given GakrCLI theme.
  */
 
 import { diffArrays } from 'diff'

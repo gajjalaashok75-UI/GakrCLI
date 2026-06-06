@@ -8,11 +8,11 @@
 import { homedir, userInfo } from 'os'
 import { join } from 'path'
 
-/** macOS preference domain for Gakr MDM profiles. */
+/** macOS preference domain for GakrCLI MDM profiles. */
 export const MACOS_PREFERENCE_DOMAIN = 'com.anthropic.gakrclicode'
 
 /**
- * Windows registry key paths for Gakr MDM policies.
+ * Windows registry key paths for GakrCLI MDM policies.
  *
  * These keys live under SOFTWARE\Policies which is on the WOW64 shared key
  * list — both 32-bit and 64-bit processes see the same values without

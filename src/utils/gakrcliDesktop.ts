@@ -15,7 +15,7 @@ export async function getgakrcliDesktopConfigPath(): Promise<string> {
 
   if (!SUPPORTED_PLATFORMS.includes(platform)) {
     throw new Error(
-      `Unsupported platform: ${platform} - Gakr Desktop integration only works on macOS and WSL.`,
+      `Unsupported platform: ${platform} - GakrCLI Desktop integration only works on macOS and WSL.`,
     )
   }
 
@@ -56,7 +56,7 @@ export async function getgakrcliDesktopConfigPath(): Promise<string> {
     try {
       const userDirs = await readdir(usersDir, { withFileTypes: true })
 
-      // Look for Gakr Desktop config in each user directory
+      // Look for GakrCLI Desktop config in each user directory
       for (const user of userDirs) {
         if (
           user.name === 'Public' ||
@@ -91,7 +91,7 @@ export async function getgakrcliDesktopConfigPath(): Promise<string> {
   }
 
   throw new Error(
-    'Could not find Gakr Desktop config file in Windows. Make sure Gakr Desktop is installed on Windows.',
+    'Could not find GakrCLI Desktop config file in Windows. Make sure GakrCLI Desktop is installed on Windows.',
   )
 }
 
@@ -100,7 +100,7 @@ export async function readgakrcliDesktopMcpServers(): Promise<
 > {
   if (!SUPPORTED_PLATFORMS.includes(getPlatform())) {
     throw new Error(
-      'Unsupported platform - Gakr Desktop integration only works on macOS and WSL.',
+      'Unsupported platform - GakrCLI Desktop integration only works on macOS and WSL.',
     )
   }
   try {

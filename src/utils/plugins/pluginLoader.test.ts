@@ -8,10 +8,11 @@ import {
   acquireSharedMutationLock,
   releaseSharedMutationLock,
 } from '../../test/sharedMutationLock.js'
-import type { LoadedPlugin } from '../../types/plugin.js'
+import type { LoadedPlugin, PluginError } from '../../types/plugin.js'
 import {
   clearPluginCache,
   createPluginFromPath,
+  loadPluginFromMarketplaceEntryCacheOnlyForTesting,
   mergePluginSources,
   resolveExistingPluginComponentPath,
   resolvePluginComponentPath,
@@ -96,6 +97,61 @@ describe('mergePluginSources', () => {
       source: legacy.source,
       plugin: legacy.name,
     })
+  })
+})
+
+describe('loadPluginFromMarketplaceEntryCacheOnly', () => {
+  test('uses recorded installPath for marketplace-relative plugins', async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), 'plugin-cache-only-'))
+    try {
+      const marketplaceDir = join(tempRoot, 'marketplace')
+      const marketplacePluginDir = join(
+        marketplaceDir,
+        'channel-plugins',
+        'telegram',
+      )
+      const installedPluginDir = join(
+        tempRoot,
+        'installed-cache',
+        'telegram',
+        '1.0.0',
+      )
+
+      await mkdir(join(marketplacePluginDir, '.gakrcli-plugin'), {
+        recursive: true,
+      })
+      await mkdir(join(installedPluginDir, '.gakrcli-plugin'), {
+        recursive: true,
+      })
+
+      await writeFile(
+        join(marketplacePluginDir, '.gakrcli-plugin', 'plugin.json'),
+        JSON.stringify({ name: 'telegram', version: 'marketplace-copy' }),
+      )
+      await writeFile(
+        join(installedPluginDir, '.gakrcli-plugin', 'plugin.json'),
+        JSON.stringify({ name: 'telegram', version: '1.0.0' }),
+      )
+
+      const errors: PluginError[] = []
+      const plugin = await loadPluginFromMarketplaceEntryCacheOnlyForTesting(
+        {
+          name: 'telegram',
+          version: '1.0.0',
+          source: './channel-plugins/telegram',
+        },
+        'telegram@test-market',
+        true,
+        errors,
+        installedPluginDir,
+      )
+
+      expect(plugin?.path).toBe(installedPluginDir)
+      expect(plugin?.manifest.version).toBe('1.0.0')
+      expect(errors).toEqual([])
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true })
+    }
   })
 })
 

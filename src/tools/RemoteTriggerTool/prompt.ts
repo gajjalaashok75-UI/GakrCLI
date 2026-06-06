@@ -1,7 +1,7 @@
 export const REMOTE_TRIGGER_TOOL_NAME = 'RemoteTrigger'
 
 export const DESCRIPTION =
-  'Manage scheduled remote Gakr agents (triggers) via the gakr.ai CCR API. Auth is handled in-process — the token never reaches the shell.'
+  'Manage scheduled remote GakrCLI agents (triggers) via the gakr.ai CCR API. Auth is handled in-process — the token never reaches the shell.'
 
 export const PROMPT = `Call the gakr.ai remote-trigger API. Use this instead of curl — the OAuth token is added automatically in-process and never exposed.
 

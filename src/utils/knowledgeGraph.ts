@@ -1,4 +1,4 @@
-import { rmSync, renameSync, existsSync, readFileSync, writeFileSync } from 'fs'
+import { rmSync, renameSync, existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { getProjectsDir } from './envUtils.js'
 import { sanitizePath } from './sessionStoragePortable.js'
@@ -8,6 +8,7 @@ import { persist, restore } from '@orama/plugin-data-persistence'
 import { AsyncLocalStorage } from 'async_hooks'
 import { SQLiteProvider } from './storage/SQLiteProvider.js'
 import { JSONProvider } from './storage/JSONProvider.js'
+import { writeFileSyncAndFlush_DEPRECATED } from './file.js'
 
 export interface Entity {
   id: string
@@ -265,7 +266,7 @@ export async function saveOrama(cwd: string): Promise<void> {
   const path = getOramaPersistencePath(cwd)
   try {
     const data = await persist(oramaDb, 'binary')
-    writeFileSync(path, data as Buffer)
+    writeFileSyncAndFlush_DEPRECATED(path, data as Buffer)
   } catch (e) {
     console.error('Failed to save Orama DB:', e)
   }

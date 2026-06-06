@@ -1,4 +1,4 @@
-# Gakr Quick Start for macOS and Linux (v0.5.5)
+# GakrCLI Quick Start for macOS and Linux (v0.5.6)
 
 This guide uses a standard shell such as Terminal, iTerm, bash, or zsh.
 

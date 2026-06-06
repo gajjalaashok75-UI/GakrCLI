@@ -11,9 +11,10 @@
  * with (the channel's MCP tool, SendUserMessage, or both).
  *
  * feature('KAIROS') || feature('KAIROS_CHANNELS'). Runtime gate tengu_harbor.
- * Requires gakr.ai OAuth auth — API key users are blocked until
- * console gets a channelsEnabled admin surface. Teams/Enterprise orgs
- * must explicitly opt in via channelsEnabled: true in managed settings.
+ * Cloud sessions require gakr.ai OAuth auth; open/local third-party-provider
+ * sessions use explicit --channels opt-in plus the local approved-plugin
+ * allowlist. Teams/Enterprise orgs must explicitly opt in via
+ * channelsEnabled: true in managed settings.
  */
 
 import type { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js'
@@ -23,6 +24,7 @@ import { CHANNEL_TAG } from '../../constants/xml.js'
 import {
   getgakrcliAIOAuthTokens,
   getSubscriptionType,
+  isUsing3PServices,
 } from '../../utils/auth.js'
 import { lazySchema } from '../../utils/lazySchema.js'
 import { parsePluginIdentifier } from '../../utils/plugins/pluginIdentifier.js'
@@ -112,7 +114,14 @@ export function wrapChannelMessage(
     .filter(([k]) => SAFE_META_KEY.test(k))
     .map(([k, v]) => ` ${k}="${escapeXmlAttr(v)}"`)
     .join('')
-  return `<${CHANNEL_TAG} source="${escapeXmlAttr(serverName)}"${attrs}>\n${content}\n</${CHANNEL_TAG}>`
+  return [
+    '<channel_delivery_instruction>',
+    'This message came from an external channel. If you answer it, use that channel MCP server\'s reply/send tool with the chat_id or destination in the channel tag. Do not answer channel messages with normal assistant prose, and do not add a visible terminal response after the channel reply tool call.',
+    '</channel_delivery_instruction>',
+    `<${CHANNEL_TAG} source="${escapeXmlAttr(serverName)}"${attrs}>`,
+    content,
+    `</${CHANNEL_TAG}>`,
+  ].join('\n')
 }
 
 /**
@@ -216,10 +225,12 @@ export function gateChannelServer(
     }
   }
 
-  // OAuth-only. API key users (console) are blocked — there's no
-  // channelsEnabled admin surface in console yet, so the policy opt-in
-  // flow doesn't exist for them. Drop this when console parity lands.
-  if (!getgakrcliAIOAuthTokens()?.accessToken) {
+  // Upstream cloud channels require OAuth because org policy and allowlist
+  // decisions come from gakr.ai. In the open/local build, third-party provider
+  // sessions (OpenAI-compatible, Gemini, NVIDIA, etc.) do not have gakr.ai
+  // OAuth at all, so rely on the explicit --channels opt-in plus the local
+  // allowlist ledger instead.
+  if (!isUsing3PServices() && !getgakrcliAIOAuthTokens()?.accessToken) {
     return {
       action: 'skip',
       kind: 'auth',

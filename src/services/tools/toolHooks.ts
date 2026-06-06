@@ -27,7 +27,10 @@ import {
   type PermissionDecisionReason,
   type PermissionResult,
 } from '../../utils/permissions/PermissionResult.js'
-import { checkRuleBasedPermissions } from '../../utils/permissions/permissions.js'
+import {
+  checkRuleBasedPermissions,
+  hasPermissionsToUseTool,
+} from '../../utils/permissions/permissions.js'
 import { formatError } from '../../utils/toolErrors.js'
 import { getAutoFixConfig } from '../autoFix/autoFixConfig.js'
 import { shouldRunAutoFix, buildAutoFixContext } from '../autoFix/autoFixHook.js'
@@ -486,6 +489,22 @@ export async function resolveHookPermissionDecision(
     hookPermissionResult.updatedInput
       ? hookPermissionResult.updatedInput
       : input
+  const isFullAccessMode =
+    toolUseContext.getAppState().toolPermissionContext.mode === 'fullAccess'
+  if (hookPermissionResult?.behavior === 'ask' && isFullAccessMode) {
+    const fullAccessDecision = await hasPermissionsToUseTool(
+      tool,
+      askInput,
+      toolUseContext,
+      assistantMessage,
+      toolUseID,
+    )
+    return {
+      decision: fullAccessDecision,
+      input: fullAccessDecision.updatedInput ?? askInput,
+    }
+  }
+
   return {
     decision: await canUseTool(
       tool,

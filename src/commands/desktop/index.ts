@@ -14,7 +14,7 @@ const desktop = {
   type: 'local-jsx',
   name: 'desktop',
   aliases: ['app'],
-  description: 'Continue the current session in Gakr Desktop',
+  description: 'Continue the current session in GakrCLI Desktop',
   availability: ['gakrcli-ai'],
   isEnabled: isSupportedPlatform,
   get isHidden() {

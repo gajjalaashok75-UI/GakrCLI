@@ -202,7 +202,7 @@ export const ImageSearchTool = buildTool({
   maxResultSizeChars: 100_000,
   shouldDefer: true,
   async description(input) {
-    return `Gakr wants to search images for: ${input.query}`
+    return `GakrCLI wants to search images for: ${input.query}`
   },
   userFacingName() {
     return 'Image Search'

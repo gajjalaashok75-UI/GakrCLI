@@ -110,7 +110,7 @@ Plugin syntax: \`plugin-name@source\` where source is \`gakrcli-code-marketplace
 
 const HOOKS_DOCS = `## Hooks Configuration
 
-Hooks run commands at specific points in Gakr's lifecycle.
+Hooks run commands at specific points in GakrCLI's lifecycle.
 
 ### Hook Structure
 \`\`\`json
@@ -142,7 +142,7 @@ Hooks run commands at specific points in Gakr's lifecycle.
 | PostToolUse | Tool name | Run after successful tool |
 | PostToolUseFailure | Tool name | Run after tool fails |
 | Notification | Notification type | Run on notifications |
-| Stop | - | Run when Gakr stops (including clear, resume, compact) |
+| Stop | - | Run when GakrCLI stops (including clear, resume, compact) |
 | PreCompact | "manual"/"auto" | Before compaction |
 | PostCompact | "manual"/"auto" | After compaction (receives summary) |
 | UserPromptSubmit | - | When user submits |
@@ -307,7 +307,7 @@ Given an event, matcher, target file, and desired behavior, follow this flow. Ea
 
 const UPDATE_CONFIG_PROMPT = `# Update Config Skill
 
-Modify Gakr configuration by updating settings.json files.
+Modify GakrCLI configuration by updating settings.json files.
 
 ## When Hooks Are Required (Not Memory)
 
@@ -386,7 +386,7 @@ ${HOOK_VERIFICATION_FLOW}
 
 ### Adding a Hook
 
-User: "Format my code after Gakr writes it"
+User: "Format my code after GakrCLI writes it"
 
 1. **Clarify**: Which formatter? (prettier, gofmt, etc.)
 2. **Read**: \`.gakrcli/settings.json\` (or create if missing)
@@ -447,7 +447,7 @@ export function registerUpdateConfigSkill(): void {
   registerBundledSkill({
     name: 'update-config',
     description:
-      'Use this skill to configure the Gakr harness via settings.json. Automated behaviors ("from now on when X", "each time X", "whenever X", "before/after X") require hooks configured in settings.json - the harness executes these, not Gakr, so memory/preferences cannot fulfill them. Also use for: permissions ("allow X", "add permission", "move permission to"), env vars ("set X=Y"), hook troubleshooting, or any changes to settings.json/settings.local.json files. Examples: "allow npm commands", "add bq permission to global settings", "move permission to user settings", "set DEBUG=true", "when gakrcli stops show X". For simple settings like theme/model, use Config tool.',
+      'Use this skill to configure the GakrCLI harness via settings.json. Automated behaviors ("from now on when X", "each time X", "whenever X", "before/after X") require hooks configured in settings.json - the harness executes these, not Gakr, so memory/preferences cannot fulfill them. Also use for: permissions ("allow X", "add permission", "move permission to"), env vars ("set X=Y"), hook troubleshooting, or any changes to settings.json/settings.local.json files. Examples: "allow npm commands", "add bq permission to global settings", "move permission to user settings", "set DEBUG=true", "when gakrcli stops show X". For simple settings like theme/model, use Config tool.',
     allowedTools: ['Read'],
     userInvocable: true,
     async getPromptForCommand(args) {

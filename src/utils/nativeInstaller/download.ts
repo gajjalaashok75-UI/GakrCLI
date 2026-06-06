@@ -1,7 +1,7 @@
 /**
  * Download functionality for native installer
  *
- * Handles downloading Gakr binaries from various sources:
+ * Handles downloading GakrCLI binaries from various sources:
  * - Artifactory NPM packages
  * - GCS bucket
  */

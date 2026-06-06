@@ -156,10 +156,10 @@ function Web({
     return <LoadingState message="Connecting GitHub to Gakr…" />;
   }
   const token = step.token;
-  return <Dialog title="Connect Gakr on the web to GitHub?" onCancel={handleCancel} hideInputGuide>
+  return <Dialog title="Connect GakrCLI on the web to GitHub?" onCancel={handleCancel} hideInputGuide>
       <Box flexDirection="column">
         <Text>
-          Gakr on the web requires connecting to your GitHub account to clone
+          GakrCLI on the web requires connecting to your GitHub account to clone
           and push code on your behalf.
         </Text>
         <Text dimColor>

@@ -15,35 +15,59 @@ import {
 } from './permissionSetup.js'
 
 let bypassPermissionsCheckRan = false
+let bypassPermissionsCheckPromise: Promise<void> | null = null
+
+type BypassPermissionsCheckDeps = {
+  createDisabledBypassPermissionsContext: typeof createDisabledBypassPermissionsContext
+  shouldDisableBypassPermissions: typeof shouldDisableBypassPermissions
+}
+
+const DEFAULT_BYPASS_PERMISSIONS_CHECK_DEPS: BypassPermissionsCheckDeps = {
+  createDisabledBypassPermissionsContext,
+  shouldDisableBypassPermissions,
+}
 
 export async function checkAndDisableBypassPermissionsIfNeeded(
   toolPermissionContext: ToolPermissionContext,
   setAppState: (f: (prev: AppState) => AppState) => void,
+  deps: BypassPermissionsCheckDeps = DEFAULT_BYPASS_PERMISSIONS_CHECK_DEPS,
 ): Promise<void> {
-  // Check if bypassPermissions should be disabled based on Statsig gate
-  // Do this only once, before the first query, to ensure we have the latest gate value
+  // Check if bypassPermissions should be disabled based on Statsig gate.
+  // Share the in-flight check so startup and the first query both wait on the
+  // same authoritative verdict instead of racing each other.
   if (bypassPermissionsCheckRan) {
     return
   }
-  bypassPermissionsCheckRan = true
 
   if (!toolPermissionContext.isBypassPermissionsModeAvailable) {
     return
   }
 
-  const shouldDisable = await shouldDisableBypassPermissions()
-  if (!shouldDisable) {
-    return
+  if (bypassPermissionsCheckPromise) {
+    return bypassPermissionsCheckPromise
   }
 
-  setAppState(prev => {
-    return {
-      ...prev,
-      toolPermissionContext: createDisabledBypassPermissionsContext(
-        prev.toolPermissionContext,
-      ),
+  bypassPermissionsCheckPromise = (async () => {
+    const shouldDisable = await deps.shouldDisableBypassPermissions()
+    if (!shouldDisable) {
+      bypassPermissionsCheckRan = true
+      return
     }
+
+    setAppState(prev => {
+      return {
+        ...prev,
+        toolPermissionContext: deps.createDisabledBypassPermissionsContext(
+          prev.toolPermissionContext,
+        ),
+      }
+    })
+    bypassPermissionsCheckRan = true
+  })().finally(() => {
+    bypassPermissionsCheckPromise = null
   })
+
+  return bypassPermissionsCheckPromise
 }
 
 /**
@@ -52,6 +76,7 @@ export async function checkAndDisableBypassPermissionsIfNeeded(
  */
 export function resetBypassPermissionsCheck(): void {
   bypassPermissionsCheckRan = false
+  bypassPermissionsCheckPromise = null
 }
 
 export function useKickOffCheckAndDisableBypassPermissionsIfNeeded(): void {

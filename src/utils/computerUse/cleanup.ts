@@ -79,7 +79,7 @@ export async function cleanupComputerUseAfterTurn(
 
   if (await releaseComputerUseLock()) {
     ctx.sendOSNotification?.({
-      message: 'Gakr is done using your computer',
+      message: 'GakrCLI is done using your computer',
       notificationType: 'computer_use_exit',
     })
   }

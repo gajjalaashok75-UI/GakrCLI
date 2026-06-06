@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Gakr — gakrcli Code with any LLM
+ * GakrCLI — gakrcli Code with any LLM
  *
  * If dist/cli.mjs exists (built), run that.
  * Otherwise, tell the user to build first or use `bun run dev`.
@@ -32,6 +32,16 @@ function hasNodeOptionFlag(flag) {
 }
 
 function getHeapSizeMb() {
+  // --max-memory flag overrides env var
+  const maxMemArg = process.argv.find(a => a.startsWith('--max-memory='))
+  if (maxMemArg) {
+    const mb = Number.parseInt(maxMemArg.split('=')[1] || '0', 10)
+    if (Number.isSafeInteger(mb) && mb > 0) {
+      process.env[HEAP_SIZE_ENV] = String(mb)
+      process.env.GAKR_MAX_MEMORY_MB = String(mb)
+      return mb
+    }
+  }
   const raw = process.env[HEAP_SIZE_ENV]
   if (!raw) return DEFAULT_HEAP_SIZE_MB
   const parsed = Number.parseInt(raw, 10)
@@ -51,14 +61,23 @@ function relaunchWithLongSessionHeapIfNeeded() {
   if (!hasHeapLimit) {
     execArgv.push(`--max-old-space-size=${getHeapSizeMb()}`)
   }
+
+  // Expose explicit GC for long interactive sessions. NODE_OPTIONS cannot
+  // carry --expose-gc, so the executable wrapper must add it before startup.
   if (!hasExplicitGc) {
     execArgv.push('--expose-gc')
   }
 
+    // Strip --max-memory flag before relaunching — it's a launcher-only arg
+  // that Commander in the built CLI would reject as unknown.
+  const childArgs = process.argv.slice(2).filter(
+    arg => !arg.startsWith('--max-memory=') && arg !== '--max-memory',
+  )
+
   const result = spawnSync(process.execPath, [
     ...execArgv,
     fileURLToPath(import.meta.url),
-    ...process.argv.slice(2),
+    ...childArgs,
   ], {
     stdio: 'inherit',
     env: {

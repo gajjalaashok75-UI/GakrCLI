@@ -64,7 +64,7 @@ export const PermissionsSchema = lazySchema(() =>
             : EXTERNAL_PERMISSION_MODES,
         )
         .optional()
-        .describe('Default permission mode when Gakr needs access'),
+        .describe('Default permission mode when GakrCLI needs access'),
       disableBypassPermissionsMode: z
         .enum(['disable'])
         .optional()
@@ -265,7 +265,7 @@ export const SettingsSchema = lazySchema(() =>
       $schema: z
         .literal(GAKR_CODE_SETTINGS_SCHEMA_URL)
         .optional()
-        .describe('JSON Schema reference for Gakr settings'),
+        .describe('JSON Schema reference for GakrCLI settings'),
       apiKeyHelper: z
         .string()
         .optional()
@@ -298,7 +298,7 @@ export const SettingsSchema = lazySchema(() =>
                   .describe('IdP issuer URL for OIDC discovery'),
                 clientId: z
                   .string()
-                  .describe("Gakr's client_id registered at the IdP"),
+                  .describe("GakrCLI's client_id registered at the IdP"),
                 callbackPort: z
                   .number()
                   .int()
@@ -339,7 +339,7 @@ export const SettingsSchema = lazySchema(() =>
         ),
       env: EnvironmentVariablesSchema()
         .optional()
-        .describe('Environment variables to set for Gakr sessions'),
+        .describe('Environment variables to set for GakrCLI sessions'),
       // Attribution for commits and PRs
       attribution: z
         .object({
@@ -361,20 +361,20 @@ export const SettingsSchema = lazySchema(() =>
         .optional()
         .describe(
           'Customize attribution text for commits and PRs. ' +
-            'Each field defaults to the standard Gakr attribution if not set.',
+            'Each field defaults to the standard GakrCLI attribution if not set.',
         ),
       includeCoAuthoredBy: z
         .boolean()
         .optional()
         .describe(
           'Deprecated: Use attribution instead. ' +
-            "Whether to include Gakr's co-authored by attribution in commits and PRs (defaults to true)",
+            "Whether to include GakrCLI's co-authored by attribution in commits and PRs (defaults to true)",
         ),
       includeGitInstructions: z
         .boolean()
         .optional()
         .describe(
-          "Include built-in commit and PR workflow instructions in Gakr's system prompt (default: true)",
+          "Include built-in commit and PR workflow instructions in GakrCLI's system prompt (default: true)",
         ),
       permissions: PermissionsSchema()
         .optional()
@@ -394,6 +394,16 @@ export const SettingsSchema = lazySchema(() =>
             'and full model IDs. ' +
             'If undefined, all models are available. If empty array, only the default model is available. ' +
             'Typically set in managed settings by enterprise administrators.',
+        ),
+      providerProfileModelPickerMode: z
+        .enum(['auto', 'profile', 'provider'])
+        .optional()
+        .catch(undefined)
+        .describe(
+          'Controls /model options when an active provider profile is applied. ' +
+            '"profile" shows only explicitly configured profile models; ' +
+            '"provider" shows the provider catalog/discovery list plus explicit profile-only custom models; ' +
+            '"auto" uses profile mode when the profile has multiple explicitly configured models, otherwise provider mode.',
         ),
       modelOverrides: z
         .record(z.string(), z.string())
@@ -633,12 +643,12 @@ export const SettingsSchema = lazySchema(() =>
             'these exact sources are blocked from being added as marketplaces. The check happens BEFORE ' +
             'downloading, so blocked sources never touch the filesystem.',
         ),
-      // Force a specific login method: 'gakrcliai' for Gakr Pro/Max, 'console' for Console billing
+      // Force a specific login method: 'gakrcliai' for GakrCLI Pro/Max, 'console' for Console billing
       forceLoginMethod: z
         .enum(['gakrcliai', 'console'])
         .optional()
         .describe(
-          'Force a specific login method: "gakrcliai" for Gakr Pro/Max, "console" for Console billing',
+          'Force a specific login method: "gakrcliai" for GakrCLI Pro/Max, "console" for Console billing',
         ),
       // Organization UUID to use for OAuth login (will be added as URL param to authorization URL)
       forceLoginOrgUUID: z
@@ -657,7 +667,7 @@ export const SettingsSchema = lazySchema(() =>
         .string()
         .optional()
         .describe(
-          'Preferred language for Gakr responses and voice dictation (e.g., "japanese", "spanish")',
+          'Preferred language for GakrCLI responses and voice dictation (e.g., "japanese", "spanish")',
         ),
       skipWebFetchPreflight: z
         .boolean()
@@ -905,7 +915,7 @@ export const SettingsSchema = lazySchema(() =>
               .boolean()
               .optional()
               .describe(
-                'Start Gakr in assistant mode (custom system prompt, brief view, scheduled check-in skills)',
+                'Start GakrCLI in assistant mode (custom system prompt, brief view, scheduled check-in skills)',
               ),
             assistantName: z
               .string()
@@ -969,13 +979,13 @@ export const SettingsSchema = lazySchema(() =>
         .boolean()
         .optional()
         .describe(
-          'Enable auto-memory for this project. When false, Gakr will not read from or write to the auto-memory directory.',
+          'Enable auto-memory for this project. When false, GakrCLI will not read from or write to the auto-memory directory.',
         ),
       autoMemoryDirectory: z
         .string()
         .optional()
         .describe(
-          'Custom directory path for auto-memory storage. Supports ~/ prefix for home directory expansion. Ignored if set in projectSettings (checked-in .gakrcli/settings.json) for security. When unset, defaults to ~/.gakrcli/projects/<sanitized-cwd>/memory/.',
+          'Custom directory path for auto-memory storage. Supports ~/ prefix for home directory expansion. Ignored if set in projectSettings (checked-in .gakrcli/settings.json) for security. When unset, defaults to ~/.gakrcli/workspace/projects/<sanitized-cwd>/memory/.',
         ),
       autoDreamEnabled: z
         .boolean()
@@ -994,6 +1004,12 @@ export const SettingsSchema = lazySchema(() =>
         .optional()
         .describe(
           'Whether the user has accepted the bypass permissions mode dialog',
+        ),
+      skipFullAccessModePermissionPrompt: z
+        .boolean()
+        .optional()
+        .describe(
+          'Whether the user has accepted the full access mode dialog',
         ),
       ...(feature('TRANSCRIPT_CLASSIFIER')
         ? {
@@ -1084,10 +1100,10 @@ export const SettingsSchema = lazySchema(() =>
         .array(z.string())
         .optional()
         .describe(
-          'Glob patterns or absolute paths of GAKR.md files to exclude from loading. ' +
+          'Glob patterns or absolute paths of GAKRCLI.md files to exclude from loading. ' +
             'Patterns are matched against absolute file paths using picomatch. ' +
             'Only applies to User, Project, and Local memory types (Managed/policy files cannot be excluded). ' +
-            'Examples: "/home/user/monorepo/GAKR.md", "**/code/GAKR.md", "**/some-dir/.gakrcli/rules/**"',
+            'Examples: "/home/user/monorepo/GAKRCLI.md", "**/code/GAKRCLI.md", "**/some-dir/.gakrcli/rules/**"',
         ),
       pluginTrustMessage: z
         .string()

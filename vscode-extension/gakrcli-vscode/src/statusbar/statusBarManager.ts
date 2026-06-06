@@ -1,4 +1,5 @@
-import * as vscode from 'vscode';
+import type * as VSCode from 'vscode';
+import { vscode } from '../vscodeCompat';
 
 export type StatusBarState = 'idle' | 'pending' | 'completed-hidden';
 
@@ -10,8 +11,8 @@ export type StatusBarState = 'idle' | 'pending' | 'completed-hidden';
  *
  * Priority: pending > completed-hidden > idle.
  */
-export class StatusBarManager implements vscode.Disposable {
-  private readonly item: vscode.StatusBarItem;
+export class StatusBarManager implements VSCode.Disposable {
+  private readonly item: VSCode.StatusBarItem;
   private pendingPermission = false;
   private completedWhileHidden = false;
 

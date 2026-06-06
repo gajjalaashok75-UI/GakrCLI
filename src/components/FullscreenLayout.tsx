@@ -234,7 +234,7 @@ export type UnseenDivider = {
  * that countUnseenAssistantTurns skips — count floors at 1 so the pill
  * flips from "Jump to bottom" to "1 new message". Without the floor,
  * the pill stays "Jump to bottom" through an entire tool-call sequence
- * until Gakr's text response lands.
+ * until GakrCLI's text response lands.
  */
 export function computeUnseenDivider(messages: readonly Message[], dividerIndex: number | null): UnseenDivider | undefined {
   if (dividerIndex === null) return undefined;
@@ -537,7 +537,7 @@ function NewMessagesPill(t0) {
 }
 
 // Context breadcrumb: when scrolled up into history, pin the current
-// conversation turn's prompt above the viewport so you know what Gakr was
+// conversation turn's prompt above the viewport so you know what GakrCLI was
 // responding to. Normal-flow sibling BEFORE the ScrollBox (mirrors the pill
 // below it) — shrinks the ScrollBox by exactly 1 row via flex, stays outside
 // the DECSTBM scroll region. Click jumps back to the prompt.

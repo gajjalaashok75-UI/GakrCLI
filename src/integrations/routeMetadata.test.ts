@@ -17,10 +17,10 @@ test('getRouteProviderTypeLabel uses descriptor transport kinds for provider lab
   expect(getRouteProviderTypeLabel('anthropic')).toBe('Anthropic native API')
   expect(getRouteProviderTypeLabel('gemini')).toBe('Gemini API')
   expect(getRouteProviderTypeLabel('bedrock')).toBe(
-    'AWS Bedrock Gakr API',
+    'AWS Bedrock GakrCLI API',
   )
   expect(getRouteProviderTypeLabel('vertex')).toBe(
-    'Google Vertex Gakr API',
+    'Google Vertex GakrCLI API',
   )
   expect(getRouteProviderTypeLabel('openrouter')).toBe(
     'OpenAI-compatible API',

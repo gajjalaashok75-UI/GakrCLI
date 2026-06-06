@@ -1,8 +1,9 @@
-import * as vscode from 'vscode';
+import type * as VSCode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as readline from 'readline';
+import { vscode } from '../vscodeCompat';
 
 const MAX_SANITIZED_LENGTH = 200;
 
@@ -35,7 +36,7 @@ export interface SessionInfo {
   createdAt: Date;
   /** Count of user + assistant messages, excluding isMeta and file-history-snapshot */
   messageCount: number;
-  /** Project directory name in ~/.gakrcli/projects/ */
+  /** Project directory name in ~/.gakrcli/workspace/projects/ */
   projectDir: string;
   /** Absolute path to the .jsonl file */
   filePath: string;
@@ -52,13 +53,13 @@ export interface GroupedSessions {
   sessions: SessionInfo[];
 }
 
-export class SessionTracker implements vscode.Disposable {
+export class SessionTracker implements VSCode.Disposable {
   private sessions: Map<string, SessionInfo> = new Map();
-  private watcher: vscode.FileSystemWatcher | undefined;
+  private watcher: VSCode.FileSystemWatcher | undefined;
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly _onSessionsChanged = new vscode.EventEmitter<SessionInfo[]>();
   public readonly onSessionsChanged = this._onSessionsChanged.event;
-  private disposables: vscode.Disposable[] = [];
+  private disposables: VSCode.Disposable[] = [];
 
   constructor() {
     this.disposables.push(this._onSessionsChanged);
@@ -70,9 +71,16 @@ export class SessionTracker implements vscode.Disposable {
     this.startWatching();
   }
 
-  /** ~/.gakrcli/projects/ */
+  /** ~/.gakrcli/workspace/projects/ */
   private getProjectsDir(): string {
-    return path.join(process.env.GAKR_CONFIG_DIR || path.join(os.homedir(), '.gakrcli'), 'projects');
+    const workspaceDir =
+      process.env.GAKRCLI_WORKSPACE_DIR ||
+      process.env.GAKR_WORKSPACE_DIR ||
+      path.join(
+        process.env.GAKR_CONFIG_DIR || path.join(os.homedir(), '.gakrcli'),
+        'workspace',
+      );
+    return path.join(workspaceDir, 'projects');
   }
 
   /**
@@ -382,7 +390,7 @@ export class SessionTracker implements vscode.Disposable {
     return this.sessions.get(id);
   }
 
-  /** Delete a session by removing its JSONL file. Only deletes inside ~/.gakrcli/projects/. */
+  /** Delete a session by removing its JSONL file. Only deletes inside ~/.gakrcli/workspace/projects/. */
   async deleteSession(id: string): Promise<boolean> {
     const session = this.sessions.get(id);
     if (!session) {

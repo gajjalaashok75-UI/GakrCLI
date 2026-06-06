@@ -185,7 +185,7 @@ export async function prepareApiRequest(): Promise<{
   const accessToken = getgakrcliAIOAuthTokens()?.accessToken
   if (accessToken === undefined) {
     throw new Error(
-      'Gakr web sessions require authentication with a Gakr.ai account. API key authentication is not sufficient. Please run /login to authenticate, or check your authentication status with /status.',
+      'GakrCLI web sessions require authentication with a Gakr.ai account. API key authentication is not sufficient. Please run /login to authenticate, or check your authentication status with /status.',
     )
   }
 

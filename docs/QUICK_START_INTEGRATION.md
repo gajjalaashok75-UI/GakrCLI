@@ -2,13 +2,13 @@
 
 This guide covers:
 
-- GakrCLI CLI package: `0.5.5`
-- GakrCLI VS Code extension: `0.2.3`
+- GakrCLI CLI package: `0.5.6`
+- GakrCLI VS Code extension: `0.2.4`
 
 ## Install The CLI
 
 ```bash
-npm install -g @gakr-gakr/gakrcli@0.5.5
+npm install -g @gakr-gakr/gakrcli@0.5.6
 gakrcli --version
 ```
 
@@ -25,7 +25,7 @@ From a local VSIX:
 ```bash
 cd vscode-extension/gakrcli-vscode
 npx @vscode/vsce package
-code --install-extension gakrcli-vscode-0.2.3.vsix
+code --install-extension gakrcli-vscode-0.2.4.vsix
 ```
 
 ## Configure A Provider

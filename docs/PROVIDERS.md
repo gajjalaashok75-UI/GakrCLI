@@ -1,6 +1,6 @@
 # GakrCLI Provider Reference
 
-This page documents the provider presets exposed by GakrCLI 0.5.5. The easiest setup path is still the in-app provider wizard:
+This page documents the provider presets exposed by GakrCLI 0.5.6. The easiest setup path is still the in-app provider wizard:
 
 ```text
 /provider
