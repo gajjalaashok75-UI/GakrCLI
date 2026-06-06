@@ -55,7 +55,7 @@ const featureFlags: Record<string, boolean> = {
   AUTO_THEME: false,              // Automatic terminal theme detection
   BASH_CLASSIFIER: false,         // Bash safety classifier service integration
   BREAK_CACHE_COMMAND: false,     // Prompt-cache break debugging injection
-  BUILDING_GAKR_APPS: false,      // Internal Gakr app-building mode
+  BUILDING_GAKR_APPS: false,      // Internal GakrCLI app-building mode
   BYOC_ENVIRONMENT_RUNNER: false, // Bring-your-own-cloud environment runner
   CCR_AUTO_CONNECT: false,        // Cloud/CCR automatic bridge connection
   CCR_MIRROR: false,              // Cloud/CCR mirror transport mode

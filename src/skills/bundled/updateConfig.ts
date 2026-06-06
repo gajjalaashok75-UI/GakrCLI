@@ -110,7 +110,7 @@ Plugin syntax: \`plugin-name@source\` where source is \`gakrcli-code-marketplace
 
 const HOOKS_DOCS = `## Hooks Configuration
 
-Hooks run commands at specific points in Gakr's lifecycle.
+Hooks run commands at specific points in GakrCLI's lifecycle.
 
 ### Hook Structure
 \`\`\`json

@@ -298,7 +298,7 @@ export const SettingsSchema = lazySchema(() =>
                   .describe('IdP issuer URL for OIDC discovery'),
                 clientId: z
                   .string()
-                  .describe("Gakr's client_id registered at the IdP"),
+                  .describe("GakrCLI's client_id registered at the IdP"),
                 callbackPort: z
                   .number()
                   .int()
@@ -368,13 +368,13 @@ export const SettingsSchema = lazySchema(() =>
         .optional()
         .describe(
           'Deprecated: Use attribution instead. ' +
-            "Whether to include Gakr's co-authored by attribution in commits and PRs (defaults to true)",
+            "Whether to include GakrCLI's co-authored by attribution in commits and PRs (defaults to true)",
         ),
       includeGitInstructions: z
         .boolean()
         .optional()
         .describe(
-          "Include built-in commit and PR workflow instructions in Gakr's system prompt (default: true)",
+          "Include built-in commit and PR workflow instructions in GakrCLI's system prompt (default: true)",
         ),
       permissions: PermissionsSchema()
         .optional()

@@ -168,7 +168,7 @@ export function sanitizeModelName(shortName: string): string {
 }
 
 /**
- * Attribution state for tracking Gakr's contributions to files.
+ * Attribution state for tracking GakrCLI's contributions to files.
  */
 export type AttributionState = {
   // File states keyed by relative path (from cwd)
@@ -192,7 +192,7 @@ export type AttributionState = {
 }
 
 /**
- * Summary of Gakr's contribution for a commit.
+ * Summary of GakrCLI's contribution for a commit.
  */
 export type AttributionSummary = {
   gakrcliPercent: number
@@ -332,7 +332,7 @@ function computeFileModificationState(
   const normalizedPath = normalizeFilePath(filePath)
 
   try {
-    // Calculate Gakr's character contribution
+    // Calculate GakrCLI's character contribution
     let gakrcliContribution: number
 
     if (oldContent === '' || newContent === '') {

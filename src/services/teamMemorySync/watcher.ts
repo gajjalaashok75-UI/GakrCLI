@@ -244,9 +244,9 @@ async function startFileWatcher(teamDir: string): Promise<void> {
  *
  * Pulls from server, then starts the file watcher unconditionally.
  * The watcher must start even when the server has no content yet
- * (fresh EAP repo) — otherwise Gakr's first team-memory write
+ * (fresh EAP repo) — otherwise GakrCLI's first team-memory write
  * depends entirely on PostToolUse hooks firing notifyTeamMemoryWrite,
- * which is a chicken-and-egg: Gakr's write rate is low enough that
+ * which is a chicken-and-egg: GakrCLI's write rate is low enough that
  * a fresh partner can sit in the bootstrap dead zone for days.
  */
 export async function startTeamMemoryWatcher(): Promise<void> {
