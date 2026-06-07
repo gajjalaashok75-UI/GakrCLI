@@ -1,7 +1,7 @@
 import React from 'react'
 import { COMMON_HELP_ARGS, COMMON_INFO_ARGS } from '../../constants/xml.js'
 import { ingestLocalWikiSource } from '../../services/wiki/ingest.js'
-import { initializeWiki } from '../../services/wiki/init.js'
+import { initializeWikiKnowledge } from '../../services/wiki/knowledgeGraph.js'
 import { getWikiStatus } from '../../services/wiki/status.js'
 import type {
   LocalJSXCommandCall,
@@ -16,8 +16,8 @@ function renderHelp(): string {
 Manage the GakrCLI project wiki stored in .gakrcli/wiki.
 
 Commands:
-  /wiki init    Initialize the LLM-maintained wiki structure
-  /wiki status  Show wiki status and raw/page/source counts
+  /wiki init    Build or rebuild the project wiki graph knowledge base
+  /wiki status  Show wiki status, source counts, and graph counts
   /wiki ingest  Ingest a local file into generated source notes
 
 Examples:
@@ -26,17 +26,29 @@ Examples:
   /wiki ingest README.md`
 }
 
-function formatInitResult(result: Awaited<ReturnType<typeof initializeWiki>>): string {
-  const lines = [`Initialized GakrCLI wiki at ${result.root}`]
+function formatInitResult(result: Awaited<ReturnType<typeof initializeWikiKnowledge>>): string {
+  const lines = [
+    `Initialized GakrCLI wiki at ${result.root}`,
+    '',
+    `Graph root: ${result.graphRoot}`,
+    `Indexed files: ${result.indexedFiles}`,
+    `Graph nodes: ${result.nodeCount}`,
+    `Graph edges: ${result.edgeCount}`,
+    `Communities: ${result.communityCount}`,
+  ]
 
   if (result.alreadyExisted) {
-    lines.push('', 'Wiki already existed. No new files were created.')
-    return lines.join('\n')
+    lines.push('', 'Wiki scaffold already existed. Graph artifacts were rebuilt.')
+  } else if (result.createdFiles.length > 0) {
+    lines.push('', 'Created scaffold files:')
+    for (const file of result.createdFiles) {
+      lines.push(`- ${file}`)
+    }
   }
 
-  if (result.createdFiles.length > 0) {
-    lines.push('', 'Created files:')
-    for (const file of result.createdFiles) {
+  if (result.graphFiles.length > 0) {
+    lines.push('', 'Graph files:')
+    for (const file of result.graphFiles) {
       lines.push(`- ${file}`)
     }
   }
@@ -56,6 +68,13 @@ function formatStatus(status: Awaited<ReturnType<typeof getWikiStatus>>): string
     `Raw files: ${status.rawSourceCount}`,
     `Pages: ${status.pageCount}`,
     `Source notes: ${status.sourceCount}`,
+    `Graph: ${status.graphInitialized ? 'present' : 'missing'}`,
+    `Graph nodes: ${status.graphNodeCount ?? 'unknown'}`,
+    `Graph edges: ${status.graphEdgeCount ?? 'unknown'}`,
+    `Graph communities: ${status.graphCommunityCount ?? 'unknown'}`,
+    `Graph report: ${status.hasGraphReport ? 'present' : 'missing'}`,
+    `Graph wiki index: ${status.hasGraphWikiIndex ? 'present' : 'missing'}`,
+    `Graph HTML: ${status.hasGraphHtml ? 'present' : 'missing'}`,
     `Schema: ${status.hasSchema ? 'present' : 'missing'}`,
     `Index: ${status.hasIndex ? 'present' : 'missing'}`,
     `Log: ${status.hasLog ? 'present' : 'missing'}`,
@@ -95,7 +114,8 @@ async function runWikiCommand(
   }
 
   if (normalized === 'init') {
-    onDone(formatInitResult(await initializeWiki(cwd)), { display: 'system' })
+    const target = rest.join(' ').trim() || '.'
+    onDone(formatInitResult(await initializeWikiKnowledge(cwd, target)), { display: 'system' })
     return
   }
 

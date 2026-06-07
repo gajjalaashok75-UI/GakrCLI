@@ -1,9 +1,10 @@
 # `/wiki` Command Reference
 
-`/wiki` manages a local, project-scoped Markdown knowledge base at `.gakrcli/wiki`.
-It follows the LLM Wiki pattern: raw inputs remain separate, generated source notes
-capture what was read, durable wiki pages accumulate synthesis, and `index.md` plus
-`log.md` help humans and agents navigate the knowledge over time.
+`/wiki` manages a local, project-scoped knowledge base at `.gakrcli/wiki`.
+It follows the LLM Wiki pattern and adds a Graphify-style local graph layer:
+raw inputs remain separate, generated source notes capture what was read,
+durable wiki pages accumulate synthesis, and `graph/` stores a project graph for
+low-token codebase understanding.
 
 ## Commands
 
@@ -15,7 +16,7 @@ capture what was read, durable wiki pages accumulate synthesis, and `index.md` p
 | --- | --- |
 | `/wiki` | Show wiki status. |
 | `/wiki status` | Show wiki status. |
-| `/wiki init` | Create the wiki scaffold in the current project. |
+| `/wiki init` | Create the wiki scaffold and force-rebuild the local graph knowledge base. |
 | `/wiki ingest <path>` | Read a local project file and create a generated source note. |
 | `/wiki help` | Show command help. |
 
@@ -40,6 +41,14 @@ current working directory:
         architecture.md
       sources/
         <generated-source-note>.md
+      graph/
+        graph.json
+        GRAPH_REPORT.md
+        graph.html
+        manifest.json
+        wiki/
+          index.md
+          Community_0.md
 ```
 
 | Path | Purpose |
@@ -50,6 +59,10 @@ current working directory:
 | `.gakrcli/wiki/schema.md` | Operating contract for future wiki maintenance. |
 | `.gakrcli/wiki/index.md` | Content-oriented catalog of pages and source notes. |
 | `.gakrcli/wiki/log.md` | Append-only chronological history with parseable headings. |
+| `.gakrcli/wiki/graph/graph.json` | Machine-readable graph of files, symbols, headings, and imports. |
+| `.gakrcli/wiki/graph/GRAPH_REPORT.md` | Low-token summary of central nodes, communities, and suggested questions. |
+| `.gakrcli/wiki/graph/wiki/` | Generated markdown community pages for graph navigation. |
+| `.gakrcli/wiki/graph/manifest.json` | Indexed file hashes and metadata for later update/query phases. |
 
 ## LLM Wiki Contract
 
@@ -67,9 +80,10 @@ Core rules:
 
 ## `/wiki init`
 
-`/wiki init` calls `initializeWiki(cwd)` from `src/services/wiki/init.ts`.
+`/wiki init` calls `initializeWikiKnowledge(cwd)` from
+`src/services/wiki/knowledgeGraph.ts`.
 
-It creates:
+It creates the base wiki scaffold if needed:
 
 ```text
 .gakrcli/wiki/
@@ -83,7 +97,24 @@ It creates:
 ```
 
 File creation uses exclusive writes, so existing wiki files are preserved. Running
-`/wiki init` again is idempotent.
+`/wiki init` again preserves hand-maintained scaffold files.
+
+It also force-rebuilds graph artifacts every time, similar in spirit to
+`python -m graphify update . --force`, but implemented locally in TypeScript with
+no Python package dependency:
+
+```text
+.gakrcli/wiki/graph/graph.json
+.gakrcli/wiki/graph/GRAPH_REPORT.md
+.gakrcli/wiki/graph/graph.html
+.gakrcli/wiki/graph/manifest.json
+.gakrcli/wiki/graph/wiki/index.md
+.gakrcli/wiki/graph/wiki/Community_*.md
+```
+
+The scan honors `.gitignore` and `.wikiignore` from the project root, plus built-in
+ignores for generated folders such as `.gakrcli/wiki/`, `node_modules/`, `dist/`,
+`build/`, `coverage/`, caches, and `graphify-out/`.
 
 ## `/wiki status`
 
@@ -97,6 +128,8 @@ Status reports:
 - Markdown page count under `pages/`
 - generated source-note count under `sources/`
 - whether `schema.md`, `index.md`, and `log.md` are present
+- whether graph artifacts are present
+- graph node, edge, and community counts when `graph.json` exists
 - last update timestamp across core wiki files
 
 ## `/wiki ingest <path>`
@@ -145,6 +178,7 @@ Focused coverage lives in:
 | Test file | Coverage |
 | --- | --- |
 | `src/services/wiki/init.test.ts` | Scaffold creation, schema content, log format, idempotency. |
-| `src/services/wiki/status.test.ts` | Uninitialized state, raw/page/source counts, timestamps. |
+| `src/services/wiki/knowledgeGraph.test.ts` | Graph build, `.wikiignore`, target scans, forced rebuilds. |
+| `src/services/wiki/status.test.ts` | Uninitialized state, raw/page/source/graph counts, timestamps. |
 | `src/services/wiki/ingest.test.ts` | Source note generation, parseable log entries, rebuilt index. |
-| `src/commands/wiki/wiki.test.ts` | `/wiki status` dispatch behavior. |
+| `src/commands/wiki/wiki.test.ts` | `/wiki status` and `/wiki init` dispatch behavior. |

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased - 0.5.6]
 
+### Added (2026-06-07)
+- **Graphify-Style Wiki Init Graph**: Made `/wiki init` build a local project knowledge graph under `.gakrcli/wiki/graph/` without depending on the Python `graphify` package, including `graph.json`, `GRAPH_REPORT.md`, `graph.html`, `manifest.json`, and a generated graph wiki index/community pages.
+- **Wiki Graph Extraction Coverage**: Added local code/document/config/media discovery with `.wikiignore` and `.gitignore` support, symbol and markdown-heading extraction, call/reference/import edges, Python and package-style import resolution, import-cycle reporting, graph freshness notes, god-node reporting, knowledge gaps, and focused wiki graph tests.
+
+### Changed (2026-06-07)
+- **Wiki Status And Index Graph Awareness**: Surfaced graph artifact presence, node/edge/community counts, and graph navigation links in `/wiki status` and `.gakrcli/wiki/index.md`.
+- **Graphify Reference Parity Testing**: Verified `/wiki init` against the `references/graphify-8` corpus and tuned extraction/clustering so local wiki output is close to Graphify's AST-only graph shape while keeping semantic/rationale-only gaps explicit.
+
 ### Changed (2026-06-06)
 - **LLM Wiki Scaffold**: Expanded `/wiki` around the LLM Wiki pattern with a raw/source/page layout, parseable dated log headings, richer schema workflows, source-note titles in the rebuilt index, and raw/source/page counts in status output.
 - **Open-Build Feature Flag Inventory**: Declared every `feature(...)` gate used in `src/` in `scripts/build.ts`, defaulting newly documented unavailable or unvalidated functionality to `false` so missing flags are explicit without changing runtime behavior.
