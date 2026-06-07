@@ -81,6 +81,29 @@ test('initializeWikiKnowledge respects .wikiignore and default ignored folders',
   expect(sources.some(source => source.includes('node_modules/'))).toBe(false)
 })
 
+test('initializeWikiKnowledge skips unsupported noise files like Graphify collect_files', async () => {
+  const cwd = await makeProjectDir()
+  await mkdir(join(cwd, 'src'), { recursive: true })
+  await mkdir(join(cwd, 'worked', 'demo'), { recursive: true })
+  await writeFile(join(cwd, 'src', 'visible.ts'), 'export function visible() {}\n', 'utf8')
+  await writeFile(join(cwd, '.dockerignore'), 'node_modules\n', 'utf8')
+  await writeFile(join(cwd, 'Dockerfile'), 'FROM node:22\n', 'utf8')
+  await writeFile(join(cwd, 'logo.svg'), '<svg />\n', 'utf8')
+  await writeFile(join(cwd, 'worked', 'demo', 'graph.json'), '{"nodes":[],"links":[]}\n', 'utf8')
+  await writeFile(join(cwd, 'worked', 'demo', 'manifest.json'), '{}\n', 'utf8')
+  await writeFile(join(cwd, 'worked', 'demo', 'graph.html'), '<html></html>\n', 'utf8')
+
+  await initializeWikiKnowledge(cwd)
+  const graph = await readGraph(cwd)
+  const sources = graph.nodes.map(node => node.source_file)
+
+  expect(sources.some(source => source === 'src/visible.ts')).toBe(true)
+  expect(sources.some(source => source === '.dockerignore')).toBe(false)
+  expect(sources.some(source => source === 'Dockerfile')).toBe(false)
+  expect(sources.some(source => source === 'logo.svg')).toBe(false)
+  expect(sources.some(source => source.startsWith('worked/demo/'))).toBe(false)
+})
+
 test('initializeWikiKnowledge can scan a target folder with project-root ignores', async () => {
   const cwd = await makeProjectDir()
   await mkdir(join(cwd, 'src', 'feature'), { recursive: true })
@@ -101,6 +124,23 @@ test('initializeWikiKnowledge can scan a target folder with project-root ignores
   expect(sources.some(source => source === 'src/feature/entry.ts')).toBe(true)
   expect(sources.some(source => source === 'outside.ts')).toBe(false)
   expect(sources.some(source => source === 'src/skip/ignored.ts')).toBe(false)
+})
+
+test('initializeWikiKnowledge deduplicates repeated call and import edges', async () => {
+  const cwd = await makeProjectDir()
+  await mkdir(join(cwd, 'src'), { recursive: true })
+  await writeFile(
+    join(cwd, 'src', 'main.ts'),
+    "import { helper } from './helper'\nimport { helper as helperAgain } from './helper'\n\nexport function main() {\n  helper()\n  helper()\n  helperAgain()\n}\n",
+    'utf8',
+  )
+  await writeFile(join(cwd, 'src', 'helper.ts'), 'export function helper() {}\n', 'utf8')
+
+  await initializeWikiKnowledge(cwd)
+  const graph = await readGraph(cwd)
+  const keys = graph.links.map(link => `${link.source}|${link.target}|${link.relation}`)
+
+  expect(new Set(keys).size).toBe(keys.length)
 })
 
 test('initializeWikiKnowledge emits Graphify-style rationale and class relation edges', async () => {
