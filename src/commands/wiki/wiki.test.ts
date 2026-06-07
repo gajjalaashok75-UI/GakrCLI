@@ -25,7 +25,7 @@ test('/wiki status dispatches to status instead of generic help', async () => {
   }
 })
 
-test('/wiki help mentions .wikiignore exclusions', async () => {
+test('/wiki help documents wiki commands and query options', async () => {
   const cwd = await mkdtemp(join(tmpdir(), 'gakrcli-wiki-command-'))
   const onDone = mock(() => {})
 
@@ -34,6 +34,38 @@ test('/wiki help mentions .wikiignore exclusions', async () => {
 
     expect(onDone).toHaveBeenCalledWith(
       expect.stringContaining('add `.wikiignore` in the project root'),
+      { display: 'system' },
+    )
+    expect(onDone).toHaveBeenCalledWith(
+      expect.stringContaining('/wiki init [path]'),
+      { display: 'system' },
+    )
+    expect(onDone).toHaveBeenCalledWith(
+      expect.stringContaining('--force'),
+      { display: 'system' },
+    )
+    expect(onDone).toHaveBeenCalledWith(
+      expect.stringContaining('--bfs'),
+      { display: 'system' },
+    )
+    expect(onDone).toHaveBeenCalledWith(
+      expect.stringContaining('--dfs'),
+      { display: 'system' },
+    )
+    expect(onDone).toHaveBeenCalledWith(
+      expect.stringContaining('--depth <n>'),
+      { display: 'system' },
+    )
+    expect(onDone).toHaveBeenCalledWith(
+      expect.stringContaining('--budget <n>'),
+      { display: 'system' },
+    )
+    expect(onDone).toHaveBeenCalledWith(
+      expect.stringContaining('--context <kind>'),
+      { display: 'system' },
+    )
+    expect(onDone).toHaveBeenCalledWith(
+      expect.stringContaining('Extra positional words are treated as part of the query'),
       { display: 'system' },
     )
   } finally {
