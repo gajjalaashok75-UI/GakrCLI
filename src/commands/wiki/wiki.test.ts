@@ -142,6 +142,35 @@ test('/wiki update reports when no graph changes are detected', async () => {
   }
 })
 
+test('/wiki status reports stale graph freshness after source changes', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'gakrcli-wiki-command-'))
+  const onDone = mock(() => {})
+
+  try {
+    await mkdir(join(cwd, 'src'), { recursive: true })
+    await writeFile(join(cwd, 'src', 'main.ts'), 'export function main() {}\n', 'utf8')
+
+    await runWithCwdOverride(cwd, () => call(onDone as never, {} as never, 'init'))
+    await writeFile(
+      join(cwd, 'src', 'main.ts'),
+      'export function changedMain() { return 1 }\n',
+      'utf8',
+    )
+    await runWithCwdOverride(cwd, () => call(onDone as never, {} as never, 'status'))
+
+    expect(onDone).toHaveBeenCalledWith(
+      expect.stringContaining('Graph freshness: Codebase files have changes'),
+      { display: 'system' },
+    )
+    expect(onDone).toHaveBeenCalledWith(
+      expect.stringContaining('Run /wiki update'),
+      { display: 'system' },
+    )
+  } finally {
+    await rm(cwd, { recursive: true, force: true })
+  }
+})
+
 test('/wiki update requires init first', async () => {
   const cwd = await mkdtemp(join(tmpdir(), 'gakrcli-wiki-command-'))
   const onDone = mock(() => {})

@@ -54,6 +54,8 @@ export type WikiStatus = {
   hasIndex: boolean
   hasLog: boolean
   lastUpdatedAt: string | null
+  graphFreshness: 'up_to_date' | 'stale' | 'unknown'
+  graphFreshnessMessage: string | null
 }
 
 export type WikiIngestResult = {

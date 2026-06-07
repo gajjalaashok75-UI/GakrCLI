@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { initializeWiki } from './init.js'
+import { initializeWikiKnowledge } from './knowledgeGraph.js'
 import { getWikiPaths } from './paths.js'
 import { getWikiStatus } from './status.js'
 
@@ -38,6 +39,8 @@ test('getWikiStatus reports uninitialized wiki state', async () => {
   expect(status.hasSchema).toBe(false)
   expect(status.hasIndex).toBe(false)
   expect(status.hasLog).toBe(false)
+  expect(status.graphFreshness).toBe('unknown')
+  expect(status.graphFreshnessMessage).toBeNull()
 })
 
 test('getWikiStatus counts pages and sources for initialized wiki', async () => {
@@ -79,4 +82,29 @@ test('getWikiStatus counts pages and sources for initialized wiki', async () => 
   expect(status.hasIndex).toBe(true)
   expect(status.hasLog).toBe(true)
   expect(status.lastUpdatedAt).not.toBeNull()
+  expect(status.graphFreshness).toBe('unknown')
+  expect(status.graphFreshnessMessage).toBeNull()
+})
+
+test('getWikiStatus reports stale graph freshness when indexed files change', async () => {
+  const cwd = await makeProjectDir()
+  await mkdir(join(cwd, 'src'), { recursive: true })
+  await writeFile(join(cwd, 'src', 'main.ts'), 'export function main() {}\n', 'utf8')
+
+  await initializeWikiKnowledge(cwd)
+  const fresh = await getWikiStatus(cwd)
+
+  expect(fresh.graphFreshness).toBe('up_to_date')
+  expect(fresh.graphFreshnessMessage).toContain('up to date')
+
+  await writeFile(
+    join(cwd, 'src', 'main.ts'),
+    'export function changedMain() { return 1 }\n',
+    'utf8',
+  )
+  const stale = await getWikiStatus(cwd)
+
+  expect(stale.graphFreshness).toBe('stale')
+  expect(stale.graphFreshnessMessage).toContain('Codebase files have changes')
+  expect(stale.graphFreshnessMessage).toContain('Run /wiki update')
 })
