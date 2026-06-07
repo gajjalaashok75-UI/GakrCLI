@@ -9,6 +9,7 @@ compiled/
 dist/
 *.tsbuildinfo
 *.map
+.wikiignore
 gakrcli-plugins-official/
 .playwright-mcp/
 # Web landing page build artifacts
