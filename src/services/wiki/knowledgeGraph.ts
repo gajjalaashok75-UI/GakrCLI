@@ -20,10 +20,32 @@ type WikiGraphNode = {
 type WikiGraphEdge = {
   source: string
   target: string
-  relation: 'contains' | 'imports' | 'imports_from' | 'references' | 'calls'
+  relation:
+    | 'contains'
+    | 'imports'
+    | 'imports_from'
+    | 'references'
+    | 'calls'
+    | 'method'
+    | 'inherits'
+    | 'implements'
+    | 're_exports'
+    | 'uses'
+    | 'rationale_for'
   confidence: 'EXTRACTED'
   source_file?: string
   weight?: number
+}
+
+type ExtractedSymbol = {
+  name: string
+  line: number
+  kind: 'symbol' | 'concept'
+  symbolKind?: 'class' | 'function' | 'method' | 'type'
+  parentName?: string
+  bases?: string[]
+  implements?: string[]
+  rationale?: string
 }
 
 type WikiGraph = {
@@ -44,8 +66,10 @@ type ExtractedFile = {
   fileType: string
   hash: string
   size: number
-  symbols: Array<{ name: string; line: number; kind: 'symbol' | 'concept' }>
-  imports: string[]
+  symbols: ExtractedSymbol[]
+  imports: Array<{ imported: string; names: string[]; line: number }>
+  reExports: Array<{ imported: string; names: string[] }>
+  uses: Array<{ name: string; line: number }>
   references: Array<{ name: string; line: number }>
 }
 
@@ -276,6 +300,10 @@ function symbolId(relPath: string, name: string, line: number): string {
   return `symbol:${relPath}:${line}:${name}`
 }
 
+function rationaleId(relPath: string, line: number, text: string): string {
+  return `rationale:${relPath}:${line}:${hashText(text).slice(0, 12)}`
+}
+
 function fileId(relPath: string): string {
   return `file:${relPath}`
 }
@@ -339,39 +367,248 @@ async function collectProjectFiles(projectRoot: string, scanRoot: string): Promi
   return files.sort()
 }
 
+function splitTypeList(value: string | undefined): string[] {
+  if (!value) return []
+  return value
+    .split(/[,|&]/)
+    .map(item => item.trim().replace(/<.*$/, '').replace(/\(.*$/, ''))
+    .map(item => item.split(/\s+/).pop() ?? '')
+    .filter(Boolean)
+    .slice(0, 12)
+}
+
+function rationaleNear(lines: string[], index: number): string | undefined {
+  const comments: string[] = []
+  for (let i = index - 1; i >= 0 && comments.length < 5; i -= 1) {
+    const trimmed = lines[i].trim()
+    if (!trimmed) {
+      if (comments.length > 0) break
+      continue
+    }
+    const comment = trimmed
+      .replace(/^\/\*\*?/, '')
+      .replace(/\*\/$/, '')
+      .replace(/^\*/, '')
+      .replace(/^#/, '')
+      .replace(/^\/\//, '')
+      .trim()
+    if (comment === trimmed && comments.length > 0) break
+    if (comment === trimmed) break
+    if (comment) comments.unshift(comment)
+  }
+
+  const next = lines[index + 1]?.trim()
+  if (next?.startsWith('"""') || next?.startsWith("'''")) {
+    const quote = next.slice(0, 3)
+    const doc: string[] = [next.slice(3).replace(quote, '').trim()]
+    for (let i = index + 2; i < lines.length && doc.length < 5; i += 1) {
+      const line = lines[i].trim()
+      if (line.includes(quote)) {
+        doc.push(line.replace(quote, '').trim())
+        break
+      }
+      doc.push(line)
+    }
+    comments.push(...doc.filter(Boolean))
+  }
+
+  const text = comments.join(' ').replace(/\s+/g, ' ').trim()
+  return text ? text.slice(0, 180) : undefined
+}
+
 function codeSymbols(content: string, ext: string): ExtractedFile['symbols'] {
   const symbols: ExtractedFile['symbols'] = []
   const lines = content.split(/\r?\n/)
-  const patterns: RegExp[] = []
-
-  if (['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'].includes(ext)) {
-    patterns.push(
-      /\b(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\b/,
-      /\b(?:export\s+)?class\s+([A-Za-z_$][\w$]*)\b/,
-      /\b(?:export\s+)?interface\s+([A-Za-z_$][\w$]*)\b/,
-      /\b(?:export\s+)?type\s+([A-Za-z_$][\w$]*)\b/,
-      /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(?[^=]*\)?\s*=>/,
-    )
-  } else if (ext === '.py') {
-    patterns.push(/^\s*(?:async\s+)?def\s+([A-Za-z_]\w*)\b/, /^\s*class\s+([A-Za-z_]\w*)\b/)
-  } else if (ext === '.go') {
-    patterns.push(/\bfunc\s+(?:\([^)]+\)\s*)?([A-Za-z_]\w*)\b/, /\btype\s+([A-Za-z_]\w*)\b/)
-  } else if (ext === '.rs') {
-    patterns.push(/\bfn\s+([A-Za-z_]\w*)\b/, /\b(?:struct|enum|trait)\s+([A-Za-z_]\w*)\b/)
-  } else {
-    patterns.push(/\b(?:class|interface|enum|struct)\s+([A-Za-z_]\w*)\b/)
-  }
+  const classStack: Array<{ name: string; indent: number; braceDepth?: number }> = []
+  let braceDepth = 0
 
   for (const [index, line] of lines.entries()) {
-    for (const pattern of patterns) {
-      const match = pattern.exec(line)
-      if (match?.[1]) {
-        symbols.push({ name: match[1], line: index + 1, kind: 'symbol' })
+    const lineNo = index + 1
+    const trimmed = line.trim()
+    const indent = line.length - line.trimStart().length
+    while (
+      classStack.length > 0 &&
+      indent <= classStack[classStack.length - 1].indent &&
+      ext === '.py' &&
+      trimmed &&
+      !trimmed.startsWith('#') &&
+      !trimmed.startsWith('@')
+    ) {
+      classStack.pop()
+    }
+
+    let match: RegExpExecArray | null = null
+    if (ext === '.py') {
+      match = /^(\s*)class\s+([A-Za-z_]\w*)(?:\(([^)]*)\))?/.exec(line)
+      if (match?.[2]) {
+        classStack.push({ name: match[2], indent })
+        symbols.push({
+          name: match[2],
+          line: lineNo,
+          kind: 'symbol',
+          symbolKind: 'class',
+          bases: splitTypeList(match[3]),
+          rationale: rationaleNear(lines, index),
+        })
+        continue
       }
+
+      match = /^(\s*)(?:async\s+)?def\s+([A-Za-z_]\w*)\b/.exec(line)
+      if (match?.[2]) {
+        const parent = classStack[classStack.length - 1]
+        symbols.push({
+          name: match[2],
+          line: lineNo,
+          kind: 'symbol',
+          symbolKind: parent ? 'method' : 'function',
+          parentName: parent?.name,
+          rationale: rationaleNear(lines, index),
+        })
+        continue
+      }
+    } else if (['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.vue', '.svelte', '.astro'].includes(ext)) {
+      match = /\b(?:export\s+)?class\s+([A-Za-z_$][\w$]*)(?:\s+extends\s+([A-Za-z_$][\w$./]*))?(?:\s+implements\s+([^{]+))?/.exec(line)
+      if (match?.[1]) {
+        classStack.push({ name: match[1], indent, braceDepth })
+        symbols.push({
+          name: match[1],
+          line: lineNo,
+          kind: 'symbol',
+          symbolKind: 'class',
+          bases: splitTypeList(match[2]),
+          implements: splitTypeList(match[3]),
+          rationale: rationaleNear(lines, index),
+        })
+      }
+
+      match = /\b(?:export\s+)?interface\s+([A-Za-z_$][\w$]*)(?:\s+extends\s+([^{]+))?/.exec(line)
+      if (match?.[1]) {
+        symbols.push({
+          name: match[1],
+          line: lineNo,
+          kind: 'symbol',
+          symbolKind: 'type',
+          bases: splitTypeList(match[2]),
+          rationale: rationaleNear(lines, index),
+        })
+      }
+
+      match = /\b(?:export\s+)?type\s+([A-Za-z_$][\w$]*)\b/.exec(line)
+      if (match?.[1]) {
+        symbols.push({ name: match[1], line: lineNo, kind: 'symbol', symbolKind: 'type', rationale: rationaleNear(lines, index) })
+      }
+
+      match = /\b(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\b/.exec(line)
+      if (match?.[1]) {
+        symbols.push({ name: match[1], line: lineNo, kind: 'symbol', symbolKind: 'function', rationale: rationaleNear(lines, index) })
+      }
+
+      match = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(?[^=]*\)?\s*=>/.exec(line)
+      if (match?.[1]) {
+        symbols.push({ name: match[1], line: lineNo, kind: 'symbol', symbolKind: 'function', rationale: rationaleNear(lines, index) })
+      }
+
+      const parent = classStack[classStack.length - 1]
+      match = /^\s*(?:public\s+|private\s+|protected\s+|static\s+|async\s+)*([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*[:{]/.exec(line)
+      if (match?.[1] && parent && !['if', 'for', 'while', 'switch'].includes(match[1])) {
+        symbols.push({
+          name: match[1],
+          line: lineNo,
+          kind: 'symbol',
+          symbolKind: 'method',
+          parentName: parent.name,
+          rationale: rationaleNear(lines, index),
+        })
+      }
+    } else if (ext === '.go') {
+      match = /\bfunc\s+(?:\([^)]+\)\s*)?([A-Za-z_]\w*)\b/.exec(line)
+      if (match?.[1]) symbols.push({ name: match[1], line: lineNo, kind: 'symbol', symbolKind: 'function', rationale: rationaleNear(lines, index) })
+      match = /\btype\s+([A-Za-z_]\w*)\b/.exec(line)
+      if (match?.[1]) symbols.push({ name: match[1], line: lineNo, kind: 'symbol', symbolKind: 'type', rationale: rationaleNear(lines, index) })
+    } else if (ext === '.rs') {
+      match = /\bfn\s+([A-Za-z_]\w*)\b/.exec(line)
+      if (match?.[1]) symbols.push({ name: match[1], line: lineNo, kind: 'symbol', symbolKind: 'function', rationale: rationaleNear(lines, index) })
+      match = /\b(?:struct|enum|trait)\s+([A-Za-z_]\w*)\b/.exec(line)
+      if (match?.[1]) symbols.push({ name: match[1], line: lineNo, kind: 'symbol', symbolKind: 'type', rationale: rationaleNear(lines, index) })
+      match = /\bimpl\s+([A-Za-z_]\w*)\s+for\s+([A-Za-z_]\w*)/.exec(line)
+      if (match?.[1] && match[2]) {
+        const target = symbols.find(symbol => symbol.name === match?.[2])
+        if (target) target.implements = [...(target.implements ?? []), match[1]]
+      }
+    } else if (['.java', '.php'].includes(ext)) {
+      match = /\b(?:public\s+)?(?:abstract\s+)?(?:final\s+)?(?:class|interface)\s+([A-Za-z_]\w*)(?:\s+extends\s+([A-Za-z_][\w\\]*))?(?:\s+implements\s+([^{]+))?/.exec(line)
+      if (match?.[1]) {
+        symbols.push({
+          name: match[1],
+          line: lineNo,
+          kind: 'symbol',
+          symbolKind: 'class',
+          bases: splitTypeList(match[2]),
+          implements: splitTypeList(match[3]),
+          rationale: rationaleNear(lines, index),
+        })
+      }
+    } else if (['.cs', '.kt', '.swift'].includes(ext)) {
+      match = /\b(?:public\s+|open\s+|data\s+|final\s+)*class\s+([A-Za-z_]\w*)(?:<[^>]+>)?(?:\([^)]*\))?\s*(?::\s*([^{]+))?/.exec(line)
+      if (match?.[1]) {
+        const types = splitTypeList(match[2])
+        symbols.push({
+          name: match[1],
+          line: lineNo,
+          kind: 'symbol',
+          symbolKind: 'class',
+          bases: types.slice(0, 1),
+          implements: types.slice(1),
+          rationale: rationaleNear(lines, index),
+        })
+      }
+      match = /\b(?:public\s+|open\s+)?(?:interface|protocol)\s+([A-Za-z_]\w*)/.exec(line)
+      if (match?.[1]) {
+        symbols.push({ name: match[1], line: lineNo, kind: 'symbol', symbolKind: 'type', rationale: rationaleNear(lines, index) })
+      }
+      match = /\bextension\s+([A-Za-z_]\w*)\s*:\s*([^{]+)/.exec(line)
+      if (match?.[1] && match[2]) {
+        const target = symbols.find(symbol => symbol.name === match?.[1])
+        if (target) target.implements = [...(target.implements ?? []), ...splitTypeList(match[2])]
+      }
+    } else if (ext === '.m') {
+      match = /@interface\s+([A-Za-z_]\w*)(?:\s*:\s*([A-Za-z_]\w*))?(?:\s*<([^>]+)>)?/.exec(line)
+      if (match?.[1]) {
+        symbols.push({
+          name: match[1],
+          line: lineNo,
+          kind: 'symbol',
+          symbolKind: 'class',
+          bases: splitTypeList(match[2]),
+          implements: splitTypeList(match[3]),
+          rationale: rationaleNear(lines, index),
+        })
+      }
+    } else {
+      match = /\b(?:class|interface|enum|struct)\s+([A-Za-z_]\w*)(?:\s*:\s*([^{]+)|\s+extends\s+([^{]+))?/.exec(line)
+      if (match?.[1]) {
+        symbols.push({
+          name: match[1],
+          line: lineNo,
+          kind: 'symbol',
+          symbolKind: 'class',
+          bases: splitTypeList(match[2] ?? match[3]),
+          rationale: rationaleNear(lines, index),
+        })
+      }
+    }
+
+    braceDepth += (line.match(/{/g) ?? []).length - (line.match(/}/g) ?? []).length
+    while (
+      classStack.length > 0 &&
+      classStack[classStack.length - 1].braceDepth !== undefined &&
+      braceDepth <= (classStack[classStack.length - 1].braceDepth ?? 0)
+    ) {
+      classStack.pop()
     }
   }
 
-  return symbols.slice(0, 200)
+  return symbols.slice(0, 400)
 }
 
 function markdownConcepts(content: string): ExtractedFile['symbols'] {
@@ -386,29 +623,94 @@ function markdownConcepts(content: string): ExtractedFile['symbols'] {
     .slice(0, 100)
 }
 
-function importsFor(content: string, ext: string): string[] {
-  const imports = new Set<string>()
-  const patterns =
-    ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'].includes(ext)
-      ? [
-          /\bimport\s+.*?\s+from\s+['"]([^'"]+)['"]/g,
-          /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
-          /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
-        ]
-      : ext === '.py'
-        ? [/^\s*from\s+([A-Za-z0-9_.]+)\s+import\b/gm, /^\s*import\s+([A-Za-z0-9_.]+)/gm]
-        : ext === '.go'
-          ? [/"([^"]+)"/g]
-          : ext === '.rs'
-            ? [/\buse\s+([^;]+);/g]
-            : []
+function namesFromImportList(value: string): string[] {
+  return value
+    .split(',')
+    .map(item => item.trim().replace(/^type\s+/, '').split(/\s+as\s+|\s+AS\s+/)[0]?.trim() ?? '')
+    .map(item => item.replace(/^\{|\}$/g, '').trim())
+    .filter(Boolean)
+    .slice(0, 30)
+}
 
-  for (const pattern of patterns) {
-    for (const match of content.matchAll(pattern)) {
-      if (match[1]) imports.add(match[1])
+function lineAt(content: string, index: number | undefined): number {
+  if (index === undefined) return 1
+  return content.slice(0, index).split(/\r?\n/).length
+}
+
+function importsFor(content: string, ext: string): ExtractedFile['imports'] {
+  const imports = new Map<string, ExtractedFile['imports'][number]>()
+
+  function add(imported: string, names: string[], line: number): void {
+    const key = `${imported}:${names.join(',')}:${line}`
+    imports.set(key, { imported, names, line })
+  }
+
+  if (['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'].includes(ext)) {
+    for (const match of content.matchAll(/\bimport\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"]/g)) {
+      if (match[1] && match[2]) add(match[2], namesFromImportList(match[1]), lineAt(content, match.index))
+    }
+    for (const match of content.matchAll(/\bimport\s+([A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+)['"]/g)) {
+      if (match[1] && match[2]) add(match[2], [match[1]], lineAt(content, match.index))
+    }
+    for (const match of content.matchAll(/\bimport\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+)['"]/g)) {
+      if (match[1] && match[2]) add(match[2], [match[1]], lineAt(content, match.index))
+    }
+    for (const match of content.matchAll(/\bimport\s+['"]([^'"]+)['"]/g)) {
+      if (match[1]) add(match[1], [], lineAt(content, match.index))
+    }
+    for (const match of content.matchAll(/\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g)) {
+      if (match[1]) add(match[1], [], lineAt(content, match.index))
+    }
+    for (const match of content.matchAll(/\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g)) {
+      if (match[1]) add(match[1], [], lineAt(content, match.index))
+    }
+  } else if (ext === '.py') {
+    for (const match of content.matchAll(/^\s*from\s+([A-Za-z0-9_.]+)\s+import\s+(.+)$/gm)) {
+      if (match[1] && match[2]) add(match[1], namesFromImportList(match[2]), lineAt(content, match.index))
+    }
+    for (const match of content.matchAll(/^\s*import\s+([A-Za-z0-9_.]+)(?:\s+as\s+\w+)?/gm)) {
+      if (match[1]) add(match[1], [match[1].split('.').pop() ?? match[1]], lineAt(content, match.index))
+    }
+  } else if (ext === '.go') {
+    for (const match of content.matchAll(/"([^"]+)"/g)) {
+      if (match[1]) add(match[1], [], lineAt(content, match.index))
+    }
+  } else if (ext === '.rs') {
+    for (const match of content.matchAll(/\buse\s+([^;]+);/g)) {
+      if (match[1]) {
+        const imported = match[1].replace(/::\{.*$/, '').trim()
+        add(imported, namesFromImportList(match[1].replace(/^.*::\{?/, '').replace(/\}?$/, '')), lineAt(content, match.index))
+      }
     }
   }
-  return [...imports].slice(0, 100)
+
+  return [...imports.values()].slice(0, 100)
+}
+
+function reExportsFor(content: string, ext: string): ExtractedFile['reExports'] {
+  if (!['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'].includes(ext)) return []
+
+  const reExports: ExtractedFile['reExports'] = []
+  const patterns = [
+    /\bexport\s+\*\s+from\s+['"]([^'"]+)['"]/g,
+    /\bexport\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"]/g,
+  ]
+
+  for (const match of content.matchAll(patterns[0])) {
+    if (match[1]) reExports.push({ imported: match[1], names: [] })
+  }
+
+  for (const match of content.matchAll(patterns[1])) {
+    if (!match[1] || !match[2]) continue
+    const names = match[1]
+      .split(',')
+      .map(item => item.trim().replace(/^type\s+/, '').split(/\s+as\s+/i)[0]?.trim() ?? '')
+      .filter(Boolean)
+      .slice(0, 25)
+    reExports.push({ imported: match[2], names })
+  }
+
+  return reExports.slice(0, 100)
 }
 
 function referencesFor(content: string, ext: string): ExtractedFile['references'] {
@@ -439,6 +741,38 @@ function referencesFor(content: string, ext: string): ExtractedFile['references'
   }
 
   return [...refs.values()].slice(0, 200)
+}
+
+function usesFor(content: string, ext: string): ExtractedFile['uses'] {
+  if (!CODE_EXTENSIONS.has(ext)) return []
+  const uses = new Map<string, { name: string; line: number }>()
+  const patterns =
+    ext === '.py'
+      ? [
+          /(?:^|[(:,])\s*([A-Z][A-Za-z0-9_]*)\s*(?:[=,):]|\|)/gm,
+          /->\s*([A-Z][A-Za-z0-9_]*)/g,
+          /\b([A-Z][A-Za-z0-9_]*)\s*\(/g,
+        ]
+      : [
+          /:\s*([A-Z][A-Za-z0-9_]*)\b/g,
+          /<\s*([A-Z][A-Za-z0-9_]*)\s*>/g,
+          /\bnew\s+([A-Z][A-Za-z0-9_]*)\b/g,
+          /->\s*([A-Z][A-Za-z0-9_]*)\b/g,
+        ]
+
+  for (const pattern of patterns) {
+    for (const match of content.matchAll(pattern)) {
+      const name = match[1]
+      if (!name || CALL_NOISE.has(name) || name.length < 3) continue
+      const before = content.slice(0, match.index)
+      const line = before.split(/\r?\n/).length
+      const lineText = content.split(/\r?\n/)[line - 1]?.trim() ?? ''
+      if (/^(?:class|interface|type|struct|enum|trait|protocol)\b/.test(lineText)) continue
+      uses.set(`${name}:${line}`, { name, line })
+    }
+  }
+
+  return [...uses.values()].slice(0, 120)
 }
 
 function resolveLocalImport(
@@ -507,6 +841,8 @@ async function extractFile(cwd: string, absPath: string): Promise<ExtractedFile 
       size: info.size,
       symbols: [],
       imports: [],
+      reExports: [],
+      uses: [],
       references: [],
     }
   }
@@ -523,6 +859,8 @@ async function extractFile(cwd: string, absPath: string): Promise<ExtractedFile 
     size: info.size,
     symbols,
     imports: importsFor(content, ext),
+    reExports: reExportsFor(content, ext),
+    uses: usesFor(content, ext),
     references: referencesFor(content, ext),
   }
 }
@@ -530,8 +868,12 @@ async function extractFile(cwd: string, absPath: string): Promise<ExtractedFile 
 function edgeWeight(edge: WikiGraphEdge): number {
   if (typeof edge.weight === 'number') return edge.weight
   if (edge.relation === 'imports_from' || edge.relation === 'imports') return 2
+  if (edge.relation === 'inherits' || edge.relation === 'implements') return 1.8
+  if (edge.relation === 'method' || edge.relation === 're_exports') return 1.4
   if (edge.relation === 'calls') return 1.2
+  if (edge.relation === 'uses') return 1
   if (edge.relation === 'references') return 0.8
+  if (edge.relation === 'rationale_for') return 0.4
   return 0.2
 }
 
@@ -742,6 +1084,8 @@ function buildGraph(cwd: string, files: ExtractedFile[]): WikiGraph {
   const filesByDirectory = new Map<string, string[]>()
   const symbolIdsByName = new Map<string, string[]>()
   const symbolIdsByFile = new Map<string, string[]>()
+  const symbolIdsByFileAndName = new Map<string, string[]>()
+  const symbolsById = new Map<string, ExtractedSymbol & { relPath: string }>()
 
   for (const file of files) {
     const fid = fileId(file.relPath)
@@ -767,6 +1111,11 @@ function buildGraph(cwd: string, files: ExtractedFile[]): WikiGraph {
       const byFile = symbolIdsByFile.get(file.relPath) ?? []
       byFile.push(sid)
       symbolIdsByFile.set(file.relPath, byFile)
+      const byFileAndNameKey = `${file.relPath}:${symbol.name}`
+      const byFileAndName = symbolIdsByFileAndName.get(byFileAndNameKey) ?? []
+      byFileAndName.push(sid)
+      symbolIdsByFileAndName.set(byFileAndNameKey, byFileAndName)
+      symbolsById.set(sid, { ...symbol, relPath: file.relPath })
       nodes.push({
         id: sid,
         label: symbol.name,
@@ -784,6 +1133,92 @@ function buildGraph(cwd: string, files: ExtractedFile[]): WikiGraph {
         source_file: file.relPath,
         weight: 0.2,
       })
+
+      if (symbol.rationale) {
+        const rid = rationaleId(file.relPath, symbol.line, symbol.rationale)
+        nodes.push({
+          id: rid,
+          label: symbol.rationale,
+          type: 'concept',
+          source_file: file.relPath,
+          source_location: `L${symbol.line}`,
+          community: 0,
+          file_type: 'rationale',
+        })
+        links.push({
+          source: rid,
+          target: sid,
+          relation: 'rationale_for',
+          confidence: 'EXTRACTED',
+          source_file: file.relPath,
+          weight: 0.4,
+        })
+      }
+    }
+  }
+
+  function symbolIdsForName(name: string, relPath?: string): string[] {
+    if (relPath) {
+      const local = symbolIdsByFileAndName.get(`${relPath}:${name}`)
+      if (local?.length) return local
+    }
+    return symbolIdsByName.get(name) ?? []
+  }
+
+  function preferredSymbolId(name: string, relPath?: string): string | undefined {
+    const candidates = symbolIdsForName(name, relPath)
+    if (candidates.length === 0) return undefined
+    return candidates
+      .map(id => ({ id, symbol: symbolsById.get(id) }))
+      .sort((a, b) => {
+        const aLocal = a.symbol?.relPath === relPath ? 0 : 1
+        const bLocal = b.symbol?.relPath === relPath ? 0 : 1
+        return aLocal - bLocal || (a.symbol?.line ?? 0) - (b.symbol?.line ?? 0)
+      })[0]?.id
+  }
+
+  for (const file of files) {
+    for (const symbol of file.symbols) {
+      const source = symbolId(file.relPath, symbol.name, symbol.line)
+      if (symbol.parentName) {
+        const parent = preferredSymbolId(symbol.parentName, file.relPath)
+        if (parent && parent !== source) {
+          links.push({
+            source: parent,
+            target: source,
+            relation: 'method',
+            confidence: 'EXTRACTED',
+            source_file: file.relPath,
+            weight: 1.4,
+          })
+        }
+      }
+
+      for (const base of symbol.bases ?? []) {
+        const target = preferredSymbolId(base, file.relPath)
+        if (!target || target === source) continue
+        links.push({
+          source,
+          target,
+          relation: 'inherits',
+          confidence: 'EXTRACTED',
+          source_file: file.relPath,
+          weight: 1.8,
+        })
+      }
+
+      for (const implemented of symbol.implements ?? []) {
+        const target = preferredSymbolId(implemented, file.relPath)
+        if (!target || target === source) continue
+        links.push({
+          source,
+          target,
+          relation: 'implements',
+          confidence: 'EXTRACTED',
+          source_file: file.relPath,
+          weight: 1.8,
+        })
+      }
     }
   }
 
@@ -803,8 +1238,8 @@ function buildGraph(cwd: string, files: ExtractedFile[]): WikiGraph {
 
   const nodeIds = new Set(nodes.map(node => node.id))
   for (const file of files) {
-    for (const imported of file.imports) {
-      const resolved = resolveLocalImport(file.relPath, imported, filesByRelPath)
+    for (const importRef of file.imports) {
+      const resolved = resolveLocalImport(file.relPath, importRef.imported, filesByRelPath)
       const target = resolved ? filesByRelPath.get(resolved) : null
       if (target && target !== fileId(file.relPath) && nodeIds.has(target)) {
         links.push({
@@ -815,7 +1250,83 @@ function buildGraph(cwd: string, files: ExtractedFile[]): WikiGraph {
           source_file: file.relPath,
           weight: 2,
         })
+        const sourceSymbol = [...file.symbols]
+          .filter(symbol => symbol.kind === 'symbol' && symbol.line <= importRef.line)
+          .sort((a, b) => b.line - a.line)[0]
+        const source = sourceSymbol
+          ? symbolId(file.relPath, sourceSymbol.name, sourceSymbol.line)
+          : fileId(file.relPath)
+        const importedSymbols =
+          importRef.names.length > 0
+            ? importRef.names
+                .map(name => preferredSymbolId(name, resolved))
+                .filter((id): id is string => Boolean(id))
+            : []
+        for (const importedSymbol of importedSymbols.slice(0, 30)) {
+          links.push({
+            source,
+            target: importedSymbol,
+            relation: 'imports',
+            confidence: 'EXTRACTED',
+            source_file: file.relPath,
+            weight: 1.6,
+          })
+        }
       }
+    }
+
+    for (const reExport of file.reExports) {
+      const resolved = resolveLocalImport(file.relPath, reExport.imported, filesByRelPath)
+      const target = resolved ? filesByRelPath.get(resolved) : null
+      if (!target || target === fileId(file.relPath) || !nodeIds.has(target)) continue
+
+      if (reExport.names.length === 0) {
+        links.push({
+          source: fileId(file.relPath),
+          target,
+          relation: 're_exports',
+          confidence: 'EXTRACTED',
+          source_file: file.relPath,
+          weight: 1.4,
+        })
+        continue
+      }
+
+      for (const name of reExport.names) {
+        const exportedSymbol = preferredSymbolId(name, resolved)
+        links.push({
+          source: fileId(file.relPath),
+          target: exportedSymbol ?? target,
+          relation: 're_exports',
+          confidence: 'EXTRACTED',
+          source_file: file.relPath,
+          weight: 1.4,
+        })
+      }
+    }
+
+    const useEdgeKeys = new Set<string>()
+    for (const use of file.uses) {
+      const target = preferredSymbolId(use.name, file.relPath)
+      if (!target) continue
+      const sourceSymbol = [...file.symbols]
+        .filter(symbol => symbol.kind === 'symbol' && symbol.line <= use.line)
+        .sort((a, b) => b.line - a.line)[0]
+      const source = sourceSymbol
+        ? symbolId(file.relPath, sourceSymbol.name, sourceSymbol.line)
+        : fileId(file.relPath)
+      if (source === target) continue
+      const key = `${source}->${target}`
+      if (useEdgeKeys.has(key)) continue
+      useEdgeKeys.add(key)
+      links.push({
+        source,
+        target,
+        relation: 'uses',
+        confidence: 'EXTRACTED',
+        source_file: file.relPath,
+        weight: 0.8,
+      })
     }
 
     const localSymbolIds = new Set(symbolIdsByFile.get(file.relPath) ?? [])
@@ -906,7 +1417,13 @@ function crossCommunityConnections(graph: WikiGraph, limit = 12): Array<{
   const items: Array<{ source: WikiGraphNode; target: WikiGraphNode; edge: WikiGraphEdge }> = []
 
   for (const edge of graph.links) {
-    if (edge.relation === 'contains' || edge.relation === 'imports' || edge.relation === 'imports_from') {
+    if (
+      edge.relation === 'contains' ||
+      edge.relation === 'imports' ||
+      edge.relation === 'imports_from' ||
+      edge.relation === 'method' ||
+      edge.relation === 'rationale_for'
+    ) {
       continue
     }
     const source = nodesById.get(edge.source)

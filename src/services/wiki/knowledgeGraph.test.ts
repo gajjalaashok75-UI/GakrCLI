@@ -20,7 +20,7 @@ async function makeProjectDir(): Promise<string> {
 }
 
 async function readGraph(cwd: string): Promise<{
-  nodes: Array<{ id: string; label: string; source_file: string }>
+  nodes: Array<{ id: string; label: string; source_file: string; file_type?: string }>
   links: Array<{ source: string; target: string; relation: string }>
 }> {
   return JSON.parse(await readFile(getWikiPaths(cwd).graphJsonFile, 'utf8'))
@@ -101,6 +101,49 @@ test('initializeWikiKnowledge can scan a target folder with project-root ignores
   expect(sources.some(source => source === 'src/feature/entry.ts')).toBe(true)
   expect(sources.some(source => source === 'outside.ts')).toBe(false)
   expect(sources.some(source => source === 'src/skip/ignored.ts')).toBe(false)
+})
+
+test('initializeWikiKnowledge emits Graphify-style rationale and class relation edges', async () => {
+  const cwd = await makeProjectDir()
+  await mkdir(join(cwd, 'src'), { recursive: true })
+  await writeFile(
+    join(cwd, 'src', 'models.py'),
+    'class Base:\n    pass\n\n# Coordinates orchestration for the app.\nclass App(Base):\n    """Keep startup logic close to the model."""\n    def run(self):\n        return None\n',
+    'utf8',
+  )
+
+  await initializeWikiKnowledge(cwd)
+  const graph = await readGraph(cwd)
+
+  expect(graph.links.some(link => link.relation === 'method')).toBe(true)
+  expect(graph.links.some(link => link.relation === 'inherits')).toBe(true)
+  expect(graph.links.some(link => link.relation === 'rationale_for')).toBe(true)
+  expect(graph.nodes.some(node => node.file_type === 'rationale')).toBe(true)
+})
+
+test('initializeWikiKnowledge emits local import, implements, and re-export edges', async () => {
+  const cwd = await makeProjectDir()
+  await mkdir(join(cwd, 'src'), { recursive: true })
+  await writeFile(
+    join(cwd, 'src', 'contracts.ts'),
+    'export interface Runnable {\n  run(): void\n}\n',
+    'utf8',
+  )
+  await writeFile(
+    join(cwd, 'src', 'worker.ts'),
+    "import { Runnable } from './contracts'\n\nexport class Worker implements Runnable {\n  delegate?: Runnable\n  run() {}\n}\n",
+    'utf8',
+  )
+  await writeFile(join(cwd, 'src', 'index.ts'), "export { Worker } from './worker'\n", 'utf8')
+
+  await initializeWikiKnowledge(cwd)
+  const graph = await readGraph(cwd)
+
+  expect(graph.links.some(link => link.relation === 'imports_from')).toBe(true)
+  expect(graph.links.some(link => link.relation === 'imports')).toBe(true)
+  expect(graph.links.some(link => link.relation === 'implements')).toBe(true)
+  expect(graph.links.some(link => link.relation === 're_exports')).toBe(true)
+  expect(graph.links.some(link => link.relation === 'uses')).toBe(true)
 })
 
 test('initializeWikiKnowledge force-rebuilds graph artifacts on repeated init', async () => {
