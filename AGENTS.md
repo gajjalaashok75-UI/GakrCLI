@@ -66,14 +66,3 @@ check and conform and verify and then tests , proceed and continue
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
 `
-## GakrCLI wiki tool lessons
-
-When testing or improving the GakrCLI `wiki` tool, treat graph traversal quality as more than "a seed node was found".
-
-Rules:
-- Prefer `wiki({ query: "..." })` for model-side codebase lookup after `.gakrcli/wiki/graph/graph.json` exists.
-- Check whether returned seed nodes have useful incoming/outgoing edges. A seed-only result can mean an orphan node, not a successful answer.
-- For caller/import questions, verify the returned edges match the intent, for example `target --calls--> symbol` or `file --imports--> module`.
-- If a symbol such as `AgentTool` appears in search results but has no useful edges, treat it as graph coverage/orphan-seed work, not as proof the wiki tool is complete.
-- After graph-producing code changes, run `/wiki update` before retesting model-side `wiki({ query: "..." })` behavior.
-- Do not describe the wiki graph as complete while known orphan seeds or missing relation coverage remain.

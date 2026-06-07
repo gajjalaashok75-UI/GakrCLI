@@ -171,7 +171,6 @@ import advisor from './commands/advisor.js'
 import autoFix from './commands/auto-fix.js'
 import benchmark from './commands/benchmark.js'
 import cacheProbe from './commands/cache-probe/index.js'
-import wiki from './commands/wiki/index.js'
 import { logError } from './utils/log.js'
 import { toError } from './utils/errors.js'
 import { logForDebugging } from './utils/debug.js'
@@ -352,7 +351,6 @@ const COMMANDS = memoize((): Command[] => [
   usage,
   usageReport,
   vim,
-  wiki,
   ...(webCmd ? [webCmd] : []),
   ...(forkCmd ? [forkCmd] : []),
   ...(buddy ? [buddy] : []),

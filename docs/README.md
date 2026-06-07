@@ -22,7 +22,6 @@ This directory is the structured documentation entry point for the GakrCLI CLI, 
 | [GAKRCLI_SDK.md](GAKRCLI_SDK.md) | Public SDK import path, query APIs, session APIs, permissions, MCP, and host controls. |
 | [context.md](context.md) | Concrete main-agent system prompt, dynamic context, hidden user-context, and API request shape. |
 | [context-building.md](context-building.md) | How GakrCLI builds and manages context. |
-| [wiki-command.md](wiki-command.md) | Full reference for the `/wiki` slash command, local wiki layout, ingest behavior, and tests. |
 | [hook-chains.md](hook-chains.md) | Hook configuration and execution flow. |
 | [codex-oauth-browser-sign-in.md](codex-oauth-browser-sign-in.md) | Browser sign-in flow documentation. |
 | [litellm-setup.md](litellm-setup.md) | LiteLLM setup guidance. |
