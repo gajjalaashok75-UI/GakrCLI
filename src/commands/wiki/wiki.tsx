@@ -15,17 +15,33 @@ const WIKIIGNORE_HINT =
   'Tip: add `.wikiignore` in the project root to exclude files or folders from wiki graph knowledge.'
 
 function renderHelp(): string {
-  return `Usage: /wiki [init [--force] [path]|update [path]|query <question>|status|ingest <path>]
+  return `Usage: /wiki [init [--force] [path]|update [path]|query "<question>" [options]|status|ingest <path>]
 
 Manage the GakrCLI project wiki stored in .gakrcli/wiki.
 
 Commands:
-  /wiki init          Create the wiki graph knowledge base if missing
-  /wiki init --force  Reinitialize and rebuild the wiki graph
-  /wiki update        Refresh the existing wiki graph for . or a target path
+  /wiki               Show wiki status
+  /wiki help          Show this help
+  /wiki init [path]   Create the wiki graph knowledge base if missing
+  /wiki update [path] Refresh the existing wiki graph for . or a target path
   /wiki query         Query the wiki graph with BFS/DFS traversal
-  /wiki status        Show wiki status, source counts, and graph counts
-  /wiki ingest        Ingest a local file into generated source notes
+  /wiki status        Show source counts, graph counts, and freshness
+  /wiki ingest <path> Ingest a local file into generated source notes
+
+Init:
+  --force             Reinitialize and rebuild even when .gakrcli/wiki exists
+
+Query options:
+  --bfs               Use breadth-first graph traversal (default)
+  --dfs               Use depth-first graph traversal
+  --depth <n>         Traversal depth, 1-6 (default: 2; direct caller/import queries default: 1)
+  --budget <n>        Approximate output token budget, 100-20000 (default: 2000)
+  --context <kind>    Restrict edges by relation/context. Repeatable.
+                      Common kinds: call, import, field, parameter_type, return_type, generic_arg
+
+Notes:
+  Quote the query text. Extra positional words are treated as part of the query, not as a graph path.
+  Use /wiki status to check freshness, then /wiki update to refresh changed files.
 
 Examples:
   /wiki init
@@ -34,6 +50,7 @@ Examples:
   /wiki update src
   /wiki query "starting point"
   /wiki query "who calls updateWikiKnowledge" --context call
+  /wiki query "imported by config" --context import --depth 1
   /wiki query "auth flow" --dfs --budget 3000
   /wiki status
   /wiki ingest README.md

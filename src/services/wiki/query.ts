@@ -30,6 +30,7 @@ type LoadedGraph = {
   nodes: Map<string, WikiQueryNode>
   links: WikiQueryEdge[]
   outgoing: Map<string, WikiQueryEdge[]>
+  incoming: Map<string, WikiQueryEdge[]>
   degree: Map<string, number>
 }
 
@@ -44,6 +45,10 @@ const EXACT_MATCH_BONUS = 1000
 const PREFIX_MATCH_BONUS = 100
 const SUBSTRING_MATCH_BONUS = 1
 const SOURCE_MATCH_BONUS = 0.5
+const SOURCE_PATH_MATCH_BONUS = 25
+const SHORT_EXACT_MATCH_BONUS = 1
+
+type TraversalDirection = 'outgoing' | 'incoming' | 'both'
 
 const CONTEXT_HINTS: Array<[string, string[]]> = [
   ['call', ['call', 'calls', 'called', 'invoke', 'invokes', 'invoked']],
@@ -90,6 +95,35 @@ const CONTEXT_FILTER_ALIASES = new Map([
   ['exports', 'export'],
   ['exported', 'export'],
 ])
+
+const QUERY_INTENT_TERMS = new Set([
+  'about',
+  'all',
+  'codebase',
+  'describe',
+  'explain',
+  'find',
+  'flow',
+  'flows',
+  'from',
+  'give',
+  'how',
+  'list',
+  'overview',
+  'show',
+  'tell',
+  'the',
+  'what',
+  'when',
+  'where',
+  'which',
+  'who',
+  'why',
+])
+
+const CONTEXT_INTENT_TERMS = new Set(
+  [...CONTEXT_FILTER_ALIASES.keys(), ...CONTEXT_FILTER_ALIASES.values(), ...CONTEXT_HINTS.flatMap(([, hints]) => hints)],
+)
 
 function stripDiacritics(value: string): string {
   return value.normalize('NFKD').replace(/\p{Diacritic}/gu, '')
@@ -143,7 +177,28 @@ function queryTerms(question: string): string[] {
       }
     }
   }
-  return terms
+  return expandSemanticTerms(question, terms)
+}
+
+function expandSemanticTerms(question: string, terms: string[]): string[] {
+  const lowered = stripDiacritics(question).toLowerCase()
+  const expanded = [...terms]
+  if (/\b(?:starting point|entry point|entrypoint|start point|start here)\b/u.test(lowered)) {
+    expanded.push('main', 'cli', 'entrypoint', 'bootstrap', 'startup')
+  }
+  return [...new Set(expanded)]
+}
+
+function seedTerms(question: string, filters: string[]): string[] {
+  const allTerms = queryTerms(question)
+  const removePointIntent = /\b(?:starting point|entry point|start point)\b/iu.test(question)
+  const useful = allTerms.filter(term => {
+    if (QUERY_INTENT_TERMS.has(term)) return false
+    if (removePointIntent && (term === 'starting' || term === 'start' || term === 'point')) return false
+    if (filters.length > 0 && CONTEXT_INTENT_TERMS.has(term)) return false
+    return true
+  })
+  return useful.length > 0 ? useful : allTerms
 }
 
 function sanitize(value: unknown): string {
@@ -186,6 +241,7 @@ async function loadGraph(graphPath: string): Promise<LoadedGraph> {
   const nodes = new Map<string, WikiQueryNode>()
   const links = (data.links ?? data.edges ?? []).map(normalizeEdge)
   const outgoing = new Map<string, WikiQueryEdge[]>()
+  const incoming = new Map<string, WikiQueryEdge[]>()
   const degree = new Map<string, number>()
 
   for (const node of data.nodes ?? []) {
@@ -201,11 +257,14 @@ async function loadGraph(graphPath: string): Promise<LoadedGraph> {
     const edges = outgoing.get(edge.source) ?? []
     edges.push(edge)
     outgoing.set(edge.source, edges)
+    const incomingEdges = incoming.get(edge.target) ?? []
+    incomingEdges.push(edge)
+    incoming.set(edge.target, incomingEdges)
     degree.set(edge.source, (degree.get(edge.source) ?? 0) + 1)
     degree.set(edge.target, (degree.get(edge.target) ?? 0) + 1)
   }
 
-  return { nodes, links, outgoing, degree }
+  return { nodes, links, outgoing, incoming, degree }
 }
 
 function nodeLabel(node: WikiQueryNode | undefined, fallback: string): string {
@@ -231,21 +290,23 @@ function computeIdf(graph: LoadedGraph, terms: string[]): Map<string, number> {
   return idf
 }
 
-function scoreNodes(graph: LoadedGraph, terms: string[]): Array<[number, string]> {
+function scoreNodes(graph: LoadedGraph, terms: string[], originalTermCount = terms.length): Array<[number, string]> {
   const normalizedTerms = terms.flatMap(term => searchTokens(term))
   const idf = computeIdf(graph, normalizedTerms)
+  const multiTermQuery = originalTermCount > 1
   const scored: Array<[number, string]> = []
 
   for (const [nodeId, node] of graph.nodes.entries()) {
     const normLabel = normalizedLabel(node)
     const bareLabel = normLabel.replace(/\(\)$/u, '')
     const source = String(node.source_file || '').toLowerCase()
+    const degree = graph.degree.get(nodeId) ?? 0
     let score = 0
 
     for (const term of normalizedTerms) {
       const weight = idf.get(term) ?? 1
       if (term === normLabel || term === bareLabel) {
-        score += EXACT_MATCH_BONUS * weight
+        score += (multiTermQuery && term.length <= 4 ? SHORT_EXACT_MATCH_BONUS : EXACT_MATCH_BONUS) * weight
       } else if (normLabel.startsWith(term) || bareLabel.startsWith(term)) {
         score += PREFIX_MATCH_BONUS * weight
       } else if (normLabel.includes(term)) {
@@ -254,9 +315,13 @@ function scoreNodes(graph: LoadedGraph, terms: string[]): Array<[number, string]
       if (source.includes(term)) {
         score += SOURCE_MATCH_BONUS * weight
       }
+      if (source.includes(term) || nodeId.toLowerCase().includes(term)) {
+        score += SOURCE_PATH_MATCH_BONUS * weight
+      }
     }
 
     if (score > 0) {
+      score += Math.log1p(degree)
       scored.push([score, nodeId])
     }
   }
@@ -333,8 +398,44 @@ function edgeMatchesContext(edge: WikiQueryEdge, filters: string[]): boolean {
   return allowed.has(normalizedRelation(edge.context)) || allowed.has(normalizedRelation(edge.relation))
 }
 
-function filteredOutgoing(graph: LoadedGraph, nodeId: string, filters: string[]): WikiQueryEdge[] {
-  return (graph.outgoing.get(nodeId) ?? []).filter(edge => edgeMatchesContext(edge, filters))
+function edgesForDirection(
+  graph: LoadedGraph,
+  nodeId: string,
+  filters: string[],
+  direction: TraversalDirection,
+): WikiQueryEdge[] {
+  const edges = direction === 'outgoing'
+    ? graph.outgoing.get(nodeId) ?? []
+    : direction === 'incoming'
+      ? graph.incoming.get(nodeId) ?? []
+      : [...(graph.outgoing.get(nodeId) ?? []), ...(graph.incoming.get(nodeId) ?? [])]
+  return edges.filter(edge => edgeMatchesContext(edge, filters))
+}
+
+function edgeNeighbor(edge: WikiQueryEdge, nodeId: string, direction: TraversalDirection): string | null {
+  if (direction === 'outgoing') return edge.target
+  if (direction === 'incoming') return edge.source
+  if (edge.source === nodeId) return edge.target
+  if (edge.target === nodeId) return edge.source
+  return null
+}
+
+function inferTraversalDirection(question: string, filters: string[]): TraversalDirection {
+  const lowered = stripDiacritics(question).toLowerCase()
+  if (
+    filters.includes('call') &&
+    (/\bwho\s+(?:calls|invokes)\b/u.test(lowered) ||
+      /\b(?:callers?|called by|invoked by)\b/u.test(lowered))
+  ) {
+    return 'incoming'
+  }
+  if (
+    filters.includes('import') &&
+    (/\bwho\s+imports\b/u.test(lowered) || /\bimported by\b/u.test(lowered))
+  ) {
+    return 'incoming'
+  }
+  return 'outgoing'
 }
 
 function hubThreshold(graph: LoadedGraph): number {
@@ -349,6 +450,7 @@ function bfs(
   startNodes: string[],
   depth: number,
   filters: string[],
+  direction: TraversalDirection,
 ): { nodes: Set<string>; edges: WikiQueryEdge[] } {
   const threshold = hubThreshold(graph)
   const seedSet = new Set(startNodes)
@@ -362,9 +464,10 @@ function bfs(
       if (!seedSet.has(nodeId) && (graph.degree.get(nodeId) ?? 0) >= threshold) {
         continue
       }
-      for (const edge of filteredOutgoing(graph, nodeId, filters)) {
-        if (!visited.has(edge.target)) {
-          nextFrontier.add(edge.target)
+      for (const edge of edgesForDirection(graph, nodeId, filters, direction)) {
+        const neighbor = edgeNeighbor(edge, nodeId, direction)
+        if (neighbor && !visited.has(neighbor)) {
+          nextFrontier.add(neighbor)
           edges.push(edge)
         }
       }
@@ -383,6 +486,7 @@ function dfs(
   startNodes: string[],
   depth: number,
   filters: string[],
+  direction: TraversalDirection,
 ): { nodes: Set<string>; edges: WikiQueryEdge[] } {
   const threshold = hubThreshold(graph)
   const seedSet = new Set(startNodes)
@@ -399,9 +503,10 @@ function dfs(
     if (!seedSet.has(item.nodeId) && (graph.degree.get(item.nodeId) ?? 0) >= threshold) {
       continue
     }
-    for (const edge of filteredOutgoing(graph, item.nodeId, filters)) {
-      if (!visited.has(edge.target)) {
-        stack.push({ nodeId: edge.target, depth: item.depth + 1 })
+    for (const edge of edgesForDirection(graph, item.nodeId, filters, direction)) {
+      const neighbor = edgeNeighbor(edge, item.nodeId, direction)
+      if (neighbor && !visited.has(neighbor)) {
+        stack.push({ nodeId: neighbor, depth: item.depth + 1 })
         edges.push(edge)
       }
     }
@@ -481,20 +586,22 @@ export async function queryWikiKnowledge(
   const paths = getWikiPaths(cwd)
   const graph = await loadGraph(paths.graphJsonFile)
   const mode = options.mode ?? 'bfs'
-  const depth = boundedInt(options.depth, 2, 1, 6)
   const tokenBudget = boundedInt(options.tokenBudget, 2000, 100, 20_000)
-  const terms = queryTerms(trimmedQuestion)
-  const scored = scoreNodes(graph, terms)
+  const { filters, source } = resolveContextFilters(trimmedQuestion, options.contextFilters)
+  const direction = inferTraversalDirection(trimmedQuestion, filters)
+  const depth = boundedInt(options.depth, direction === 'incoming' ? 1 : 2, 1, 6)
+  const allTerms = queryTerms(trimmedQuestion)
+  const terms = seedTerms(trimmedQuestion, filters)
+  const scored = scoreNodes(graph, terms, allTerms.length)
   const startNodes = pickSeeds(scored)
 
   if (startNodes.length === 0) {
     return `No matching nodes found for query: ${trimmedQuestion}`
   }
 
-  const { filters, source } = resolveContextFilters(trimmedQuestion, options.contextFilters)
   const result = mode === 'dfs'
-    ? dfs(graph, startNodes, depth, filters)
-    : bfs(graph, startNodes, depth, filters)
+    ? dfs(graph, startNodes, depth, filters, direction)
+    : bfs(graph, startNodes, depth, filters, direction)
   const startLabels = startNodes.map(nodeId => nodeLabel(graph.nodes.get(nodeId), nodeId))
   const headerParts = [
     `Traversal: ${mode.toUpperCase()} depth=${depth}`,
@@ -502,6 +609,9 @@ export async function queryWikiKnowledge(
   ]
   if (filters.length > 0) {
     headerParts.push(`Context: ${filters.join(', ')} (${source})`)
+  }
+  if (direction !== 'outgoing') {
+    headerParts.push(`Direction: ${direction}`)
   }
   headerParts.push(`${result.nodes.size} nodes found`)
 
