@@ -16,6 +16,26 @@ test('/wiki status dispatches to status instead of generic help', async () => {
       expect.stringContaining('GakrCLI wiki is not initialized in this project.'),
       { display: 'system' },
     )
+    expect(onDone).toHaveBeenCalledWith(
+      expect.stringContaining('add `.wikiignore` in the project root'),
+      { display: 'system' },
+    )
+  } finally {
+    await rm(cwd, { recursive: true, force: true })
+  }
+})
+
+test('/wiki help mentions .wikiignore exclusions', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'gakrcli-wiki-command-'))
+  const onDone = mock(() => {})
+
+  try {
+    await runWithCwdOverride(cwd, () => call(onDone as never, {} as never, 'help'))
+
+    expect(onDone).toHaveBeenCalledWith(
+      expect.stringContaining('add `.wikiignore` in the project root'),
+      { display: 'system' },
+    )
   } finally {
     await rm(cwd, { recursive: true, force: true })
   }
@@ -37,6 +57,10 @@ test('/wiki init builds the graph knowledge base', async () => {
     )
     expect(onDone).toHaveBeenCalledWith(
       expect.stringContaining('.gakrcli/wiki/graph/graph.json'),
+      { display: 'system' },
+    )
+    expect(onDone).toHaveBeenCalledWith(
+      expect.stringContaining('add `.wikiignore` in the project root'),
       { display: 'system' },
     )
   } finally {
@@ -61,6 +85,10 @@ test('/wiki init reports already initialized unless forced', async () => {
     )
     expect(onDone).toHaveBeenCalledWith(
       expect.stringContaining('/wiki init --force'),
+      { display: 'system' },
+    )
+    expect(onDone).toHaveBeenCalledWith(
+      expect.stringContaining('add `.wikiignore` in the project root'),
       { display: 'system' },
     )
   } finally {
@@ -111,6 +139,10 @@ test('/wiki update refreshes an existing graph knowledge base', async () => {
     )
     expect(onDone).toHaveBeenCalledWith(
       expect.stringContaining('Changed: yes'),
+      { display: 'system' },
+    )
+    expect(onDone).toHaveBeenCalledWith(
+      expect.stringContaining('add `.wikiignore` in the project root'),
       { display: 'system' },
     )
   } finally {

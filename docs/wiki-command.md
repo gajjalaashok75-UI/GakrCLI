@@ -26,6 +26,9 @@ The command is registered as an immediate local JSX command in
 `src/commands/wiki/index.ts`, so it runs locally and returns a system-display
 message instead of sending the request to the model.
 
+Use a project-root `.wikiignore` file to exclude files and folders from wiki
+graph knowledge. It uses the same pattern style as `.gitignore`.
+
 ## Filesystem Layout
 
 `getWikiPaths()` in `src/services/wiki/paths.ts` resolves the wiki layout from the
@@ -164,6 +167,7 @@ Status reports:
 - last update timestamp across core wiki files
 - graph freshness compared with the manifest; if codebase files changed, status
   tells the user to run `/wiki update`
+- a reminder that `.wikiignore` can exclude noisy files from wiki graph knowledge
 
 ## `/wiki ingest <path>`
 
