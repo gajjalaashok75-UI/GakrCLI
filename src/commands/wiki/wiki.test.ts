@@ -44,6 +44,51 @@ test('/wiki init builds the graph knowledge base', async () => {
   }
 })
 
+test('/wiki init reports already initialized unless forced', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'gakrcli-wiki-command-'))
+  const onDone = mock(() => {})
+
+  try {
+    await mkdir(join(cwd, 'src'), { recursive: true })
+    await writeFile(join(cwd, 'src', 'main.ts'), 'export function main() {}\n', 'utf8')
+
+    await runWithCwdOverride(cwd, () => call(onDone as never, {} as never, 'init'))
+    await runWithCwdOverride(cwd, () => call(onDone as never, {} as never, 'init'))
+
+    expect(onDone).toHaveBeenCalledWith(
+      expect.stringContaining('GakrCLI wiki is already initialized'),
+      { display: 'system' },
+    )
+    expect(onDone).toHaveBeenCalledWith(
+      expect.stringContaining('/wiki init --force'),
+      { display: 'system' },
+    )
+  } finally {
+    await rm(cwd, { recursive: true, force: true })
+  }
+})
+
+test('/wiki init --force rebuilds an existing graph knowledge base', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'gakrcli-wiki-command-'))
+  const onDone = mock(() => {})
+
+  try {
+    await mkdir(join(cwd, 'src'), { recursive: true })
+    await writeFile(join(cwd, 'src', 'main.ts'), 'export function main() {}\n', 'utf8')
+
+    await runWithCwdOverride(cwd, () => call(onDone as never, {} as never, 'init'))
+    await writeFile(join(cwd, 'src', 'main.ts'), 'export function forcedMain() {}\n', 'utf8')
+    await runWithCwdOverride(cwd, () => call(onDone as never, {} as never, 'init --force'))
+
+    expect(onDone).toHaveBeenCalledWith(
+      expect.stringContaining('Wiki scaffold already existed. Graph artifacts were rebuilt.'),
+      { display: 'system' },
+    )
+  } finally {
+    await rm(cwd, { recursive: true, force: true })
+  }
+})
+
 test('/wiki update refreshes an existing graph knowledge base', async () => {
   const cwd = await mkdtemp(join(tmpdir(), 'gakrcli-wiki-command-'))
   const onDone = mock(() => {})

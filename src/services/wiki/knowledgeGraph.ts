@@ -86,6 +86,10 @@ type WikiGraphManifest = {
   }>
 }
 
+type WikiKnowledgeInitOptions = {
+  force?: boolean
+}
+
 const DEFAULT_IGNORE_PATTERNS = [
   '.git/',
   '.gakrcli/wiki/',
@@ -1687,7 +1691,7 @@ function generateReport(graph: WikiGraph, files: ExtractedFile[]): string {
     '',
     '## Graph Freshness',
     '- Built by `/wiki init` from current working tree.',
-    '- Run `/wiki init` after code changes to force-rebuild the local graph.',
+    '- Run `/wiki update` after code changes to refresh the local graph.',
     '',
     '## Community Hubs (Navigation)',
     ...communityEntries.map(([community]) => `- [[_COMMUNITY_Community ${community}|Community ${community}]]`),
@@ -1950,6 +1954,16 @@ async function readExistingManifest(path: string): Promise<WikiGraphManifest | n
   }
 }
 
+async function wikiScaffoldExists(paths: ReturnType<typeof getWikiPaths>): Promise<boolean> {
+  const [hasRoot, hasSchema, hasIndex, hasLog] = await Promise.all([
+    pathExists(paths.root),
+    pathExists(paths.schemaFile),
+    pathExists(paths.indexFile),
+    pathExists(paths.logFile),
+  ])
+  return hasRoot && hasSchema && hasIndex && hasLog
+}
+
 function manifestFromGraph(
   graph: WikiGraph,
   extracted: ExtractedFile[],
@@ -2135,7 +2149,43 @@ async function rebuildWikiKnowledgeGraph(
 export async function initializeWikiKnowledge(
   cwd: string,
   target = '.',
+  options: WikiKnowledgeInitOptions = {},
 ): Promise<WikiKnowledgeInitResult> {
+  const paths = getWikiPaths(cwd)
+  if (!options.force && await wikiScaffoldExists(paths)) {
+    const init: WikiInitResult = {
+      root: paths.root,
+      createdFiles: [],
+      createdDirectories: [],
+      alreadyExisted: true,
+    }
+    const previousGraph = await readExistingGraph(paths.graphJsonFile)
+    if (previousGraph) {
+      const previousManifest = await readExistingManifest(paths.graphManifestFile)
+      return {
+        ...resultFromExistingGraph(
+          init,
+          paths,
+          cwd,
+          previousGraph,
+          previousManifest?.files?.length ?? 0,
+        ),
+        skipped: true,
+      }
+    }
+
+    return {
+      ...init,
+      graphRoot: paths.graphDir,
+      indexedFiles: 0,
+      nodeCount: 0,
+      edgeCount: 0,
+      communityCount: 0,
+      graphFiles: [],
+      skipped: true,
+    }
+  }
+
   const init = await initializeWiki(cwd)
   return rebuildWikiKnowledgeGraph(cwd, target, init)
 }

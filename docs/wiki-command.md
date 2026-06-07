@@ -9,14 +9,15 @@ low-token codebase understanding.
 ## Commands
 
 ```text
-/wiki [init|update [path]|status|ingest <path>]
+/wiki [init [--force] [path]|update [path]|status|ingest <path>]
 ```
 
 | Command | Purpose |
 | --- | --- |
 | `/wiki` | Show wiki status. |
 | `/wiki status` | Show wiki status. |
-| `/wiki init` | Create the wiki scaffold and force-rebuild the local graph knowledge base. |
+| `/wiki init` | Create the wiki scaffold and local graph knowledge base if missing. |
+| `/wiki init --force [path]` | Reinitialize and force-rebuild the local graph knowledge base. |
 | `/wiki update [path]` | Refresh an existing wiki graph for `.` or a target path. |
 | `/wiki ingest <path>` | Read a local project file and create a generated source note. |
 | `/wiki help` | Show command help. |
@@ -97,12 +98,14 @@ It creates the base wiki scaffold if needed:
 .gakrcli/wiki/pages/architecture.md
 ```
 
-File creation uses exclusive writes, so existing wiki files are preserved. Running
-`/wiki init` again preserves hand-maintained scaffold files.
+File creation uses exclusive writes, so existing wiki files are preserved. If the
+main wiki scaffold already exists (`schema.md`, `index.md`, and `log.md`),
+plain `/wiki init` reports that initialization is already done and does not
+rebuild graph artifacts.
 
-It also force-rebuilds graph artifacts every time, similar in spirit to
-`python -m graphify update . --force`, but implemented locally in TypeScript with
-no Python package dependency:
+Use `/wiki init --force` to reinitialize and force-rebuild graph artifacts,
+similar in spirit to `python -m graphify update . --force`, but implemented
+locally in TypeScript with no Python package dependency:
 
 ```text
 .gakrcli/wiki/graph/graph.json
