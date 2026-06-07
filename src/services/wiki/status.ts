@@ -1,4 +1,5 @@
 import { readdir, readFile, stat } from 'fs/promises'
+import { checkWikiKnowledgeFreshness } from './knowledgeGraph.js'
 import { getWikiPaths } from './paths.js'
 import type { WikiStatus } from './types.js'
 
@@ -131,6 +132,20 @@ export async function getWikiStatus(cwd: string): Promise<WikiStatus> {
       listMarkdownFiles(paths.pagesDir),
       listMarkdownFiles(paths.sourcesDir),
     ])
+  const freshness = hasGraphJson ? await checkWikiKnowledgeFreshness(cwd) : null
+  const changedCount = freshness
+    ? freshness.addedFiles + freshness.modifiedFiles + freshness.deletedFiles
+    : 0
+  const graphFreshness = !freshness?.checked
+    ? 'unknown'
+    : freshness.changed
+      ? 'stale'
+      : 'up_to_date'
+  const graphFreshnessMessage = !freshness?.checked
+    ? null
+    : freshness.changed
+      ? `Codebase files have changes (${changedCount}: ${freshness.addedFiles} added, ${freshness.modifiedFiles} modified, ${freshness.deletedFiles} deleted). Run /wiki update to update the wiki.`
+      : 'Wiki graph is up to date with the indexed codebase files.'
 
   return {
     initialized: hasRoot && hasSchema && hasIndex && hasLog,
@@ -159,5 +174,7 @@ export async function getWikiStatus(cwd: string): Promise<WikiStatus> {
       ...pages,
       ...sources,
     ]),
+    graphFreshness,
+    graphFreshnessMessage,
   }
 }

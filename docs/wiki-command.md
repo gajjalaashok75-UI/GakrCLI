@@ -162,6 +162,8 @@ Status reports:
 - whether graph artifacts are present
 - graph node, edge, and community counts when `graph.json` exists
 - last update timestamp across core wiki files
+- graph freshness compared with the manifest; if codebase files changed, status
+  tells the user to run `/wiki update`
 
 ## `/wiki ingest <path>`
 

@@ -99,6 +99,7 @@ function formatStatus(status: Awaited<ReturnType<typeof getWikiStatus>>): string
     `Index: ${status.hasIndex ? 'present' : 'missing'}`,
     `Log: ${status.hasLog ? 'present' : 'missing'}`,
     `Last updated: ${status.lastUpdatedAt ?? 'unknown'}`,
+    `Graph freshness: ${status.graphFreshnessMessage ?? status.graphFreshness}`,
   ].join('\n')
 }
 

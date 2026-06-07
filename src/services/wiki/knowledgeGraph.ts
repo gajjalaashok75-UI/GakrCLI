@@ -1,5 +1,6 @@
 import { createHash } from 'crypto'
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'fs/promises'
+import { cpus } from 'os'
 import { basename, extname, isAbsolute, join, relative, resolve } from 'path'
 import ignore from 'ignore'
 import { initializeWiki } from './init.js'
@@ -88,6 +89,15 @@ type WikiGraphManifest = {
 
 type WikiKnowledgeInitOptions = {
   force?: boolean
+}
+
+export type WikiKnowledgeFreshness = {
+  checked: boolean
+  changed: boolean
+  indexedFiles: number
+  addedFiles: number
+  modifiedFiles: number
+  deletedFiles: number
 }
 
 const DEFAULT_IGNORE_PATTERNS = [
@@ -295,6 +305,7 @@ const INDEX_FILENAMES = JS_RESOLVE_EXTENSIONS.map(ext => `index${ext}`)
 const MAX_COMMUNITY_SIZE = 120
 
 const MAX_TEXT_FILE_BYTES = 1_000_000
+const GRAPH_WORKER_COUNT = Math.max(2, Math.min(8, cpus().length || 4))
 const GRAPHIFY_DISPATCH_EXTENSIONS = new Set([
   '.py',
   '.js',
@@ -387,6 +398,27 @@ function toPosix(path: string): string {
 
 function hashText(input: string): string {
   return createHash('sha256').update(input).digest('hex')
+}
+
+async function mapWithWorkers<T, R>(
+  items: T[],
+  workerCount: number,
+  mapper: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let cursor = 0
+  const workers = Array.from(
+    { length: Math.min(workerCount, Math.max(items.length, 1)) },
+    async () => {
+      while (cursor < items.length) {
+        const index = cursor
+        cursor += 1
+        results[index] = await mapper(items[index], index)
+      }
+    },
+  )
+  await Promise.all(workers)
+  return results
 }
 
 function slug(value: string): string {
@@ -1989,8 +2021,10 @@ async function collectManifestEntries(
   previous?: WikiGraphManifest | null,
 ): Promise<Required<WikiGraphManifest>['files']> {
   const previousByPath = new Map((previous?.files ?? []).map(file => [file.path, file]))
-  return Promise.all(
-    files.map(async file => {
+  return mapWithWorkers(
+    files,
+    GRAPH_WORKER_COUNT,
+    async file => {
       const relPath = toPosix(relative(cwd, file))
       const info = await stat(file)
       const old = previousByPath.get(relPath)
@@ -2009,7 +2043,7 @@ async function collectManifestEntries(
         mtime_ms: info.mtimeMs,
         type: classifyFile(file),
       }
-    }),
+    },
   )
 }
 
@@ -2023,25 +2057,52 @@ function manifestChangedForTarget(
   current: WikiGraphManifest,
   targetRel: string,
 ): boolean {
-  if (!previous?.files || !current.files) return true
+  return manifestDiffForTarget(previous, current, targetRel).changed
+}
+
+function manifestDiffForTarget(
+  previous: WikiGraphManifest | null,
+  current: WikiGraphManifest,
+  targetRel: string,
+): Omit<WikiKnowledgeFreshness, 'checked' | 'indexedFiles'> {
+  if (!previous?.files || !current.files) {
+    return {
+      changed: true,
+      addedFiles: current.files?.length ?? 0,
+      modifiedFiles: 0,
+      deletedFiles: 0,
+    }
+  }
   const previousByPath = new Map(previous.files.map(file => [file.path, file]))
   const currentByPath = new Map(current.files.map(file => [file.path, file]))
+  let addedFiles = 0
+  let modifiedFiles = 0
+  let deletedFiles = 0
 
   for (const file of current.files) {
     if (!targetContainsPath(targetRel, file.path)) continue
     const old = previousByPath.get(file.path)
     if (!old || old.hash !== file.hash || old.size !== file.size || old.type !== file.type) {
-      return true
+      if (old) {
+        modifiedFiles += 1
+      } else {
+        addedFiles += 1
+      }
     }
   }
 
   for (const file of previous.files) {
     if (targetContainsPath(targetRel, file.path) && !currentByPath.has(file.path)) {
-      return true
+      deletedFiles += 1
     }
   }
 
-  return false
+  return {
+    changed: addedFiles + modifiedFiles + deletedFiles > 0,
+    addedFiles,
+    modifiedFiles,
+    deletedFiles,
+  }
 }
 
 function mergeManifestTargetEntries(
@@ -2108,7 +2169,7 @@ async function rebuildWikiKnowledgeGraph(
   const scanRoot = resolveInsideProject(cwd, target)
   const files = await collectProjectFiles(cwd, scanRoot)
   const extracted = (
-    await Promise.all(files.map(file => extractFile(cwd, file)))
+    await mapWithWorkers(files, GRAPH_WORKER_COUNT, file => extractFile(cwd, file))
   ).filter((file): file is ExtractedFile => file !== null)
 
   const graph = buildGraph(cwd, extracted)
@@ -2257,5 +2318,35 @@ export async function updateWikiKnowledge(
     ...result,
     changed: true,
     updatedTarget: targetRel,
+  }
+}
+
+export async function checkWikiKnowledgeFreshness(cwd: string): Promise<WikiKnowledgeFreshness> {
+  const paths = getWikiPaths(cwd)
+  const previousManifest = await readExistingManifest(paths.graphManifestFile)
+  if (!previousManifest?.files) {
+    return {
+      checked: false,
+      changed: false,
+      indexedFiles: 0,
+      addedFiles: 0,
+      modifiedFiles: 0,
+      deletedFiles: 0,
+    }
+  }
+
+  const scanRoot = resolveInsideProject(cwd, previousManifest.scan_root || '.')
+  const files = (await pathExists(scanRoot)) ? await collectProjectFiles(cwd, scanRoot) : []
+  const currentManifest: Required<WikiGraphManifest> = {
+    generated_at: previousManifest.generated_at ?? '',
+    scan_root: previousManifest.scan_root || '.',
+    files: await collectManifestEntries(cwd, files, previousManifest),
+  }
+  const diff = manifestDiffForTarget(previousManifest, currentManifest, '.')
+
+  return {
+    checked: true,
+    indexedFiles: currentManifest.files.length,
+    ...diff,
   }
 }
