@@ -9,7 +9,7 @@ low-token codebase understanding.
 ## Commands
 
 ```text
-/wiki [init [--force] [path]|update [path]|status|ingest <path>]
+/wiki [init [--force] [path]|update [path]|query <question>|status|ingest <path>]
 ```
 
 | Command | Purpose |
@@ -19,6 +19,7 @@ low-token codebase understanding.
 | `/wiki init` | Create the wiki scaffold and local graph knowledge base if missing. |
 | `/wiki init --force [path]` | Reinitialize and force-rebuild the local graph knowledge base. |
 | `/wiki update [path]` | Refresh an existing wiki graph for `.` or a target path. |
+| `/wiki query <question>` | Query the wiki graph with Graphify-style BFS/DFS traversal. |
 | `/wiki ingest <path>` | Read a local project file and create a generated source note. |
 | `/wiki help` | Show command help. |
 
@@ -149,6 +150,42 @@ left untouched and the command reports that no graph changes were detected. If
 the target changed, the saved scan root from `graph/manifest.json` is rebuilt so
 the graph keeps representing the full initialized corpus rather than shrinking
 to only the updated folder or file.
+
+## `/wiki query <question>`
+
+`/wiki query` calls `queryWikiKnowledge(cwd, question, options)` from
+`src/services/wiki/query.ts`.
+
+It loads `.gakrcli/wiki/graph/graph.json` and returns a compact, Graphify-style
+subgraph instead of reading raw source files:
+
+```text
+/wiki query "starting point"
+/wiki query "who calls updateWikiKnowledge" --context call
+/wiki query "auth flow" --dfs --budget 3000
+```
+
+The query flow mirrors Graphify's CLI query path:
+
+- split the natural-language question into searchable terms
+- score graph nodes by exact, prefix, substring, and source-file matches
+- down-weight common terms with IDF-style weighting
+- pick the top one to three seed nodes
+- traverse with BFS by default, or DFS with `--dfs`
+- skip expanding high-degree hub nodes as transit
+- render `NODE` and `EDGE` lines with source files, source locations,
+  communities, relations, and confidence tags
+- cap output with `--budget N` so results stay token friendly
+
+Supported flags:
+
+| Flag | Purpose |
+| --- | --- |
+| `--dfs` | Use DFS traversal for chain/path-style questions. |
+| `--bfs` | Force BFS traversal. BFS is the default. |
+| `--depth N` | Traversal depth, clamped from 1 to 6. |
+| `--budget N` | Approximate output token budget. |
+| `--context C` | Restrict traversal to a context/relation such as `call` or `import`. |
 
 ## `/wiki status`
 
