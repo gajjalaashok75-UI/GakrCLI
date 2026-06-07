@@ -5,7 +5,7 @@ import ignore from 'ignore'
 import { initializeWiki } from './init.js'
 import { rebuildWikiIndex } from './indexBuilder.js'
 import { getWikiPaths } from './paths.js'
-import type { WikiKnowledgeInitResult } from './types.js'
+import type { WikiInitResult, WikiKnowledgeInitResult, WikiKnowledgeUpdateResult } from './types.js'
 
 type WikiGraphNode = {
   id: string
@@ -71,6 +71,17 @@ type ExtractedFile = {
   reExports: Array<{ imported: string; names: string[] }>
   uses: Array<{ name: string; line: number }>
   references: Array<{ name: string; line: number }>
+}
+
+type WikiGraphManifest = {
+  generated_at?: string
+  scan_root?: string
+  files?: Array<{
+    path: string
+    hash: string
+    size: number
+    type: string
+  }>
 }
 
 const DEFAULT_IGNORE_PATTERNS = [
@@ -1899,11 +1910,117 @@ function resolveInsideProject(cwd: string, target: string): string {
   return abs
 }
 
-export async function initializeWikiKnowledge(
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await stat(path)
+    return true
+  } catch (error: unknown) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'ENOENT'
+    ) {
+      return false
+    }
+    throw error
+  }
+}
+
+async function readExistingGraph(path: string): Promise<WikiGraph | null> {
+  try {
+    return JSON.parse(await readFile(path, 'utf8')) as WikiGraph
+  } catch {
+    return null
+  }
+}
+
+async function readExistingManifest(path: string): Promise<WikiGraphManifest | null> {
+  try {
+    return JSON.parse(await readFile(path, 'utf8')) as WikiGraphManifest
+  } catch {
+    return null
+  }
+}
+
+function manifestFromGraph(
+  graph: WikiGraph,
+  extracted: ExtractedFile[],
+  scanRoot: string,
   cwd: string,
-  target = '.',
+): Required<WikiGraphManifest> {
+  return {
+    generated_at: graph.graph.generated_at,
+    scan_root: toPosix(relative(cwd, scanRoot)) || '.',
+    files: extracted.map(file => ({
+      path: file.relPath,
+      hash: file.hash,
+      size: file.size,
+      type: file.fileType,
+    })),
+  }
+}
+
+function targetContainsPath(targetRel: string, relPath: string): boolean {
+  if (!targetRel || targetRel === '.') return true
+  return relPath === targetRel || relPath.startsWith(`${targetRel}/`)
+}
+
+function manifestChangedForTarget(
+  previous: WikiGraphManifest | null,
+  current: WikiGraphManifest,
+  targetRel: string,
+): boolean {
+  if (!previous?.files || !current.files) return true
+  const previousByPath = new Map(previous.files.map(file => [file.path, file]))
+  const currentByPath = new Map(current.files.map(file => [file.path, file]))
+
+  for (const file of current.files) {
+    if (!targetContainsPath(targetRel, file.path)) continue
+    const old = previousByPath.get(file.path)
+    if (!old || old.hash !== file.hash || old.size !== file.size || old.type !== file.type) {
+      return true
+    }
+  }
+
+  for (const file of previous.files) {
+    if (targetContainsPath(targetRel, file.path) && !currentByPath.has(file.path)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function resultFromExistingGraph(
+  init: WikiInitResult,
+  paths: ReturnType<typeof getWikiPaths>,
+  cwd: string,
+  graph: WikiGraph,
+  indexedFiles: number,
+): WikiKnowledgeInitResult {
+  return {
+    ...init,
+    graphRoot: paths.graphDir,
+    indexedFiles,
+    nodeCount: graph.nodes.length,
+    edgeCount: graph.links.length,
+    communityCount: new Set(graph.nodes.map(node => node.community)).size,
+    graphFiles: [
+      paths.graphJsonFile,
+      paths.graphReportFile,
+      paths.graphHtmlFile,
+      paths.graphManifestFile,
+      paths.graphWikiIndexFile,
+    ].map(file => toPosix(relative(cwd, file))),
+  }
+}
+
+async function rebuildWikiKnowledgeGraph(
+  cwd: string,
+  target: string,
+  init: WikiInitResult,
 ): Promise<WikiKnowledgeInitResult> {
-  const init = await initializeWiki(cwd)
   const paths = getWikiPaths(cwd)
   const scanRoot = resolveInsideProject(cwd, target)
   const files = await collectProjectFiles(cwd, scanRoot)
@@ -1912,6 +2029,7 @@ export async function initializeWikiKnowledge(
   ).filter((file): file is ExtractedFile => file !== null)
 
   const graph = buildGraph(cwd, extracted)
+  const manifest = manifestFromGraph(graph, extracted, scanRoot, cwd)
   await mkdir(paths.graphDir, { recursive: true })
   await writeFile(paths.graphJsonFile, JSON.stringify(graph, null, 2), 'utf8')
   await writeFile(paths.graphReportFile, generateReport(graph, extracted), 'utf8')
@@ -1919,15 +2037,7 @@ export async function initializeWikiKnowledge(
   await writeFile(
     paths.graphManifestFile,
     JSON.stringify(
-      {
-        generated_at: graph.graph.generated_at,
-        files: extracted.map(file => ({
-          path: file.relPath,
-          hash: file.hash,
-          size: file.size,
-          type: file.fileType,
-        })),
-      },
+      manifest,
       null,
       2,
     ),
@@ -1950,5 +2060,67 @@ export async function initializeWikiKnowledge(
       paths.graphManifestFile,
       paths.graphWikiIndexFile,
     ].map(file => toPosix(relative(cwd, file))),
+  }
+}
+
+export async function initializeWikiKnowledge(
+  cwd: string,
+  target = '.',
+): Promise<WikiKnowledgeInitResult> {
+  const init = await initializeWiki(cwd)
+  return rebuildWikiKnowledgeGraph(cwd, target, init)
+}
+
+export async function updateWikiKnowledge(
+  cwd: string,
+  target = '.',
+): Promise<WikiKnowledgeUpdateResult> {
+  const paths = getWikiPaths(cwd)
+  if (!(await pathExists(paths.root))) {
+    throw new Error('Wiki is not initialized. Run /wiki init first.')
+  }
+  const previousGraph = await readExistingGraph(paths.graphJsonFile)
+  if (!previousGraph) {
+    throw new Error('Wiki graph is missing. Run /wiki init first.')
+  }
+
+  const init: WikiInitResult = {
+    root: paths.root,
+    createdFiles: [],
+    createdDirectories: [],
+    alreadyExisted: true,
+  }
+  const previousManifest = await readExistingManifest(paths.graphManifestFile)
+  const scanTarget = previousManifest?.scan_root || '.'
+  const scanRoot = resolveInsideProject(cwd, scanTarget)
+  const targetRel = toPosix(relative(cwd, resolveInsideProject(cwd, target))) || '.'
+  const files = await collectProjectFiles(cwd, scanRoot)
+  const extracted = (
+    await Promise.all(files.map(file => extractFile(cwd, file)))
+  ).filter((file): file is ExtractedFile => file !== null)
+  const candidateGraph = buildGraph(cwd, extracted)
+  const candidateManifest = manifestFromGraph(candidateGraph, extracted, scanRoot, cwd)
+  const changed = manifestChangedForTarget(previousManifest, candidateManifest, targetRel)
+
+  if (!changed) {
+    const result = resultFromExistingGraph(
+      init,
+      paths,
+      cwd,
+      previousGraph,
+      previousManifest?.files?.length ?? extracted.length,
+    )
+    return {
+      ...result,
+      changed: false,
+      updatedTarget: targetRel,
+    }
+  }
+
+  const result = await rebuildWikiKnowledgeGraph(cwd, scanTarget, init)
+  return {
+    ...result,
+    changed: true,
+    updatedTarget: targetRel,
   }
 }

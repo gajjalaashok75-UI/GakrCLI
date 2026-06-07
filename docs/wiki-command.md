@@ -9,7 +9,7 @@ low-token codebase understanding.
 ## Commands
 
 ```text
-/wiki [init|status|ingest <path>]
+/wiki [init|update [path]|status|ingest <path>]
 ```
 
 | Command | Purpose |
@@ -17,6 +17,7 @@ low-token codebase understanding.
 | `/wiki` | Show wiki status. |
 | `/wiki status` | Show wiki status. |
 | `/wiki init` | Create the wiki scaffold and force-rebuild the local graph knowledge base. |
+| `/wiki update [path]` | Refresh an existing wiki graph for `.` or a target path. |
 | `/wiki ingest <path>` | Read a local project file and create a generated source note. |
 | `/wiki help` | Show command help. |
 
@@ -115,6 +116,33 @@ no Python package dependency:
 The scan honors `.gitignore` and `.wikiignore` from the project root, plus built-in
 ignores for generated folders such as `.gakrcli/wiki/`, `node_modules/`, `dist/`,
 `build/`, `coverage/`, caches, and `graphify-out/`.
+
+## `/wiki update [path]`
+
+`/wiki update` calls `updateWikiKnowledge(cwd, target)` from
+`src/services/wiki/knowledgeGraph.ts`.
+
+It refreshes graph artifacts for an existing wiki and defaults to the current
+project directory:
+
+```text
+/wiki update
+/wiki update .
+/wiki update src
+/wiki update src/services/wiki/knowledgeGraph.ts
+```
+
+The command requires `.gakrcli/wiki/` and `graph/graph.json` to already exist and
+fails with guidance to run `/wiki init` first when the graph has not been
+initialized. This mirrors Graphify's `graphify update <path>` role as a no-LLM,
+code-graph refresh after file changes.
+
+The target path must stay inside the current project. The target is used as the
+change scope: if manifest hashes for that path are unchanged, graph artifacts are
+left untouched and the command reports that no graph changes were detected. If
+the target changed, the saved scan root from `graph/manifest.json` is rebuilt so
+the graph keeps representing the full initialized corpus rather than shrinking
+to only the updated folder or file.
 
 ## `/wiki status`
 
