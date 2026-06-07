@@ -20,6 +20,10 @@ describe('builtInCommandNames', () => {
     expect(builtInCommandNames()).toContain('cache-probe')
   })
 
+  test('includes the wiki command', () => {
+    expect(builtInCommandNames()).toContain('wiki')
+  })
+
   test('does not include removed GitHub Models onboarding command', () => {
     expect(builtInCommandNames()).not.toContain('onboard-github')
   })
