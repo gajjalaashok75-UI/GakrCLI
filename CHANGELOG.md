@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Wiki Graph Extraction Coverage**: Added local code/document/config/media discovery with `.wikiignore` and `.gitignore` support, symbol and markdown-heading extraction, call/reference/import edges, Python and package-style import resolution, import-cycle reporting, graph freshness notes, god-node reporting, knowledge gaps, and focused wiki graph tests.
 
 ### Changed (2026-06-07)
+- **Graphify Wiki Graph Parity**: Enriched `/wiki init` graph extraction with rationale nodes, class-method edges, inheritance/interface implementation edges, named import/re-export edges, and local type-use edges, bringing the generated wiki graph closer to the reference Graphify AST graph while keeping generation dependency-free.
 - **Wiki Status And Index Graph Awareness**: Surfaced graph artifact presence, node/edge/community counts, and graph navigation links in `/wiki status` and `.gakrcli/wiki/index.md`.
 - **Graphify Reference Parity Testing**: Verified `/wiki init` against the `references/graphify-8` corpus and tuned extraction/clustering so local wiki output is close to Graphify's AST-only graph shape while keeping semantic/rationale-only gaps explicit.
 
