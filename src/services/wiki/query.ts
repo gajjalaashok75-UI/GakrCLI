@@ -130,8 +130,13 @@ function stripDiacritics(value: string): string {
 }
 
 function searchTokens(value: unknown): string[] {
-  return [...stripDiacritics(String(value)).toLowerCase().matchAll(/[\p{L}\p{N}_]+/gu)]
-    .map(match => match[0])
+	const text = String(value)
+	// Split camelCase/PascalCase boundaries first, then tokenize
+	const camelSplit = text
+		.replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+		.replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+	return [...stripDiacritics(camelSplit).toLowerCase().matchAll(/[\p{L}\p{N}_]+/gu)]
+		.map(match => match[0])
 }
 
 function hasChinese(value: string): boolean {
@@ -388,8 +393,11 @@ function resolveContextFilters(
 }
 
 function normalizedRelation(value: string | null | undefined): string {
-  const key = stripDiacritics(String(value || '')).trim().toLowerCase()
-  return CONTEXT_FILTER_ALIASES.get(key) ?? key
+	const raw = String(value || '').trim()
+	// Graph may include side tags like "[EXTRACTED]" after the real relation
+	const cleaned = raw.replace(/\s*\[[^\]]+\]\s*/gu, '').trim().toLowerCase()
+	const key = stripDiacritics(cleaned)
+	return CONTEXT_FILTER_ALIASES.get(key) ?? key
 }
 
 function edgeMatchesContext(edge: WikiQueryEdge, filters: string[]): boolean {
@@ -439,10 +447,12 @@ function inferTraversalDirection(question: string, filters: string[]): Traversal
 }
 
 function hubThreshold(graph: LoadedGraph): number {
-  const degrees = [...graph.degree.values()].sort((a, b) => a - b)
-  if (degrees.length === 0) return 50
-  const index = Math.min(degrees.length - 1, Math.floor(degrees.length * 0.99))
-  return Math.max(50, degrees[index] ?? 0)
+	const degrees = [...graph.degree.values()].sort((a, b) => a - b)
+	if (degrees.length === 0) return 50
+	// Use 90th percentile rather than 99th; high-degree "god nodes" (like Tool or
+	// the main entry point) should still be traversed from seeds if they match.
+	const index = Math.min(degrees.length - 1, Math.floor(degrees.length * 0.9))
+	return Math.max(30, degrees[index] ?? 0)
 }
 
 function bfs(
