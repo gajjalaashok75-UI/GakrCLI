@@ -2,6 +2,7 @@ import React from 'react'
 import { COMMON_HELP_ARGS, COMMON_INFO_ARGS } from '../../constants/xml.js'
 import { ingestLocalWikiSource } from '../../services/wiki/ingest.js'
 import { initializeWikiKnowledge, updateWikiKnowledge } from '../../services/wiki/knowledgeGraph.js'
+import { queryWikiKnowledge, type WikiQueryOptions } from '../../services/wiki/query.js'
 import { getWikiStatus } from '../../services/wiki/status.js'
 import type {
   LocalJSXCommandCall,
@@ -14,7 +15,7 @@ const WIKIIGNORE_HINT =
   'Tip: add `.wikiignore` in the project root to exclude files or folders from wiki graph knowledge.'
 
 function renderHelp(): string {
-  return `Usage: /wiki [init [--force] [path]|update [path]|status|ingest <path>]
+  return `Usage: /wiki [init [--force] [path]|update [path]|query <question>|status|ingest <path>]
 
 Manage the GakrCLI project wiki stored in .gakrcli/wiki.
 
@@ -22,6 +23,7 @@ Commands:
   /wiki init          Create the wiki graph knowledge base if missing
   /wiki init --force  Reinitialize and rebuild the wiki graph
   /wiki update        Refresh the existing wiki graph for . or a target path
+  /wiki query         Query the wiki graph with BFS/DFS traversal
   /wiki status        Show wiki status, source counts, and graph counts
   /wiki ingest        Ingest a local file into generated source notes
 
@@ -30,10 +32,67 @@ Examples:
   /wiki init --force
   /wiki update .
   /wiki update src
+  /wiki query "starting point"
+  /wiki query "who calls updateWikiKnowledge" --context call
+  /wiki query "auth flow" --dfs --budget 3000
   /wiki status
   /wiki ingest README.md
 
 ${WIKIIGNORE_HINT}`
+}
+
+function tokenizeArgs(input: string): string[] {
+  const tokens: string[] = []
+  const pattern = /"([^"]*)"|'([^']*)'|(\S+)/g
+  for (const match of input.matchAll(pattern)) {
+    tokens.push(match[1] ?? match[2] ?? match[3] ?? '')
+  }
+  return tokens
+}
+
+function parseQueryArgs(input: string): { question: string; options: WikiQueryOptions } {
+  const tokens = tokenizeArgs(input)
+  const questionParts: string[] = []
+  const contextFilters: string[] = []
+  const options: WikiQueryOptions = {}
+  let index = 0
+
+  while (index < tokens.length) {
+    const token = tokens[index]
+    if (token === '--dfs') {
+      options.mode = 'dfs'
+      index += 1
+    } else if (token === '--bfs') {
+      options.mode = 'bfs'
+      index += 1
+    } else if (token === '--budget' && index + 1 < tokens.length) {
+      options.tokenBudget = Number.parseInt(tokens[index + 1], 10)
+      index += 2
+    } else if (token.startsWith('--budget=')) {
+      options.tokenBudget = Number.parseInt(token.split('=', 2)[1], 10)
+      index += 1
+    } else if (token === '--depth' && index + 1 < tokens.length) {
+      options.depth = Number.parseInt(tokens[index + 1], 10)
+      index += 2
+    } else if (token.startsWith('--depth=')) {
+      options.depth = Number.parseInt(token.split('=', 2)[1], 10)
+      index += 1
+    } else if (token === '--context' && index + 1 < tokens.length) {
+      contextFilters.push(tokens[index + 1])
+      index += 2
+    } else if (token.startsWith('--context=')) {
+      contextFilters.push(token.split('=', 2)[1])
+      index += 1
+    } else {
+      questionParts.push(token)
+      index += 1
+    }
+  }
+
+  if (contextFilters.length > 0) {
+    options.contextFilters = contextFilters
+  }
+  return { question: questionParts.join(' ').trim(), options }
 }
 
 function formatInitResult(result: Awaited<ReturnType<typeof initializeWikiKnowledge>>): string {
@@ -175,6 +234,13 @@ async function runWikiCommand(
   if (normalized === 'update') {
     const target = rest.join(' ').trim() || '.'
     onDone(formatUpdateResult(await updateWikiKnowledge(cwd, target)), { display: 'system' })
+    return
+  }
+
+  if (normalized === 'query') {
+    const queryArgs = trimmedArgs.slice(rawSubcommand.length).trim()
+    const { question, options } = parseQueryArgs(queryArgs)
+    onDone(await queryWikiKnowledge(cwd, question, options), { display: 'system' })
     return
   }
 

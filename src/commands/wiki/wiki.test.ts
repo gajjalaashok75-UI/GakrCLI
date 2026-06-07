@@ -174,6 +174,30 @@ test('/wiki update reports when no graph changes are detected', async () => {
   }
 })
 
+test('/wiki query returns a graph traversal result', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'gakrcli-wiki-command-'))
+  const onDone = mock(() => {})
+
+  try {
+    await mkdir(join(cwd, 'src'), { recursive: true })
+    await writeFile(join(cwd, 'src', 'main.ts'), 'export function main() {}\n', 'utf8')
+
+    await runWithCwdOverride(cwd, () => call(onDone as never, {} as never, 'init'))
+    await runWithCwdOverride(cwd, () => call(onDone as never, {} as never, 'query "main" --budget 500'))
+
+    expect(onDone).toHaveBeenCalledWith(
+      expect.stringContaining('Wiki query: main'),
+      { display: 'system' },
+    )
+    expect(onDone).toHaveBeenCalledWith(
+      expect.stringContaining('Traversal: BFS'),
+      { display: 'system' },
+    )
+  } finally {
+    await rm(cwd, { recursive: true, force: true })
+  }
+})
+
 test('/wiki status reports stale graph freshness after source changes', async () => {
   const cwd = await mkdtemp(join(tmpdir(), 'gakrcli-wiki-command-'))
   const onDone = mock(() => {})
