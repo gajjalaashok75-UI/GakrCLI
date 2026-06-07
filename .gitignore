@@ -21,7 +21,7 @@ web/*.tsbuildinfo
 .env.*.local
 .env.*
 !.env.example
-
+log.md
 # User/workspace-specific config
 .claude
 .gakrcli/
