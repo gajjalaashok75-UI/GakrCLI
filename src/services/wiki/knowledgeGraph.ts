@@ -76,20 +76,53 @@ type ExtractedFile = {
 const DEFAULT_IGNORE_PATTERNS = [
   '.git/',
   '.gakrcli/wiki/',
+  '.graphify/',
   'node_modules/',
   'dist/',
   'build/',
+  'target/',
+  'out/',
   'coverage/',
+  'lcov-report/',
+  'visual-tests/',
+  'visual-test/',
+  '__snapshots__/',
+  'snapshots/',
+  'storybook-static/',
+  'dist-protected/',
   '.pytest_cache/',
+  '.mypy_cache/',
+  '.ruff_cache/',
+  '.tox/',
+  '.eggs/',
   '__pycache__/',
   '.next/',
+  '.nuxt/',
   '.turbo/',
+  '.angular/',
   '.cache/',
+  '.parcel-cache/',
+  '.svelte-kit/',
+  '.terraform/',
+  '.serverless/',
+  '.worktrees/',
   'graphify-out/',
+  'worked/**/graph.json',
+  'worked/**/graph.html',
+  'worked/**/manifest.json',
+  'worked/**/.obsidian/',
   '*.log',
   '*.tmp',
   '*.map',
   'package-lock.json',
+  'yarn.lock',
+  'pnpm-lock.yaml',
+  'Cargo.lock',
+  'poetry.lock',
+  'Gemfile.lock',
+  'composer.lock',
+  'go.sum',
+  'go.work.sum',
   'bun.lock',
   'uv.lock',
 ]
@@ -245,6 +278,91 @@ const INDEX_FILENAMES = JS_RESOLVE_EXTENSIONS.map(ext => `index${ext}`)
 const MAX_COMMUNITY_SIZE = 120
 
 const MAX_TEXT_FILE_BYTES = 1_000_000
+const GRAPHIFY_DISPATCH_EXTENSIONS = new Set([
+  '.py',
+  '.js',
+  '.jsx',
+  '.mjs',
+  '.ts',
+  '.tsx',
+  '.go',
+  '.rs',
+  '.java',
+  '.groovy',
+  '.gradle',
+  '.c',
+  '.h',
+  '.cpp',
+  '.cc',
+  '.cxx',
+  '.hpp',
+  '.rb',
+  '.cs',
+  '.kt',
+  '.kts',
+  '.scala',
+  '.php',
+  '.swift',
+  '.lua',
+  '.luau',
+  '.toc',
+  '.zig',
+  '.ps1',
+  '.ex',
+  '.exs',
+  '.m',
+  '.mm',
+  '.jl',
+  '.f',
+  '.F',
+  '.f90',
+  '.F90',
+  '.f95',
+  '.F95',
+  '.f03',
+  '.F03',
+  '.f08',
+  '.F08',
+  '.vue',
+  '.svelte',
+  '.astro',
+  '.dart',
+  '.v',
+  '.sv',
+  '.svh',
+  '.sql',
+  '.md',
+  '.mdx',
+  '.qmd',
+  '.pas',
+  '.pp',
+  '.dpr',
+  '.dpk',
+  '.lpr',
+  '.inc',
+  '.dfm',
+  '.lfm',
+  '.lpk',
+  '.sh',
+  '.bash',
+  '.json',
+  '.tf',
+  '.tfvars',
+  '.hcl',
+  '.dm',
+  '.dme',
+  '.dmi',
+  '.dmm',
+  '.dmf',
+  '.sln',
+  '.csproj',
+  '.fsproj',
+  '.vbproj',
+  '.razor',
+  '.cshtml',
+  '.cls',
+  '.trigger',
+])
 
 function toPosix(path: string): string {
   return path.replace(/\\/g, '/')
@@ -288,8 +406,8 @@ function splitCommunityKey(node: WikiGraphNode): string {
 
 function classifyFile(path: string): string {
   const ext = extname(path).toLowerCase()
-  if (CODE_EXTENSIONS.has(ext)) return 'code'
-  if (ext === '.md' || ext === '.mdx' || ext === '.txt') return 'document'
+  if (CODE_EXTENSIONS.has(ext) || (GRAPHIFY_DISPATCH_EXTENSIONS.has(ext) && !['.md', '.mdx', '.qmd'].includes(ext))) return 'code'
+  if (ext === '.md' || ext === '.mdx' || ext === '.qmd' || ext === '.txt') return 'document'
   if (ext === '.json' || ext === '.yaml' || ext === '.yml' || ext === '.toml') return 'config'
   if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'].includes(ext)) return 'image'
   if (['.mp4', '.mov', '.webm', '.mp3', '.wav', '.m4a'].includes(ext)) return 'media'
@@ -357,7 +475,7 @@ async function collectProjectFiles(projectRoot: string, scanRoot: string): Promi
 
       if (entry.isDirectory()) {
         await walk(absPath)
-      } else if (entry.isFile()) {
+      } else if (entry.isFile() && GRAPHIFY_DISPATCH_EXTENSIONS.has(extname(entry.name))) {
         files.push(absPath)
       }
     }
@@ -832,7 +950,7 @@ async function extractFile(cwd: string, absPath: string): Promise<ExtractedFile 
   const ext = extname(absPath).toLowerCase()
   const fileType = classifyFile(absPath)
 
-  if (!TEXT_EXTENSIONS.has(ext) || info.size > MAX_TEXT_FILE_BYTES) {
+  if (!GRAPHIFY_DISPATCH_EXTENSIONS.has(ext) || info.size > MAX_TEXT_FILE_BYTES) {
     return {
       relPath,
       absPath,
@@ -849,7 +967,7 @@ async function extractFile(cwd: string, absPath: string): Promise<ExtractedFile 
 
   const content = await readFile(absPath, 'utf8')
   const symbols =
-    ext === '.md' || ext === '.mdx' ? markdownConcepts(content) : codeSymbols(content, ext)
+    ext === '.md' || ext === '.mdx' || ext === '.qmd' ? markdownConcepts(content) : codeSymbols(content, ext)
 
   return {
     relPath,
@@ -875,6 +993,30 @@ function edgeWeight(edge: WikiGraphEdge): number {
   if (edge.relation === 'references') return 0.8
   if (edge.relation === 'rationale_for') return 0.4
   return 0.2
+}
+
+function dedupeEdges(edges: WikiGraphEdge[]): WikiGraphEdge[] {
+  const byKey = new Map<string, WikiGraphEdge>()
+  for (const edge of edges) {
+    if (edge.source === edge.target && edge.relation !== 'rationale_for') continue
+    const key = `${edge.source}\u0000${edge.target}\u0000${edge.relation}`
+    const existing = byKey.get(key)
+    if (!existing) {
+      byKey.set(key, edge)
+      continue
+    }
+    const existingWeight = edgeWeight(existing)
+    const nextWeight = edgeWeight(edge)
+    if (nextWeight > existingWeight) {
+      byKey.set(key, edge)
+    }
+  }
+  return [...byKey.values()].sort(
+    (a, b) =>
+      a.source.localeCompare(b.source) ||
+      a.target.localeCompare(b.target) ||
+      a.relation.localeCompare(b.relation),
+  )
 }
 
 function buildAdjacency(graph: WikiGraph): Map<string, Map<string, number>> {
@@ -968,7 +1110,7 @@ function splitOversizedCommunities(
 function mergeSmallCommunities(
   graph: WikiGraph,
   communities: Map<number, string[]>,
-  minSize = 8,
+  minSize = 3,
 ): Map<number, string[]> {
   const nodeCommunity = new Map<string, number>()
   for (const [community, nodes] of communities) {
@@ -1364,7 +1506,7 @@ function buildGraph(cwd: string, files: ExtractedFile[]): WikiGraph {
       root: cwd,
     },
     nodes,
-    links,
+    links: dedupeEdges(links),
   }
   assignCommunities(graph)
   return graph
