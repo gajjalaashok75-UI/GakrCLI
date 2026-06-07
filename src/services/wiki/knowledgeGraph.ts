@@ -66,6 +66,7 @@ type ExtractedFile = {
   fileType: string
   hash: string
   size: number
+  mtimeMs: number
   symbols: ExtractedSymbol[]
   imports: Array<{ imported: string; names: string[]; line: number }>
   reExports: Array<{ imported: string; names: string[] }>
@@ -80,6 +81,7 @@ type WikiGraphManifest = {
     path: string
     hash: string
     size: number
+    mtime_ms?: number
     type: string
   }>
 }
@@ -474,6 +476,18 @@ async function loadIgnore(cwd: string): Promise<ReturnType<typeof ignore>> {
 async function collectProjectFiles(projectRoot: string, scanRoot: string): Promise<string[]> {
   const ig = await loadIgnore(projectRoot)
   const files: string[] = []
+
+  const rootInfo = await stat(scanRoot)
+  const rootRelPath = toPosix(relative(projectRoot, scanRoot))
+  if (rootInfo.isFile()) {
+    if (
+      GRAPHIFY_DISPATCH_EXTENSIONS.has(extname(scanRoot)) &&
+      (!rootRelPath || !ig.ignores(rootRelPath))
+    ) {
+      return [scanRoot]
+    }
+    return []
+  }
 
   async function walk(dir: string): Promise<void> {
     const entries = await readdir(dir, { withFileTypes: true })
@@ -968,6 +982,7 @@ async function extractFile(cwd: string, absPath: string): Promise<ExtractedFile 
       fileType,
       hash: `${info.size}:${info.mtimeMs}`,
       size: info.size,
+      mtimeMs: info.mtimeMs,
       symbols: [],
       imports: [],
       reExports: [],
@@ -986,6 +1001,7 @@ async function extractFile(cwd: string, absPath: string): Promise<ExtractedFile 
     fileType,
     hash: hashText(content),
     size: info.size,
+    mtimeMs: info.mtimeMs,
     symbols,
     imports: importsFor(content, ext),
     reExports: reExportsFor(content, ext),
@@ -1733,17 +1749,6 @@ function generateReport(graph: WikiGraph, files: ExtractedFile[]): string {
 }
 
 function generateHtml(graph: WikiGraph): string {
-  const data = JSON.stringify({
-    nodes: graph.nodes.map(node => ({
-      id: node.id,
-      label: node.label,
-      group: node.community,
-      type: node.type,
-      source: node.source_file,
-    })),
-    links: graph.links,
-  })
-
   return `<!doctype html>
 <html>
 <head>
@@ -1752,20 +1757,22 @@ function generateHtml(graph: WikiGraph): string {
   <style>
     body { margin: 0; font-family: system-ui, sans-serif; background: #101418; color: #e6f2e6; }
     header { padding: 16px 20px; border-bottom: 1px solid #2b3a32; }
-    #graph { width: 100vw; height: calc(100vh - 74px); }
+    main { padding: 20px; max-width: 880px; line-height: 1.5; }
+    a { color: #95e6a4; }
     .hint { color: #8fb89a; font-size: 13px; }
+    code { background: #1a211d; padding: 2px 6px; border-radius: 4px; }
   </style>
 </head>
 <body>
   <header>
     <strong>GakrCLI Wiki Graph</strong>
-    <div class="hint">${graph.nodes.length} nodes - ${graph.links.length} edges. Open graph.json for machine-readable data.</div>
+    <div class="hint">${graph.nodes.length} nodes - ${graph.links.length} edges - ${new Set(graph.nodes.map(node => node.community)).size} communities</div>
   </header>
-  <pre id="graph"></pre>
-  <script>
-    const data = ${data};
-    document.getElementById('graph').textContent = JSON.stringify(data, null, 2);
-  </script>
+  <main>
+    <p>The full graph is saved next to this file as <a href="./graph.json">graph.json</a>.</p>
+    <p>Start with <a href="./GRAPH_REPORT.md">GRAPH_REPORT.md</a> for central nodes and surprising connections, or open <a href="./wiki/index.md">wiki/index.md</a> for community pages.</p>
+    <p class="hint">This HTML intentionally references graph artifacts instead of embedding the full graph inline, keeping <code>/wiki init</code> and <code>/wiki update</code> responsive on large repositories.</p>
+  </main>
 </body>
 </html>`
 }
@@ -1956,9 +1963,40 @@ function manifestFromGraph(
       path: file.relPath,
       hash: file.hash,
       size: file.size,
+      mtime_ms: file.mtimeMs,
       type: file.fileType,
     })),
   }
+}
+
+async function collectManifestEntries(
+  cwd: string,
+  files: string[],
+  previous?: WikiGraphManifest | null,
+): Promise<Required<WikiGraphManifest>['files']> {
+  const previousByPath = new Map((previous?.files ?? []).map(file => [file.path, file]))
+  return Promise.all(
+    files.map(async file => {
+      const relPath = toPosix(relative(cwd, file))
+      const info = await stat(file)
+      const old = previousByPath.get(relPath)
+      if (old && old.size === info.size && old.mtime_ms === info.mtimeMs) {
+        return old
+      }
+      const ext = extname(file).toLowerCase()
+      let hash = `${info.size}:${info.mtimeMs}`
+      if (GRAPHIFY_DISPATCH_EXTENSIONS.has(ext) && info.size <= MAX_TEXT_FILE_BYTES) {
+        hash = hashText(await readFile(file, 'utf8'))
+      }
+      return {
+        path: relPath,
+        hash,
+        size: info.size,
+        mtime_ms: info.mtimeMs,
+        type: classifyFile(file),
+      }
+    }),
+  )
 }
 
 function targetContainsPath(targetRel: string, relPath: string): boolean {
@@ -1990,6 +2028,37 @@ function manifestChangedForTarget(
   }
 
   return false
+}
+
+function mergeManifestTargetEntries(
+  previous: WikiGraphManifest,
+  current: Required<WikiGraphManifest>,
+): Required<WikiGraphManifest> | null {
+  if (!previous.files) return null
+  const currentByPath = new Map(current.files.map(file => [file.path, file]))
+  let changed = false
+  const files = previous.files.map(file => {
+    const updated = currentByPath.get(file.path)
+    if (!updated) return file
+    if (
+      file.hash !== updated.hash ||
+      file.size !== updated.size ||
+      file.type !== updated.type ||
+      file.mtime_ms !== updated.mtime_ms
+    ) {
+      changed = true
+      return updated
+    }
+    return file
+  })
+
+  return changed
+    ? {
+        generated_at: previous.generated_at ?? current.generated_at,
+        scan_root: previous.scan_root ?? current.scan_root,
+        files,
+      }
+    : null
 }
 
 function resultFromExistingGraph(
@@ -2092,23 +2161,39 @@ export async function updateWikiKnowledge(
   }
   const previousManifest = await readExistingManifest(paths.graphManifestFile)
   const scanTarget = previousManifest?.scan_root || '.'
-  const scanRoot = resolveInsideProject(cwd, scanTarget)
-  const targetRel = toPosix(relative(cwd, resolveInsideProject(cwd, target))) || '.'
-  const files = await collectProjectFiles(cwd, scanRoot)
-  const extracted = (
-    await Promise.all(files.map(file => extractFile(cwd, file)))
-  ).filter((file): file is ExtractedFile => file !== null)
-  const candidateGraph = buildGraph(cwd, extracted)
-  const candidateManifest = manifestFromGraph(candidateGraph, extracted, scanRoot, cwd)
-  const changed = manifestChangedForTarget(previousManifest, candidateManifest, targetRel)
+  const targetAbs = resolveInsideProject(cwd, target)
+  const targetRel = toPosix(relative(cwd, targetAbs)) || '.'
+  let changed = true
+  let refreshedManifest: Required<WikiGraphManifest> | null = null
+
+  if (previousManifest?.files) {
+    const targetExists = await pathExists(targetAbs)
+    if (targetExists) {
+      const targetFiles = await collectProjectFiles(cwd, targetAbs)
+      const targetManifest: Required<WikiGraphManifest> = {
+        generated_at: previousManifest.generated_at ?? '',
+        scan_root: scanTarget,
+        files: await collectManifestEntries(cwd, targetFiles, previousManifest),
+      }
+      changed = manifestChangedForTarget(previousManifest, targetManifest, targetRel)
+      if (!changed) {
+        refreshedManifest = mergeManifestTargetEntries(previousManifest, targetManifest)
+      }
+    } else {
+      changed = previousManifest.files.some(file => targetContainsPath(targetRel, file.path))
+    }
+  }
 
   if (!changed) {
+    if (refreshedManifest) {
+      await writeFile(paths.graphManifestFile, JSON.stringify(refreshedManifest, null, 2), 'utf8')
+    }
     const result = resultFromExistingGraph(
       init,
       paths,
       cwd,
       previousGraph,
-      previousManifest?.files?.length ?? extracted.length,
+      previousManifest?.files?.length ?? 0,
     )
     return {
       ...result,

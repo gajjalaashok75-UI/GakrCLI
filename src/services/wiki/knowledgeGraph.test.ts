@@ -252,6 +252,42 @@ test('updateWikiKnowledge leaves graph artifacts untouched when target has no ch
   expect(after.mtimeMs).toBe(before.mtimeMs)
 })
 
+test('updateWikiKnowledge ignores changes outside the requested target', async () => {
+  const cwd = await makeProjectDir()
+  await mkdir(join(cwd, 'src', 'feature'), { recursive: true })
+  await writeFile(join(cwd, 'src', 'feature', 'entry.ts'), 'export function entry() {}\n', 'utf8')
+  await writeFile(join(cwd, 'outside.ts'), 'export function outside() {}\n', 'utf8')
+
+  await initializeWikiKnowledge(cwd)
+  const paths = getWikiPaths(cwd)
+  const before = await stat(paths.graphJsonFile)
+  await writeFile(join(cwd, 'outside.ts'), 'export function changedOutside() {}\n', 'utf8')
+  const result = await updateWikiKnowledge(cwd, 'src/feature')
+  const after = await stat(paths.graphJsonFile)
+  const graph = await readGraph(cwd)
+
+  expect(result.changed).toBe(false)
+  expect(after.mtimeMs).toBe(before.mtimeMs)
+  expect(graph.nodes.some(node => node.label === 'outside')).toBe(true)
+  expect(graph.nodes.some(node => node.label === 'changedOutside')).toBe(false)
+})
+
+test('updateWikiKnowledge detects deleted files inside the requested target', async () => {
+  const cwd = await makeProjectDir()
+  await mkdir(join(cwd, 'src'), { recursive: true })
+  await writeFile(join(cwd, 'src', 'keep.ts'), 'export function keep() {}\n', 'utf8')
+  await writeFile(join(cwd, 'src', 'remove.ts'), 'export function removeMe() {}\n', 'utf8')
+
+  await initializeWikiKnowledge(cwd)
+  await rm(join(cwd, 'src', 'remove.ts'))
+  const result = await updateWikiKnowledge(cwd, 'src')
+  const graph = await readGraph(cwd)
+
+  expect(result.changed).toBe(true)
+  expect(graph.nodes.some(node => node.label === 'keep')).toBe(true)
+  expect(graph.nodes.some(node => node.label === 'removeMe')).toBe(false)
+})
+
 test('updateWikiKnowledge requires an initialized wiki', async () => {
   const cwd = await makeProjectDir()
   await writeFile(join(cwd, 'main.ts'), 'export function main() {}\n', 'utf8')
