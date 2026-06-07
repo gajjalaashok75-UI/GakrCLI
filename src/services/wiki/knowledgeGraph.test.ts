@@ -1,8 +1,8 @@
 import { afterEach, expect, test } from 'bun:test'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { initializeWikiKnowledge } from './knowledgeGraph.js'
+import { initializeWikiKnowledge, updateWikiKnowledge } from './knowledgeGraph.js'
 import { getWikiPaths } from './paths.js'
 
 const tempDirs: string[] = []
@@ -199,6 +199,64 @@ test('initializeWikiKnowledge force-rebuilds graph artifacts on repeated init', 
   expect(second.alreadyExisted).toBe(true)
   expect(graph.nodes.some(node => node.label === 'newName')).toBe(true)
   expect(graph.nodes.some(node => node.label === 'oldName')).toBe(false)
+})
+
+test('updateWikiKnowledge refreshes an initialized wiki graph for current directory', async () => {
+  const cwd = await makeProjectDir()
+  await mkdir(join(cwd, 'src'), { recursive: true })
+  await writeFile(join(cwd, 'src', 'main.ts'), 'export function oldName() {}\n', 'utf8')
+
+  await initializeWikiKnowledge(cwd)
+  await writeFile(join(cwd, 'src', 'main.ts'), 'export function newName() {}\n', 'utf8')
+  const result = await updateWikiKnowledge(cwd, '.')
+  const graph = await readGraph(cwd)
+
+  expect(result.updatedTarget).toBe('.')
+  expect(result.changed).toBe(true)
+  expect(result.alreadyExisted).toBe(true)
+  expect(graph.nodes.some(node => node.label === 'newName')).toBe(true)
+  expect(graph.nodes.some(node => node.label === 'oldName')).toBe(false)
+})
+
+test('updateWikiKnowledge uses target path as change scope while preserving graph corpus', async () => {
+  const cwd = await makeProjectDir()
+  await mkdir(join(cwd, 'src', 'feature'), { recursive: true })
+  await writeFile(join(cwd, 'src', 'feature', 'entry.ts'), 'export function entry() {}\n', 'utf8')
+  await writeFile(join(cwd, 'outside.ts'), 'export function outside() {}\n', 'utf8')
+
+  await initializeWikiKnowledge(cwd)
+  await writeFile(join(cwd, 'src', 'feature', 'entry.ts'), 'export function changedEntry() {}\n', 'utf8')
+  const result = await updateWikiKnowledge(cwd, 'src/feature')
+  const graph = await readGraph(cwd)
+  const sources = graph.nodes.map(node => node.source_file)
+
+  expect(result.updatedTarget).toBe('src/feature')
+  expect(result.changed).toBe(true)
+  expect(sources.some(source => source === 'src/feature/entry.ts')).toBe(true)
+  expect(sources.some(source => source === 'outside.ts')).toBe(true)
+  expect(graph.nodes.some(node => node.label === 'changedEntry')).toBe(true)
+})
+
+test('updateWikiKnowledge leaves graph artifacts untouched when target has no changes', async () => {
+  const cwd = await makeProjectDir()
+  await mkdir(join(cwd, 'src'), { recursive: true })
+  await writeFile(join(cwd, 'src', 'main.ts'), 'export function main() {}\n', 'utf8')
+
+  await initializeWikiKnowledge(cwd)
+  const paths = getWikiPaths(cwd)
+  const before = await stat(paths.graphJsonFile)
+  const result = await updateWikiKnowledge(cwd, '.')
+  const after = await stat(paths.graphJsonFile)
+
+  expect(result.changed).toBe(false)
+  expect(after.mtimeMs).toBe(before.mtimeMs)
+})
+
+test('updateWikiKnowledge requires an initialized wiki', async () => {
+  const cwd = await makeProjectDir()
+  await writeFile(join(cwd, 'main.ts'), 'export function main() {}\n', 'utf8')
+
+  await expect(updateWikiKnowledge(cwd)).rejects.toThrow('Wiki is not initialized')
 })
 
 test('initializeWikiKnowledge splits oversized communities for navigation', async () => {

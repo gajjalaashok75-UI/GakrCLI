@@ -1,7 +1,7 @@
 import React from 'react'
 import { COMMON_HELP_ARGS, COMMON_INFO_ARGS } from '../../constants/xml.js'
 import { ingestLocalWikiSource } from '../../services/wiki/ingest.js'
-import { initializeWikiKnowledge } from '../../services/wiki/knowledgeGraph.js'
+import { initializeWikiKnowledge, updateWikiKnowledge } from '../../services/wiki/knowledgeGraph.js'
 import { getWikiStatus } from '../../services/wiki/status.js'
 import type {
   LocalJSXCommandCall,
@@ -11,17 +11,20 @@ import { getCwd } from '../../utils/cwd.js'
 import { logError } from '../../utils/log.js'
 
 function renderHelp(): string {
-  return `Usage: /wiki [init|status|ingest <path>]
+  return `Usage: /wiki [init|update [path]|status|ingest <path>]
 
 Manage the GakrCLI project wiki stored in .gakrcli/wiki.
 
 Commands:
   /wiki init    Build or rebuild the project wiki graph knowledge base
+  /wiki update  Refresh the existing wiki graph for . or a target path
   /wiki status  Show wiki status, source counts, and graph counts
   /wiki ingest  Ingest a local file into generated source notes
 
 Examples:
   /wiki init
+  /wiki update .
+  /wiki update src
   /wiki status
   /wiki ingest README.md`
 }
@@ -94,6 +97,26 @@ function formatIngestResult(
   ].join('\n')
 }
 
+function formatUpdateResult(result: Awaited<ReturnType<typeof updateWikiKnowledge>>): string {
+  const title = result.changed
+    ? `Updated GakrCLI wiki graph at ${result.root}`
+    : `No wiki graph changes detected at ${result.root}`
+  return [
+    title,
+    '',
+    `Target: ${result.updatedTarget}`,
+    `Graph root: ${result.graphRoot}`,
+    `Indexed files: ${result.indexedFiles}`,
+    `Graph nodes: ${result.nodeCount}`,
+    `Graph edges: ${result.edgeCount}`,
+    `Communities: ${result.communityCount}`,
+    `Changed: ${result.changed ? 'yes' : 'no'}`,
+    '',
+    'Graph files:',
+    ...result.graphFiles.map(file => `- ${file}`),
+  ].join('\n')
+}
+
 async function runWikiCommand(
   onDone: LocalJSXCommandOnDone,
   args: string,
@@ -116,6 +139,12 @@ async function runWikiCommand(
   if (normalized === 'init') {
     const target = rest.join(' ').trim() || '.'
     onDone(formatInitResult(await initializeWikiKnowledge(cwd, target)), { display: 'system' })
+    return
+  }
+
+  if (normalized === 'update') {
+    const target = rest.join(' ').trim() || '.'
+    onDone(formatUpdateResult(await updateWikiKnowledge(cwd, target)), { display: 'system' })
     return
   }
 

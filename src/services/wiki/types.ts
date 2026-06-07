@@ -31,6 +31,11 @@ export type WikiKnowledgeInitResult = WikiInitResult & {
   graphFiles: string[]
 }
 
+export type WikiKnowledgeUpdateResult = WikiKnowledgeInitResult & {
+  changed: boolean
+  updatedTarget: string
+}
+
 export type WikiStatus = {
   initialized: boolean
   root: string
