@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased - 0.5.6]
 
+### Added (2026-06-07)
+- **Wiki Command MVP**: Restored `/wiki init`, `/wiki status`, and `/wiki ingest <path>` for a local `.gakrcli/wiki` markdown knowledge scaffold, adapted from the OpenClaude reference implementation.
+
 ### Changed (2026-06-06)
 - **Open-Build Feature Flag Inventory**: Declared every `feature(...)` gate used in `src/` in `scripts/build.ts`, defaulting newly documented unavailable or unvalidated functionality to `false` so missing flags are explicit without changing runtime behavior.
 - **Knowledge Graph Persistence Durability**: Persisted the Orama knowledge index through the flushed atomic file-write helper, allowed that helper to accept buffer payloads, and made cleanup registration support synchronous handlers so SQLite close hooks match their actual behavior.
