@@ -44,7 +44,7 @@ What TO document:
 - Key entry points and where to start reading code
 - Important design decisions and their rationale
 - Critical dependencies or integration points
-- References to related files, docs, or code (like a wiki) - help readers navigate to relevant context
+- References to related files, docs, or code - help readers navigate to relevant context
 
 What NOT to document:
 - Anything obvious from reading the code itself

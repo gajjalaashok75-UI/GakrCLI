@@ -7,31 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased - 0.5.6]
 
-### Added (2026-06-07)
-- **Bundled Wiki Tool**: Added a read-only built-in `wiki` tool for model/agent use, backed by `.gakrcli/wiki/graph/graph.json`, so agents can call `wiki({ query: "..." })` for low-token codebase graph lookup without shelling out to `/wiki query`.
-- **Wiki Query Command**: Added `/wiki query "<question>"` as Phase 3A, using Graphify-style lexical seed scoring plus BFS/DFS graph traversal over `.gakrcli/wiki/graph/graph.json` with context filters and token-budgeted NODE/EDGE output.
-- **Wiki Update Command**: Added `/wiki update [path]` to refresh an existing wiki graph after project changes, using manifest hashes to leave graph artifacts untouched when the requested target has no changes.
-- **Graphify-Style Wiki Init Graph**: Made `/wiki init` build a local project knowledge graph under `.gakrcli/wiki/graph/` without depending on the Python `graphify` package, including `graph.json`, `GRAPH_REPORT.md`, `graph.html`, `manifest.json`, and a generated graph wiki index/community pages.
-- **Wiki Graph Extraction Coverage**: Added local code/document/config/media discovery with `.wikiignore` and `.gitignore` support, symbol and markdown-heading extraction, call/reference/import edges, Python and package-style import resolution, import-cycle reporting, graph freshness notes, god-node reporting, knowledge gaps, and focused wiki graph tests.
-
-### Changed (2026-06-07)
-- **Wiki Query Reliability And Help**: Improved `/wiki query` seed ranking for short/generic terms, added incoming traversal for caller/import questions, tuned entrypoint-style queries, and expanded `/wiki help` with init/query options, defaults, contexts, and `.wikiignore` guidance.
-- **Wiki Ignore Guidance**: Added `.wikiignore` reminders to `/wiki help`, status, init, and update outputs so users know how to exclude noisy files from wiki graph knowledge.
-- **Wiki Status Freshness**: Made `/wiki status` compare the current codebase against the wiki graph manifest and warn when files changed, and moved graph extraction/manifest checks onto a bounded parallel worker pool for smoother large-repo runs.
-- **Wiki Init Guard**: Made plain `/wiki init` skip expensive rebuilds when the wiki scaffold already exists, added `/wiki init --force` for explicit reinitialization, and documented `/wiki update` as the normal refresh path.
-- **Wiki Update Responsiveness**: Made no-change `/wiki update` checks manifest-only before graph rebuilds, stopped embedding the full graph JSON inside `graph.html`, and wrapped Windows paths in command output so `.gakrcli` paths render correctly.
-- **Wiki Graphify Parity Noise Reduction**: Matched `/wiki init` scanning more closely to Graphify's extractor dispatch, ignored generated graph artifacts and build/cache noise, deduplicated graph edge triples before reporting/clustering, and tuned small-community merging to keep community counts closer to Graphify output.
-- **Graphify Wiki Graph Parity**: Enriched `/wiki init` graph extraction with rationale nodes, class-method edges, inheritance/interface implementation edges, named import/re-export edges, and local type-use edges, bringing the generated wiki graph closer to the reference Graphify AST graph while keeping generation dependency-free.
-- **Wiki Status And Index Graph Awareness**: Surfaced graph artifact presence, node/edge/community counts, and graph navigation links in `/wiki status` and `.gakrcli/wiki/index.md`.
-- **Graphify Reference Parity Testing**: Verified `/wiki init` against the `references/graphify-8` corpus and tuned extraction/clustering so local wiki output is close to Graphify's AST-only graph shape while keeping semantic/rationale-only gaps explicit.
-
 ### Changed (2026-06-06)
-- **LLM Wiki Scaffold**: Expanded `/wiki` around the LLM Wiki pattern with a raw/source/page layout, parseable dated log headings, richer schema workflows, source-note titles in the rebuilt index, and raw/source/page counts in status output.
 - **Open-Build Feature Flag Inventory**: Declared every `feature(...)` gate used in `src/` in `scripts/build.ts`, defaulting newly documented unavailable or unvalidated functionality to `false` so missing flags are explicit without changing runtime behavior.
 - **Knowledge Graph Persistence Durability**: Persisted the Orama knowledge index through the flushed atomic file-write helper, allowed that helper to accept buffer payloads, and made cleanup registration support synchronous handlers so SQLite close hooks match their actual behavior.
-
-### Fixed (2026-06-06)
-- **Wiki Status Dispatch**: Routed `/wiki status` and common info aliases to the wiki status output instead of the generic help text.
 
 ### Added (2026-06-03)
 - **OpenClaw-Style Workspace Persistence**: Added root workspace files under `~/.gakrcli/workspace/` for GakrCLI identity, rulebook, soul, user profile, tools, memory, dreams, heartbeat, and first-run bootstrap context.
@@ -471,10 +449,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Vite + React 19 with responsive design
   - Light/dark theme support with localStorage persistence
   - Feature showcase and installation instructions
-- **Wiki Service**: Restored wiki service MVP with local source ingestion
-  - `.gakrcli/wiki` scaffold creation with markdown pages
-  - Recursive page counting and initialization checks
-  - Path validation and security hardening
 
 ### Fixed
 - **WebSearchTool Provider System**: Complete overhaul with modular provider system
@@ -482,7 +456,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Intelligent fallback chain with auto mode
   - Domain filtering and security guardrails
 - **Command Registry**: Restored missing reference commands
-  - Added `/auto-fix`, `/benchmark`, `/cache-probe`, `/wiki` commands
+  - Added `/auto-fix`, `/benchmark`, and `/cache-probe` commands
   - Enhanced GitHub Models setup with token reuse support
 
 ## [0.4.6] - 2024-11-15
