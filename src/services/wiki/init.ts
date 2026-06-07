@@ -24,6 +24,7 @@ answer cache.
 - \`raw/\`: immutable curated inputs copied or dropped in by the user
 - \`sources/\`: generated source notes and summaries created from raw/project files
 - \`pages/\`: durable topic, entity, concept, comparison, and architecture pages
+- \`graph/\`: generated project knowledge graph, graph report, HTML view, and graph wiki
 - \`index.md\`: content-oriented catalog of wiki pages and source notes
 - \`log.md\`: append-only chronological update log with parseable headings
 - \`schema.md\`: this operating contract for future wiki-maintenance sessions
@@ -53,9 +54,10 @@ relevant pages, refresh \`index.md\`, and append a dated \`ingest\` entry to
 
 ### Query
 
-When answering a question, read \`index.md\` first, open relevant pages and
-source notes, synthesize an answer with citations, and file durable discoveries
-back into \`pages/\` when they should compound over time.
+When answering a codebase question, read \`graph/GRAPH_REPORT.md\` and
+\`graph/wiki/index.md\` before raw files. Then open relevant pages, source notes,
+or source files only as needed. This keeps token usage focused on central nodes,
+communities, and grounded source locations.
 
 ### Lint
 
@@ -78,6 +80,12 @@ Read this file first, then drill into the linked pages and source notes.
 
 - Raw curated inputs live in [raw/](./raw/)
 - Generated source notes live in [sources/](./sources/)
+
+## Graph Knowledge
+
+- [Graph report](./graph/GRAPH_REPORT.md)
+- [Graph wiki index](./graph/wiki/index.md)
+- [Interactive graph data view](./graph/graph.html)
 
 ## Recent Updates
 
@@ -150,7 +158,13 @@ export async function initializeWiki(cwd: string): Promise<WikiInitResult> {
   const createdDirectories: string[] = []
   const createdFiles: string[] = []
 
-  for (const dir of [paths.root, paths.rawDir, paths.pagesDir, paths.sourcesDir]) {
+  for (const dir of [
+    paths.root,
+    paths.rawDir,
+    paths.pagesDir,
+    paths.sourcesDir,
+    paths.graphDir,
+  ]) {
     await mkdir(dir, { recursive: true })
     createdDirectories.push(dir)
   }

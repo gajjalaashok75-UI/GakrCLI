@@ -1,4 +1,4 @@
-import { readdir, stat } from 'fs/promises'
+import { readdir, readFile, stat } from 'fs/promises'
 import { getWikiPaths } from './paths.js'
 import type { WikiStatus } from './types.js'
 
@@ -70,15 +70,63 @@ async function getLastUpdatedAt(pathsToCheck: string[]): Promise<string | null> 
   return new Date(Math.max(...mtimes)).toISOString()
 }
 
+async function readGraphCounts(path: string): Promise<{
+  nodeCount: number | null
+  edgeCount: number | null
+  communityCount: number | null
+}> {
+  try {
+    const graph = JSON.parse(await readFile(path, 'utf8')) as {
+      nodes?: Array<{ community?: unknown }>
+      links?: unknown[]
+    }
+    const communities = new Set(
+      (graph.nodes ?? [])
+        .map(node => node.community)
+        .filter(community => community !== undefined),
+    )
+
+    return {
+      nodeCount: Array.isArray(graph.nodes) ? graph.nodes.length : null,
+      edgeCount: Array.isArray(graph.links) ? graph.links.length : null,
+      communityCount: communities.size > 0 ? communities.size : null,
+    }
+  } catch {
+    return {
+      nodeCount: null,
+      edgeCount: null,
+      communityCount: null,
+    }
+  }
+}
+
 export async function getWikiStatus(cwd: string): Promise<WikiStatus> {
   const paths = getWikiPaths(cwd)
 
-  const [hasRoot, hasSchema, hasIndex, hasLog, rawSourceCount, pages, sources] =
+  const [
+    hasRoot,
+    hasSchema,
+    hasIndex,
+    hasLog,
+    hasGraphJson,
+    hasGraphReport,
+    hasGraphHtml,
+    hasGraphWikiIndex,
+    graphCounts,
+    rawSourceCount,
+    pages,
+    sources,
+  ] =
     await Promise.all([
       pathExists(paths.root),
       pathExists(paths.schemaFile),
       pathExists(paths.indexFile),
       pathExists(paths.logFile),
+      pathExists(paths.graphJsonFile),
+      pathExists(paths.graphReportFile),
+      pathExists(paths.graphHtmlFile),
+      pathExists(paths.graphWikiIndexFile),
+      readGraphCounts(paths.graphJsonFile),
       countFiles(paths.rawDir),
       listMarkdownFiles(paths.pagesDir),
       listMarkdownFiles(paths.sourcesDir),
@@ -90,6 +138,13 @@ export async function getWikiStatus(cwd: string): Promise<WikiStatus> {
     rawSourceCount,
     pageCount: pages.length,
     sourceCount: sources.length,
+    graphInitialized: hasGraphJson,
+    graphNodeCount: graphCounts.nodeCount,
+    graphEdgeCount: graphCounts.edgeCount,
+    graphCommunityCount: graphCounts.communityCount,
+    hasGraphReport,
+    hasGraphHtml,
+    hasGraphWikiIndex,
     hasSchema,
     hasIndex,
     hasLog,
@@ -97,6 +152,10 @@ export async function getWikiStatus(cwd: string): Promise<WikiStatus> {
       paths.schemaFile,
       paths.indexFile,
       paths.logFile,
+      paths.graphJsonFile,
+      paths.graphReportFile,
+      paths.graphHtmlFile,
+      paths.graphWikiIndexFile,
       ...pages,
       ...sources,
     ]),

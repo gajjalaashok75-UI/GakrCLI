@@ -28,6 +28,13 @@ test('getWikiStatus reports uninitialized wiki state', async () => {
   expect(status.rawSourceCount).toBe(0)
   expect(status.pageCount).toBe(0)
   expect(status.sourceCount).toBe(0)
+  expect(status.graphInitialized).toBe(false)
+  expect(status.graphNodeCount).toBeNull()
+  expect(status.graphEdgeCount).toBeNull()
+  expect(status.graphCommunityCount).toBeNull()
+  expect(status.hasGraphReport).toBe(false)
+  expect(status.hasGraphHtml).toBe(false)
+  expect(status.hasGraphWikiIndex).toBe(false)
   expect(status.hasSchema).toBe(false)
   expect(status.hasIndex).toBe(false)
   expect(status.hasLog).toBe(false)
@@ -42,6 +49,18 @@ test('getWikiStatus counts pages and sources for initialized wiki', async () => 
   await writeFile(join(paths.rawDir, 'articles', 'source.txt'), 'Raw source\n', 'utf8')
   await writeFile(join(paths.pagesDir, 'runtime.md'), '# Runtime\n', 'utf8')
   await writeFile(join(paths.sourcesDir, 'notes.md'), '# Notes\n', 'utf8')
+  await mkdir(paths.graphWikiDir, { recursive: true })
+  await writeFile(
+    paths.graphJsonFile,
+    JSON.stringify({
+      nodes: [{ id: 'a', community: 0 }, { id: 'b', community: 1 }],
+      links: [{ source: 'a', target: 'b' }],
+    }),
+    'utf8',
+  )
+  await writeFile(paths.graphReportFile, '# Report\n', 'utf8')
+  await writeFile(paths.graphHtmlFile, '<html></html>\n', 'utf8')
+  await writeFile(paths.graphWikiIndexFile, '# Graph Wiki\n', 'utf8')
 
   const status = await getWikiStatus(cwd)
 
@@ -49,6 +68,13 @@ test('getWikiStatus counts pages and sources for initialized wiki', async () => 
   expect(status.rawSourceCount).toBe(1)
   expect(status.pageCount).toBe(2)
   expect(status.sourceCount).toBe(1)
+  expect(status.graphInitialized).toBe(true)
+  expect(status.graphNodeCount).toBe(2)
+  expect(status.graphEdgeCount).toBe(1)
+  expect(status.graphCommunityCount).toBe(2)
+  expect(status.hasGraphReport).toBe(true)
+  expect(status.hasGraphHtml).toBe(true)
+  expect(status.hasGraphWikiIndex).toBe(true)
   expect(status.hasSchema).toBe(true)
   expect(status.hasIndex).toBe(true)
   expect(status.hasLog).toBe(true)
