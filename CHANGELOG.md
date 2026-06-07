@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [unreleased - 0.5.6]
 
 ### Added (2026-06-07)
+- **Bundled Wiki Tool**: Added a read-only built-in `wiki` tool for model/agent use, backed by `.gakrcli/wiki/graph/graph.json`, so agents can call `wiki({ query: "..." })` for low-token codebase graph lookup without shelling out to `/wiki query`.
 - **Wiki Query Command**: Added `/wiki query "<question>"` as Phase 3A, using Graphify-style lexical seed scoring plus BFS/DFS graph traversal over `.gakrcli/wiki/graph/graph.json` with context filters and token-budgeted NODE/EDGE output.
 - **Wiki Update Command**: Added `/wiki update [path]` to refresh an existing wiki graph after project changes, using manifest hashes to leave graph artifacts untouched when the requested target has no changes.
 - **Graphify-Style Wiki Init Graph**: Made `/wiki init` build a local project knowledge graph under `.gakrcli/wiki/graph/` without depending on the Python `graphify` package, including `graph.json`, `GRAPH_REPORT.md`, `graph.html`, `manifest.json`, and a generated graph wiki index/community pages.
