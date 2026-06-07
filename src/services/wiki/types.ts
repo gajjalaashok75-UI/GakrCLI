@@ -29,6 +29,7 @@ export type WikiKnowledgeInitResult = WikiInitResult & {
   edgeCount: number
   communityCount: number
   graphFiles: string[]
+  skipped?: boolean
 }
 
 export type WikiKnowledgeUpdateResult = WikiKnowledgeInitResult & {

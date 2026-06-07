@@ -11,18 +11,20 @@ import { getCwd } from '../../utils/cwd.js'
 import { logError } from '../../utils/log.js'
 
 function renderHelp(): string {
-  return `Usage: /wiki [init|update [path]|status|ingest <path>]
+  return `Usage: /wiki [init [--force] [path]|update [path]|status|ingest <path>]
 
 Manage the GakrCLI project wiki stored in .gakrcli/wiki.
 
 Commands:
-  /wiki init    Build or rebuild the project wiki graph knowledge base
-  /wiki update  Refresh the existing wiki graph for . or a target path
-  /wiki status  Show wiki status, source counts, and graph counts
-  /wiki ingest  Ingest a local file into generated source notes
+  /wiki init          Create the wiki graph knowledge base if missing
+  /wiki init --force  Reinitialize and rebuild the wiki graph
+  /wiki update        Refresh the existing wiki graph for . or a target path
+  /wiki status        Show wiki status, source counts, and graph counts
+  /wiki ingest        Ingest a local file into generated source notes
 
 Examples:
   /wiki init
+  /wiki init --force
   /wiki update .
   /wiki update src
   /wiki status
@@ -30,6 +32,21 @@ Examples:
 }
 
 function formatInitResult(result: Awaited<ReturnType<typeof initializeWikiKnowledge>>): string {
+  if (result.skipped) {
+    return [
+      `GakrCLI wiki is already initialized at \`${result.root}\`.`,
+      '',
+      'Nothing was rebuilt.',
+      'Run `/wiki update` to refresh changed files, or `/wiki init --force` to reinitialize and rebuild the wiki graph.',
+      '',
+      `Graph root: \`${result.graphRoot}\``,
+      `Indexed files: ${result.indexedFiles}`,
+      `Graph nodes: ${result.nodeCount}`,
+      `Graph edges: ${result.edgeCount}`,
+      `Communities: ${result.communityCount}`,
+    ].join('\n')
+  }
+
   const lines = [
     `Initialized GakrCLI wiki at \`${result.root}\``,
     '',
@@ -137,8 +154,9 @@ async function runWikiCommand(
   }
 
   if (normalized === 'init') {
-    const target = rest.join(' ').trim() || '.'
-    onDone(formatInitResult(await initializeWikiKnowledge(cwd, target)), { display: 'system' })
+    const force = rest.includes('--force')
+    const target = rest.filter(arg => arg !== '--force').join(' ').trim() || '.'
+    onDone(formatInitResult(await initializeWikiKnowledge(cwd, target, { force })), { display: 'system' })
     return
   }
 

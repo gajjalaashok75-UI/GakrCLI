@@ -193,12 +193,29 @@ test('initializeWikiKnowledge force-rebuilds graph artifacts on repeated init', 
 
   await initializeWikiKnowledge(cwd)
   await writeFile(join(cwd, 'src', 'main.ts'), 'export function newName() {}\n', 'utf8')
-  const second = await initializeWikiKnowledge(cwd)
+  const second = await initializeWikiKnowledge(cwd, '.', { force: true })
   const graph = await readGraph(cwd)
 
   expect(second.alreadyExisted).toBe(true)
+  expect(second.skipped).toBeUndefined()
   expect(graph.nodes.some(node => node.label === 'newName')).toBe(true)
   expect(graph.nodes.some(node => node.label === 'oldName')).toBe(false)
+})
+
+test('initializeWikiKnowledge skips repeated init without force', async () => {
+  const cwd = await makeProjectDir()
+  await mkdir(join(cwd, 'src'), { recursive: true })
+  await writeFile(join(cwd, 'src', 'main.ts'), 'export function oldName() {}\n', 'utf8')
+
+  await initializeWikiKnowledge(cwd)
+  await writeFile(join(cwd, 'src', 'main.ts'), 'export function newName() {}\n', 'utf8')
+  const second = await initializeWikiKnowledge(cwd)
+  const graph = await readGraph(cwd)
+
+  expect(second.skipped).toBe(true)
+  expect(second.alreadyExisted).toBe(true)
+  expect(graph.nodes.some(node => node.label === 'oldName')).toBe(true)
+  expect(graph.nodes.some(node => node.label === 'newName')).toBe(false)
 })
 
 test('updateWikiKnowledge refreshes an initialized wiki graph for current directory', async () => {
