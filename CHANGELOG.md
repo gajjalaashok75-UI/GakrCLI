@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Wiki Graph Extraction Coverage**: Added local code/document/config/media discovery with `.wikiignore` and `.gitignore` support, symbol and markdown-heading extraction, call/reference/import edges, Python and package-style import resolution, import-cycle reporting, graph freshness notes, god-node reporting, knowledge gaps, and focused wiki graph tests.
 
 ### Changed (2026-06-07)
+- **Wiki Ignore Guidance**: Added `.wikiignore` reminders to `/wiki help`, status, init, and update outputs so users know how to exclude noisy files from wiki graph knowledge.
 - **Wiki Status Freshness**: Made `/wiki status` compare the current codebase against the wiki graph manifest and warn when files changed, and moved graph extraction/manifest checks onto a bounded parallel worker pool for smoother large-repo runs.
 - **Wiki Init Guard**: Made plain `/wiki init` skip expensive rebuilds when the wiki scaffold already exists, added `/wiki init --force` for explicit reinitialization, and documented `/wiki update` as the normal refresh path.
 - **Wiki Update Responsiveness**: Made no-change `/wiki update` checks manifest-only before graph rebuilds, stopped embedding the full graph JSON inside `graph.html`, and wrapped Windows paths in command output so `.gakrcli` paths render correctly.

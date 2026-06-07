@@ -10,6 +10,9 @@ import type {
 import { getCwd } from '../../utils/cwd.js'
 import { logError } from '../../utils/log.js'
 
+const WIKIIGNORE_HINT =
+  'Tip: add `.wikiignore` in the project root to exclude files or folders from wiki graph knowledge.'
+
 function renderHelp(): string {
   return `Usage: /wiki [init [--force] [path]|update [path]|status|ingest <path>]
 
@@ -28,7 +31,9 @@ Examples:
   /wiki update .
   /wiki update src
   /wiki status
-  /wiki ingest README.md`
+  /wiki ingest README.md
+
+${WIKIIGNORE_HINT}`
 }
 
 function formatInitResult(result: Awaited<ReturnType<typeof initializeWikiKnowledge>>): string {
@@ -44,6 +49,7 @@ function formatInitResult(result: Awaited<ReturnType<typeof initializeWikiKnowle
       `Graph nodes: ${result.nodeCount}`,
       `Graph edges: ${result.edgeCount}`,
       `Communities: ${result.communityCount}`,
+      WIKIIGNORE_HINT,
     ].join('\n')
   }
 
@@ -73,12 +79,14 @@ function formatInitResult(result: Awaited<ReturnType<typeof initializeWikiKnowle
     }
   }
 
+  lines.push('', WIKIIGNORE_HINT)
+
   return lines.join('\n')
 }
 
 function formatStatus(status: Awaited<ReturnType<typeof getWikiStatus>>): string {
   if (!status.initialized) {
-    return `GakrCLI wiki is not initialized in this project.\n\nRun /wiki init to create \`${status.root}\`.`
+    return `GakrCLI wiki is not initialized in this project.\n\nRun /wiki init to create \`${status.root}\`.\n${WIKIIGNORE_HINT}`
   }
 
   return [
@@ -100,6 +108,7 @@ function formatStatus(status: Awaited<ReturnType<typeof getWikiStatus>>): string
     `Log: ${status.hasLog ? 'present' : 'missing'}`,
     `Last updated: ${status.lastUpdatedAt ?? 'unknown'}`,
     `Graph freshness: ${status.graphFreshnessMessage ?? status.graphFreshness}`,
+    WIKIIGNORE_HINT,
   ].join('\n')
 }
 
@@ -132,6 +141,8 @@ function formatUpdateResult(result: Awaited<ReturnType<typeof updateWikiKnowledg
     '',
     'Graph files:',
     ...result.graphFiles.map(file => `- ${file}`),
+    '',
+    WIKIIGNORE_HINT,
   ].join('\n')
 }
 
