@@ -31,9 +31,9 @@ Examples:
 
 function formatInitResult(result: Awaited<ReturnType<typeof initializeWikiKnowledge>>): string {
   const lines = [
-    `Initialized GakrCLI wiki at ${result.root}`,
+    `Initialized GakrCLI wiki at \`${result.root}\``,
     '',
-    `Graph root: ${result.graphRoot}`,
+    `Graph root: \`${result.graphRoot}\``,
     `Indexed files: ${result.indexedFiles}`,
     `Graph nodes: ${result.nodeCount}`,
     `Graph edges: ${result.edgeCount}`,
@@ -61,13 +61,13 @@ function formatInitResult(result: Awaited<ReturnType<typeof initializeWikiKnowle
 
 function formatStatus(status: Awaited<ReturnType<typeof getWikiStatus>>): string {
   if (!status.initialized) {
-    return `GakrCLI wiki is not initialized in this project.\n\nRun /wiki init to create ${status.root}.`
+    return `GakrCLI wiki is not initialized in this project.\n\nRun /wiki init to create \`${status.root}\`.`
   }
 
   return [
     'GakrCLI wiki status',
     '',
-    `Root: ${status.root}`,
+    `Root: \`${status.root}\``,
     `Raw files: ${status.rawSourceCount}`,
     `Pages: ${status.pageCount}`,
     `Source notes: ${status.sourceCount}`,
@@ -99,13 +99,13 @@ function formatIngestResult(
 
 function formatUpdateResult(result: Awaited<ReturnType<typeof updateWikiKnowledge>>): string {
   const title = result.changed
-    ? `Updated GakrCLI wiki graph at ${result.root}`
-    : `No wiki graph changes detected at ${result.root}`
+    ? `Updated GakrCLI wiki graph at \`${result.root}\``
+    : `No wiki graph changes detected at \`${result.root}\``
   return [
     title,
     '',
     `Target: ${result.updatedTarget}`,
-    `Graph root: ${result.graphRoot}`,
+    `Graph root: \`${result.graphRoot}\``,
     `Indexed files: ${result.indexedFiles}`,
     `Graph nodes: ${result.nodeCount}`,
     `Graph edges: ${result.edgeCount}`,
