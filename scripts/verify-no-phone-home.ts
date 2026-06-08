@@ -12,6 +12,7 @@ const BANNED_PATTERNS = [
   'anthropic-serve',
   'infra.ant.dev',
   'gakrcli-code-feedback',
+  'ip-api.com',
   'C07VBSHV7EV',
 ] as const
 
