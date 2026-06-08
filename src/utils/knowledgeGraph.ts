@@ -157,6 +157,35 @@ export function getOramaPersistencePath(cwd: string): string {
   return join(projectDir, 'knowledge.orama')
 }
 
+export function getKnowledgeStorageStatus(): {
+  runtime: 'bun' | 'node'
+  jsonPath: string
+  jsonExists: boolean
+  oramaPath: string
+  oramaExists: boolean
+  sqlitePath: string
+  sqliteExists: boolean
+  sqliteReady: boolean
+  sqliteAvailable: boolean
+} {
+  const cwd = getFsImplementation().cwd()
+  const projectDir = join(getProjectsDir(), sanitizePath(cwd))
+  const providers = getProviders()
+  const sqlitePath = join(projectDir, 'knowledge.db')
+
+  return {
+    runtime: typeof Bun === 'undefined' ? 'node' : 'bun',
+    jsonPath: getProjectGraphPath(cwd),
+    jsonExists: existsSync(getProjectGraphPath(cwd)),
+    oramaPath: getOramaPersistencePath(cwd),
+    oramaExists: existsSync(getOramaPersistencePath(cwd)),
+    sqlitePath,
+    sqliteExists: existsSync(sqlitePath),
+    sqliteReady: providers.sqlite.isReady,
+    sqliteAvailable: SQLiteProvider.isRuntimeAvailable(),
+  }
+}
+
 async function isOramaInSync(graph: KnowledgeGraph): Promise<boolean> {
   if (!oramaDb) return false
   const doc = getByID(oramaDb, 'meta:sync')
@@ -194,6 +223,8 @@ export async function initOrama(cwd: string): Promise<void> {
     // 2. Load the base graph state if not already loaded
     if (!projectGraph) {
       loadProjectGraph(cwd)
+    } else if (providers.sqlite.isReady) {
+      providers.sqlite.saveGraph(projectGraph)
     }
 
     // 3. Initialize Orama

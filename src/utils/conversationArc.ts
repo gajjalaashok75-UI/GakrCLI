@@ -25,11 +25,10 @@ export async function finalizeArcTurn(): Promise<void> {
 
   const completedGoals = arc.goals.filter(g => g.status === 'completed')
   const graph = getGlobalGraph()
-  // Heuristic to detect new facts: entities added after arc start
-  const newFacts = Object.values(graph.entities).filter(e =>
-    e.id.includes(String(arc.id.split('_')[1])) ||
-    graph.lastUpdateTime > arc.startTime
-  )
+  const newFacts = Object.values(graph.entities).filter(e => {
+    const createdAt = Number(e.id.split('_')[1])
+    return Number.isFinite(createdAt) && createdAt >= arc.startTime
+  })
 
   if (completedGoals.length === 0 && arc.decisions.length === 0 && newFacts.length === 0) return
 
@@ -144,15 +143,29 @@ async function extractFactsAutomatically(content: string): Promise<void> {
   if (!arc) return
 
   const promises: Promise<any>[] = []
+  const searchableContent = content.replace(/```[\s\S]*?```/g, ' ')
+
+  const addRuleIfUseful = (rule: string) => {
+    const normalized = rule.replace(/\s+/g, ' ').trim()
+    if (
+      normalized.length < 12 ||
+      normalized.length > 180 ||
+      normalized.includes('`') ||
+      normalized.includes('###')
+    ) {
+      return
+    }
+    promises.push(addGlobalRule(normalized))
+  }
 
   // 1. Detect Environment Variables (KEY=VALUE)
-  const envMatches = content.matchAll(/(?:export\s+)?([A-Z_]{3,})=([^\s\n"']+)/g)
+  const envMatches = searchableContent.matchAll(/(?:export\s+)?([A-Z_]{3,})=([^\s\n"']+)/g)
   for (const match of envMatches) {
     promises.push(addGlobalEntity('environment_variable', match[1], { value: match[2] }))
   }
 
   // 2. Detect Absolute Paths
-  const pathMatches = content.matchAll(/(\/(?:[\w.-]+\/)+[\w.-]+)/g)
+  const pathMatches = searchableContent.matchAll(/(\/(?:[\w.-]+\/)+[\w.-]+)/g)
   for (const match of pathMatches) {
     const path = match[1]
     if (path.length > 8 && !path.includes('node_modules') && !path.includes('://')) {
@@ -161,13 +174,13 @@ async function extractFactsAutomatically(content: string): Promise<void> {
   }
 
   // 3. Detect Versions
-  const versionMatches = content.matchAll(/(?:v|version\s+)(\d+\.\d+(?:\.\d+)?)/gi)
+  const versionMatches = searchableContent.matchAll(/(?:v|version\s+)(\d+\.\d+(?:\.\d+)?)/gi)
   for (const match of versionMatches) {
     promises.push(addGlobalEntity('version', match[0].toLowerCase(), { semver: match[1] }))
   }
 
   // 4. Detect Hostnames/URLs
-  const urlMatches = content.matchAll(/(https?:\/\/[^\s\n"']+)/g)
+  const urlMatches = searchableContent.matchAll(/(https?:\/\/[^\s\n"']+)/g)
   for (const match of urlMatches) {
     try {
       const url = new URL(match[1])
@@ -180,7 +193,7 @@ async function extractFactsAutomatically(content: string): Promise<void> {
   }
 
   // 5. Detect IPv4
-  const ipMatches = content.matchAll(/\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b/g)
+  const ipMatches = searchableContent.matchAll(/\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b/g)
   for (const match of ipMatches) {
     const ip = match[1]
     const context = content.toLowerCase()
@@ -197,17 +210,17 @@ async function extractFactsAutomatically(content: string): Promise<void> {
   // 6. DYNAMIC CONCEPT DISCOVERY (Improved for Doctoral precision)
 
   // A. Detect symbols in backticks (High confidence symbols)
-  const backtickMatches = content.matchAll(/`([^`]+)`/g)
+  const backtickMatches = content.matchAll(/`([^`\n]+)`/g)
   for (const match of backtickMatches) {
     const symbol = match[1]
-    if (symbol.length > 2 && symbol.length < 60) {
+    if (symbol.length > 2 && symbol.length < 80 && !/\s{2,}/.test(symbol)) {
       promises.push(addGlobalEntity('concept', symbol, { source: 'backticks' }))
     }
   }
 
   // B. Detect Technical Concepts (Hyphenated-Terms, PascalCase, camelCase)
   // Now also capturing lowercase hyphenated terms (worker-node-49)
-  const technicalMatches = content.matchAll(
+  const technicalMatches = searchableContent.matchAll(
     /\b([a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)+|[A-Z][a-z]+[A-Z][\w]*|[a-z]+[A-Z][\w]*)\b/g,
   )
   for (const match of technicalMatches) {
@@ -218,21 +231,21 @@ async function extractFactsAutomatically(content: string): Promise<void> {
   }
 
   // C. Specific pattern for availability/percentages
-  const metricMatches = content.matchAll(/(\d+(?:\.\d+)?%)/g)
+  const metricMatches = searchableContent.matchAll(/(\d+(?:\.\d+)?%)/g)
   for (const match of metricMatches) {
     promises.push(addGlobalEntity('metric', match[1], { type: 'availability' }))
   }
 
   // D. Project Rule Detection (Passive Learning)
   const rulePatterns = [
-    /\b(?:always|must|should)\s+(?:use|implement|follow)\b\s+([^.!?]+)/gi,
-    /\b(?:never|cannot|should\s+not)\b\s+([^.!?]+)/gi,
-    /\b(?:prefer)\b\s+([^.!?]+)/gi,
+    /\b(?:always|must|should)\s+(?:use|implement|follow)\b\s+([^\n.!?]{3,160})/gi,
+    /\b(?:never|cannot|should\s+not)\b\s+([^\n.!?]{3,160})/gi,
+    /\b(?:prefer)\b\s+([^\n.!?]{3,160})/gi,
   ]
   for (const pattern of rulePatterns) {
-    const ruleMatches = content.matchAll(pattern)
+    const ruleMatches = searchableContent.matchAll(pattern)
     for (const match of ruleMatches) {
-      promises.push(addGlobalRule(match[0].trim()))
+      addRuleIfUseful(match[0])
     }
   }
 

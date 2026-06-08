@@ -62,7 +62,7 @@ const featureFlags: Record<string, boolean> = {
   CCR_REMOTE_SETUP: false,        // Remote setup web command for CCR
   COMPACTION_REMINDERS: false,    // Extra compact/reminder prompting
   CONNECTOR_TEXT: false,          // Connector text-block handling
-  CONVERSATION_ARC: false,        // Native knowledge graph prompt injection; disabled until validated
+  CONVERSATION_ARC: true,         // Native knowledge graph prompt injection and passive fact extraction
   DIRECT_CONNECT: false,          // Direct remote connection flow
   DOWNLOAD_USER_SETTINGS: false,  // Hosted user-settings download
   ENHANCED_TELEMETRY_BETA: false, // Enhanced telemetry beta metadata
@@ -82,7 +82,7 @@ const featureFlags: Record<string, boolean> = {
   LODESTONE: false,               // Lodestone integration
   MCP_RICH_OUTPUT: false,         // Rich MCP output rendering
   MEMORY_SHAPE_TELEMETRY: false,  // Memory-shape telemetry
-  MULTI_TURN_CONTEXT: false,      // Native multi-turn context tracker; disabled until validated
+  MULTI_TURN_CONTEXT: true,       // Native multi-turn context tracker for active query turns
   NATIVE_CLIENT_ATTESTATION: false, // Native client attestation header
   NATIVE_CLIPBOARD_IMAGE: false,  // Native clipboard image support
   NEW_INIT: false,                // New init flow

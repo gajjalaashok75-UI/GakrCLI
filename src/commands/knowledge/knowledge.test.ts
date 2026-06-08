@@ -108,4 +108,12 @@ describe('knowledge command', () => {
     const res = await knowledgeCallWithCapture('invalid')
     expect(res.toLowerCase()).toContain('unknown subcommand')
   })
+
+  it('shows storage backend status', async () => {
+    const res = await knowledgeCallWithCapture('status')
+    expect(res).toContain('Storage:')
+    expect(res).toContain('JSON')
+    expect(res).toContain('Orama')
+    expect(res).toContain('SQLite')
+  })
 })
