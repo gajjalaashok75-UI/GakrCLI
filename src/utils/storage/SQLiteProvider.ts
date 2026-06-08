@@ -240,8 +240,9 @@ export class SQLiteProvider {
           )
         }
 
+        this.db!.exec('DELETE FROM rules')
         for (const rule of graph.rules) {
-          upsertRule.run(rule, Date.now())
+          upsertRule.run(rule, graph.lastUpdateTime)
         }
 
         prepare('INSERT OR REPLACE INTO sync_meta (key, value) VALUES (?, ?)')
