@@ -4,7 +4,7 @@ import {
   getAdditionalDirectoriesForgakrcliMd,
   setCachedgakrcliMdContent,
 } from './bootstrap/state.js'
-import { getLocalISODate, getUserLocation } from './constants/common.js'
+import { getLocalISODate } from './constants/common.js'
 import {
   filterInjectedMemoryFiles,
   getgakrcliMds,
@@ -181,12 +181,9 @@ export const getUserContext = memoize(
       gakrclimd_disabled: Boolean(shouldDisablegakrcliMd),
     })
 
- const [location] = await Promise.all([getUserLocation()])
-
- return {
-   ...(gakrcliMd && { gakrcliMd }),
-   currentDate: `Today's date is ${getLocalISODate()}.`,
-   ...(location && { currentLocation: `User's current location (IP-based): ${location}` }),
- }
+    return {
+      ...(gakrcliMd && { gakrcliMd }),
+      currentDate: `Today's date is ${getLocalISODate()}.`,
+    }
   },
 )

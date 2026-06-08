@@ -10,7 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added (2026-06-08)
 - **Design Skills Pack**: Added packaged design guidance under `assets/skills/design-skills/`, covering cinematic scroll, 3D interaction, micro-interactions, depth/glassmorphism, editorial typography, ambient effects, WebGPU shaders, visual systems, motion choreography, interaction patterns, and generative design.
 - **Soulcraft Skill**: Added `assets/skills/soulcraft/SKILL.md` for reflective product, identity, and experience-shaping work.
-- **Dynamic IP-based location injection**: Added `getUserLocation()` in `src/constants/common.ts` that fetches the user's IP-geolocation from ip-api.com (free, no key) once per session and memoizes the result. The location (e.g., "Pulivendula, Andhra Pradesh, India") is injected into runtime context as `currentLocation` alongside `currentDate`, so the assistant always has up-to-date geographic context without relying on static memory. Graceful failure path returns null — no error thrown, no context pollution. Covered by 7 unit tests for success, partial data, API/auth/network errors, and memoization behavior.
+
+### Fixed (2026-06-08)
+- **Location Privacy Regression**: Removed automatic IP-based location lookup from runtime context and added `ip-api.com` to the no-phone-home verifier so external geolocation calls cannot quietly re-enter the bundle.
+
+### Added (2026-06-07)
+- **Wiki Command MVP**: Restored `/wiki init`, `/wiki status`, and `/wiki ingest <path>` for a local `.gakrcli/wiki` markdown knowledge scaffold, adapted from the OpenClaude reference implementation.
 
 ### Changed (2026-06-06)
 - **Open-Build Feature Flag Inventory**: Declared every `feature(...)` gate used in `src/` in `scripts/build.ts`, defaulting newly documented unavailable or unvalidated functionality to `false` so missing flags are explicit without changing runtime behavior.
