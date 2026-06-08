@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed (2026-06-08)
 - **Location Privacy Regression**: Removed automatic IP-based location lookup from runtime context and added `ip-api.com` to the no-phone-home verifier so external geolocation calls cannot quietly re-enter the bundle.
+- **Knowledge Graph Rule Sync**: Made SQLite rule persistence replace stale rows when `knowledge_graph.json` rules are cleaned or removed, preventing old malformed rules from remaining in the database after JSON and Orama are corrected.
 
 ### Changed (2026-06-08)
 - **Knowledge Graph SQLite Runtime Support**: Enabled conversation arc and multi-turn context in the open build, made the knowledge graph SQLite provider work under both Bun (`bun:sqlite`) and Node (`node:sqlite`), added storage backend status reporting, hydrated SQLite on the first learned fact, and tightened passive arc extraction to reduce noisy summaries and malformed rules.

@@ -200,4 +200,36 @@ describe('SQLite Storage Layer', () => {
     expect(closedProvider.loadGraph()).toBeNull()
     closedProvider.close()
   })
+
+  it('replaces stale rules when saving a graph', async () => {
+    const projectDir = join(getProjectsDir(), sanitizePath(workspaceDir))
+    const provider = new SQLiteProvider(projectDir)
+    await provider.init()
+
+    const entity = {
+      id: 'keeper',
+      type: 'tool',
+      name: 'keeper',
+      attributes: {}
+    }
+
+    provider.saveGraph({
+      entities: { keeper: entity },
+      relations: [],
+      summaries: [],
+      rules: ['Old malformed rule'],
+      lastUpdateTime: 1
+    })
+
+    provider.saveGraph({
+      entities: { keeper: entity },
+      relations: [],
+      summaries: [],
+      rules: ['New clean rule.'],
+      lastUpdateTime: 2
+    })
+
+    expect(provider.loadGraph()?.rules).toEqual(['New clean rule.'])
+    provider.close()
+  })
 })
