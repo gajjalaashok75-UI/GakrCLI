@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added (2026-06-08)
 - **Design Skills Pack**: Added packaged design guidance under `assets/skills/design-skills/`, covering cinematic scroll, 3D interaction, micro-interactions, depth/glassmorphism, editorial typography, ambient effects, WebGPU shaders, visual systems, motion choreography, interaction patterns, and generative design.
+- **Claude Design Skill**: Added `assets/skills/design-skills/claude-design/SKILL.md` with Claude-style visual system guidance for warm editorial AI-product interfaces.
+- **Storage Architecture Reference**: Added `docs/storage-sessions-memory-knowledge-graph.md` documenting current storage, sessions, memory, knowledge graph, DB, Orama, JSON, subagent, tool-result, plugin, MCP, telemetry, and UI state paths.
 - **Soulcraft Skill**: Added `assets/skills/soulcraft/SKILL.md` for reflective product, identity, and experience-shaping work.
 
 ### Fixed (2026-06-08)
