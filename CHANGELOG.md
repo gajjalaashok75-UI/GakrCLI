@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed (2026-06-08)
 - **Location Privacy Regression**: Removed automatic IP-based location lookup from runtime context and added `ip-api.com` to the no-phone-home verifier so external geolocation calls cannot quietly re-enter the bundle.
 
+### Changed (2026-06-08)
+- **Knowledge Graph SQLite Runtime Support**: Enabled conversation arc and multi-turn context in the open build, made the knowledge graph SQLite provider work under both Bun (`bun:sqlite`) and Node (`node:sqlite`), added storage backend status reporting, hydrated SQLite on the first learned fact, and tightened passive arc extraction to reduce noisy summaries and malformed rules.
+
 ### Added (2026-06-07)
 - **Wiki Command MVP**: Restored `/wiki init`, `/wiki status`, and `/wiki ingest <path>` for a local `.gakrcli/wiki` markdown knowledge scaffold, adapted from the OpenClaude reference implementation.
 

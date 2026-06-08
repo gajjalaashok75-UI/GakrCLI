@@ -123,11 +123,17 @@ describe('SQLite Storage Layer', () => {
   })
 
   it('persists data in SQLite database', async () => {
-    const sqlitePath = join(getProjectsDir(), sanitizePath(workspaceDir), 'knowledge.db')
+    const projectDir = join(getProjectsDir(), sanitizePath(workspaceDir))
+    const sqlitePath = join(projectDir, 'knowledge.db')
     
     // 1. Add data
     await addGlobalEntity('tool', 'sqlite-test', { status: 'durable' })
     expect(existsSync(sqlitePath)).toBe(true)
+    const sqliteProvider = new SQLiteProvider(projectDir)
+    await sqliteProvider.init()
+    const sqliteGraph = sqliteProvider.loadGraph()
+    expect(Object.values(sqliteGraph?.entities ?? {}).some(e => e.name === 'sqlite-test')).toBe(true)
+    sqliteProvider.close()
 
     // 2. Simulate process restart (clear memory cache)
     clearMemoryOnly()

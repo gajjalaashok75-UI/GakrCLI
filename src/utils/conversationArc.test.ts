@@ -167,6 +167,24 @@ describe('conversationArc', () => {
       expect(ragResult).toContain('Build RAG engine')
       expect(ragResult).toContain('Use JSON for storage')
     })
+
+    it('summarizes only facts learned during the active arc', async () => {
+      const firstArc = initializeArc()
+      await addEntity('tool', 'pre-existing-tool')
+      await finalizeArcTurn()
+
+      resetArc()
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5)
+      initializeArc()
+      await addEntity('tool', 'fresh-tool')
+      await finalizeArcTurn()
+
+      const graph = getGlobalGraph()
+      const latestSummary = graph.summaries[graph.summaries.length - 1]
+      expect(latestSummary.content).toContain('fresh-tool')
+      expect(latestSummary.content).not.toContain('pre-existing-tool')
+      expect(firstArc.id).toBeDefined()
+    })
   })
 
   describe('resetArc', () => {
@@ -209,6 +227,22 @@ describe('conversationArc', () => {
 
       // Phase should remain at implementing since it was detected first
       expect(getArc()?.currentPhase).toBe('implementing')
+    })
+
+    it('ignores noisy multi-line and code-block rules', async () => {
+      initializeArc()
+      await updateArcPhase([createMessage('user', [
+        'Always use `new_tab()` on first visit',
+        '```ts',
+        'never inline them',
+        '```',
+        'never hardcode individual breakpoints.',
+      ].join('\n'))])
+
+      const graph = getGlobalGraph()
+      expect(graph.rules).toContain('never hardcode individual breakpoints')
+      expect(graph.rules.some(rule => rule.includes('new_tab'))).toBe(false)
+      expect(graph.rules.some(rule => rule.includes('inline them'))).toBe(false)
     })
   })
 
