@@ -23,6 +23,36 @@ export function getLocalISODate(): string {
 // stale date after midnight vs. ~entire-conversation cache bust — stale wins).
 export const getSessionStartDate = memoize(getLocalISODate)
 
+// --- Dynamic location (IP-based, optional) ---
+// Fetches the user's IP location once per session via ip-api.com (free, no key).
+// Returns null on any failure (offline, blocked, API down) — never throws.
+let _locationPromise: Promise<string | null> | null = null
+
+// Test-only: resets memoized location so each test gets a fresh fetch
+export function __resetUserLocationForTests() {
+  _locationPromise = null
+}
+
+export async function getUserLocation(): Promise<string | null> {
+  if (_locationPromise) return _locationPromise
+  _locationPromise = (async () => {
+    try {
+      const res = await fetch('http://ip-api.com/json/', {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(5000),
+      })
+      if (!res.ok) return null
+      const data: { city?: string; regionName?: string; country?: string; status?: string } = await res.json()
+    if (!data || data.status !== 'success' || !data.city) return null
+    const parts = [data.city, data.regionName, data.country].filter(Boolean)
+    return parts.join(', ')
+    } catch {
+      return null
+    }
+  })()
+  return _locationPromise
+}
+
 // Returns "Month YYYY" (e.g. "February 2026") in the user's local timezone.
 // Changes monthly, not daily — used in tool prompts to minimize cache busting.
 export function getLocalMonthYear(): string {
