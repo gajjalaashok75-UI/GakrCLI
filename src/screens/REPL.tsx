@@ -576,6 +576,7 @@ export type Props = {
   sshSession?: SSHSession;
   // Thinking configuration to use when thinking is enabled
   thinkingConfig: ThinkingConfig;
+  fallbackModel?: string;
 };
 export type Screen = 'prompt' | 'transcript';
 export function REPL({
@@ -603,7 +604,8 @@ export function REPL({
   remoteSessionConfig,
   directConnectConfig,
   sshSession,
-  thinkingConfig
+  thinkingConfig,
+  fallbackModel
 }: Props): React.ReactNode {
   const isRemoteSession = !!remoteSessionConfig;
 
@@ -2608,6 +2610,7 @@ export function REPL({
           systemContext,
           canUseTool,
           toolUseContext,
+          fallbackModel,
           querySource: getQuerySourceForREPL()
         },
         description: terminalTitle,
@@ -2615,7 +2618,7 @@ export function REPL({
         agentDefinition: mainThreadAgentDefinition
       });
     })();
-  }, [abortController, mainLoopModel, toolPermissionContext, mainThreadAgentDefinition, getToolUseContext, customSystemPrompt, appendSystemPrompt, canUseTool, setAppState]);
+  }, [abortController, mainLoopModel, toolPermissionContext, mainThreadAgentDefinition, getToolUseContext, customSystemPrompt, appendSystemPrompt, canUseTool, setAppState, fallbackModel]);
   const {
     handleBackgroundSession
   } = useSessionBackgrounding({
@@ -2841,6 +2844,7 @@ export function REPL({
       systemContext,
       canUseTool,
       toolUseContext,
+      fallbackModel,
       querySource: getQuerySourceForREPL()
     })) {
       onQueryEvent(event);

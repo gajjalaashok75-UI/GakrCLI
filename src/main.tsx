@@ -2807,6 +2807,7 @@ async function run() {
             appendSystemPrompt,
             taskListId,
             thinkingConfig,
+            fallbackModel: userSpecifiedFallbackModel,
             ...(uploaderReady && {
                 onTurnComplete: (messages) => {
                     void uploaderReady.then(uploader => uploader?.(messages));

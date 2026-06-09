@@ -29,6 +29,8 @@ import { getInitialSettings } from '../utils/settings/settings.js';
 import { BASH_MAX_OUTPUT_DEFAULT, BASH_MAX_OUTPUT_UPPER_LIMIT } from '../utils/shell/outputLimits.js';
 import { TASK_MAX_OUTPUT_DEFAULT, TASK_MAX_OUTPUT_UPPER_LIMIT } from '../utils/task/outputFormatting.js';
 import { getXDGStateHome } from '../utils/xdg.js';
+import { loadDoctorDiagnostic } from './doctorDiagnosticLoad.js';
+import { resolveDoctorDistTags } from './doctorDistTags.js';
 type Props = {
   onDone: (result?: string, options?: {
     display?: CommandResultDisplay;
@@ -117,13 +119,18 @@ export function Doctor(t0) {
   }
   const tools = t1;
   const [diagnostic, setDiagnostic] = useState(null);
+  const [diagnosticLoadFailed, setDiagnosticLoadFailed] = useState(false);
   const [agentInfo, setAgentInfo] = useState(null);
   const [contextWarnings, setContextWarnings] = useState(null);
   const [versionLockInfo, setVersionLockInfo] = useState(null);
   const validationErrors = useSettingsErrors();
   let t2;
   if ($[2] === Symbol.for("react.memo_cache_sentinel")) {
-    t2 = getDoctorDiagnostic().then(_temp6);
+    t2 = resolveDoctorDistTags({
+      getDoctorDiagnostic,
+      getNpmDistTags,
+      getGcsDistTags
+    });
     $[2] = t2;
   } else {
     t2 = $[2];
@@ -163,7 +170,10 @@ export function Doctor(t0) {
   let t6;
   if ($[6] !== agentDefinitions || $[7] !== toolPermissionContext || $[8] !== tools) {
     t5 = () => {
-      getDoctorDiagnostic().then(setDiagnostic);
+      void loadDoctorDiagnostic(
+        { getDoctorDiagnostic },
+        { setDiagnostic, setDiagnosticLoadFailed }
+      );
       (async () => {
         const userAgentsDir = join(getGakrcliConfigHomeDir(), "agents");
         const projectAgentsDir = join(getOriginalCwd(), ".gakrcli", "agents");
@@ -253,6 +263,9 @@ export function Doctor(t0) {
     t9 = $[15];
   }
   useKeybindings(t8, t9);
+  if (diagnosticLoadFailed && !diagnostic) {
+    return <Box flexDirection="column" gap={1}><Text color="red">Failed to load diagnostics.</Text><PressEnterToContinue onDone={onDone} /></Box>;
+  }
   if (!diagnostic) {
     let t10;
     if ($[16] === Symbol.for("react.memo_cache_sentinel")) {
