@@ -1,14 +1,26 @@
-import { afterEach, expect, test } from 'bun:test'
+import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { mkdtemp, rm } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { runWithCwdOverride } from '../../utils/cwd.js'
 import { call } from './wiki.js'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../../test/sharedMutationLock.js'
 
 const tempDirs: string[] = []
 
+beforeEach(async () => {
+  await acquireSharedMutationLock('commands/wiki/wiki.test.ts')
+})
+
 afterEach(async () => {
-  await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
+  try {
+    await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
+  } finally {
+    releaseSharedMutationLock()
+  }
 })
 
 async function makeProjectDir(): Promise<string> {

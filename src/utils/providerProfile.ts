@@ -871,6 +871,14 @@ export function buildCompatibilityProcessEnv(options: {
   return env
 }
 
+export function isDefaultStartupProviderEnv(env: NodeJS.ProcessEnv): boolean {
+  return (
+    env.GAKR_CODE_USE_OPENAI === '1' &&
+    env.OPENAI_BASE_URL === DEFAULT_CODEX_BASE_URL &&
+    env.OPENAI_MODEL === 'codexplan'
+  )
+}
+
 export function buildCodexOAuthProfileEnv(
   tokens: {
     accessToken: string

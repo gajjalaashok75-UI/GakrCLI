@@ -136,6 +136,21 @@ async function main(): Promise<void> {
     }
   }
 
+  {
+    const {
+      applyAgentProviderOverrideToEnv,
+      resolveOutOfProcessTeammateProviderFromCliArgs,
+    } = await import('../services/api/agentRouting.js')
+    const { getInitialSettings } = await import('../utils/settings/settings.js')
+    const providerOverride = resolveOutOfProcessTeammateProviderFromCliArgs(
+      args,
+      getInitialSettings(),
+    )
+    if (providerOverride) {
+      applyAgentProviderOverrideToEnv(providerOverride)
+    }
+  }
+
   // Hydrate GitHub credentials after profile is applied so GAKR_CODE_USE_GITHUB from profile is available
   {
     const {
