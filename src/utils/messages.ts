@@ -1619,14 +1619,28 @@ function stripUnavailableToolReferencesFromUserMessage(
  * Only mutates the API-bound copy, not the stored message.
  * This lets GakrCLI reference message IDs when calling the snip tool.
  */
-function appendMessageTagToUserMessage(message: UserMessage): UserMessage {
+export function appendMessageTagToUserMessage(message: UserMessage): UserMessage {
   if (message.isMeta) {
     return message
   }
 
-  const tag = `\n[id:${deriveShortMessageId(message.uuid)}]`
+  const idToken = `[id:${deriveShortMessageId(message.uuid)}]`
+  const tag = `\n${idToken}`
 
   const content = message.message.content
+
+  const alreadyTagged =
+    typeof content === 'string'
+      ? content.includes(idToken)
+      : Array.isArray(content) &&
+        content.some(
+          block =>
+            block!.type === 'text' &&
+            (block as TextBlockParam).text.includes(idToken),
+        )
+  if (alreadyTagged) {
+    return message
+  }
 
   // Handle string content (most common for simple text input)
   if (typeof content === 'string') {
@@ -1652,7 +1666,19 @@ function appendMessageTagToUserMessage(message: UserMessage): UserMessage {
     }
   }
   if (lastTextIdx === -1) {
-    return message
+    if (!content.some(block => block!.type === 'tool_result')) {
+      return message
+    }
+    return {
+      ...message,
+      message: {
+        ...message.message,
+        content: [
+          ...content,
+          { type: 'text' as const, text: tag.replace(/^\n/, '') },
+        ] as typeof content,
+      },
+    }
   }
 
   const newContent = [...content]

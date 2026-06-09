@@ -713,15 +713,23 @@ async function getMessagesForSlashCommand(commandName: string, args: string, set
                 messages: [],
                 shouldQuery: false,
                 command,
-                resultText: result.value
+                resultText: result.value,
+                nextInput: result.nextInput,
+                submitNextInput: result.submitNextInput,
               };
             }
 
+            const metaMessages = (result.metaMessages ?? []).map((content: string) => createUserMessage({
+              content,
+              isMeta: true
+            }));
             return {
-              messages: [userMessage, createCommandInputMessage(`<local-command-stdout>${result.value}</local-command-stdout>`)],
-              shouldQuery: false,
+              messages: [userMessage, createCommandInputMessage(`<local-command-stdout>${result.value}</local-command-stdout>`), ...metaMessages],
+              shouldQuery: result.shouldQuery ?? false,
               command,
-              resultText: result.value
+              resultText: result.value,
+              nextInput: result.nextInput,
+              submitNextInput: result.submitNextInput,
             };
           } catch (e) {
             logError(e);
