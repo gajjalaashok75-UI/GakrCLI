@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased - 0.5.6]
 
+### Fixed (2026-06-09)
+- **Agent Routing And gRPC Startup Wiring**: Aligned teammate model routing, fallback model provider overrides, AgentTool metadata, CLI startup env application, and gRPC provider-profile startup handling with the OpenClaude reference while preserving GakrCLI env names.
+- **Full-Suite Test Isolation**: Isolated GitHub Actions setup, wiki, onboarding, and user identity tests from shared cwd/config/module state so the full Bun test suite passes with constrained concurrency.
+
 ### Added (2026-06-08)
 - **Design Skills Pack**: Added packaged design guidance under `assets/skills/design-skills/`, covering cinematic scroll, 3D interaction, micro-interactions, depth/glassmorphism, editorial typography, ambient effects, WebGPU shaders, visual systems, motion choreography, interaction patterns, and generative design.
 - **Claude Design Skill**: Added `assets/skills/design-skills/claude-design/SKILL.md` with Claude-style visual system guidance for warm editorial AI-product interfaces.

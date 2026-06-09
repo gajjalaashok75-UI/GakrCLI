@@ -11,7 +11,7 @@ import { startAgentSummarization } from '../../services/AgentSummary/agentSummar
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js';
 import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from '../../services/analytics/index.js';
 import { clearDumpState } from '../../services/api/dumpPrompts.js';
-import { resolveAgentProvider, resolveOutOfProcessTeammateProvider } from '../../services/api/agentRouting.js';
+import { resolveAgentRunModelRouting, resolveOutOfProcessTeammateProvider } from '../../services/api/agentRouting.js';
 import { completeAgentTask as completeAsyncAgent, createActivityDescriptionResolver, createProgressTracker, enqueueAgentNotification, failAgentTask as failAsyncAgent, getProgressUpdate, getTokenCountFromTracker, isLocalAgentTask, killAsyncAgent, registerAgentForeground, registerAsyncAgent, unregisterAgentForeground, updateAgentProgress as updateAsyncAgentProgress, updateProgressFromMessage } from '../../tasks/LocalAgentTask/LocalAgentTask.js';
 import { checkRemoteAgentEligibility, formatPreconditionError, getRemoteTaskSessionUrl, registerRemoteAgentTask } from '../../tasks/RemoteAgentTask/RemoteAgentTask.js';
 import { assembleToolPool } from '../../tools.js';
@@ -440,10 +440,17 @@ export const AgentTool = buildTool({
       setAgentColor(selectedAgent.agentType, selectedAgent.color);
     }
 
-    // Resolve agent params for logging (these are already resolved in runAgent)
+    // Resolve agent params for logging and prebuilt system prompts. runAgent
+    // resolves the same settings again before the actual query.
     const resolvedAgentModel = getAgentModel(selectedAgent.model, toolUseContext.options.mainLoopModel, isForkPath ? undefined : model, permissionMode);
-    const providerOverride = resolveAgentProvider(name, selectedAgent.agentType, getInitialSettings());
-    const effectiveAgentModel = providerOverride ? providerOverride.model : resolvedAgentModel;
+    const { mainLoopModel: effectiveAgentModel } = resolveAgentRunModelRouting({
+      resolvedAgentModel,
+      toolSpecifiedModel: isForkPath ? undefined : model,
+      agentName: name,
+      subagentType: selectedAgent.agentType,
+      agentDefinitionModel: selectedAgent.model,
+      settings: getInitialSettings(),
+    });
     logEvent('tengu_agent_tool_selected', {
       agent_type: selectedAgent.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       model: effectiveAgentModel as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -569,7 +576,7 @@ export const AgentTool = buildTool({
     }
     const metadata = {
       prompt,
-      resolvedAgentModel,
+      resolvedAgentModel: effectiveAgentModel,
       isBuiltInAgent: isBuiltInAgent(selectedAgent),
       startTime,
       agentType: selectedAgent.agentType,

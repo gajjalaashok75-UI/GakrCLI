@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test'
-import { getGlobalConfig, saveGlobalConfig } from 'src/utils/config.js'
 import {
   acquireSharedMutationLock,
   releaseSharedMutationLock,
 } from '../../test/sharedMutationLock.js'
 
 type BrowserModule = typeof import('../../utils/browser.js')
+type ConfigModule = typeof import('../../utils/config.js')
 type ExecFileNoThrowModule = typeof import('../../utils/execFileNoThrow.js')
 
 type ExecCall = {
@@ -15,6 +15,7 @@ type ExecCall = {
 
 type RealModules = {
   browser: BrowserModule
+  config: ConfigModule
   execFileNoThrow: ExecFileNoThrowModule
 }
 
@@ -26,6 +27,9 @@ const REVIEW_WORKFLOW_PATH =
 const execCalls: ExecCall[] = []
 const openedUrls: string[] = []
 let initialSetupCount: number | undefined
+let testGlobalConfig: ConfigModule['DEFAULT_GLOBAL_CONFIG'] & {
+  githubActionSetupCount?: number
+}
 let realModules: RealModules | undefined
 
 function execResult(stdout = '', code = 0, stderr = '') {
@@ -44,6 +48,9 @@ async function importRealModules(): Promise<RealModules> {
     browser: (await import(
       `../../utils/browser.ts?setup-actions-real-${cacheKey}`
     )) as BrowserModule,
+    config: (await import(
+      `../../utils/config.ts?setup-actions-real-${cacheKey}`
+    )) as ConfigModule,
     execFileNoThrow: (await import(
       `../../utils/execFileNoThrow.ts?setup-actions-real-${cacheKey}`
     )) as ExecFileNoThrowModule,
@@ -167,6 +174,16 @@ function handleGhCommand(args: string[]) {
 }
 
 function installMocks(real: RealModules): void {
+  mock.module('src/utils/config.js', () => ({
+    ...real.config,
+    getGlobalConfig: () => testGlobalConfig,
+    saveGlobalConfig: mock(
+      (updater: (current: typeof testGlobalConfig) => typeof testGlobalConfig) => {
+        testGlobalConfig = updater(testGlobalConfig)
+      },
+    ),
+  }))
+
   mock.module('../../utils/execFileNoThrow.js', () => ({
     ...real.execFileNoThrow,
     execFileNoThrow: mock(async (file: string, args: string[]) => {
@@ -198,19 +215,19 @@ beforeEach(async () => {
   )
   execCalls.length = 0
   openedUrls.length = 0
-  initialSetupCount = getGlobalConfig().githubActionSetupCount
+  testGlobalConfig = {
+    ...((await importRealModules()).config.DEFAULT_GLOBAL_CONFIG),
+  }
+  initialSetupCount = testGlobalConfig.githubActionSetupCount
   installMocks(await importRealModules())
 })
 
 afterEach(() => {
   try {
-    saveGlobalConfig(current => ({
-      ...current,
-      githubActionSetupCount: initialSetupCount,
-    }))
     initialSetupCount = undefined
     mock.restore()
     if (realModules) {
+      mock.module('src/utils/config.js', () => realModules!.config)
       mock.module(
         '../../utils/execFileNoThrow.js',
         () => realModules!.execFileNoThrow,
@@ -246,7 +263,7 @@ test('setupGitHubActions creates only the selected review workflow', async () =>
   expect(openedUrls[0]).toContain(
     'https://github.com/owner/repo/compare/main...add-gakrcli-github-actions-',
   )
-  expect(getGlobalConfig().githubActionSetupCount).toBe(
+  expect(testGlobalConfig.githubActionSetupCount).toBe(
     (initialSetupCount ?? 0) + 1,
   )
 })
@@ -276,7 +293,7 @@ test('setupGitHubActions skip mode configures the secret without workflow writes
   expect(openedUrls).toHaveLength(0)
   expect(secretSet?.args).toContain('GAKR_CODE_OAUTH_TOKEN')
   expect(secretSet?.args).toContain('oauth-token')
-  expect(getGlobalConfig().githubActionSetupCount).toBe(
+  expect(testGlobalConfig.githubActionSetupCount).toBe(
     (initialSetupCount ?? 0) + 1,
   )
 })

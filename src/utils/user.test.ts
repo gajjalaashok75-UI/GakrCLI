@@ -6,9 +6,9 @@ import {
 } from '../test/sharedMutationLock.js'
 import * as realAuth from './auth.js'
 import * as realConfig from './config.js'
-import * as realCwd from './cwd.js'
 import * as realEnv from './env.js'
 import * as realEnvUtils from './envUtils.js'
+import { runWithCwdOverride } from './cwd.js'
 
 const originalEnv = { ...process.env }
 const originalMacro = (globalThis as Record<string, unknown>).MACRO
@@ -48,11 +48,6 @@ function installCommonMocks(options?: {
     getOrCreateUserID: () => 'device-test',
   }))
 
-  mock.module('./cwd.js', () => ({
-    ...realCwd,
-    getCwd: () => 'C:\\repo',
-  }))
-
   mock.module('./env.js', () => ({
     ...realEnv,
     env: { platform: 'windows' },
@@ -83,7 +78,6 @@ afterEach(() => {
     mock.restore()
     mock.module('./auth.js', () => realAuth)
     mock.module('./config.js', () => realConfig)
-    mock.module('./cwd.js', () => realCwd)
     mock.module('./env.js', () => realEnv)
     mock.module('./envUtils.js', () => realEnvUtils)
     mock.module('execa', () => realExeca)
@@ -106,7 +100,9 @@ describe('user email fallbacks', () => {
 
     installCommonMocks()
 
-    const { getCoreUserData } = await importFreshUserModule()
+    const { getCoreUserData } = await runWithCwdOverride('C:\\repo', () =>
+      importFreshUserModule(),
+    )
     const result = getCoreUserData()
 
     expect(result.email).toBeUndefined()
@@ -119,8 +115,11 @@ describe('user email fallbacks', () => {
 
     installCommonMocks({ gitEmail: 'git@example.com' })
 
-    const { initUser, getCoreUserData } = await importFreshUserModule()
-    await initUser()
+    const { initUser, getCoreUserData } = await runWithCwdOverride(
+      'C:\\repo',
+      () => importFreshUserModule(),
+    )
+    await runWithCwdOverride('C:\\repo', () => initUser())
 
     const result = getCoreUserData()
     expect(result.email).toBe('git@example.com')

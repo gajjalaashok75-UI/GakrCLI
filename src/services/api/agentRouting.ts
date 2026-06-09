@@ -18,11 +18,53 @@ export interface AgentRunModelRouting {
   providerOverride?: ProviderOverride
 }
 
+type AgentModelConfig = NonNullable<SettingsJson['agentModels']>[string]
+
+const PROVIDER_ENV_VARS_TO_CLEAR_FOR_OVERRIDE = [
+  'GAKR_CODE_USE_OPENAI',
+  'GAKR_CODE_USE_BEDROCK',
+  'GAKR_CODE_USE_VERTEX',
+  'GAKR_CODE_USE_FOUNDRY',
+  'GAKR_CODE_USE_GITHUB',
+  'GAKR_CODE_USE_GEMINI',
+  'GAKR_CODE_USE_MISTRAL',
+  'GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED',
+  'GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID',
+  'NVIDIA_NIM',
+  'ANTHROPIC_MODEL',
+  'ANTHROPIC_BASE_URL',
+  'GEMINI_MODEL',
+  'GEMINI_BASE_URL',
+  'MISTRAL_MODEL',
+  'MISTRAL_BASE_URL',
+  'OPENAI_API_BASE',
+  'OPENAI_API_FORMAT',
+  'OPENAI_AUTH_HEADER',
+  'OPENAI_AUTH_SCHEME',
+  'OPENAI_AUTH_HEADER_VALUE',
+] as const
+
 /**
  * Normalize an agent identifier for case-insensitive, hyphen/underscore-agnostic matching.
  */
 function normalize(key: string): string {
   return key.toLowerCase().replace(/[-_]/g, '')
+}
+
+function toProviderOverride(
+  configuredModelKey: string,
+  modelConfig: AgentModelConfig | undefined,
+): ProviderOverride | null {
+  if (!modelConfig) return null
+
+  const apiKey = modelConfig.api_key.trim()
+  if (!apiKey) return null
+
+  return {
+    model: modelConfig.model?.trim() || configuredModelKey,
+    baseURL: modelConfig.base_url,
+    apiKey,
+  }
 }
 
 /**
@@ -48,7 +90,9 @@ export function resolveAgentProvider(
   for (const [key, value] of Object.entries(routing)) {
     const nk = normalize(key)
     if (normalizedRouting.has(nk)) {
-      console.error(`[agentRouting] Warning: routing key "${key}" collides with an existing key after normalization (both map to "${nk}"). First entry wins.`)
+      console.error(
+        `[agentRouting] Warning: routing key "${key}" collides with an existing key after normalization (both map to "${nk}"). First entry wins.`,
+      )
     }
     if (!normalizedRouting.has(nk)) {
       normalizedRouting.set(nk, value)
@@ -69,14 +113,7 @@ export function resolveAgentProvider(
 
   if (!modelName) return null
 
-  const modelConfig = models[modelName]
-  if (!modelConfig) return null
-
-  return {
-    model: modelName,
-    baseURL: modelConfig.base_url,
-    apiKey: modelConfig.api_key,
-  }
+  return toProviderOverride(modelName, models[modelName])
 }
 
 /**
@@ -90,15 +127,7 @@ export function resolveAgentModelProvider(
   if (!settings || !settings.agentModels || !modelName) return null
 
   const trimmedModelName = modelName.trim()
-  const modelConfig = settings.agentModels[trimmedModelName]
-
-  if (!modelConfig) return null
-
-  return {
-    model: trimmedModelName,
-    baseURL: modelConfig.base_url,
-    apiKey: modelConfig.api_key,
-  }
+  return toProviderOverride(trimmedModelName, settings.agentModels[trimmedModelName])
 }
 
 export function resolveAgentRunModelRouting({
@@ -118,6 +147,9 @@ export function resolveAgentRunModelRouting({
 }): AgentRunModelRouting {
   const toolRequestedModel = toolSpecifiedModel?.trim()
   if (toolRequestedModel) {
+    // Tool-specified models are explicit. If the request is not a configured
+    // agentModels key, preserve getAgentModel() alias/inherit/custom-ID behavior
+    // instead of falling through to persistent agentRouting.
     const providerOverride = resolveAgentModelProvider(toolRequestedModel, settings)
     return {
       mainLoopModel: providerOverride?.model ?? resolvedAgentModel,
@@ -137,6 +169,10 @@ export function resolveAgentRunModelRouting({
 
 /**
  * Resolve provider routing for a teammate that will run as its own CLI process.
+ *
+ * Pane/window teammates do not enter runAgent() in the parent process. They
+ * become the child process's main loop, so the child startup path must resolve
+ * the same configured agentModels route from its CLI identity.
  */
 export function resolveOutOfProcessTeammateProvider({
   cliModel,
@@ -194,5 +230,27 @@ function parseCliFlag(args: readonly string[], flag: string): string | undefined
   const idx = args.indexOf(flag)
   if (idx === -1) return undefined
   const value = args[idx + 1]
-  return value && !value.startsWith('--') ? value : undefined
+  if (!value || value.startsWith('--')) return undefined
+  return value
+}
+
+/**
+ * Apply an agentModels provider override to a child process environment.
+ *
+ * agentModels entries are OpenAI-compatible routes. Clear competing route
+ * selectors and stale model/endpoint/header knobs first because provider
+ * detection gives several selectors higher priority than GAKR_CODE_USE_OPENAI.
+ */
+export function applyAgentProviderOverrideToEnv(
+  providerOverride: ProviderOverride,
+  env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
+): void {
+  for (const key of PROVIDER_ENV_VARS_TO_CLEAR_FOR_OVERRIDE) {
+    delete env[key]
+  }
+
+  env.GAKR_CODE_USE_OPENAI = '1'
+  env.OPENAI_MODEL = providerOverride.model
+  env.OPENAI_BASE_URL = providerOverride.baseURL
+  env.OPENAI_API_KEY = providerOverride.apiKey
 }
