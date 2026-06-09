@@ -69,3 +69,7 @@ src/utils/graphify-out/cache/
 
 # Build cache
 src/utils/graphify-out/
+
+# Local test checker agent and skill
+assets/agents/test-checker.md
+assets/skills/test-checker/
