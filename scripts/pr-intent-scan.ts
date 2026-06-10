@@ -24,6 +24,8 @@ type CliOptions = {
   failOn: FindingSeverity
 }
 
+const GIT_OUTPUT_MAX_BUFFER_BYTES = 64 * 1024 * 1024
+
 const SELF_EXCLUDED_FILES = new Set([
   'scripts/pr-intent-scan.ts',
   'scripts/pr-intent-scan.test.ts',
@@ -380,6 +382,7 @@ export function scanAddedLines(lines: DiffLine[]): Finding[] {
 export function getGitDiff(baseRef: string, headRef = 'HEAD'): string {
   const mergeBase = spawnSync('git', ['merge-base', baseRef, headRef], {
     encoding: 'utf8',
+    maxBuffer: GIT_OUTPUT_MAX_BUFFER_BYTES,
   })
 
   if (mergeBase.status !== 0) {
@@ -392,7 +395,7 @@ export function getGitDiff(baseRef: string, headRef = 'HEAD'): string {
   const diff = spawnSync(
     'git',
     ['diff', '--unified=0', '--no-ext-diff', `${base}...${headRef}`],
-    { encoding: 'utf8' },
+    { encoding: 'utf8', maxBuffer: GIT_OUTPUT_MAX_BUFFER_BYTES },
   )
 
   if (diff.status !== 0) {
