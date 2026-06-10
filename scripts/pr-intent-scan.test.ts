@@ -195,4 +195,34 @@ describe('getGitDiff', () => {
       rmSync(repo, { recursive: true, force: true })
     }
   })
+
+  test('handles diffs larger than the default child process buffer', () => {
+    const repo = mkdtempSync(join(tmpdir(), 'gakrcli-pr-intent-scan-'))
+    const originalCwd = process.cwd()
+
+    try {
+      git(repo, ['init', '-q', '-b', 'main'])
+      git(repo, ['config', 'user.email', 'test@example.com'])
+      git(repo, ['config', 'user.name', 'Test User'])
+
+      writeFileSync(join(repo, 'README.md'), 'base\n')
+      git(repo, ['add', 'README.md'])
+      git(repo, ['commit', '-q', '-m', 'base'])
+      const base = git(repo, ['rev-parse', 'HEAD'])
+
+      writeFileSync(join(repo, 'large.txt'), `${'safe line\n'.repeat(140_000)}`)
+      git(repo, ['add', 'large.txt'])
+      git(repo, ['commit', '-q', '-m', 'large diff'])
+      const head = git(repo, ['rev-parse', 'HEAD'])
+
+      process.chdir(repo)
+      const diff = getGitDiff(base, head)
+
+      expect(diff).toContain('large.txt')
+      expect(diff.length).toBeGreaterThan(1024 * 1024)
+    } finally {
+      process.chdir(originalCwd)
+      rmSync(repo, { recursive: true, force: true })
+    }
+  })
 })
