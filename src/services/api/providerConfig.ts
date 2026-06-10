@@ -27,6 +27,8 @@ export const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1'
 export const DEFAULT_CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex'
 export const DEFAULT_NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1'
 export const DEFAULT_MISTRAL_BASE_URL = 'https://api.mistral.ai/v1'
+export const DEFAULT_OPENCODE_BASE_URL = 'https://opencode.ai/zen/v1'
+export const DEFAULT_OPENCODE_GO_BASE_URL = 'https://opencode.ai/zen/go/v1'
 /** Default GitHub Models API model when user selects copilot / github:copilot */
 export const DEFAULT_GITHUB_MODELS_API_MODEL = 'gpt-4o'
 /** Default NVIDIA model */
@@ -95,8 +97,15 @@ const CODEX_ALIAS_MODELS: Record<
 type CodexAlias = keyof typeof CODEX_ALIAS_MODELS
 type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh'
 const OPENAI_CODEX_SHORTCUT_ALIASES = new Set(['codexplan', 'codexspark'])
-export type ProviderTransport = 'chat_completions' | 'responses' | 'codex_responses'
-export type OpenAICompatibleApiFormat = 'chat_completions' | 'responses'
+export type ProviderTransport =
+  | 'chat_completions'
+  | 'responses'
+  | 'responses_compat'
+  | 'codex_responses'
+export type OpenAICompatibleApiFormat =
+  | 'chat_completions'
+  | 'responses'
+  | 'responses_compat'
 
 export type ResolvedProviderRequest = {
   transport: ProviderTransport
@@ -241,6 +250,9 @@ export function parseOpenAICompatibleApiFormat(
     normalized === 'responses_api'
   ) {
     return 'responses'
+  }
+  if (normalized === 'responses_compat' || normalized === 'response_compat') {
+    return 'responses_compat'
   }
   if (
     normalized === 'chat_completions' ||
@@ -430,7 +442,8 @@ function normalizePathWithV1(pathname: string): string {
   return `${trimmed}/v1`
 }
 
-function isLikelyOllamaEndpoint(baseUrl: string): boolean {
+export function isLikelyOllamaEndpoint(baseUrl: string | undefined): boolean {
+  if (!baseUrl) return false
   try {
     const parsed = new URL(baseUrl)
     const hostname = parsed.hostname.toLowerCase()
@@ -717,7 +730,8 @@ export function resolveProviderRequest(options?: {
       : parseOpenAICompatibleApiFormat(options?.apiFormat) ??
         parseOpenAICompatibleApiFormat(process.env.OPENAI_API_FORMAT)
   const supportsRequestedApiFormat =
-    requestedApiFormat !== 'responses' ||
+    (requestedApiFormat !== 'responses' &&
+      requestedApiFormat !== 'responses_compat') ||
     (() => {
       const runtimeShimContext = resolveOpenAIShimRuntimeContext({
         processEnv: process.env,
@@ -738,6 +752,8 @@ export function resolveProviderRequest(options?: {
       ? 'codex_responses'
       : requestedApiFormat === 'responses' && supportsRequestedApiFormat
         ? 'responses'
+        : requestedApiFormat === 'responses_compat' && supportsRequestedApiFormat
+          ? 'responses_compat'
         : 'chat_completions'
   
   // For GitHub Copilot API, normalize to real model ID (e.g., "github:copilot" -> "gpt-4o")

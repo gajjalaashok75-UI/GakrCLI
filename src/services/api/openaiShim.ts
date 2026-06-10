@@ -1676,6 +1676,7 @@ class OpenAIShimMessages {
           (
             request.transport === 'codex_responses' ||
             request.transport === 'responses' ||
+            request.transport === 'responses_compat' ||
             isResponsesStream
           )
             ? codexStreamToAnthropic(response, request.resolvedModel, options?.signal)
@@ -1694,6 +1695,7 @@ class OpenAIShimMessages {
       const isResponsesNonStream = response.url?.includes('/responses')
       if (
         request.transport === 'responses' ||
+        request.transport === 'responses_compat' ||
         isResponsesNonStream ||
         (request.transport === 'chat_completions' && isGithubModelsMode())
       ) {
@@ -1986,6 +1988,7 @@ class OpenAIShimMessages {
             message?: { role?: string; content?: unknown }
             content?: unknown
           }>,
+          request.transport === 'responses_compat',
         ),
         stream: params.stream ?? false,
         store: false,
@@ -2000,7 +2003,15 @@ class OpenAIShimMessages {
           {
             type: 'message',
             role: 'user',
-            content: [{ type: 'input_text', text: '' }],
+            content: [
+              {
+                type:
+                  request.transport === 'responses_compat'
+                    ? 'text'
+                    : 'input_text',
+                text: '',
+              },
+            ],
           },
         ]
       }
@@ -2165,7 +2176,7 @@ class OpenAIShimMessages {
       : []
 
     const buildRequestUrl = (baseUrl: string): string =>
-      request.transport === 'responses'
+      request.transport === 'responses' || request.transport === 'responses_compat'
         ? `${baseUrl}/responses`
         : buildChatCompletionsUrl(baseUrl)
 
@@ -2205,7 +2216,9 @@ class OpenAIShimMessages {
     // the provider's prefix hash.
     const serializeBody = (): string => {
       const payload =
-        request.transport === 'responses' ? buildResponsesBody() : body
+        request.transport === 'responses' || request.transport === 'responses_compat'
+          ? buildResponsesBody()
+          : body
       return fastPath.skipStableStringify
         ? JSON.stringify(payload)
         : stableStringifyJson(payload)
@@ -2458,7 +2471,7 @@ class OpenAIShimMessages {
       }
 
       const hasToolsPayload =
-        request.transport === 'responses'
+        request.transport === 'responses' || request.transport === 'responses_compat'
           ? Array.isArray(params.tools) && params.tools.length > 0
           : Array.isArray(body.tools) && body.tools.length > 0
 

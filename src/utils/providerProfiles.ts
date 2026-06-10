@@ -1,5 +1,6 @@
 import { randomBytes } from 'crypto'
 import {
+  getAdditionalModelOptionsCacheScope,
   isCodexBaseUrl,
   parseOpenAICompatibleApiFormat,
 } from '../services/api/providerConfig.js'
@@ -23,6 +24,7 @@ import {
   buildNvidiaNimProfileEnv,
   buildOpenAIProfileEnv,
   buildVeniceProfileEnv,
+  buildXaiOAuthProfileEnv,
   buildXiaomiMimoProfileEnv,
   buildVertexProfileEnv,
   clearManagedProfileEnv,
@@ -33,6 +35,7 @@ import {
   type ProviderProfile as ProviderProfileStartup,
 } from './providerProfile.js'
 import { refreshStartupDiscoveryForRoute } from '../integrations/discoveryService.js'
+import { resolveEnvOnlyProviderRouteId } from '../integrations/routeMetadata.js'
 import {
   getProviderPresetUiMetadata,
   normalizeXiaomiMimoBaseUrl,
@@ -100,6 +103,9 @@ function resolveProfileCompatibility(provider: string): {
     return { route, compatibilityMode: 'vertex' }
   }
   if (route.vendorId === 'anthropic') {
+    return { route, compatibilityMode: 'anthropic' }
+  }
+  if (route.vendorId === 'minimax') {
     return { route, compatibilityMode: 'anthropic' }
   }
   if (route.vendorId === 'gemini') {
@@ -371,6 +377,7 @@ function hasProviderSelectionFlags(
 function hasCompleteProviderSelection(
   processEnv: NodeJS.ProcessEnv = process.env,
 ): boolean {
+  if (resolveEnvOnlyProviderRouteId(processEnv) !== null) return true
   if (!hasProviderSelectionFlags(processEnv)) return false
   if (processEnv.GAKR_CODE_USE_OPENAI !== undefined) {
     return (
@@ -607,10 +614,20 @@ export function applyProviderProfileToProcessEnv(profile: ProviderProfile): void
   }
 
   if (compatibilityMode === 'anthropic') {
-    profileEnv = {
-      ANTHROPIC_BASE_URL: profile.baseUrl,
-      ANTHROPIC_MODEL: primaryModel,
-      ...(profile.apiKey ? { ANTHROPIC_API_KEY: profile.apiKey } : {}),
+    if (route.vendorId === 'minimax') {
+      profileEnv =
+        buildMiniMaxProfileEnv({
+          model: primaryModel,
+          baseUrl: profile.baseUrl,
+          apiKey: profile.apiKey,
+          processEnv: process.env,
+        }) ?? {}
+    } else {
+      profileEnv = {
+        ANTHROPIC_BASE_URL: profile.baseUrl,
+        ANTHROPIC_MODEL: primaryModel,
+        ...(profile.apiKey ? { ANTHROPIC_API_KEY: profile.apiKey } : {}),
+      }
     }
   } else if (compatibilityMode === 'mistral') {
     profileEnv = {
@@ -873,64 +890,7 @@ export function persistActiveProviderProfileModel(
     return null
   }
 
-  // Keep multi-model profile choices, but promote the last selected model so
-  // restart uses it as the primary model. This preserves model lists like
-  // "glm-4.5, glm-4.7" while moving the selected model first.
-  const existingModels = parseModelList(activeProfile.model)
-  const nextProfileModel =
-    existingModels.length > 1
-      ? [
-          nextModel,
-          ...existingModels.filter(existingModel => existingModel !== nextModel),
-        ].join(', ')
-      : nextModel
-
-  saveGlobalConfig(current => {
-    const currentProfiles = getProviderProfiles(current)
-    const profileIndex = currentProfiles.findIndex(
-      profile => profile.id === activeProfile.id,
-    )
-
-    if (profileIndex < 0) {
-      return current
-    }
-
-    const currentProfile = currentProfiles[profileIndex]
-    if (currentProfile.model === nextProfileModel) {
-      return current
-    }
-
-    const nextProfiles = [...currentProfiles]
-    nextProfiles[profileIndex] = {
-      ...currentProfile,
-      model: nextProfileModel,
-    }
-
-    return {
-      ...current,
-      providerProfiles: nextProfiles,
-    }
-  })
-
-  const resolvedProfile = getActiveProviderProfile()
-  if (!resolvedProfile || resolvedProfile.id !== activeProfile.id) {
-    return null
-  }
-
-  if (
-    process.env[PROFILE_ENV_APPLIED_FLAG] === '1' &&
-    trimOrUndefined(process.env[PROFILE_ENV_APPLIED_ID]) === resolvedProfile.id
-  ) {
-    applyProviderProfileToProcessEnv(resolvedProfile)
-  }
-
-  const startupProfile = buildStartupProfileFromActiveProfile(resolvedProfile)
-
-  if (startupProfile) {
-    saveProfileFile(createProfileFile(startupProfile.profile, startupProfile.env))
-  }
-
-  return resolvedProfile
+  return activeProfile
 }
 
 /**
@@ -943,16 +903,22 @@ export function getProfileModelOptions(
   profile: ProviderProfile,
   config = getGlobalConfig(),
 ): ModelOption[] {
-  const configuredOptions = parseModelList(profile.model).map(model => ({
-    value: model,
-    label: model,
-    description: `Provider: ${profile.name}`,
-  }))
+  const configuredOptions = getConfiguredProfileModelOptions(profile)
 
   return mergeModelOptionsByValue(
     configuredOptions,
     getModelCacheByProfile(profile.id, config),
   )
+}
+
+export function getConfiguredProfileModelOptions(
+  profile: ProviderProfile,
+): ModelOption[] {
+  return parseModelList(profile.model).map(model => ({
+    value: model,
+    label: model,
+    description: `Provider: ${profile.name}`,
+  }))
 }
 
 function buildOpenAICompatibleStartupEnv(
@@ -1158,6 +1124,16 @@ function buildStartupProfileFromActiveProfile(
           : null
       }
 
+      if (route.vendorId === 'xai' && !activeProfile.apiKey) {
+        const env = applySupportedProfileCustomHeaders(activeProfile, {
+          ...buildXaiOAuthProfileEnv({
+            model: getPrimaryModel(activeProfile.model),
+          }),
+          OPENAI_BASE_URL: activeProfile.baseUrl,
+        })
+        return { profile: 'xai', env }
+      }
+
       const env = buildOpenAICompatibleStartupEnv(activeProfile)
       return env ? { profile: 'openai', env } : null
     }
@@ -1356,6 +1332,32 @@ export function setActiveOpenAIModelOptionsCache(options: ModelOption[]): void {
       ...(current.openaiAdditionalModelOptionsCacheByProfile ?? {}),
       [activeProfile.id]: mergedOptions,
     },
+  }))
+}
+
+export function getActiveOpenAIRouteModelOptionsCache(
+  config = getGlobalConfig(),
+): ModelOption[] {
+  const activeScope = getAdditionalModelOptionsCacheScope()
+
+  return activeScope?.startsWith('openai:') &&
+    config.additionalModelOptionsCacheScope === activeScope
+    ? (config.additionalModelOptionsCache ?? [])
+    : []
+}
+
+export function setActiveOpenAIRouteModelOptionsCache(
+  options: ModelOption[],
+): void {
+  const activeScope = getAdditionalModelOptionsCacheScope()
+  if (!activeScope?.startsWith('openai:')) {
+    return
+  }
+
+  saveGlobalConfig(current => ({
+    ...current,
+    additionalModelOptionsCache: options,
+    additionalModelOptionsCacheScope: activeScope,
   }))
 }
 

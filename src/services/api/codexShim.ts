@@ -46,6 +46,7 @@ export interface ShimCreateParams {
 type ResponsesInputPart =
   | { type: 'input_text'; text: string }
   | { type: 'output_text'; text: string }
+  | { type: 'text'; text: string }
   | { type: 'input_image'; image_url: string }
 
 type ResponsesInputItem =
@@ -168,8 +169,13 @@ function convertToolResultToText(content: unknown): string {
 function convertContentBlocksToResponsesParts(
   content: unknown,
   role: 'user' | 'assistant',
+  forceTextChunks: boolean,
 ): ResponsesInputPart[] {
-  const textType = role === 'assistant' ? 'output_text' : 'input_text'
+  const textType = forceTextChunks
+    ? 'text'
+    : role === 'assistant'
+      ? 'output_text'
+      : 'input_text'
   if (typeof content === 'string') {
     return [{ type: textType, text: content }]
   }
@@ -222,6 +228,7 @@ function convertContentBlocksToResponsesParts(
 
 export function convertAnthropicMessagesToResponsesInput(
   messages: Array<{ role?: string; message?: { role?: string; content?: unknown }; content?: unknown }>,
+  forceTextChunks = false,
 ): ResponsesInputItem[] {
   const items: ResponsesInputItem[] = []
 
@@ -251,7 +258,11 @@ export function convertAnthropicMessagesToResponsesInput(
           })
         }
 
-        const parts = convertContentBlocksToResponsesParts(otherContent, 'user')
+        const parts = convertContentBlocksToResponsesParts(
+          otherContent,
+          'user',
+          forceTextChunks,
+        )
         if (parts.length > 0) {
           items.push({
             type: 'message',
@@ -265,7 +276,11 @@ export function convertAnthropicMessagesToResponsesInput(
       items.push({
         type: 'message',
         role: 'user',
-        content: convertContentBlocksToResponsesParts(content, 'user'),
+        content: convertContentBlocksToResponsesParts(
+          content,
+          'user',
+          forceTextChunks,
+        ),
       })
       continue
     }
@@ -275,7 +290,11 @@ export function convertAnthropicMessagesToResponsesInput(
         ? content.filter((block: { type?: string }) =>
             block.type !== 'tool_use' && block.type !== 'thinking')
         : content
-      const parts = convertContentBlocksToResponsesParts(textBlocks, 'assistant')
+      const parts = convertContentBlocksToResponsesParts(
+        textBlocks,
+        'assistant',
+        forceTextChunks,
+      )
       if (parts.length > 0) {
         items.push({
           type: 'message',
@@ -790,7 +809,7 @@ export async function* codexStreamToAnthropic(
   const messageId = makeMessageId()
   const toolBlocksByItemId = new Map<
     string,
-    { index: number; toolUseId: string }
+    { index: number; toolUseId: string; emittedArgs: string }
   >()
   let activeTextBlockIndex: number | null = null
   const thinkFilter = createThinkTagFilter()
@@ -851,9 +870,12 @@ export async function* codexStreamToAnthropic(
         yield* closeActiveTextBlock()
         const blockIndex = nextContentBlockIndex++
         const toolUseId = item.call_id ?? item.id ?? `call_${blockIndex}`
+        const initialArgs =
+          typeof item.arguments === 'string' ? item.arguments : ''
         toolBlocksByItemId.set(String(item.id ?? toolUseId), {
           index: blockIndex,
           toolUseId,
+          emittedArgs: initialArgs,
         })
         sawToolUse = true
 
@@ -868,13 +890,13 @@ export async function* codexStreamToAnthropic(
           },
         }
 
-        if (item.arguments) {
+        if (initialArgs) {
           yield {
             type: 'content_block_delta',
             index: blockIndex,
             delta: {
               type: 'input_json_delta',
-              partial_json: item.arguments,
+              partial_json: initialArgs,
             },
           }
         }
@@ -910,13 +932,37 @@ export async function* codexStreamToAnthropic(
     if (event.event === 'response.function_call_arguments.delta') {
       const toolBlock = toolBlocksByItemId.get(String(payload.item_id ?? ''))
       if (toolBlock) {
-        yield {
-          type: 'content_block_delta',
-          index: toolBlock.index,
-          delta: {
-            type: 'input_json_delta',
-            partial_json: payload.delta ?? '',
-          },
+        const delta = typeof payload.delta === 'string' ? payload.delta : ''
+        if (delta) {
+          toolBlock.emittedArgs += delta
+          yield {
+            type: 'content_block_delta',
+            index: toolBlock.index,
+            delta: {
+              type: 'input_json_delta',
+              partial_json: delta,
+            },
+          }
+        }
+      }
+      continue
+    }
+
+    if (event.event === 'response.function_call_arguments.done') {
+      const toolBlock = toolBlocksByItemId.get(String(payload.item_id ?? ''))
+      if (toolBlock) {
+        const fullArgs =
+          typeof payload.arguments === 'string' ? payload.arguments : ''
+        if (fullArgs && !toolBlock.emittedArgs) {
+          toolBlock.emittedArgs = fullArgs
+          yield {
+            type: 'content_block_delta',
+            index: toolBlock.index,
+            delta: {
+              type: 'input_json_delta',
+              partial_json: fullArgs,
+            },
+          }
         }
       }
       continue
@@ -927,6 +973,19 @@ export async function* codexStreamToAnthropic(
       if (item?.type === 'function_call') {
         const toolBlock = toolBlocksByItemId.get(String(item.id ?? ''))
         if (toolBlock) {
+          const finalArgs =
+            typeof item.arguments === 'string' ? item.arguments : ''
+          if (finalArgs && !toolBlock.emittedArgs) {
+            toolBlock.emittedArgs = finalArgs
+            yield {
+              type: 'content_block_delta',
+              index: toolBlock.index,
+              delta: {
+                type: 'input_json_delta',
+                partial_json: finalArgs,
+              },
+            }
+          }
           yield {
             type: 'content_block_stop',
             index: toolBlock.index,

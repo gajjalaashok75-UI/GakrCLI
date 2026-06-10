@@ -167,6 +167,17 @@ export function formatOutput(content: string): {
 export const stdErrAppendShellResetMessage = (stderr: string): string =>
   `${stderr.trim()}\nShell cwd was reset to ${getOriginalCwd()}`
 
+export function selectFailureOutput(
+  accumulatedOutput: string,
+  resultStdout: string | undefined,
+  progressFullOutput: string,
+): string {
+  if (accumulatedOutput.trim() !== '') return accumulatedOutput
+  if (resultStdout && resultStdout.trim() !== '') return resultStdout
+  if (progressFullOutput.trim() !== '') return progressFullOutput
+  return ''
+}
+
 export function resetCwdIfOutsideProject(
   toolPermissionContext: ToolPermissionContext,
 ): boolean {

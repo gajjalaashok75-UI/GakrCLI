@@ -29,6 +29,7 @@ testIfWindows(
           workspaceFolders: [
             'C:\\Users\\gajja\\Documents\\data-science\\Gakrcli',
           ],
+          pid: process.ppid,
           ideName: 'VS Code',
           transport: 'sse',
         }),

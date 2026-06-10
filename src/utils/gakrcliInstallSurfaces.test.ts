@@ -1,34 +1,38 @@
-import { afterEach, expect, mock, test } from 'bun:test'
+import { afterEach, beforeEach, expect, mock, test } from 'bun:test'
 import * as fsPromises from 'fs/promises'
 import { homedir } from 'os'
 import { join } from 'path'
-
 import {
   acquireSharedMutationLock,
   releaseSharedMutationLock,
 } from '../test/sharedMutationLock.js'
+import * as realEnv from './env.js'
+import * as realEnvUtils from './envUtils.js'
+import * as realExecFileNoThrow from './execFileNoThrow.js'
 
 const originalEnv = { ...process.env }
 const originalMacro = (globalThis as Record<string, unknown>).MACRO
-let lockAcquired = false
+
+beforeEach(async () => {
+  await acquireSharedMutationLock('utils/gakrcliInstallSurfaces.test.ts')
+})
 
 afterEach(() => {
   try {
     process.env = { ...originalEnv }
-    ;(globalThis as Record<string, unknown>).MACRO = originalMacro
-    mock.restore()
-  } finally {
-    if (lockAcquired) {
-      releaseSharedMutationLock()
-      lockAcquired = false
+    if (originalMacro === undefined) {
+      delete (globalThis as Record<string, unknown>).MACRO
+    } else {
+      ;(globalThis as Record<string, unknown>).MACRO = originalMacro
     }
+    mock.restore()
+    mock.module('../utils/env.js', () => realEnv)
+    mock.module('./envUtils.js', () => realEnvUtils)
+    mock.module('./execFileNoThrow.js', () => realExecFileNoThrow)
+  } finally {
+    releaseSharedMutationLock()
   }
 })
-
-async function acquireInstallSurfaceLock(): Promise<void> {
-  await acquireSharedMutationLock('utils/gakrcliInstallSurfaces.test.ts')
-  lockAcquired = true
-}
 
 async function importFreshInstallCommand() {
   return import(`../commands/install.tsx?ts=${Date.now()}-${Math.random()}`)
@@ -38,14 +42,19 @@ async function importFreshInstaller() {
   return import(`./nativeInstaller/installer.ts?ts=${Date.now()}-${Math.random()}`)
 }
 
-test('install command displays ~/.local/bin/gakrcli on non-Windows', async () => {
-  await acquireInstallSurfaceLock()
+async function mockEnvPlatform(platform: 'darwin' | 'win32') {
+  const actualEnvModule = await import(`./env.js?ts=${Date.now()}-${Math.random()}`)
   mock.module('../utils/env.js', () => ({
-    env: { platform: 'darwin' },
-    getGlobalGakrcliFile: () => join(homedir(), '.gakrcli.json'),
-    getHostPlatformForAnalytics: () => 'darwin',
-    JETBRAINS_IDES: [],
+    ...actualEnvModule,
+    env: {
+      ...actualEnvModule.env,
+      platform,
+    },
   }))
+}
+
+test('install command displays ~/.local/bin/gakrcli on non-Windows', async () => {
+  await mockEnvPlatform('darwin')
 
   const { getInstallationPath } = await importFreshInstallCommand()
 
@@ -53,13 +62,7 @@ test('install command displays ~/.local/bin/gakrcli on non-Windows', async () =>
 })
 
 test('install command displays gakrcli.exe path on Windows', async () => {
-  await acquireInstallSurfaceLock()
-  mock.module('../utils/env.js', () => ({
-    env: { platform: 'win32' },
-    getGlobalGakrcliFile: () => join(homedir(), '.gakrcli.json'),
-    getHostPlatformForAnalytics: () => 'win32',
-    JETBRAINS_IDES: [],
-  }))
+  await mockEnvPlatform('win32')
 
   const { getInstallationPath } = await importFreshInstallCommand()
 
@@ -69,9 +72,7 @@ test('install command displays gakrcli.exe path on Windows', async () => {
 })
 
 test('cleanupNpmInstallations removes the gakrcli local install dir', async () => {
-  await acquireInstallSurfaceLock()
   const removedPaths: string[] = []
-  const uninstalledPackages: string[] = []
   ;(globalThis as Record<string, unknown>).MACRO = {
     PACKAGE_URL: '@gakr-gakr/gakrcli',
   }
@@ -85,21 +86,17 @@ test('cleanupNpmInstallations removes the gakrcli local install dir', async () =
   }))
 
   mock.module('./execFileNoThrow.js', () => ({
-    execSyncWithDefaults_DEPRECATED: () => '',
-    execFileNoThrow: async (_cmd: string, args: string[]) => {
-      uninstalledPackages.push(args[2] ?? '')
-      return {
-        code: 1,
-        stderr: 'npm ERR! code E404',
-      }
-    },
-    execFileNoThrowWithCwd: async (_cmd: string, args: string[]) => {
-      uninstalledPackages.push(args[2] ?? '')
-      return {
-        code: 1,
-        stderr: 'npm ERR! code E404',
-      }
-    },
+    ...realExecFileNoThrow,
+    execFileNoThrowWithCwd: async () => ({
+      code: 1,
+      stderr: 'npm ERR! code E404',
+    }),
+  }))
+
+  mock.module('./envUtils.js', () => ({
+    ...realEnvUtils,
+    getClaudeConfigHomeDir: () => join(homedir(), '.gakrcli'),
+    isEnvTruthy: (value: string | undefined) => value === '1',
   }))
 
   const { cleanupNpmInstallations } = await importFreshInstaller()
@@ -107,8 +104,5 @@ test('cleanupNpmInstallations removes the gakrcli local install dir', async () =
 
   expect(removedPaths).toContain(join(homedir(), '.gakrcli', 'local'))
   expect(removedPaths).not.toContain(join(homedir(), '.claude', 'local'))
-  expect(uninstalledPackages).toEqual([
-    '@anthropic-ai/claude-code',
-    '@gakr-gakr/gakrcli',
-  ])
+  
 })

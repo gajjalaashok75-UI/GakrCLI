@@ -59,6 +59,7 @@ export default defineVendor({
       requireReasoningContentOnAssistantMessages: true,
       reasoningContentFallback: '',
       maxTokensField: 'max_completion_tokens',
+      removeBodyFields: ['store', 'stream_options'],
       supportsApiFormatSelection: false,
       supportsAuthHeaders: false,
     },

@@ -75,6 +75,26 @@ export type {
   QueryPermissionMode,
 } from './shared.js'
 
+export type {
+  AccountInfo,
+  AgentInfo,
+  FastModeState,
+  ModelInfo,
+  SlashCommand,
+} from './coreTypes.generated.js'
+
+export type SDKControlInitializeResponse = {
+  commands: import('./coreTypes.generated.js').SlashCommand[]
+  agents: import('./coreTypes.generated.js').AgentInfo[]
+  output_style: string
+  available_output_styles: string[]
+  models: import('./coreTypes.generated.js').ModelInfo[]
+  account: import('./coreTypes.generated.js').AccountInfo
+  /** @internal CLI process PID for tmux socket isolation. */
+  pid?: number
+  fast_mode_state?: import('./coreTypes.generated.js').FastModeState
+}
+
 // ============================================================================
 // Re-exports from permissions
 // ============================================================================

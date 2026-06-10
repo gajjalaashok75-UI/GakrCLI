@@ -23,12 +23,22 @@ export async function fetchWithProxyRetry(
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      return await fetch(input, {
+      const response = await fetch(input, {
         ...init,
         ...getProxyFetchOptions({
           forAnthropicAPI: options?.forAnthropicAPI,
         }),
       })
+
+      if (
+        (response.status === 502 || response.status === 504) &&
+        attempt < maxAttempts
+      ) {
+        disableKeepAlive()
+        continue
+      }
+
+      return response
     } catch (error) {
       lastError = error
       if (attempt >= maxAttempts || !isRetryableFetchError(error)) {

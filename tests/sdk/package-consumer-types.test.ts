@@ -19,7 +19,6 @@ const ROOT = join(import.meta.dir, '..', '..')
 const SDK_DTS = join(ROOT, 'src', 'entrypoints', 'sdk.d.ts')
 const CORE_TYPES_TS = join(ROOT, 'src', 'entrypoints', 'sdk', 'coreTypes.generated.ts')
 const TSC_BIN = join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc')
-const PACKAGE_NAME = '@gakr-gakr/gakrcli'
 
 /** All temp dirs created during tests — cleaned up in afterAll */
 const tempDirs: string[] = []
@@ -65,7 +64,7 @@ function setupConsumerProject(name: string): string {
     join(pkgDir, 'package.json'),
     JSON.stringify(
       {
-        name: PACKAGE_NAME,
+        name: '@gakr-gakr/gakrcli',
         version: '0.0.0-test',
         type: 'module',
         exports: {
@@ -139,7 +138,7 @@ describe('package consumer types', () => {
         `  SDKRateLimitError,`,
         `  QueryOptions,`,
         `  SDKSession,`,
-        `} from '${PACKAGE_NAME}/sdk'`,
+        `} from '@gakr-gakr/gakrcli/sdk'`,
         ``,
         `// Use the types so they're not unused-imports-eliminated`,
         `type _Msg = SDKMessage`,
@@ -166,7 +165,7 @@ describe('package consumer types', () => {
     writeFileSync(
       join(tmpDir, 'consumer.ts'),
       [
-        `import type { SDKMessage, SDKUserMessage, SDKResultMessage } from '${PACKAGE_NAME}/sdk'`,
+        `import type { SDKMessage, SDKUserMessage, SDKResultMessage } from '@gakr-gakr/gakrcli/sdk'`,
         ``,
         `// Discriminated union check — if types are broken, this won't compile`,
         `function handle(msg: SDKMessage) {`,
@@ -191,7 +190,7 @@ describe('package consumer types', () => {
     writeFileSync(
       join(tmpDir, 'consumer.ts'),
       [
-        `import { SDKRateLimitError } from '${PACKAGE_NAME}/sdk'`,
+        `import { SDKRateLimitError } from '@gakr-gakr/gakrcli/sdk'`,
         ``,
         `// Constructor should accept (message?, resetsAt?, rateLimitType?)`,
         `const err = new SDKRateLimitError('rate limited', 12345, 'requests')`,
@@ -201,6 +200,39 @@ describe('package consumer types', () => {
         `const rateType: string | undefined = err.rateLimitType`,
         ``,
         `console.log(resets, rateType)`,
+      ].join('\n'),
+    )
+
+    expect(tsc(tmpDir)).toBe('')
+  }, 30_000)
+
+  test('control initialize response accepts generated model and account values', () => {
+    const tmpDir = setupConsumerProject('control-init')
+
+    writeFileSync(
+      join(tmpDir, 'consumer.ts'),
+      [
+        `import type { SDKControlInitializeResponse, ModelInfo } from '@gakr-gakr/gakrcli/sdk'`,
+        ``,
+        `const models: ModelInfo[] = [{`,
+        `  value: 'claude-opus-4-6',`,
+        `  displayName: 'Claude Opus 4.6',`,
+        `  description: 'Most capable model',`,
+        `  supportsEffort: true,`,
+        `  supportedEffortLevels: ['low', 'medium', 'high', 'max'],`,
+        `}]`,
+        ``,
+        `const response: SDKControlInitializeResponse = {`,
+        `  commands: [],`,
+        `  agents: [],`,
+        `  output_style: 'default',`,
+        `  available_output_styles: ['default'],`,
+        `  models,`,
+        `  account: { apiProvider: 'openai' },`,
+        `  pid: 1234,`,
+        `}`,
+        ``,
+        `console.log(response)`,
       ].join('\n'),
     )
 

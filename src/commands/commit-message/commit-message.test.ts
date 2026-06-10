@@ -1,10 +1,31 @@
-import { describe, expect, it } from 'bun:test'
+import { afterEach, describe, expect, it } from 'bun:test'
+import { mkdtempSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 import {
+  getGakrcliConfigHomeDir,
+  setGakrcliConfigHomeDirForTesting,
+} from '../../utils/envUtils.js'
+import { resetSettingsCache } from '../../utils/settings/settingsCache.js'
+import {
+  call,
   formatCoAuthorTrailer,
   parseCoAuthor,
   stripMatchingQuotes,
   USAGE,
 } from './commit-message.js'
+
+let tempSettingsDir: string | null = null
+
+afterEach(() => {
+  setGakrcliConfigHomeDirForTesting(undefined)
+  getGakrcliConfigHomeDir.cache?.clear?.()
+  resetSettingsCache()
+  if (tempSettingsDir) {
+    rmSync(tempSettingsDir, { recursive: true, force: true })
+    tempSettingsDir = null
+  }
+})
 
 describe('commit-message command helpers', () => {
   it('parses quoted co-author names with a plain email', () => {
@@ -54,5 +75,16 @@ describe('commit-message command helpers', () => {
       '/commit-message set "Generated with GakrCLI using GPT-5.5"',
     )
     expect(USAGE).not.toContain('/commit-message set-attribution')
+  })
+
+  it('describes default reset as privacy-preserving', async () => {
+    tempSettingsDir = mkdtempSync(join(tmpdir(), 'gakrcli-settings-'))
+    setGakrcliConfigHomeDirForTesting(tempSettingsDir)
+    getGakrcliConfigHomeDir.cache?.clear?.()
+
+    await expect(call('default', {} as never)).resolves.toEqual({
+      type: 'text',
+      value: 'Commit attribution reset to the privacy-preserving default.',
+    })
   })
 })

@@ -14,6 +14,14 @@ const originalEnv = {
   OPENAI_MODEL: process.env.OPENAI_MODEL,
 }
 
+afterAll(() => {
+  try {
+    mock.restore()
+  } finally {
+    releaseSharedMutationLock()
+  }
+})
+
 // Mock config + autoCompact so the shim sees deterministic state.
 const mockState = {
   enabled: true,

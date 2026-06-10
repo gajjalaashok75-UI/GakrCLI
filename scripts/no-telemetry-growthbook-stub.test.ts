@@ -60,6 +60,15 @@ describe('growthbook stub — local feature flag overrides', () => {
     expect(stub.getAllGrowthBookFeatures()).toEqual({})
   })
 
+  test('all getter functions return default values when no flags file', async () => {
+    expect(await stub.getFeatureValue_DEPRECATED('tengu_gate', false)).toBe(false)
+    expect(stub.getFeatureValue_CACHED_WITH_REFRESH('tengu_gate', false)).toBe(false)
+    expect(stub.checkStatsigFeatureGate_CACHED_MAY_BE_STALE('tengu_gate')).toBe(false)
+    expect(await stub.checkGate_CACHED_OR_BLOCKING('tengu_gate')).toBe(false)
+    expect(await stub.getDynamicConfig_BLOCKS_ON_INIT('tengu_config', {})).toEqual({})
+    expect(stub.getDynamicConfig_CACHED_MAY_BE_STALE('tengu_config', {})).toEqual({})
+  })
+
   // ── Open-build defaults (_openBuildDefaults) ────────────────────
 
   test('returns open-build default when flags file is absent', () => {
@@ -159,6 +168,24 @@ describe('growthbook stub — local feature flag overrides', () => {
     expect(await stub.getDynamicConfig_BLOCKS_ON_INIT('tengu_config', {})).toEqual({ a: 1 })
     stub.resetGrowthBook()
     expect(stub.getDynamicConfig_CACHED_MAY_BE_STALE('tengu_config', {})).toEqual({ a: 1 })
+  })
+
+  test('checkStatsigFeatureGate_CACHED_MAY_BE_STALE returns false when file is absent', () => {
+    expect(stub.checkStatsigFeatureGate_CACHED_MAY_BE_STALE('tengu_gate')).toBe(false)
+  })
+
+  test('checkStatsigFeatureGate_CACHED_MAY_BE_STALE returns true from flags file', () => {
+    writeFileSync(flagsFile, JSON.stringify({ tengu_gate: true }))
+    expect(stub.checkStatsigFeatureGate_CACHED_MAY_BE_STALE('tengu_gate')).toBe(true)
+  })
+
+  test('checkGate_CACHED_OR_BLOCKING returns false when file is absent', async () => {
+    expect(await stub.checkGate_CACHED_OR_BLOCKING('tengu_bridge')).toBe(false)
+  })
+
+  test('checkGate_CACHED_OR_BLOCKING returns true from flags file', async () => {
+    writeFileSync(flagsFile, JSON.stringify({ tengu_bridge: true }))
+    expect(await stub.checkGate_CACHED_OR_BLOCKING('tengu_bridge')).toBe(true)
   })
 
   // ── Security gate ────────────────────────────────────────────────

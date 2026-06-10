@@ -244,7 +244,7 @@ export function isAutoCompactEnabled(): boolean {
   }
   // Check if user has disabled auto-compact in their settings
   const userConfig = getGlobalConfig()
-  return userConfig.autoCompactEnabled
+  return userConfig.autoCompactEnabled !== false
 }
 
 export async function shouldAutoCompact(

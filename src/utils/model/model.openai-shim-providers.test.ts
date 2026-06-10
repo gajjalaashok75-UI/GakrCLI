@@ -8,12 +8,18 @@ import { getGlobalConfig, saveGlobalConfig } from '../config.js'
 
 async function importFreshModelModule() {
   mock.restore()
+  mock.module('../auth.js', () => ({
+    getSubscriptionType: () => 'max',
+    isClaudeAISubscriber: () => true,
+    isMaxSubscriber: () => true,
+    isProSubscriber: () => false,
+    isTeamPremiumSubscriber: () => false,
+  }))
   mock.module('./providers.js', () => ({
     getAPIProvider: () => {
       if (process.env.NVIDIA_NIM) return 'nvidia-nim'
       if (process.env.MINIMAX_API_KEY) return 'minimax'
       if (process.env.MIMO_API_KEY) return 'xiaomi-mimo'
-      if (process.env.XAI_API_KEY) return 'xai'
       if (process.env.GAKR_CODE_USE_GEMINI) return 'gemini'
       if (process.env.GAKR_CODE_USE_MISTRAL) return 'mistral'
       if (process.env.GAKR_CODE_USE_GITHUB) return 'github'
@@ -44,6 +50,7 @@ const SAVED_ENV = {
   GAKR_CODE_USE_FOUNDRY: process.env.GAKR_CODE_USE_FOUNDRY,
   NVIDIA_NIM: process.env.NVIDIA_NIM,
   MINIMAX_API_KEY: process.env.MINIMAX_API_KEY,
+  ANTHROPIC_MODEL: process.env.ANTHROPIC_MODEL,
   MIMO_API_KEY: process.env.MIMO_API_KEY,
   XAI_API_KEY: process.env.XAI_API_KEY,
   NVIDIA_MODEL: process.env.NVIDIA_MODEL,
@@ -77,10 +84,9 @@ beforeEach(async () => {
   delete process.env.GAKR_CODE_USE_VERTEX
   delete process.env.GAKR_CODE_USE_FOUNDRY
   delete process.env.NVIDIA_NIM
-  delete process.env.NVIDIA_MODEL
   delete process.env.MINIMAX_API_KEY
+  delete process.env.ANTHROPIC_MODEL
   delete process.env.MIMO_API_KEY
-  delete process.env.XAI_API_KEY
   delete process.env.OPENAI_MODEL
   delete process.env.OPENAI_BASE_URL
   delete process.env.CODEX_API_KEY
@@ -147,10 +153,11 @@ test('minimax provider reads OPENAI_MODEL, not stale settings.model', async () =
   expect(model).toBe('MiniMax-M2.5')
 })
 
-test('xiaomi-mimo provider reads OPENAI_MODEL, not stale settings.model', async () => {
-  saveGlobalConfig(current => ({ ...current, model: 'kimi-k2.6' }))
+test('xiaomi mimo provider reads OPENAI_MODEL, not stale settings.model', async () => {
+  saveGlobalConfig(current => ({ ...current, model: 'opus' }))
   process.env.MIMO_API_KEY = 'mimo-test'
   process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://api.xiaomimimo.com/v1'
   process.env.OPENAI_MODEL = 'mimo-v2.5-pro'
 
   const { getUserSpecifiedModelSetting } = await importFreshModelModule()
@@ -231,50 +238,15 @@ test('getDefaultOpusModel returns OPENAI_MODEL for MiniMax', async () => {
   expect(getDefaultOpusModel()).toBe('MiniMax-M2.7')
 })
 
-test('getDefaultSonnetModel returns OPENAI_MODEL for NVIDIA NIM', async () => {
-  process.env.NVIDIA_NIM = '1'
-  process.env.GAKR_CODE_USE_OPENAI = '1'
-  process.env.OPENAI_MODEL = 'nvidia/llama-3.1-nemotron-70b-instruct'
-
-  const { getDefaultSonnetModel } = await importFreshModelModule()
-  expect(getDefaultSonnetModel()).toBe('nvidia/llama-3.1-nemotron-70b-instruct')
-})
-
-test('getDefaultMainLoopModelSetting returns the NVIDIA NIM default model', async () => {
-  process.env.NVIDIA_NIM = '1'
-  process.env.GAKR_CODE_USE_OPENAI = '1'
-
-  const { getDefaultMainLoopModelSetting } = await importFreshModelModule()
-  expect(getDefaultMainLoopModelSetting()).toBe(
-    'stepfun-ai/step-3.5-flash',
-  )
-})
-
-test('getDefaultHaikuModel returns OPENAI_MODEL for MiniMax', async () => {
+test('getDefaultMainLoopModelSetting defaults MiniMax to M3', async () => {
   process.env.MINIMAX_API_KEY = 'minimax-test'
-  process.env.OPENAI_MODEL = 'MiniMax-M2.5-highspeed'
-
-  const { getDefaultHaikuModel } = await importFreshModelModule()
-  expect(getDefaultHaikuModel()).toBe('MiniMax-M2.5-highspeed')
-})
-
-test('Xiaomi MiMo default helpers return Xiaomi model ids', async () => {
-  process.env.MIMO_API_KEY = 'mimo-test'
-  process.env.GAKR_CODE_USE_OPENAI = '1'
 
   const {
-    getSmallFastModel,
-    getDefaultOpusModel,
-    getDefaultSonnetModel,
-    getDefaultHaikuModel,
+    getDefaultMainLoopModel,
     getDefaultMainLoopModelSetting,
   } = await importFreshModelModule()
-
-  expect(getSmallFastModel()).toBe('mimo-v2-flash')
-  expect(getDefaultOpusModel()).toBe('mimo-v2.5-pro')
-  expect(getDefaultSonnetModel()).toBe('mimo-v2.5-pro')
-  expect(getDefaultHaikuModel()).toBe('mimo-v2-flash')
-  expect(getDefaultMainLoopModelSetting()).toBe('mimo-v2.5-pro')
+  expect(getDefaultMainLoopModelSetting()).toBe('MiniMax-M3')
+  expect(getDefaultMainLoopModel()).toBe('MiniMax-M3')
 })
 
 test('getDefaultMainLoopModelSetting defaults Xiaomi MiMo to mimo-v2.5-pro', async () => {
@@ -286,7 +258,6 @@ test('getDefaultMainLoopModelSetting defaults Xiaomi MiMo to mimo-v2.5-pro', asy
     getDefaultMainLoopModel,
     getDefaultMainLoopModelSetting,
   } = await importFreshModelModule()
-
   expect(getDefaultMainLoopModelSetting()).toBe('mimo-v2.5-pro')
   expect(getDefaultMainLoopModel()).toBe('mimo-v2.5-pro')
 })
@@ -301,28 +272,37 @@ test('modelDisplayString does not show Claude subscription default for Xiaomi Mi
     modelDisplayString,
     renderDefaultModelSetting,
   } = await importFreshModelModule()
-
   expect(modelDisplayString(null)).toBe('Default (mimo-v2.5-pro)')
   expect(renderDefaultModelSetting('mimo-v2.5-pro')).toBe('mimo-v2.5-pro')
 })
 
-test('xAI default helpers return Grok model ids', async () => {
-  process.env.XAI_API_KEY = 'xai-test'
-  process.env.GAKR_CODE_USE_OPENAI = '1'
+test('modelDisplayString does not show Claude subscription default for MiniMax', async () => {
+  process.env.MINIMAX_API_KEY = 'minimax-test'
+  process.env.OPENAI_MODEL = 'MiniMax-M2.7'
 
   const {
-    getSmallFastModel,
-    getDefaultOpusModel,
-    getDefaultSonnetModel,
-    getDefaultHaikuModel,
-    getDefaultMainLoopModelSetting,
+    modelDisplayString,
+    renderDefaultModelSetting,
   } = await importFreshModelModule()
+  expect(modelDisplayString(null)).toBe('Default (MiniMax-M2.7)')
+  expect(renderDefaultModelSetting('MiniMax-M2.7')).toBe('MiniMax-M2.7')
+})
 
-  expect(getSmallFastModel()).toBe('grok-3')
-  expect(getDefaultOpusModel()).toBe('grok-4.3')
-  expect(getDefaultSonnetModel()).toBe('grok-4.3')
-  expect(getDefaultHaikuModel()).toBe('grok-3')
-  expect(getDefaultMainLoopModelSetting()).toBe('grok-4.3')
+test('getDefaultSonnetModel returns OPENAI_MODEL for NVIDIA NIM', async () => {
+  process.env.NVIDIA_NIM = '1'
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_MODEL = 'nvidia/llama-3.1-nemotron-70b-instruct'
+
+  const { getDefaultSonnetModel } = await importFreshModelModule()
+  expect(getDefaultSonnetModel()).toBe('nvidia/llama-3.1-nemotron-70b-instruct')
+})
+
+test('getDefaultHaikuModel returns OPENAI_MODEL for MiniMax', async () => {
+  process.env.MINIMAX_API_KEY = 'minimax-test'
+  process.env.OPENAI_MODEL = 'MiniMax-M2.5-highspeed'
+
+  const { getDefaultHaikuModel } = await importFreshModelModule()
+  expect(getDefaultHaikuModel()).toBe('MiniMax-M2.5-highspeed')
 })
 
 test('default helpers do not leak claude-* names to shim providers', async () => {
@@ -362,7 +342,6 @@ test('default helpers do not leak claude-* names to Xiaomi MiMo', async () => {
     getDefaultSonnetModel,
     getDefaultHaikuModel,
   } = await importFreshModelModule()
-
   for (const fn of [
     getSmallFastModel,
     getDefaultOpusModel,
@@ -371,5 +350,7 @@ test('default helpers do not leak claude-* names to Xiaomi MiMo', async () => {
   ]) {
     const model = fn()
     expect(model.toLowerCase()).not.toContain('claude')
+    expect(model.toLowerCase()).not.toContain('opus')
   }
 })
+

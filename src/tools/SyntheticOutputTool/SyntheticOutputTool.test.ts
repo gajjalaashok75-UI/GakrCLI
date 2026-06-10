@@ -25,7 +25,7 @@ const OBJECT_SCHEMA = {
   additionalProperties: false,
 } as const
 
-describe('createSyntheticOutputTool ( root schema wrapping)', () => {
+describe('createSyntheticOutputTool (#1256 root schema wrapping)', () => {
   test('top-level array root: wraps inputJSONSchema as object envelope', () => {
     const result = createSyntheticOutputTool({ ...ARRAY_OF_OBJECTS_SCHEMA })
     if (!('tool' in result)) throw new Error(`expected tool: ${result.error}`)

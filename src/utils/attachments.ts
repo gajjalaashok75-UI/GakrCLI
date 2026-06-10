@@ -267,6 +267,21 @@ export const AUTO_MODE_ATTACHMENT_CONFIG = {
   FULL_REMINDER_EVERY_N_ATTACHMENTS: 5,
 } as const
 
+const SKILL_LISTING_SUPPRESSED_QUERY_SOURCES = new Set([
+  'compact',
+  'extract_memories',
+  'session_memory',
+])
+
+export function shouldIncludeSkillListingAttachment(
+  querySource?: QuerySource,
+): boolean {
+  return !(
+    typeof querySource === 'string' &&
+    SKILL_LISTING_SUPPRESSED_QUERY_SOURCES.has(querySource)
+  )
+}
+
 const MAX_MEMORY_LINES = 200
 // Line cap alone doesn't bound size (200 × 500-char lines = 100KB).  The
 // surfacer injects up to 5 files per turn via <system-reminder>, bypassing

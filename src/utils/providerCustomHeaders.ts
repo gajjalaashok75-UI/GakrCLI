@@ -96,8 +96,19 @@ export function parseCustomHeadersEnv(
   if (!value) {
     return undefined
   }
-  const parsed = parseProfileCustomHeadersInput(value)
-  return parsed.error || Object.keys(parsed.headers).length === 0
-    ? undefined
-    : parsed.headers
+  if (value.includes('\r')) {
+    return undefined
+  }
+
+  const headers: Record<string, string> = {}
+  for (const entry of parseHeaderEntries(value)) {
+    const colonIndex = entry.indexOf(':')
+    if (colonIndex <= 0) continue
+    const name = entry.slice(0, colonIndex).trim()
+    const val = entry.slice(colonIndex + 1).trim()
+    if (name && val) {
+      headers[name] = val
+    }
+  }
+  return Object.keys(headers).length === 0 ? undefined : headers
 }

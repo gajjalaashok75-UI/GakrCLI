@@ -180,6 +180,15 @@ function hasNonEmptyEnvValue(value: string | undefined): boolean {
   return Boolean(trimmed && trimmed !== 'undefined' && trimmed !== 'null')
 }
 
+export function isNativeVendorCatalogRoute(routeId: string): boolean {
+  const vendor = getVendor(routeId)
+  return (
+    vendor?.classification === 'native' &&
+    vendor.catalog?.source === 'static' &&
+    (vendor.catalog?.models?.length ?? 0) > 0
+  )
+}
+
 export function isMiniMaxBaseUrl(value: string | undefined): boolean {
   const trimmed = value?.trim()
   if (!trimmed) {
@@ -276,6 +285,11 @@ export function isVeniceBaseUrl(value: string | undefined): boolean {
 export function getMiniMaxBaseUrlOverride(
   processEnv: NodeJS.ProcessEnv = process.env,
 ): string | undefined {
+  const anthropicBaseUrl = processEnv.ANTHROPIC_BASE_URL?.trim()
+  if (isMiniMaxBaseUrl(anthropicBaseUrl)) {
+    return anthropicBaseUrl
+  }
+
   const openAIBaseUrl = processEnv.OPENAI_BASE_URL?.trim()
   if (isMiniMaxBaseUrl(openAIBaseUrl)) {
     return openAIBaseUrl
@@ -287,6 +301,22 @@ export function getMiniMaxBaseUrlOverride(
   }
 
   return undefined
+}
+
+function isMiniMaxModelName(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase()
+  return Boolean(
+    normalized &&
+      (normalized.startsWith('minimax-') || normalized.startsWith('minimax/')),
+  )
+}
+
+function hasMiniMaxRouteIntent(processEnv: NodeJS.ProcessEnv): boolean {
+  return (
+    getMiniMaxBaseUrlOverride(processEnv) !== undefined ||
+    isMiniMaxModelName(processEnv.OPENAI_MODEL) ||
+    isMiniMaxModelName(processEnv.ANTHROPIC_MODEL)
+  )
 }
 
 export function getXaiBaseUrlOverride(
@@ -346,12 +376,19 @@ export function hasXaiEnvOnlyProviderIntent(
 export function hasMiniMaxEnvOnlyProviderIntent(
   processEnv: NodeJS.ProcessEnv = process.env,
 ): boolean {
+  const hasExplicitMiniMaxIntent = hasMiniMaxRouteIntent(processEnv)
+  const hasMiniMaxCredential =
+    hasNonEmptyEnvValue(processEnv.MINIMAX_API_KEY) ||
+    (isMiniMaxBaseUrl(processEnv.ANTHROPIC_BASE_URL) &&
+      hasNonEmptyEnvValue(processEnv.ANTHROPIC_API_KEY))
+
   return (
-    hasNonEmptyEnvValue(processEnv.MINIMAX_API_KEY) &&
-    !hasNonEmptyEnvValue(processEnv.OPENAI_API_KEY) &&
-    !hasNonEmptyEnvValue(processEnv.XAI_API_KEY) &&
+    hasMiniMaxCredential &&
     !hasConflictingOpenAIBaseUrlForRoute(processEnv, isMiniMaxBaseUrl) &&
-    hasNoExplicitNonOpenAICompatibleProvider(processEnv)
+    (hasExplicitMiniMaxIntent ||
+      (!hasNonEmptyEnvValue(processEnv.OPENAI_API_KEY) &&
+        !hasNonEmptyEnvValue(processEnv.XAI_API_KEY) &&
+        hasNoExplicitNonOpenAICompatibleProvider(processEnv)))
   )
 }
 
@@ -385,6 +422,13 @@ export function hasXiaomiMimoEnvOnlyProviderIntent(
 export function resolveEnvOnlyProviderRouteId(
   processEnv: NodeJS.ProcessEnv = process.env,
 ): 'xai' | 'minimax' | 'venice' | 'xiaomi-mimo' | null {
+  if (
+    hasMiniMaxRouteIntent(processEnv) &&
+    hasMiniMaxEnvOnlyProviderIntent(processEnv)
+  ) {
+    return 'minimax'
+  }
+
   if (hasXaiEnvOnlyProviderIntent(processEnv)) {
     return 'xai'
   }
@@ -605,6 +649,9 @@ export function resolveActiveRouteIdFromEnv(
     return 'vertex'
   }
 
+  const envOnlyRouteId = resolveEnvOnlyProviderRouteId(processEnv)
+  if (envOnlyRouteId) return envOnlyRouteId
+
   if (isEnvTruthy(processEnv.GAKR_CODE_USE_OPENAI)) {
     const baseUrl =
       processEnv.OPENAI_BASE_URL ?? processEnv.OPENAI_API_BASE
@@ -639,9 +686,6 @@ export function resolveActiveRouteIdFromEnv(
 
     return 'custom'
   }
-
-  const envOnlyRouteId = resolveEnvOnlyProviderRouteId(processEnv)
-  if (envOnlyRouteId) return envOnlyRouteId
 
   return 'anthropic'
 }
