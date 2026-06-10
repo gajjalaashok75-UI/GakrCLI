@@ -390,3 +390,78 @@ test('startup provider validation stays strict for non-interactive launches', ()
     }),
   ).toBe(true)
 })
+
+test.skip('opengateway validation fails without OPENGATEWAY_API_KEY or OPENAI_API_KEY', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://opengateway.gitlawb.com/v1'
+  delete process.env.OPENAI_API_KEY
+  delete process.env.OPENGATEWAY_API_KEY
+
+  const error = await getProviderValidationError(process.env)
+  expect(error).not.toBeNull()
+  expect(error!).toContain('OPENGATEWAY_API_KEY')
+})
+
+test.skip('opengateway validation passes when OPENGATEWAY_API_KEY is set', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://opengateway.gitlawb.com/v1'
+  process.env.OPENGATEWAY_API_KEY = 'ogw_live_test_0000000000000000'
+  delete process.env.OPENAI_API_KEY
+
+  await expect(getProviderValidationError(process.env)).resolves.toBeNull()
+})
+
+test.skip('opengateway validation accepts OPENAI_API_KEY as fallback', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://opengateway.gitlawb.com/v1'
+  process.env.OPENAI_API_KEY = 'ogw_live_test_0000000000000000'
+  delete process.env.OPENGATEWAY_API_KEY
+
+  await expect(getProviderValidationError(process.env)).resolves.toBeNull()
+})
+
+test.skip('opengateway validation still requires a key on the model-specific path', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://opengateway.gitlawb.com/v1/xiaomi-mimo'
+  delete process.env.OPENAI_API_KEY
+  delete process.env.OPENGATEWAY_API_KEY
+
+  const error = await getProviderValidationError(process.env)
+  expect(error).not.toBeNull()
+  expect(error!).toContain('OPENGATEWAY_API_KEY')
+})
+
+test('non-Ollama remote provider still requires OPENAI_API_KEY', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1'
+  delete process.env.OPENAI_API_KEY
+
+  const message = await getProviderValidationError(process.env)
+  expect(message).toContain(
+    'OPENAI_API_KEY is required when GAKR_CODE_USE_OPENAI=1 and OPENAI_BASE_URL is not local.',
+  )
+})
+
+test('remote Ollama by hostname does not require OPENAI_API_KEY (#369)', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'http://my-ollama-server.example.com:11434/v1'
+  delete process.env.OPENAI_API_KEY
+
+  await expect(getProviderValidationError(process.env)).resolves.toBeNull()
+})
+
+test('remote Ollama on default port without API key is allowed (#369)', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'http://203.0.113.5:11434/v1'
+  delete process.env.OPENAI_API_KEY
+
+  await expect(getProviderValidationError(process.env)).resolves.toBeNull()
+})
+
+test('remote Ollama identified by "ollama" in hostname is allowed without key (#369)', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://ollama.corp.example.com/v1'
+  delete process.env.OPENAI_API_KEY
+
+  await expect(getProviderValidationError(process.env)).resolves.toBeNull()
+})

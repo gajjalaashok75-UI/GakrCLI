@@ -488,8 +488,13 @@ export function useTextInput({
                 // eslint-disable-next-line custom-rules/no-lookbehind-regex -- .replace(re, str) on 1-2 char keystrokes: no-match returns same string (Object.is), regex never runs
                 .replace(/(?<=[^\\\r\n])\r$/, '')
                 .replace(/\r/g, '\n')
-              if (cursor.isAtStart() && isInputModeCharacter(input)) {
-                return cursor.insert(text).left()
+              if (
+                cursor.text.length === 0 &&
+                cursor.isAtStart() &&
+                isInputModeCharacter(input)
+              ) {
+                onChange(text)
+                return undefined
               }
               return cursor.insert(text)
             }

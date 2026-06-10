@@ -50,7 +50,7 @@ async function importFreshEnvModule() {
   return import(`./env.js?ts=${Date.now()}-${Math.random()}`)
 }
 
-// getGlobalGakrcliFile — three migration branches
+// getGlobalGakrcliFile — default path plus explicit override compatibility
 
 test('getGlobalGakrcliFile: new install returns .gakrcli.json when neither file exists', async () => {
   const { getGlobalGakrcliFile } = await importFreshEnvModule()

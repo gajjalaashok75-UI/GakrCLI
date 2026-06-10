@@ -2024,7 +2024,7 @@ async function loadPluginSettings(
 /**
  * Merge two HooksSettings objects
  */
-function mergeHooksSettings(
+export function mergeHooksSettings(
   base: HooksSettings | undefined,
   additional: HooksSettings,
 ): HooksSettings {

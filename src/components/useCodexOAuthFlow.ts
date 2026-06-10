@@ -22,7 +22,7 @@ export type CodexOAuthFlowStatus =
 
 type PersistCodexOAuthCredentials = (options?: {
   profileId?: string
-}) => void
+}) => { warning?: string }
 
 type CodexOAuthFlowDependencies = {
   createOAuthService?: () => Pick<
@@ -111,6 +111,7 @@ export function useCodexOAuthFlow(options: {
                 'Codex OAuth succeeded, but credentials could not be saved securely.',
             )
           }
+          return { warning: saved.warning }
         }
 
         await onAuthenticatedRef.current(tokens, persistCredentials)

@@ -184,6 +184,34 @@ export type SessionMessage = {
   [key: string]: unknown
 }
 
+import type {
+  AccountInfo,
+  AgentInfo,
+  FastModeState,
+  ModelInfo,
+  SlashCommand,
+} from './sdk/coreTypes.generated.js'
+
+export type {
+  AccountInfo,
+  AgentInfo,
+  FastModeState,
+  ModelInfo,
+  SlashCommand,
+} from './sdk/coreTypes.generated.js'
+
+export type SDKControlInitializeResponse = {
+  commands: SlashCommand[]
+  agents: AgentInfo[]
+  output_style: string
+  available_output_styles: string[]
+  models: ModelInfo[]
+  account: AccountInfo
+  /** @internal CLI process PID for tmux socket isolation. */
+  pid?: number
+  fast_mode_state?: FastModeState
+}
+
 export type SDKProviderInfo = {
   id: string
   label: string

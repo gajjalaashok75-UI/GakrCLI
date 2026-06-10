@@ -37,6 +37,10 @@ export type ModelSetting = ModelName | ModelAlias | null
 const DEFAULT_XIAOMI_MIMO_MODEL = 'mimo-v2.5-pro'
 const DEFAULT_XIAOMI_MIMO_FAST_MODEL = 'mimo-v2-flash'
 
+function getMiniMaxModelEnv(): string | undefined {
+  return process.env.ANTHROPIC_MODEL || process.env.OPENAI_MODEL
+}
+
 export function getSmallFastModel(): ModelName {
   if (process.env.ANTHROPIC_SMALL_FAST_MODEL) return process.env.ANTHROPIC_SMALL_FAST_MODEL
   // For Gemini provider, use a fast model
@@ -60,7 +64,7 @@ export function getSmallFastModel(): ModelName {
     return process.env.OPENAI_MODEL || process.env.NVIDIA_MODEL || 'meta/llama-3.1-8b-instruct'
   }
   if (getAPIProvider() === 'minimax') {
-    return process.env.OPENAI_MODEL || 'MiniMax-M2.5-highspeed'
+    return getMiniMaxModelEnv() || 'MiniMax-M2.5-highspeed'
   }
   if (getAPIProvider() === 'xiaomi-mimo') {
     return process.env.OPENAI_MODEL || DEFAULT_XIAOMI_MIMO_FAST_MODEL
@@ -129,6 +133,7 @@ export function getUserSpecifiedModelSetting(): ModelSetting | undefined {
     specifiedModel =
       (provider === 'gemini' ? process.env.GEMINI_MODEL : undefined) ||
       (provider === 'mistral' ? process.env.MISTRAL_MODEL : undefined) ||
+      (provider === 'minimax' ? getMiniMaxModelEnv() : undefined) ||
       (isOpenAIShimProvider ? process.env.OPENAI_MODEL : undefined) ||
       (provider === 'firstParty' ? process.env.ANTHROPIC_MODEL : undefined) ||
       setting ||
@@ -195,7 +200,7 @@ export function getDefaultOpusModel(): ModelName {
     return process.env.OPENAI_MODEL || 'github:copilot'
   }
   if (getAPIProvider() === 'minimax') {
-    return process.env.OPENAI_MODEL || 'MiniMax-M2.7'
+    return getMiniMaxModelEnv() || 'MiniMax-M2.7'
   }
   if (getAPIProvider() === 'xiaomi-mimo') {
     return process.env.OPENAI_MODEL || DEFAULT_XIAOMI_MIMO_MODEL
@@ -241,7 +246,7 @@ export function getDefaultSonnetModel(): ModelName {
     return process.env.OPENAI_MODEL || 'github:copilot'
   }
   if (getAPIProvider() === 'minimax') {
-    return process.env.OPENAI_MODEL || 'MiniMax-M2.5'
+    return getMiniMaxModelEnv() || 'MiniMax-M2.5'
   }
   if (getAPIProvider() === 'xiaomi-mimo') {
     return process.env.OPENAI_MODEL || DEFAULT_XIAOMI_MIMO_MODEL
@@ -285,7 +290,7 @@ export function getDefaultHaikuModel(): ModelName {
     return process.env.GEMINI_MODEL || 'gemini-2.0-flash-lite'
   }
   if (getAPIProvider() === 'minimax') {
-    return process.env.OPENAI_MODEL || 'MiniMax-M2.5-highspeed'
+    return getMiniMaxModelEnv() || 'MiniMax-M2.5-highspeed'
   }
   if (getAPIProvider() === 'xiaomi-mimo') {
     return process.env.OPENAI_MODEL || DEFAULT_XIAOMI_MIMO_FAST_MODEL
@@ -361,6 +366,10 @@ export function getDefaultMainLoopModelSetting(): ModelName | ModelAlias {
   // Xiaomi MiMo provider: always use the configured OpenAI-compatible model
   if (getAPIProvider() === 'xiaomi-mimo') {
     return process.env.OPENAI_MODEL || DEFAULT_XIAOMI_MIMO_MODEL
+  }
+  // MiniMax provider: always use the configured MiniMax model.
+  if (getAPIProvider() === 'minimax') {
+    return getMiniMaxModelEnv() || 'MiniMax-M3'
   }
 
   // Ants default to defaultModel from flag config, or Opus 1M if not configured

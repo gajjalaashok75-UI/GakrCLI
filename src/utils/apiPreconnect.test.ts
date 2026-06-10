@@ -102,4 +102,12 @@ describe('preconnectAnthropicApi', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
+
+  test('keeps non-mocked provider exports available to neighboring imports', async () => {
+    await importFreshModule()
+
+    const providers = await import('./model/providers.js')
+
+    expect(typeof providers.isFirstPartyAnthropicBaseUrl).toBe('function')
+  })
 })

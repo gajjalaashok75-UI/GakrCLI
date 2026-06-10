@@ -8,6 +8,7 @@ import {
   extractOpenAICategoryMarker,
   formatOpenAICategoryMarker,
   isLocalhostLikeHost,
+  isRetryableOpenAICompatibilityFailureCategory,
 } from './openaiErrorClassification.js'
 
 test('classifies localhost ECONNREFUSED as connection_refused', () => {
@@ -174,4 +175,25 @@ test('isLocalhostLikeHost matches loopback variants', () => {
   expect(isLocalhostLikeHost('::1')).toBe(true)
   expect(isLocalhostLikeHost('integrate.api.nvidia.com')).toBe(false)
   expect(isLocalhostLikeHost(undefined)).toBe(false)
+})
+
+test('classifies 404 with images as vision_not_supported', () => {
+  const failure = classifyOpenAIHttpFailure({
+    status: 404,
+    body: 'Not Found',
+    hasImages: true,
+  })
+
+  expect(failure.category).toBe('vision_not_supported')
+  expect(failure.retryable).toBe(false)
+  expect(failure.hint).toContain('image')
+})
+
+test('reports retryability for extracted category markers', () => {
+  expect(isRetryableOpenAICompatibilityFailureCategory('auth_invalid')).toBe(false)
+  expect(isRetryableOpenAICompatibilityFailureCategory('model_not_found')).toBe(false)
+  expect(isRetryableOpenAICompatibilityFailureCategory('context_overflow')).toBe(false)
+  expect(isRetryableOpenAICompatibilityFailureCategory('rate_limited')).toBe(true)
+  expect(isRetryableOpenAICompatibilityFailureCategory('provider_unavailable')).toBe(true)
+  expect(isRetryableOpenAICompatibilityFailureCategory('network_error')).toBe(true)
 })

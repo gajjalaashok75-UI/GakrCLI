@@ -56,6 +56,7 @@ import {
   createMicrocompactBoundaryMessage,
   stripSignatureBlocks,
 } from './utils/messages.js'
+import { analyzeContinuationIntent } from './utils/continuation.js'
 import { generateToolUseSummary } from './services/toolUseSummary/toolUseSummaryGenerator.js'
 import { prependUserContext, appendSystemContext } from './utils/api.js'
 import {
@@ -1620,7 +1621,11 @@ async function* queryLoop(
       // Continuation nudge: detect when the model signals intent to act but
       // doesn't call tools. Nudge it to proceed, capped at MAX_CONTINUATION_NUDGES
       // to prevent infinite loops.
-      if (state.continuationNudgeCount < MAX_CONTINUATION_NUDGES) {
+      if (
+        assistantMessages.length > 0 &&
+        turnCount < (maxTurns ?? Infinity) &&
+        state.continuationNudgeCount < MAX_CONTINUATION_NUDGES
+      ) {
         const lastAssistant = assistantMessages[assistantMessages.length - 1]
         if (lastAssistant?.type === 'assistant') {
           const lastText = lastAssistant.message.content
@@ -1650,13 +1655,17 @@ async function* queryLoop(
               : []),
           ]
 
+          const { shouldNudge, reason: nudgeReason } = analyzeContinuationIntent(
+            lastText,
+          )
+
           // Don't nudge if the text contains completion markers
           const completionMarkers = /\b(done|finished|completed|complete|summary|that's all|that is all|all set|hope this helps|let me know if)\b/
-          if (completionMarkers.test(lastText)) {
+          if (!shouldNudge && completionMarkers.test(lastText)) {
             // Model signaled completion — don't nudge
-          } else if (continuationSignals.some(re => re.test(lastText))) {
+          } else if (shouldNudge || continuationSignals.some(re => re.test(lastText))) {
             logForDebugging(
-              `Continuation nudge triggered (${state.continuationNudgeCount + 1}/${MAX_CONTINUATION_NUDGES}): model said "${lastText.slice(-120)}" without tool calls`,
+              `Continuation nudge triggered (${state.continuationNudgeCount + 1}/${MAX_CONTINUATION_NUDGES}): ${nudgeReason ?? 'continuation_signal'} detected in "${lastText.slice(-120)}" without tool calls`,
             )
             logEvent('tengu_continuation_nudge', {
               nudgeCount: state.continuationNudgeCount + 1,
@@ -1664,7 +1673,8 @@ async function* queryLoop(
               queryDepth: queryTracking.depth,
             })
             const nudge = createUserMessage({
-              content: 'Continue with the task. Use the appropriate tools to proceed.',
+              content:
+                'Continue with the task. If you were interrupted, resume your thought. Otherwise, use the appropriate tools to proceed to the next step.',
               isMeta: true,
             })
             const next: State = {

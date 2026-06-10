@@ -1,6 +1,7 @@
 // biome-ignore-all assist/source/organizeImports: internal-only import markers must not be reordered
 import { CONTEXT_1M_BETA_HEADER } from '../constants/betas.js'
 import { getGlobalConfig } from './config.js'
+import { logForDebugging } from './debug.js'
 import { isEnvTruthy } from './envUtils.js'
 import { resolveModelRuntimeLimits } from '../integrations/runtimeMetadata.js'
 import {
@@ -39,6 +40,8 @@ const MAX_OUTPUT_TOKENS_UPPER_LIMIT = 64_000
 export const CAPPED_DEFAULT_MAX_TOKENS = 8_000
 export const ESCALATED_MAX_TOKENS = 64_000
 
+const warnedUnknownIntegrationRuntimeLimitKeys = new Set<string>()
+
 /**
  * Check if 1M context is disabled via environment variable.
  * Used by C4E admins to disable 1M context for HIPAA compliance.
@@ -71,8 +74,23 @@ function shouldUseIntegrationRuntimeLimits(
 
   return (
     transportKind === 'openai-compatible' ||
+    transportKind === 'anthropic-proxy' ||
     transportKind === 'local' ||
     transportKind === 'gemini-native'
+  )
+}
+
+function warnUnknownIntegrationRuntimeLimits(model: string): void {
+  const routeId = resolveActiveRouteIdFromEnv(process.env) ?? 'unknown-route'
+  const warningKey = `${routeId}:${model}`
+  if (warnedUnknownIntegrationRuntimeLimitKeys.has(warningKey)) return
+
+  warnedUnknownIntegrationRuntimeLimitKeys.add(warningKey)
+  logForDebugging(
+    `[context] Warning: model "${model}" not in integration model metadata for route "${routeId}" - ` +
+      `using fallback ${OPENAI_FALLBACK_CONTEXT_WINDOW} token context window. ` +
+      'Add it to src/integrations/models for accurate compaction.',
+    { level: 'warn' },
   )
 }
 
@@ -108,10 +126,11 @@ export function getContextWindowForModel(
     if (runtimeLimits.contextWindow !== undefined) {
       return runtimeLimits.contextWindow
     }
-    console.error(
+    warnUnknownIntegrationRuntimeLimits(model)
+    /*
       `[context] Warning: model "${model}" not in integration model metadata — using conservative 128k default. ` +
       'Add it to src/integrations/models for accurate compaction.',
-    )
+    */
     return OPENAI_FALLBACK_CONTEXT_WINDOW
   }
 

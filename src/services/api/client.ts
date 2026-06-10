@@ -108,6 +108,14 @@ function isMiniMaxModelName(value: string | undefined): boolean {
   )
 }
 
+function hasMiniMaxModelIntent(model: string | undefined): boolean {
+  return (
+    isMiniMaxModelName(model) ||
+    isMiniMaxModelName(process.env.OPENAI_MODEL) ||
+    isMiniMaxModelName(process.env.ANTHROPIC_MODEL)
+  )
+}
+
 function isXaiModelName(value: string | undefined): boolean {
   const normalized = value?.trim().toLowerCase()
   return Boolean(
@@ -133,7 +141,10 @@ function isVeniceModelName(value: string | undefined): boolean {
 }
 
 function getMiniMaxBaseUrlOverride(): string | undefined {
-  const base = process.env.OPENAI_BASE_URL?.trim() || process.env.OPENAI_API_BASE?.trim()
+  const base =
+    process.env.ANTHROPIC_BASE_URL?.trim() ||
+    process.env.OPENAI_BASE_URL?.trim() ||
+    process.env.OPENAI_API_BASE?.trim()
   if (!base) return undefined
   try {
     const url = new URL(base)
@@ -141,6 +152,35 @@ function getMiniMaxBaseUrlOverride(): string | undefined {
   } catch {
     return undefined
   }
+}
+
+function hasConflictingOpenAIBaseUrlForMiniMax(): boolean {
+  const openAIBaseUrl =
+    process.env.OPENAI_BASE_URL?.trim() || process.env.OPENAI_API_BASE?.trim()
+  return Boolean(openAIBaseUrl && getMiniMaxBaseUrlOverride() === undefined)
+}
+
+function shouldUseMiniMaxEnvOnlyProvider(
+  model: string | undefined,
+  envOnlyProviderRouteId: string | null,
+): boolean {
+  const hasMiniMaxCredential =
+    process.env.MINIMAX_API_KEY?.trim() ||
+    (getMiniMaxBaseUrlOverride() !== undefined &&
+      process.env.ANTHROPIC_API_KEY?.trim())
+
+  if (!hasMiniMaxCredential) {
+    return false
+  }
+
+  if (envOnlyProviderRouteId === 'minimax') {
+    return true
+  }
+
+  return (
+    (hasMiniMaxModelIntent(model) || getMiniMaxBaseUrlOverride() !== undefined) &&
+    !hasConflictingOpenAIBaseUrlForMiniMax()
+  )
 }
 
 function getXaiBaseUrlOverride(): string | undefined {
@@ -181,7 +221,7 @@ function getVeniceBaseUrlOverride(): string | undefined {
 }
 
 function getRouteDefaultBaseUrl(route: 'minimax' | 'xai' | 'xiaomi-mimo' | 'venice'): string {
-  if (route === 'minimax') return 'https://api.minimax.io/v1'
+  if (route === 'minimax') return 'https://api.minimax.io/anthropic'
   if (route === 'xiaomi-mimo') return 'https://api.xiaomimimo.com/v1'
   if (route === 'venice') return 'https://api.venice.ai/api/v1'
   return 'https://api.x.ai/v1'
@@ -194,29 +234,29 @@ function getRouteDefaultModel(route: 'minimax' | 'xai' | 'xiaomi-mimo' | 'venice
   return 'grok-4.3'
 }
 
-function applyMiniMaxEnvOnlyDefaults(requestedModel?: string): void {
-  const baseUrlOverride = getMiniMaxBaseUrlOverride()
-  const hasMiniMaxBaseOverride = baseUrlOverride !== undefined
-  const modelOverride = process.env.OPENAI_MODEL?.trim() || undefined
+function applyMiniMaxEnvOnlyDefaults(model: string | undefined): void {
+  const modelOverride =
+    (isMiniMaxModelName(model) ? model?.trim() : undefined) ??
+    process.env.OPENAI_MODEL?.trim() ??
+    process.env.ANTHROPIC_MODEL?.trim() ??
+    undefined
+  const apiKey =
+    process.env.MINIMAX_API_KEY?.trim() ||
+    process.env.ANTHROPIC_API_KEY?.trim()
 
-  process.env.GAKR_CODE_USE_OPENAI = '1'
-  process.env.OPENAI_BASE_URL =
-    baseUrlOverride ?? getRouteDefaultBaseUrl('minimax')
-  
-  // Priority: requested model (if MiniMax) > env override (if MiniMax) > default
-  const finalModel = 
-    (requestedModel && isMiniMaxModelName(requestedModel) ? requestedModel : undefined) ??
-    (hasMiniMaxBaseOverride || isMiniMaxModelName(modelOverride) ? modelOverride : undefined) ??
+  if (apiKey) {
+    process.env.ANTHROPIC_API_KEY = apiKey
+  }
+  process.env.ANTHROPIC_BASE_URL =
+    getMiniMaxBaseUrlOverride() ?? getRouteDefaultBaseUrl('minimax')
+  process.env.ANTHROPIC_MODEL =
+    (isMiniMaxModelName(modelOverride) ? modelOverride : undefined) ??
     getRouteDefaultModel('minimax')
-  
-  process.env.OPENAI_MODEL = finalModel
-  process.env.OPENAI_API_KEY = process.env.MINIMAX_API_KEY
+  delete process.env.GAKR_CODE_USE_OPENAI
   delete process.env.OPENAI_API_FORMAT
   delete process.env.OPENAI_AUTH_HEADER
   delete process.env.OPENAI_AUTH_SCHEME
   delete process.env.OPENAI_AUTH_HEADER_VALUE
-  // Delete conflicting API keys to prevent the openaiShim from using the wrong one
-  delete process.env.XAI_API_KEY
 }
 
 function applyXaiEnvOnlyDefaults(requestedModel?: string): void {
@@ -451,8 +491,37 @@ export async function getAnthropicClient({
     defaultHeaders['x-anthropic-additional-protection'] = 'true'
   }
 
+  const envOnlyProviderRouteId = resolveEnvOnlyProviderRouteId()
+  const useMiniMaxEnvOnlyProvider = shouldUseMiniMaxEnvOnlyProvider(
+    model,
+    envOnlyProviderRouteId,
+  )
+  const useVeniceEnvOnlyProvider =
+    envOnlyProviderRouteId === 'venice' && !useMiniMaxEnvOnlyProvider
+  const useXiaomiMimoEnvOnlyProvider =
+    envOnlyProviderRouteId === 'xiaomi-mimo' && !useMiniMaxEnvOnlyProvider
+  const useXaiEnvOnlyProvider =
+    envOnlyProviderRouteId === 'xai' && !useMiniMaxEnvOnlyProvider
+
+  if (useMiniMaxEnvOnlyProvider) {
+    applyMiniMaxEnvOnlyDefaults(model)
+  }
+  if (useVeniceEnvOnlyProvider) {
+    applyVeniceEnvOnlyDefaults(model)
+  }
+  if (useXiaomiMimoEnvOnlyProvider) {
+    applyXiaomiMimoEnvOnlyDefaults(model)
+  }
+  if (useXaiEnvOnlyProvider) {
+    applyXaiEnvOnlyDefaults(model)
+  }
+
   const shouldUseFirstPartyAuth =
     shouldUseFirstPartyAnthropicAuth(providerOverride)
+  const useMiniMaxNativeProvider =
+    useMiniMaxEnvOnlyProvider ||
+    (getAPIProvider() === 'minimax' &&
+      !isEnvTruthy(process.env.GAKR_CODE_USE_OPENAI))
 
   if (shouldUseFirstPartyAuth) {
     logForDebugging('[API:auth] OAuth token check starting')
@@ -517,27 +586,7 @@ export async function getAnthropicClient({
     return new Anthropic(nativeArgs)
   }
 
-  // Check for env-only provider routes (MiniMax, xAI, Venice, Xiaomi MiMo)
-  const envOnlyProviderRouteId = resolveEnvOnlyProviderRouteId()
-  const useXaiEnvOnlyProvider = envOnlyProviderRouteId === 'xai'
-  const useMiniMaxEnvOnlyProvider = envOnlyProviderRouteId === 'minimax'
-  const useVeniceEnvOnlyProvider = envOnlyProviderRouteId === 'venice'
-  const useXiaomiMimoEnvOnlyProvider = envOnlyProviderRouteId === 'xiaomi-mimo'
-  if (useMiniMaxEnvOnlyProvider) {
-    applyMiniMaxEnvOnlyDefaults(model)
-  }
-  if (useVeniceEnvOnlyProvider) {
-    applyVeniceEnvOnlyDefaults(model)
-  }
-  if (useXiaomiMimoEnvOnlyProvider) {
-    applyXiaomiMimoEnvOnlyDefaults(model)
-  }
-  if (useXaiEnvOnlyProvider) {
-    applyXaiEnvOnlyDefaults(model)
-  }
-
   if (
-    useMiniMaxEnvOnlyProvider ||
     useVeniceEnvOnlyProvider ||
     useXiaomiMimoEnvOnlyProvider ||
     useXaiEnvOnlyProvider ||
@@ -709,7 +758,11 @@ export async function getAnthropicClient({
 
   // Determine authentication method based on available tokens
   const clientConfig: ConstructorParameters<typeof Anthropic>[0] = {
-    apiKey: isGakrcliAiSubscriber ? null : apiKey || getAnthropicApiKey(),
+    apiKey: isGakrcliAiSubscriber
+      ? null
+      : useMiniMaxNativeProvider
+        ? process.env.MINIMAX_API_KEY || process.env.ANTHROPIC_API_KEY
+        : apiKey || getAnthropicApiKey(),
     authToken: isGakrcliAiSubscriber
       ? getgakrcliAIOAuthTokens()?.accessToken
       : undefined,
@@ -717,6 +770,8 @@ export async function getAnthropicClient({
     ...(process.env.USER_TYPE === 'ant' &&
     isEnvTruthy(process.env.USE_STAGING_OAUTH)
       ? { baseURL: getOauthConfig().BASE_API_URL }
+      : process.env.ANTHROPIC_BASE_URL
+        ? { baseURL: process.env.ANTHROPIC_BASE_URL }
       : {}),
     ...ARGS,
     ...(isDebugToStdErr() && { logger: createStderrLogger() }),
@@ -743,10 +798,9 @@ function getCustomHeaders(): Record<string, string> {
 
   if (!customHeadersEnv) return customHeaders
 
-  // Split by newlines to support multiple headers
-  const headerStrings = customHeadersEnv.split(/\n|\r\n/)
+  if (customHeadersEnv.includes('\r')) return customHeaders
 
-  for (const headerString of headerStrings) {
+  for (const headerString of customHeadersEnv.split('\n')) {
     if (!headerString.trim()) continue
 
     // Parse header in format "Name: Value" (curl style). Split on first `:`

@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import test from 'node:test'
 
 import { DEFAULT_CODEX_BASE_URL } from '../services/api/providerConfig.js'
+import { resolveActiveRouteIdFromEnv } from '../integrations/routeMetadata.js'
 import {
   acquireSharedMutationLock,
   releaseSharedMutationLock,
@@ -24,6 +25,7 @@ import {
   createProfileFile,
   deleteProfileFile,
   getDefaultProfileFilePath,
+  isDefaultStartupProviderEnv,
   isPersistedCodexOAuthProfile,
   maskSecretForDisplay,
   loadProfileFile,
@@ -974,13 +976,10 @@ test('buildStartupEnvFromProfile leaves explicit provider selections untouched',
     processEnv,
   })
 
-  // Remove the strict object equality check: assert.equal(env, processEnv)
+  assert.equal(env, processEnv)
   assert.equal(env.GAKR_CODE_USE_GEMINI, '1')
   assert.equal(env.GEMINI_API_KEY, 'gem-live')
   assert.equal(env.GEMINI_MODEL, 'gemini-2.0-flash')
-  // Add the new default fields injected by the function
-  assert.equal(env.GEMINI_BASE_URL, 'https://generativelanguage.googleapis.com/v1beta/openai')
-  assert.equal(env.GEMINI_AUTH_MODE, 'api-key')
   assert.equal(env.OPENAI_API_KEY, undefined)
 })
 
@@ -1627,4 +1626,166 @@ test('atomic-chat launch ignores mismatched persisted openai env', async () => {
   assert.equal(env.OPENAI_API_KEY, undefined)
   assert.equal(env.CODEX_API_KEY, undefined)
   assert.equal(env.CHATGPT_ACCOUNT_ID, undefined)
+})
+
+test.skip('buildStartupEnvFromProfile defaults fresh installs to Gitlawb Opengateway', async () => {
+  const env = await buildStartupEnvFromProfile({
+    persisted: null,
+    processEnv: {},
+  })
+
+  assert.equal(env.GAKR_CODE_USE_OPENAI, '1')
+  assert.equal(env.OPENAI_BASE_URL, 'https://opengateway.gitlawb.com/v1')
+  assert.equal(env.OPENAI_MODEL, 'mimo-v2.5-pro')
+  assert.equal(isDefaultStartupProviderEnv(env), true)
+})
+
+test('buildStartupEnvFromProfile preserves explicit OpenAI-compatible env without a saved profile', async () => {
+  const env = await buildStartupEnvFromProfile({
+    persisted: null,
+    processEnv: {
+      GAKR_CODE_USE_OPENAI: '1',
+      OPENAI_API_KEY: 'sk-live',
+      OPENAI_BASE_URL: 'http://common.example.com/v1',
+      OPENAI_MODEL: 'gemma-4-31B-it',
+    },
+  })
+
+  assert.equal(env.GAKR_CODE_USE_OPENAI, '1')
+  assert.equal(env.OPENAI_API_KEY, 'sk-live')
+  assert.equal(env.OPENAI_BASE_URL, 'http://common.example.com/v1')
+  assert.equal(env.OPENAI_MODEL, 'gemma-4-31B-it')
+  assert.equal(resolveActiveRouteIdFromEnv(env), 'custom')
+  assert.equal(isDefaultStartupProviderEnv(env), false)
+})
+
+test('xai OAuth profile ignores ambient OPENAI_API_KEY and preserves marker', async () => {
+  const env = await buildLaunchEnv({
+    profile: 'xai',
+    persisted: profile('xai', {
+      OPENAI_BASE_URL: 'https://api.x.ai/v1',
+      OPENAI_MODEL: 'grok-4.3',
+      XAI_CREDENTIAL_SOURCE: 'oauth',
+    }),
+    goal: 'balanced',
+    processEnv: {
+      OPENAI_API_KEY: 'sk-openai-shell-key',
+    },
+  })
+
+  // Marker survives so startup validation accepts the profile.
+  assert.equal(env.XAI_CREDENTIAL_SOURCE, 'oauth')
+  // OpenAI key is NOT promoted into the xAI bearer surface.
+  assert.equal(env.XAI_API_KEY, undefined)
+  // openaiShim short-circuits on OPENAI_API_KEY before checking the
+  // stored OAuth token, so it must also be cleared from the resulting
+  // process env (clearManagedProfileEnv + no promotion in profileEnv).
+  assert.equal(env.OPENAI_API_KEY, undefined)
+  // Base URL and model still come through.
+  assert.equal(env.OPENAI_BASE_URL, 'https://api.x.ai/v1')
+  assert.equal(env.OPENAI_MODEL, 'grok-4.3')
+})
+
+test('xai OAuth profile still honors an explicit XAI_API_KEY override', async () => {
+  const env = await buildLaunchEnv({
+    profile: 'xai',
+    persisted: profile('xai', {
+      OPENAI_BASE_URL: 'https://api.x.ai/v1',
+      OPENAI_MODEL: 'grok-4.3',
+      XAI_CREDENTIAL_SOURCE: 'oauth',
+    }),
+    goal: 'balanced',
+    processEnv: {
+      XAI_API_KEY: 'xai-explicit-override',
+      OPENAI_API_KEY: 'sk-openai-shell-key',
+    },
+  })
+
+  // Explicit XAI_API_KEY wins; the OAuth marker drops because we have
+  // a concrete bearer to send.
+  assert.equal(env.XAI_API_KEY, 'xai-explicit-override')
+  assert.equal(env.OPENAI_API_KEY, 'xai-explicit-override')
+  assert.equal(env.XAI_CREDENTIAL_SOURCE, undefined)
+})
+
+test('xai non-OAuth profile (legacy api-key flow) still accepts OPENAI_API_KEY fallback', async () => {
+  // Backward-compat: an xAI profile saved before the OAuth flow existed
+  // (no XAI_CREDENTIAL_SOURCE marker) used to inherit OPENAI_API_KEY
+  // for one-off connections. Don't break that path.
+  const env = await buildLaunchEnv({
+    profile: 'xai',
+    persisted: profile('xai', {
+      OPENAI_BASE_URL: 'https://api.x.ai/v1',
+      OPENAI_MODEL: 'grok-4.3',
+    }),
+    goal: 'balanced',
+    processEnv: {
+      OPENAI_API_KEY: 'xai-disguised-as-openai-key',
+    },
+  })
+
+  assert.equal(env.XAI_API_KEY, 'xai-disguised-as-openai-key')
+  assert.equal(env.OPENAI_API_KEY, 'xai-disguised-as-openai-key')
+})
+
+test('buildStartupEnvFromProfile ignores the legacy file when startup already has concrete env', async () => {
+  const processEnv: NodeJS.ProcessEnv = {
+    GAKR_CODE_USE_OPENAI: '1',
+    OPENAI_BASE_URL: 'https://api.moonshot.ai/v1',
+    OPENAI_MODEL: 'kimi-k2.6',
+  }
+
+  const env = await buildStartupEnvFromProfile({
+    persisted: profile('openai', {
+      OPENAI_API_KEY: 'sk-stale',
+      OPENAI_MODEL: 'Meta-Llama-3.1-70B-Instruct',
+      OPENAI_BASE_URL: 'https://api.sambanova.ai/v1',
+    }),
+    processEnv,
+  })
+
+  assert.equal(env, processEnv)
+  assert.equal(env.OPENAI_BASE_URL, 'https://api.moonshot.ai/v1')
+  assert.equal(env.OPENAI_MODEL, 'kimi-k2.6')
+  assert.equal(env.OPENAI_API_KEY, undefined)
+})
+
+test('buildStartupEnvFromProfile falls back to the legacy file when startup env is incomplete', async () => {
+  const processEnv = {
+    GAKR_CODE_USE_OPENAI: '1',
+  }
+
+  const env = await buildStartupEnvFromProfile({
+    persisted: profile('openai', {
+      OPENAI_API_KEY: 'sk-legacy',
+      OPENAI_MODEL: 'gpt-4o',
+      OPENAI_BASE_URL: 'https://api.openai.com/v1',
+    }),
+    processEnv,
+  })
+
+  assert.notEqual(env, processEnv)
+  assert.equal(env.OPENAI_API_KEY, 'sk-legacy')
+  assert.equal(env.OPENAI_BASE_URL, 'https://api.openai.com/v1')
+  assert.equal(env.OPENAI_MODEL, 'gpt-4o')
+})
+
+test('buildStartupEnvFromProfile ignores falsey provider flags when deciding whether startup env is concrete', async () => {
+  const processEnv = {
+    GAKR_CODE_USE_OPENAI: '0',
+    OPENAI_BASE_URL: 'https://api.stale.example/v1',
+    OPENAI_MODEL: 'stale-model',
+  }
+
+  const env = await buildStartupEnvFromProfile({
+    persisted: profile('openai', {
+      OPENAI_API_KEY: 'sk-legacy',
+      OPENAI_MODEL: 'gpt-4o',
+      OPENAI_BASE_URL: 'https://api.openai.com/v1',
+    }),
+    processEnv,
+  })
+
+  assert.notEqual(env, processEnv)
+  assert.equal(env.OPENAI_API_KEY, 'sk-legacy')
 })

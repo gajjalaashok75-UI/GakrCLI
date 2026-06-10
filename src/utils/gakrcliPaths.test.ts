@@ -1,11 +1,16 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
-import * as fsPromises from 'fs/promises'
-import { homedir } from 'os'
-import { join } from 'path'
+import { afterEach, describe, expect, mock, test } from 'bun:test'
 import {
-  acquireSharedMutationLock,
-  releaseSharedMutationLock,
-} from '../test/sharedMutationLock.js'
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'fs'
+import * as fsPromises from 'fs/promises'
+import { homedir, tmpdir } from 'os'
+import { join } from 'path'
+import { acquireEnvMutex, releaseEnvMutex } from '../entrypoints/sdk/shared.js'
 
 const originalEnv = { ...process.env }
 const originalArgv = [...process.argv]
@@ -26,22 +31,19 @@ async function importFreshPlans() {
   return import(`./plans.ts?ts=${Date.now()}-${Math.random()}`)
 }
 
-beforeEach(async () => {
-  await acquireSharedMutationLock('gakrcliPaths.test.ts')
-})
-
 afterEach(() => {
   try {
     process.env = { ...originalEnv }
     process.argv = [...originalArgv]
     mock.restore()
   } finally {
-    releaseSharedMutationLock()
+    releaseEnvMutex()
   }
 })
 
 describe('GakrCLI paths', () => {
   test('defaults user config home to ~/.gakrcli', async () => {
+    await acquireEnvMutex()
     delete process.env.GAKR_CONFIG_DIR
     const { resolveGakrcliConfigHomeDir } = await importFreshEnvUtils()
 
@@ -53,6 +55,7 @@ describe('GakrCLI paths', () => {
   })
 
   test('hard-cuts user config home to ~/.gakrcli by default', async () => {
+    await acquireEnvMutex()
     delete process.env.GAKR_CONFIG_DIR
     const { resolveGakrcliConfigHomeDir } = await importFreshEnvUtils()
 
@@ -62,7 +65,7 @@ describe('GakrCLI paths', () => {
       }),
     ).toBe(join(homedir(), '.gakrcli'))
   })
-
+  
   test('uses GAKR_CONFIG_DIR override when provided', async () => {
     process.env.GAKR_CONFIG_DIR = '/tmp/custom-gakrcli'
     const { getgakrcliConfigHomeDir, resolveGakrcliConfigHomeDir } =
@@ -103,6 +106,7 @@ describe('GakrCLI paths', () => {
   })
 
   test('default plans directory uses ~/.gakrcli/plans', async () => {
+    await acquireEnvMutex()
     delete process.env.GAKR_CONFIG_DIR
     const { getDefaultPlansDirectory } = await importFreshPlans()
 
@@ -112,6 +116,7 @@ describe('GakrCLI paths', () => {
   })
 
   test('default plans directory respects explicit GAKR_CONFIG_DIR', async () => {
+    await acquireEnvMutex()
     const { getDefaultPlansDirectory } = await importFreshPlans()
 
     expect(
@@ -120,6 +125,7 @@ describe('GakrCLI paths', () => {
   })
 
   test('default plans directory normalizes generated path to NFC', async () => {
+    await acquireEnvMutex()
     const { getDefaultPlansDirectory } = await importFreshPlans()
 
     expect(
@@ -128,6 +134,7 @@ describe('GakrCLI paths', () => {
   })
 
   test('default plans directory normalizes explicit GAKR_CONFIG_DIR to NFC', async () => {
+    await acquireEnvMutex()
     const { getDefaultPlansDirectory } = await importFreshPlans()
 
     expect(
@@ -135,7 +142,22 @@ describe('GakrCLI paths', () => {
     ).toBe(join('/tmp/caf\u00e9-gakrcli', 'plans'))
   })
 
+  test('uses GAKR_CONFIG_DIR override when provided', async () => {
+    await acquireEnvMutex()
+    process.env.GAKR_CONFIG_DIR = '/tmp/custom-gakrcli'
+    const { getGakrcliConfigHomeDir, resolveGakrcliConfigHomeDir } =
+      await importFreshEnvUtils()
+
+    expect(getGakrcliConfigHomeDir()).toBe('/tmp/custom-gakrcli')
+    expect(
+      resolveGakrcliConfigHomeDir({
+        configDirEnv: '/tmp/custom-gakrcli',
+      }),
+    ).toBe('/tmp/custom-gakrcli')
+  })
+
   test('project and local settings paths use .gakrcli', async () => {
+    await acquireEnvMutex()
     const { getRelativeSettingsFilePathForSource } = await importFreshSettings()
 
     expect(getRelativeSettingsFilePathForSource('projectSettings')).toBe(
@@ -147,6 +169,9 @@ describe('GakrCLI paths', () => {
   })
 
   test('local installer uses gakrcli wrapper path', async () => {
+    await acquireEnvMutex()
+    // Force .gakrcli config home so the test doesn't fall back to
+    // ~/.claude when ~/.gakrcli doesn't exist on this machine.
     process.env.GAKR_CONFIG_DIR = join(homedir(), '.gakrcli')
     const { getLocalGakrcliPath } = await importFreshLocalInstaller()
 
@@ -156,6 +181,7 @@ describe('GakrCLI paths', () => {
   })
 
   test('local installation detection matches .gakrcli path', async () => {
+    await acquireEnvMutex()
     const { isManagedLocalInstallationPath } =
       await importFreshLocalInstaller()
 
@@ -183,6 +209,7 @@ describe('GakrCLI paths', () => {
     expect(
       getCandidateLocalInstallDirs({
         configHomeDir: join(homedir(), '.gakrcli'),
+        homeDir: homedir(),
       }),
     ).toEqual([join(homedir(), '.gakrcli', 'local')])
   })

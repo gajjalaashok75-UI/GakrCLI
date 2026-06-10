@@ -56,7 +56,7 @@ export function runPostCompactCleanup(querySource?: QuerySource): void {
     // Manual /compact already clears this explicitly at its call sites;
     // auto-compact and reactive-compact did not — this centralizes the
     // clear so all compaction paths behave consistently.
-    getUserContext.cache.clear?.()
+    getUserContext.cache?.clear?.()
     resetGetMemoryFilesCache('compact')
   }
   clearSystemPromptSections()

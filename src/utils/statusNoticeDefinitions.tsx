@@ -35,6 +35,23 @@ export type StatusNoticeDefinition = {
   render: (context: StatusNoticeContext) => React.ReactNode;
 };
 
+function WarningNoticeRow({
+  children,
+  marginTop,
+}: {
+  children: React.ReactNode;
+  marginTop?: number;
+}): React.ReactNode {
+  return <Box flexDirection="row" marginTop={marginTop}>
+      <Box marginRight={1}>
+        <Text color="warning">{figures.warning}</Text>
+      </Box>
+      <Box flexDirection="column" flexShrink={1}>
+        {children}
+      </Box>
+    </Box>;
+}
+
 // Individual notice definitions
 const largeMemoryFilesNotice: StatusNoticeDefinition = {
   id: 'large-memory-files',
@@ -162,15 +179,14 @@ const largeAgentDescriptionsNotice: StatusNoticeDefinition = {
   },
   render: context => {
     const totalTokens = getAgentDescriptionsTotalTokens(context.agentDefinitions);
-    return <Box flexDirection="row">
-        <Text color="warning">{figures.warning}</Text>
+    return <WarningNoticeRow>
         <Text color="warning">
           Large cumulative agent descriptions will impact performance (~
           {formatNumber(totalTokens)} tokens &gt;{' '}
           {formatNumber(AGENT_DESCRIPTIONS_THRESHOLD)})
           <Text dimColor> · /agents to manage</Text>
         </Text>
-      </Box>;
+      </WarningNoticeRow>;
   }
 };
 const jetbrainsPluginNotice: StatusNoticeDefinition = {
@@ -223,14 +239,13 @@ const thirdPartyPermissiveModeNotice: StatusNoticeDefinition = {
   },
   render: ctx => {
     const mode = ctx.permissionMode;
-    return <Box flexDirection="row">
-        <Text color="warning">{figures.warning}</Text>
+    return <WarningNoticeRow>
         <Text color="warning">
           <Text bold>{mode}</Text> mode is active on a third-party provider —
           tool calls run without the AI safety classifier.
           <Text dimColor> Inspect tool calls manually, especially when working with untrusted code.</Text>
         </Text>
-      </Box>;
+      </WarningNoticeRow>;
   }
 };
 
@@ -244,14 +259,13 @@ const dangerouslySkipPermissionsNotice: StatusNoticeDefinition = {
   isActive: ctx =>
     hasDangerouslySkipPermissionsArg() ||
     ctx.permissionMode === 'bypassPermissions',
-  render: () => <Box flexDirection="row">
-      <Text color="warning">{figures.warning}</Text>
+  render: () => <WarningNoticeRow>
       <Text color="warning">
         <Text bold>--dangerously-skip-permissions</Text> bypasses every tool
         consent check.
         <Text dimColor> Only use inside a sandbox with no internet access. Restart without the flag to re-enable prompts.</Text>
       </Text>
-    </Box>
+    </WarningNoticeRow>
 };
 
 const localModelContextLoadNotice: StatusNoticeDefinition = {

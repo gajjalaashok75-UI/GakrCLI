@@ -86,6 +86,99 @@ describe('Session timeout fix', () => {
 // Fix 3: Agent loop continuation nudge
 // ---------------------------------------------------------------------------
 describe('Agent loop continuation nudge', () => {
+  test('continuation logic has been moved to utility', async () => {
+    const content = await file('query.ts').text()
+    expect(content).toContain('analyzeContinuationIntent')
+  })
+
+  test('continuation.ts has robust patterns', async () => {
+    const content = await file('utils/continuation.ts').text()
+
+    expect(content).toContain('CONTINUATION_SIGNALS')
+    expect(content).toContain('COMPLETION_MARKERS')
+    expect(content).toMatch(/so now \(i\|let me\|we\)/)
+  })
+
+  test('analyzeContinuationIntent behavior follows project standards', async () => {
+    const { analyzeContinuationIntent } = await import('../utils/continuation.js')
+
+    expect(analyzeContinuationIntent('So now I will start task 2').shouldNudge).toBe(true)
+    expect(analyzeContinuationIntent('I will now do the following').shouldNudge).toBe(true)
+
+    expect(analyzeContinuationIntent('Task finished').shouldNudge).toBe(false)
+
+    expect(
+      analyzeContinuationIntent(
+        'The analysis is complete and no code changes are needed here',
+      ).shouldNudge,
+    ).toBe(false)
+    expect(
+      analyzeContinuationIntent(
+        'I changed package.json and src/query.ts and added tests',
+      ).shouldNudge,
+    ).toBe(false)
+    expect(
+      analyzeContinuationIntent(
+        'Updated src/query.ts and added coverage in bugfixes.test.ts',
+      ).shouldNudge,
+    ).toBe(false)
+    expect(
+      analyzeContinuationIntent(
+        'This should be ready after the latest test updates',
+      ).shouldNudge,
+    ).toBe(false)
+
+    expect(
+      analyzeContinuationIntent('Task 1 is done. Let me update the status.')
+        .shouldNudge,
+    ).toBe(true)
+    expect(
+      analyzeContinuationIntent('Task 1 finished. I will now run tests.')
+        .shouldNudge,
+    ).toBe(true)
+    expect(
+      analyzeContinuationIntent('Analysis complete. Now I will edit src/query.ts')
+        .shouldNudge,
+    ).toBe(true)
+    expect(
+      analyzeContinuationIntent(
+        'No issues in the first file. I will now inspect the next one.',
+      ).shouldNudge,
+    ).toBe(true)
+
+    expect(
+      analyzeContinuationIntent(
+        'Setup is complete. Here is the code:\n```typescript\nfunction run() {',
+      ).shouldNudge,
+    ).toBe(true)
+    expect(
+      analyzeContinuationIntent('Task complete. Please inspect (src/query.ts')
+        .shouldNudge,
+    ).toBe(true)
+    expect(
+      analyzeContinuationIntent(
+        'The analysis is done and now I am editing files and',
+      ).shouldNudge,
+    ).toBe(true)
+
+    expect(
+      analyzeContinuationIntent('I am currently updating the following files and')
+        .shouldNudge,
+    ).toBe(true)
+    expect(
+      analyzeContinuationIntent('Please check the results in (src/query.ts')
+        .shouldNudge,
+    ).toBe(true)
+    expect(analyzeContinuationIntent('The plan is as follows:').shouldNudge).toBe(
+      true,
+    )
+    expect(
+      analyzeContinuationIntent(
+        'Here is the code:\n```typescript\nfunction test() {',
+      ).shouldNudge,
+    ).toBe(true)
+  })
+
   test('query.ts has continuation signal detection', async () => {
     const content = await file('query.ts').text()
 
@@ -109,7 +202,7 @@ describe('Agent loop continuation nudge', () => {
     const content = await file('query.ts').text()
 
     expect(content).toContain(
-      'Continue with the task. Use the appropriate tools to proceed.',
+      'Continue with the task. If you were interrupted, resume your thought. Otherwise, use the appropriate tools to proceed to the next step.',
     )
   })
 })

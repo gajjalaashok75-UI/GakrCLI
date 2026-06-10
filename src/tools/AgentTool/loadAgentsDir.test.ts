@@ -124,6 +124,25 @@ describe('agent definition loading', () => {
     ).toBe(true)
   })
 
+  test('prefers .gakrcli project agents over legacy .claude agents', async () => {
+    const projectDir = join(tempDir, 'project')
+    await writeAgent(
+      join(projectDir, '.claude', 'agents', 'shared-agent.md'),
+      'shared-agent',
+      'legacy prompt',
+    )
+    await writeAgent(
+      join(projectDir, '.gakrcli', 'agents', 'shared-agent.md'),
+      'shared-agent',
+      'gakrcli prompt',
+    )
+
+    const { activeAgents } = await getAgentDefinitionsWithOverrides(projectDir)
+    const agent = activeAgents.find(agent => agent.agentType === 'shared-agent')
+
+    expect(agent?.getSystemPrompt()).toBe('gakrcli prompt')
+  })
+
   test('deduplicates agents by name across user and project sources', async () => {
     const projectDir = join(tempDir, 'project')
     await writeAgent(

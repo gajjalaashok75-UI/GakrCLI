@@ -135,6 +135,19 @@ export function getAttributionTexts(): AttributionTexts {
     return { commit: '', pr: '' }
   }
 
+  const settings = getInitialSettings()
+
+  if (settings.attribution) {
+    return {
+      commit: settings.attribution.commit ?? '',
+      pr: settings.attribution.pr ?? '',
+    }
+  }
+
+  if (settings.includeCoAuthoredBy !== true) {
+    return { commit: '', pr: '' }
+  }
+
   // First-party unknown models may be unreleased GakrCLI codenames. Other
   // providers can safely use the configured public model string.
   const model = getMainLoopModel()
@@ -147,26 +160,12 @@ export function getAttributionTexts(): AttributionTexts {
   const defaultAttribution =
     '🤖 Generated with [GakrCLI](https://github.com/gajjalaashok75-UI/GakrCLI)'
   const coAuthorEmail = getDefaultCommitCoAuthorEmail(apiProvider)
-  const defaultCommit = isEnvTruthy(
-    process.env.GAKR_DISABLE_CO_AUTHORED_BY,
+  const defaultCommit = (
+    isEnvTruthy(process.env.GAKRCLI_DISABLE_CO_AUTHORED_BY) ||
+    isEnvTruthy(process.env.GAKR_DISABLE_CO_AUTHORED_BY)
   )
     ? ''
     : `Co-Authored-By: ${modelName} <${coAuthorEmail}>`
-
-  const settings = getInitialSettings()
-
-  // New attribution setting takes precedence over deprecated includeCoAuthoredBy
-  if (settings.attribution) {
-    return {
-      commit: settings.attribution.commit ?? defaultCommit,
-      pr: settings.attribution.pr ?? defaultAttribution,
-    }
-  }
-
-  // Backward compatibility: deprecated includeCoAuthoredBy setting
-  if (settings.includeCoAuthoredBy === false) {
-    return { commit: '', pr: '' }
-  }
 
   return { commit: defaultCommit, pr: defaultAttribution }
 }
@@ -389,13 +388,14 @@ export async function getEnhancedPRAttribution(
 
   const settings = getInitialSettings()
 
-  // If user has custom PR attribution, use that
-  if (settings.attribution?.pr) {
+  if (settings.attribution?.pr !== undefined) {
     return settings.attribution.pr
   }
+  if (settings.attribution) {
+    return ''
+  }
 
-  // Backward compatibility: deprecated includeCoAuthoredBy setting
-  if (settings.includeCoAuthoredBy === false) {
+  if (settings.includeCoAuthoredBy !== true) {
     return ''
   }
 
@@ -426,7 +426,7 @@ export async function getEnhancedPRAttribution(
   const gakrPercent = attributionData?.summary.gakrPercent ?? 0
 
   logForDebugging(
-    `PR Attribution: gakrPercent: ${gakrpercent}, promptCount: ${promptCount}, memoryAccessCount: ${memoryAccessCount}`,
+    `PR Attribution: gakrPercent: ${gakrPercent}, promptCount: ${promptCount}, memoryAccessCount: ${memoryAccessCount}`,
   )
 
   // Get short model name, sanitized for non-internal repos

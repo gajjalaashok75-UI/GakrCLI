@@ -961,11 +961,12 @@ export const connectToServer = memoize(
         transport = clientTransport
         logMCPDebug(name, `In-process Computer Use MCP server started`)
       } else if (serverRef.type === 'stdio' || !serverRef.type) {
-        const finalCommand =
-          process.env.GAKR_CODE_SHELL_PREFIX || serverRef.command
-        const finalArgs = process.env.GAKR_CODE_SHELL_PREFIX
-          ? [[serverRef.command, ...serverRef.args].join(' ')]
-          : serverRef.args
+        const { command: finalCommand, args: finalArgs } =
+          buildMcpStdioCommand(
+            serverRef.command,
+            serverRef.args,
+            process.env.GAKR_CODE_SHELL_PREFIX,
+          )
         transport = new StdioClientTransport({
           command: finalCommand,
           args: finalArgs,
@@ -3402,4 +3403,45 @@ export async function setupSdkMcpClients(
   }
 
   return { clients, tools }
+}
+
+export function buildMcpStdioCommand(
+  command: string,
+  args: string[],
+  shellPrefix?: string,
+): { command: string; args: string[] } {
+  if (!shellPrefix) {
+    return { command, args }
+  }
+
+  let finalCommand: string
+  let prefixArgs: string[]
+  const cIndex = shellPrefix.lastIndexOf(' -c')
+  if (cIndex > 0) {
+    finalCommand = shellPrefix.substring(0, cIndex)
+    prefixArgs = [
+      '-c',
+      ...shellPrefix.substring(cIndex + 3).split(/\s+/).filter(Boolean),
+    ]
+  } else {
+    const parts = shellPrefix.split(/\s+/).filter(Boolean)
+    if (parts.length === 0 || !parts[0]) return { command, args }
+    finalCommand = parts[0]
+    prefixArgs = parts.slice(1)
+  }
+
+  if (prefixArgs.includes('-c')) {
+    const cmdStr = [command, ...args]
+      .map(a => `'${a.replace(/'/g, "'\\''")}'`)
+      .join(' ')
+    return {
+      command: finalCommand,
+      args: [...prefixArgs, cmdStr],
+    }
+  }
+
+  return {
+    command: finalCommand,
+    args: [...prefixArgs, command, ...args],
+  }
 }

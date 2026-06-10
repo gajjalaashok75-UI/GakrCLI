@@ -1237,6 +1237,8 @@ class Project {
         ? getAgentTranscriptPath(entry.agentId)
         : sessionFile
       void this.enqueueWrite(targetFile, entry)
+    } else if (entry.type === 'goal-state') {
+      await this.appendToFile(sessionFile, jsonStringify(entry) + '\n')
     } else if (entry.type === 'marble-origami-commit') {
       // Always append. Commit order matters for restore (later commits may
       // reference earlier commits' summary messages), so these must be

@@ -65,8 +65,18 @@ describe('loaded registry validation', () => {
     expect(missingDescriptors).toEqual([])
   })
 
-  test('gateway defaultModel values are present in their static catalog', () => {
-    const dynamicCatalogRoutes = new Set([
+  test('dynamic route catalogs rely entirely on discovery', () => {
+    const routes = [...getAllVendors(), ...getAllGateways()]
+    const dynamicCatalogsWithCuratedModels = routes
+      .filter(route => route.catalog?.source === 'dynamic')
+      .filter(route => (route.catalog?.models ?? []).length > 0)
+      .map(route => route.id)
+
+    expect(dynamicCatalogsWithCuratedModels).toEqual([])
+  })
+
+  test('gateway defaultModel values are present unless provided outside curated catalog metadata', () => {
+    const routesWithExternalDefaultModelSources = new Set([
       'atomic-chat',
       'custom',
       'lmstudio',
@@ -74,7 +84,7 @@ describe('loaded registry validation', () => {
     ])
     const missingDefaults = getAllGateways()
       .filter(gateway => gateway.defaultModel)
-      .filter(gateway => !dynamicCatalogRoutes.has(gateway.id))
+      .filter(gateway => !routesWithExternalDefaultModelSources.has(gateway.id))
       .filter(gateway => {
         const defaultModel = gateway.defaultModel?.trim()
         return !(gateway.catalog?.models ?? []).some(

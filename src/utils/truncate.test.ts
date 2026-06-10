@@ -12,4 +12,14 @@ describe('truncate utilities', () => {
   test('truncatePathMiddle returns empty string for undefined path', () => {
     expect(truncatePathMiddle(undefined, 20)).toBe('')
   })
+
+  test('truncate respects single-line mode and display width together', () => {
+    expect(truncate('abcdefghij\nrest', 5, true)).toBe('abcd\u2026')
+  })
+
+  test('truncateToWidth preserves CJK display width boundaries', () => {
+    expect(truncateToWidth('\u4f60\u597d\u4e16\u754c', 5)).toBe(
+      '\u4f60\u597d\u2026',
+    )
+  })
 })

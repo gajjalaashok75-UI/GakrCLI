@@ -421,8 +421,9 @@ async function cachedMicrocompactPath(
 export function evaluateTimeBasedTrigger(
   messages: Message[],
   querySource: QuerySource | undefined,
+  configOverride?: TimeBasedMCConfig,
 ): { gapMinutes: number; config: TimeBasedMCConfig } | null {
-  const config = getTimeBasedMCConfig()
+  const config = configOverride ?? getTimeBasedMCConfig()
   // Require an explicit main-thread querySource. isMainThreadSource treats
   // undefined as main-thread (for cached-MC backward-compat), but several
   // callers (/context, /compact, analyzeContext) invoke microcompactMessages
@@ -442,11 +443,16 @@ export function evaluateTimeBasedTrigger(
   return { gapMinutes, config }
 }
 
-function maybeTimeBasedMicrocompact(
+export function maybeTimeBasedMicrocompact(
   messages: Message[],
   querySource: QuerySource | undefined,
+  configOverride?: TimeBasedMCConfig,
 ): MicrocompactResult | null {
-  const trigger = evaluateTimeBasedTrigger(messages, querySource)
+  const trigger = evaluateTimeBasedTrigger(
+    messages,
+    querySource,
+    configOverride,
+  )
   if (!trigger) {
     return null
   }
@@ -487,6 +493,7 @@ function maybeTimeBasedMicrocompact(
     return {
       ...message,
       message: { ...message.message, content: newContent },
+      toolUseResult: undefined,
     }
   })
 
