@@ -19,6 +19,7 @@ export interface SearchHit {
 
 export interface SearchInput {
   query: string
+  max_results?: number
   allowed_domains?: string[]
   blocked_domains?: string[]
 }
