@@ -40,6 +40,13 @@ import {
 const inputSchema = lazySchema(() =>
   z.strictObject({
     query: z.string().min(2).describe('The search query to use'),
+    max_results: z
+      .number()
+      .int()
+      .min(1)
+      .max(30)
+      .optional()
+      .describe('Maximum number of web results to return'),
     allowed_domains: z
       .array(z.string())
       .optional()
@@ -695,6 +702,7 @@ export const WebSearchTool = buildTool({
         const providerOutput = await runSearch(
           {
             query: input.query,
+            max_results: input.max_results,
             allowed_domains: input.allowed_domains,
             blocked_domains: input.blocked_domains,
           },

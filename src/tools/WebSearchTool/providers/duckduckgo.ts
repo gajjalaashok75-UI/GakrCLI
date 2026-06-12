@@ -39,7 +39,7 @@ export const duckduckgoProvider: SearchProvider = {
         query: input.query,
         allowed_domains: input.allowed_domains,
         blocked_domains: input.blocked_domains,
-        max_results: DEFAULT_MAX_RESULTS,
+        max_results: input.max_results ?? DEFAULT_MAX_RESULTS,
         retry_attempts: DEFAULT_RETRY_ATTEMPTS,
         retry_backoff_seconds: DEFAULT_RETRY_BACKOFF_SECONDS,
       })
