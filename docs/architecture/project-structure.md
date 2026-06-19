@@ -1,6 +1,6 @@
 # Project Structure
 
-This map reflects the current repository layout for GakrCLI `0.5.6` and GakrCLI VS Code `0.2.4`.
+This map reflects the current repository layout for GakrCLI `0.5.7` and GakrCLI VS Code `0.2.4`.
 
 ## Repository Root
 

@@ -29,7 +29,7 @@ code --install-extension gakrcli-vscode-0.2.4.vsix
 The extension package depends on `@gakr-gakr/gakrcli`. For terminal mode, install the CLI globally too:
 
 ```bash
-npm install -g @gakr-gakr/gakrcli@0.5.6
+npm install -g @gakr-gakr/gakrcli@0.5.7
 ```
 
 ## Open GakrCLI
@@ -189,7 +189,7 @@ Dry-run package inspection:
 npx @vscode/vsce ls --tree
 ```
 
-Release note: `gakrcli-vscode@0.2.4` depends on `@gakr-gakr/gakrcli@0.5.6`, so publish the root npm package first, then refresh this extension lockfile before building the final VSIX.
+Release note: `gakrcli-vscode@0.2.4` depends on `@gakr-gakr/gakrcli@0.5.7`, so publish the root npm package first, then refresh this extension lockfile before building the final VSIX.
 
 ## More Docs
 

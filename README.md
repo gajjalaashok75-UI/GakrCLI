@@ -4,7 +4,7 @@
 
 # GakrCLI
 
-**Version 0.5.6**
+**Version 0.5.7**
 
 Any model. Every tool. One terminal-first coding agent.
 
