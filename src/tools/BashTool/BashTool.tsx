@@ -1,6 +1,5 @@
 import { feature } from 'bun:bundle';
 import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs';
-import { readFileSync } from 'fs';
 import { copyFile, stat as fsStat, truncate as fsTruncate, link } from 'fs/promises';
 import * as React from 'react';
 import type { CanUseToolFn } from 'src/hooks/useCanUseTool.js';
@@ -17,7 +16,7 @@ import type { AgentId } from '../../types/ids.js';
 import type { AssistantMessage } from '../../types/message.js';
 import { parseForSecurity } from '../../utils/bash/ast.js';
 import { splitCommand_DEPRECATED, splitCommandWithOperators } from '../../utils/bash/commands.js';
-import { extractgakrcliCodeHints } from '../../utils/gakrcliCodeHints.js';
+import { extractGakrCLICodeHints } from '../../utils/gakrcliCodeHints.js';
 import { detectCodeIndexingFromCommand } from '../../utils/codeIndexing.js';
 import { isEnvTruthy } from '../../utils/envUtils.js';
 import { isENOENT, ShellError } from '../../utils/errors.js';
@@ -43,13 +42,13 @@ import { userFacingName as fileEditUserFacingName } from '../FileEditTool/UI.js'
 import { trackGitOperations } from '../shared/gitOperationTracking.js';
 import { bashToolHasPermission, commandHasAnyCd, matchWildcardPattern, permissionRuleExtractPrefix } from './bashPermissions.js';
 import { interpretCommandResult } from './commandSemantics.js';
-import { getDefaultTimeoutMs, getMaxTimeoutMs, getSimplePrompt } from './prompt.js';
+import { getEffectiveTimeoutMs, getMaxTimeoutMs, getSimplePrompt } from './prompt.js';
 import { checkReadOnlyConstraints } from './readOnlyValidation.js';
 import { parseSedEditCommand } from './sedEditParser.js';
 import { shouldUseSandbox } from './shouldUseSandbox.js';
 import { BASH_TOOL_NAME } from './toolName.js';
 import { BackgroundHint, renderToolResultMessage, renderToolUseErrorMessage, renderToolUseMessage, renderToolUseProgressMessage, renderToolUseQueuedMessage } from './UI.js';
-import { buildImageToolResult, isImageOutput, resetCwdIfOutsideProject, resizeShellImageOutput, stdErrAppendShellResetMessage, stripEmptyLines } from './utils.js';
+import { buildImageToolResult, isImageOutput, resetCwdIfOutsideProject, resizeShellImageOutput, selectFailureOutput, stdErrAppendShellResetMessage, stripEmptyLines } from './utils.js';
 const EOL = '\n';
 
 // Progress display constants
@@ -581,7 +580,7 @@ export const BashTool = buildTool({
       };
     }
 
-    // For image data, format as image content block for Gakr
+    // For image data, format as image content block for GakrCLI
     if (isImage) {
       const block = buildImageToolResult(stdout, toolUseID);
       if (block) return block;
@@ -668,23 +667,32 @@ export const BashTool = buildTool({
 
       // Consume the generator and capture the return value
       let generatorResult;
+      // Capture the most recent `fullOutput` yielded by the streaming
+      // generator so we can fall back to it for failure messages when the
+      // final ExecResult.stdout slot ends up empty (#1231).
+      let lastProgressFullOutput = '';
       do {
         generatorResult = await commandGenerator.next();
-        if (!generatorResult.done && onProgress) {
+        if (!generatorResult.done) {
           const progress = generatorResult.value;
-          onProgress({
-            toolUseID: `bash-progress-${progressCounter++}`,
-            data: {
-              type: 'bash_progress',
-              output: progress.output,
-              fullOutput: progress.fullOutput,
-              elapsedTimeSeconds: progress.elapsedTimeSeconds,
-              totalLines: progress.totalLines,
-              totalBytes: progress.totalBytes,
-              taskId: progress.taskId,
-              timeoutMs: progress.timeoutMs
-            }
-          });
+          if (typeof progress.fullOutput === 'string' && progress.fullOutput.length > 0) {
+            lastProgressFullOutput = progress.fullOutput;
+          }
+          if (onProgress) {
+            onProgress({
+              toolUseID: `bash-progress-${progressCounter++}`,
+              data: {
+                type: 'bash_progress',
+                output: progress.output,
+                fullOutput: progress.fullOutput,
+                elapsedTimeSeconds: progress.elapsedTimeSeconds,
+                totalLines: progress.totalLines,
+                totalBytes: progress.totalBytes,
+                taskId: progress.taskId,
+                timeoutMs: progress.timeoutMs
+              }
+            });
+          }
         }
       } while (!generatorResult.done);
 
@@ -710,24 +718,41 @@ export const BashTool = buildTool({
         }
       }
 
-      // Annotate output with sandbox violations if any (stderr is in stdout)
-      const outputWithSbFailures = SandboxManager.annotateStderrWithSandboxFailures(input.command, result.stdout || '');
+      // Annotate output with sandbox violations if any (stderr is in stdout).
+      // Issue #1231: pick the best non-empty failure body across three
+      // sources, ordered by trust:
+      //   1. The accumulator (after stripping the synthetic "Exit code N"
+      //      marker we appended above) — mirrors the success-path stdout
+      //      that was appended at line 696 above.
+      //   2. result.stdout from the shell runner.
+      //   3. lastProgressFullOutput — the most recent fullOutput yielded by
+      //      the streaming generator. Recovers stdout when the shell runner
+      //      streamed every line through progress callbacks but the final
+      //      ExecResult.stdout slot was left empty (flush-after-result race,
+      //      exit before EOF, persisted to file path, etc.).
+      // Strip the trailing "Exit code N" so getErrorParts() doesn't
+      // duplicate it; ShellError carries the code separately.
+      const accumulatedOutput = stdoutAccumulator
+        .toString()
+        .replace(new RegExp(`\\nExit code ${result.code}$`), '')
+        .replace(new RegExp(`^Exit code ${result.code}$`), '');
+      const failureOutput = selectFailureOutput(
+        accumulatedOutput,
+        result.stdout,
+        lastProgressFullOutput,
+      );
+      const outputWithSbFailures = SandboxManager.annotateStderrWithSandboxFailures(input.command, failureOutput);
       if (result.preSpawnError) {
         throw new Error(result.preSpawnError);
       }
       if (interpretationResult.isError && !isInterrupt) {
-        // Keep captured output on ShellError.stdout so formatted errors show
-        // the command output alongside the exit code.
-        let capturedOutput =
-          outputWithSbFailures || result.stdout || result.stderr || ''
-        if (!capturedOutput && result.outputFilePath) {
-          try {
-            capturedOutput = readFileSync(result.outputFilePath, 'utf8')
-          } catch {
-            // Keep the exit-code-only error if the temp output file vanished.
-          }
-        }
-        throw new ShellError(capturedOutput, '', result.code, result.interrupted);
+        // Merged-fd setup puts both streams into result.stdout. Carry it on
+        // the stdout slot of ShellError (matches PowerShellTool.tsx:595) so
+        // getErrorParts() emits the captured output alongside "Exit code N"
+        // — without this, a non-zero exit hides the very output users need
+        // to debug the failure (issue #1231). result.stderr is empty in
+        // file mode but populated in pipe mode (hooks).
+        throw new ShellError(outputWithSbFailures, result.stderr || '', result.code, result.interrupted);
       }
       wasInterrupted = result.interrupted;
     } finally {
@@ -783,13 +808,13 @@ export const BashTool = buildTool({
     }
     let strippedStdout = stripEmptyLines(stdout);
 
-    // GakrCLI hints protocol: CLIs/SDKs gated on gakrcliCODE=1 emit a
+    // GakrCLI Code hints protocol: CLIs/SDKs gated on GAKRCLICODE=1 emit a
     // `<gakrcli-code-hint />` tag to stderr (merged into stdout here). Scan,
-    // record for usegakrcliCodeHintRecommendation to surface, then strip
+    // record for useGakrCLICodeHintRecommendation to surface, then strip
     // so the model never sees the tag — a zero-token side channel.
     // Stripping runs unconditionally (subagent output must stay clean too);
     // only the dialog recording is main-thread-only.
-    const extracted = extractgakrcliCodeHints(strippedStdout, input.command);
+    const extracted = extractGakrCLICodeHints(strippedStdout, input.command);
     strippedStdout = extracted.stripped;
     if (isMainThread && extracted.hints.length > 0) {
       for (const hint of extracted.hints) maybeRecordPluginHint(hint);
@@ -869,7 +894,7 @@ async function* runShellCommand({
     timeout,
     run_in_background
   } = input;
-  const timeoutMs = timeout || getDefaultTimeoutMs();
+  const timeoutMs = getEffectiveTimeoutMs(timeout);
   let fullOutput = '';
   let lastProgressOutput = '';
   let lastTotalLines = 0;
