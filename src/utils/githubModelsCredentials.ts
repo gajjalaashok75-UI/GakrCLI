@@ -10,6 +10,7 @@ export const GITHUB_MODELS_HYDRATED_ENV_MARKER =
 export type GithubModelsCredentialBlob = {
   accessToken: string
   oauthAccessToken?: string
+  credentialType?: 'copilot_token' | 'copilot_key'
 }
 
 type GithubTokenStatus = 'valid' | 'expired' | 'invalid_format'
@@ -113,6 +114,11 @@ export async function refreshGithubModelsTokenIfNeeded(): Promise<boolean> {
     return false
   }
 
+  // GITHUB_COPILOT_KEY is a direct API key, no refresh needed
+  if (process.env.GITHUB_COPILOT_KEY?.trim()) {
+    return false
+  }
+
   try {
     const secureStorage = getSecureStorage()
     const data = secureStorage.read() as
@@ -121,6 +127,13 @@ export async function refreshGithubModelsTokenIfNeeded(): Promise<boolean> {
     const blob = data?.githubModels
     const accessToken = blob?.accessToken?.trim() || ''
     const oauthToken = blob?.oauthAccessToken?.trim() || ''
+
+    if (blob?.credentialType === 'copilot_key') {
+      if (accessToken && !process.env.GITHUB_COPILOT_KEY?.trim()) {
+        process.env.GITHUB_COPILOT_KEY = accessToken
+      }
+      return false
+    }
 
     if (!accessToken && !oauthToken) {
       return false
@@ -138,7 +151,10 @@ export async function refreshGithubModelsTokenIfNeeded(): Promise<boolean> {
       return false
     }
 
-    const refreshed = await exchangeForCopilotToken(oauthToken)
+    // Get GHE URL for token exchange if in enterprise mode
+    const gheUrl = process.env.GITHUB_ENTERPRISE_URL?.trim() || undefined
+
+    const refreshed = await exchangeForCopilotToken(oauthToken, undefined, gheUrl)
     const saved = saveGithubModelsToken(refreshed.token, oauthToken)
     if (!saved.success) {
       return false
@@ -154,6 +170,7 @@ export async function refreshGithubModelsTokenIfNeeded(): Promise<boolean> {
 export function saveGithubModelsToken(
   token: string,
   oauthToken?: string,
+  options?: { credentialType?: GithubModelsCredentialBlob['credentialType'] },
 ): {
   success: boolean
   warning?: string
@@ -173,6 +190,7 @@ export function saveGithubModelsToken(
   const oauthTrimmed = oauthToken?.trim()
   const mergedBlob: GithubModelsCredentialBlob = {
     accessToken: trimmed,
+    credentialType: options?.credentialType ?? 'copilot_token',
   }
   if (oauthTrimmed) {
     mergedBlob.oauthAccessToken = oauthTrimmed
