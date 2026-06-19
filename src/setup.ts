@@ -344,7 +344,7 @@ export async function setup(
       setImmediate(() => {
         void import('./utils/attributionHooks.js').then(
           ({ registerAttributionHooks }) => {
-            registerAttributionHooks() // Register attribution tracking hooks (ant-only feature)
+            registerAttributionHooks() // Register attribution tracking hooks (internal-only feature)
           },
         )
       })
@@ -385,6 +385,7 @@ export async function setup(
   // If permission mode is set to bypass, verify we're in a safe environment
   if (
     permissionMode === 'bypassPermissions' ||
+    permissionMode === 'fullAccess' ||
     allowDangerouslySkipPermissions
   ) {
     // Check if running as root/sudo on Unix-like systems

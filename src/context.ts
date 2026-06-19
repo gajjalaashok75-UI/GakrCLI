@@ -1,13 +1,13 @@
 import { feature } from 'bun:bundle'
 import memoize from 'lodash-es/memoize.js'
 import {
-  getAdditionalDirectoriesForgakrcliMd,
-  setCachedgakrcliMdContent,
+  getAdditionalDirectoriesForGakrCLIMd,
+  setCachedGakrCLIMdContent,
 } from './bootstrap/state.js'
 import { getLocalISODate } from './constants/common.js'
 import {
   filterInjectedMemoryFiles,
-  getgakrcliMds,
+  getGakrCLIMds,
   getMemoryFiles,
 } from './utils/gakrclimd.js'
 import { logForDiagnosticsNoPII } from './utils/diagLogs.js'
@@ -19,7 +19,7 @@ import { logError } from './utils/log.js'
 
 const MAX_STATUS_CHARS = 2000
 
-// System prompt injection for cache breaking (ant-only, ephemeral debugging state)
+// System prompt injection for cache breaking (internal-only, ephemeral debugging state)
 let systemPromptInjection: string | null = null
 
 export function getSystemPromptInjection(): string | null {
@@ -127,7 +127,7 @@ export const getSystemContext = memoize(
         ? null
         : await getGitStatus()
 
-    // Include system prompt injection if set (for cache breaking, ant-only)
+    // Include system prompt injection if set (for cache breaking, internal-only)
     const injection = feature('BREAK_CACHE_COMMAND')
       ? getSystemPromptInjection()
       : null
@@ -162,23 +162,23 @@ export const getUserContext = memoize(
     // GAKR_CODE_DISABLE_GAKR_MDS: hard off, always.
     // --bare: skip auto-discovery (cwd walk), BUT honor explicit --add-dir.
     // --bare means "skip what I didn't ask for", not "ignore what I asked for".
-    const shouldDisablegakrcliMd =
+    const shouldDisableGakrCLIMd =
       isEnvTruthy(process.env.GAKR_CODE_DISABLE_GAKR_MDS) ||
-      (isBareMode() && getAdditionalDirectoriesForgakrcliMd().length === 0)
+      (isBareMode() && getAdditionalDirectoriesForGakrCLIMd().length === 0)
     // Await the async I/O (readFile/readdir directory walk) so the event
     // loop yields naturally at the first fs.readFile.
-    const gakrcliMd = shouldDisablegakrcliMd
+    const gakrcliMd = shouldDisableGakrCLIMd
       ? null
-      : getgakrcliMds(filterInjectedMemoryFiles(await getMemoryFiles()))
+      : getGakrCLIMds(filterInjectedMemoryFiles(await getMemoryFiles()))
     // Cache for the auto-mode classifier (yoloClassifier.ts reads this
     // instead of importing gakrclimd.ts directly, which would create a
     // cycle through permissions/filesystem → permissions → yoloClassifier).
-    setCachedgakrcliMdContent(gakrcliMd || null)
+    setCachedGakrCLIMdContent(gakrcliMd || null)
 
     logForDiagnosticsNoPII('info', 'user_context_completed', {
       duration_ms: Date.now() - startTime,
       gakrclimd_length: gakrcliMd?.length ?? 0,
-      gakrclimd_disabled: Boolean(shouldDisablegakrcliMd),
+      gakrclimd_disabled: Boolean(shouldDisableGakrCLIMd),
     })
 
     return {
