@@ -178,6 +178,7 @@ export function activateGithubOnboardingMode(
     applyProcessEnv?: (model: string) => void
     hydrateToken?: () => void
     onChangeAPIKey?: () => void
+    gheUrl?: string
   },
 ): { ok: boolean; detail?: string } {
   const normalizedModel = model.trim() || DEFAULT_MODEL
