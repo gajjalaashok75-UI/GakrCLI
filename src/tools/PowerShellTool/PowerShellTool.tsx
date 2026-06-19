@@ -13,7 +13,7 @@ import { buildTool, type ToolDef } from '../../Tool.js';
 import { backgroundExistingForegroundTask, markTaskNotified, registerForeground, spawnShellTask, unregisterForeground } from '../../tasks/LocalShellTask/LocalShellTask.js';
 import type { AgentId } from '../../types/ids.js';
 import type { AssistantMessage } from '../../types/message.js';
-import { extractgakrcliCodeHints } from '../../utils/gakrcliCodeHints.js';
+import { extractGakrCLICodeHints } from '../../utils/gakrcliCodeHints.js';
 import { isEnvTruthy } from '../../utils/envUtils.js';
 import { errorMessage as getErrorMessage, ShellError } from '../../utils/errors.js';
 import { truncate } from '../../utils/format.js';
@@ -39,7 +39,7 @@ import { buildImageToolResult, isImageOutput, resetCwdIfOutsideProject, resizeSh
 import { trackGitOperations } from '../shared/gitOperationTracking.js';
 import { interpretCommandResult } from './commandSemantics.js';
 import { powershellToolHasPermission } from './powershellPermissions.js';
-import { getDefaultTimeoutMs, getMaxTimeoutMs, getPrompt } from './prompt.js';
+import { getEffectiveTimeoutMs, getMaxTimeoutMs, getPrompt } from './prompt.js';
 import { hasSyncSecurityConcerns, isReadOnlyCommand, resolveToCanonical } from './readOnlyValidation.js';
 import { POWERSHELL_TOOL_NAME } from './toolName.js';
 import { renderToolResultMessage, renderToolUseErrorMessage, renderToolUseMessage, renderToolUseProgressMessage, renderToolUseQueuedMessage } from './UI.js';
@@ -398,7 +398,7 @@ export const PowerShellTool = buildTool({
     backgroundedByUser,
     assistantAutoBackgrounded
   }: Out, toolUseID: string): ToolResultBlockParam {
-    // For image data, format as image content block for Gakr
+    // For image data, format as image content block for GakrCLI
     if (isImage) {
       const block = buildImageToolResult(stdout, toolUseID);
       if (block) return block;
@@ -540,7 +540,7 @@ export const PowerShellTool = buildTool({
       // model (BashTool has no early return, so all paths flow through its
       // single extraction site).
       if (result.backgroundTaskId) {
-        const bgExtracted = extractgakrcliCodeHints(result.stdout || '', input.command);
+        const bgExtracted = extractGakrCLICodeHints(result.stdout || '', input.command);
         if (isMainThread && bgExtracted.hints.length > 0) {
           for (const hint of bgExtracted.hints) maybeRecordPluginHint(hint);
         }
@@ -572,13 +572,13 @@ export const PowerShellTool = buildTool({
 
       let stdout = stripEmptyLines(stdoutAccumulator.toString());
 
-      // GakrCLI hints protocol: CLIs/SDKs gated on gakrcliCODE=1 emit a
+      // GakrCLI Code hints protocol: CLIs/SDKs gated on GAKRCLICODE=1 emit a
       // `<gakrcli-code-hint />` tag to stderr (merged into stdout here). Scan,
-      // record for usegakrcliCodeHintRecommendation to surface, then strip
+      // record for useGakrCLICodeHintRecommendation to surface, then strip
       // so the model never sees the tag — a zero-token side channel.
       // Stripping runs unconditionally (subagent output must stay clean too);
       // only the dialog recording is main-thread-only.
-      const extracted = extractgakrcliCodeHints(stdout, input.command);
+      const extracted = extractGakrCLICodeHints(stdout, input.command);
       stdout = extracted.stripped;
       if (isMainThread && extracted.hints.length > 0) {
         for (const hint of extracted.hints) maybeRecordPluginHint(hint);
@@ -707,7 +707,7 @@ async function* runPowerShellCommand({
     dangerouslyDisableSandbox,
     _dangerouslyDisableSandboxApproved
   } = input;
-  const timeoutMs = Math.min(timeout || getDefaultTimeoutMs(), getMaxTimeoutMs());
+  const timeoutMs = getEffectiveTimeoutMs(timeout);
   let fullOutput = '';
   let lastProgressOutput = '';
   let lastTotalLines = 0;

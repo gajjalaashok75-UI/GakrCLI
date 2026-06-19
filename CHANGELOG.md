@@ -5,6 +5,21 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.7] - 2026-06-19
+
+### Fixed
+- **New File Wiring & Integration**: Wired 78+ newly added source files across bridge, CLI, commands, components, services, tools, and utils into the module graph. Resolved import gaps, missing exports, and dead code paths by cross-referencing against the OpenClaude reference.
+- **LSP Diagnostic Registry Storm Control**: Restored missing ~700 lines of storm detection, deduplication, delivery planning, per-server diagnostic windows, and cross-turn tracking in `LSPDiagnosticRegistry.ts`.
+- **Sandbox-Toggle Null Guard**: Fixed null crash in `sandbox-toggle/index.ts` when `SandboxManager.checkDependencies()` returns null.
+- **Tool Query Activity Lease Lifecycle**: Wired `queryActivityLease` acquire/release/registerActivity into `toolExecution.ts` for shell tools (BashTool, PowerShellTool).
+- **BashTool & PowerShellTool Timeout Wiring**: Replaced `getDefaultTimeoutMs()` with `getEffectiveTimeoutMs(timeout)` across both shell tools so lease-aware timeout propagation works correctly.
+- **AgentDetail Route Picker**: Integrated `AgentRouteSelector`, `useInput` for 'm' key handling, route display, and `useKeybinding` `isActive` deactivation into `AgentDetail.tsx`.
+- **Prompt Cache Break Detection**: Replaced stripped-down `promptCacheBreakDetection.ts` with full reference implementation including `PromptCacheBreakKind` taxonomy, prompt state snapshots, per-tool hashing, cache break classification, and TTL expiry detection.
+- **Cache Metrics Reliability**: Added missing `CacheMetricsReliability` type and `getCacheMetricsReliability()` function to `cacheMetrics.ts`.
+
+### Added
+- **Batch Test Verification**: Ran 36+ new test files across 14 batches covering bridge, CLI, commands, components, services, tools, and utils. All new tests pass after wiring fixes.
+
 ## [unreleased - 0.5.6]
 
 ### Enhanced (2026-06-12)
@@ -24,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added (2026-06-08)
 - **Design Skills Pack**: Added packaged design guidance under `assets/skills/design-skills/`, covering cinematic scroll, 3D interaction, micro-interactions, depth/glassmorphism, editorial typography, ambient effects, WebGPU shaders, visual systems, motion choreography, interaction patterns, and generative design.
-- **Claude Design Skill**: Added `assets/skills/design-skills/claude-design/SKILL.md` with Claude-style visual system guidance for warm editorial AI-product interfaces.
+- **Claude Design Skill**: Added `assets/skills/design-skills/gakrcli-design/SKILL.md` with Claude-style visual system guidance for warm editorial AI-product interfaces.
 - **Storage Architecture Reference**: Added `docs/storage-sessions-memory-knowledge-graph.md` documenting current storage, sessions, memory, knowledge graph, DB, Orama, JSON, subagent, tool-result, plugin, MCP, telemetry, and UI state paths.
 - **Soulcraft Skill**: Added `assets/skills/soulcraft/SKILL.md` for reflective product, identity, and experience-shaping work.
 
@@ -185,7 +200,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - **Promotional Spinner Tips**: Removed the partner-tip catalog, scheduling controls, history tracking, settings schema, tests, and provider badge copy so spinner tips are only regular product tips.
-- **Gitlawb Opengateway Provider**: Removed the Gitlawb Opengateway provider preset, zero-key auto-detect fallback, generated integration metadata, and legacy route normalization coverage.
+- **gakr-gakr Opengateway Provider**: Removed the gakr-gakr Opengateway provider preset, zero-key auto-detect fallback, generated integration metadata, and legacy route normalization coverage.
 - **Standalone GitHub Models Slash Command**: Removed `/onboard-github` from built-in slash commands now that GitHub Models setup lives in `/provider`.
 
 ## [0.5.3] - 2026-05-22
@@ -196,7 +211,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Plugin Marketplace JSON Parsing**: Stripped UTF-8 BOM markers before JSON parsing so marketplace manifests downloaded from GitHub parse correctly.
-- **Plugin MCP Startup on Windows**: Spawned plugin-provided stdio MCP servers from the plugin install directory and accepted both `${GAKR_PLUGIN_*}` and legacy `${GAKRCLI_PLUGIN_*}` variable names, fixing official Telegram MCP startup.
+- **Plugin MCP Startup on Windows**: Spawned plugin-provided stdio MCP servers from the plugin install directory and accepted both `${GAKR_PLUGIN_*}` and legacy `${GAKR_PLUGIN_*}` variable names, fixing official Telegram MCP startup.
 - **Built-In Marketplace Protection**: Hid remove actions for the official marketplace in `/plugin` and blocked removal through the marketplace manager.
 
 ### Removed
@@ -205,7 +220,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.5.2] - 2026-05-17
 
 ### Changed
-- **GakrCLI Config Home Cleanup (2026-05-20 09:37:21 +05:30)**: Removed active legacy `~/.claude` and project `.claude` config fallback paths so user config, project markdown loading, managed local install detection, VS Code session discovery, and permission special-casing now rely on `~/.gakrcli` / `.gakrcli` only.
+- **GakrCLI Config Home Cleanup (2026-05-20 09:37:21 +05:30)**: Removed active legacy `~/.gakrcli` and project `.gakrcli` config fallback paths so user config, project markdown loading, managed local install detection, VS Code session discovery, and permission special-casing now rely on `~/.gakrcli` / `.gakrcli` only.
 - **Pinned Bun Runtime**: Added the shared `.bun-version` and wired CI and Docker builds to use the repo-tracked Bun version.
 
 ### Added
@@ -224,7 +239,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Windows Bin Import Path**: Normalized Windows drive-letter paths in the CLI bin import helper so built entrypoint URLs are valid across path contexts.
 - **Abort Timeout Cleanup**: Replaced raw timeout abort signals across runtime fetch, hook, bridge, shutdown, and updater paths with cleanup-safe combined abort signals.
-- **Legacy npm Package Cleanup**: Restored cleanup and doctor checks for the real legacy `@anthropic-ai/claude-code` package while keeping GakrCLI package checks pointed at `@gakr-gakr/gakrcli`.
+- **Legacy npm Package Cleanup**: Restored cleanup and doctor checks for the real legacy `@anthropic-ai/gakrcli-code` package while keeping GakrCLI package checks pointed at `@gakr-gakr/gakrcli`.
 - **Codex OAuth Callback Settings**: Restored loopback callback host validation and host-aware redirect URI construction for Codex OAuth.
 - **Web Fetch Firecrawl Endpoint**: Let Web Fetch use self-hosted Firecrawl endpoints via `FIRECRAWL_API_URL`, matching Web Search behavior.
 - **Atomic Chat Provider Tests**: Replaced stale duplicate Ollama coverage with Atomic Chat provider tests adapted for GakrCLI.
