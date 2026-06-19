@@ -82,7 +82,7 @@ import {
   classifyOpenAINetworkFailure,
 } from './openaiErrorClassification.js'
 import { sanitizeSchemaForOpenAICompat } from '../../utils/schemaSanitizer.js'
-import { redactSecretValueForDisplay } from '../../utils/providerProfile.js'
+import { redactSecretValueForDisplay, type SecretValueSource } from '../../utils/providerProfile.js'
 import { shouldRedactUrlQueryParam } from '../../utils/urlRedaction.js'
 import {
   normalizeToolArguments,
@@ -95,16 +95,6 @@ import {
   getStreamStats,
 } from '../../utils/streamingOptimizer.js'
 import { stableStringifyJson } from '../../utils/stableStringify.js'
-
-type SecretValueSource = Partial<{
-  OPENAI_API_KEY: string
-  OPENAI_AUTH_HEADER_VALUE: string
-  CODEX_API_KEY: string
-  GEMINI_API_KEY: string
-  GOOGLE_API_KEY: string
-  GEMINI_ACCESS_TOKEN: string
-  MISTRAL_API_KEY: string
-}>
 
 const GITHUB_429_MAX_RETRIES = 3
 const GITHUB_429_BASE_DELAY_SEC = 1
@@ -408,7 +398,12 @@ function convertToolResultContent(
     parts.unshift({ type: 'text', text: 'Error:' })
   }
 
-  return parts
+  // Defense in depth (issue #1421): some OpenAI-compatible providers (e.g.
+  // Xiaomi Mimo) reject `role: "tool"` messages whose `content` is image-only
+  // with a 400 "text is not set". Prepend a placeholder text part so the
+  // payload always carries a text component alongside any images, mirroring
+  // the existing behavior for user-role messages.
+  return ensureTextPartForImageContent(parts)
 }
 
 function convertContentBlocks(
@@ -501,8 +496,12 @@ function hydrateOpenAIShimCompatibilityEnv(
   }
 
   if (isEnvTruthy(processEnv.GAKR_CODE_USE_GITHUB)) {
-    processEnv.OPENAI_API_KEY ??=
-      processEnv.GITHUB_TOKEN ?? processEnv.GH_TOKEN ?? ''
+    processEnv.OPENAI_API_KEY =
+      processEnv.GITHUB_COPILOT_KEY ??
+      processEnv.OPENAI_API_KEY ??
+      processEnv.GITHUB_TOKEN ??
+      processEnv.GH_TOKEN ??
+      ''
     return
   }
 
@@ -2450,7 +2449,7 @@ class OpenAIShimMessages {
     const isLocal = isLocalProviderUrl(request.baseUrl)
 
     const githubEndpointType = getGithubEndpointType(request.baseUrl)
-    const isGithubCopilot = isGithub && githubEndpointType === 'copilot'
+    const isGithubCopilot = isGithub && (githubEndpointType === 'copilot' || githubEndpointType === 'ghe')
     const isGithubModels = isGithub && (githubEndpointType === 'models' || githubEndpointType === 'custom')
     const shouldStripResponsesStore =
       (shimConfig.removeBodyFields ?? []).includes('store') ||

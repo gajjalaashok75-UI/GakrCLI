@@ -21,6 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **External List Validation**: Restored `bun` and `byn` externals in `scripts/externals.ts` for background session support
+- **Automatic Interruption Bug**: Fixed 6 locations where `abortController.abort()` was called without `'interrupt'` reason, causing unwanted interruption messages in the query loop — updates in `PermissionContext.ts` (lines 206, 286), `PermissionPromptToolResultSchema.ts` (line 126), `permissions.ts` (line 469), and `print.ts` (lines 2838, 2850)
+- **GitHub Enterprise Full Wiring**: Completed orphaned GHE implementation by:
+  - Adding `'ghe'` endpoint type detection to `getGithubEndpointType()` in `providerConfig.ts` (`.ghe.com`, `GITHUB_ENTERPRISE_URL` env var, `*.github.com` GHE detection)
+  - Adding `getGithubEnterpriseUrl()`, `buildGithubEnterpriseCopilotBaseUrl()`, and `asGithubEnterpriseEnvUrl()` helpers
+  - Wiring GHE base URL routing in `resolveProviderRequest()` with `gheCopilotBaseUrl`, `isGithubGhe`, `isGithubCopilotLike` variables
+  - Adding `'github-enterprise'` compatibility mode in `providerProfiles.ts` with `isGithubCompatibilityMode()`, `deriveGithubEnterpriseUrl()`, and `buildGithubCompatibleProfileEnv()`
+  - Extending `onboard-github.tsx` — `buildGithubOnboardingSettingsEnv()`, `applyGithubOnboardingProcessEnv()`, `mergeUserSettingsEnv()`, and `getExistingGithubEnterpriseUrl()` now accept and propagate `gheUrl` parameters; `activateGithubOnboardingMode()` passes `gheUrl` through to merge/apply callbacks
 
 ## [0.5.8] - 2026-06-19
 

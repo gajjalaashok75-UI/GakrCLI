@@ -35,6 +35,14 @@ export const DEFAULT_GITHUB_MODELS_API_MODEL = 'gpt-4o'
 export const DEFAULT_NVIDIA_MODEL = 'stepfun-ai/step-3.5-flash'
 const warnedUndefinedEnvNames = new Set<string>()
 
+function asGithubEnterpriseEnvUrl(value: string | undefined): string | undefined {
+  const trimmed = value?.trim()
+  if (!trimmed || trimmed.toLowerCase() === 'undefined') {
+    return undefined
+  }
+  return trimmed
+}
+
 function normalizegitlawbOpengatewayBaseUrl(baseUrl: string | undefined): string | undefined {
   if (!baseUrl) return undefined
   try {
@@ -602,7 +610,8 @@ export const GITHUB_MODELS_BASE_URL = 'https://models.github.ai/inference'
 
 export function getGithubEndpointType(
   baseUrl: string | undefined,
-): 'copilot' | 'models' | 'custom' {
+  options?: { githubEnterpriseUrl?: string },
+): 'copilot' | 'models' | 'ghe' | 'custom' {
   if (!baseUrl) return 'copilot'
   try {
     const hostname = new URL(baseUrl).hostname.toLowerCase()
@@ -612,9 +621,75 @@ export function getGithubEndpointType(
     if (hostname === 'models.github.ai' || hostname.endsWith('.github.ai')) {
       return 'models'
     }
+    // Detect GitHub Enterprise Server instances:
+    // - *.ghe.com (GitHub's hosted GHE domains)
+    // - *.github.com (but not api.github.com or models.github.ai)
+    // - Any host when GITHUB_ENTERPRISE_URL is set
+    if (
+      hostname.endsWith('.ghe.com') ||
+      (hostname.endsWith('.github.com') &&
+        hostname !== 'api.github.com' &&
+        hostname !== 'models.github.com')
+    ) {
+      return 'ghe'
+    }
+    // Check if GITHUB_ENTERPRISE_URL env var points to this host
+    const gheUrl = options?.githubEnterpriseUrl ?? process.env.GITHUB_ENTERPRISE_URL
+    if (gheUrl) {
+      try {
+        const gheHostname = new URL(gheUrl).hostname.toLowerCase()
+        if (hostname === gheHostname) {
+          return 'ghe'
+        }
+      } catch {
+        // Ignore invalid GITHUB_ENTERPRISE_URL
+      }
+    }
     return 'custom'
   } catch {
     return 'copilot'
+  }
+}
+
+/**
+ * Get the GitHub Enterprise URL from environment or base URL.
+ * Returns undefined if not in GHE mode.
+ */
+export function getGithubEnterpriseUrl(
+  baseUrl?: string,
+): string | undefined {
+  // Explicit env var takes precedence
+  const envUrl = asGithubEnterpriseEnvUrl(process.env.GITHUB_ENTERPRISE_URL)
+  if (envUrl) return envUrl
+
+  // If base URL indicates GHE, derive the enterprise URL from it
+  if (baseUrl) {
+    const endpointType = getGithubEndpointType(baseUrl)
+    if (endpointType === 'ghe') {
+      try {
+        const parsed = new URL(baseUrl)
+        return parsed.origin
+      } catch {
+        // Ignore invalid URL
+      }
+    }
+  }
+
+  return undefined
+}
+
+/**
+ * Build the Copilot API base URL for a GitHub Enterprise instance.
+ * For GHE, the Copilot API is at {ghe_url}/api/copilot
+ */
+export function buildGithubEnterpriseCopilotBaseUrl(
+  gheUrl: string,
+): string {
+  try {
+    return `${new URL(gheUrl.trim()).origin}/api/copilot`
+  } catch {
+    const normalized = gheUrl.replace(/\/+$/, '')
+    return `${normalized}/api/copilot`
   }
 }
 
@@ -719,9 +794,16 @@ export function resolveProviderRequest(options?: {
     primaryEnvBaseUrl ??
     fallbackEnvBaseUrl
 
+  const githubEnterpriseEnvUrl = asGithubEnterpriseEnvUrl(
+    process.env.GITHUB_ENTERPRISE_URL,
+  )
   const isCodexModelForGithub = isGithubMode && isCodexAlias(requestedModel)
   const envBaseUrl =
-    isCodexModelForGithub && envBaseUrlRaw && getGithubEndpointType(envBaseUrlRaw) === 'custom'
+    isCodexModelForGithub &&
+    envBaseUrlRaw &&
+    getGithubEndpointType(envBaseUrlRaw, {
+      githubEnterpriseUrl: githubEnterpriseEnvUrl,
+    }) === 'custom'
       ? undefined
       : envBaseUrlRaw
 
@@ -745,16 +827,26 @@ export function resolveProviderRequest(options?: {
       : rawBaseUrl
   const finalBaseUrl = normalizegitlawbOpengatewayBaseUrl(finalBaseUrlRaw)
 
+  const gheUrl = githubEnterpriseEnvUrl
   const githubEndpointType = isGithubMode
-    ? getGithubEndpointType(rawBaseUrl)
+    ? (gheUrl && !rawBaseUrl
+      ? 'ghe'
+      : getGithubEndpointType(rawBaseUrl, { githubEnterpriseUrl: gheUrl }))
     : 'custom'
   const isGithubCopilot = isGithubMode && githubEndpointType === 'copilot'
   const isGithubModels = isGithubMode && githubEndpointType === 'models'
+  const isGithubGhe = isGithubMode && githubEndpointType === 'ghe'
   const isGithubCustom = isGithubMode && githubEndpointType === 'custom'
+  const isGithubCopilotLike = isGithubCopilot || isGithubGhe
 
   const githubResolvedModel = isGithubMode
     ? normalizeGithubModelsApiModel(requestedModel)
     : requestedModel
+
+  // For GHE instances, build the Copilot API base URL from GITHUB_ENTERPRISE_URL
+  const gheCopilotBaseUrl = gheUrl
+    ? buildGithubEnterpriseCopilotBaseUrl(gheUrl)
+    : undefined
 
   const requestedApiFormat =
     isGithubMode
@@ -779,7 +871,7 @@ export function resolveProviderRequest(options?: {
     })()
   const transport: ProviderTransport =
     shouldUseCodexTransport(requestedModel, finalBaseUrl) ||
-      (isGithubCopilot && shouldUseGithubResponsesApi(githubResolvedModel))
+      (isGithubCopilotLike && shouldUseGithubResponsesApi(githubResolvedModel))
       ? 'codex_responses'
       : (requestedApiFormat === 'responses' || requestedApiFormat === 'responses_compat') && supportsRequestedApiFormat
         ? requestedApiFormat
@@ -789,7 +881,7 @@ export function resolveProviderRequest(options?: {
   // For GitHub Models/custom endpoints:
   //   - Normalize default alias (github:copilot -> gpt-4o)
   //   - Preserve provider-qualified models (openai/gpt-4.1 stays as-is)
-  const resolvedModel = isGithubCopilot
+  const resolvedModel = isGithubCopilotLike
     ? normalizeGithubCopilotModel(descriptor.baseModel)
     : (isGithubModels || isGithubCustom
       ? normalizeGithubModelsApiModel(descriptor.baseModel)
@@ -804,12 +896,16 @@ export function resolveProviderRequest(options?: {
     requestedModel,
     resolvedModel,
     baseUrl:
-      (finalBaseUrl ??
-        (isGithubCopilot && transport === 'codex_responses'
-          ? GITHUB_COPILOT_BASE_URL
-          : (isGithubMode
+      // For GHE instances, use the GHE Copilot API URL even when a profile
+      // stores the Enterprise origin as OPENAI_BASE_URL.
+      ((isGithubGhe && gheCopilotBaseUrl
+        ? gheCopilotBaseUrl
+        : (finalBaseUrl ??
+          (isGithubCopilot && transport === 'codex_responses'
             ? GITHUB_COPILOT_BASE_URL
-            : DEFAULT_OPENAI_BASE_URL))
+            : (isGithubMode
+              ? GITHUB_COPILOT_BASE_URL
+              : DEFAULT_OPENAI_BASE_URL))))
       ).replace(/\/+$/, ''),
     reasoning,
   }
