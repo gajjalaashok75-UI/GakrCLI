@@ -1,4 +1,4 @@
-import { rmSync, renameSync, existsSync, readFileSync } from 'fs'
+import { rmSync, renameSync, existsSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { getProjectsDir } from './envUtils.js'
 import { sanitizePath } from './sessionStoragePortable.js'
@@ -236,7 +236,7 @@ export async function initOrama(cwd: string): Promise<void> {
     if (existsSync(path)) {
       try {
         const data = readFileSync(path)
-        oramaDb = await restore('binary', data)
+        oramaDb = await restore<NonNullable<typeof oramaDb>>('binary', data)
         const graph = projectGraph || loadProjectGraph(cwd)
         if (await isOramaInSync(graph)) {
           restored = true
@@ -297,6 +297,7 @@ export async function saveOrama(cwd: string): Promise<void> {
   const path = getOramaPersistencePath(cwd)
   try {
     const data = await persist(oramaDb, 'binary')
+    // Atomic write with flush using established project utility
     writeFileSyncAndFlush_DEPRECATED(path, data as Buffer)
   } catch (e) {
     console.error('Failed to save Orama DB:', e)
