@@ -1514,6 +1514,12 @@ async function run(): Promise<CommanderCommand> {
     if (gakrcliInChromeStartupMode === 'explicit') {
       const platform = getPlatform();
       try {
+        let hasWebBrowserTool: boolean
+        if (feature('WEB_BROWSER_TOOL')) {
+          hasWebBrowserTool = typeof Bun !== 'undefined' && 'WebView' in Bun
+        } else {
+          hasWebBrowserTool = false
+        }
         logEvent('tengu_gakrcli_in_chrome_setup', {
           platform: platform as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
         });
@@ -1522,7 +1528,7 @@ async function run(): Promise<CommanderCommand> {
           setupResult: setupGakrCLIInChrome(),
           dynamicMcpConfig,
           appendSystemPrompt,
-          hasWebBrowserTool: feature('WEB_BROWSER_TOOL') && typeof Bun !== 'undefined' && 'WebView' in Bun
+          hasWebBrowserTool,
         });
         dynamicMcpConfig = startupConfig.dynamicMcpConfig;
         allowedTools.push(...startupConfig.allowedTools);
@@ -1539,12 +1545,18 @@ async function run(): Promise<CommanderCommand> {
       }
     } else if (gakrcliInChromeStartupMode === 'auto') {
       try {
+        let hasWebBrowserTool: boolean
+        if (feature('WEB_BROWSER_TOOL')) {
+          hasWebBrowserTool = typeof Bun !== 'undefined' && 'WebView' in Bun
+        } else {
+          hasWebBrowserTool = false
+        }
         const startupConfig = mergeGakrCLIInChromeStartupConfig({
           mode: gakrcliInChromeStartupMode,
           setupResult: setupGakrCLIInChrome(),
           dynamicMcpConfig,
           appendSystemPrompt,
-          hasWebBrowserTool: feature('WEB_BROWSER_TOOL') && typeof Bun !== 'undefined' && 'WebView' in Bun
+          hasWebBrowserTool,
         });
         dynamicMcpConfig = startupConfig.dynamicMcpConfig;
         appendSystemPrompt = startupConfig.appendSystemPrompt;
