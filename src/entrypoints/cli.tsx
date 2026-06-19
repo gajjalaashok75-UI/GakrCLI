@@ -179,6 +179,33 @@ async function main(): Promise<void> {
   )
   await validateProviderEnvForStartupOrExit()
 
+  // --provider-env-file: Load explicit environment files before any provider resolution.
+  let reapplyProviderEnvFileValues: () => void = () => {}
+  {
+    const {
+      loadEnvFile,
+      parseProviderEnvFileArgs,
+      reapplyRememberedEnvFileValues,
+      rememberLoadedEnvFileValues,
+    } = await import('../utils/envFile.js')
+    reapplyProviderEnvFileValues = reapplyRememberedEnvFileValues
+    const providerEnvFiles = parseProviderEnvFileArgs(args)
+    if (providerEnvFiles.error) {
+      // biome-ignore lint/suspicious/noConsole: intentional error output
+      console.error(providerEnvFiles.error)
+      process.exit(1)
+    }
+    for (const filePath of providerEnvFiles.paths) {
+      try {
+        rememberLoadedEnvFileValues(loadEnvFile(filePath))
+      } catch (err: unknown) {
+        // biome-ignore lint/suspicious/noConsole: intentional error output
+        console.error(err instanceof Error ? err.message : String(err))
+        process.exit(1)
+      }
+    }
+  }
+
   // #808: --model alone (no --provider) — route to the env var matching the
   // active provider before the banner prints so the override is visible.
   if (args.includes('--model')) {

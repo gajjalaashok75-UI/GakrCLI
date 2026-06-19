@@ -5,6 +5,17 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.8] - 2026-06-19
+
+### Added
+- **Provider Env-File Loading**: Wired `--provider-env-file` CLI flag into `cli.tsx` with explicit env file loading before provider resolution. Added `reapplyRememberedEnvFileValues()` to `managedEnv.ts` so explicitly-loaded env files are restored after every settings.env merge, preventing saved config from clobbering provider routing inputs.
+- **GitHub Enterprise Support**: Restored GHE device flow functions (`normalizeGithubEnterpriseAuthBaseUrl`, `getGithubEnterpriseDeviceCodeUrl`, `getGithubEnterpriseAccessTokenUrl`, `getGithubEnterpriseCopilotTokenUrl`) in `deviceFlow.ts`. Added `gheUrl` params to `requestDeviceCode()`, `pollAccessToken()`, `exchangeForCopilotToken()`. Extended `githubModelsCredentials.ts` with `credentialType` field and `GITHUB_COPILOT_KEY` support. Restored GHE URL and Copilot API key flows in `onboard-github.tsx`.
+- **Commander --provider-env-file Option**: Registered the `--provider-env-file` option in `main.tsx` so `--help` displays it and unknown-option handling stays aligned.
+- **Env-File Tests**: Ported 3 envFile integration tests from reference to `cli.test.ts` — text scan for remembered values, functional test for settings+profile merge preservation, and functional test for `--provider` values beating env-file values.
+
+### Fixed
+- **Env-File ReferenceError**: Fixed `reapplyProviderEnvFileValues` assignment in `cli.tsx` `--provider-env-file` block — added `let` declaration before the block to prevent ReferenceError.
+
 ## [0.5.7] - 2026-06-19
 
 ### Fixed
