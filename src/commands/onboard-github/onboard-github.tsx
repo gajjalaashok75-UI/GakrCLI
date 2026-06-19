@@ -2,6 +2,8 @@ import * as React from 'react'
 import { useCallback, useState } from 'react'
 import { Select } from '../../components/CustomSelect/select.js'
 import { Spinner } from '../../components/Spinner.js'
+import TextInput from '../../components/TextInput.js'
+import { useTerminalSize } from '../../hooks/useTerminalSize.js'
 import { Box, Text } from '../../ink.js'
 import {
   exchangeForCopilotToken,
@@ -10,12 +12,18 @@ import {
   requestDeviceCode,
 } from '../../services/github/deviceFlow.js'
 import type { LocalJSXCommandCall } from '../../types/command.js'
+import type { GithubModelsCredentialBlob } from '../../utils/githubModelsCredentials.js'
 import {
   hydrateGithubModelsTokenFromSecureStorage,
   readGithubModelsToken,
   saveGithubModelsToken,
 } from '../../utils/githubModelsCredentials.js'
-import { getSettingsForSource, updateSettingsForSource } from '../../utils/settings/settings.js'
+import { getDisplayPath } from '../../utils/file.js'
+import {
+  getSettingsFilePathForSource,
+  getSettingsForSource,
+  updateSettingsForSource,
+} from '../../utils/settings/settings.js'
 
 const DEFAULT_MODEL = 'github:copilot'
 const FORCE_RELOGIN_ARGS = new Set([
@@ -27,7 +35,7 @@ const FORCE_RELOGIN_ARGS = new Set([
   '--reauth',
 ])
 
-type Step = 'menu' | 'device-busy' | 'error'
+type Step = 'menu' | 'ghe-url' | 'copilot-key' | 'device-busy' | 'error'
 
 const PROVIDER_SPECIFIC_KEYS = new Set([
   'GAKR_CODE_USE_OPENAI',
@@ -35,6 +43,8 @@ const PROVIDER_SPECIFIC_KEYS = new Set([
   'GAKR_CODE_USE_BEDROCK',
   'GAKR_CODE_USE_VERTEX',
   'GAKR_CODE_USE_FOUNDRY',
+  'GITHUB_COPILOT_KEY',
+  'GITHUB_ENTERPRISE_URL',
   'OPENAI_BASE_URL',
   'OPENAI_API_BASE',
   'OPENAI_API_KEY',
@@ -59,6 +69,20 @@ const GITHUB_PAT_PREFIXES = ['ghp_', 'gho_','ghs_', 'ghr_', 'github_pat_']
 
 function isGithubPat(token: string): boolean {
   return GITHUB_PAT_PREFIXES.some(prefix => token.startsWith(prefix))
+}
+
+function getUserSettingsDisplayPath(): string {
+  const userSettingsPath = getSettingsFilePathForSource('userSettings')
+  return userSettingsPath ? getDisplayPath(userSettingsPath) : 'settings'
+}
+
+function getExistingGithubEnterpriseUrl(
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  return (
+    env.GITHUB_ENTERPRISE_URL?.trim() ||
+    (env.GAKR_CODE_USE_GITHUB ? undefined : undefined)
+  )
 }
 
 export function hasExistingGithubModelsLoginToken(
@@ -184,20 +208,31 @@ function OnboardGithub(props: {
     user_code: string
     verification_uri: string
   } | null>(null)
+  const [gheUrl, setGheUrl] = useState<string | undefined>(
+    getExistingGithubEnterpriseUrl(),
+  )
+  const [gheUrlInput, setGheUrlInput] = useState(gheUrl ?? '')
+  const [copilotKey, setCopilotKey] = useState(
+    process.env.GITHUB_COPILOT_KEY?.trim() || '',
+  )
 
   const finalize = useCallback(
     async (
       token: string,
       model: string = DEFAULT_MODEL,
       oauthToken?: string,
+      credentialType?: GithubModelsCredentialBlob['credentialType'],
     ) => {
-      const saved = saveGithubModelsToken(token, oauthToken)
+      const saved = saveGithubModelsToken(token, oauthToken, {
+        credentialType,
+      })
       if (!saved.success) {
         setErrorMsg(saved.warning ?? 'Could not save token to secure storage.')
         setStep('error')
         return
       }
       const activated = activateGithubOnboardingMode(model, {
+        gheUrl,
         onChangeAPIKey,
       })
       if (!activated.ok) {
@@ -226,28 +261,49 @@ function OnboardGithub(props: {
     [onChangeAPIKey, onDone],
   )
 
-  const runDeviceFlow = useCallback(async () => {
-    setStep('device-busy')
-    setErrorMsg(null)
-    setDeviceHint(null)
-    try {
-      const device = await requestDeviceCode()
-      setDeviceHint({
-        user_code: device.user_code,
-        verification_uri: device.verification_uri,
-      })
-      await openVerificationUri(device.verification_uri)
-      const oauthToken = await pollAccessToken(device.device_code, {
-        initialInterval: device.interval,
-        timeoutSeconds: device.expires_in,
-      })
-      const copilotToken = await exchangeForCopilotToken(oauthToken)
-      await finalize(copilotToken.token, DEFAULT_MODEL, oauthToken)
-    } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : String(e))
-      setStep('error')
-    }
-  }, [finalize])
+  const runDeviceFlow = useCallback(
+    async (params?: { gheUrl?: string }) => {
+      setStep('device-busy')
+      setErrorMsg(null)
+      setDeviceHint(null)
+      try {
+        const copilotKeyVal = copilotKey.trim()
+        if (copilotKeyVal) {
+          const tokenFromKey = copilotKeyVal
+          if (tokenFromKey) {
+            await finalize(tokenFromKey, DEFAULT_MODEL, undefined, 'copilot_key')
+            return
+          }
+        }
+        const device = await requestDeviceCode({ gheUrl: params?.gheUrl })
+        setDeviceHint({
+          user_code: device.user_code,
+          verification_uri: device.verification_uri,
+        })
+        await openVerificationUri(device.verification_uri)
+        const oauthToken = await pollAccessToken(device.device_code, {
+          initialInterval: device.interval,
+          timeoutSeconds: device.expires_in,
+          gheUrl: params?.gheUrl,
+        })
+        const copilotToken = await exchangeForCopilotToken(
+          oauthToken,
+          undefined,
+          params?.gheUrl,
+        )
+        await finalize(
+          copilotToken.token,
+          DEFAULT_MODEL,
+          oauthToken,
+          'copilot_token',
+        )
+      } catch (e) {
+        setErrorMsg(e instanceof Error ? e.message : String(e))
+        setStep('error')
+      }
+    },
+    [finalize, copilotKey],
+  )
 
   if (step === 'error' && errorMsg) {
     const options = [
@@ -300,10 +356,84 @@ function OnboardGithub(props: {
     )
   }
 
+  const termsWidth = useTerminalSize()?.columns ?? 80
+
+  if (step === 'ghe-url') {
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Text bold>GitHub Enterprise Server URL</Text>
+        <TextInput
+          value={gheUrlInput}
+          placeholder="https://github.example.com"
+          onChange={setGheUrlInput}
+          onSubmit={() => {
+            const trimmed = gheUrlInput.trim()
+            if (trimmed) {
+              setGheUrl(trimmed)
+              setGheUrlInput(trimmed)
+              setStep('menu')
+            } else {
+              setGheUrl(undefined)
+              setGheUrlInput('')
+              setStep('menu')
+            }
+          }}
+          width={Math.min(termsWidth - 4, 60)}
+        />
+        <Text dimColor>
+          Enter your GitHub Enterprise Server URL to use Copilot with a
+          self-hosted instance. Leave empty and press Enter to use github.com.
+        </Text>
+      </Box>
+    )
+  }
+
+  if (step === 'copilot-key') {
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Text bold>GitHub Copilot API Key</Text>
+        <TextInput
+          value={copilotKey}
+          placeholder="Paste your Copilot API key..."
+          onChange={setCopilotKey}
+          onSubmit={() => {
+            void runDeviceFlow()
+          }}
+          width={Math.min(termsWidth - 4, 60)}
+        />
+        <Text dimColor>
+          Paste your GitHub Copilot API Key. This is an alternative to the
+          device-flow OAuth sign-in. You can get it from your GitHub settings.
+        </Text>
+      </Box>
+    )
+  }
+
   const menuOptions = [
     {
       label: 'Sign in with browser',
       value: 'device' as const,
+    },
+    ...(gheUrl
+      ? [
+          {
+            label: `Switch Enterprise URL (${
+              gheUrl.length > 30
+                ? gheUrl.slice(0, 30) + '...'
+                : gheUrl
+            })`,
+            value: 'ghe-url' as const,
+          },
+        ]
+      : [
+          {
+            label: 'Use Enterprise Server',
+            value: 'ghe-url' as const,
+          },
+        ]),
+    {
+      label: 'Paste Copilot API Key',
+      value: 'copilot-key' as const,
     },
     {
       label: 'Cancel',
@@ -326,7 +456,15 @@ function OnboardGithub(props: {
             onDone('GitHub onboard cancelled', { display: 'system' })
             return
           }
-          void runDeviceFlow()
+          if (v === 'ghe-url') {
+            setStep('ghe-url')
+            return
+          }
+          if (v === 'copilot-key') {
+            setStep('copilot-key')
+            return
+          }
+          void runDeviceFlow({ gheUrl })
         }}
       />
     </Box>
@@ -335,8 +473,10 @@ function OnboardGithub(props: {
 
 export const call: LocalJSXCommandCall = async (onDone, context, args) => {
   const forceRelogin = shouldForceGithubRelogin(args)
+  const existingGheUrl = getExistingGithubEnterpriseUrl()
   if (hasExistingGithubModelsLoginToken() && !forceRelogin) {
     const activated = activateGithubOnboardingMode(DEFAULT_MODEL, {
+      gheUrl: existingGheUrl,
       onChangeAPIKey: context.onChangeAPIKey,
     })
     if (!activated.ok) {
