@@ -27,6 +27,79 @@ import {
 } from '../utils/providerFlag.js'
 import { applyProfileEnvToProcessEnv } from '../utils/providerProfile.js'
 
+type CliMain = typeof import('./cli.js')['main']
+
+let runCliEntrypoint: CliMain
+
+const mockProfileCheckpoint = mock((_checkpoint: string) => {})
+const mockPsHandler = mock(async (_args: string[]) => {})
+const mockLogsHandler = mock(async (_args: string[]) => {})
+const mockAttachHandler = mock(async (_args: string[]) => {})
+const mockKillHandler = mock(async (_args: string[]) => {})
+const mockHandleBgFlag = mock(async (_args: string[]) => {})
+const mockLoadEnvFile = mock((_filePath: string) => ({}))
+const mockParseProviderEnvFileArgs = mock((_args: string[]) => ({ paths: [] }))
+const mockReapplyRememberedEnvFileValues = mock(() => {})
+const mockRememberLoadedEnvFileValues = mock(
+  (_values: Record<string, string>) => {},
+)
+const mockEnableConfigs = mock(() => {})
+const mockApplySafeConfigEnvironmentVariables = mock(() => {})
+const mockApplyStartupEnvFromProfile = mock(
+  async (_input: {
+    processEnv: NodeJS.ProcessEnv
+    onValidationError: (message: string) => void
+  }) => {},
+)
+const mockGetProviderValidationError = mock(
+  async (_env: NodeJS.ProcessEnv) => undefined,
+)
+const mockEagerLoadSettingsFromArgs = mock((_args: string[]) => ({ ok: true }))
+const mockResolveOutOfProcessTeammateProviderFromCliArgs = mock(
+  (_args: string[], _settings: unknown) => undefined,
+)
+const mockApplyAgentProviderOverrideToEnv = mock((_override: unknown) => {})
+const mockGetInitialSettings = mock(() => ({}))
+const mockRefreshGithubModelsTokenIfNeeded = mock(async () => {})
+const mockHydrateGithubModelsTokenFromSecureStorage = mock(() => {})
+const mockValidateProviderEnvForStartupOrExit = mock(async () => {})
+const mockPrintStartupScreen = mock((_model: string | undefined) => {})
+const mockStartCapturingEarlyInput = mock(() => {})
+const mockCliMain = mock(async () => {})
+
+const runtimeMocks = [
+  mockProfileCheckpoint,
+  mockPsHandler,
+  mockLogsHandler,
+  mockAttachHandler,
+  mockKillHandler,
+  mockHandleBgFlag,
+  mockLoadEnvFile,
+  mockParseProviderEnvFileArgs,
+  mockReapplyRememberedEnvFileValues,
+  mockRememberLoadedEnvFileValues,
+  mockEnableConfigs,
+  mockApplySafeConfigEnvironmentVariables,
+  mockApplyStartupEnvFromProfile,
+  mockGetProviderValidationError,
+  mockEagerLoadSettingsFromArgs,
+  mockResolveOutOfProcessTeammateProviderFromCliArgs,
+  mockApplyAgentProviderOverrideToEnv,
+  mockGetInitialSettings,
+  mockRefreshGithubModelsTokenIfNeeded,
+  mockHydrateGithubModelsTokenFromSecureStorage,
+  mockValidateProviderEnvForStartupOrExit,
+  mockPrintStartupScreen,
+  mockStartCapturingEarlyInput,
+  mockCliMain,
+]
+
+function clearRuntimeMocks() {
+  for (const fn of runtimeMocks) {
+    fn.mockClear()
+  }
+}
+
 describe('cli.tsx — NODE_OPTIONS --max-old-space-size (issue #402)', () => {
   const originalNodeOptions = process.env.NODE_OPTIONS
 
@@ -222,6 +295,7 @@ describe('cli.tsx — --provider startup ordering', () => {
     const providerValidationIndex = src.indexOf(
       'await validateProviderEnvForStartupOrExit()',
     )
+
     expect(bgManagementIndex).toBeGreaterThanOrEqual(0)
     expect(configEnableIndex).toBeGreaterThanOrEqual(0)
     expect(providerValidationIndex).toBeGreaterThanOrEqual(0)
@@ -231,195 +305,179 @@ describe('cli.tsx — --provider startup ordering', () => {
 
   it('keeps background spawn after profile routing but before provider validation', async () => {
     const src = await Bun.file(`${import.meta.dir}/cli.tsx`).text()
-    const checkBg = src.indexOf("optionArgs.includes('--bg')")
-    const startupProfileIndex = src.indexOf('await buildStartupEnvFromProfile')
+    const profileApplyIndex = src.indexOf('await applyStartupEnvFromProfile')
+    const bgFlagIndex = src.indexOf("optionArgs.includes('--bg')")
     const providerValidationIndex = src.indexOf(
       'await validateProviderEnvForStartupOrExit()',
     )
-    expect(checkBg).toBeGreaterThanOrEqual(0)
-    expect(startupProfileIndex).toBeGreaterThanOrEqual(0)
+
+    expect(profileApplyIndex).toBeGreaterThanOrEqual(0)
+    expect(bgFlagIndex).toBeGreaterThanOrEqual(0)
     expect(providerValidationIndex).toBeGreaterThanOrEqual(0)
-    expect(checkBg).toBeGreaterThan(startupProfileIndex)
-    expect(checkBg).toBeLessThan(providerValidationIndex)
+    expect(bgFlagIndex).toBeGreaterThan(profileApplyIndex)
+    expect(bgFlagIndex).toBeLessThan(providerValidationIndex)
   })
+
 })
 
 describe('cli.tsx — background routing behavior', () => {
-  type CliMain = typeof import('./cli.js')['main']
-  let runCliEntrypoint: CliMain
+  const bgOptions = {
+    bgSessionsEnabled: true,
+    importers: {
+      startupProfiler: async () => ({
+        profileCheckpoint: mockProfileCheckpoint,
+      }),
+      bg: async () => ({
+        psHandler: mockPsHandler,
+        logsHandler: mockLogsHandler,
+        attachHandler: mockAttachHandler,
+        killHandler: mockKillHandler,
+        handleBgFlag: mockHandleBgFlag,
+      }),
+      envFile: async () => ({
+        loadEnvFile: mockLoadEnvFile,
+        parseProviderEnvFileArgs: mockParseProviderEnvFileArgs,
+        reapplyRememberedEnvFileValues: mockReapplyRememberedEnvFileValues,
+        rememberLoadedEnvFileValues: mockRememberLoadedEnvFileValues,
+      }),
+      config: async () => ({
+        enableConfigs: mockEnableConfigs,
+      }),
+      managedEnv: async () => ({
+        applySafeConfigEnvironmentVariables:
+          mockApplySafeConfigEnvironmentVariables,
+      }),
+      providerProfile: async () => ({
+        applyStartupEnvFromProfile: mockApplyStartupEnvFromProfile,
+      }),
+      providerValidation: async () => ({
+        getProviderValidationError: mockGetProviderValidationError,
+        validateProviderEnvForStartupOrExit:
+          mockValidateProviderEnvForStartupOrExit,
+      }),
+      flagSettings: async () => ({
+        eagerLoadSettingsFromArgs: mockEagerLoadSettingsFromArgs,
+      }),
+      agentRouting: async () => ({
+        applyAgentProviderOverrideToEnv: mockApplyAgentProviderOverrideToEnv,
+        resolveOutOfProcessTeammateProviderFromCliArgs:
+          mockResolveOutOfProcessTeammateProviderFromCliArgs,
+      }),
+      settings: async () => ({
+        getInitialSettings: mockGetInitialSettings,
+      }),
+      githubModelsCredentials: async () => ({
+        hydrateGithubModelsTokenFromSecureStorage:
+          mockHydrateGithubModelsTokenFromSecureStorage,
+        refreshGithubModelsTokenIfNeeded: mockRefreshGithubModelsTokenIfNeeded,
+      }),
+      startupScreen: async () => ({
+        printStartupScreen: mockPrintStartupScreen,
+      }),
+      earlyInput: async () => ({
+        startCapturingEarlyInput: mockStartCapturingEarlyInput,
+      }),
+      main: async () => ({
+        main: mockCliMain,
+      }),
+    },
+  } as unknown as Parameters<CliMain>[1]
+  const originalAutoRunGuard =
+    process.env.GAKR_DISABLE_CLI_ENTRYPOINT_AUTO_RUN
 
   beforeAll(async () => {
-    process.env.GAKR_CODE_DISABLE_CLI_ENTRYPOINT_AUTO_RUN = '1'
-    const mod = await import('./cli.js')
-    runCliEntrypoint = mod.main
+    process.env.GAKR_DISABLE_CLI_ENTRYPOINT_AUTO_RUN = '1'
+
+    const entrypoint = await import('./cli.js')
+    runCliEntrypoint = entrypoint.main
   })
 
   afterAll(() => {
-    delete process.env.GAKR_CODE_DISABLE_CLI_ENTRYPOINT_AUTO_RUN
+    if (originalAutoRunGuard === undefined) {
+      delete process.env.GAKR_DISABLE_CLI_ENTRYPOINT_AUTO_RUN
+    } else {
+      process.env.GAKR_DISABLE_CLI_ENTRYPOINT_AUTO_RUN =
+        originalAutoRunGuard
+    }
   })
-
-  const mockProfileCheckpoint = mock(() => {})
-  const mockPsHandler = mock(() => {})
-  const mockLogsHandler = mock(() => {})
-  const mockAttachHandler = mock(() => {})
-  const mockKillHandler = mock(() => {})
-  const mockHandleBgFlag = mock(() => {})
-  const mockEnableConfigs = mock(async () => {})
-  const mockApplySafeConfigEnv = mock(() => {})
-  const mockApplyProviderFlag = mock(() => ({ error: undefined }))
-  const mockReapplyProviderFlag = mock(() => {})
-  const mockLoadEnvFile = mock(() => ({}))
-  const mockParseProviderEnvFileArgs = mock(() => ({ paths: [], error: undefined }))
-  const mockReapplyEnvFile = mock(() => {})
-  const mockRememberLoadedEnvFile = mock(() => {})
-  const mockApplyStartupEnv = mock(() => ({}))
-  const mockBuildStartupEnv = mock(async () => process.env)
-  const mockGetProviderValidationError = mock(() => undefined)
-  const mockValidateProviderEnv = mock(async () => {})
-  const mockResolveAgentOverride = mock(() => undefined)
-  const mockApplyAgentOverride = mock(() => {})
-  const mockGetInitialSettings = mock(() => ({}))
-  const mockEagerLoadSettings = mock(() => ({ ok: true }))
-  const mockArgsBeforeDelimiter = mock((a: string[]) => a)
-  const mockEagerParseCliFlag = mock(() => undefined)
-  const mockPrintStartupScreen = mock(() => {})
-  const mockHydrateGithubToken = mock(() => {})
-  const mockRefreshGithubToken = mock(async () => false)
-  const mockStartCapturingEarlyInput = mock(() => {})
-  const mockCliMain = mock(async () => {})
-
-  function resetMock(m: ReturnType<typeof mock>) {
-    m.mockClear()
-  }
 
   beforeEach(() => {
-    resetMock(mockProfileCheckpoint)
-    resetMock(mockPsHandler)
-    resetMock(mockLogsHandler)
-    resetMock(mockAttachHandler)
-    resetMock(mockKillHandler)
-    resetMock(mockHandleBgFlag)
-    resetMock(mockEnableConfigs)
-    resetMock(mockApplySafeConfigEnv)
-    resetMock(mockApplyProviderFlag)
-    resetMock(mockReapplyProviderFlag)
-    resetMock(mockLoadEnvFile)
-    resetMock(mockParseProviderEnvFileArgs)
-    resetMock(mockReapplyEnvFile)
-    resetMock(mockRememberLoadedEnvFile)
-    resetMock(mockApplyStartupEnv)
-    resetMock(mockBuildStartupEnv)
-    resetMock(mockGetProviderValidationError)
-    resetMock(mockValidateProviderEnv)
-    resetMock(mockResolveAgentOverride)
-    resetMock(mockApplyAgentOverride)
-    resetMock(mockGetInitialSettings)
-    resetMock(mockEagerLoadSettings)
-    resetMock(mockArgsBeforeDelimiter)
-    resetMock(mockEagerParseCliFlag)
-    resetMock(mockPrintStartupScreen)
-    resetMock(mockHydrateGithubToken)
-    resetMock(mockRefreshGithubToken)
-    resetMock(mockStartCapturingEarlyInput)
-    resetMock(mockCliMain)
+    clearRuntimeMocks()
   })
 
-  const commonMocks = {
-    startupProfiler: () => ({ profileCheckpoint: mockProfileCheckpoint }),
-    bg: () => ({
-      psHandler: mockPsHandler,
-      logsHandler: mockLogsHandler,
-      attachHandler: mockAttachHandler,
-      killHandler: mockKillHandler,
-      handleBgFlag: mockHandleBgFlag,
-    }),
-    providerFlag: () => ({
-      applyProviderFlagFromArgs: mockApplyProviderFlag,
-      reapplyRememberedProviderFlag: mockReapplyProviderFlag,
-    }),
-    envFile: () => ({
-      loadEnvFile: mockLoadEnvFile,
-      parseProviderEnvFileArgs: mockParseProviderEnvFileArgs,
-      reapplyRememberedEnvFileValues: mockReapplyEnvFile,
-      rememberLoadedEnvFileValues: mockRememberLoadedEnvFile,
-    }),
-    config: () => ({
-      enableConfigs: mockEnableConfigs,
-      applySafeConfigEnvironmentVariables: mockApplySafeConfigEnv,
-    }),
-    managedEnv: () => ({
-      applySafeConfigEnvironmentVariables: mockApplySafeConfigEnv,
-    }),
-    providerProfile: () => ({
-      applyProfileEnvToProcessEnv: mockApplyStartupEnv,
-      buildStartupEnvFromProfile: mockBuildStartupEnv,
-      isDefaultStartupProviderEnv: mockGetProviderValidationError,
-    }),
-    providerValidation: () => ({
-      validateProviderEnvForStartupOrExit: mockValidateProviderEnv,
-      getProviderValidationError: mockGetProviderValidationError,
-    }),
-    agentRouting: () => ({
-      applyAgentProviderOverrideToEnv: mockApplyAgentOverride,
-      resolveOutOfProcessTeammateProviderFromCliArgs: mockResolveAgentOverride,
-    }),
-    settings: () => ({
-      getInitialSettings: mockGetInitialSettings,
-    }),
-    flagSettings: () => ({
-      eagerLoadSettingsFromArgs: mockEagerLoadSettings,
-    }),
-    cliArgs: () => ({
-      argsBeforeDelimiter: mockArgsBeforeDelimiter,
-      eagerParseCliFlag: mockEagerParseCliFlag,
-    }),
-    githubModelsCredentials: () => ({
-      hydrateGithubModelsTokenFromSecureStorage: mockHydrateGithubToken,
-      refreshGithubModelsTokenIfNeeded: mockRefreshGithubToken,
-    }),
-    startupScreen: () => ({
-      printStartupScreen: mockPrintStartupScreen,
-    }),
-    earlyInput: () => ({
-      startCapturingEarlyInput: mockStartCapturingEarlyInput,
-    }),
-    main: () => ({
-      main: mockCliMain,
-    }),
-  }
-
-  const bgEnabledOptions = { bgSessionsEnabled: true, importers: commonMocks }
-
   it('dispatches background management commands before startup work', async () => {
-    await runCliEntrypoint(['ps'], bgEnabledOptions)
+    const cases: Array<[string, typeof mockPsHandler, string[]]> = [
+      ['ps', mockPsHandler, ['--json']],
+      ['logs', mockLogsHandler, ['session-1', '-f']],
+      ['attach', mockAttachHandler, ['session-1']],
+      ['kill', mockKillHandler, ['session-1']],
+    ]
 
-    expect(mockPsHandler).toHaveBeenCalled()
-    expect(mockEnableConfigs).not.toHaveBeenCalled()
+    for (const [command, handler, tail] of cases) {
+      clearRuntimeMocks()
+
+      await runCliEntrypoint([command, ...tail], bgOptions)
+
+      expect(handler.mock.calls).toEqual([[tail]])
+      expect(mockParseProviderEnvFileArgs).not.toHaveBeenCalled()
+      expect(mockHandleBgFlag).not.toHaveBeenCalled()
+      expect(mockEnableConfigs).not.toHaveBeenCalled()
+      expect(mockValidateProviderEnvForStartupOrExit).not.toHaveBeenCalled()
+      expect(mockCliMain).not.toHaveBeenCalled()
+    }
   })
 
   it('keeps management commands on the management path even with --bg arguments', async () => {
-    await runCliEntrypoint(['ps', '--bg'], bgEnabledOptions)
+    const cases: Array<[string, typeof mockPsHandler]> = [
+      ['ps', mockPsHandler],
+      ['logs', mockLogsHandler],
+      ['attach', mockAttachHandler],
+      ['kill', mockKillHandler],
+    ]
 
-    expect(mockPsHandler).toHaveBeenCalled()
-    expect(mockHandleBgFlag).not.toHaveBeenCalled()
+    for (const [command, handler] of cases) {
+      clearRuntimeMocks()
+
+      await runCliEntrypoint([command, '--bg', 'session-1'], bgOptions)
+
+      expect(handler.mock.calls).toEqual([[['--bg', 'session-1']]])
+      expect(mockParseProviderEnvFileArgs).not.toHaveBeenCalled()
+      expect(mockHandleBgFlag).not.toHaveBeenCalled()
+      expect(mockEnableConfigs).not.toHaveBeenCalled()
+      expect(mockValidateProviderEnvForStartupOrExit).not.toHaveBeenCalled()
+      expect(mockCliMain).not.toHaveBeenCalled()
+    }
   })
 
   it('routes real background flags after profile routing without provider validation', async () => {
-    await runCliEntrypoint(['--bg'], bgEnabledOptions)
+    const args = ['--background', '--', '--print']
 
-    expect(mockHandleBgFlag).toHaveBeenCalled()
-    expect(mockValidateProviderEnv).not.toHaveBeenCalled()
+    await runCliEntrypoint(args, bgOptions)
+
+    expect(mockEnableConfigs).toHaveBeenCalledTimes(1)
+    expect(mockParseProviderEnvFileArgs.mock.calls).toEqual([[args]])
+    expect(mockReapplyRememberedEnvFileValues).toHaveBeenCalledTimes(2)
+    expect(mockApplySafeConfigEnvironmentVariables).toHaveBeenCalledTimes(1)
+    expect(mockApplyStartupEnvFromProfile).toHaveBeenCalledTimes(1)
+    expect(mockEagerLoadSettingsFromArgs.mock.calls).toEqual([[args]])
+    expect(mockHandleBgFlag.mock.calls).toEqual([[args]])
+    expect(mockRefreshGithubModelsTokenIfNeeded).not.toHaveBeenCalled()
+    expect(mockValidateProviderEnvForStartupOrExit).not.toHaveBeenCalled()
+    expect(mockCliMain).not.toHaveBeenCalled()
   })
 
   it('treats --bg after -- as positional text, not a background flag', async () => {
-    mockArgsBeforeDelimiter.mockImplementation((a: string[]) => {
-      const delim = a.indexOf('--')
-      return delim === -1 ? a : a.slice(0, delim)
-    })
+    const args = ['--', '--bg']
 
-    await runCliEntrypoint(['--', '--bg'], { bgSessionsEnabled: true, importers: commonMocks })
+    await runCliEntrypoint(args, bgOptions)
+
     expect(mockHandleBgFlag).not.toHaveBeenCalled()
-    expect(mockStartCapturingEarlyInput).toHaveBeenCalled()
-    expect(mockCliMain).toHaveBeenCalled()
+    expect(mockRefreshGithubModelsTokenIfNeeded).toHaveBeenCalledTimes(1)
+    expect(mockHydrateGithubModelsTokenFromSecureStorage).toHaveBeenCalledTimes(
+      1,
+    )
+    expect(mockValidateProviderEnvForStartupOrExit).toHaveBeenCalledTimes(1)
+    expect(mockPrintStartupScreen).toHaveBeenCalledTimes(1)
+    expect(mockCliMain).toHaveBeenCalledTimes(1)
   })
 })
