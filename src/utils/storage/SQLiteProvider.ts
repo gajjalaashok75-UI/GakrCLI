@@ -35,7 +35,7 @@ export class SQLiteProvider {
       mkdirSync(projectDir, { recursive: true })
     }
     this.dbPath = join(projectDir, 'knowledge.db')
-    
+
     // Ensure connection is closed on process exit
     registerCleanup(() => this.close())
   }
@@ -47,12 +47,21 @@ export class SQLiteProvider {
   public async init(): Promise<void> {
     if (this.isInitialized && this.db) return
 
+    // Runtime check: bun:sqlite is only available in Bun
+    if (typeof Bun === 'undefined') {
+      this.isInitialized = true
+      return
+    }
+
     try {
+      // Dynamic import to prevent Node.js from failing during bundle load
+      const { Database } = await import('bun:sqlite')
+
       if (existsSync(this.dbPath) && statSync(this.dbPath).size === 0) {
         unlinkSync(this.dbPath)
       }
 
-      this.db = await this.openDatabase()
+      this.db = new Database(this.dbPath)
       this.db.exec('PRAGMA journal_mode = WAL;')
       this.db.exec('PRAGMA foreign_keys = ON;')
       this.createTables()
@@ -76,10 +85,13 @@ export class SQLiteProvider {
         }
       }
 
-      this.db = await this.openDatabase()
-      this.db.exec('PRAGMA journal_mode = WAL;')
-      this.db.exec('PRAGMA foreign_keys = ON;')
-      this.createTables()
+      if (typeof Bun !== 'undefined') {
+        const { Database } = await import('bun:sqlite')
+        this.db = new Database(this.dbPath)
+        this.db.exec('PRAGMA journal_mode = WAL;')
+        this.db.exec('PRAGMA foreign_keys = ON;')
+        this.createTables()
+      }
       this.isInitialized = true
     } catch (e) {
       console.warn(`Critical SQLite failure during self-heal at ${this.dbPath}. Falling back to JSON:`, e)
@@ -87,7 +99,6 @@ export class SQLiteProvider {
       this.db = null
     }
   }
-
   private async openDatabase(): Promise<any> {
     if (typeof Bun !== 'undefined') {
       const { Database } = await import('bun:sqlite')
@@ -186,68 +197,79 @@ export class SQLiteProvider {
 
         try {
         const upsertEntity = prepare(`
-          INSERT INTO entities (id, type, name, attributes, last_updated) 
-          VALUES (?, ?, ?, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET 
-            type=excluded.type, 
-            name=excluded.name, 
-            attributes=excluded.attributes, 
+          INSERT INTO entities (id, type, name, attributes, last_updated)
+          VALUES ($id, $type, $name, $attributes, $last_updated)
+          ON CONFLICT(id) DO UPDATE SET
+            type=excluded.type,
+            name=excluded.name,
+            attributes=excluded.attributes,
             last_updated=excluded.last_updated
         `)
-        
+
         const upsertSummary = prepare(`
-          INSERT INTO summaries (id, content, keywords, timestamp) 
-          VALUES (?, ?, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET 
-            content=excluded.content, 
-            keywords=excluded.keywords, 
+          INSERT INTO summaries (id, content, keywords, timestamp)
+          VALUES ($id, $content, $keywords, $timestamp)
+          ON CONFLICT(id) DO UPDATE SET
+            content=excluded.content,
+            keywords=excluded.keywords,
             timestamp=excluded.timestamp
         `)
 
         const upsertRelation = prepare(`
-          INSERT INTO relations (source_id, target_id, type) 
-          VALUES (?, ?, ?)
+          INSERT INTO relations (source_id, target_id, type)
+          VALUES ($source_id, $target_id, $type)
           ON CONFLICT(source_id, target_id, type) DO NOTHING
         `)
 
         const upsertRule = prepare(`
-          INSERT INTO rules (content, timestamp) 
-          VALUES (?, ?)
-          ON CONFLICT(content) DO UPDATE SET 
+          INSERT INTO rules (content, timestamp)
+          VALUES ($content, $timestamp)
+          ON CONFLICT(content) DO UPDATE SET
             timestamp=excluded.timestamp
         `)
 
         for (const entity of Object.values(graph.entities)) {
-          upsertEntity.run(
-            entity.id,
-            entity.type,
-            entity.name,
-            JSON.stringify(entity.attributes),
-            graph.lastUpdateTime,
-          )
+          upsertEntity.run({
+            $id: entity.id,
+            $type: entity.type,
+            $name: entity.name,
+            $attributes: JSON.stringify(entity.attributes),
+            $last_updated: graph.lastUpdateTime
+          })
         }
 
         for (const rel of graph.relations) {
-          upsertRelation.run(rel.sourceId, rel.targetId, rel.type)
+          upsertRelation.run({
+            $source_id: rel.sourceId,
+            $target_id: rel.targetId,
+            $type: rel.type
+          })
         }
 
         for (const summary of graph.summaries) {
-          upsertSummary.run(
-            summary.id,
-            summary.content,
-            JSON.stringify(summary.keywords),
-            summary.timestamp,
-          )
+          upsertSummary.run({
+            $id: summary.id,
+            $content: summary.content,
+            $keywords: JSON.stringify(summary.keywords),
+            $timestamp: summary.timestamp
+          })
         }
 
-        this.db!.exec('DELETE FROM rules')
+        // Replace all rules — this is a full graph save, so stale rules
+        // that are no longer in the new graph must be removed.
+        const deleteAllRules = prepare('DELETE FROM rules')
+        deleteAllRules.run()
+
         for (const rule of graph.rules) {
-          upsertRule.run(rule, graph.lastUpdateTime)
+          upsertRule.run({
+            $content: rule,
+            $timestamp: Date.now()
+          })
         }
 
-        prepare('INSERT OR REPLACE INTO sync_meta (key, value) VALUES (?, ?)')
+        this.db!.prepare('INSERT OR REPLACE INTO sync_meta (key, value) VALUES (?, ?)')
           .run('last_update_time', graph.lastUpdateTime.toString())
-        } finally {
+      } finally {
           for (const statement of statements) {
             try {
               statement.finalize?.()
@@ -273,16 +295,16 @@ export class SQLiteProvider {
       }
 
       try {
-      const entitiesRaw = prepare('SELECT * FROM entities').all() as any[]
-      const summariesRaw = prepare('SELECT * FROM summaries').all() as any[]
-      
+      const entitiesRaw = this.db.query('SELECT * FROM entities').all() as any[]
+      const summariesRaw = this.db.query('SELECT * FROM summaries').all() as any[]
+
       if (entitiesRaw.length === 0 && summariesRaw.length === 0) {
         return null
       }
 
-      const relationsRaw = prepare('SELECT * FROM relations').all() as any[]
-      const rulesRaw = prepare('SELECT * FROM rules').all() as any[]
-      const meta = prepare('SELECT value FROM sync_meta WHERE key = "last_update_time"').get() as any
+      const relationsRaw = this.db.query('SELECT * FROM relations').all() as any[]
+      const rulesRaw = this.db.query('SELECT * FROM rules').all() as any[]
+      const meta = this.db.query('SELECT value FROM sync_meta WHERE key = "last_update_time"').get() as any
 
       const entities: Record<string, Entity> = {}
       for (const row of entitiesRaw) {
@@ -334,8 +356,13 @@ export class SQLiteProvider {
         return true
       }
 
+      if (typeof Bun === 'undefined') {
+        return false
+      }
+
       try {
-        this.db = this.openDatabaseSync()
+        const { Database } = require('bun:sqlite')
+        this.db = new Database(this.dbPath)
         this.db.exec('PRAGMA journal_mode = WAL;')
         this.db.exec('PRAGMA foreign_keys = ON;')
         this.createTables()
@@ -349,13 +376,13 @@ export class SQLiteProvider {
     }
 
     try {
-      this.runTransaction(() => {
+      this.db.transaction(() => {
         this.db!.exec('DELETE FROM relations')
         this.db!.exec('DELETE FROM entities')
         this.db!.exec('DELETE FROM summaries')
         this.db!.exec('DELETE FROM rules')
         this.db!.exec('DELETE FROM sync_meta')
-      })
+      })()
       return true
     } catch (e) {
       console.error('Failed to clear SQLite knowledge graph:', e)

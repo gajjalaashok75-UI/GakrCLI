@@ -1,6 +1,6 @@
 import type { LocalCommandCall } from '../../types/command.js';
 import { getArcSummary, resetArc, getArcStats } from '../../utils/conversationArc.js';
-import { getGlobalGraph, getKnowledgeStorageStatus, resetGlobalGraph } from '../../utils/knowledgeGraph.js';
+import { getGlobalGraph, getKnowledgeStorageStatus , resetGlobalGraph } from '../../utils/knowledgeGraph.js';
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js';
 import chalk from 'chalk';
 
@@ -30,7 +30,7 @@ export const call: LocalCommandCall = async (args, _context) => {
     } else if (!storage.sqliteReady) {
       output += ' (SQLite available but not initialized yet)';
     }
-
+    
     return { type: 'text', value: output };
   }
 
