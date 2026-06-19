@@ -164,7 +164,7 @@ export default defineGateway({
       {
         id: 'github-claude-sonnet-4.6',
         apiName: 'claude-sonnet-4-6',
-        label: 'claude sonnet 4.6 (GitHub)',
+        label: 'Claude Sonnet 4.6 (GitHub)',
         modelDescriptorId: 'github:copilot:claude-sonnet-4.6',
         contextWindow: 200_000,
         maxOutputTokens: 8_192,
@@ -172,7 +172,7 @@ export default defineGateway({
       {
         id: 'github-claude-sonnet-4.5',
         apiName: 'claude-sonnet-4-5',
-        label: 'claude sonnet 4.5 (GitHub)',
+        label: 'Claude Sonnet 4.5 (GitHub)',
         modelDescriptorId: 'github:copilot:claude-sonnet-4.5',
         contextWindow: 200_000,
         maxOutputTokens: 8_192,
@@ -180,7 +180,7 @@ export default defineGateway({
       {
         id: 'github-claude-opus-4.6',
         apiName: 'claude-opus-4-6',
-        label: 'claude opus 4.6 (GitHub)',
+        label: 'Claude Opus 4.6 (GitHub)',
         modelDescriptorId: 'github:copilot:claude-opus-4.6',
         contextWindow: 200_000,
         maxOutputTokens: 8_192,
@@ -188,7 +188,7 @@ export default defineGateway({
       {
         id: 'github-claude-opus-4.5',
         apiName: 'claude-opus-4-5',
-        label: 'claude opus 4.5 (GitHub)',
+        label: 'Claude Opus 4.5 (GitHub)',
         modelDescriptorId: 'github:copilot:claude-opus-4.5',
         contextWindow: 200_000,
         maxOutputTokens: 8_192,
@@ -196,7 +196,7 @@ export default defineGateway({
       {
         id: 'github-claude-haiku-4.5',
         apiName: 'claude-haiku-4-5',
-        label: 'claude haiku 4.5 (GitHub)',
+        label: 'Claude Haiku 4.5 (GitHub)',
         modelDescriptorId: 'github:copilot:claude-haiku-4.5',
         contextWindow: 144_000,
         maxOutputTokens: 8_192,
