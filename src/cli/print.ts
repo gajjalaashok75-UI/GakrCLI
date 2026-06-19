@@ -2835,7 +2835,7 @@ function runHeadlessStreaming(
             }))
           }
           if (abortController) {
-            abortController.abort()
+            abortController.abort('interrupt')
           }
           suggestionState.abortController?.abort()
           suggestionState.abortController = null
@@ -2847,7 +2847,7 @@ function runHeadlessStreaming(
             `[print.ts] end_session received, reason=${message.request.reason ?? 'unspecified'}`,
           )
           if (abortController) {
-            abortController.abort()
+            abortController.abort('interrupt')
           }
           suggestionState.abortController?.abort()
           suggestionState.abortController = null

@@ -80,9 +80,19 @@ type ProfileCompatibilityMode =
   | 'gemini'
   | 'mistral'
   | 'github'
+  | 'github-enterprise'
   | 'bedrock'
   | 'vertex'
   | 'openai'
+
+function isGithubCompatibilityMode(
+  compatibilityMode: ProfileCompatibilityMode,
+): boolean {
+  return (
+    compatibilityMode === 'github' ||
+    compatibilityMode === 'github-enterprise'
+  )
+}
 
 function resolveProfileCompatibility(provider: string): {
   route: ResolvedProfileRoute
@@ -90,7 +100,10 @@ function resolveProfileCompatibility(provider: string): {
 } {
   const route = resolveProfileRoute(provider)
 
-  if (route.gatewayId === 'github') {
+  if (provider === 'github-enterprise' || route.gatewayId === 'github-enterprise') {
+    return { route, compatibilityMode: 'github-enterprise' }
+  }
+  if (provider === 'github' || route.gatewayId === 'github') {
     return { route, compatibilityMode: 'github' }
   }
   if (route.gatewayId === 'bedrock') {
@@ -113,6 +126,43 @@ function resolveProfileCompatibility(provider: string): {
   }
 
   return { route, compatibilityMode: 'openai' }
+}
+
+function deriveGithubEnterpriseUrl(baseUrl: string | undefined): string | undefined {
+  if (!baseUrl?.trim()) return undefined
+  try {
+    const parsed = new URL(baseUrl)
+    if (parsed.origin === 'https://api.githubcopilot.com') {
+      return undefined
+    }
+    return parsed.origin
+  } catch {
+    return undefined
+  }
+}
+
+function buildGithubCompatibleProfileEnv(options: {
+  model: string
+  baseUrl?: string
+  gatewayId?: string
+  apiKey?: string
+}): ProfileEnv {
+  const env = buildGithubProfileEnv({
+    model: options.model,
+    baseUrl: options.baseUrl,
+  })
+
+  if (options.gatewayId === 'github-enterprise') {
+    const enterpriseUrl = deriveGithubEnterpriseUrl(options.baseUrl)
+    if (enterpriseUrl) {
+      env.GITHUB_ENTERPRISE_URL = enterpriseUrl
+    }
+    if (options.apiKey?.trim()) {
+      env.GITHUB_COPILOT_KEY = options.apiKey.trim()
+    }
+  }
+
+  return env
 }
 
 function trimValue(value: string | undefined): string {
@@ -488,7 +538,7 @@ function isProcessEnvAlignedWithProfile(
     )
   }
 
-  if (compatibilityMode === 'github') {
+  if (compatibilityMode === 'github' || compatibilityMode === 'github-enterprise') {
     return (
       processEnv.GAKR_CODE_USE_GITHUB !== undefined &&
       processEnv.GAKR_CODE_USE_OPENAI === undefined &&
@@ -650,10 +700,12 @@ export function applyProviderProfileToProcessEnv(profile: ProviderProfile): void
       GEMINI_MODEL: primaryModel,
       ...(profile.apiKey ? { GEMINI_API_KEY: profile.apiKey } : {}),
     }
-  } else if (compatibilityMode === 'github') {
-    profileEnv = buildGithubProfileEnv({
+  } else if (compatibilityMode === 'github' || compatibilityMode === 'github-enterprise') {
+    profileEnv = buildGithubCompatibleProfileEnv({
       model: primaryModel,
       baseUrl: profile.baseUrl,
+      gatewayId: profile.provider === 'github-enterprise' ? 'github-enterprise' : undefined,
+      apiKey: profile.apiKey,
     })
   } else if (compatibilityMode === 'bedrock') {
     profileEnv = buildBedrockProfileEnv({
@@ -1094,12 +1146,23 @@ function buildStartupProfileFromActiveProfile(
         ? { profile: 'mistral', env: applySupportedProfileCustomHeaders(activeProfile, env) }
         : null
     }
+    case 'github-enterprise':
+      return {
+        profile: 'github-enterprise',
+        env: applySupportedProfileCustomHeaders(activeProfile, buildGithubCompatibleProfileEnv({
+          model: getPrimaryModel(activeProfile.model),
+          baseUrl: activeProfile.baseUrl,
+          gatewayId: 'github-enterprise',
+          apiKey: activeProfile.apiKey,
+        })),
+      }
     case 'github':
       return {
         profile: 'github',
-        env: applySupportedProfileCustomHeaders(activeProfile, buildGithubProfileEnv({
+        env: applySupportedProfileCustomHeaders(activeProfile, buildGithubCompatibleProfileEnv({
           model: getPrimaryModel(activeProfile.model),
           baseUrl: activeProfile.baseUrl,
+          apiKey: activeProfile.apiKey,
         })),
       }
     case 'bedrock':

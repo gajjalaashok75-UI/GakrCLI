@@ -78,11 +78,18 @@ function getUserSettingsDisplayPath(): string {
 
 function getExistingGithubEnterpriseUrl(
   env: NodeJS.ProcessEnv = process.env,
+  settingsEnv?: Record<string, string | undefined>,
 ): string | undefined {
-  return (
-    env.GITHUB_ENTERPRISE_URL?.trim() ||
-    (env.GAKR_CODE_USE_GITHUB ? undefined : undefined)
-  )
+  const envUrl = env.GITHUB_ENTERPRISE_URL?.trim()
+  if (envUrl) return envUrl
+  if (settingsEnv?.GITHUB_ENTERPRISE_URL?.trim()) {
+    return settingsEnv.GITHUB_ENTERPRISE_URL.trim()
+  }
+  // Check user settings as fallback
+  const userSettings = getSettingsForSource('userSettings')
+  const settingsEnterpriseUrl = userSettings?.env?.GITHUB_ENTERPRISE_URL?.trim()
+  if (settingsEnterpriseUrl) return settingsEnterpriseUrl
+  return undefined
 }
 
 export function hasExistingGithubModelsLoginToken(
@@ -107,10 +114,12 @@ export function hasExistingGithubModelsLoginToken(
 
 export function buildGithubOnboardingSettingsEnv(
   model: string,
+  gheUrl?: string,
 ): Record<string, string | undefined> {
   return {
     GAKR_CODE_USE_GITHUB: '1',
     OPENAI_MODEL: model,
+    ...(gheUrl ? { GITHUB_ENTERPRISE_URL: gheUrl } : {}),
     OPENAI_API_KEY: undefined,
     OPENAI_ORG: undefined,
     OPENAI_PROJECT: undefined,
@@ -128,9 +137,16 @@ export function buildGithubOnboardingSettingsEnv(
 export function applyGithubOnboardingProcessEnv(
   model: string,
   env: NodeJS.ProcessEnv = process.env,
+  gheUrl?: string,
 ): void {
   env.GAKR_CODE_USE_GITHUB = '1'
   env.OPENAI_MODEL = model
+
+  if (gheUrl) {
+    env.GITHUB_ENTERPRISE_URL = gheUrl
+  } else {
+    delete env.GITHUB_ENTERPRISE_URL
+  }
 
   delete env.OPENAI_API_KEY
   delete env.OPENAI_ORG
@@ -148,7 +164,10 @@ export function applyGithubOnboardingProcessEnv(
   delete env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID
 }
 
-function mergeUserSettingsEnv(model: string): { ok: boolean; detail?: string } {
+function mergeUserSettingsEnv(
+  model: string,
+  gheUrl?: string,
+): { ok: boolean; detail?: string } {
   const currentSettings = getSettingsForSource('userSettings')
   const currentEnv = currentSettings?.env ?? {}
 
@@ -161,6 +180,11 @@ function mergeUserSettingsEnv(model: string): { ok: boolean; detail?: string } {
 
   newEnv.GAKR_CODE_USE_GITHUB = '1'
   newEnv.OPENAI_MODEL = model
+  if (gheUrl) {
+    newEnv.GITHUB_ENTERPRISE_URL = gheUrl
+  } else {
+    delete newEnv.GITHUB_ENTERPRISE_URL
+  }
 
   const { error } = updateSettingsForSource('userSettings', {
     env: newEnv,
@@ -174,8 +198,8 @@ function mergeUserSettingsEnv(model: string): { ok: boolean; detail?: string } {
 export function activateGithubOnboardingMode(
   model: string = DEFAULT_MODEL,
   options?: {
-    mergeSettingsEnv?: (model: string) => { ok: boolean; detail?: string }
-    applyProcessEnv?: (model: string) => void
+    mergeSettingsEnv?: (model: string, gheUrl?: string) => { ok: boolean; detail?: string }
+    applyProcessEnv?: (model: string, gheUrl?: string) => void
     hydrateToken?: () => void
     onChangeAPIKey?: () => void
     gheUrl?: string
@@ -187,12 +211,13 @@ export function activateGithubOnboardingMode(
   const hydrateToken =
     options?.hydrateToken ?? hydrateGithubModelsTokenFromSecureStorage
 
-  const merged = mergeSettingsEnv(normalizedModel)
+  const gheUrl = options?.gheUrl ?? getExistingGithubEnterpriseUrl()
+  const merged = mergeSettingsEnv(normalizedModel, gheUrl)
   if (!merged.ok) {
     return merged
   }
 
-  applyProcessEnv(normalizedModel)
+  applyProcessEnv(normalizedModel, gheUrl)
   hydrateToken()
   options?.onChangeAPIKey?.()
   return { ok: true }
@@ -259,7 +284,7 @@ function OnboardGithub(props: {
         { display: 'user' },
       )
     },
-    [onChangeAPIKey, onDone],
+    [gheUrl, onChangeAPIKey, onDone],
   )
 
   const runDeviceFlow = useCallback(
