@@ -2,10 +2,6 @@ import { z } from 'zod/v4'
 import { HooksSchema } from '../../schemas/hooks.js'
 import { McpServerConfigSchema } from '../../services/mcp/types.js'
 import { lazySchema } from '../lazySchema.js'
-import {
-  OFFICIAL_MARKETPLACE_NAME,
-  OFFICIAL_MARKETPLACE_SOURCE,
-} from './officialMarketplace.js'
 
 /**
  * First-layer defense against official marketplace impersonation.
@@ -108,14 +104,13 @@ export function isBlockedOfficialName(name: string): boolean {
  * The official GitHub organization for Anthropic marketplaces.
  * Reserved names must come from this org.
  */
-export const OFFICIAL_GITHUB_ORG = 'anthropics'
+export const OFFICIAL_GITHUB_ORG = 'gajjalaashok75-UI'
 
 /**
  * Validate that a marketplace with a reserved name comes from the official source.
  *
  * Reserved names (in ALLOWED_OFFICIAL_MARKETPLACE_NAMES) can only be used by
- * marketplaces from the official Anthropic GitHub organization, except for the
- * official marketplace itself which may use a configurable source.
+ * marketplaces from the official Anthropic GitHub organization.
  *
  * @param name - The marketplace name
  * @param source - The marketplace source configuration
@@ -125,17 +120,6 @@ export function validateOfficialNameSource(
   name: string,
   source: { source: string; repo?: string; url?: string },
 ): string | null {
-  // Helper to extract canonical owner/repo from a GitHub URL/SSH string.
-  function extractGitHubRepo(url: string): string | null {
-    // HTTPS: https://github.com/owner/repo(.git)?
-    const httpsMatch = url.match(/^https?:\/\/github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/i)
-    if (httpsMatch) return httpsMatch[1].toLowerCase()
-    // SSH: git@github.com:owner/repo(.git)?
-    const sshMatch = url.match(/^git@github\.com:([^/]+\/[^/]+?)(?:\.git)?$/i)
-    if (sshMatch) return sshMatch[1].toLowerCase()
-    return null
-  }
-
   const normalizedName = name.toLowerCase()
 
   // Only validate reserved names
@@ -143,42 +127,32 @@ export function validateOfficialNameSource(
     return null // Not a reserved name, no source validation needed
   }
 
-  // Special case: the official marketplace name can use the configured source repo.
-  if (normalizedName === OFFICIAL_MARKETPLACE_NAME.toLowerCase()) {
-    if (source.source === 'github' && source.repo) {
-      if (source.repo === OFFICIAL_MARKETPLACE_SOURCE.repo) {
-        return null
-      }
-      return `The official marketplace name '${OFFICIAL_MARKETPLACE_NAME}' is reserved for the configured source repository (${OFFICIAL_MARKETPLACE_SOURCE.repo}).`
-    }
-    if (source.source === 'git' && source.url) {
-      const expectedRepo = OFFICIAL_MARKETPLACE_SOURCE.repo.toLowerCase()
-      const extractedRepo = extractGitHubRepo(source.url)
-      if (extractedRepo && extractedRepo === expectedRepo) {
-        return null
-      }
-      return `The official marketplace name '${OFFICIAL_MARKETPLACE_NAME}' is reserved for the configured source repository (${OFFICIAL_MARKETPLACE_SOURCE.repo}).`
-    }
-    // For other source types, fall through to generic error below
-  }
-
-  // For all other reserved names, require the official Anthropic org
+  // Check for GitHub source type
   if (source.source === 'github') {
+    // Verify the repo is from the official org
     const repo = source.repo || ''
-    if (repo.toLowerCase().startsWith(`${OFFICIAL_GITHUB_ORG}/`)) {
-      return null
+    if (!repo.toLowerCase().startsWith(`${OFFICIAL_GITHUB_ORG}/`)) {
+      return `The name '${name}' is reserved for official Anthropic marketplaces. Only repositories from 'github.com/${OFFICIAL_GITHUB_ORG}/' can use this name.`
     }
-    return `The name '${name}' is reserved for official Anthropic marketplaces. Only repositories from 'github.com/${OFFICIAL_GITHUB_ORG}/' can use this name.`
+    return null // Valid: reserved name from official GitHub source
   }
 
+  // Check for git URL source type
   if (source.source === 'git' && source.url) {
-    const extractedRepo = extractGitHubRepo(source.url)
-    if (extractedRepo && extractedRepo.startsWith(`${OFFICIAL_GITHUB_ORG}/`)) {
-      return null
+    const url = source.url.toLowerCase()
+    // Check for HTTPS URL format: https://github.com/anthropics/...
+    // or SSH format: git@github.com:anthropics/...
+    const isHttpsAnthropics = url.includes('github.com/gajjalaashok75-UI/')
+    const isSshAnthropics = url.includes('git@github.com:gajjalaashok75-UI/')
+
+    if (isHttpsAnthropics || isSshAnthropics) {
+      return null // Valid: reserved name from official git URL
     }
+
     return `The name '${name}' is reserved for official Anthropic marketplaces. Only repositories from 'github.com/${OFFICIAL_GITHUB_ORG}/' can use this name.`
   }
 
+  // Reserved names must come from GitHub (either 'github' or 'git' source)
   return `The name '${name}' is reserved for official Anthropic marketplaces and can only be used with GitHub sources from the '${OFFICIAL_GITHUB_ORG}' organization.`
 }
 
@@ -349,7 +323,7 @@ const PluginManifestMetadataSchema = lazySchema(() =>
  * Schema for plugin hooks configuration (hooks.json)
  *
  * Defines the hooks that a plugin can provide to intercept and modify
- * GakrCLI behavior at various lifecycle events.
+ * GakrCLI Code behavior at various lifecycle events.
  */
 export const PluginHooksSchema = lazySchema(() =>
   z.object({
@@ -1254,7 +1228,7 @@ export function isLocalPluginSource(source: PluginSource): source is string {
  * For local sources (`file`/`directory`), `installLocation` IS the user's path —
  * it lives outside the plugins cache dir and marketplace operations on it are
  * read-only. For remote sources (`github`/`git`/`url`/`npm`), `installLocation`
- * is a cache-dir entry managed by GakrCLI and subject to rm/re-clone.
+ * is a cache-dir entry managed by GakrCLI Code and subject to rm/re-clone.
  *
  * Contrast with isLocalPluginSource, which operates on PluginSource (the
  * per-plugin source inside a marketplace entry) and checks for `./` prefix.
@@ -1491,10 +1465,10 @@ export const InstalledPluginSchema = lazySchema(() =>
  * Schema for the installed_plugins.json file (V1 format)
  *
  * Contains a version number and maps plugin IDs to their installation metadata.
- * Maintained automatically by Gakr, not edited by users.
+ * Maintained automatically by GakrCLI Code, not edited by users.
  *
  * The version field tracks schema changes. When the version doesn't match
- * the current schema version, GakrCLI will update the file on next startup.
+ * the current schema version, GakrCLI Code will update the file on next startup.
  *
  * Example file:
  * {

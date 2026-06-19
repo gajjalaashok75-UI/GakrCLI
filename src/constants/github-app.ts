@@ -1,9 +1,9 @@
 export const PR_TITLE = 'Add GakrCLI GitHub Workflow'
 
 export const GITHUB_ACTION_SETUP_DOCS_URL =
-  'https://github.com/anthropics/gakrcli-code-action/blob/main/docs/setup.md'
+  'https://github.com/gajjalaashok75-UI/gakrcli-action/blob/main/docs/setup.md'
 
-export const WORKFLOW_CONTENT = `name: Gakr
+export const WORKFLOW_CONTENT = `name: GakrCLI
 
 on:
   issue_comment:
@@ -35,9 +35,9 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Run Gakr
+      - name: Run GakrCLI
         id: gakrcli
-        uses: anthropics/gakrcli-code-action@v1
+        uses: gajjalaashok75-UI/gakrcli-action@v1
         with:
           anthropic_api_key: \${{ secrets.ANTHROPIC_API_KEY }}
 
@@ -45,12 +45,12 @@ jobs:
           additional_permissions: |
             actions: read
 
-          # Optional: Give a custom prompt to Gakr. If this is not specified, GakrCLI will perform the instructions specified in the comment that tagged it.
+          # Optional: Give a custom prompt to GakrCLI. If this is not specified, GakrCLI will perform the instructions specified in the comment that tagged it.
           # prompt: 'Update the pull request description to include a summary of changes.'
 
           # Optional: Add gakrcli_args to customize behavior and configuration
-          # See https://github.com/anthropics/gakrcli-code-action/blob/main/docs/usage.md
-          # or https://github.com/gajjalaashok75-UI/GakrCLI/docs/en/cli-reference for available options
+          # See https://github.com/gajjalaashok75-UI/gakrcli-action/blob/main/docs/usage.md
+          # or https://code.gakrcli.com/docs/en/cli-reference for available options
           # gakrcli_args: '--allowed-tools Bash(gh pr:*)'
 
 `
@@ -59,9 +59,9 @@ export const PR_BODY = `## 🤖 Installing GakrCLI GitHub App
 
 This PR adds a GitHub Actions workflow that enables GakrCLI integration in our repository.
 
-### What is Gakr?
+### What is GakrCLI?
 
-[Gakr](https://gakrcli.com/gakrcli-code) is an AI coding agent that can help with:
+[GakrCLI](https://gakrcli.com/gakrcli) is an AI coding agent that can help with:
 - Bug fixes and improvements  
 - Documentation updates
 - Implementing new features
@@ -93,7 +93,7 @@ Once the workflow is triggered, GakrCLI will analyze the comment and surrounding
 allowed_tools: Bash(npm install),Bash(npm run build),Bash(npm run lint),Bash(npm run test)
 \`\`\`
 
-There's more information in the [GakrCLI action repo](https://github.com/anthropics/gakrcli-code-action).
+There's more information in the [GakrCLI action repo](https://github.com/gajjalaashok75-UI/gakrcli-action).
 
 After merging this PR, let's try mentioning @gakrcli in a comment on any PR to get started!`
 
@@ -132,13 +132,13 @@ jobs:
 
       - name: Run GakrCLI Review
         id: gakrcli-review
-        uses: anthropics/gakrcli-code-action@v1
+        uses: gajjalaashok75-UI/gakrcli-action@v1
         with:
           anthropic_api_key: \${{ secrets.ANTHROPIC_API_KEY }}
-          plugin_marketplaces: 'https://github.com/anthropics/gakrcli-code.git'
-          plugins: 'code-review@gakrcli-code-plugins'
+          plugin_marketplaces: 'https://github.com/gajjalaashok75-UI/gakrcli.git'
+          plugins: 'code-review@gakrcli-plugins'
           prompt: '/code-review:code-review \${{ github.repository }}/pull/\${{ github.event.pull_request.number }}'
-          # See https://github.com/anthropics/gakrcli-code-action/blob/main/docs/usage.md
-          # or https://github.com/gajjalaashok75-UI/GakrCLI/docs/en/cli-reference for available options
+          # See https://github.com/gajjalaashok75-UI/gakrcli-action/blob/main/docs/usage.md
+          # or https://code.gakrcli.com/docs/en/cli-reference for available options
 
 `

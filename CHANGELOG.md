@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.5.7] - 2026-06-19
 
 ### Fixed
+- **GitHub URL Renames**: Updated stale `anthropics/gakrcli-code-action`, `anthropics/claude-code-action`, `anthropics/gakrcli-code-marketplace`, and `gakr-gakr/gakrcli-code` references to `gajjalaashok75-UI/gakrcli-action` and `gajjalaashok75-UI/GakrCLI` across 6 files. Fixed `OFFICIAL_GITHUB_ORG` in plugin schema validation from `anthropics` → `gajjalaashok75-UI`. Fixed telemetry `isOfficialRepo()` check to use correct org for official marketplace detection.
 - **New File Wiring & Integration**: Wired 78+ newly added source files across bridge, CLI, commands, components, services, tools, and utils into the module graph. Resolved import gaps, missing exports, and dead code paths by cross-referencing against the OpenClaude reference.
 - **LSP Diagnostic Registry Storm Control**: Restored missing ~700 lines of storm detection, deduplication, delivery planning, per-server diagnostic windows, and cross-turn tracking in `LSPDiagnosticRegistry.ts`.
 - **Sandbox-Toggle Null Guard**: Fixed null crash in `sandbox-toggle/index.ts` when `SandboxManager.checkDependencies()` returns null.
