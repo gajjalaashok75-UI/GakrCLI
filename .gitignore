@@ -22,7 +22,7 @@ web/*.tsbuildinfo
 !.env.example
 log.md
 # User/workspace-specific config
-.claude
+.gakrcli
 .gakrcli/
 .gakrcli-profile.json
 .opengakrcli/
