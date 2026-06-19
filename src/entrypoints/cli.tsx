@@ -62,13 +62,81 @@ if (feature('ABLATION_BASELINE') && process.env.GAKR_CODE_ABLATION_BASELINE) {
   }
 }
 
+type CliEntrypointOptions = {
+  bgSessionsEnabled?: boolean
+  importers?: Partial<CliEntrypointImporters>
+}
+
+type CliEntrypointImporters = {
+  startupProfiler: () => Promise<typeof import('../utils/startupProfiler.js')>
+  bg: () => Promise<typeof import('../cli/bg.js')>
+  providerFlag: () => Promise<typeof import('../utils/providerFlag.js')>
+  envFile: () => Promise<typeof import('../utils/envFile.js')>
+  config: () => Promise<typeof import('../utils/config.js')>
+  managedEnv: () => Promise<typeof import('../utils/managedEnv.js')>
+  providerProfile: () => Promise<typeof import('../utils/providerProfile.js')>
+  providerValidation: () => Promise<typeof import('../utils/providerValidation.js')>
+  flagSettings: () => Promise<typeof import('../utils/settings/flagSettings.js')>
+  agentRouting: () => Promise<typeof import('../services/api/agentRouting.js')>
+  settings: () => Promise<typeof import('../utils/settings/settings.js')>
+  cliArgs: () => Promise<typeof import('../utils/cliArgs.js')>
+  githubModelsCredentials: () => Promise<typeof import('../utils/githubModelsCredentials.js')>
+  startupScreen: () => Promise<typeof import('../components/StartupScreen.js')>
+  earlyInput: () => Promise<typeof import('../utils/earlyInput.js')>
+  main: () => Promise<typeof import('../main.js')>
+}
+
+const defaultCliEntrypointImporters: CliEntrypointImporters = {
+  startupProfiler: () => import('../utils/startupProfiler.js'),
+  bg: () => import('../cli/bg.js'),
+  providerFlag: () => import('../utils/providerFlag.js'),
+  envFile: () => import('../utils/envFile.js'),
+  config: () => import('../utils/config.js'),
+  managedEnv: () => import('../utils/managedEnv.js'),
+  providerProfile: () => import('../utils/providerProfile.js'),
+  providerValidation: () => import('../utils/providerValidation.js'),
+  flagSettings: () => import('../utils/settings/flagSettings.js'),
+  agentRouting: () => import('../services/api/agentRouting.js'),
+  settings: () => import('../utils/settings/settings.js'),
+  cliArgs: () => import('../utils/cliArgs.js'),
+  githubModelsCredentials: () => import('../utils/githubModelsCredentials.js'),
+  startupScreen: () => import('../components/StartupScreen.js'),
+  earlyInput: () => import('../utils/earlyInput.js'),
+  main: () => import('../main.js'),
+}
+
+function getCliEntrypointImporters(
+  overrides: Partial<CliEntrypointImporters> | undefined,
+): CliEntrypointImporters {
+  return {
+    ...defaultCliEntrypointImporters,
+    ...overrides,
+  }
+}
+
+function isBgSessionsEnabled(options: CliEntrypointOptions): boolean {
+  if (options.bgSessionsEnabled !== undefined) return options.bgSessionsEnabled
+  if (feature('BG_SESSIONS')) return true
+  return false
+}
+
 /**
  * Bootstrap entrypoint - checks for special flags before loading the full CLI.
  * All imports are dynamic to minimize module evaluation for fast paths.
  * Fast-path for --version has zero imports beyond this file.
  */
-async function main(): Promise<void> {
-  const args = process.argv.slice(2);
+export async function main(
+  args: string[] = process.argv.slice(2),
+  options: CliEntrypointOptions = {},
+): Promise<void> {
+  const bgSessionsEnabled = isBgSessionsEnabled(options)
+  const importers = getCliEntrypointImporters(options.importers)
+  let reapplyProviderEnvFileValues: () => void = () => {}
+  let reapplyProviderFlagValues: () => void = () => {}
+  const reapplyExplicitProviderInputs = () => {
+    reapplyProviderEnvFileValues()
+    reapplyProviderFlagValues()
+  }
 
   // Fast-path for --version/-v: zero module loading needed
   if (args.length === 1 && (args[0] === '--version' || args[0] === '-v' || args[0] === '-V')) {
@@ -78,10 +146,65 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Fast-path for `gakrcli ps|logs|attach|kill`: session management is entirely
+  // local, no config or provider resolution needed.
+  if (bgSessionsEnabled && (args[0] === 'ps' || args[0] === 'logs' || args[0] === 'attach' || args[0] === 'kill')) {
+    const {
+      profileCheckpoint
+    } = await importers.startupProfiler();
+    profileCheckpoint('cli_bg_path');
+    const bg = await importers.bg();
+    switch (args[0]) {
+      case 'ps':
+        await bg.psHandler(args.slice(1));
+        break;
+      case 'logs':
+        await bg.logsHandler(args[1]);
+        break;
+      case 'attach':
+        await bg.attachHandler(args[1]);
+        break;
+      case 'kill':
+        await bg.killHandler(args[1]);
+        break;
+    }
+    return;
+  }
+
+  // --provider-env-file: Load explicit environment files before any provider resolution.
+  {
+    const {
+      loadEnvFile,
+      parseProviderEnvFileArgs,
+      reapplyRememberedEnvFileValues,
+      rememberLoadedEnvFileValues,
+    } = await importers.envFile()
+    reapplyProviderEnvFileValues = reapplyRememberedEnvFileValues
+    const providerEnvFiles = parseProviderEnvFileArgs(args)
+    if (providerEnvFiles.error) {
+      // biome-ignore lint/suspicious/noConsole:: intentional error output
+      console.error(providerEnvFiles.error)
+      process.exit(1)
+    }
+    for (const filePath of providerEnvFiles.paths) {
+      try {
+        rememberLoadedEnvFileValues(loadEnvFile(filePath))
+      } catch (err: unknown) {
+        // biome-ignore lint/suspicious/noConsole:: intentional error output
+        console.error(err instanceof Error ? err.message : String(err))
+        process.exit(1)
+      }
+    }
+  }
+
   // --provider: set provider env vars early so saved-profile resolution,
   // validation, and the startup banner all see the intended provider/model.
   if (args.includes('--provider')) {
-    const { applyProviderFlagFromArgs } = await import('../utils/providerFlag.js');
+    const {
+      applyProviderFlagFromArgs,
+      reapplyRememberedProviderFlag,
+    } = await importers.providerFlag()
+    reapplyProviderFlagValues = reapplyRememberedProviderFlag
     const result = applyProviderFlagFromArgs(args, {
       rememberForSettingsEnv: true,
     });
@@ -109,6 +232,7 @@ async function main(): Promise<void> {
     const { applySafeConfigEnvironmentVariables } = await import('../utils/managedEnv.js')
     applySafeConfigEnvironmentVariables()
   }
+  reapplyExplicitProviderInputs()
 
   const {
     applyProfileEnvToProcessEnv,
@@ -131,6 +255,7 @@ async function main(): Promise<void> {
       applyProfileEnvToProcessEnv(process.env, startupEnv)
     }
   }
+  reapplyExplicitProviderInputs()
 
   // Pane/window teammates are launched as fresh CLI processes. If the parent
   // selected a configured agentModels key, apply that route before provider
@@ -164,6 +289,22 @@ async function main(): Promise<void> {
     }
   }
 
+  // Fast-path for `--bg`/`--background` after profile routing has been applied
+  // so the spawned child inherits the selected provider/model environment.
+  if (bgSessionsEnabled) {
+    const { argsBeforeDelimiter } = await importers.cliArgs()
+    const optionArgs = argsBeforeDelimiter(args)
+    if (optionArgs.includes('--bg') || optionArgs.includes('--background')) {
+      const {
+        profileCheckpoint
+      } = await importers.startupProfiler();
+      profileCheckpoint('cli_bg_path');
+      const bg = await importers.bg();
+      await bg.handleBgFlag(args);
+      return;
+    }
+  }
+
   // Hydrate GitHub credentials after profile is applied so GAKR_CODE_USE_GITHUB from profile is available
   {
     const {
@@ -178,33 +319,6 @@ async function main(): Promise<void> {
     '../utils/providerValidation.js'
   )
   await validateProviderEnvForStartupOrExit()
-
-  // --provider-env-file: Load explicit environment files before any provider resolution.
-  let reapplyProviderEnvFileValues: () => void = () => {}
-  {
-    const {
-      loadEnvFile,
-      parseProviderEnvFileArgs,
-      reapplyRememberedEnvFileValues,
-      rememberLoadedEnvFileValues,
-    } = await import('../utils/envFile.js')
-    reapplyProviderEnvFileValues = reapplyRememberedEnvFileValues
-    const providerEnvFiles = parseProviderEnvFileArgs(args)
-    if (providerEnvFiles.error) {
-      // biome-ignore lint/suspicious/noConsole: intentional error output
-      console.error(providerEnvFiles.error)
-      process.exit(1)
-    }
-    for (const filePath of providerEnvFiles.paths) {
-      try {
-        rememberLoadedEnvFileValues(loadEnvFile(filePath))
-      } catch (err: unknown) {
-        // biome-ignore lint/suspicious/noConsole: intentional error output
-        console.error(err instanceof Error ? err.message : String(err))
-        process.exit(1)
-      }
-    }
-  }
 
   // #808: --model alone (no --provider) — route to the env var matching the
   // active provider before the banner prints so the override is visible.
@@ -359,35 +473,6 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Fast-path for `gakrcli ps|logs|attach|kill` and `--bg`/`--background`.
-  // Session management against the ~/.gakrcli/sessions/ registry. Flag
-  // literals are inlined so bg.js only loads when actually dispatching.
-  if (feature('BG_SESSIONS') && (args[0] === 'ps' || args[0] === 'logs' || args[0] === 'attach' || args[0] === 'kill' || args.includes('--bg') || args.includes('--background'))) {
-    profileCheckpoint('cli_bg_path');
-    const {
-      enableConfigs
-    } = await import('../utils/config.js');
-    enableConfigs();
-    const bg = await import('../cli/bg.js');
-    switch (args[0]) {
-      case 'ps':
-        await bg.psHandler(args.slice(1));
-        break;
-      case 'logs':
-        await bg.logsHandler(args[1]);
-        break;
-      case 'attach':
-        await bg.attachHandler(args[1]);
-        break;
-      case 'kill':
-        await bg.killHandler(args[1]);
-        break;
-      default:
-        await bg.handleBgFlag(args);
-    }
-    return;
-  }
-
   // Fast-path for template job commands.
   if (feature('TEMPLATES') && (args[0] === 'new' || args[0] === 'list' || args[0] === 'reply')) {
     profileCheckpoint('cli_templates_path');
@@ -468,17 +553,19 @@ async function main(): Promise<void> {
   if (process.env.GAKR_DISABLE_EARLY_INPUT !== '1') {
     const {
       startCapturingEarlyInput
-    } = await import('../utils/earlyInput.js');
+    } = await importers.earlyInput();
     startCapturingEarlyInput();
   }
   profileCheckpoint('cli_before_main_import');
   const {
     main: cliMain
-  } = await import('../main.js');
+  } = await importers.main();
   profileCheckpoint('cli_after_main_import');
   await cliMain();
   profileCheckpoint('cli_after_main_complete');
 }
 
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
-void main();
+if (process.env.GAKR_CODE_DISABLE_CLI_ENTRYPOINT_AUTO_RUN !== '1') {
+  void main();
+}

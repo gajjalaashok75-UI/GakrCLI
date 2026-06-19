@@ -12,9 +12,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **GitHub Enterprise Support**: Restored GHE device flow functions (`normalizeGithubEnterpriseAuthBaseUrl`, `getGithubEnterpriseDeviceCodeUrl`, `getGithubEnterpriseAccessTokenUrl`, `getGithubEnterpriseCopilotTokenUrl`) in `deviceFlow.ts`. Added `gheUrl` params to `requestDeviceCode()`, `pollAccessToken()`, `exchangeForCopilotToken()`. Extended `githubModelsCredentials.ts` with `credentialType` field and `GITHUB_COPILOT_KEY` support. Restored GHE URL and Copilot API key flows in `onboard-github.tsx`.
 - **Commander --provider-env-file Option**: Registered the `--provider-env-file` option in `main.tsx` so `--help` displays it and unknown-option handling stays aligned.
 - **Env-File Tests**: Ported 3 envFile integration tests from reference to `cli.test.ts` — text scan for remembered values, functional test for settings+profile merge preservation, and functional test for `--provider` values beating env-file values.
+- **Importers Pattern**: Restructured `cli.tsx` to export `main()` with `CliEntrypointImporters` for dependency injection, matching the reference architecture.
+- **Background Routing Tests**: Ported 6 bg routing tests from reference — 2 text scan tests (bg before config, bg after profile but before validation) and 4 runtime tests with mock importers.
+- **Main Entry Exported**: Exported `main` function from `cli.tsx` with `GAKR_CODE_DISABLE_CLI_ENTRYPOINT_AUTO_RUN` guard for test-controlled auto-execution.
 
 ### Fixed
 - **Env-File ReferenceError**: Fixed `reapplyProviderEnvFileValues` assignment in `cli.tsx` `--provider-env-file` block — added `let` declaration before the block to prevent ReferenceError.
+- **main.tsx feature() Build Error**: Fixed `feature('WEB_BROWSER_TOOL')` calls in object literals at `src/main.tsx:1525` and `src/main.tsx:1547` by extracting into proper `if (feature(...))` blocks, so `main.tsx` can be compiled in test mode.
 
 ## [0.5.7] - 2026-06-19
 

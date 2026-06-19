@@ -214,4 +214,212 @@ describe('cli.tsx — --provider startup ordering', () => {
     expect(process.env.GAKR_CODE_USE_GEMINI).toBe('1')
     expect(process.env.GEMINI_MODEL).toBe('gemini-2.0-flash')
   })
+
+  it('dispatches background session management before config and provider validation', async () => {
+    const src = await Bun.file(`${import.meta.dir}/cli.tsx`).text()
+    const bgManagementIndex = src.indexOf("bgSessionsEnabled && (args[0] === 'ps'")
+    const configEnableIndex = src.indexOf('enableConfigs()')
+    const providerValidationIndex = src.indexOf(
+      'await validateProviderEnvForStartupOrExit()',
+    )
+    expect(bgManagementIndex).toBeGreaterThanOrEqual(0)
+    expect(configEnableIndex).toBeGreaterThanOrEqual(0)
+    expect(providerValidationIndex).toBeGreaterThanOrEqual(0)
+    expect(bgManagementIndex).toBeLessThan(configEnableIndex)
+    expect(bgManagementIndex).toBeLessThan(providerValidationIndex)
+  })
+
+  it('keeps background spawn after profile routing but before provider validation', async () => {
+    const src = await Bun.file(`${import.meta.dir}/cli.tsx`).text()
+    const checkBg = src.indexOf("optionArgs.includes('--bg')")
+    const startupProfileIndex = src.indexOf('await buildStartupEnvFromProfile')
+    const providerValidationIndex = src.indexOf(
+      'await validateProviderEnvForStartupOrExit()',
+    )
+    expect(checkBg).toBeGreaterThanOrEqual(0)
+    expect(startupProfileIndex).toBeGreaterThanOrEqual(0)
+    expect(providerValidationIndex).toBeGreaterThanOrEqual(0)
+    expect(checkBg).toBeGreaterThan(startupProfileIndex)
+    expect(checkBg).toBeLessThan(providerValidationIndex)
+  })
+})
+
+describe('cli.tsx — background routing behavior', () => {
+  type CliMain = typeof import('./cli.js')['main']
+  let runCliEntrypoint: CliMain
+
+  beforeAll(async () => {
+    process.env.GAKR_CODE_DISABLE_CLI_ENTRYPOINT_AUTO_RUN = '1'
+    const mod = await import('./cli.js')
+    runCliEntrypoint = mod.main
+  })
+
+  afterAll(() => {
+    delete process.env.GAKR_CODE_DISABLE_CLI_ENTRYPOINT_AUTO_RUN
+  })
+
+  const mockProfileCheckpoint = mock(() => {})
+  const mockPsHandler = mock(() => {})
+  const mockLogsHandler = mock(() => {})
+  const mockAttachHandler = mock(() => {})
+  const mockKillHandler = mock(() => {})
+  const mockHandleBgFlag = mock(() => {})
+  const mockEnableConfigs = mock(async () => {})
+  const mockApplySafeConfigEnv = mock(() => {})
+  const mockApplyProviderFlag = mock(() => ({ error: undefined }))
+  const mockReapplyProviderFlag = mock(() => {})
+  const mockLoadEnvFile = mock(() => ({}))
+  const mockParseProviderEnvFileArgs = mock(() => ({ paths: [], error: undefined }))
+  const mockReapplyEnvFile = mock(() => {})
+  const mockRememberLoadedEnvFile = mock(() => {})
+  const mockApplyStartupEnv = mock(() => ({}))
+  const mockBuildStartupEnv = mock(async () => process.env)
+  const mockGetProviderValidationError = mock(() => undefined)
+  const mockValidateProviderEnv = mock(async () => {})
+  const mockResolveAgentOverride = mock(() => undefined)
+  const mockApplyAgentOverride = mock(() => {})
+  const mockGetInitialSettings = mock(() => ({}))
+  const mockEagerLoadSettings = mock(() => ({ ok: true }))
+  const mockArgsBeforeDelimiter = mock((a: string[]) => a)
+  const mockEagerParseCliFlag = mock(() => undefined)
+  const mockPrintStartupScreen = mock(() => {})
+  const mockHydrateGithubToken = mock(() => {})
+  const mockRefreshGithubToken = mock(async () => false)
+  const mockStartCapturingEarlyInput = mock(() => {})
+  const mockCliMain = mock(async () => {})
+
+  function resetMock(m: ReturnType<typeof mock>) {
+    m.mockClear()
+  }
+
+  beforeEach(() => {
+    resetMock(mockProfileCheckpoint)
+    resetMock(mockPsHandler)
+    resetMock(mockLogsHandler)
+    resetMock(mockAttachHandler)
+    resetMock(mockKillHandler)
+    resetMock(mockHandleBgFlag)
+    resetMock(mockEnableConfigs)
+    resetMock(mockApplySafeConfigEnv)
+    resetMock(mockApplyProviderFlag)
+    resetMock(mockReapplyProviderFlag)
+    resetMock(mockLoadEnvFile)
+    resetMock(mockParseProviderEnvFileArgs)
+    resetMock(mockReapplyEnvFile)
+    resetMock(mockRememberLoadedEnvFile)
+    resetMock(mockApplyStartupEnv)
+    resetMock(mockBuildStartupEnv)
+    resetMock(mockGetProviderValidationError)
+    resetMock(mockValidateProviderEnv)
+    resetMock(mockResolveAgentOverride)
+    resetMock(mockApplyAgentOverride)
+    resetMock(mockGetInitialSettings)
+    resetMock(mockEagerLoadSettings)
+    resetMock(mockArgsBeforeDelimiter)
+    resetMock(mockEagerParseCliFlag)
+    resetMock(mockPrintStartupScreen)
+    resetMock(mockHydrateGithubToken)
+    resetMock(mockRefreshGithubToken)
+    resetMock(mockStartCapturingEarlyInput)
+    resetMock(mockCliMain)
+  })
+
+  const commonMocks = {
+    startupProfiler: () => ({ profileCheckpoint: mockProfileCheckpoint }),
+    bg: () => ({
+      psHandler: mockPsHandler,
+      logsHandler: mockLogsHandler,
+      attachHandler: mockAttachHandler,
+      killHandler: mockKillHandler,
+      handleBgFlag: mockHandleBgFlag,
+    }),
+    providerFlag: () => ({
+      applyProviderFlagFromArgs: mockApplyProviderFlag,
+      reapplyRememberedProviderFlag: mockReapplyProviderFlag,
+    }),
+    envFile: () => ({
+      loadEnvFile: mockLoadEnvFile,
+      parseProviderEnvFileArgs: mockParseProviderEnvFileArgs,
+      reapplyRememberedEnvFileValues: mockReapplyEnvFile,
+      rememberLoadedEnvFileValues: mockRememberLoadedEnvFile,
+    }),
+    config: () => ({
+      enableConfigs: mockEnableConfigs,
+      applySafeConfigEnvironmentVariables: mockApplySafeConfigEnv,
+    }),
+    managedEnv: () => ({
+      applySafeConfigEnvironmentVariables: mockApplySafeConfigEnv,
+    }),
+    providerProfile: () => ({
+      applyProfileEnvToProcessEnv: mockApplyStartupEnv,
+      buildStartupEnvFromProfile: mockBuildStartupEnv,
+      isDefaultStartupProviderEnv: mockGetProviderValidationError,
+    }),
+    providerValidation: () => ({
+      validateProviderEnvForStartupOrExit: mockValidateProviderEnv,
+      getProviderValidationError: mockGetProviderValidationError,
+    }),
+    agentRouting: () => ({
+      applyAgentProviderOverrideToEnv: mockApplyAgentOverride,
+      resolveOutOfProcessTeammateProviderFromCliArgs: mockResolveAgentOverride,
+    }),
+    settings: () => ({
+      getInitialSettings: mockGetInitialSettings,
+    }),
+    flagSettings: () => ({
+      eagerLoadSettingsFromArgs: mockEagerLoadSettings,
+    }),
+    cliArgs: () => ({
+      argsBeforeDelimiter: mockArgsBeforeDelimiter,
+      eagerParseCliFlag: mockEagerParseCliFlag,
+    }),
+    githubModelsCredentials: () => ({
+      hydrateGithubModelsTokenFromSecureStorage: mockHydrateGithubToken,
+      refreshGithubModelsTokenIfNeeded: mockRefreshGithubToken,
+    }),
+    startupScreen: () => ({
+      printStartupScreen: mockPrintStartupScreen,
+    }),
+    earlyInput: () => ({
+      startCapturingEarlyInput: mockStartCapturingEarlyInput,
+    }),
+    main: () => ({
+      main: mockCliMain,
+    }),
+  }
+
+  const bgEnabledOptions = { bgSessionsEnabled: true, importers: commonMocks }
+
+  it('dispatches background management commands before startup work', async () => {
+    await runCliEntrypoint(['ps'], bgEnabledOptions)
+
+    expect(mockPsHandler).toHaveBeenCalled()
+    expect(mockEnableConfigs).not.toHaveBeenCalled()
+  })
+
+  it('keeps management commands on the management path even with --bg arguments', async () => {
+    await runCliEntrypoint(['ps', '--bg'], bgEnabledOptions)
+
+    expect(mockPsHandler).toHaveBeenCalled()
+    expect(mockHandleBgFlag).not.toHaveBeenCalled()
+  })
+
+  it('routes real background flags after profile routing without provider validation', async () => {
+    await runCliEntrypoint(['--bg'], bgEnabledOptions)
+
+    expect(mockHandleBgFlag).toHaveBeenCalled()
+    expect(mockValidateProviderEnv).not.toHaveBeenCalled()
+  })
+
+  it('treats --bg after -- as positional text, not a background flag', async () => {
+    mockArgsBeforeDelimiter.mockImplementation((a: string[]) => {
+      const delim = a.indexOf('--')
+      return delim === -1 ? a : a.slice(0, delim)
+    })
+
+    await runCliEntrypoint(['--', '--bg'], { bgSessionsEnabled: true, importers: commonMocks })
+    expect(mockHandleBgFlag).not.toHaveBeenCalled()
+    expect(mockStartCapturingEarlyInput).toHaveBeenCalled()
+    expect(mockCliMain).toHaveBeenCalled()
+  })
 })
