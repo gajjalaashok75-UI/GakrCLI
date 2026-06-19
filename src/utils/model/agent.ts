@@ -1,15 +1,15 @@
-import type { PermissionMode } from '../permissions/PermissionMode.js'
-import { getInitialSettings } from '../settings/settings.js'
 import type { SettingsJson } from '../settings/types.js'
+import { getInitialSettings } from '../settings/settings.js'
+import type { PermissionMode } from '../permissions/PermissionMode.js'
 import { capitalize } from '../stringUtils.js'
-import { MODEL_ALIASES, type ModelAlias } from './aliases.js'
+import { MODEL_ALIASES } from './aliases.js'
 import { applyBedrockRegionPrefix, getBedrockRegionPrefix } from './bedrock.js'
+import { isModelAllowed } from './modelAllowlist.js'
 import {
   getCanonicalName,
   getRuntimeMainLoopModel,
   parseUserSpecifiedModel,
 } from './model.js'
-import { isModelAllowed } from './modelAllowlist.js'
 import { getAPIProvider, isFirstPartyAnthropicBaseUrl } from './providers.js'
 
 export const AGENT_MODEL_OPTIONS = [...MODEL_ALIASES, 'inherit'] as const
@@ -95,18 +95,18 @@ export function getAgentModel(
   const agentModelWithExp = agentModel ?? getDefaultSubagentModel()
 
   // Provider-aware model alias fallback for agents.
-  // Claude-native providers (Bedrock, Vertex, Foundry, official Anthropic API)
+  // GakrCLI-native providers (Bedrock, Vertex, Foundry, official Anthropic API)
   // have guaranteed haiku/sonnet model availability. Custom Anthropic-compatible
   // endpoints, OpenAI-shim, Gemini, Mistral, and other providers may not have
   // equivalent models, causing "model not found" errors when resolving aliases.
-  // For haiku/sonnet aliases on non-Claude-native providers, inherit parent model.
+  // For haiku/sonnet aliases on non-GakrCLI-native providers, inherit parent model.
   // Note: 'opus' is NOT included here because it's handled separately by
   // aliasMatchesParentTier() which checks if parent's tier matches the alias.
   if (
     (agentModelWithExp === 'haiku' || agentModelWithExp === 'sonnet') &&
-    !checkIsClaudeNativeProvider()
+    !checkIsGakrCLINativeProvider()
   ) {
-    // Non-Claude-native provider → inherit parent model
+    // Non-GakrCLI-native provider → inherit parent model
     return getRuntimeMainLoopModel({
       permissionMode: permissionMode ?? 'default',
       mainLoopModel: parentModel,
@@ -174,12 +174,12 @@ function assertToolSpecifiedModelAllowed(
 }
 
 /**
- * Check if the current provider is Claude-native (has guaranteed haiku/sonnet models).
- * Claude-native providers: Bedrock, Vertex, Foundry, official Anthropic API.
- * Non-Claude-native: OpenAI, Gemini, Mistral, GitHub, NVIDIA NIM, MiniMax,
+ * Check if the current provider is GakrCLI-native (has guaranteed haiku/sonnet models).
+ * GakrCLI-native providers: Bedrock, Vertex, Foundry, official Anthropic API.
+ * Non-GakrCLI-native: OpenAI, Gemini, Mistral, GitHub, NVIDIA NIM, MiniMax,
  * and custom Anthropic-compatible endpoints (proxies, self-hosted).
  */
-export function checkIsClaudeNativeProvider(): boolean {
+export function checkIsGakrCLINativeProvider(): boolean {
   const provider = getAPIProvider()
   return (
     provider === 'bedrock' ||
@@ -189,8 +189,6 @@ export function checkIsClaudeNativeProvider(): boolean {
   )
 }
 
-export const checkIsGakrcliNativeProvider = checkIsClaudeNativeProvider
-
 export function getAgentModelDisplay(model: string | undefined): string {
   // When model is omitted, getDefaultSubagentModel() returns 'inherit' at runtime
   if (!model) return 'Inherit from parent (default)'
@@ -198,9 +196,6 @@ export function getAgentModelDisplay(model: string | undefined): string {
   return capitalize(model)
 }
 
-/**
- * Get available model options for agents
- */
 export function getAgentModelOptions(
   settings: SettingsJson | null = getInitialSettings(),
 ): AgentModelOption[] {
@@ -228,8 +223,9 @@ export function getAgentModelOptions(
   ]
 
   if (settings?.agentModels) {
-    for (const key of Object.keys(settings.agentModels)) {
-      if (!baseOptions.some(option => option.value === key)) {
+    const configuredKeys = Object.keys(settings.agentModels)
+    for (const key of configuredKeys) {
+      if (!baseOptions.some(opt => opt.value === key)) {
         baseOptions.push({
           value: key,
           label: key,

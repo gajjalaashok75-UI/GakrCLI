@@ -39,11 +39,8 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Smoke check
-        run: bun run smoke
-
-      - name: Full unit test suite
-        run: bun test --path-ignore-patterns="references/**" --path-ignore-patterns="dist/**" --max-concurrency=1
+      - name: Smoke and full unit test suite
+        run: bun run check
 
       - name: Install Python test dependencies
         run: python -m pip install -r python/requirements.txt
@@ -52,13 +49,38 @@ jobs:
         run: python -m pytest -q python/tests
 
       - name: Suspicious PR intent scan
-        run: bun run security:pr-scan -- --base ${{ github.event.pull_request.base.sha || 'origin/main' }}
-
+        env:
+          PR_SCAN_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || 'origin/main' }}
+          PR_SCAN_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || 'HEAD' }}
+        run: bun run security:pr-scan -- --base "$PR_SCAN_BASE" --head "$PR_SCAN_HEAD"
       - name: Provider tests
         run: bun run test:provider
 
       - name: Provider recommendation tests
         run: npm run test:provider-recommendation
+
+  typecheck:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Type tests
+        run: bun run typecheck:type-tests
 
   web:
     runs-on: ubuntu-latest

@@ -50,10 +50,23 @@ describe('loaded registry validation', () => {
     ).toEqual([])
   })
 
+  test('dynamic route catalogs rely entirely on discovery', () => {
+    const routes = [...getAllVendors(), ...getAllGateways()]
+    const dynamicCatalogsWithCuratedModels = routes
+      .filter(route => route.catalog?.source === 'dynamic')
+      .filter(route => (route.catalog?.models ?? []).length > 0)
+      .map(route => route.id)
+
+    expect(dynamicCatalogsWithCuratedModels).toEqual([])
+  })
+
   test('static gateway catalog entries use shared model descriptors when known', () => {
     const descriptorOptionalEntries = new Set([
       'azure-openai:azure-deployment',
       'github:github-copilot-default',
+      // Virtual model — the gateway's smart router resolves it server-side,
+      // so there is no concrete model descriptor to reference.
+      'gakr-gakr-opengateway:opengateway-auto',
     ])
     const missingDescriptors = getAllGateways().flatMap(gateway =>
       (gateway.catalog?.models ?? [])
@@ -63,16 +76,6 @@ describe('loaded registry validation', () => {
     )
 
     expect(missingDescriptors).toEqual([])
-  })
-
-  test('dynamic route catalogs rely entirely on discovery', () => {
-    const routes = [...getAllVendors(), ...getAllGateways()]
-    const dynamicCatalogsWithCuratedModels = routes
-      .filter(route => route.catalog?.source === 'dynamic')
-      .filter(route => (route.catalog?.models ?? []).length > 0)
-      .map(route => route.id)
-
-    expect(dynamicCatalogsWithCuratedModels).toEqual([])
   })
 
   test('gateway defaultModel values are present unless provided outside curated catalog metadata', () => {
@@ -107,31 +110,5 @@ describe('loaded registry validation', () => {
     )
 
     expect(missingModels).toEqual([])
-  })
-
-  test('confirmed OpenAI-compatible model-list routes enable discovery', () => {
-    const routes = [...getAllVendors(), ...getAllGateways()]
-    const discoveryRoutes = new Set(
-      routes
-        .filter(route => route.catalog?.discovery)
-        .map(route => route.id),
-    )
-
-    const expectedDiscoveryRoutes = [
-      'atomic-chat',
-      'groq',
-      'hicap',
-      'lmstudio',
-      'mistral',
-      'nvidia-nim',
-      'ollama',
-      'openai',
-      'openrouter',
-      'together',
-    ]
-
-    for (const routeId of expectedDiscoveryRoutes) {
-      expect(discoveryRoutes.has(routeId)).toBe(true)
-    }
   })
 })

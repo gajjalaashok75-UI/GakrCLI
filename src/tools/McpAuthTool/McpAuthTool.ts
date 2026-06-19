@@ -83,14 +83,14 @@ export function createMcpAuthTool(
       return { behavior: 'allow', updatedInput: input }
     },
     async call(_input, context) {
-      // gakr.ai connectors use a separate auth flow (handlegakrcliAIAuth in
+      // gakrcli.ai connectors use a separate auth flow (handleGakrCLIAIAuth in
       // MCPRemoteServerMenu) that we don't invoke programmatically here —
       // just point the user at /mcp.
       if (config.type === 'gakrcliai-proxy') {
         return {
           data: {
             status: 'unsupported' as const,
-            message: `This is a gakr.ai MCP connector. Ask the user to run /mcp and select "${serverName}" to authenticate.`,
+            message: `This is a gakrcli.ai MCP connector. Ask the user to run /mcp and select "${serverName}" to authenticate.`,
           },
         }
       }

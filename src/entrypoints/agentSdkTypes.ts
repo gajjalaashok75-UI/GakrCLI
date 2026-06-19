@@ -1,5 +1,5 @@
 /**
- * Main entrypoint for GakrCLI Agent SDK types.
+ * Main entrypoint for GakrCLI Code Agent SDK types.
  *
  * This file re-exports the public SDK API from:
  * - sdk/coreTypes.ts - Common serializable types (messages, configs)
@@ -49,23 +49,12 @@ export {
 
 // Import types needed for @internal function signatures kept below
 import type {
-  AnyZodRawShape,
   ForkSessionOptions,
   ForkSessionResult,
   GetSessionInfoOptions,
-  GetSessionMessagesOptions,
-  InferShape,
-  InternalOptions,
-  InternalQuery,
   ListSessionsOptions,
-  Options,
-  Query,
-  SDKSession,
-  SDKSessionOptions,
-  SdkMcpToolDefinition,
-  SessionMessage,
   SessionMutationOptions,
-} from './sdk/runtimeTypes.js'
+} from './sdk/shared.js'
 
 import type {
   SDKMessage,
@@ -167,7 +156,7 @@ export function watchScheduledTasks(_opts: {
 }
 
 /**
- * A user message typed on gakr.ai, extracted from the bridge WS.
+ * A user message typed on gakrcli.ai, extracted from the bridge WS.
  * @internal
  */
 export type InboundPrompt = {
@@ -219,15 +208,15 @@ export type RemoteControlHandle = {
 }
 
 /**
- * Hold a gakr.ai remote-control bridge connection from a daemon process.
+ * Hold a gakrcli.ai remote-control bridge connection from a daemon process.
  *
  * The daemon owns the WebSocket in the PARENT process — if the agent
  * subprocess (spawned via `query()`) crashes, the daemon respawns it while
- * gakr.ai keeps the same session. Contrast with `query.enableRemoteControl`
+ * gakrcli.ai keeps the same session. Contrast with `query.enableRemoteControl`
  * which puts the WS in the CHILD process (dies with the agent).
  *
  * Pipe `query()` yields through `write()` + `sendResult()`. Read
- * `inboundPrompts()` (user typed on gakr.ai) into `query()`'s input
+ * `inboundPrompts()` (user typed on gakrcli.ai) into `query()`'s input
  * stream. Handle `controlRequests()` locally (interrupt → abort, set_model
  * → reconfigure).
  *

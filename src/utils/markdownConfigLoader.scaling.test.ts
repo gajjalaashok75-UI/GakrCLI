@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { mkdtemp, mkdir, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
+import { getGakrCLIConfigHomeDir, setGakrCLIConfigHomeDirForTesting } from './envUtils.js'
 import {
   clearOversizedMarkdownSkipsForTesting,
   getOversizedMarkdownSkips,
@@ -42,20 +43,33 @@ beforeEach(async () => {
   await acquireSharedMutationLock('markdownConfigLoader.scaling.test.ts')
   tempDir = await mkdtemp(join(tmpdir(), 'gakrcli-md-scaling-'))
   process.env.GAKR_CONFIG_DIR = join(tempDir, '.gakrcli')
+  setGakrCLIConfigHomeDirForTesting(join(tempDir, '.gakrcli'))
   process.env.GAKR_CODE_USE_NATIVE_FILE_SEARCH = '1'
   delete process.env.GAKR_CODE_MAX_MARKDOWN_FILE_SIZE_BYTES
   loadMarkdownFilesForSubdir.cache.clear?.()
   clearOversizedMarkdownSkipsForTesting()
+  ;(getGakrCLIConfigHomeDir as any).cache?.clear?.()
+  // Override homedir so that even if concurrent tests corrupt
+  // gakrcliConfigHomeDirOverride + GAKR_CONFIG_DIR, the fallback in
+  // getGakrCLIConfigHomeDir resolves to the temp dir, not the real
+  // ~/.gakrcli/agents/.
+  mock.module('os', () => ({
+    homedir: () => tempDir,
+    tmpdir,
+  }))
 })
 
 afterEach(async () => {
+  mock.restore()
   try {
     await rm(tempDir, { recursive: true, force: true })
     restore('GAKR_CONFIG_DIR')
+    setGakrCLIConfigHomeDirForTesting(undefined)
     restore('GAKR_CODE_USE_NATIVE_FILE_SEARCH')
     restore('GAKR_CODE_MAX_MARKDOWN_FILE_SIZE_BYTES')
     loadMarkdownFilesForSubdir.cache.clear?.()
     clearOversizedMarkdownSkipsForTesting()
+    ;(getGakrCLIConfigHomeDir as any).cache?.clear?.()
   } finally {
     releaseSharedMutationLock()
   }

@@ -33,6 +33,7 @@ const PROVIDER_MANAGED_ENV_VARS = new Set([
   'ANTHROPIC_AUTH_TOKEN',
   'GAKR_CODE_OAUTH_TOKEN',
   'AWS_BEARER_TOKEN_BEDROCK',
+  'ANTHROPIC_FOUNDRY_API_KEY',
   'GAKR_CODE_SKIP_BEDROCK_AUTH',
   'GAKR_CODE_SKIP_VERTEX_AUTH',
   'GAKR_CODE_SKIP_FOUNDRY_AUTH',
@@ -83,7 +84,7 @@ export const DANGEROUS_SHELL_SETTINGS = [
 
 /**
  * Safe environment variables that can be applied before trust dialog.
- * These are GakrCLI specific settings that don't pose security risks.
+ * These are GakrCLI Code specific settings that don't pose security risks.
  *
  * IMPORTANT: This is the source of truth for which env vars are safe.
  * Any env var NOT in this list is considered dangerous and will trigger

@@ -108,7 +108,7 @@ function resolveLocalSourceCli(workspaceFolder: string): string | undefined {
     };
     if (
       packageJson.name === '@gakr-gakr/gakrcli' &&
-      packageJson.bin?.gakrcli === 'bin/gakrcli.js'
+      packageJson.bin?.gakrcli === 'bin/gakrcli'
     ) {
       return cliPath;
     }
@@ -144,7 +144,7 @@ function resolveWrapperArg(arg: string, candidateRoots: string[]): string {
 
 function isKnownCliEntrypointArg(arg: string): boolean {
   const normalized = arg.replace(/\\/g, '/').replace(/^\.\//, '');
-  return normalized === 'dist/cli.mjs' || normalized === 'bin/gakrcli.js';
+  return normalized === 'dist/cli.mjs' || normalized === 'bin/gakrcli';
 }
 
 function parseCommandLine(commandLine: string): CliLaunchCommand {

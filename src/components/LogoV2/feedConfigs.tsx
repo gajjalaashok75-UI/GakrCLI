@@ -7,6 +7,7 @@ import { formatCreditAmount, getCachedReferrerReward } from '../../services/api/
 import type { LogOption } from '../../types/logs.js';
 import { getCwd } from '../../utils/cwd.js';
 import { formatRelativeTimeAgo } from '../../utils/format.js';
+import { getReleaseSectionHeaderTitle, isReleaseSectionHeader } from '../../utils/releaseNotes.js';
 import type { FeedConfig, FeedLine } from './Feed.js';
 export function createRecentActivityFeed(activities: LogOption[]): FeedConfig {
   const lines: FeedLine[] = activities.map(log => {
@@ -26,25 +27,20 @@ export function createRecentActivityFeed(activities: LogOption[]): FeedConfig {
 }
 export function createWhatsNewFeed(releaseNotes: string[]): FeedConfig {
   const lines: FeedLine[] = releaseNotes.map(note => {
-    if ("external" === 'ant') {
-      const match = note.match(/^(\d+\s+\w+\s+ago)\s+(.+)$/);
-      if (match) {
-        return {
-          timestamp: match[1],
-          text: match[2] || ''
-        };
-      }
+    if (isReleaseSectionHeader(note)) {
+      return {
+        text: `${getReleaseSectionHeaderTitle(note)}:`
+      };
     }
     return {
       text: note
     };
   });
-  const emptyMessage = "external" === 'ant' ? 'Unable to fetch latest gakrcli-cli-internal commits' : 'Check /release-notes for recent updates';
   return {
-    title: "external" === 'ant' ? "GakrCLI Updates [ANT-ONLY: Latest CC commits]" : "GakrCLI Updates",
+    title: "GakrCLI Updates",
     lines,
     footer: lines.length > 0 ? '/release-notes for more' : undefined,
-    emptyMessage
+    emptyMessage: 'Check /release-notes for recent updates'
   };
 }
 export function createProjectOnboardingFeed(steps: Step[]): FeedConfig {

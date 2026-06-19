@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test'
+import { describe, expect, it, beforeEach, afterEach, afterAll } from 'bun:test'
 import {
   addGlobalEntity,
   addGlobalSummary,
@@ -11,17 +11,15 @@ import {
 import { mkdtempSync, rmSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
 import { dirname, join } from 'path'
-import {
-  acquireSharedMutationLock,
-  releaseSharedMutationLock,
-} from '../test/sharedMutationLock.js'
-import { setGakrcliConfigHomeDirForTesting } from './envUtils.js'
+import { acquireEnvMutex, releaseEnvMutex } from '../entrypoints/sdk/shared.js'
+import { setGakrCLIConfigHomeDirForTesting } from './envUtils.js'
 import { getFsImplementation } from './fsOperations.js'
 
 describe('KnowledgeGraph Phase 1 Stress & Edge Cases', () => {
   const originalConfigDir = process.env.GAKR_CONFIG_DIR
-  const originalOrama = process.env.GAKRCLI_KNOWLEDGE_ORAMA
-  let configDir: string | undefined
+  const originalOrama = process.env.GAKR_KNOWLEDGE_ORAMA
+  const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-stress-'))
+  const cwd = getFsImplementation().cwd()
 
   const removeDirWithRetry = (dir: string) => {
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -48,11 +46,10 @@ describe('KnowledgeGraph Phase 1 Stress & Edge Cases', () => {
   }
 
   beforeEach(async () => {
-    await acquireSharedMutationLock('utils/knowledgeGraph.stress.test.ts')
-    configDir = mkdtempSync(join(tmpdir(), 'gakrcli-stress-'))
+    await acquireEnvMutex()
     process.env.GAKR_CONFIG_DIR = configDir
-    process.env.GAKRCLI_KNOWLEDGE_ORAMA = '1'
-    setGakrcliConfigHomeDirForTesting(configDir)
+    process.env.GAKR_KNOWLEDGE_ORAMA = '1'
+    setGakrCLIConfigHomeDirForTesting(configDir)
     resetGlobalGraph()
   })
 
@@ -66,22 +63,18 @@ describe('KnowledgeGraph Phase 1 Stress & Edge Cases', () => {
         process.env.GAKR_CONFIG_DIR = originalConfigDir
       }
       if (originalOrama === undefined) {
-        delete process.env.GAKRCLI_KNOWLEDGE_ORAMA
+        delete process.env.GAKR_KNOWLEDGE_ORAMA
       } else {
-        process.env.GAKRCLI_KNOWLEDGE_ORAMA = originalOrama
+        process.env.GAKR_KNOWLEDGE_ORAMA = originalOrama
       }
-      setGakrcliConfigHomeDirForTesting(undefined)
+      setGakrCLIConfigHomeDirForTesting(undefined)
     } finally {
-      const dirToRemove = configDir
-      configDir = undefined
-      try {
-        if (dirToRemove) {
-          removeDirWithRetry(dirToRemove)
-        }
-      } finally {
-        releaseSharedMutationLock()
-      }
+      releaseEnvMutex()
     }
+  })
+
+  afterAll(() => {
+    removeDirWithRetry(configDir)
   })
 
   it('handles high-volume entity insertion (Stress Test)', async () => {
@@ -116,7 +109,6 @@ describe('KnowledgeGraph Phase 1 Stress & Edge Cases', () => {
     // 1. Create a valid DB
     await addGlobalEntity('type', 'valid', { val: '1' })
     const { getOramaPersistencePath } = await import('./knowledgeGraph.js')
-    const cwd = getFsImplementation().cwd()
     const oramaPath = getOramaPersistencePath(cwd)
     expect(existsSync(oramaPath)).toBe(true)
 
@@ -134,9 +126,9 @@ describe('KnowledgeGraph Phase 1 Stress & Edge Cases', () => {
     
     // 5. Verify the corrupted file was moved
     const { readdirSync } = await import('fs')
-    const projectDir = dirname(oramaPath)
-    expect(existsSync(projectDir)).toBe(true)
-    // Search recursively for the corrupted file
+    const oramaDir = dirname(oramaPath)
+    expect(existsSync(oramaDir)).toBe(true)
+    // Search from the actual persistence directory for the corrupted file.
     const findCorrupted = (dir: string): boolean => {
       const entries = readdirSync(dir, { withFileTypes: true })
       for (const entry of entries) {
@@ -148,7 +140,7 @@ describe('KnowledgeGraph Phase 1 Stress & Edge Cases', () => {
       }
       return false
     }
-    expect(findCorrupted(projectDir)).toBe(true)
+    expect(findCorrupted(oramaDir)).toBe(true)
   })
 
   it('maintains consistency between JSON and Orama', async () => {
@@ -176,7 +168,7 @@ describe('KnowledgeGraph Phase 1 Stress & Edge Cases', () => {
     
     // 2. Perform 50 concurrent updates
     const count = 50
-    const promises = []
+    const promises: Array<ReturnType<typeof addGlobalEntity>> = []
     for (let i = 0; i < count; i++) {
       promises.push(addGlobalEntity('tool', 'concurrent-entity', { [`k${i}`]: String(i) }))
     }

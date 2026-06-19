@@ -408,21 +408,21 @@ export async function detectAvailableBrowser(): Promise<ChromiumBrowser | null> 
   return null
 }
 
-export function isgakrcliInChromeMCPServer(name: string): boolean {
+export function isGakrCLIInChromeMCPServer(name: string): boolean {
   return normalizeNameForMCP(name) === GAKR_IN_CHROME_MCP_SERVER_NAME
 }
 
 const MAX_TRACKED_TABS = 200
 const trackedTabIds = new Set<number>()
 
-export function trackgakrcliInChromeTabId(tabId: number): void {
+export function trackGakrCLIInChromeTabId(tabId: number): void {
   if (trackedTabIds.size >= MAX_TRACKED_TABS && !trackedTabIds.has(tabId)) {
     trackedTabIds.clear()
   }
   trackedTabIds.add(tabId)
 }
 
-export function isTrackedgakrcliInChromeTabId(tabId: number): boolean {
+export function isTrackedGakrCLIInChromeTabId(tabId: number): boolean {
   return trackedTabIds.has(tabId)
 }
 
@@ -500,7 +500,7 @@ export function getAllSocketPaths(): string[] {
 
   // Scan for *.sock files in the socket directory
   try {
-    // eslint-disable-next-line custom-rules/no-sync-fs -- gakrcliForChromeContext.getSocketPaths (external @ant/gakrcli-for-chrome-mcp) requires a sync () => string[] callback
+    // eslint-disable-next-line custom-rules/no-sync-fs -- GakrCLIForChromeContext.getSocketPaths (external @ant/gakrcli-for-chrome-mcp) requires a sync () => string[] callback
     const files = readdirSync(socketDir)
     for (const file of files) {
       if (file.endsWith('.sock')) {

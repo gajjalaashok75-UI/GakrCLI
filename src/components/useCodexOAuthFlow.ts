@@ -58,11 +58,6 @@ export function useCodexOAuthFlow(options: {
   const [status, setStatus] = React.useState<CodexOAuthFlowStatus>({
     state: 'starting',
   })
-  const onAuthenticatedRef = React.useRef(onAuthenticated)
-
-  React.useEffect(() => {
-    onAuthenticatedRef.current = onAuthenticated
-  }, [onAuthenticated])
 
   React.useEffect(() => {
     if (isBareModeFn()) {
@@ -114,7 +109,7 @@ export function useCodexOAuthFlow(options: {
           return { warning: saved.warning }
         }
 
-        await onAuthenticatedRef.current(tokens, persistCredentials)
+        await onAuthenticated(tokens, persistCredentials)
       })
       .catch(error => {
         if (cancelled) return
@@ -131,6 +126,7 @@ export function useCodexOAuthFlow(options: {
   }, [
     createOAuthService,
     isBareModeFn,
+    onAuthenticated,
     openBrowserFn,
     saveCredentials,
   ])

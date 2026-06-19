@@ -1,7 +1,7 @@
 import { getDirectConnectServerUrl, getSessionId } from '../bootstrap/state.js'
 import { stringWidth } from '../ink/stringWidth.js'
 import type { LogOption } from '../types/logs.js'
-import { getSubscriptionName, isgakrcliAISubscriber } from './auth.js'
+import { getSubscriptionName, isGakrCLIAISubscriber } from './auth.js'
 import { getCwd } from './cwd.js'
 import { getDisplayPath } from './file.js'
 import {
@@ -9,7 +9,11 @@ import {
   truncateToWidth,
   truncateToWidthNoEllipsis,
 } from './format.js'
-import { getStoredChangelogFromMemory, parseChangelog } from './releaseNotes.js'
+import {
+  getStoredChangelogFromMemory,
+  parseChangelog,
+  sliceReleaseNotesForDisplay,
+} from './releaseNotes.js'
 import { gt } from './semver.js'
 import { loadMessageLogs } from './sessionStorage.js'
 import { getInitialSettings } from './settings/settings.js'
@@ -86,7 +90,7 @@ export function calculateOptimalLeftWidth(
     stringWidth(welcomeMessage),
     stringWidth(truncatedCwd),
     stringWidth(modelLine),
-    20, // Minimum for gakrcli art
+    20, // Minimum for clawd art
   )
   return Math.min(contentWidth + 4, MAX_LEFT_WIDTH) // +4 for padding
 }
@@ -96,7 +100,7 @@ export function calculateOptimalLeftWidth(
  */
 export function formatWelcomeMessage(username: string | null): string {
   if (!username || username.length > MAX_USERNAME_LENGTH) {
-    return 'Welcome to Gakr'
+    return 'Welcome to GakrCLI'
   }
   return `Welcome back, ${username}`
 }
@@ -161,7 +165,7 @@ export function truncatePath(path: string, maxLength: number): string {
   }
 
   // Try to keep as many middle parts as possible
-  const middleParts = []
+  const middleParts: string[] = []
   for (let i = parts.length - 2; i > 0; i--) {
     const part = parts[i]
     if (part && stringWidth(part) + separatorWidth <= available) {
@@ -253,7 +257,7 @@ export function getLogoDisplayData(): {
   const cwd = serverUrl
     ? `${displayPath} in ${serverUrl.replace(/^https?:\/\//, '')}`
     : displayPath
-  const billingType = isgakrcliAISubscriber()
+  const billingType = isGakrCLIAISubscriber()
     ? getSubscriptionName()
     : 'API Usage Billing'
   const agentName = getInitialSettings().agent
@@ -345,6 +349,5 @@ export function getRecentReleaseNotesSync(maxItems: number): string[] {
     }
   }
 
-  // Return raw notes without filtering or premature truncation
-  return allNotes.slice(0, maxItems)
+  return sliceReleaseNotesForDisplay(allNotes, maxItems)
 }

@@ -65,10 +65,11 @@ export async function processBashCommand(inputString: string, precedingInputBloc
       });
     };
 
-    // User-initiated `!` commands run outside sandbox. Both shell tools honor
-    // dangerouslyDisableSandbox (checked against areUnsandboxedCommandsAllowed()
-    // in shouldUseSandbox.ts). PS sandbox is Linux/macOS/WSL2 only — on Windows
-    // native, shouldUseSandbox() returns false regardless (unsupported platform).
+    // User-initiated `!` commands run outside sandbox when policy allows it.
+    // Bash requires an internal approval marker so model-controlled tool input
+    // cannot disable sandboxing by setting dangerouslyDisableSandbox directly.
+    // PS sandbox is Linux/macOS/WSL2 only — on Windows native, shouldUseSandbox()
+    // returns false regardless (unsupported platform).
     // Lazy-require PowerShellTool so its ~300KB chunk only loads when the
     // user has actually selected the powershell default shell.
     type PSMod = typeof import('src/tools/PowerShellTool/PowerShellTool.js');
@@ -81,29 +82,33 @@ export async function processBashCommand(inputString: string, precedingInputBloc
     const shellTool = PowerShellTool ?? BashTool;
     const response = PowerShellTool ? await PowerShellTool.call({
       command: inputString,
-      dangerouslyDisableSandbox: true
+      dangerouslyDisableSandbox: true,
+      _dangerouslyDisableSandboxApproved: true
     }, bashModeContext, undefined, undefined, onProgress) : await BashTool.call({
       command: inputString,
-      dangerouslyDisableSandbox: true
+      dangerouslyDisableSandbox: true,
+      _dangerouslyDisableSandboxApproved: true
     }, bashModeContext, undefined, undefined, onProgress);
     const data = response.data;
     if (!data) {
       throw new Error('No result received from shell command');
     }
     const stderr = data.stderr;
-    // Reuse the same formatting pipeline as inline !`cmd` bash (promptShellExecution)
-    // and model-initiated Bash. When BashTool.call() persists large output to disk,
-    // data.persistedOutputPath is set and the formatter wraps in <persisted-output>.
-    // Pass stderr:'' to keep it separate for the <bash-stderr> UI tag.
-    const mapped = await processToolResultBlock(shellTool, {
-      ...data,
-      stderr: ''
-    }, randomUUID());
-    // mapped.content may contain our own <persisted-output> wrapper (trusted
-    // XML from buildLargeToolResultMessage). Escaping it would turn structural
-    // tags into &lt;persisted-output&gt;, breaking the model's parse and
-    // UserBashOutputMessage's extractTag. Escape the raw fallback only.
-    const stdout = typeof mapped.content === 'string' ? mapped.content : escapeXml(data.stdout);
+    let stdout = escapeXml(data.stdout);
+    if (data.persistedOutputPath || data.backgroundTaskId) {
+      // Reuse the model-facing formatter when it adds metadata the user needs,
+      // such as persisted-output markers or background task IDs.
+      const mapped = await processToolResultBlock(shellTool, {
+        ...data,
+        stderr: ''
+      }, randomUUID());
+      // Formatter output is trusted: persisted-output markers contain
+      // structural XML, background-task output is plain text with no
+      // user-supplied content that needs escaping.
+      if (typeof mapped.content === 'string') {
+        stdout = mapped.content;
+      }
+    }
     return {
       messages: [createSyntheticUserCaveatMessage(), userMessage, ...attachmentMessages, createUserMessage({
         content: `<bash-stdout>${stdout}</bash-stdout><bash-stderr>${escapeXml(stderr)}</bash-stderr>`

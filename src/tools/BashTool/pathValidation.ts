@@ -121,7 +121,7 @@ export function checkDangerousRemovalPaths(
  * Here `-/../.gakrcli/settings.local.json` starts with `-` so the naive filter
  * drops it, validation sees zero paths, returns passthrough, and the file is
  * deleted without a prompt. With `--` handling, the path IS extracted and
- * validated (blocked by isgakrcliConfigFilePath / pathInAllowedWorkingPath).
+ * validated (blocked by isGakrCLIConfigFilePath / pathInAllowedWorkingPath).
  */
 function filterOutFlags(args: string[]): string[] {
   const result: string[] = []
@@ -619,7 +619,7 @@ function validateCommandPaths(
   if (validator && !validator(args)) {
     return {
       behavior: 'ask',
-      message: `${command} with flags requires manual approval to ensure path safety. For security, GakrCLI cannot automatically validate ${command} commands that use flags, as some flags like --target-directory=PATH can bypass path validation.`,
+      message: `${command} with flags requires manual approval to ensure path safety. For security, GakrCLI Code cannot automatically validate ${command} commands that use flags, as some flags like --target-directory=PATH can bypass path validation.`,
       decisionReason: {
         type: 'other',
         reason: `${command} command with flags requires manual approval`,
@@ -645,7 +645,7 @@ function validateCommandPaths(
   if (compoundCommandHasCd && operationType !== 'read') {
     return {
       behavior: 'ask',
-      message: `Commands that change directories and perform write operations require explicit approval to ensure paths are evaluated correctly. For security, GakrCLI cannot automatically determine the final working directory when 'cd' is used in compound commands.`,
+      message: `Commands that change directories and perform write operations require explicit approval to ensure paths are evaluated correctly. For security, GakrCLI Code cannot automatically determine the final working directory when 'cd' is used in compound commands.`,
       decisionReason: {
         type: 'other',
         reason:
@@ -674,7 +674,7 @@ function validateCommandPaths(
         decisionReason?.type === 'other' ||
         decisionReason?.type === 'safetyCheck'
           ? decisionReason.reason
-          : `${command} in '${resolvedPath}' was blocked. For security, GakrCLI may only ${ACTION_VERBS[command]} the allowed working directories for this session: ${dirListStr}.`
+          : `${command} in '${resolvedPath}' was blocked. For security, GakrCLI Code may only ${ACTION_VERBS[command]} the allowed working directories for this session: ${dirListStr}.`
 
       if (decisionReason?.type === 'rule') {
         return {
@@ -935,7 +935,7 @@ function validateOutputRedirections(
   if (compoundCommandHasCd && redirections.length > 0) {
     return {
       behavior: 'ask',
-      message: `Commands that change directories and write via output redirection require explicit approval to ensure paths are evaluated correctly. For security, GakrCLI cannot automatically determine the final working directory when 'cd' is used in compound commands.`,
+      message: `Commands that change directories and write via output redirection require explicit approval to ensure paths are evaluated correctly. For security, GakrCLI Code cannot automatically determine the final working directory when 'cd' is used in compound commands.`,
       decisionReason: {
         type: 'other',
         reason:
@@ -969,7 +969,7 @@ function validateOutputRedirections(
           ? decisionReason.reason
           : decisionReason?.type === 'rule'
             ? `Output redirection to '${resolvedPath}' was blocked by a deny rule.`
-            : `Output redirection to '${resolvedPath}' was blocked. For security, GakrCLI may only write to files in the allowed working directories for this session: ${dirListStr}.`
+            : `Output redirection to '${resolvedPath}' was blocked. For security, GakrCLI Code may only write to files in the allowed working directories for this session: ${dirListStr}.`
 
       // If denied by a deny rule, return 'deny' behavior
       if (decisionReason?.type === 'rule') {

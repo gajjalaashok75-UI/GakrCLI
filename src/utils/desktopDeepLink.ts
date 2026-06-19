@@ -42,7 +42,7 @@ function buildDesktopDeepLink(sessionId: string): string {
 
 /**
  * Check if GakrCLI Desktop app is installed.
- * On macOS, checks for /Applications/Gakr.app.
+ * On macOS, checks for /Applications/GakrCLI.app.
  * On Linux, checks if xdg-open can handle gakrcli:// protocol.
  * On Windows, checks if the protocol handler exists.
  * In dev mode, always returns true (assumes dev Desktop is running).
@@ -56,8 +56,8 @@ async function isDesktopInstalled(): Promise<boolean> {
   const platform = process.platform
 
   if (platform === 'darwin') {
-    // Check for Gakr.app in /Applications
-    return pathExists('/Applications/Gakr.app')
+    // Check for GakrCLI.app in /Applications
+    return pathExists('/Applications/GakrCLI.app')
   } else if (platform === 'linux') {
     // Check if xdg-mime can find a handler for gakrcli://
     // Note: xdg-mime returns exit code 0 even with no handler, so check stdout too
@@ -92,7 +92,7 @@ async function getDesktopVersion(): Promise<string | null> {
   if (platform === 'darwin') {
     const { code, stdout } = await execFileNoThrow('defaults', [
       'read',
-      '/Applications/Gakr.app/Contents/Info.plist',
+      '/Applications/GakrCLI.app/Contents/Info.plist',
       'CFBundleShortVersionString',
     ])
     if (code !== 0) {
@@ -105,7 +105,7 @@ async function getDesktopVersion(): Promise<string | null> {
     if (!localAppData) {
       return null
     }
-    const installDir = join(localAppData, 'Anthropicgakrcli')
+    const installDir = join(localAppData, 'AnthropicGakrCLI')
     try {
       const entries = await readdir(installDir)
       const versions = entries
@@ -216,7 +216,7 @@ export async function openCurrentSessionInDesktop(): Promise<{
     return {
       success: false,
       error:
-        'GakrCLI Desktop is not installed. Install it from https://gakr.ai/download',
+        'GakrCLI Desktop is not installed. Install it from https://gakrcli.ai/download',
     }
   }
 

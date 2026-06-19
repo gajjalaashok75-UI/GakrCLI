@@ -24,7 +24,7 @@ export function CostThresholdDialog({ onDone }: Props): React.ReactNode {
     >
       <Box flexDirection="column">
         <Text>Learn more about how to monitor your spending:</Text>
-        <Link url="https://code.claude.com/docs/en/costs" />
+        <Link url="https://code.gakrcli.com/docs/en/costs" />
       </Box>
       <Select
         options={[

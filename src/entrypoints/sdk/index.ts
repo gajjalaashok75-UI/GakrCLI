@@ -24,28 +24,20 @@ import { init } from '../init.js'
  * If any resolved to a stub, it means a TUI dependency leaked through.
  */
 function detectStubLeaks(): void {
-  let criticalImports: Array<{ name: string; mod: Record<string, unknown> }>
-  try {
-    criticalImports = [
-      // QueryEngine is the core SDK engine — must never be a stub
-      { name: 'QueryEngine', mod: QueryEngine as unknown as Record<string, unknown> },
-      // These are imported by this file and must be real modules, not stubs
-      { name: 'getTools', mod: getTools as unknown as Record<string, unknown> },
-      { name: 'init', mod: init as unknown as Record<string, unknown> },
-    ]
-  } catch (error) {
-    if (error instanceof ReferenceError && error.message.includes('before initialization')) {
-      return
-    }
-    throw error
-  }
+  const criticalImports: Array<{ name: string; mod: Record<string, unknown> }> = [
+    // QueryEngine is the core SDK engine — must never be a stub
+    { name: 'QueryEngine', mod: QueryEngine as unknown as Record<string, unknown> },
+    // These are imported by this file and must be real modules, not stubs
+    { name: 'getTools', mod: getTools as unknown as Record<string, unknown> },
+    { name: 'init', mod: init as unknown as Record<string, unknown> },
+  ]
 
   for (const { name, mod } of criticalImports) {
     if ('__stub' in mod && mod.__stub === true) {
       throw new Error(
         `SDK init error: "${name}" resolved to a build stub at runtime. ` +
         `This means a TUI/CLI dependency leaked into the SDK bundle. ` +
-        `Report this at https://github.com/gajjalaashok75-UI/GakrCLI/issues`,
+        `Report this at https://github.com/gajjalaashok75-UI/gakrcli/issues`,
       )
     }
   }
@@ -74,26 +66,14 @@ export type {
   SDKAgentLoadFailureMessage,
   QueryPermissionMode,
 } from './shared.js'
-
 export type {
   AccountInfo,
   AgentInfo,
   FastModeState,
   ModelInfo,
   SlashCommand,
-} from './coreTypes.generated.js'
-
-export type SDKControlInitializeResponse = {
-  commands: import('./coreTypes.generated.js').SlashCommand[]
-  agents: import('./coreTypes.generated.js').AgentInfo[]
-  output_style: string
-  available_output_styles: string[]
-  models: import('./coreTypes.generated.js').ModelInfo[]
-  account: import('./coreTypes.generated.js').AccountInfo
-  /** @internal CLI process PID for tmux socket isolation. */
-  pid?: number
-  fast_mode_state?: import('./coreTypes.generated.js').FastModeState
-}
+} from './coreTypes.js'
+export type { SDKControlInitializeResponse } from './controlTypes.js'
 
 // ============================================================================
 // Re-exports from permissions
@@ -263,7 +243,7 @@ export function createSdkMcpServer(config: SdkMcpServerConfig): SdkScopedMcpServ
 
 export {
   AbortError,
-  GakrcliError,
+  GakrCLIError,
   SDKError,
   SDKAuthenticationError,
   SDKBillingError,
@@ -282,22 +262,3 @@ export type {
   ApiKeySource,
   PermissionResult,
 } from './coreTypes.generated.js'
-
-export type {
-  SDKApplySettingsInput,
-  SDKContextUsage,
-  SDKFastModeState,
-  SDKModelInfo,
-  SDKMutationResult,
-  SDKPluginInfo,
-  SDKProviderInfo,
-  SDKProviderProfileInfo,
-  SDKReasoningConfig,
-  SDKRunSlashCommandResult,
-  SDKRuntimeState,
-  SDKSettingsSnapshot,
-  SDKSlashCommandInfo,
-  SDKTodoItem,
-  SDKTodoState,
-  SDKUsageSummary,
-} from './runtime.js'

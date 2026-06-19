@@ -7,7 +7,7 @@
  * return @path refs to prepend. GakrCLI's Read tool takes it from there.
  *
  * Best-effort: any failure (no token, network, non-2xx, disk) logs debug and
- * skips that attachment. The message still reaches Gakr, just without @path.
+ * skips that attachment. The message still reaches GakrCLI, just without @path.
  */
 
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs'
@@ -18,7 +18,7 @@ import { basename, join } from 'path'
 import { z } from 'zod/v4'
 import { getSessionId } from '../bootstrap/state.js'
 import { logForDebugging } from '../utils/debug.js'
-import { getGakrcliConfigHomeDir } from '../utils/envUtils.js'
+import { getGakrCLIConfigHomeDir } from '../utils/envUtils.js'
 import { lazySchema } from '../utils/lazySchema.js'
 import { getBridgeAccessToken, getBridgeBaseUrl } from './bridgeConfig.js'
 
@@ -58,7 +58,7 @@ function sanitizeFileName(name: string): string {
 }
 
 function uploadsDir(): string {
-  return join(getGakrcliConfigHomeDir(), 'uploads', getSessionId())
+  return join(getGakrCLIConfigHomeDir(), 'uploads', getSessionId())
 }
 
 /**

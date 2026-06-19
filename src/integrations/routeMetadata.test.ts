@@ -47,7 +47,6 @@ test('getRouteCredentialEnvVars keeps descriptor env vars and openai fallback fo
     'HICAP_API_KEY',
     'OPENAI_API_KEY',
   ])
-  expect(getRouteCredentialEnvVars('custom')).toEqual(['OPENAI_API_KEY'])
   expect(getRouteCredentialEnvVars('venice')).toEqual([
     'VENICE_API_KEY',
     'OPENAI_API_KEY',
@@ -56,6 +55,23 @@ test('getRouteCredentialEnvVars keeps descriptor env vars and openai fallback fo
     'MIMO_API_KEY',
     'OPENAI_API_KEY',
   ])
+})
+
+test('getRouteCredentialEnvVars omits the openai fallback for dedicatedCredentialsOnly routes', () => {
+  expect(getRouteCredentialEnvVars('atlas-cloud')).toEqual([
+    'ATLAS_CLOUD_API_KEY',
+  ])
+  expect(
+    getRouteCredentialValue('atlas-cloud', {
+      OPENAI_API_KEY: 'sk-openai-generic',
+    }),
+  ).toBeUndefined()
+  expect(
+    getRouteCredentialValue('atlas-cloud', {
+      OPENAI_API_KEY: 'sk-openai-generic',
+      ATLAS_CLOUD_API_KEY: 'atlas-key',
+    }),
+  ).toBe('atlas-key')
 })
 
 test('getRouteCredentialValue reads the first configured route credential', () => {
@@ -80,32 +96,24 @@ test('NVIDIA NIM hides custom auth header prompts but keeps custom headers avail
 test('Venice route metadata uses official OpenAI-compatible defaults', () => {
   expect(getRouteDefaultBaseUrl('venice')).toBe('https://api.venice.ai/api/v1')
   expect(getRouteDefaultModel('venice')).toBe('venice-uncensored')
-  expect(resolveRouteIdFromBaseUrl('https://api.venice.ai/api/v1')).toBe(
-    'venice',
-  )
-  expect(
-    resolveRouteIdFromBaseUrl(
-      'https://api.venice.ai/api/v1/chat/completions',
-    ),
-  ).toBe('venice')
+  expect(resolveRouteIdFromBaseUrl('https://api.venice.ai/api/v1')).toBe('venice')
+  expect(resolveRouteIdFromBaseUrl('https://api.venice.ai/api/v1/chat/completions')).toBe('venice')
 })
 
 test('Xiaomi MiMo route metadata uses official OpenAI-compatible defaults', () => {
-  expect(getRouteDefaultBaseUrl('xiaomi-mimo')).toBe(
-    'https://api.xiaomimimo.com/v1',
-  )
+  expect(getRouteDefaultBaseUrl('xiaomi-mimo')).toBe('https://api.xiaomimimo.com/v1')
   expect(getRouteDefaultModel('xiaomi-mimo')).toBe('mimo-v2.5-pro')
-  expect(resolveRouteIdFromBaseUrl('https://api.xiaomimimo.com/v1')).toBe(
-    'xiaomi-mimo',
-  )
+  expect(resolveRouteIdFromBaseUrl('https://api.xiaomimimo.com/v1')).toBe('xiaomi-mimo')
+  expect(resolveRouteIdFromBaseUrl('https://api.xiaomimimo.com/v1/chat/completions')).toBe('xiaomi-mimo')
+  expect(resolveRouteIdFromBaseUrl('https://api.mimo-v2.com/v1')).toBe('xiaomi-mimo')
+})
+
+test('resolveActiveRouteIdFromEnv treats Xiaomi MiMo credential-only env as Xiaomi MiMo', () => {
   expect(
-    resolveRouteIdFromBaseUrl(
-      'https://api.xiaomimimo.com/v1/chat/completions',
-    ),
+    resolveActiveRouteIdFromEnv({
+      MIMO_API_KEY: 'mimo-key',
+    }),
   ).toBe('xiaomi-mimo')
-  expect(resolveRouteIdFromBaseUrl('https://api.mimo-v2.com/v1')).toBe(
-    'xiaomi-mimo',
-  )
 })
 
 test('resolveActiveRouteIdFromEnv treats MiniMax credential-only env as MiniMax', () => {
@@ -126,6 +134,13 @@ test('resolveActiveRouteIdFromEnv treats Anthropic-compatible MiniMax profile en
   ).toBe('minimax')
 })
 
+test('resolveActiveRouteIdFromEnv treats Venice credential-only env as Venice', () => {
+  expect(
+    resolveActiveRouteIdFromEnv({
+      VENICE_API_KEY: 'venice-key',
+    }),
+  ).toBe('venice')
+})
 test('resolveActiveRouteIdFromEnv treats xAI credential-only env as xAI', () => {
   expect(
     resolveActiveRouteIdFromEnv({
@@ -141,22 +156,6 @@ test('resolveActiveRouteIdFromEnv prefers xAI when env-only keys compete', () =>
       MINIMAX_API_KEY: 'minimax-key',
     }),
   ).toBe('xai')
-})
-
-test('resolveActiveRouteIdFromEnv treats Xiaomi MiMo credential-only env as Xiaomi MiMo', () => {
-  expect(
-    resolveActiveRouteIdFromEnv({
-      MIMO_API_KEY: 'mimo-key',
-    }),
-  ).toBe('xiaomi-mimo')
-})
-
-test('resolveActiveRouteIdFromEnv treats Venice credential-only env as Venice', () => {
-  expect(
-    resolveActiveRouteIdFromEnv({
-      VENICE_API_KEY: 'venice-key',
-    }),
-  ).toBe('venice')
 })
 
 test('resolveActiveRouteIdFromEnv lets explicit MiniMax model beat ambient OpenAI-compatible env', () => {
@@ -205,13 +204,13 @@ test('resolveActiveRouteIdFromEnv keeps MiniMax primary base over stale API base
 
 test.each([
   ['MiniMax', 'https://api.minimax.io/v1', 'MiniMax-M2.7', 'minimax'],
-  ['Xiaomi MiMo', 'https://api.xiaomimimo.com/v1', 'mimo-v2.5-pro', 'xiaomi-mimo'],
-  ['Venice', 'https://api.venice.ai/api/v1', 'venice-uncensored', 'venice'],
   ['xAI', 'https://api.x.ai/v1', 'grok-4.3', 'xai'],
-  ['NVIDIA NIM', 'https://integrate.api.nvidia.com/v1', 'stepfun-ai/step-3.5-flash', 'nvidia-nim'],
+  ['NVIDIA NIM', 'https://integrate.api.nvidia.com/v1', 'nvidia/llama-3.1-nemotron-70b-instruct', 'nvidia-nim'],
   ['OpenRouter', 'https://openrouter.ai/api/v1', 'openai/gpt-5-mini', 'openrouter'],
   ['DeepSeek', 'https://api.deepseek.com/v1', 'deepseek-v4-pro', 'deepseek'],
   ['Hicap', 'https://api.hicap.ai/v1', 'claude-opus-4.7', 'hicap'],
+  ['Xiaomi MiMo', 'https://api.xiaomimimo.com/v1', 'mimo-v2.5-pro', 'xiaomi-mimo'],
+  ['Venice', 'https://api.venice.ai/api/v1', 'venice-uncensored', 'venice'],
 ])(
   'resolveActiveRouteIdFromEnv refines generic OpenAI profile by %s base URL',
   (_label, baseUrl, model, expectedRouteId) => {
@@ -236,4 +235,33 @@ test('resolveActiveRouteIdFromEnv does not infer MiniMax with OpenAI credentials
       OPENAI_API_KEY: 'openai-key',
     }),
   ).toBe('anthropic')
+})
+
+test('resolveActiveRouteIdFromEnv infers Near AI with NEARAI_API_KEY and stale OPENAI_API_KEY', () => {
+  expect(
+    resolveActiveRouteIdFromEnv({
+      NEARAI_API_KEY: 'nearai-key',
+      OPENAI_API_KEY: 'stale-openai-key',
+    }),
+  ).toBe('nearai')
+})
+
+test('resolveActiveRouteIdFromEnv does not infer Near AI when OPENAI_BASE_URL points elsewhere', () => {
+  expect(
+    resolveActiveRouteIdFromEnv({
+      NEARAI_API_KEY: 'nearai-key',
+      OPENAI_API_KEY: 'openai-key',
+      OPENAI_BASE_URL: 'https://api.openai.com/v1',
+    }),
+  ).toBe('anthropic')
+})
+
+test('resolveActiveRouteIdFromEnv does not infer Near AI with explicit provider flag', () => {
+  expect(
+    resolveActiveRouteIdFromEnv({
+      NEARAI_API_KEY: 'nearai-key',
+      OPENAI_API_KEY: 'openai-key',
+      GAKR_CODE_USE_GEMINI: '1',
+    }),
+  ).toBe('gemini')
 })

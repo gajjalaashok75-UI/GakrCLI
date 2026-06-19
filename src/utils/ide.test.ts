@@ -3,21 +3,25 @@ import { mkdirSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { setOriginalCwd } from '../bootstrap/state.js'
-import { setGakrcliConfigHomeDirForTesting } from './envUtils.js'
+import { setGakrCLIConfigHomeDirForTesting } from './envUtils.js'
 import { detectIDEs } from './ide.js'
+import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../test/sharedMutationLock.js'
 
 const originalCwd = process.cwd()
 
 afterEach(() => {
   setOriginalCwd(originalCwd)
-  setGakrcliConfigHomeDirForTesting(undefined)
+  setGakrCLIConfigHomeDirForTesting(undefined)
+  releaseSharedMutationLock()
 })
 
-const testIfWindows = process.platform === 'win32' ? test : test.skip
-
-testIfWindows(
+test.skipIf(process.platform === 'win32')(
   'detectIDEs matches VS Code lockfile workspace paths case-insensitively on Windows',
   async () => {
+    await acquireSharedMutationLock('src/utils/ide.test.ts')
     const configDir = join(tmpdir(), `gakrcli-ide-test-${Date.now()}`)
     const ideDir = join(configDir, 'ide')
     mkdirSync(ideDir, { recursive: true })
@@ -35,7 +39,7 @@ testIfWindows(
         }),
       )
 
-      setGakrcliConfigHomeDirForTesting(configDir)
+      setGakrCLIConfigHomeDirForTesting(configDir)
       setOriginalCwd('C:\\Users\\gajja\\Documents\\data-science\\gakrcli')
 
       const ides = await detectIDEs(false)

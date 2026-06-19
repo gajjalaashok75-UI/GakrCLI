@@ -286,7 +286,9 @@ export function execFileNoThrowWithCwd(
       finalTimeout > 0
         ? setTimeout(() => {
             timedOut = true
-            child.kill()
+            if (child && typeof child.kill === 'function') {
+              child.kill()
+            }
           }, finalTimeout)
         : undefined
 

@@ -13,7 +13,7 @@
  * capabilities.experimental['gakrcli/channel/permission'].
  *
  * Kenneth's "would this let GakrCLI self-approve?": the approving party is
- * the human via the channel, not Gakr. But the trust boundary isn't the
+ * the human via the channel, not GakrCLI. But the trust boundary isn't the
  * terminal — it's the allowlist (tengu_harbor_ledger). A compromised
  * channel server CAN fabricate "yes <id>" without the human seeing the
  * prompt. Accepted risk: a compromised channel already has unlimited

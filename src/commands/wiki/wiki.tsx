@@ -76,8 +76,9 @@ function formatIngestResult(
 async function runWikiCommand(
   onDone: LocalJSXCommandOnDone,
   args: string,
+  contextCwd?: string,
 ): Promise<void> {
-  const cwd = getCwd()
+  const cwd = contextCwd ?? getCwd()
   const normalized = args.trim().toLowerCase()
 
   if (COMMON_HELP_ARGS.includes(normalized) || COMMON_INFO_ARGS.includes(normalized)) {
@@ -118,6 +119,6 @@ export const call: LocalJSXCommandCall = async (
   _context,
   args,
 ): Promise<React.ReactNode> => {
-  await runWikiCommand(onDone, args ?? '')
+  await runWikiCommand(onDone, args ?? '', ((_context as any)?.cwd))
   return null
 }

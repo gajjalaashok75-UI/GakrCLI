@@ -3,7 +3,7 @@ import { dirname, isAbsolute, join, normalize, relative } from 'path'
 import { fileURLToPath } from 'url'
 import { jsonParse, jsonStringify } from './slowOperations.js'
 import { logForDebugging } from './debug.js'
-import { getGakrcliWorkspaceDir, getProjectsDir } from './envUtils.js'
+import { getGakrCLIWorkspaceDir, getProjectsDir } from './envUtils.js'
 
 export const WORKSPACE_CONTEXT_FILENAMES = [
   'GAKRCLI.md',
@@ -365,7 +365,7 @@ function getModuleDir(): string | undefined {
 function getWorkspaceTemplateDirCandidates(): string[] {
   const moduleDir = getModuleDir()
   const candidates = [
-    process.env.GAKRCLI_WORKSPACE_TEMPLATE_DIR,
+    process.env.GAKR_WORKSPACE_TEMPLATE_DIR,
     join(process.cwd(), 'assets', 'workspace'),
     moduleDir ? join(moduleDir, '..', 'assets', 'workspace') : undefined,
     moduleDir ? join(moduleDir, '..', '..', 'assets', 'workspace') : undefined,
@@ -522,7 +522,7 @@ async function writeFallbackIfMissing(
 }
 
 export async function ensureGakrcliWorkspace(): Promise<void> {
-  const workspaceDir = getGakrcliWorkspaceDir()
+  const workspaceDir = getGakrCLIWorkspaceDir()
   try {
     await mkdir(workspaceDir, { recursive: true, mode: 0o700 })
     await mkdir(getProjectsDir(), { recursive: true, mode: 0o700 })
@@ -572,14 +572,14 @@ export async function ensureGakrcliWorkspace(): Promise<void> {
 }
 
 export function getWorkspaceBootstrapPaths(): string[] {
-  const workspaceDir = getGakrcliWorkspaceDir()
+  const workspaceDir = getGakrCLIWorkspaceDir()
   return WORKSPACE_BOOTSTRAP_FILENAMES.map(fileName =>
     join(workspaceDir, fileName),
   )
 }
 
 export function getWorkspacePersistencePaths(): string[] {
-  const workspaceDir = getGakrcliWorkspaceDir()
+  const workspaceDir = getGakrCLIWorkspaceDir()
   return WORKSPACE_PERSISTENCE_FILENAMES.map(fileName =>
     join(workspaceDir, fileName),
   )
@@ -587,7 +587,7 @@ export function getWorkspacePersistencePaths(): string[] {
 
 export function isWorkspacePersistencePath(filePath: string): boolean {
   const relativePath = relative(
-    normalize(getGakrcliWorkspaceDir()),
+    normalize(getGakrCLIWorkspaceDir()),
     normalize(filePath),
   )
   return (

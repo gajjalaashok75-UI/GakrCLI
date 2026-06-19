@@ -9,7 +9,7 @@ import { findToolByName } from '../../Tool.js';
 import type { AgentToolResult } from '../../tools/AgentTool/agentToolUtils.js';
 import type { AgentDefinition } from '../../tools/AgentTool/loadAgentsDir.js';
 import { SYNTHETIC_OUTPUT_TOOL_NAME } from '../../tools/SyntheticOutputTool/SyntheticOutputTool.js';
-import { asAgentId, type AgentId } from '../../types/ids.js';
+import { asAgentId } from '../../types/ids.js';
 import type { Message } from '../../types/message.js';
 import { createAbortController, createChildAbortController } from '../../utils/abortController.js';
 import { registerCleanup } from '../../utils/cleanupRegistry.js';
@@ -219,7 +219,7 @@ export function enqueueAgentNotification({
     durationMs: number;
   };
   toolUseId?: string;
-  agentId?: AgentId;
+  agentId?: string;
   worktreePath?: string;
   worktreeBranch?: string;
 }): void {
@@ -260,7 +260,7 @@ export function enqueueAgentNotification({
   enqueuePendingNotification({
     value: message,
     mode: 'task-notification',
-    agentId
+    ...(agentId ? { agentId } : {}),
   });
 }
 

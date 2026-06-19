@@ -187,14 +187,14 @@ describe("Secure Storage Platform Implementations", () => {
     });
 
     test("delete() includes legacy assembly load when explicitly enabled", () => {
-      process.env.GAKRCLI_ENABLE_LEGACY_WINDOWS_PASSWORDVAULT = "1";
+      process.env.GAKR_ENABLE_LEGACY_WINDOWS_PASSWORDVAULT = "1";
       windowsCredentialStorage.delete();
       const script = getPowerShellScript(1);
       expect(script).toContain("Add-Type -AssemblyName System.Runtime.WindowsRuntime");
     });
 
     test("escapes double quotes in username", () => {
-      process.env.GAKRCLI_ENABLE_LEGACY_WINDOWS_PASSWORDVAULT = "1";
+      process.env.GAKR_ENABLE_LEGACY_WINDOWS_PASSWORDVAULT = "1";
       process.env.USER = 'user"name';
       windowsCredentialStorage.read();
       const script = getPowerShellScript(1);
@@ -212,7 +212,7 @@ describe("Secure Storage Platform Implementations", () => {
     });
 
     test("read() falls back to legacy PasswordVault when explicitly enabled", () => {
-      process.env.GAKRCLI_ENABLE_LEGACY_WINDOWS_PASSWORDVAULT = "1";
+      process.env.GAKR_ENABLE_LEGACY_WINDOWS_PASSWORDVAULT = "1";
       mockExecaSync
         .mockImplementationOnce(() => execaResult({ stdout: "{not-json" }))
         .mockImplementationOnce(() => execaResult({ stdout: JSON.stringify(testData) }));
@@ -224,7 +224,7 @@ describe("Secure Storage Platform Implementations", () => {
     });
 
     test("read() fails closed when the legacy PasswordVault payload is invalid JSON", () => {
-      process.env.GAKRCLI_ENABLE_LEGACY_WINDOWS_PASSWORDVAULT = "1";
+      process.env.GAKR_ENABLE_LEGACY_WINDOWS_PASSWORDVAULT = "1";
       mockExecaSync
         .mockImplementationOnce(() => execaResult({ exitCode: 1 }))
         .mockImplementationOnce(() => execaResult({ stdout: "{not-json" }));

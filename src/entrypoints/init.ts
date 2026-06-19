@@ -1,11 +1,9 @@
 import { profileCheckpoint } from '../utils/startupProfiler.js'
+import { validateEnvVars } from '../utils/envValidation.js'
 import '../bootstrap/state.js'
 import '../utils/config.js'
-import type { Attributes, MetricOptions } from '@opentelemetry/api'
 import memoize from 'lodash-es/memoize.js'
 import { getIsNonInteractiveSession } from 'src/bootstrap/state.js'
-import type { AttributedCounter } from '../bootstrap/state.js'
-import { getSessionCounter, setMeter } from '../bootstrap/state.js'
 import { shutdownLspServerManager } from '../services/lsp/manager.js'
 import { populateOAuthAccountInfoIfNeeded } from '../services/oauth/client.js'
 import {
@@ -27,7 +25,6 @@ import { logForDiagnosticsNoPII } from '../utils/diagLogs.js'
 import { initJetBrainsDetection } from '../utils/envDynamic.js'
 import { isEnvTruthy } from '../utils/envUtils.js'
 import { ConfigParseError, errorMessage } from '../utils/errors.js'
-import { initUserDirs } from '../utils/initUserDirs.js'
 // showInvalidConfigDialog is dynamically imported in the error path to avoid loading React at init
 import {
   gracefulShutdownSync,
@@ -42,25 +39,17 @@ import {
   ensureScratchpadDir,
   isScratchpadEnabled,
 } from '../utils/permissions/filesystem.js'
-// initializeTelemetry is loaded lazily via import() in setMeterState() to defer
-// ~400KB of OpenTelemetry + protobuf modules until telemetry is actually initialized.
-// gRPC exporters (~700KB via @grpc/grpc-js) are further lazy-loaded within instrumentation.ts.
 import { configureGlobalAgents } from '../utils/proxy.js'
-import { isBetaTracingEnabled } from '../utils/telemetry/betaSessionTracing.js'
-import { getTelemetryAttributes } from '../utils/telemetryAttributes.js'
 import { setShellIfWindows } from '../utils/windowsPaths.js'
 
-// initialize1PEventLogging is dynamically imported to defer OpenTelemetry sdk-logs/resources
-
-// Track if telemetry has been initialized to prevent double initialization
-let telemetryInitialized = false
 
 export const init = memoize(async (): Promise<void> => {
   const initStartTime = Date.now()
   logForDiagnosticsNoPII('info', 'init_started')
   profileCheckpoint('init_function_start')
-
-  // Validate configs are valid and enable configuration system
+  // Validate critical environment variables early
+  // Crashes immediately if invalid to avoid wasting time
+  validateEnvVars()
   try {
     const configsStart = Date.now()
     enableConfigs()
@@ -68,18 +57,6 @@ export const init = memoize(async (): Promise<void> => {
       duration_ms: Date.now() - configsStart,
     })
     profileCheckpoint('init_configs_enabled')
-
-    const userDirsStart = Date.now()
-    const userDirsResult = initUserDirs()
-    logForDiagnosticsNoPII('info', 'init_user_dirs_ready', {
-      duration_ms: Date.now() - userDirsStart,
-      created_dirs: userDirsResult.createdDirs.length,
-      synced_agents: userDirsResult.syncedAssets.agents,
-      synced_rules: userDirsResult.syncedAssets.rules,
-      synced_skills: userDirsResult.syncedAssets.skills,
-      missing_asset_dirs: userDirsResult.missingAssetDirs.length,
-    })
-    profileCheckpoint('init_user_dirs_ready')
 
     // Apply only safe environment variables before trust dialog
     // Full environment variables are applied after trust is established
@@ -91,6 +68,9 @@ export const init = memoize(async (): Promise<void> => {
     // via BoringSSL, so this must happen before the first TLS handshake.
     applyExtraCACertsFromConfig()
 
+    // Re-validate values hydrated from trusted config before network setup.
+    validateEnvVars()
+
     logForDiagnosticsNoPII('info', 'init_safe_env_vars_applied', {
       duration_ms: Date.now() - envVarsStart,
     })
@@ -100,22 +80,7 @@ export const init = memoize(async (): Promise<void> => {
     setupGracefulShutdown()
     profileCheckpoint('init_after_graceful_shutdown')
 
-    // Initialize 1P event logging (no security concerns, but deferred to avoid
-    // loading OpenTelemetry sdk-logs at startup). growthbook.js is already in
-    // the module cache by this point (firstPartyEventLogger imports it), so the
-    // second dynamic import adds no load cost.
-    void Promise.all([
-      import('../services/analytics/firstPartyEventLogger.js'),
-      import('../services/analytics/growthbook.js'),
-    ]).then(([fp, gb]) => {
-      fp.initialize1PEventLogging()
-      // Rebuild the logger provider if tengu_1p_event_batch_config changes
-      // mid-session. Change detection (isEqual) is inside the handler so
-      // unchanged refreshes are no-ops.
-      gb.onGrowthBookRefresh(() => {
-        void fp.reinitialize1PEventLoggingIfConfigChanged()
-      })
-    })
+    // 1P event logging and GrowthBook initialization removed (no-op stubs)
     profileCheckpoint('init_after_1p_event_logging')
 
     // Populate OAuth account info if it is not already cached in config. This is needed since the
@@ -251,103 +216,9 @@ export const init = memoize(async (): Promise<void> => {
 })
 
 /**
- * Initialize telemetry after trust has been granted.
- * For remote-settings-eligible users, waits for settings to load (non-blocking),
- * then re-applies env vars (to include remote settings) before initializing telemetry.
- * For non-eligible users, initializes telemetry immediately.
- * This should only be called once, after the trust dialog has been accepted.
+ * No-op — telemetry initialization has been removed.
+ * Kept as an empty function for API compatibility with callers.
  */
 export function initializeTelemetryAfterTrust(): void {
-  if (isEligibleForRemoteManagedSettings()) {
-    // For SDK/headless mode with beta tracing, initialize eagerly first
-    // to ensure the tracer is ready before the first query runs.
-    // The async path below will still run but doInitializeTelemetry() guards against double init.
-    if (getIsNonInteractiveSession() && isBetaTracingEnabled()) {
-      void doInitializeTelemetry().catch(error => {
-        logForDebugging(
-          `[3P telemetry] Eager telemetry init failed (beta tracing): ${errorMessage(error)}`,
-          { level: 'error' },
-        )
-      })
-    }
-    logForDebugging(
-      '[3P telemetry] Waiting for remote managed settings before telemetry init',
-    )
-    void waitForRemoteManagedSettingsToLoad()
-      .then(async () => {
-        logForDebugging(
-          '[3P telemetry] Remote managed settings loaded, initializing telemetry',
-        )
-        // Re-apply env vars to pick up remote settings before initializing telemetry.
-        applyConfigEnvironmentVariables()
-        await doInitializeTelemetry()
-      })
-      .catch(error => {
-        logForDebugging(
-          `[3P telemetry] Telemetry init failed (remote settings path): ${errorMessage(error)}`,
-          { level: 'error' },
-        )
-      })
-  } else {
-    void doInitializeTelemetry().catch(error => {
-      logForDebugging(
-        `[3P telemetry] Telemetry init failed: ${errorMessage(error)}`,
-        { level: 'error' },
-      )
-    })
-  }
-}
-
-async function doInitializeTelemetry(): Promise<void> {
-  if (telemetryInitialized) {
-    // Already initialized, nothing to do
-    return
-  }
-
-  // Set flag before init to prevent double initialization
-  telemetryInitialized = true
-  try {
-    await setMeterState()
-  } catch (error) {
-    // Reset flag on failure so subsequent calls can retry
-    telemetryInitialized = false
-    throw error
-  }
-}
-
-async function setMeterState(): Promise<void> {
-  // Lazy-load instrumentation to defer ~400KB of OpenTelemetry + protobuf
-  const { initializeTelemetry } = await import(
-    '../utils/telemetry/instrumentation.js'
-  )
-  // Initialize customer OTLP telemetry (metrics, logs, traces)
-  const meter = await initializeTelemetry()
-  if (meter) {
-    // Create factory function for attributed counters
-    const createAttributedCounter = (
-      name: string,
-      options: MetricOptions,
-    ): AttributedCounter => {
-      const counter = meter?.createCounter(name, options)
-
-      return {
-        add(value: number, additionalAttributes: Attributes = {}) {
-          // Always fetch fresh telemetry attributes to ensure they're up to date
-          const currentAttributes = getTelemetryAttributes()
-          const mergedAttributes = {
-            ...currentAttributes,
-            ...additionalAttributes,
-          }
-          counter?.add(value, mergedAttributes)
-        },
-      }
-    }
-
-    setMeter(meter, createAttributedCounter)
-
-    // Increment session counter here because the startup telemetry path
-    // runs before this async initialization completes, so the counter
-    // would be null there.
-    getSessionCounter()?.add(1)
-  }
+  // Telemetry is no longer initialized; this is a no-op.
 }

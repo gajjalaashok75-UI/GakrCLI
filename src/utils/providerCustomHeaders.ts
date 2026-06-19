@@ -20,7 +20,7 @@ function isReservedHeaderName(name: string): boolean {
 
 function parseHeaderEntries(input: string): string[] {
   return input
-    .split(/[\n\r;]+/)
+    .split(/[\n;]+/)
     .map(entry => entry.trim())
     .filter(Boolean)
 }
@@ -96,10 +96,14 @@ export function parseCustomHeadersEnv(
   if (!value) {
     return undefined
   }
+  // Reject raw CR characters — these indicate a header value containing \r\n
+  // that would create an injected header entry after splitting.
   if (value.includes('\r')) {
     return undefined
   }
-
+  // Parse headers without reserved-name filtering (that's for profile headers).
+  // The env var path allows all header names including managed ones, since the
+  // shim's caller is responsible for stripping Anthropic-specific headers.
   const headers: Record<string, string> = {}
   for (const entry of parseHeaderEntries(value)) {
     const colonIndex = entry.indexOf(':')

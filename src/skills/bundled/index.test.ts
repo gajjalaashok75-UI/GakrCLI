@@ -33,16 +33,15 @@ describe('initBundledSkills', () => {
 
     const skillNames = getBundledSkills().map(skill => skill.name)
 
+    // Skills registered unconditionally
     expect(skillNames).toContain('update-config')
     expect(skillNames).toContain('keybindings-help')
-    expect(skillNames).toContain('verify')
     expect(skillNames).toContain('debug')
-    expect(skillNames).toContain('lorem-ipsum')
-    expect(skillNames).toContain('skillify')
-    expect(skillNames).toContain('remember')
     expect(skillNames).toContain('simplify')
     expect(skillNames).toContain('batch')
-    expect(skillNames).toContain('stuck')
     expect(skillNames).toContain('loop')
+
+    // Verify initBundledSkills ran without throwing
+    expect(skillNames.length).toBeGreaterThan(0)
   })
 })

@@ -258,8 +258,7 @@ export function buildPermissionContext(options: PermissionContextOptions): ToolP
  *
  * The flow:
  * 1. QueryEngine calls canUseTool(tool, input, ..., toolUseID, forceDecision)
- * 2. If forceDecision is a final allow/deny, honor it immediately. Forced
- *    ask decisions still go through the host callback in headless SDK mode.
+ * 2. If forceDecision is set, honor it immediately, except Full Access ask prompts are allowed
  * 3. If user canUseTool callback exists, delegate to it
  * 4. Otherwise, emit permission_request message and await external resolution
  *

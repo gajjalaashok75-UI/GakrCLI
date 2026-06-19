@@ -1,95 +1,34 @@
 import { defineGateway } from '../define.js'
-import { getCopilotModel } from '../../utils/model/copilotModels.js'
-
-const COPILOT_HEADERS: Record<string, string> = {
-  'User-Agent': 'GitHubCopilotChat/0.26.7',
-  'Editor-Version': 'vscode/1.99.3',
-  'Editor-Plugin-Version': 'copilot-chat/0.26.7',
-  'Copilot-Integration-Id': 'vscode-chat',
-}
-
-const HIDDEN_COPILOT_MODEL_PATTERNS = [
-  /embedding/i,
-  /^accounts\/[^/]+\/routers\//i,
-  /^oswe-vscode-/i,
-  /^goldeneye-/i,
-  /^gpt-3\.5-turbo$/i,
-]
-
-function stringField(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined
-}
-
-function numberField(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0
-    ? value
-    : undefined
-}
-
-function getPolicyState(model: Record<string, unknown>): string | undefined {
-  const policy = model.policy
-  if (!policy || typeof policy !== 'object' || Array.isArray(policy)) {
-    return undefined
-  }
-  return stringField((policy as Record<string, unknown>).state)?.toLowerCase()
-}
-
-function getVersionedCopilotLabel(id: string): string | undefined {
-  const gpt4oMini = /^gpt-4o-mini-(\d{4}-\d{2}-\d{2})$/i.exec(id)
-  if (gpt4oMini) {
-    return `GPT-4o mini (${gpt4oMini[1]})`
-  }
-
-  const gpt4o = /^gpt-4o-(\d{4}-\d{2}-\d{2})$/i.exec(id)
-  if (gpt4o) {
-    return `GPT-4o (${gpt4o[1]})`
-  }
-
-  const gpt41 = /^gpt-4\.1-(\d{4}-\d{2}-\d{2})$/i.exec(id)
-  if (gpt41) {
-    return `GPT-4.1 (${gpt41[1]})`
-  }
-
-  const gpt35 = /^gpt-3\.5-turbo-(\d+)$/i.exec(id)
-  if (gpt35) {
-    return `GPT 3.5 Turbo (${gpt35[1]})`
-  }
-
-  const gpt4 = /^gpt-4-(\d+)(?:-(preview))?$/i.exec(id)
-  if (gpt4) {
-    return `GPT 4 (${gpt4[1]}${gpt4[2] ? ' preview' : ''})`
-  }
-
-  if (/^gpt-4-o-preview$/i.test(id)) {
-    return 'GPT-4o Preview'
-  }
-
-  return undefined
-}
-
-function getCopilotModelLabel(
-  id: string,
-  model: Record<string, unknown>,
-): string {
-  return (
-    getVersionedCopilotLabel(id) ??
-    getCopilotModel(id)?.name ??
-    stringField(model.name) ??
-    stringField(model.display_name) ??
-    stringField(model.displayName) ??
-    id
-  )
-}
 
 /**
- * GitHub Copilot has a special native-Claude path for Claude models.
- * When the model string contains "claude-", the runtime routes through
+ * GitHub Copilot has a special native-GakrCLI path for GakrCLI models.
+ * When the model string contains "gakrcli-", the runtime routes through
  * the native Anthropic path instead of the OpenAI shim to enable prompt
  * caching. This exception is handled in openaiShim.ts and providers.ts
  * and must be preserved during migration.
  *
  * @see src/utils/model/providers.ts — isGithubNativeAnthropicMode()
  * @see src/services/api/openaiShim.ts — getGithubEndpointType()
+ *
+ * ## Premium Request Optimization
+ *
+ * GitHub Copilot tracks "Premium Requests" per billing cycle, with the exact
+ * quota set by the user's Copilot plan (not a property of this runtime).
+ * Each HTTP request to api.githubcopilot.com counts toward this quota.
+ * GakrCLI's sub-agent architecture can consume multiple Premium Requests
+ * per chat interaction (one per agent per turn), rapidly depleting the quota.
+ *
+ * By default, when GAKR_CODE_USE_GITHUB=1 is active, GakrCLI limits
+ * sub-agents to synchronous in-process execution (max 1 concurrent) to mitigate
+ * Premium Request consumption (mitigates #678). Configure these env vars to tune behaviour:
+ *
+ *   GITHUB_COPILOT_MAX_SUBAGENTS=0          Disable sub-agents entirely (most conservative)
+ *   GITHUB_COPILOT_MAX_SUBAGENTS=1          One sub-agent at a time (default when unset)
+ *   GITHUB_COPILOT_ALLOW_SUBAGENTS=1        Re-enable background/parallel sub-agents
+ *   GITHUB_COPILOT_FORCE_SYNC_SUBAGENTS=1   Force all sub-agents to run synchronously
+ *   GITHUB_COPILOT_OPTIMIZATION_DISABLED=1  Turn off all Copilot optimizations
+ *
+ * @see src/utils/copilotOptimization.ts
  */
 export default defineGateway({
   id: 'github',
@@ -97,7 +36,6 @@ export default defineGateway({
   vendorId: 'openai',
   category: 'hosted',
   defaultBaseUrl: 'https://api.githubcopilot.com',
-  defaultModel: 'github:copilot',
   supportsModelRouting: true,
   setup: {
     requiresAuth: true,
@@ -107,7 +45,6 @@ export default defineGateway({
   transportConfig: {
     kind: 'openai-compatible',
     openaiShim: {
-      headers: COPILOT_HEADERS,
       supportsAuthHeaders: true,
       maxTokensField: 'max_tokens',
     },
@@ -119,51 +56,183 @@ export default defineGateway({
       skipWhenUseOpenAI: true,
     },
     missingCredentialMessage:
-      'GitHub Copilot authentication required.\nRun /provider in the CLI and choose GitHub Models to sign in with your GitHub account.\nThis will store your OAuth token securely and enable Copilot models.',
+      'GitHub Copilot authentication required.\nRun /onboard-github in the CLI to sign in with your GitHub account.\nThis will store your OAuth token securely and enable Copilot models.',
     expiredCredentialMessage:
-      'GitHub Copilot token has expired.\nRun /provider and choose GitHub Models to sign in again and get a fresh token.',
+      'GitHub Copilot token has expired.\nRun /onboard-github to sign in again and get a fresh token.',
     invalidCredentialMessage:
-      'GitHub Copilot token is invalid or corrupted.\nRun /provider and choose GitHub Models to sign in again with your GitHub account.',
+      'GitHub Copilot token is invalid or corrupted.\nRun /onboard-github to sign in again with your GitHub account.',
   },
   catalog: {
-    source: 'hybrid',
-    discovery: {
-      kind: 'openai-compatible',
-      mapModel(raw: unknown) {
-        const model = raw as Record<string, unknown>
-        const id = stringField(model.id)
-        if (!id) {
-          return null
-        }
-        if (HIDDEN_COPILOT_MODEL_PATTERNS.some(pattern => pattern.test(id))) {
-          return null
-        }
-        const policyState = getPolicyState(model)
-        if (policyState && policyState !== 'enabled') {
-          return null
-        }
-
-        const known = getCopilotModel(id)
-        const label = getCopilotModelLabel(id, model)
-        const contextWindow =
-          known?.limit.context ??
-          numberField(model.context_length) ??
-          numberField(model.contextWindow) ??
-          numberField(model.inputTokenLimit)
-
-        return {
-          id,
-          apiName: id,
-          label,
-          ...(contextWindow ? { contextWindow } : {}),
-        }
-      },
-    },
-    discoveryCacheTtl: '1h',
-    discoveryRefreshMode: 'on-open',
-    allowManualRefresh: true,
+    source: 'static',
     models: [
-      { id: 'github-copilot-default', apiName: 'github:copilot', label: 'GitHub Copilot Default' },
+      {
+        id: 'github-gpt-5.5',
+        apiName: 'gpt-5.5',
+        label: 'GPT-5.5 (GitHub)',
+        modelDescriptorId: 'github:copilot:gpt-5.5',
+        contextWindow: 272_000,
+        maxOutputTokens: 128_000,
+      },
+      {
+        id: 'github-gpt-5.5-mini',
+        apiName: 'gpt-5.5-mini',
+        label: 'GPT-5.5 mini (GitHub)',
+        modelDescriptorId: 'github:copilot:gpt-5.5-mini',
+        contextWindow: 400_000,
+        maxOutputTokens: 128_000,
+      },
+      {
+        id: 'github-gpt-5.4',
+        apiName: 'gpt-5.4',
+        label: 'GPT-5.4 (GitHub)',
+        modelDescriptorId: 'github:copilot:gpt-5.4',
+        contextWindow: 1_050_000,
+        maxOutputTokens: 32_768,
+      },
+      {
+        id: 'github-gpt-5.4-mini',
+        apiName: 'gpt-5.4-mini',
+        label: 'GPT-5.4 mini (GitHub)',
+        modelDescriptorId: 'github:copilot:gpt-5.4-mini',
+        contextWindow: 400_000,
+        maxOutputTokens: 128_000,
+      },
+      {
+        id: 'github-gpt-5.3-codex',
+        apiName: 'gpt-5.3-codex',
+        label: 'GPT-5.3-Codex (GitHub)',
+        modelDescriptorId: 'github:copilot:gpt-5.3-codex',
+        contextWindow: 400_000,
+        maxOutputTokens: 32_768,
+      },
+      {
+        id: 'github-gpt-5.2-codex',
+        apiName: 'gpt-5.2-codex',
+        label: 'GPT-5.2-Codex (GitHub)',
+        modelDescriptorId: 'github:copilot:gpt-5.2-codex',
+        contextWindow: 400_000,
+        maxOutputTokens: 32_768,
+      },
+      {
+        id: 'github-gpt-5.2',
+        apiName: 'gpt-5.2',
+        label: 'GPT-5.2 (GitHub)',
+        modelDescriptorId: 'github:copilot:gpt-5.2',
+        contextWindow: 400_000,
+        maxOutputTokens: 32_768,
+      },
+      {
+        id: 'github-gpt-5.1-codex',
+        apiName: 'gpt-5.1-codex',
+        label: 'GPT-5.1-Codex (GitHub)',
+        modelDescriptorId: 'github:copilot:gpt-5.1-codex',
+        contextWindow: 400_000,
+        maxOutputTokens: 32_768,
+      },
+      {
+        id: 'github-gpt-5.1-codex-max',
+        apiName: 'gpt-5.1-codex-max',
+        label: 'GPT-5.1-Codex-max (GitHub)',
+        modelDescriptorId: 'github:copilot:gpt-5.1-codex-max',
+        contextWindow: 400_000,
+        maxOutputTokens: 32_768,
+      },
+      {
+        id: 'github-gpt-5.1-codex-mini',
+        apiName: 'gpt-5.1-codex-mini',
+        label: 'GPT-5.1-Codex-mini (GitHub)',
+        modelDescriptorId: 'github:copilot:gpt-5.1-codex-mini',
+        contextWindow: 400_000,
+        maxOutputTokens: 32_768,
+      },
+      {
+        id: 'github-gpt-4.1',
+        apiName: 'gpt-4.1',
+        label: 'GPT-4.1 (GitHub)',
+        modelDescriptorId: 'github:copilot:gpt-4.1',
+        contextWindow: 1_047_576,
+        maxOutputTokens: 32_768,
+      },
+      {
+        id: 'github-gpt-4o',
+        apiName: 'gpt-4o',
+        label: 'GPT-4o (GitHub)',
+        modelDescriptorId: 'github:copilot:gpt-4o',
+        contextWindow: 128_000,
+        maxOutputTokens: 16_384,
+      },
+      {
+        id: 'github-claude-sonnet-4.6',
+        apiName: 'claude-sonnet-4-6',
+        label: 'claude sonnet 4.6 (GitHub)',
+        modelDescriptorId: 'github:copilot:claude-sonnet-4.6',
+        contextWindow: 200_000,
+        maxOutputTokens: 8_192,
+      },
+      {
+        id: 'github-claude-sonnet-4.5',
+        apiName: 'claude-sonnet-4-5',
+        label: 'claude sonnet 4.5 (GitHub)',
+        modelDescriptorId: 'github:copilot:claude-sonnet-4.5',
+        contextWindow: 200_000,
+        maxOutputTokens: 8_192,
+      },
+      {
+        id: 'github-claude-opus-4.6',
+        apiName: 'claude-opus-4-6',
+        label: 'claude opus 4.6 (GitHub)',
+        modelDescriptorId: 'github:copilot:claude-opus-4.6',
+        contextWindow: 200_000,
+        maxOutputTokens: 8_192,
+      },
+      {
+        id: 'github-claude-opus-4.5',
+        apiName: 'claude-opus-4-5',
+        label: 'claude opus 4.5 (GitHub)',
+        modelDescriptorId: 'github:copilot:claude-opus-4.5',
+        contextWindow: 200_000,
+        maxOutputTokens: 8_192,
+      },
+      {
+        id: 'github-claude-haiku-4.5',
+        apiName: 'claude-haiku-4-5',
+        label: 'claude haiku 4.5 (GitHub)',
+        modelDescriptorId: 'github:copilot:claude-haiku-4.5',
+        contextWindow: 144_000,
+        maxOutputTokens: 8_192,
+      },
+      {
+        id: 'github-gemini-3.1-pro-preview',
+        apiName: 'gemini-3.1-pro-preview',
+        label: 'Gemini 3.1 Pro Preview (GitHub)',
+        modelDescriptorId: 'github:copilot:gemini-3.1-pro-preview',
+        contextWindow: 128_000,
+        maxOutputTokens: 32_768,
+      },
+      {
+        id: 'github-gemini-3-flash-preview',
+        apiName: 'gemini-3-flash-preview',
+        label: 'Gemini 3 Flash (GitHub)',
+        modelDescriptorId: 'github:copilot:gemini-3-flash-preview',
+        contextWindow: 128_000,
+        maxOutputTokens: 32_768,
+      },
+      {
+        id: 'github-gemini-2.5-pro',
+        apiName: 'gemini-2.5-pro',
+        label: 'Gemini 2.5 Pro (GitHub)',
+        modelDescriptorId: 'github:copilot:gemini-2.5-pro',
+        contextWindow: 1_048_576,
+        maxOutputTokens: 65_536,
+      },
+      {
+        id: 'github-grok-code-fast-1',
+        apiName: 'grok-code-fast-1',
+        label: 'Grok Code Fast 1 (GitHub)',
+        modelDescriptorId: 'github:copilot:grok-code-fast-1',
+        contextWindow: 256_000,
+        maxOutputTokens: 32_768,
+      },
     ],
   },
   usage: { supported: false },

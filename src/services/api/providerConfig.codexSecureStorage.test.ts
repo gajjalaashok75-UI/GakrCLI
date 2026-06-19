@@ -1,13 +1,20 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterEach, describe, expect, mock, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import * as realOs from 'node:os'
+import * as realCodexCredentials from '../../utils/codexCredentials.js'
+import { acquireEnvMutex, releaseEnvMutex } from '../../entrypoints/sdk/shared.js'
 
-import {
-  acquireSharedMutationLock,
-  releaseSharedMutationLock,
-} from '../../test/sharedMutationLock.js'
+type ProviderConfigModule = typeof import('./providerConfig.js')
+
+function importFreshProviderConfig(
+  cacheKey: string,
+): Promise<ProviderConfigModule> {
+  return import(
+    `./providerConfig.js?${cacheKey}`
+  ) as Promise<ProviderConfigModule>
+}
 
 function makeJwt(payload: Record<string, unknown>): string {
   const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' }))
@@ -17,28 +24,19 @@ function makeJwt(payload: Record<string, unknown>): string {
 }
 
 describe('resolveCodexApiCredentials with secure storage', () => {
-  let lockAcquired = false
-
-  beforeEach(async () => {
-    await acquireSharedMutationLock(
-      'services/api/providerConfig.codexSecureStorage.test.ts',
-    )
-    lockAcquired = true
-  })
-
   afterEach(() => {
     try {
       mock.restore()
+      mock.module('../../utils/codexCredentials.js', () => realCodexCredentials)
     } finally {
-      if (lockAcquired) {
-        releaseSharedMutationLock()
-        lockAcquired = false
-      }
+      releaseEnvMutex()
     }
   })
 
   test('loads Codex credentials from GakrCLI secure storage', async () => {
+    await acquireEnvMutex()
     mock.module('../../utils/codexCredentials.js', () => ({
+      ...realCodexCredentials,
       isCodexRefreshFailureCoolingDown: () => false,
       readCodexCredentials: () => ({
         apiKey: 'codex-api-key-token',
@@ -47,10 +45,8 @@ describe('resolveCodexApiCredentials with secure storage', () => {
       }),
     }))
 
-    // @ts-expect-error cache-busting query string for Bun module mocks
-    const { resolveCodexApiCredentials } = await import(
-      './providerConfig.js?codex-secure-storage'
-    )
+    const { resolveCodexApiCredentials } =
+      await importFreshProviderConfig('codex-secure-storage')
 
     const credentials = resolveCodexApiCredentials({} as NodeJS.ProcessEnv)
     expect(credentials.apiKey).toBe('codex-api-key-token')
@@ -59,7 +55,9 @@ describe('resolveCodexApiCredentials with secure storage', () => {
   })
 
   test('prefers explicit env credentials over secure storage', async () => {
+    await acquireEnvMutex()
     mock.module('../../utils/codexCredentials.js', () => ({
+      ...realCodexCredentials,
       isCodexRefreshFailureCoolingDown: () => false,
       readCodexCredentials: () => ({
         accessToken: 'stored-token',
@@ -67,10 +65,8 @@ describe('resolveCodexApiCredentials with secure storage', () => {
       }),
     }))
 
-    // @ts-expect-error cache-busting query string for Bun module mocks
-    const { resolveCodexApiCredentials } = await import(
-      './providerConfig.js?codex-env-precedence'
-    )
+    const { resolveCodexApiCredentials } =
+      await importFreshProviderConfig('codex-env-precedence')
 
     const credentials = resolveCodexApiCredentials({
       CODEX_API_KEY: 'env-token',
@@ -83,15 +79,15 @@ describe('resolveCodexApiCredentials with secure storage', () => {
   })
 
   test('parses nested chatgpt_account_id from a CODEX_API_KEY JWT', async () => {
+    await acquireEnvMutex()
     mock.module('../../utils/codexCredentials.js', () => ({
+      ...realCodexCredentials,
       isCodexRefreshFailureCoolingDown: () => false,
       readCodexCredentials: () => undefined,
     }))
 
-    // @ts-expect-error cache-busting query string for Bun module mocks
-    const { resolveCodexApiCredentials } = await import(
-      './providerConfig.js?codex-env-nested-account'
-    )
+    const { resolveCodexApiCredentials } =
+      await importFreshProviderConfig('codex-env-nested-account')
 
     const credentials = resolveCodexApiCredentials({
       CODEX_API_KEY: makeJwt({
@@ -106,7 +102,9 @@ describe('resolveCodexApiCredentials with secure storage', () => {
   })
 
   test('parses nested chatgpt_account_id from auth.json tokens', async () => {
+    await acquireEnvMutex()
     mock.module('../../utils/codexCredentials.js', () => ({
+      ...realCodexCredentials,
       isCodexRefreshFailureCoolingDown: () => false,
       readCodexCredentials: () => undefined,
     }))
@@ -127,10 +125,8 @@ describe('resolveCodexApiCredentials with secure storage', () => {
     )
 
     try {
-      // @ts-expect-error cache-busting query string for Bun module mocks
-      const { resolveCodexApiCredentials } = await import(
-        './providerConfig.js?codex-auth-json-nested-account'
-      )
+      const { resolveCodexApiCredentials } =
+        await importFreshProviderConfig('codex-auth-json-nested-account')
 
       const credentials = resolveCodexApiCredentials({
         CODEX_AUTH_JSON_PATH: authPath,
@@ -144,7 +140,9 @@ describe('resolveCodexApiCredentials with secure storage', () => {
   })
 
   test('does not read default auth.json when secure storage already has Codex credentials', async () => {
+    await acquireEnvMutex()
     mock.module('../../utils/codexCredentials.js', () => ({
+      ...realCodexCredentials,
       isCodexRefreshFailureCoolingDown: () => false,
       readCodexCredentials: () => ({
         apiKey: 'codex-api-key-token',
@@ -153,10 +151,8 @@ describe('resolveCodexApiCredentials with secure storage', () => {
       }),
     }))
 
-    // @ts-expect-error cache-busting query string for Bun module mocks
-    const { resolveCodexApiCredentials } = await import(
-      './providerConfig.js?codex-secure-storage-no-auth-io'
-    )
+    const { resolveCodexApiCredentials } =
+      await importFreshProviderConfig('codex-secure-storage-no-auth-io')
 
     const credentials = resolveCodexApiCredentials({} as NodeJS.ProcessEnv)
     expect(credentials.apiKey).toBe('codex-api-key-token')
@@ -165,6 +161,7 @@ describe('resolveCodexApiCredentials with secure storage', () => {
   })
 
   test('falls back to the default auth.json when stored Codex refresh is cooling down', async () => {
+    await acquireEnvMutex()
     const tempHomeDir = mkdtempSync(join(tmpdir(), 'gakrcli-codex-home-'))
     const authJson = JSON.stringify({
       openai_api_key: makeJwt({
@@ -182,6 +179,7 @@ describe('resolveCodexApiCredentials with secure storage', () => {
     }))
 
     mock.module('../../utils/codexCredentials.js', () => ({
+      ...realCodexCredentials,
       isCodexRefreshFailureCoolingDown: () => true,
       readCodexCredentials: () => ({
         accessToken: 'stored-token',
@@ -191,10 +189,8 @@ describe('resolveCodexApiCredentials with secure storage', () => {
       }),
     }))
 
-    // @ts-expect-error cache-busting query string for Bun module mocks
-    const { resolveCodexApiCredentials } = await import(
-      './providerConfig.js?codex-refresh-cooldown-fallback'
-    )
+    const { resolveCodexApiCredentials } =
+      await importFreshProviderConfig('codex-refresh-cooldown-fallback')
 
     try {
       const credentials = resolveCodexApiCredentials({} as NodeJS.ProcessEnv)
@@ -207,6 +203,7 @@ describe('resolveCodexApiCredentials with secure storage', () => {
   })
 
   test('preserves the stored account id when auth.json fallback lacks one', async () => {
+    await acquireEnvMutex()
     const tempHomeDir = mkdtempSync(join(tmpdir(), 'gakrcli-codex-home-'))
     const authJson = JSON.stringify({
       openai_api_key: 'auth-json-access-token',
@@ -220,6 +217,7 @@ describe('resolveCodexApiCredentials with secure storage', () => {
     }))
 
     mock.module('../../utils/codexCredentials.js', () => ({
+      ...realCodexCredentials,
       isCodexRefreshFailureCoolingDown: () => true,
       readCodexCredentials: () => ({
         accessToken: 'stored-token',
@@ -229,9 +227,8 @@ describe('resolveCodexApiCredentials with secure storage', () => {
       }),
     }))
 
-    // @ts-expect-error cache-busting query string for Bun module mocks
-    const { resolveCodexApiCredentials } = await import(
-      './providerConfig.js?codex-refresh-cooldown-account-id-fallback'
+    const { resolveCodexApiCredentials } = await importFreshProviderConfig(
+      'codex-refresh-cooldown-account-id-fallback',
     )
 
     try {

@@ -1238,7 +1238,7 @@ export async function hasWorktreeChanges(
 
 /**
  * Fast-path handler for --worktree --tmux.
- * Creates the worktree and execs into tmux running gakrcli inside.
+ * Creates the worktree and execs into tmux running GakrCLI inside.
  * This is called early in cli.tsx before loading the full CLI.
  */
 export async function execIntoTmuxWorktree(args: string[]): Promise<{
@@ -1332,8 +1332,7 @@ export async function execIntoTmuxWorktree(args: string[]): Promise<{
       }
     }
     repoName = basename(findCanonicalGitRoot(getCwd()) ?? getCwd())
-    // biome-ignore lint/suspicious/noConsole: intentional console output
-    console.log(`Using worktree via hook: ${worktreeDir}`)
+    logForDebugging(`Using worktree via hook: ${worktreeDir}`)
   } else {
     // Get main git repo root (resolves through worktrees)
     const repoRoot = findCanonicalGitRoot(getCwd())
@@ -1355,8 +1354,7 @@ export async function execIntoTmuxWorktree(args: string[]): Promise<{
         prNumber !== null ? { prNumber } : undefined,
       )
       if (!result.existed) {
-        // biome-ignore lint/suspicious/noConsole: intentional console output
-        console.log(
+        logForDebugging(
           `Created worktree: ${worktreeDir} (based on ${result.baseBranch})`,
         )
         await performPostCreationSetup(repoRoot, worktreeDir)
@@ -1403,8 +1401,8 @@ export async function execIntoTmuxWorktree(args: string[]): Promise<{
     }
   }
 
-  // Check if tmux prefix conflicts with gakrcli keybindings
-  // gakrcli binds: ctrl+b (task:background), ctrl+c, ctrl+d, ctrl+t, ctrl+o, ctrl+r, ctrl+s, ctrl+g, ctrl+e
+  // Check if tmux prefix conflicts with GakrCLI keybindings
+  // GakrCLI binds: ctrl+b (task:background), ctrl+c, ctrl+d, ctrl+t, ctrl+o, ctrl+r, ctrl+s, ctrl+g, ctrl+e
   const gakrcliBindings = [
     'C-b',
     'C-c',
@@ -1418,7 +1416,7 @@ export async function execIntoTmuxWorktree(args: string[]): Promise<{
   ]
   const prefixConflicts = gakrcliBindings.includes(tmuxPrefix)
 
-  // Set env vars for the inner gakrcli to display tmux info in welcome message
+  // Set env vars for the inner GakrCLI to display tmux info in welcome message
   const tmuxEnv = {
     ...process.env,
     GAKR_CODE_TMUX_SESSION: tmuxSessionName,
@@ -1456,13 +1454,13 @@ export async function execIntoTmuxWorktree(args: string[]): Promise<{
     )
   }
 
-  // For ants in gakr-cli-internal, set up dev panes (watch + start)
+  // For ants in gakrcli-cli-internal, set up dev panes (watch + start)
   const isAnt = process.env.USER_TYPE === 'ant'
-  const isGakrCliInternal = repoName === 'gakr-cli-internal'
-  const shouldSetupDevPanes = isAnt && isGakrCliInternal && !sessionExists
+  const isGakrCLICliInternal = repoName === 'gakrcli-cli-internal'
+  const shouldSetupDevPanes = isAnt && isGakrCLICliInternal && !sessionExists
 
   if (shouldSetupDevPanes) {
-    // Create detached session with gakrcli in first pane
+    // Create detached session with GakrCLI in first pane
     spawnSync(
       'tmux',
       [
@@ -1501,7 +1499,7 @@ export async function execIntoTmuxWorktree(args: string[]): Promise<{
       cwd: worktreeDir,
     })
 
-    // Select the first pane (gakrcli)
+    // Select the first pane (GakrCLI)
     spawnSync('tmux', ['select-pane', '-t', `${tmuxSessionName}:0.0`], {
       cwd: worktreeDir,
     })

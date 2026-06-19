@@ -4,7 +4,6 @@ import { hostname, tmpdir } from 'os'
 import { basename, join, resolve } from 'path'
 import { getRemoteSessionUrl } from '../constants/product.js'
 import { shutdownDatadog } from '../services/analytics/datadog.js'
-import { shutdown1PEventLogging } from '../services/analytics/firstPartyEventLogger.js'
 import { checkGate_CACHED_OR_BLOCKING } from '../services/analytics/growthbook.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -349,7 +348,7 @@ export async function runBridgeLoop(
           ? `${config.debugFile.slice(0, ext)}-*${config.debugFile.slice(ext)}`
           : `${config.debugFile}-*`
     } else {
-      debugGlob = join(tmpdir(), 'gakr', 'bridge-session-*.log')
+      debugGlob = join(tmpdir(), 'gakrcli', 'bridge-session-*.log')
     }
     logger.setDebugLogPath(debugGlob)
   }
@@ -1135,7 +1134,7 @@ export async function runBridgeLoop(
           } else if (config.verbose || process.env.USER_TYPE === 'ant') {
             sessionDebugFile = join(
               tmpdir(),
-              'gakr',
+              'gakrcli',
               `bridge-session-${safeId}.log`,
             )
           }
@@ -1520,7 +1519,7 @@ export async function runBridgeLoop(
   // Skip when the loop exited fatally (env expired, auth failed, give-up) —
   // resume is impossible in those cases and the message would contradict the
   // error already printed.
-  // feature('KAIROS') gate: --session-id is ant-only; without the gate,
+  // feature('KAIROS') gate: --session-id is internal-only; without the gate,
   // revert to the pre-PR behavior (archive + deregister on every shutdown).
   if (
     feature('KAIROS') &&
@@ -1888,7 +1887,7 @@ export function parseArgs(args: string[]): ParsedArgs {
 
 async function printHelp(): Promise<void> {
   // Use EXTERNAL_PERMISSION_MODES for help text — internal modes (bubble)
-  // are ant-only and auto is feature-gated; they're still accepted by validation.
+  // are internal-only and auto is feature-gated; they're still accepted by validation.
   const { EXTERNAL_PERMISSION_MODES } = await import('../types/permissions.js')
   const modes = EXTERNAL_PERMISSION_MODES.join(', ')
   const showServer = await isMultiSessionSpawnEnabled()
@@ -1918,12 +1917,12 @@ async function printHelp(): Promise<void> {
 `
     : ''
   const help = `
-Remote Control - Connect your local environment to gakr.ai/code
+Remote Control - Connect your local environment to gakrcli.ai/code
 
 USAGE
   gakrcli remote-control [options]
 OPTIONS
-  --name <name>                    Name for the session (shown in gakr.ai/code)
+  --name <name>                    Name for the session (shown in gakrcli.ai/code)
 ${
   feature('KAIROS')
     ? `  -c, --continue                   Resume the last session in this directory
@@ -1939,7 +1938,7 @@ ${
 ${serverOptions}
 DESCRIPTION
   Remote Control allows you to control sessions on your local device from
-  gakr.ai/code (https://gakr.ai/code). Run this command in the
+  gakrcli.ai/code (https://gakrcli.ai/code). Run this command in the
   directory you want to work in, then connect from the GakrCLI app or web.
 ${serverDescription}
 NOTES
@@ -2064,7 +2063,7 @@ export async function bridgeMain(args: string[]): Promise<void> {
     // (sleep() doesn't unref its timer, but process.exit() follows immediately
     // so the ref'd timer can't delay shutdown.)
     await Promise.race([
-      Promise.all([shutdown1PEventLogging(), shutdownDatadog()]),
+      shutdownDatadog(),
       sleep(500, undefined, { unref: true }),
     ]).catch(() => {})
     // biome-ignore lint/suspicious/noConsole: intentional error output
@@ -2122,7 +2121,7 @@ export async function bridgeMain(args: string[]): Promise<void> {
     })
     // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.log(
-      '\nRemote Control lets you access this CLI session from the web (gakr.ai/code)\nor the GakrCLI app, so you can pick up where you left off on any device.\n\nYou can disconnect remote access anytime by running /remote-control again.\n',
+      '\nRemote Control lets you access this CLI session from the web (gakrcli.ai/code)\nor the GakrCLI app, so you can pick up where you left off on any device.\n\nYou can disconnect remote access anytime by running /remote-control again.\n',
     )
     const answer = await new Promise<string>(resolve => {
       rl.question('Enable Remote Control? (y/n) ', resolve)
@@ -2248,7 +2247,7 @@ export async function bridgeMain(args: string[]): Promise<void> {
     })
     // biome-ignore lint/suspicious/noConsole: intentional dialog output
     console.log(
-      `\nGakrCLI Remote Control is launching in spawn mode which lets you create new sessions in this project from GakrCLI on Web or your Mobile app. Learn more here: https://github.com/gakr-gakr/gakr/docs/en/remote-control\n\n` +
+      `\nGakrCLI Remote Control is launching in spawn mode which lets you create new sessions in this project from GakrCLI on the web or your mobile app. Learn more here: https://code.gakrcli.com/docs/en/remote-control\n\n` +
         `Spawn mode for this project:\n` +
         `  [1] same-dir \u2014 sessions share the current directory (default)\n` +
         `  [2] worktree \u2014 each session gets an isolated git worktree\n\n` +
@@ -2352,7 +2351,7 @@ export async function bridgeMain(args: string[]): Promise<void> {
   // environment_id and reuse that for registration (idempotent on the
   // backend). Left undefined otherwise — the backend rejects
   // client-generated UUIDs and will allocate a fresh environment.
-  // feature('KAIROS') gate: --session-id is ant-only; parseArgs already
+  // feature('KAIROS') gate: --session-id is internal-only; parseArgs already
   // rejects the flag when the gate is off, so resumeSessionId is always
   // undefined here in external builds — this guard is for tree-shaking.
   let reuseEnvironmentId: string | undefined
@@ -2421,7 +2420,7 @@ export async function bridgeMain(args: string[]): Promise<void> {
     verbose,
     sandbox,
     bridgeId,
-    workerType: 'gakr_code',
+    workerType: 'gakrcli_code',
     environmentId: randomUUID(),
     reuseEnvironmentId,
     apiBaseUrl: baseUrl,
@@ -2879,7 +2878,7 @@ export async function runBridgeHeadless(
     verbose: false,
     sandbox: opts.sandbox,
     bridgeId,
-    workerType: 'gakr_code',
+    workerType: 'gakrcli_code',
     environmentId: randomUUID(),
     apiBaseUrl: baseUrl,
     sessionIngressUrl,

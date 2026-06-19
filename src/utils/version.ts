@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url'
 import { coerce } from 'semver'
 
 export const GAKR_RELEASES_URL =
-  'https://github.com/gajjalaashok75-UI/GakrCLI/releases'
+  'https://github.com/gajjalaashok75-UI/gakrcli/releases'
 
 export function normalizePublicVersion(version: string): string {
   const trimmedVersion = version.trim()

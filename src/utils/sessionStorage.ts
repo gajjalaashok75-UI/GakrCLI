@@ -22,17 +22,14 @@ import {
   logEvent,
 } from 'src/services/analytics/index.js'
 import {
-  getCwdState,
   getOriginalCwd,
   getPlanSlugCache,
   getPromptId,
   getSessionId,
   getSessionProjectDir,
-  isSdkContextActive,
   isSessionPersistenceDisabled,
   switchSession,
 } from '../bootstrap/state.js'
-import { builtInCommandNames } from '../commands.js'
 import { COMMAND_NAME_TAG, TICK_TAG } from '../constants/xml.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
 import * as sessionIngress from '../services/api/sessionIngress.js'
@@ -72,10 +69,7 @@ import { updateSessionName } from './concurrentSessions.js'
 import { getCwd } from './cwd.js'
 import { logForDebugging } from './debug.js'
 import { logForDiagnosticsNoPII } from './diagLogs.js'
-import {
-  getProjectsDir as getConfiguredProjectsDir,
-  isEnvTruthy,
-} from './envUtils.js'
+import { getGakrCLIConfigHomeDir, getProjectsDir, isEnvTruthy } from './envUtils.js'
 import { isFsInaccessible } from './errors.js'
 import type { FileHistorySnapshot } from './fileHistory.js'
 import { formatFileSize } from './format.js'
@@ -103,6 +97,16 @@ import { validateUuid } from './uuid.js'
 // Cache MACRO.VERSION at module level to work around bun --define bug in async contexts
 // See: https://github.com/oven-sh/bun/issues/26168
 const VERSION = typeof MACRO !== 'undefined' ? MACRO.VERSION : 'unknown'
+
+let builtInCommandNamesCache: Set<string> | undefined
+
+function getBuiltInCommandNames(): Set<string> {
+  if (builtInCommandNamesCache) return builtInCommandNamesCache
+  const commands =
+    require('../commands.js') as typeof import('../commands.js')
+  builtInCommandNamesCache = commands.builtInCommandNames()
+  return builtInCommandNamesCache
+}
 
 type Transcript = (
   | UserMessage
@@ -199,10 +203,6 @@ const EPHEMERAL_PROGRESS_TYPES = new Set([
 ])
 export function isEphemeralToolProgress(dataType: unknown): boolean {
   return typeof dataType === 'string' && EPHEMERAL_PROGRESS_TYPES.has(dataType)
-}
-
-export function getProjectsDir(): string {
-  return getConfiguredProjectsDir()
 }
 
 export function getTranscriptPath(): string {
@@ -979,8 +979,11 @@ class Project {
     const allowTestPersistence = isEnvTruthy(
       process.env.TEST_ENABLE_SESSION_PERSISTENCE,
     )
+    if (allowTestPersistence) {
+      return false
+    }
     return (
-      (getNodeEnv() === 'test' && !allowTestPersistence) ||
+      getNodeEnv() === 'test' ||
       getSettings_DEPRECATED()?.cleanupPeriodDays === 0 ||
       isSessionPersistenceDisabled() ||
       isEnvTruthy(process.env.GAKR_CODE_SKIP_PROMPT_HISTORY)
@@ -1074,7 +1077,7 @@ class Project {
           // replacement records lost → FROZEN misclassification.
           userType: getUserType(),
           entrypoint: getEntrypoint(),
-          cwd: getTranscriptCwd(),
+          cwd: getCwd(),
           sessionId,
           version: VERSION,
           gitBranch,
@@ -1422,10 +1425,6 @@ export type TeamInfo = {
   agentName?: string
 }
 
-function getTranscriptCwd(): string {
-  return isSdkContextActive() ? getCwdState() : getCwd()
-}
-
 // Filter out already-recorded messages before passing to insertMessageChain.
 // Without this, after compaction messagesToKeep (same UUIDs as pre-compact
 // messages) are dedup-skipped by appendEntry but still advance the parentUuid
@@ -1538,7 +1537,7 @@ export async function recordContentReplacement(
 
 export async function recordGoalState(
   goal: GoalStateEntry['goal'],
-  sessionId: UUID,
+  sessionId: UUID = getSessionId() as UUID,
 ) {
   await getProject().insertGoalState(goal, sessionId)
 }
@@ -1823,7 +1822,7 @@ export function getFirstMeaningfulUserMessageTextContent<T extends Message>(
 
         // If it's a built-in command, then it's unlikely to provide
         // meaningful context (e.g. `/model sonnet`)
-        if (builtInCommandNames().has(commandName)) {
+        if (getBuiltInCommandNames().has(commandName)) {
           continue
         } else {
           // Otherwise, for custom commands, then keep it only if it has
@@ -1984,7 +1983,8 @@ function applyPreservedSegmentRelinks(
         tailIndex: entryIndex.get(lastSeg.tailUuid),
         headIndex: entryIndex.get(lastSeg.headUuid),
         anchorIndex: entryIndex.get(lastSeg.anchorUuid),
-        lastSeenType,
+        lastSeenType:
+          lastSeenType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
         breakParentInTranscript: Boolean(
           breakParentUuid && messages.has(breakParentUuid),
         ),
@@ -2278,7 +2278,7 @@ function forEachParsedJSONLBufferEntry<T>(
 function applySnipRemovals(messages: Map<UUID, TranscriptMessage>): void {
   // Structural check — snipMetadata only exists on the boundary subtype.
   // Avoids the subtype literal which is in excluded-strings.txt
-  // (HISTORY_SNIP is ant-only; the literal must not leak into external builds).
+  // (HISTORY_SNIP is internal-only; the literal must not leak into external builds).
   type WithSnipMeta = { snipMetadata?: { removedUuids?: UUID[] } }
   const toDelete = new Set<UUID>()
   for (const entry of messages.values()) {
@@ -2602,8 +2602,8 @@ export async function loadTranscriptFromFile(
       contextCollapseSnapshot,
       leafUuids,
       contentReplacements,
-      goalStates,
       worktreeStates,
+      goalStates,
     } = await loadTranscriptFile(filePath)
 
     if (messages.size === 0) {
@@ -2638,7 +2638,6 @@ export async function loadTranscriptFromFile(
         buildAttributionSnapshotChain(attributionSnapshots, transcript),
         undefined,
         contentReplacements.get(sessionId) ?? [],
-        goalStates.get(sessionId),
       ),
       contextCollapseCommits: contextCollapseCommits.filter(
         e => e.sessionId === sessionId,
@@ -2650,6 +2649,7 @@ export async function loadTranscriptFromFile(
       worktreeSession: worktreeStates.has(sessionId)
         ? worktreeStates.get(sessionId)
         : undefined,
+      goal: goalStates.get(sessionId),
     }
   }
 
@@ -2785,7 +2785,6 @@ function convertToLogOption(
   attributionSnapshots?: AttributionSnapshotMessage[],
   agentSetting?: string,
   contentReplacements?: ContentReplacementRecord[],
-  goal?: GoalStateEntry['goal'],
 ): LogOption {
   const lastMessage = transcript.at(-1)!
   const firstMessage = transcript[0]!
@@ -2817,7 +2816,6 @@ function convertToLogOption(
     fileHistorySnapshots: fileHistorySnapshots,
     attributionSnapshots: attributionSnapshots,
     contentReplacements,
-    goal,
     gitBranch: lastMessage.gitBranch,
     projectPath: firstMessage.cwd,
   }
@@ -3428,6 +3426,7 @@ const METADATA_TYPE_MARKERS = [
   '"type":"mode"',
   '"type":"worktree-state"',
   '"type":"pr-link"',
+  '"type":"goal-state"',
 ]
 const METADATA_MARKER_BUFS = METADATA_TYPE_MARKERS.map(m => Buffer.from(m))
 // Longest marker is 22 bytes; +1 for leading `{` = 23.
@@ -4241,9 +4240,9 @@ export async function getLastSessionLog(
       buildAttributionSnapshotChain(attributionSnapshots, transcript),
       agentSetting,
       contentReplacements.get(sessionId) ?? [],
-      goalStates.get(sessionId),
     ),
     worktreeSession: worktreeStates.get(sessionId),
+    goal: goalStates.get(sessionId),
     contextCollapseCommits: contextCollapseCommits.filter(
       e => e.sessionId === sessionId,
     ),
@@ -4805,7 +4804,7 @@ export async function findUnresolvedToolUse(
     const transcriptPath = getTranscriptPath()
     const { messages } = await loadTranscriptFile(transcriptPath)
 
-    let toolUseMessage = null
+    let toolUseMessage: TranscriptMessage | null = null
 
     // Find the tool use but make sure there's not also a result
     for (const message of messages.values()) {
@@ -5195,7 +5194,7 @@ function extractFirstPromptFromChunk(chunk: string): string {
         if (commandNameTag) {
           const name = commandNameTag.replace(/^\//, '')
           const commandArgs = extractTag(result, 'command-args')?.trim() || ''
-          if (builtInCommandNames().has(name) || !commandArgs) {
+          if (getBuiltInCommandNames().has(name) || !commandArgs) {
             if (!firstCommandFallback) {
               firstCommandFallback = commandNameTag
             }

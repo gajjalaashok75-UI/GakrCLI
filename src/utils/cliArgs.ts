@@ -46,6 +46,11 @@ export function eagerParseCliFlag(
  * @param args - The remaining arguments array
  * @returns Object with corrected command and args
  */
+export function argsBeforeDelimiter(args: string[]): string[] {
+  const delimiterIndex = args.indexOf('--')
+  return delimiterIndex === -1 ? args : args.slice(0, delimiterIndex)
+}
+
 export function extractArgsAfterDoubleDash(
   commandOrValue: string,
   args: string[] = [],

@@ -4,11 +4,12 @@ import {
   acquireSharedMutationLock,
   releaseSharedMutationLock,
 } from '../../test/sharedMutationLock.js'
-import {
-  CYBER_RISK_MITIGATION_REMINDER,
-  FileReadTool,
-  type Output,
-} from './FileReadTool.js'
+
+// Dynamic import with cache busting to avoid circular dependency issues
+// that occur when static imports are resolved during concurrent test execution.
+async function importFreshFileReadTool() {
+  return import(`./FileReadTool.js?ts=${Date.now()}-${Math.random()}`)
+}
 
 const originalDisableToolReminders = process.env.GAKR_DISABLE_TOOL_REMINDERS
 
@@ -29,20 +30,12 @@ afterEach(() => {
   }
 })
 
-function textReadOutput(): Output {
-  return {
-    type: 'text',
-    file: {
-      filePath: 'demo.ts',
-      content: 'export const demo = true\n',
-      numLines: 1,
-      startLine: 1,
-      totalLines: 1,
-    },
-  }
-}
-
 test('GAKR_DISABLE_TOOL_REMINDERS suppresses FileRead mitigation reminders', async () => {
+  const {
+    CYBER_RISK_MITIGATION_REMINDER,
+    FileReadTool,
+  } = await importFreshFileReadTool()
+
   await acquireSharedMutationLock('tools/FileReadTool/FileReadTool.test.ts')
   lockAcquired = true
   process.env.GAKR_DISABLE_TOOL_REMINDERS = '1'
@@ -58,3 +51,16 @@ test('GAKR_DISABLE_TOOL_REMINDERS suppresses FileRead mitigation reminders', asy
   }
   expect(block.content).not.toContain(CYBER_RISK_MITIGATION_REMINDER)
 })
+
+function textReadOutput() {
+  return {
+    type: 'text' as const,
+    file: {
+      filePath: 'demo.ts',
+      content: 'export const demo = true\n',
+      numLines: 1,
+      startLine: 1,
+      totalLines: 1,
+    },
+  }
+}

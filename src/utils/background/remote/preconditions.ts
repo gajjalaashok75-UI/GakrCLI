@@ -4,8 +4,8 @@ import { getOrganizationUUID } from 'src/services/oauth/client.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../../services/analytics/growthbook.js'
 import {
   checkAndRefreshOAuthTokenIfNeeded,
-  getgakrcliAIOAuthTokens,
-  isgakrcliAISubscriber,
+  getGakrCLIAIOAuthTokens,
+  isGakrCLIAISubscriber,
 } from '../../auth.js'
 import { getCwd } from '../../cwd.js'
 import { logForDebugging } from '../../debug.js'
@@ -16,12 +16,12 @@ import { getOAuthHeaders } from '../../teleport/api.js'
 import { fetchEnvironments } from '../../teleport/environments.js'
 
 /**
- * Checks if user needs to log in with Gakr.ai
+ * Checks if user needs to log in with GakrCLI.ai
  * Extracted from getTeleportErrors() in TeleportError.tsx
  * @returns true if login is required, false otherwise
  */
-export async function checkNeedsgakrcliAiLogin(): Promise<boolean> {
-  if (!isgakrcliAISubscriber()) {
+export async function checkNeedsGakrCLIAiLogin(): Promise<boolean> {
+  if (!isGakrCLIAISubscriber()) {
     return false
   }
   return checkAndRefreshOAuthTokenIfNeeded()
@@ -81,7 +81,7 @@ export async function checkGithubAppInstalled(
   signal?: AbortSignal,
 ): Promise<boolean> {
   try {
-    const accessToken = getgakrcliAIOAuthTokens()?.accessToken
+    const accessToken = getGakrCLIAIOAuthTokens()?.accessToken
     if (!accessToken) {
       logForDebugging(
         'checkGithubAppInstalled: No access token found, assuming app not installed',
@@ -163,7 +163,7 @@ export async function checkGithubAppInstalled(
  */
 export async function checkGithubTokenSynced(): Promise<boolean> {
   try {
-    const accessToken = getgakrcliAIOAuthTokens()?.accessToken
+    const accessToken = getGakrCLIAIOAuthTokens()?.accessToken
     if (!accessToken) {
       logForDebugging('checkGithubTokenSynced: No access token found')
       return false

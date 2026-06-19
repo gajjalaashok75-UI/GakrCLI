@@ -34,7 +34,7 @@ let vscodeMcpClient: ConnectedMCPServer | null = null
 
 /**
  * Sends a file_updated notification to the VSCode MCP server. This is used to
- * notify VSCode when files are edited or written by Gakr.
+ * notify VSCode when files are edited or written by GakrCLI.
  */
 export function notifyVscodeFileUpdated(
   filePath: string,

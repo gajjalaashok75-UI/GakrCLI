@@ -309,6 +309,16 @@ async function cachedMicrocompactPath(
   const state = ensureCachedMCState()
   const config = mod.getCachedMCConfig()
 
+  if (!config) {
+    // Invariant: if isCachedMicrocompactEnabled() is true, getCachedMCConfig()
+    // must not be null. This guard prevents a theoretical recursion loop in
+    // future non-stub implementations where the cached path could re-enter
+    // itself via the fallback to microcompactMessages.
+    throw new Error(
+      'cachedMicrocompact invariant violation: isCachedMicrocompactEnabled() is true but getCachedMCConfig() returned null',
+    )
+  }
+
   const compactableToolIds = new Set(collectCompactableToolIds(messages))
   // Second pass: register tool results grouped by user message
   for (const message of messages) {
@@ -421,9 +431,8 @@ async function cachedMicrocompactPath(
 export function evaluateTimeBasedTrigger(
   messages: Message[],
   querySource: QuerySource | undefined,
-  configOverride?: TimeBasedMCConfig,
+  config: TimeBasedMCConfig = getTimeBasedMCConfig(),
 ): { gapMinutes: number; config: TimeBasedMCConfig } | null {
-  const config = configOverride ?? getTimeBasedMCConfig()
   // Require an explicit main-thread querySource. isMainThreadSource treats
   // undefined as main-thread (for cached-MC backward-compat), but several
   // callers (/context, /compact, analyzeContext) invoke microcompactMessages
@@ -493,6 +502,8 @@ export function maybeTimeBasedMicrocompact(
     return {
       ...message,
       message: { ...message.message, content: newContent },
+      // The prompt content no longer contains the original tool result, so
+      // keeping the duplicate native payload only grows long-session memory.
       toolUseResult: undefined,
     }
   })

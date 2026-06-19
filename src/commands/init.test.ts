@@ -4,7 +4,7 @@ import {
   releaseSharedMutationLock,
 } from '../test/sharedMutationLock.js'
 
-const originalGakrcliNewInit = process.env.GAKR_CODE_NEW_INIT
+const originalGakrCLICodeNewInit = process.env.GAKR_CODE_NEW_INIT
 
 async function importInitCommand() {
   return (await import(`./init.ts?ts=${Date.now()}-${Math.random()}`)).default
@@ -18,10 +18,10 @@ afterEach(() => {
   try {
     mock.restore()
 
-    if (originalGakrcliNewInit === undefined) {
+    if (originalGakrCLICodeNewInit === undefined) {
       delete process.env.GAKR_CODE_NEW_INIT
     } else {
-      process.env.GAKR_CODE_NEW_INIT = originalGakrcliNewInit
+      process.env.GAKR_CODE_NEW_INIT = originalGakrCLICodeNewInit
     }
   } finally {
     releaseSharedMutationLock()

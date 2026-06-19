@@ -10,11 +10,11 @@ export class AbortError extends Error {
   override readonly name: 'AbortError'
 }
 
-export class GakrcliError extends Error {
+export class GakrCLIError extends Error {
   constructor(message: string)
 }
 
-export class SDKError extends GakrcliError {
+export class SDKError extends GakrCLIError {
   constructor(message: string)
 }
 
@@ -56,7 +56,7 @@ export type SDKAssistantMessageError =
 export function sdkErrorFromType(
   errorType: SDKAssistantMessageError,
   message?: string,
-): SDKError | GakrcliError
+): SDKError | GakrCLIError
 
 // ============================================================================
 // Types
@@ -109,7 +109,7 @@ export type PermissionResult = ({
     destination: 'userSettings' | 'projectSettings' | 'localSettings' | 'session' | 'cliArg'
   }) | ({
     type: 'setMode'
-    mode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'dontAsk'
+    mode: 'default' | 'acceptEdits' | 'bypassPermissions' | 'fullAccess' | 'plan' | 'dontAsk'
     destination: 'userSettings' | 'projectSettings' | 'localSettings' | 'session' | 'cliArg'
   }) | ({
     type: 'addDirectories'
@@ -184,12 +184,17 @@ export type SessionMessage = {
   [key: string]: unknown
 }
 
+// Re-export precise SDK message types from generated types
+// These use camelCase field names and discriminated unions for full IntelliSense
 import type {
   AccountInfo,
   AgentInfo,
   FastModeState,
   ModelInfo,
   SlashCommand,
+  SDKMessage,
+  SDKUserMessage,
+  SDKResultMessage,
 } from './sdk/coreTypes.generated.js'
 
 export type {
@@ -198,6 +203,9 @@ export type {
   FastModeState,
   ModelInfo,
   SlashCommand,
+  SDKMessage,
+  SDKUserMessage,
+  SDKResultMessage,
 } from './sdk/coreTypes.generated.js'
 
 export type SDKControlInitializeResponse = {
@@ -212,190 +220,6 @@ export type SDKControlInitializeResponse = {
   fast_mode_state?: FastModeState
 }
 
-export type SDKProviderInfo = {
-  id: string
-  label: string
-  name: string
-  provider: string
-  defaultBaseUrl?: string
-  defaultModel?: string
-  requiresApiKey?: boolean
-}
-
-export type SDKProviderProfileInfo = {
-  id: string
-  name: string
-  provider: string
-  baseUrl: string
-  model: string
-  hasApiKey: boolean
-  apiFormat?: string
-  authHeader?: string
-  authScheme?: string
-  hasAuthHeaderValue?: boolean
-  customHeaders?: string[]
-  active?: boolean
-}
-
-export type SDKModelInfo = {
-  value: string
-  displayName: string
-  description?: string
-  provider?: string
-  contextWindow?: number
-  maxOutputTokens?: number
-  supportsReasoning?: boolean
-  supportsVision?: boolean
-  supportsFastMode?: boolean
-}
-
-export type SDKReasoningConfig = {
-  thinkingEnabled: boolean
-  maxThinkingTokens?: number
-  effort?: 'low' | 'medium' | 'high' | 'max' | number
-}
-
-export type SDKFastModeState = {
-  state: 'off' | 'cooldown' | 'on'
-  enabled: boolean
-  canToggle: boolean
-}
-
-export type SDKUsageSummary = {
-  totalCostUsd: number
-  usage: Record<string, number>
-  modelUsage: Record<string, ModelUsage>
-  fastModeState?: 'off' | 'cooldown' | 'on'
-}
-
-export type SDKTodoItem = {
-  content: string
-  status: 'pending' | 'in_progress' | 'completed'
-  activeForm?: string
-}
-
-export type SDKTodoState = {
-  items: SDKTodoItem[]
-  activeItem?: SDKTodoItem
-  completed: number
-  total: number
-}
-
-export type SDKContextUsage = {
-  categories: Array<{ name: string; tokens: number; color: string; isDeferred?: boolean }>
-  totalTokens: number
-  maxTokens: number
-  rawMaxTokens: number
-  percentage: number
-  gridRows: unknown[][]
-  model: string
-  memoryFiles: Array<{ path: string; type: string; tokens: number }>
-  mcpTools: Array<{ name: string; serverName: string; tokens: number; isLoaded?: boolean }>
-  agents: Array<{ agentType: string; source: string; tokens: number }>
-  isAutoCompactEnabled: boolean
-  apiUsage: {
-    input_tokens: number
-    output_tokens: number
-    cache_creation_input_tokens: number
-    cache_read_input_tokens: number
-  } | null
-  [key: string]: unknown
-}
-
-export type SDKSlashCommandInfo = {
-  name: string
-  description: string
-  argumentHint: string
-  type?: 'prompt' | 'local' | 'local-jsx'
-  source?: string
-  requiresUi?: boolean
-}
-
-export type SDKRunSlashCommandResult =
-  | { type: 'prompt'; command: SDKSlashCommandInfo; content: string }
-  | { type: 'local_output'; command: SDKSlashCommandInfo; content: string }
-  | { type: 'requires_ui'; command: SDKSlashCommandInfo }
-  | { type: 'not_found'; command: string }
-  | { type: 'unsupported'; command: SDKSlashCommandInfo; reason: string }
-
-export type SDKPluginInfo = {
-  name: string
-  path?: string
-  source?: string
-  repository?: string
-  version?: string
-  status: 'enabled' | 'disabled' | 'error'
-  commands?: string[]
-  error?: string
-  builtin?: boolean
-}
-
-export type SDKSettingsSnapshot = {
-  effective: Record<string, unknown>
-  sources: Array<{
-    source: 'userSettings' | 'projectSettings' | 'localSettings' | 'flagSettings' | 'policySettings'
-    settings: Record<string, unknown>
-  }>
-  applied: {
-    model: string
-    permissionMode: QueryPermissionMode
-    effort: 'low' | 'medium' | 'high' | 'max' | number | null
-    fastMode: boolean
-  }
-}
-
-export type SDKRuntimeState = {
-  sessionId: string
-  cwd: string
-  status: 'idle' | 'running' | 'closed'
-  provider?: SDKProviderInfo
-  providers: SDKProviderInfo[]
-  activeProfile?: SDKProviderProfileInfo
-  profiles: SDKProviderProfileInfo[]
-  model: string
-  models: SDKModelInfo[]
-  permissionMode: QueryPermissionMode
-  reasoning: SDKReasoningConfig
-  fastModeState: SDKFastModeState
-  slashCommands: SDKSlashCommandInfo[]
-  agents: Array<{ name: string; description?: string; model?: string }>
-  mcpServers: McpServerStatus[]
-  plugins: SDKPluginInfo[]
-  account: { apiKeySource: string; [key: string]: unknown }
-  usage: SDKUsageSummary
-  todos: SDKTodoState
-}
-
-export type SDKApplySettingsInput = {
-  model?: string | null
-  permissionMode?: QueryPermissionMode
-  effort?: 'low' | 'medium' | 'high' | 'max' | number | null
-  maxThinkingTokens?: number | null
-  fastMode?: boolean
-  env?: Record<string, string | undefined>
-}
-
-export type SDKMutationResult = {
-  success: boolean
-  message?: string
-  [key: string]: unknown
-}
-
-// Re-export precise SDK message types from generated types
-// These use camelCase field names and discriminated unions for full IntelliSense
-import type {
-  ModelUsage,
-  SDKMessage,
-  SDKUserMessage,
-  SDKResultMessage,
-} from './sdk/coreTypes.generated.js'
-
-export type {
-  SDKMessage,
-  SDKUserMessage,
-  SDKResultMessage,
-} from './sdk/coreTypes.generated.js'
-
 // ============================================================================
 // Query types
 // ============================================================================
@@ -406,6 +230,8 @@ export type QueryPermissionMode =
   | 'auto-accept'
   | 'bypass-permissions'
   | 'bypassPermissions'
+  | 'full-access'
+  | 'fullAccess'
   | 'acceptEdits'
 
 export type QueryOptions = {
@@ -495,32 +321,6 @@ export interface Query {
   mcpServerStatus(): McpServerStatus[]
   accountInfo(): Promise<{ apiKeySource: ApiKeySource; [key: string]: unknown }>
   setMaxThinkingTokens(tokens: number): void
-  getRuntimeState(): Promise<SDKRuntimeState>
-  getSettings(): SDKSettingsSnapshot
-  applySettings(settings: SDKApplySettingsInput): Promise<SDKSettingsSnapshot>
-  listProviders(): SDKProviderInfo[]
-  listProviderProfiles(): SDKProviderProfileInfo[]
-  getActiveProviderProfile(): SDKProviderProfileInfo | undefined
-  setActiveProviderProfile(profileId: string): Promise<SDKMutationResult>
-  listModels(): SDKModelInfo[]
-  discoverModels(): Promise<SDKModelInfo[]>
-  getPermissionMode(): QueryPermissionMode
-  getReasoningConfig(): SDKReasoningConfig
-  setReasoningEffort(effort: 'low' | 'medium' | 'high' | 'max' | number | null): SDKReasoningConfig
-  getFastModeState(): SDKFastModeState
-  setFastMode(enabled: boolean): SDKFastModeState
-  getContextUsage(): Promise<SDKContextUsage>
-  getUsageSummary(): SDKUsageSummary
-  getTodoState(): SDKTodoState
-  listSlashCommands(): SDKSlashCommandInfo[]
-  runSlashCommand(command: string, args?: string): Promise<SDKRunSlashCommandResult>
-  listMcpServers(): McpServerStatus[]
-  setMcpServers(servers: Record<string, unknown>): Promise<SDKMutationResult>
-  toggleMcpServer(serverName: string, enabled: boolean): Promise<SDKMutationResult>
-  reconnectMcpServer(serverName: string): Promise<SDKMutationResult>
-  listPlugins(): SDKPluginInfo[]
-  setPluginEnabled(pluginName: string, enabled: boolean): Promise<SDKMutationResult>
-  reloadPlugins(): Promise<SDKMutationResult>
 }
 
 /**
@@ -579,6 +379,7 @@ export type SDKSessionOptions = {
   cwd: string
   model?: string
   permissionMode?: QueryPermissionMode
+  allowDangerouslySkipPermissions?: boolean
   abortController?: AbortController
   /**
    * Callback invoked before each tool use. Return `{ behavior: 'allow' }` to

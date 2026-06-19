@@ -3,12 +3,12 @@ import type { UUID } from 'crypto';
 import figures from 'figures';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNotifications } from 'src/context/notifications.js';
+import { PRODUCT_DISPLAY_NAME } from '../../../constants/product.js';
 import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from 'src/services/analytics/index.js';
 import { useAppState, useAppStateStore, useSetAppState } from 'src/state/AppState.js';
 import { getSdkBetas, getSessionId, isSessionPersistenceDisabled, setHasExitedPlanMode, setNeedsAutoModeExitAttachment, setNeedsPlanModeExitAttachment } from '../../../bootstrap/state.js';
 import { generateSessionName } from '../../../commands/rename/generateSessionName.js';
 import { launchUltraplan } from '../../../commands/ultraplan.js';
-import { PRODUCT_DISPLAY_NAME } from '../../../constants/product.js';
 import type { KeyboardEvent } from '../../../ink/events/keyboard-event.js';
 import { Box, Text } from '../../../ink.js';
 import type { AppState } from '../../../state/AppStateStore.js';
@@ -39,6 +39,7 @@ import { Markdown } from '../../Markdown.js';
 import { PermissionDialog } from '../PermissionDialog.js';
 import type { PermissionRequestProps } from '../PermissionRequest.js';
 import { PermissionRuleExplanation } from '../PermissionRuleExplanation.js';
+import { usePermissionModeChangeRequest } from '../usePermissionModeChangeRequest.js';
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER') ? require('../../../utils/permissions/autoModeState.js') as typeof import('../../../utils/permissions/autoModeState.js') : null;
@@ -49,24 +50,19 @@ import type { ImageDimensions } from '../../../utils/imageResizer.js';
 import { maybeResizeAndDownsampleImageBlock } from '../../../utils/imageResizer.js';
 import { cacheImagePath, storeImage } from '../../../utils/imageStore.js';
 type ResponseValue = 'yes-bypass-permissions' | 'yes-full-access' | 'yes-accept-edits' | 'yes-bypass-permissions-keep-context' | 'yes-full-access-keep-context' | 'yes-accept-edits-keep-context' | 'yes-default-keep-context' | 'yes-resume-auto-mode' | 'yes-auto-clear-context' | 'ultraplan' | 'no';
-type DangerousPlanExitMode = Extract<PermissionMode, 'bypassPermissions' | 'fullAccess'>;
+type DangerousPlanExitMode = Extract<
+  PermissionMode,
+  'bypassPermissions' | 'fullAccess'
+>;
 
-/** @internal Exported for testing. */
-export function getDangerousPlanExitMode({
-  isBypassPermissionsModeAvailable,
-  prePlanMode
-}: {
-  isBypassPermissionsModeAvailable: boolean | undefined;
-  prePlanMode?: PermissionMode;
-}): DangerousPlanExitMode | null {
-  if (!isBypassPermissionsModeAvailable) {
-    return null;
+function dangerousModeForResponse(value: ResponseValue): DangerousPlanExitMode | null {
+  if (value === 'yes-full-access' || value === 'yes-full-access-keep-context') {
+    return 'fullAccess';
   }
-  return prePlanMode === 'fullAccess' ? 'fullAccess' : 'bypassPermissions';
-}
-
-function getDangerousPlanExitLabel(mode: DangerousPlanExitMode): string {
-  return mode === 'fullAccess' ? 'full access' : 'bypass permissions';
+  if (value === 'yes-bypass-permissions' || value === 'yes-bypass-permissions-keep-context') {
+    return 'bypassPermissions';
+  }
+  return null;
 }
 
 /**
@@ -93,6 +89,24 @@ export function buildPermissionUpdates(mode: PermissionMode, allowedPrompts?: Al
     });
   }
   return updates;
+}
+
+/** @internal Exported for testing. */
+export function getDangerousPlanExitMode({
+  isBypassPermissionsModeAvailable,
+  prePlanMode
+}: {
+  isBypassPermissionsModeAvailable: boolean | undefined;
+  prePlanMode?: PermissionMode;
+}): DangerousPlanExitMode | null {
+  if (!isBypassPermissionsModeAvailable) {
+    return null;
+  }
+  return prePlanMode === 'fullAccess' ? 'fullAccess' : 'bypassPermissions';
+}
+
+function getDangerousPlanExitLabel(mode: DangerousPlanExitMode): string {
+  return mode === 'fullAccess' ? 'full access' : 'bypass permissions';
 }
 
 /**
@@ -154,6 +168,10 @@ export function ExitPlanModePermissionRequest({
   const [planFeedback, setPlanFeedback] = useState('');
   const [pastedContents, setPastedContents] = useState<Record<number, PastedContent>>({});
   const nextPasteIdRef = useRef(0);
+  const {
+    dangerousModeDialog,
+    requestPermissionModeChange
+  } = usePermissionModeChangeRequest();
   const showClearContext = useAppState(s => s.settings.showClearContextOnPlanAccept) ?? false;
   const ultraplanSessionUrl = useAppState(s => s.ultraplanSessionUrl);
   const ultraplanLaunching = useAppState(s => s.ultraplanLaunching);
@@ -183,6 +201,26 @@ export function ExitPlanModePermissionRequest({
     planAuthorName,
     onFeedbackChange: setPlanFeedback
   }), [showClearContext, showUltraplan, usage, mode, isAutoModeAvailable, dangerousPlanExitMode, planAuthorName]);
+  const requestPlanExitModeChange = useCallback(async (value: ResponseValue, onApply: () => void) => {
+    const dangerousMode = dangerousModeForResponse(value);
+    if (!dangerousMode) {
+      onApply();
+      return;
+    }
+    await requestPermissionModeChange({
+      mode: dangerousMode,
+      toolPermissionContext,
+      onApply,
+      onBlocked: error => {
+        addNotification({
+          key: `exit-plan-mode-${dangerousMode}`,
+          text: error,
+          color: 'warning',
+          priority: 'high'
+        });
+      }
+    });
+  }, [addNotification, requestPermissionModeChange, toolPermissionContext]);
   function onImagePaste(base64Image: string, mediaType?: string, filename?: string, dimensions?: ImageDimensions, _sourcePath?: string) {
     const pasteId = nextPasteIdRef.current++;
     const newContent: PastedContent = {
@@ -291,7 +329,7 @@ export function ExitPlanModePermissionRequest({
       return;
     }
 
-    // Shift+Tab immediately selects "auto-accept edits"
+    // Shift+Tab approves with feedback using the existing accept-edits path.
     if (e.shift && e.key === 'tab') {
       e.preventDefault();
       void handleResponse(showClearContext ? 'yes-accept-edits' : 'yes-accept-edits-keep-context');
@@ -334,7 +372,6 @@ export function ExitPlanModePermissionRequest({
     const updatedInput = isV2 && !planEditedLocally ? {} : {
       plan: currentPlan
     };
-
     // If auto was active during plan (from auto mode or opt-in) and NOT going
     // to auto, deactivate auto + restore permissions + fire exit attachment.
     if (feature('TRANSCRIPT_CLASSIFIER')) {
@@ -484,8 +521,10 @@ export function ExitPlanModePermissionRequest({
 
     // Handle standard approval options
     const standardModes: Record<string, PermissionMode> = {
-      'yes-bypass-permissions': 'bypassPermissions',
-      'yes-full-access': 'fullAccess',
+      ...(dangerousPlanExitMode ? {
+        'yes-bypass-permissions': 'bypassPermissions' as const,
+        'yes-full-access': 'fullAccess' as const
+      } : {}),
       'yes-accept-edits': 'acceptEdits'
     };
     const standardMode = standardModes[value];
@@ -561,13 +600,17 @@ export function ExitPlanModePermissionRequest({
     onReject();
     toolUseConfirm.onReject();
   };
-  const useStickyFooter = !isEmpty && !!setStickyFooter;
+  const useStickyFooter = !isEmpty && !!setStickyFooter && !dangerousModeDialog;
   useLayoutEffect(() => {
     if (!useStickyFooter) return;
     setStickyFooter(<Box flexDirection="column" borderStyle="round" borderColor="planMode" borderLeft={false} borderRight={false} borderBottom={false} paddingX={1}>
         <Text dimColor>Would you like to proceed?</Text>
         <Box marginTop={1}>
-          <Select options={options} onChange={v => void handleResponseRef.current(v)} onCancel={() => handleCancelRef.current?.()} onImagePaste={onImagePaste} pastedContents={pastedContents} onRemoveImage={onRemoveImage} />
+          <Select options={options} onChange={v => {
+          void requestPlanExitModeChange(v, () => {
+            void handleResponseRef.current(v);
+          });
+        }} onCancel={() => handleCancelRef.current?.()} onImagePaste={onImagePaste} pastedContents={pastedContents} onRemoveImage={onRemoveImage} />
         </Box>
         {editorName && <Box flexDirection="row" gap={1} marginTop={1}>
             <Text dimColor>ctrl-g to edit in </Text>
@@ -585,6 +628,9 @@ export function ExitPlanModePermissionRequest({
     // onImagePaste/onRemoveImage are stable (useCallback/useRef-backed above)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [useStickyFooter, setStickyFooter, options, pastedContents, editorName, isV2, planFilePath, showSaveMessage]);
+  if (dangerousModeDialog) {
+    return dangerousModeDialog;
+  }
 
   // Simplified UI for empty plans
   if (isEmpty) {
@@ -680,7 +726,11 @@ export function ExitPlanModePermissionRequest({
                   you like to proceed?
                 </Text>
                 <Box marginTop={1}>
-                  <Select options={options} onChange={handleResponse} onCancel={() => handleCancelRef.current?.()} onImagePaste={onImagePaste} pastedContents={pastedContents} onRemoveImage={onRemoveImage} />
+                  <Select options={options} onChange={v => {
+                void requestPlanExitModeChange(v, () => {
+                  void handleResponse(v);
+                });
+              }} onCancel={() => handleCancelRef.current?.()} onImagePaste={onImagePaste} pastedContents={pastedContents} onRemoveImage={onRemoveImage} />
                 </Box>
               </>}
           </Box>

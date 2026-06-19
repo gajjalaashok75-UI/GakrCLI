@@ -6,6 +6,17 @@ import {
 
 const originalSubagentModel = process.env.GAKR_CODE_SUBAGENT_MODEL
 const originalOpenAIModel = process.env.OPENAI_MODEL
+const originalDefaultModelEnv = {
+  ANTHROPIC_DEFAULT_OPUS_MODEL: process.env.ANTHROPIC_DEFAULT_OPUS_MODEL,
+  ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES:
+    process.env.ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES,
+  ANTHROPIC_DEFAULT_SONNET_MODEL: process.env.ANTHROPIC_DEFAULT_SONNET_MODEL,
+  ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES:
+    process.env.ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES,
+  ANTHROPIC_DEFAULT_HAIKU_MODEL: process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL,
+  ANTHROPIC_DEFAULT_HAIKU_MODEL_SUPPORTED_CAPABILITIES:
+    process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL_SUPPORTED_CAPABILITIES,
+}
 const allowedModelsRef: { value?: string[] } = { value: undefined }
 
 type MockProvider =
@@ -65,6 +76,10 @@ describe('getAgentModel provider-aware fallback', () => {
   beforeEach(async () => {
     await acquireSharedMutationLock('utils/model/agent.test.ts')
     delete process.env.GAKR_CODE_SUBAGENT_MODEL
+    delete process.env.OPENAI_MODEL
+    for (const key of Object.keys(originalDefaultModelEnv)) {
+      delete process.env[key]
+    }
     setAvailableModelsForTest()
     mockModelAllowlist()
   })
@@ -84,12 +99,19 @@ describe('getAgentModel provider-aware fallback', () => {
       } else {
         process.env.OPENAI_MODEL = originalOpenAIModel
       }
+      for (const [key, value] of Object.entries(originalDefaultModelEnv)) {
+        if (value === undefined) {
+          delete process.env[key]
+        } else {
+          process.env[key] = value
+        }
+      }
     } finally {
       releaseSharedMutationLock()
     }
   })
 
-  describe('Gakrcli-native providers', () => {
+  describe('GakrCLI-native providers', () => {
     test('haiku alias resolves to haiku model for official Anthropic API', async () => {
       // Mock providers to return firstParty with official URL
       mockProvider('firstParty', true)
@@ -134,7 +156,7 @@ describe('getAgentModel provider-aware fallback', () => {
     })
   })
 
-  describe('Non-Gakrcli-native providers', () => {
+  describe('Non-claude-native providers', () => {
     test('haiku alias inherits parent model for OpenAI provider', async () => {
       mockProvider('openai')
 
@@ -473,47 +495,47 @@ describe('getAgentModel provider-aware fallback', () => {
     })
   })
 
-  describe('checkIsGakrcliNativeProvider helper', () => {
+  describe('checkIsGakrCLINativeProvider helper', () => {
     test('returns true for official Anthropic API', async () => {
       mockProvider('firstParty', true)
 
-      const { checkIsGakrcliNativeProvider } = await importAgentModule()
-      expect(checkIsGakrcliNativeProvider()).toBe(true)
+      const { checkIsGakrCLINativeProvider } = await importAgentModule()
+      expect(checkIsGakrCLINativeProvider()).toBe(true)
     })
 
     test('returns true for Bedrock provider', async () => {
       mockProvider('bedrock')
 
-      const { checkIsGakrcliNativeProvider } = await importAgentModule()
-      expect(checkIsGakrcliNativeProvider()).toBe(true)
+      const { checkIsGakrCLINativeProvider } = await importAgentModule()
+      expect(checkIsGakrCLINativeProvider()).toBe(true)
     })
 
     test('returns true for Vertex provider', async () => {
       mockProvider('vertex')
 
-      const { checkIsGakrcliNativeProvider } = await importAgentModule()
-      expect(checkIsGakrcliNativeProvider()).toBe(true)
+      const { checkIsGakrCLINativeProvider } = await importAgentModule()
+      expect(checkIsGakrCLINativeProvider()).toBe(true)
     })
 
     test('returns true for Foundry provider', async () => {
       mockProvider('foundry')
 
-      const { checkIsGakrcliNativeProvider } = await importAgentModule()
-      expect(checkIsGakrcliNativeProvider()).toBe(true)
+      const { checkIsGakrCLINativeProvider } = await importAgentModule()
+      expect(checkIsGakrCLINativeProvider()).toBe(true)
     })
 
     test('returns false for OpenAI provider', async () => {
       mockProvider('openai')
 
-      const { checkIsGakrcliNativeProvider } = await importAgentModule()
-      expect(checkIsGakrcliNativeProvider()).toBe(false)
+      const { checkIsGakrCLINativeProvider } = await importAgentModule()
+      expect(checkIsGakrCLINativeProvider()).toBe(false)
     })
 
     test('returns false for custom Anthropic URL', async () => {
       mockProvider('firstParty')
 
-      const { checkIsGakrcliNativeProvider } = await importAgentModule()
-      expect(checkIsGakrcliNativeProvider()).toBe(false)
+      const { checkIsGakrCLINativeProvider } = await importAgentModule()
+      expect(checkIsGakrCLINativeProvider()).toBe(false)
     })
   })
 })

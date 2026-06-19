@@ -8,26 +8,32 @@ import type { RGBColor } from '../ink/styles.js'
 export type RGB = readonly [number, number, number]
 
 export type LogoPalette = {
+  /** Gradient stops painted top→bottom across the ASCII logo rows. */
   gradient: readonly RGB[]
+  /** Highlight color for tagline, version label, and the ✦ marker. */
   accent: RGB
+  /** Soft body text color (tagline value, label values). */
   cream: RGB
+  /** Dim color for label names and the gakrcli prefix. */
   dim: RGB
+  /** Box-drawing border color. */
   border: RGB
 }
 
 export const LOGO_PALETTES = {
-  sky: {
+  ember: {
     gradient: [
-      [170, 210, 235],
-      [135, 185, 220],
-      [114, 198, 237],
-      [90, 160, 210],
-      [70, 140, 185],
+      [255, 177, 95],
+      [255, 150, 60],
+      [255, 122, 26],
+      [230, 100, 10],
+      [190, 80, 8],
+      [145, 60, 8],
     ],
-    accent: [114, 198, 237],
-    cream: [180, 160, 140],
-    dim: [135, 185, 220],
-    border: [70, 140, 185],
+    accent: [255, 122, 26],
+    cream: [230, 200, 170],
+    dim: [130, 100, 75],
+    border: [105, 80, 60],
   },
   sunset: {
     gradient: [
@@ -91,10 +97,10 @@ export type LogoPaletteName = keyof typeof LOGO_PALETTES
 
 export const LOGO_PALETTE_NAMES = Object.keys(LOGO_PALETTES) as LogoPaletteName[]
 
-export const DEFAULT_LOGO_PALETTE: LogoPaletteName = 'sky'
+export const DEFAULT_LOGO_PALETTE: LogoPaletteName = 'ember'
 
 export const LOGO_PALETTE_LABELS: Record<LogoPaletteName, string> = {
-  sky: 'Sky blue (default)',
+  ember: 'Ember (default)',
   sunset: 'Sunset',
   forest: 'Forest green',
   ocean: 'Ocean blue',

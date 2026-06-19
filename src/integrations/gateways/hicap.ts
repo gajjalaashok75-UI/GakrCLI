@@ -59,7 +59,7 @@ export default defineGateway({
       {
         id: 'hicap-claude-opus-4.7',
         apiName: 'claude-opus-4.7',
-        label: 'Claude Opus 4.7',
+        label: 'claude opus 4.7',
         modelDescriptorId: 'claude-opus-4-7',
       },
     ],

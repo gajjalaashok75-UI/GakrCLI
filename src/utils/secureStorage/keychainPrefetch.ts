@@ -4,8 +4,8 @@
  *
  * isRemoteManagedSettingsEligible() reads two separate keychain entries
  * SEQUENTIALLY via sync execSync during applySafeConfigEnvironmentVariables():
- *   1. "Gakr-credentials" (OAuth tokens)  — ~32ms
- *   2. "Gakr" (legacy API key)            — ~33ms
+ *   1. "GakrCLI Code-credentials" (OAuth tokens)  — ~32ms
+ *   2. "GakrCLI Code" (legacy API key)            — ~33ms
  * Sequential cost: ~65ms on every macOS startup.
  *
  * Firing both here lets the subprocesses run in parallel with the ~65ms of

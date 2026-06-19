@@ -41,6 +41,9 @@ type Options = {
  */
 const useInput = (inputHandler: Handler, options: Options = {}) => {
   const { setRawMode, internal_exitOnCtrlC, internal_eventEmitter } = useStdin()
+
+  // Timer handle for the deferred raw-mode reset. Persists across renders
+  // so the setup phase of a remount can cancel a pending reset from cleanup.
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // useLayoutEffect (not useEffect) so that raw mode is enabled synchronously
@@ -53,6 +56,11 @@ const useInput = (inputHandler: Handler, options: Options = {}) => {
       return
     }
 
+    // If a prior cleanup scheduled a deferred reset (MCP re-render churn),
+    // cancel it and skip setRawMode(true). The counter was never decremented
+    // — the reset was deferred via setTimeout and aborted before it fired —
+    // so calling setRawMode(true) again would over-increment the counter
+    // and leak raw mode on final unmount.
     if (resetTimerRef.current !== null) {
       clearTimeout(resetTimerRef.current)
       resetTimerRef.current = null
@@ -61,6 +69,15 @@ const useInput = (inputHandler: Handler, options: Options = {}) => {
     }
 
     return () => {
+      // Defer the raw-mode reset by one macrotask instead of calling it
+      // synchronously. During MCP async re-render churn the component
+      // unmounts and remounts within a single React commit — the remount's
+      // setup clears this timer before it fires, so raw mode is never
+      // actually disabled and the stdin listener stays registered.
+      //
+      // For a genuine unmount (navigation, isActive→false, process exit)
+      // no remount cancels the timer, so it fires on the next tick and
+      // properly restores cooked mode.
       resetTimerRef.current = setTimeout(() => {
         setRawMode(false)
         resetTimerRef.current = null
@@ -109,3 +126,4 @@ const useInput = (inputHandler: Handler, options: Options = {}) => {
 }
 
 export default useInput
+

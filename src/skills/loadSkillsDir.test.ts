@@ -6,10 +6,10 @@ import test from 'node:test'
 
 import { getSkillDirCommands, clearSkillCaches } from './loadSkillsDir.ts'
 import {
-  getAdditionalDirectoriesForgakrcliMd,
-  setAdditionalDirectoriesForgakrcliMd,
+  getAdditionalDirectoriesForGakrCLIMd,
+  setAdditionalDirectoriesForGakrCLIMd,
 } from '../bootstrap/state.js'
-import { setGakrcliConfigHomeDirForTesting } from '../utils/envUtils.js'
+import { setGakrCLIConfigHomeDirForTesting } from '../utils/envUtils.js'
 import {
   acquireSharedMutationLock,
   releaseSharedMutationLock,
@@ -47,11 +47,20 @@ test('loads flat and nested skills with colon namespaces', async () => {
     writeSkill(configDir, 'git/commit')
     writeSkill(configDir, 'frontend/react/form')
 
-    process.env.GAKR_CONFIG_DIR = join(configDir, '.gakrcli')
+    process.env.GAKR_CONFIG_DIR = configDir
     clearSkillCaches()
 
     const skills = await getSkillDirCommands(cwd)
-    const promptSkills = skills.filter(skill => skill.type === 'prompt')
+    const fixtureSkillsRoot = join(configDir, '.gakrcli', 'skills')
+    const promptSkills = skills.filter(
+      (
+        skill,
+      ): skill is Extract<(typeof skills)[number], { type: 'prompt' }> & {
+        skillRoot: string
+      } =>
+        skill.type === 'prompt' &&
+        skill.skillRoot?.startsWith(fixtureSkillsRoot) === true,
+    )
     const skillNames = promptSkills.map(skill => skill.name).sort()
 
     assert.deepEqual(skillNames, [
@@ -102,7 +111,7 @@ test('skips npm global asset skills when user skills directory exists', async ()
     delete process.env.GAKR_CONFIG_DIR
     process.env.HOME = homeDir
     process.env.USERPROFILE = homeDir
-    setGakrcliConfigHomeDirForTesting(join(homeDir, '.gakrcli'))
+    setGakrCLIConfigHomeDirForTesting(join(homeDir, '.gakrcli'))
     clearSkillCaches()
 
     const skills = await getSkillDirCommands(cwd)
@@ -126,7 +135,7 @@ test('skips npm global asset skills when user skills directory exists', async ()
       } else {
         process.env.USERPROFILE = originalUserProfile
       }
-      setGakrcliConfigHomeDirForTesting(undefined)
+      setGakrCLIConfigHomeDirForTesting(undefined)
       clearSkillCaches()
       rmSync(homeDir, { recursive: true, force: true })
     } finally {
@@ -145,7 +154,7 @@ test('deduplicates loaded skills by name across loader sources', async () => {
   const originalConfigDir = process.env.GAKR_CONFIG_DIR
   const originalHome = process.env.HOME
   const originalUserProfile = process.env.USERPROFILE
-  const originalAdditionalDirs = getAdditionalDirectoriesForgakrcliMd()
+  const originalAdditionalDirs = getAdditionalDirectoriesForGakrCLIMd()
 
   try {
     mkdirSync(cwd, { recursive: true })
@@ -160,7 +169,7 @@ test('deduplicates loaded skills by name across loader sources', async () => {
     process.env.GAKR_CONFIG_DIR = join(configRoot, '.gakrcli')
     process.env.HOME = homeDir
     process.env.USERPROFILE = homeDir
-    setAdditionalDirectoriesForgakrcliMd([addDirRoot])
+    setAdditionalDirectoriesForGakrCLIMd([addDirRoot])
     clearSkillCaches()
 
     const skills = await getSkillDirCommands(cwd)
@@ -189,7 +198,7 @@ test('deduplicates loaded skills by name across loader sources', async () => {
       } else {
         process.env.USERPROFILE = originalUserProfile
       }
-      setAdditionalDirectoriesForgakrcliMd(originalAdditionalDirs)
+      setAdditionalDirectoriesForGakrCLIMd(originalAdditionalDirs)
       clearSkillCaches()
       rmSync(homeDir, { recursive: true, force: true })
     } finally {
@@ -197,3 +206,4 @@ test('deduplicates loaded skills by name across loader sources', async () => {
     }
   }
 })
+

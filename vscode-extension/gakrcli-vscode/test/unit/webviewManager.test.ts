@@ -9,7 +9,7 @@ function createMockContext(): vscode.ExtensionContext {
     extensionUri: Uri.file('/test/extension') as never,
     subscriptions: [],
     extension: {
-      id: 'Harsh1210.gakrcli-vscode',
+      id: 'gajjalaashok75-UI.gakrcli-vscode',
       packageJSON: { version: '0.1.0' },
     },
     globalState: {

@@ -1,6 +1,6 @@
 import { APIUserAbortError } from '@anthropic-ai/sdk'
 
-export class GakrcliError extends Error {
+export class GakrCLIError extends Error {
   constructor(message: string) {
     super(message)
     this.name = this.constructor.name
@@ -206,11 +206,11 @@ export type AxiosErrorKind =
 // ============================================================================
 
 /**
- * Base class for all SDK errors. Extends GakrcliError so that existing
- * `catch (e) { if (e instanceof GakrcliError) … }` checks still work,
+ * Base class for all SDK errors. Extends GakrCLIError so that existing
+ * `catch (e) { if (e instanceof GakrCLIError) … }` checks still work,
  * while giving SDK consumers a more specific base to match against.
  */
-export class SDKError extends GakrcliError {
+export class SDKError extends GakrCLIError {
   constructor(message: string) {
     super(message)
     this.name = 'SDKError'
@@ -278,7 +278,7 @@ export type SDKAssistantMessageError =
 export function sdkErrorFromType(
   errorType: SDKAssistantMessageError,
   message?: string,
-): SDKError | GakrcliError {
+): SDKError | GakrCLIError {
   switch (errorType) {
     case 'authentication_failed': return new SDKAuthenticationError(message)
     case 'billing_error': return new SDKBillingError(message)
@@ -286,7 +286,7 @@ export function sdkErrorFromType(
     case 'invalid_request': return new SDKInvalidRequestError(message)
     case 'server_error': return new SDKServerError(message)
     case 'max_output_tokens': return new SDKMaxOutputTokensError(message)
-    default: return new GakrcliError(message ?? 'Unknown error')
+    default: return new GakrCLIError(message ?? 'Unknown error')
   }
 }
 

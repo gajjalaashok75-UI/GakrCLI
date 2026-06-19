@@ -40,6 +40,8 @@ export interface OpenAIShimTransportConfig {
   thinkingRequestFormat?: 'none' | 'deepseek-compatible'
   maxTokensField?: OpenAIShimTokenField
   removeBodyFields?: string[]
+  /** Override the endpoint path for this model (e.g., '/responses', '/messages'). */
+  endpointPath?: string
 }
 
 export interface CapabilityFlags {
@@ -77,7 +79,6 @@ export interface ModelCatalogEntry {
   id: string
   apiName: string
   label?: string
-  owner?: string
   default?: boolean
   hidden?: boolean
   modelDescriptorId?: string
@@ -111,6 +112,12 @@ export interface SetupMetadata {
   requiresAuth: boolean
   authMode: AuthMode
   credentialEnvVars?: string[]
+  /**
+   * Restrict credential resolution to credentialEnvVars. Without this,
+   * openai-compatible routes also accept OPENAI_API_KEY, which can send a
+   * generic key belonging to another provider to this route's endpoint.
+   */
+  dedicatedCredentialsOnly?: boolean
   setupPrompt?: string
 }
 
@@ -148,6 +155,11 @@ export interface ValidationRoutingMetadata {
   skipWhenUseOpenAI?: boolean
 }
 
+export interface PresetBadge {
+  text: string
+  color?: string
+}
+
 export interface ProviderPresetMetadata {
   id: string
   description: string
@@ -159,6 +171,7 @@ export interface ProviderPresetMetadata {
   modelEnvVars?: string[]
   fallbackBaseUrl?: string
   fallbackModel?: string
+  badge?: PresetBadge
 }
 
 export type ProviderPresetRouteKind =
@@ -180,6 +193,7 @@ export interface ProviderPresetManifestEntry {
   modelEnvVars?: readonly string[]
   fallbackBaseUrl?: string
   fallbackModel?: string
+  badge?: PresetBadge
 }
 
 export type ValidationMetadata =
@@ -203,6 +217,13 @@ export type ValidationMetadata =
       expiredCredentialMessage: string
       invalidCredentialMessage: string
     }
+  // xAI accepts either an API key (XAI_API_KEY) or stored OAuth
+  // credentials (browser/device-code login). Validation passes when any of
+  // the following hold:
+  //   1. one of `credentialEnvVars` is non-empty in env
+  //   2. one of `credentialSourceEnvMarkers` matches in env (e.g.
+  //      XAI_CREDENTIAL_SOURCE=oauth, set by the OAuth profile)
+  //   3. stored OAuth credentials exist (resolved async via the runtime)
   | {
       routing?: ValidationRoutingMetadata
       kind: 'xai-credential'

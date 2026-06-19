@@ -4,7 +4,7 @@ const wiki = {
   type: 'local-jsx',
   name: 'wiki',
   description: 'Initialize and inspect the GakrCLI project wiki',
-  argumentHint: '[init|status|ingest <path>]',
+  argumentHint: '[init|status]',
   immediate: true,
   load: () => import('./wiki.js'),
 } satisfies Command

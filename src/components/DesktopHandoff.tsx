@@ -13,9 +13,9 @@ const DESKTOP_DOCS_URL = 'https://clau.de/desktop';
 export function getDownloadUrl(): string {
   switch (process.platform) {
     case 'win32':
-      return 'https://gakr.ai/api/desktop/win32/x64/exe/latest/redirect';
+      return 'https://gakrcli.ai/api/desktop/win32/x64/exe/latest/redirect';
     default:
-      return 'https://gakr.ai/api/desktop/darwin/universal/dmg/latest/redirect';
+      return 'https://gakrcli.ai/api/desktop/darwin/universal/dmg/latest/redirect';
   }
 }
 type DesktopHandoffState = 'checking' | 'prompt-download' | 'flushing' | 'opening' | 'success' | 'error';
@@ -30,7 +30,7 @@ export function DesktopHandoff(t0) {
     onDone
   } = t0;
   const [state, setState] = useState("checking");
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [downloadMessage, setDownloadMessage] = useState("");
   let t1;
   if ($[0] !== error || $[1] !== onDone || $[2] !== state) {

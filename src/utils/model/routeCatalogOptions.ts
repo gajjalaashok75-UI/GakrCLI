@@ -15,13 +15,10 @@ function toDescription(
   if (isRecommended) {
     parts.push('Recommended')
   }
+  if (entry.notes?.trim()) {
+    parts.push(entry.notes.trim())
+  }
   parts.push(`Provider: ${routeLabel}`)
-  if (entry.owner?.trim()) {
-    parts.push(`Owner: ${entry.owner.trim()}`)
-  }
-  if (typeof entry.contextWindow === 'number' && entry.contextWindow > 0) {
-    parts.push(`Context: ${Math.round(entry.contextWindow / 1000)}K`)
-  }
 
   return parts.join(' · ')
 }

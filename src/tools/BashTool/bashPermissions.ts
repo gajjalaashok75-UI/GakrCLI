@@ -110,37 +110,16 @@ export const MAX_SUBCOMMANDS_FOR_SECURITY_CHECK = 50
 export const MAX_SUGGESTED_RULES_FOR_COMPOUND = 5
 
 /**
- * [ANT-ONLY] Log classifier evaluation results for analysis.
- * This helps us understand which classifier rules are being evaluated
- * and how the classifier is deciding on commands.
+ * Log classifier evaluation results for analysis.
+ * No-op in external builds.
  */
 function logClassifierResultForAnts(
-  command: string,
-  behavior: ClassifierBehavior,
-  descriptions: string[],
-  result: ClassifierResult,
+  _command: string,
+  _behavior: ClassifierBehavior,
+  _descriptions: string[],
+  _result: ClassifierResult,
 ): void {
-  if (process.env.USER_TYPE !== 'ant') {
-    return
-  }
-
-  logEvent('tengu_internal_bash_classifier_result', {
-    behavior:
-      behavior as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    descriptions: jsonStringify(
-      descriptions,
-    ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    matches: result.matches,
-    matchedDescription: (result.matchedDescription ??
-      '') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    confidence:
-      result.confidence as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    reason:
-      result.reason as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    // Note: command contains code/filepaths - this is ANT-ONLY so it's OK
-    command:
-      command as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  })
+  // Internal-only logging removed from external build.
 }
 
 /**
@@ -234,7 +213,7 @@ const BARE_SHELL_PREFIXES = new Set([
  *
  * Deliberately not used by suggestionForExactCommand: a backend-suggested
  * `Bash(rm:*)` is too broad to auto-generate, but as an editable starting
- * point it's what users expect (internal report 1772670433193449).
+ * point it's what users expect (Slack C07VBSHV7EV/p1772670433193449).
  *
  * Reuses the same SAFE_ENV_VARS gate as getSimpleCommandPrefix — a rule like
  * `Bash(python3:*)` can never match `RUN=/path python3 ...` at check time
@@ -430,13 +409,11 @@ const SAFE_ENV_VARS = new Set([
 ])
 
 /**
- * ANT-ONLY environment variables that are safe to strip from commands.
- * These are only enabled when USER_TYPE === 'ant'.
+ * Environment variables that are safe to strip from commands.
  *
  * SECURITY: These env vars are stripped before permission-rule matching, which
  * means `DOCKER_HOST=tcp://evil.com docker ps` matches a `Bash(docker ps:*)`
- * rule after stripping. This is INTENTIONALLY ANT-ONLY (gated at line ~380)
- * and MUST NEVER ship to external users. DOCKER_HOST redirects the Docker
+ * rule after stripping. DOCKER_HOST redirects the Docker
  * daemon endpoint — stripping it defeats prefix-based permission restrictions
  * by hiding the network endpoint from the permission check. KUBECONFIG
  * similarly controls which cluster kubectl talks to. These are convenience
@@ -454,7 +431,7 @@ const ANT_ONLY_SAFE_ENV_VARS = new Set([
   'CLOUDSDK_CORE_PROJECT', // GCP project ID
   'CLUSTER', // generic cluster name
 
-  // Anthropic internal cluster selection (just names/identifiers)
+  // Internal cluster selection (just names/identifiers)
   'COO_CLUSTER', // coo cluster name
   'COO_CLUSTER_NAME', // coo cluster name (alternate)
   'COO_NAMESPACE', // coo namespace
@@ -756,11 +733,12 @@ export function stripAllLeadingEnvVars(
   // dangerous forms like $(cmd), ${var}, and $((expr)). This means
   // FOO=$VAR is not stripped — adding $VAR matching creates ReDoS risk
   // (CodeQL #671) and $VAR bypasses are low-priority.
+  //
   // SECURITY: Array subscript uses [^\]$`{(]* (not [^\]]*) to block command
   // substitution in subscript position. Bash executes FOO[$(cmd)]=val as a
   // side effect during assignment parsing; if the pattern matched $(cmd) in
   // the subscript, the env-var prefix would be stripped while the substitution
-  // silently executed, bypassing deny rules that block the substituted command.
+  // silently executed — bypassing deny rules that block the substituted command.
   const ENV_VAR_PATTERN =
     /^([A-Za-z_][A-Za-z0-9_]*(?:\[[^\]$`{(]*\])?)\+?=(?:'[^'\n\r]*'|"(?:\\.|[^"$`\\\n\r])*"|\\.|[^ \t\n\r$`;|&()<>\\\\'"])*[ \t]+/
 
@@ -1307,12 +1285,19 @@ export function checkSandboxAutoAllow(
   // would return 'ask' before a prefix deny rule on a subcommand (e.g., Bash(rm:*))
   // gets checked, downgrading a deny to an ask.
   const subcommands = splitCommand(command)
+
+  // CC-643: Mirror the legacy-only cap applied in `bashToolHasPermission` (see
+  // the `astSubcommands === null && subcommands.length > MAX...` branch). The
+  // fanout/ReDoS risk is specific to the legacy `splitCommand` path; when
+  // tree-sitter parsed the command cleanly (`astSubcommands !== null`), the
+  // subcommand count is already bounded by structural parse and a long
+  // AST-validated chain (e.g. many `echo`s) is intended to flow through.
   if (
     astSubcommands === null &&
     subcommands.length > MAX_SUBCOMMANDS_FOR_SECURITY_CHECK
   ) {
     logForDebugging(
-      `bashPermissions(sandboxAutoAllow): ${subcommands.length} subcommands exceeds cap (${MAX_SUBCOMMANDS_FOR_SECURITY_CHECK}) - returning ask`,
+      `bashPermissions(sandboxAutoAllow): ${subcommands.length} subcommands exceeds cap (${MAX_SUBCOMMANDS_FOR_SECURITY_CHECK}) — returning ask`,
       { level: 'debug' },
     )
     const decisionReason = {
@@ -1491,7 +1476,11 @@ function buildPendingClassifierCheck(
   // Skip in auto mode - auto mode classifier handles all permission decisions
   if (feature('TRANSCRIPT_CLASSIFIER') && toolPermissionContext.mode === 'auto')
     return undefined
-  if (toolPermissionContext.mode === 'bypassPermissions') return undefined
+  if (
+    toolPermissionContext.mode === 'bypassPermissions' ||
+    toolPermissionContext.mode === 'fullAccess'
+  )
+    return undefined
 
   const allowDescriptions = getBashPromptAllowDescriptions(
     toolPermissionContext,
@@ -1529,7 +1518,11 @@ export function startSpeculativeClassifierCheck(
   if (!isClassifierPermissionsEnabled()) return false
   if (feature('TRANSCRIPT_CLASSIFIER') && toolPermissionContext.mode === 'auto')
     return false
-  if (toolPermissionContext.mode === 'bypassPermissions') return false
+  if (
+    toolPermissionContext.mode === 'bypassPermissions' ||
+    toolPermissionContext.mode === 'fullAccess'
+  )
+    return false
   const allowDescriptions = getBashPromptAllowDescriptions(
     toolPermissionContext,
   )

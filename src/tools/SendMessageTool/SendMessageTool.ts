@@ -640,7 +640,7 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
             errorCode: 9,
           }
         }
-        // postIntergakrcliMessage derives from= via getReplBridgeHandle() —
+        // postInterGakrCLIMessage derives from= via getReplBridgeHandle() —
         // check handle directly for the init-timing window. Also check
         // isReplBridgeActive() to reject outbound-only (CCR mirror) mode
         // where the bridge is write-only and peer messaging is unsupported.
@@ -755,10 +755,10 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
             }
           }
           /* eslint-disable @typescript-eslint/no-require-imports */
-          const { postIntergakrcliMessage } =
+          const { postInterGakrCLIMessage } =
             require('../../bridge/peerSessions.js') as typeof import('../../bridge/peerSessions.js')
           /* eslint-enable @typescript-eslint/no-require-imports */
-          const result = await postIntergakrcliMessage(
+          const result = await postInterGakrCLIMessage(
             addr.target,
             input.message,
           )

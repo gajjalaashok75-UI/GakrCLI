@@ -16,9 +16,9 @@ import {
   clearApiKeyHelperCache,
   clearAwsCredentialsCache,
   clearGcpCredentialsCache,
-  getgakrcliAIOAuthTokens,
+  getGakrCLIAIOAuthTokens,
   handleOAuth401Error,
-  isgakrcliAISubscriber,
+  isGakrCLIAISubscriber,
   isEnterpriseSubscriber,
 } from '../../utils/auth.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
@@ -259,7 +259,7 @@ export async function* withRetry<T>(
           (lastError instanceof APIError && lastError.status === 401) ||
           isOAuthTokenRevokedError(lastError)
         ) {
-          const failedAccessToken = getgakrcliAIOAuthTokens()?.accessToken
+          const failedAccessToken = getGakrCLIAIOAuthTokens()?.accessToken
           if (failedAccessToken) {
             await handleOAuth401Error(failedAccessToken)
           }
@@ -356,7 +356,7 @@ export async function* withRetry<T>(
         // If FALLBACK_FOR_ALL_PRIMARY_MODELS is not set, fall through only if the primary model is a non-custom Opus model.
         // TODO: Revisit if the isNonCustomOpusModel check should still exist, or if isNonCustomOpusModel is a stale artifact of when GakrCLI Code was hardcoded on Opus.
         (process.env.FALLBACK_FOR_ALL_PRIMARY_MODELS ||
-          (!isgakrcliAISubscriber() && isNonCustomOpusModel(options.model)))
+          (!isGakrCLIAISubscriber() && isNonCustomOpusModel(options.model)))
       ) {
         consecutive529Errors++
         if (consecutive529Errors >= MAX_529_RETRIES) {
@@ -402,6 +402,11 @@ export async function* withRetry<T>(
       const handledCloudAuthError =
         handleAwsCredentialError(error) || handleGcpCredentialError(error)
 
+      // OpenRouter / OpenAI-compatible quota gateways: HTTP 402 with the
+      // affordable max_tokens in the message. Retry once at the affordable
+      // cap instead of failing on a credits-vs-max_tokens mismatch the user
+      // can't see in their shell (#1125). One adjustment per chain — if 402
+      // recurs after this, fail instead of spending the normal retry budget.
       if (error instanceof APIError) {
         const affordData = parseOpenRouterAffordableMaxTokensError(error)
         if (affordData && retryContext.maxTokensOverride === undefined) {
@@ -411,8 +416,10 @@ export async function* withRetry<T>(
             affordableMaxTokens: affordData.affordableMaxTokens,
             attempt,
           })
+          // Surface the credit pressure so the user understands why output
+          // shrank. Single line; the provider already explained the why.
           console.error(
-            `Provider returned 402 - retrying with max_tokens=${affordData.affordableMaxTokens} (was ${affordData.requestedMaxTokens}). Top up credits to restore the full budget.`,
+            `Provider returned 402 — retrying with max_tokens=${affordData.affordableMaxTokens} (was ${affordData.requestedMaxTokens}). Top up credits to restore the full budget.`,
           )
           continue
         }
@@ -595,6 +602,17 @@ export function getRetryDelay(
   return baseDelay + jitter
 }
 
+/**
+ * OpenRouter (and several other quota-billed gateways) reply with HTTP 402
+ * when the caller has fewer credits than the requested max_tokens would
+ * consume. The error message includes the affordable cap, so we can retry
+ * once with the lower number instead of forcing the user to manually lower
+ * their max_tokens (issue #1125).
+ *
+ * Example body:
+ *   This request requires more credits, or fewer max_tokens. You requested
+ *   up to 32000 tokens, but can only afford 27342. To increase, visit ...
+ */
 export function parseOpenRouterAffordableMaxTokensError(error: APIError):
   | { requestedMaxTokens: number; affordableMaxTokens: number }
   | undefined {
@@ -777,6 +795,9 @@ function shouldRetry(error: APIError): boolean {
     return true
   }
 
+  // Local max_tokens recovery paths need to run even when an
+  // OpenAI-compatible shim classifies the underlying provider error as a
+  // non-retryable context or quota failure.
   if (parseMaxTokensContextOverflowError(error)) {
     return true
   }
@@ -819,7 +840,7 @@ function shouldRetry(error: APIError): boolean {
   // Enterprise users can retry because they typically use PAYG instead of rate limits.
   if (
     shouldRetryHeader === 'true' &&
-    (!isgakrcliAISubscriber() || isEnterpriseSubscriber())
+    (!isGakrCLIAISubscriber() || isEnterpriseSubscriber())
   ) {
     return true
   }
@@ -845,11 +866,11 @@ function shouldRetry(error: APIError): boolean {
   // Retry on lock timeouts.
   if (error.status === 409) return true
 
-  // Retry on rate limits, but not for GakrCLI AI Subscription users
+  // Retry on rate limits, but not for GakrCLIAI Subscription users
   // Enterprise users can retry because they typically use PAYG instead of rate limits
   if (error.status === 429) {
     if (isQuotaExhausted(error)) return false
-    return !isgakrcliAISubscriber() || isEnterpriseSubscriber()
+    return !isGakrCLIAISubscriber() || isEnterpriseSubscriber()
   }
 
   // Clear API key cache on 401 and allow retry.
@@ -871,9 +892,12 @@ function shouldRetry(error: APIError): boolean {
 }
 
 export function getDefaultMaxRetries(): number {
-  const maxRetries = process.env.GAKR_MAX_RETRIES
-  if (maxRetries) {
-    return validateRetryAttemptsEnvVar('GAKR_MAX_RETRIES', maxRetries)
+  const openGakrCLIMaxRetries = process.env.GAKR_MAX_RETRIES
+  if (openGakrCLIMaxRetries) {
+    return validateRetryAttemptsEnvVar(
+      'GAKR_MAX_RETRIES',
+      openGakrCLIMaxRetries,
+    )
   }
 
   const legacyMaxRetries = process.env.GAKR_CODE_MAX_RETRIES
@@ -886,6 +910,7 @@ export function getDefaultMaxRetries(): number {
       legacyMaxRetries,
     )
   }
+
   return DEFAULT_MAX_RETRIES
 }
 
@@ -897,7 +922,6 @@ export function getDefaultRetryDelayMs(): number {
     MAX_RETRY_DELAY_BASE_MS,
   ).effective
 }
-
 function getMaxRetries(options: RetryOptions): number {
   return options.maxRetries ?? getDefaultMaxRetries()
 }

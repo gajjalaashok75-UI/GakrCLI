@@ -3,8 +3,8 @@ import type { Command } from '../commands.js'
 import { isUltrareviewEnabled } from './review/ultrareviewEnabled.js'
 
 // Legal wants the explicit surface name plus a docs link visible before the
-// user triggers, so the description carries "GakrCLI on the web" + URL.
-const CCR_TERMS_URL = 'https://github.com/gakr-gakr/gakr/docs/en/gakrcli-code-on-the-web'
+// user triggers, so the description carries "GakrCLI Code on the web" + URL.
+const CCR_TERMS_URL = 'https://code.gakrcli.com/docs/en/gakrcli-code-on-the-web'
 
 const LOCAL_REVIEW_PROMPT = (args: string) => `
       You are an expert code reviewer. Follow these steps:

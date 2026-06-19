@@ -28,7 +28,7 @@ import {
 import type { ToolUseContext } from '../../Tool.js'
 import { buildTool, type ToolDef } from '../../Tool.js'
 import { getCwd } from '../../utils/cwd.js'
-import { getGakrcliConfigHomeDir, isEnvTruthy } from '../../utils/envUtils.js'
+import { getGakrCLIConfigHomeDir, isEnvTruthy } from '../../utils/envUtils.js'
 import { getErrnoCode, isENOENT } from '../../utils/errors.js'
 import {
   addLineNumbers,
@@ -74,10 +74,10 @@ import { readFileInRange } from '../../utils/readFileInRange.js'
 import { semanticNumber } from '../../utils/semanticNumber.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
 import { BASH_TOOL_NAME } from '../BashTool/toolName.js'
+import { FILE_READ_TOOL_NAME } from './constants.js'
 import { getDefaultFileReadingLimits } from './limits.js'
 import {
   DESCRIPTION,
-  FILE_READ_TOOL_NAME,
   FILE_UNCHANGED_STUB,
   LINE_FORMAT_INSTRUCTION,
   OFFSET_INSTRUCTION_DEFAULT,
@@ -172,14 +172,80 @@ export function registerFileReadListener(
   }
 }
 
+export type MaxFileReadTokenExceededDetails = {
+  filePath?: string
+  source?: 'api' | 'estimate'
+  totalLines?: number
+}
+
+function formatCount(value: number): string {
+  return value.toLocaleString('en-US')
+}
+
+function formatReadRangeExample(
+  filePath: string,
+  offset: number,
+  limit: number,
+): string {
+  return JSON.stringify({ file_path: filePath, offset, limit })
+}
+
+export function formatMaxFileReadTokenExceededMessage(
+  tokenCount: number,
+  maxTokens: number,
+  details: MaxFileReadTokenExceededDetails = {},
+): string {
+  const tokenCountText =
+    details.source === 'estimate'
+      ? `estimated ${formatCount(tokenCount)} tokens`
+      : `${formatCount(tokenCount)} tokens`
+
+  const lines = [
+    `File content is too large to read in one request (${tokenCountText}; limit ${formatCount(maxTokens)} tokens).`,
+  ]
+
+  if (details.totalLines !== undefined) {
+    lines.push(`The file has ${formatCount(details.totalLines)} total lines.`)
+  }
+
+  if (details.filePath) {
+    const firstLimit = Math.max(
+      1,
+      Math.min(200, details.totalLines ?? 200),
+    )
+    lines.push('Read smaller ranges with offset and limit, for example:')
+    lines.push(`  ${formatReadRangeExample(details.filePath, 1, firstLimit)}`)
+
+    if (details.totalLines === undefined || details.totalLines > firstLimit) {
+      const secondOffset = firstLimit + 1
+      const secondLimit = Math.max(
+        1,
+        Math.min(200, (details.totalLines ?? firstLimit + 200) - firstLimit),
+      )
+      lines.push(
+        `  ${formatReadRangeExample(details.filePath, secondOffset, secondLimit)}`,
+      )
+    }
+  } else {
+    lines.push(
+      'Read smaller ranges with offset and limit, for example offset: 1, limit: 200, then offset: 201, limit: 200.',
+    )
+  }
+
+  lines.push(
+    'Use Grep first if you are looking for specific text, then Read the relevant range.',
+  )
+
+  return lines.join('\n')
+}
+
 export class MaxFileReadTokenExceededError extends Error {
   constructor(
     public tokenCount: number,
     public maxTokens: number,
+    public details: MaxFileReadTokenExceededDetails = {},
   ) {
-    super(
-      `File content (${tokenCount} tokens) exceeds maximum allowed tokens (${maxTokens}). Use offset and limit parameters to read specific portions of the file, or search for specific content instead of reading the whole file.`,
-    )
+    super(formatMaxFileReadTokenExceededMessage(tokenCount, maxTokens, details))
     this.name = 'MaxFileReadTokenExceededError'
   }
 }
@@ -195,7 +261,7 @@ const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp'])
 function detectSessionFileType(
   filePath: string,
 ): 'session_memory' | 'session_transcript' | null {
-  const configDir = getGakrcliConfigHomeDir()
+  const configDir = getGakrCLIConfigHomeDir()
 
   // Only match files within the GakrCLI config directory
   if (!filePath.startsWith(configDir)) {
@@ -730,7 +796,7 @@ export const CYBER_RISK_MITIGATION_REMINDER =
   '\n\n<system-reminder>\nWhenever you read a file, you should consider whether it would be considered malware. You CAN and SHOULD provide analysis of malware, what it is doing. But you MUST refuse to improve or augment the code. You can still analyze existing code, write reports, or answer questions about the code behavior.\n</system-reminder>\n'
 
 // Models where cyber risk mitigation should be skipped
-const MITIGATION_EXEMPT_MODELS = new Set(['gakrcli-opus-4-6'])
+const MITIGATION_EXEMPT_MODELS = new Set(['claude-opus-4-6'])
 
 function shouldIncludeFileReadMitigation(): boolean {
   if (isEnvTruthy(process.env.GAKR_DISABLE_TOOL_REMINDERS)) {
@@ -759,6 +825,7 @@ async function validateContentTokens(
   content: string,
   ext: string,
   maxTokens?: number,
+  details: Omit<MaxFileReadTokenExceededDetails, 'source'> = {},
 ): Promise<void> {
   const effectiveMaxTokens =
     maxTokens ?? getDefaultFileReadingLimits().maxTokens
@@ -770,7 +837,14 @@ async function validateContentTokens(
   const effectiveCount = tokenCount ?? tokenEstimate
 
   if (effectiveCount > effectiveMaxTokens) {
-    throw new MaxFileReadTokenExceededError(effectiveCount, effectiveMaxTokens)
+    throw new MaxFileReadTokenExceededError(
+      effectiveCount,
+      effectiveMaxTokens,
+      {
+        ...details,
+        source: tokenCount === null ? 'estimate' : 'api',
+      },
+    )
   }
 }
 
@@ -1030,7 +1104,10 @@ async function callInner(
       context.abortController.signal,
     )
 
-  await validateContentTokens(content, ext, maxTokens)
+  await validateContentTokens(content, ext, maxTokens, {
+    filePath: file_path,
+    totalLines,
+  })
 
   readFileState.set(fullFilePath, {
     content,
@@ -1159,12 +1236,11 @@ export async function readImageWithTokenBudget(
       // Fallback: heavily compressed version from the SAME buffer
       try {
         const sharpModule = await import('sharp')
+        // CJS/ESM interop: prefer .default; some loaders expose the callable
+        // as the module itself, hence the cast on the fallback.
         const sharp =
-          (
-            sharpModule as {
-              default?: typeof sharpModule
-            } & typeof sharpModule
-          ).default || sharpModule
+          sharpModule.default ||
+          (sharpModule as unknown as typeof sharpModule.default)
 
         const fallbackBuffer = await sharp(imageBuffer)
           .resize(400, 400, {

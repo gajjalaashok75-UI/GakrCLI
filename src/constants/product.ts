@@ -1,8 +1,8 @@
 export const PRODUCT_DISPLAY_NAME = 'GakrCLI'
 export const PRODUCT_URL = 'https://gakrcli.com/gakrcli-code'
 
-// GakrCLI Remote session URLs
-export const GAKR_AI_BASE_URL = 'https://gakr.ai'
+// GakrCLI Code Remote session URLs
+export const GAKR_AI_BASE_URL = 'https://gakrcli.ai'
 export const GAKR_AI_STAGING_BASE_URL = 'https://gakrcli-ai.staging.ant.dev'
 export const GAKR_AI_LOCAL_BASE_URL = 'http://localhost:4000'
 
@@ -37,7 +37,7 @@ export function isRemoteSessionLocal(
 /**
  * Get the base URL for GakrCLI AI based on environment.
  */
-export function getgakrcliAiBaseUrl(
+export function getGakrCLIAiBaseUrl(
   sessionId?: string,
   ingressUrl?: string,
 ): string {
@@ -55,7 +55,7 @@ export function getgakrcliAiBaseUrl(
  *
  * The cse_→session_ translation is a temporary shim gated by
  * tengu_bridge_repl_v2_cse_shim_enabled (see isCseShimEnabled). Worker
- * endpoints (/v1/code/sessions/{id}/worker/*) want `cse_*` but the gakr.ai
+ * endpoints (/v1/code/sessions/{id}/worker/*) want `cse_*` but the gakrcli.ai
  * frontend currently routes on `session_*` (compat/convert.go:27 validates
  * TagSession). Same UUID body, different tag prefix. Once the server tags by
  * environment_kind and the frontend accepts `cse_*` directly, flip the gate
@@ -72,6 +72,6 @@ export function getRemoteSessionUrl(
     require('../bridge/sessionIdCompat.js') as typeof import('../bridge/sessionIdCompat.js')
   /* eslint-enable @typescript-eslint/no-require-imports */
   const compatId = toCompatSessionId(sessionId)
-  const baseUrl = getgakrcliAiBaseUrl(compatId, ingressUrl)
+  const baseUrl = getGakrCLIAiBaseUrl(compatId, ingressUrl)
   return `${baseUrl}/code/${compatId}`
 }

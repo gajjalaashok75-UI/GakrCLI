@@ -6,7 +6,7 @@ import {
 import { invalidateOverageCreditGrantCache } from '../../services/api/overageCreditGrant.js'
 import { type ExtraUsage, fetchUtilization } from '../../services/api/usage.js'
 import { getSubscriptionType } from '../../utils/auth.js'
-import { hasgakrcliAiBillingAccess } from '../../utils/billing.js'
+import { hasGakrCLIAiBillingAccess } from '../../utils/billing.js'
 import { openBrowser } from '../../utils/browser.js'
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js'
 import { logError } from '../../utils/log.js'
@@ -27,7 +27,7 @@ export async function runExtraUsage(): Promise<ExtraUsageResult> {
   const subscriptionType = getSubscriptionType()
   const isTeamOrEnterprise =
     subscriptionType === 'team' || subscriptionType === 'enterprise'
-  const hasBillingAccess = hasgakrcliAiBillingAccess()
+  const hasBillingAccess = hasGakrCLIAiBillingAccess()
 
   if (!hasBillingAccess && isTeamOrEnterprise) {
     // Mirror apps/gakrcli-ai useHasUnlimitedOverage(): if overage is enabled
@@ -102,8 +102,8 @@ export async function runExtraUsage(): Promise<ExtraUsageResult> {
   }
 
   const url = isTeamOrEnterprise
-    ? 'https://gakr.ai/admin-settings/usage'
-    : 'https://gakr.ai/settings/usage'
+    ? 'https://gakrcli.ai/admin-settings/usage'
+    : 'https://gakrcli.ai/settings/usage'
 
   try {
     const opened = await openBrowser(url)

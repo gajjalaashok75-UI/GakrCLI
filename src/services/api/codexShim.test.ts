@@ -2,10 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import {
-  acquireSharedMutationLock,
-  releaseSharedMutationLock,
-} from '../../test/sharedMutationLock.js'
+import { acquireSharedMutationLock, releaseSharedMutationLock } from '../../test/sharedMutationLock.js'
 import {
   codexStreamToAnthropic,
   convertAnthropicMessagesToResponsesInput,
@@ -493,7 +490,10 @@ describe('Codex request translation', () => {
     ])
   })
 
-  test('defaults untyped MCP tool properties to string for Codex strict mode', () => {
+  test('defaults untyped MCP tool properties to string for Codex strict mode (issue #1114)', () => {
+    // Repro from issue #1114: MCP server (Ruflo) registers a `value` parameter
+    // with no `type`, which makes Codex strict mode 400 with
+    // "schema must have a 'type' key".
     const tools = convertToolsToResponsesTools([
       {
         name: 'mcp__ruflo__config_set',
@@ -509,14 +509,12 @@ describe('Codex request translation', () => {
       },
     ])
 
-    const parameters = tools[0].parameters as {
-      properties: Record<string, Record<string, unknown>>
-    }
-    expect(parameters.properties.value.type).toBe('string')
-    expect(parameters.properties.value.description).toBe('Any JSON value')
+    const valueSchema = (tools[0].parameters as Record<string, Record<string, Record<string, unknown>>>).properties.value
+    expect(valueSchema.type).toBe('string')
+    expect(valueSchema.description).toBe('Any JSON value')
   })
 
-  test('drops orphan required keys when an MCP schema has no properties', () => {
+  test('drops orphan required keys when Ruflo MCP schema has no properties', () => {
     const tools = convertToolsToResponsesTools([
       {
         name: 'mcp__ruflo__daa_workflow_create',
@@ -551,10 +549,8 @@ describe('Codex request translation', () => {
       },
     ])
 
-    const parameters = tools[0].parameters as {
-      properties: Record<string, Record<string, unknown>>
-    }
-    expect(parameters.properties.payload.type).toBe('object')
+    const payload = (tools[0].parameters as Record<string, Record<string, Record<string, unknown>>>).properties.payload
+    expect(payload.type).toBe('object')
   })
 
   test('infers array type for untyped schemas with items', () => {
@@ -570,10 +566,8 @@ describe('Codex request translation', () => {
       },
     ])
 
-    const parameters = tools[0].parameters as {
-      properties: Record<string, Record<string, unknown>>
-    }
-    expect(parameters.properties.tags.type).toBe('array')
+    const tags = (tools[0].parameters as Record<string, Record<string, Record<string, unknown>>>).properties.tags
+    expect(tags.type).toBe('array')
   })
 
   test('infers type from enum values when type is missing', () => {
@@ -592,13 +586,11 @@ describe('Codex request translation', () => {
       },
     ])
 
-    const parameters = tools[0].parameters as {
-      properties: Record<string, Record<string, unknown>>
-    }
-    expect(parameters.properties.mode.type).toBe('string')
-    expect(parameters.properties.level.type).toBe('integer')
-    expect(parameters.properties.ratio.type).toBe('number')
-    expect(parameters.properties.flag.type).toBe('boolean')
+    const props = (tools[0].parameters as Record<string, Record<string, Record<string, unknown>>>).properties
+    expect(props.mode.type).toBe('string')
+    expect(props.level.type).toBe('integer')
+    expect(props.ratio.type).toBe('number')
+    expect(props.flag.type).toBe('boolean')
   })
 
   test('leaves combinator-only schemas untyped to preserve alternatives', () => {
@@ -616,13 +608,52 @@ describe('Codex request translation', () => {
       },
     ])
 
-    const parameters = tools[0].parameters as {
-      properties: Record<string, Record<string, unknown>>
-    }
-    expect(parameters.properties.either.type).toBeUndefined()
-    expect(parameters.properties.either.anyOf).toEqual([
-      { type: 'string' },
-      { type: 'number' },
+    const either = (tools[0].parameters as Record<string, Record<string, Record<string, unknown>>>).properties.either
+    expect(either.type).toBeUndefined()
+    expect(either.anyOf).toEqual([{ type: 'string' }, { type: 'number' }])
+  })
+
+  test('converts plain string user message into Codex input_text chunk type', () => {
+    const items = convertAnthropicMessagesToResponsesInput([
+      { role: 'user', content: 'hello' },
+    ], false) // forceTextChunks = false
+
+    expect(items).toEqual([
+      {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_text', text: 'hello' }],
+      },
+    ])
+  })
+
+  test('converts plain string user message into standard text chunk type when forceTextChunks=true', () => {
+    const items = convertAnthropicMessagesToResponsesInput([
+      { role: 'user', content: 'hello' },
+    ], true)
+
+    expect(items).toEqual([
+      {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'text', text: 'hello' }],
+      },
+    ])
+  })
+
+  test('preserves wrapped string message content', () => {
+    const items = convertAnthropicMessagesToResponsesInput([
+      {
+        message: { role: 'user', content: 'hello' }
+      },
+    ])
+
+    expect(items).toEqual([
+      {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_text', text: 'hello' }],
+      },
     ])
   })
 
@@ -662,6 +693,46 @@ describe('Codex request translation', () => {
         output: 'done',
       },
     ])
+  })
+
+  test('renders tool_reference blocks from ToolSearch results as readable text', () => {
+    const items = convertAnthropicMessagesToResponsesInput([
+      {
+        role: 'assistant',
+        content: [
+          { type: 'tool_use', id: 'call_ts1', name: 'ToolSearch', input: { query: 'memory' } },
+        ],
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'call_ts1',
+            content: [
+              { type: 'tool_reference', tool_name: 'mcp__example__memory_search' },
+              { type: 'tool_reference', tool_name: 'mcp__example__memory_store' },
+            ],
+          },
+        ],
+      },
+    ])
+
+    const output = items.find(item => item.type === 'function_call_output') as
+      | { type: 'function_call_output'; output: string }
+      | undefined
+    expect(output).toBeDefined()
+    expect(output!.output).toContain('mcp__example__memory_search')
+    expect(output!.output).toContain('mcp__example__memory_store')
+  })
+
+  test('keeps the ToolSearch tool in the Responses tools list', () => {
+    const tools = convertToolsToResponsesTools([
+      { name: 'ToolSearch', description: 'Find deferred tools', input_schema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] } },
+      { name: 'Read', description: 'Read a file', input_schema: { type: 'object', properties: {} } },
+    ])
+
+    expect(tools.map(t => t.name)).toEqual(['ToolSearch', 'Read'])
   })
 
   test('converts completed Codex tool response into Anthropic message', () => {
@@ -765,7 +836,7 @@ describe('Codex request translation', () => {
             sources: [
               {
                 title: 'GakrCLI repo',
-                url: 'https://github.com/example/GakrCLI',
+                url: 'https://github.com/example/gakrcli',
               },
             ],
           },
@@ -779,7 +850,7 @@ describe('Codex request translation', () => {
                 sources: [
                   {
                     title: 'Docs',
-                    url: 'https://docs.example.com/GakrCLI',
+                    url: 'https://docs.example.com/gakrcli',
                   },
                 ],
               },
@@ -798,11 +869,11 @@ describe('Codex request translation', () => {
         content: [
           {
             title: 'GakrCLI repo',
-            url: 'https://github.com/example/GakrCLI',
+            url: 'https://github.com/example/gakrcli',
           },
           {
             title: 'Docs',
-            url: 'https://docs.example.com/GakrCLI',
+            url: 'https://docs.example.com/gakrcli',
           },
         ],
       },
@@ -891,7 +962,7 @@ describe('Codex request translation', () => {
                 type: 'output_text',
                 text: 'Partial results below.',
                 sources: [
-                  { title: 'Docs', url: 'https://docs.example.com/GakrCLI' },
+                  { title: 'Docs', url: 'https://docs.example.com/gakrcli' },
                 ],
               },
             ],
@@ -908,7 +979,7 @@ describe('Codex request translation', () => {
       {
         tool_use_id: 'codex-web-search',
         content: [
-          { title: 'Docs', url: 'https://docs.example.com/GakrCLI' },
+          { title: 'Docs', url: 'https://docs.example.com/gakrcli' },
         ],
       },
     ])
@@ -1028,116 +1099,39 @@ describe('Codex request translation', () => {
       'I should note that the user role requires a briefly concise friendly response format.',
     )
   })
-})
 
-describe('convertSystemPrompt', () => {
-  test('strips Anthropic attribution header block from text-block array (#607)', () => {
-    const result = convertSystemPrompt([
-      {
-        type: 'text',
-        text:
-          'x-anthropic-billing-header: cc_version=0.8.0.abc123; ' +
-          'cc_entrypoint=cli;',
+  // Regression for #1259 — codexspark / gpt-5.3-codex-spark backend delivers
+  // complete function-call arguments only via the terminal `done` event with
+  // zero `delta` events in between. Without handling either `done` variant,
+  // the Anthropic tool_use block closed with `input: {}` and Glob/Bash/etc.
+  // failed validation with "required parameter X is missing".
+  async function collectToolArgs(responseText: string): Promise<string> {
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(responseText))
+        controller.close()
       },
-      { type: 'text', text: 'You are GakrCLI.' },
-      { type: 'text', text: 'Project context: bun + react.' },
-    ])
+    })
 
-    expect(result).not.toContain('x-anthropic-billing-header')
-    expect(result).not.toContain('cc_version=')
-    expect(result).toContain('You are GakrCLI.')
-    expect(result).toContain('Project context: bun + react.')
-  })
-
-  test('returns empty string when only the attribution block is present', () => {
-    const result = convertSystemPrompt([
-      {
-        type: 'text',
-        text: 'x-anthropic-billing-header: cc_version=0.8.0.abc;',
-      },
-    ])
-
-    expect(result).toBe('')
-  })
-
-  test('passes plain string system prompts through untouched', () => {
-    expect(convertSystemPrompt('You are GakrCLI.')).toBe(
-      'You are GakrCLI.',
-    )
-  })
-})
-
-test('converts plain string user message into Codex input_text chunk type', () => {
-    const items = convertAnthropicMessagesToResponsesInput([
-      { role: 'user', content: 'hello' },
-    ], false) // forceTextChunks = false
-
-    expect(items).toEqual([
-      {
-        type: 'message',
-        role: 'user',
-        content: [{ type: 'input_text', text: 'hello' }],
-      },
-    ])
-  })
-
-test('converts plain string user message into standard text chunk type when forceTextChunks=true', () => {
-    const items = convertAnthropicMessagesToResponsesInput([
-      { role: 'user', content: 'hello' },
-    ], true)
-
-    expect(items).toEqual([
-      {
-        type: 'message',
-        role: 'user',
-        content: [{ type: 'text', text: 'hello' }],
-      },
-    ])
-  })
-
-test('preserves wrapped string message content', () => {
-    const items = convertAnthropicMessagesToResponsesInput([
-      {
-        message: { role: 'user', content: 'hello' }
-      },
-    ])
-
-    expect(items).toEqual([
-      {
-        type: 'message',
-        role: 'user',
-        content: [{ type: 'input_text', text: 'hello' }],
-      },
-    ])
-  })
-
-async function collectToolArgs(responseText: string): Promise<string> {
-  const stream = new ReadableStream({
-    start(controller) {
-      controller.enqueue(new TextEncoder().encode(responseText))
-      controller.close()
-    },
-  })
-
-  const argsParts: string[] = []
-  for await (const event of codexStreamToAnthropic(
-    new Response(stream),
-    'gpt-5.3-codex-spark',
-  )) {
-    const delta = (event as {
-      delta?: { type?: string; partial_json?: string }
-    }).delta
-    if (
-      delta?.type === 'input_json_delta' &&
-      typeof delta.partial_json === 'string'
-    ) {
-      argsParts.push(delta.partial_json)
+    const argsParts: string[] = []
+    for await (const event of codexStreamToAnthropic(
+      new Response(stream),
+      'gpt-5.3-codex-spark',
+    )) {
+      const delta = (event as {
+        delta?: { type?: string; partial_json?: string }
+      }).delta
+      if (
+        delta?.type === 'input_json_delta' &&
+        typeof delta.partial_json === 'string'
+      ) {
+        argsParts.push(delta.partial_json)
+      }
     }
+    return argsParts.join('')
   }
-  return argsParts.join('')
-}
 
-test('Codex stream: tool args delivered only via function_call_arguments.done (#1259)', async () => {
+  test('Codex stream: tool args delivered only via function_call_arguments.done (#1259)', async () => {
     const args = '{"path":"./gakrcli-codex-repro","pattern":"**/*.md"}'
     const responseText = [
       'event: response.output_item.added',
@@ -1157,7 +1151,7 @@ test('Codex stream: tool args delivered only via function_call_arguments.done (#
     expect(await collectToolArgs(responseText)).toBe(args)
   })
 
-test('Codex stream: tool args fallback via output_item.done when no delta + no arguments.done', async () => {
+  test('Codex stream: tool args fallback via output_item.done when no delta + no arguments.done', async () => {
     const args = '{"command":"ls -la"}'
     const responseText = [
       'event: response.output_item.added',
@@ -1174,7 +1168,7 @@ test('Codex stream: tool args fallback via output_item.done when no delta + no a
     expect(await collectToolArgs(responseText)).toBe(args)
   })
 
-test('Codex stream: delta path still works when present (no duplication on done)', async () => {
+  test('Codex stream: delta path still works when present (no duplication on done)', async () => {
     const args = '{"path":"./x","pattern":"**/*.ts"}'
     const responseText = [
       'event: response.output_item.added',
@@ -1197,3 +1191,41 @@ test('Codex stream: delta path still works when present (no duplication on done)
     // Delta wins; done branches must NOT re-emit and double the JSON.
     expect(await collectToolArgs(responseText)).toBe(args)
   })
+})
+
+describe('convertSystemPrompt', () => {
+  test('strips Anthropic attribution header block from text-block array (#607)', () => {
+    const result = convertSystemPrompt([
+      {
+        type: 'text',
+        text:
+          'x-anthropic-billing-header: cc_version=0.8.0.abc123; ' +
+          'cc_entrypoint=cli;',
+      },
+      { type: 'text', text: 'You are GakrCLI Code.' },
+      { type: 'text', text: 'Project context: bun + react.' },
+    ])
+
+    expect(result).not.toContain('x-anthropic-billing-header')
+    expect(result).not.toContain('cc_version=')
+    expect(result).toContain('You are GakrCLI Code.')
+    expect(result).toContain('Project context: bun + react.')
+  })
+
+  test('returns empty string when only the attribution block is present', () => {
+    const result = convertSystemPrompt([
+      {
+        type: 'text',
+        text: 'x-anthropic-billing-header: cc_version=0.8.0.abc;',
+      },
+    ])
+
+    expect(result).toBe('')
+  })
+
+  test('passes plain string system prompts through untouched', () => {
+    expect(convertSystemPrompt('You are GakrCLI Code.')).toBe(
+      'You are GakrCLI Code.',
+    )
+  })
+})

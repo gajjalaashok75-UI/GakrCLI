@@ -42,7 +42,6 @@ export default defineVendor({
         id: 'venice-uncensored',
         apiName: 'venice-uncensored',
         label: 'Venice Uncensored',
-        modelDescriptorId: 'venice-uncensored',
       },
     ],
   },

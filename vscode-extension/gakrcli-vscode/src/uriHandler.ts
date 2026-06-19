@@ -1,6 +1,6 @@
 // src/uriHandler.ts
 // Pure URI parsing helper for the GakrCLI URI handler.
-// Handles: vscode://harsh1210.gakrcli-vscode/open?prompt=...&session=...
+// Handles: vscode://gajjalaashok75-UI.gakrcli-vscode/open?prompt=...&session=...
 
 import type * as vscode from 'vscode';
 

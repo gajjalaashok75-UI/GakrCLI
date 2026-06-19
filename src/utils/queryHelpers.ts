@@ -16,7 +16,11 @@ import {
   FILE_UNCHANGED_STUB,
 } from '../tools/FileReadTool/prompt.js'
 import { FILE_WRITE_TOOL_NAME } from '../tools/FileWriteTool/prompt.js'
-import type { Message } from '../types/message.js'
+import type {
+  AssistantMessage,
+  Message,
+  UserMessage,
+} from '../types/message.js'
 import type { OrphanedPermission } from '../types/textInputTypes.js'
 import { logForDebugging } from './debug.js'
 import { isEnvTruthy } from './envUtils.js'
@@ -122,7 +126,11 @@ export function* normalizeMessage(message: Message): Generator<SDKMessage> {
         message.data.type === 'agent_progress' ||
         message.data.type === 'skill_progress'
       ) {
-        for (const _ of normalizeMessages([message.data.message])) {
+        // message.data is an untyped progress stub (`any`); annotate so the
+        // assistant|user normalizeMessages overload is selected.
+        for (const _ of normalizeMessages([message.data.message] as Array<
+          AssistantMessage | UserMessage
+        >)) {
           switch (_.type) {
             case 'assistant':
               // Skip empty messages (e.g., "(no content)") that shouldn't be output to SDK
@@ -159,7 +167,7 @@ export function* normalizeMessage(message: Message): Generator<SDKMessage> {
         message.data.type === 'powershell_progress'
       ) {
         // Filter bash progress to send only one per minute
-        // Only emit for GakrCLI Remote for now
+        // Only emit for GakrCLI Code Remote for now
         if (
           !isEnvTruthy(process.env.GAKR_CODE_REMOTE) &&
           !process.env.GAKR_CODE_CONTAINER_ID

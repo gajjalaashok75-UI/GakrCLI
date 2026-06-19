@@ -7,7 +7,7 @@
  *
  * Eligibility:
  * - Console users (API key): All eligible
- * - OAuth users (Gakr.ai): Only Enterprise/C4E and Team subscribers are eligible
+ * - OAuth users (GakrCLI.ai): Only Enterprise/C4E and Team subscribers are eligible
  * - API fails open (non-blocking) - if fetch fails, continues without remote settings
  * - API returns empty settings for users without managed settings
  */
@@ -19,7 +19,7 @@ import { getOauthConfig, OAUTH_BETA_HEADER } from '../../constants/oauth.js'
 import {
   checkAndRefreshOAuthTokenIfNeeded,
   getAnthropicApiKeyWithSource,
-  getgakrcliAIOAuthTokens,
+  getGakrCLIAIOAuthTokens,
 } from '../../utils/auth.js'
 import { registerCleanup } from '../../utils/cleanupRegistry.js'
 import { logForDebugging } from '../../utils/debug.js'
@@ -31,7 +31,7 @@ import {
 } from '../../utils/settings/types.js'
 import { sleep } from '../../utils/sleep.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
-import { getgakrcliCodeUserAgent } from '../../utils/userAgent.js'
+import { getGakrCLICodeUserAgent } from '../../utils/userAgent.js'
 import { getRetryDelay } from '../api/withRetry.js'
 import {
   checkManagedSettingsSecurity,
@@ -185,8 +185,8 @@ function getRemoteSettingsAuthHeaders(): {
     // No API key available - continue to check OAuth
   }
 
-  // Fall back to OAuth tokens (for Gakr.ai users)
-  const oauthTokens = getgakrcliAIOAuthTokens()
+  // Fall back to OAuth tokens (for GakrCLI.ai users)
+  const oauthTokens = getGakrCLIAIOAuthTokens()
   if (oauthTokens?.accessToken) {
     return {
       headers: {
@@ -267,7 +267,7 @@ async function fetchRemoteManagedSettings(
     const endpoint = getRemoteManagedSettingsEndpoint()
     const headers: Record<string, string> = {
       ...authHeaders.headers,
-      'User-Agent': getgakrcliCodeUserAgent(),
+      'User-Agent': getGakrCLICodeUserAgent(),
     }
 
     // Add If-None-Match header for ETag-based caching

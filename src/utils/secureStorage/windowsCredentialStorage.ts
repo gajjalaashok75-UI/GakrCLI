@@ -1,6 +1,6 @@
 import { execaSync } from 'execa'
 import { join } from 'path'
-import { getGakrcliConfigHomeDir } from '../envUtils.js'
+import { getGakrCLIConfigHomeDir } from '../envUtils.js'
 import { jsonParse, jsonStringify } from '../slowOperations.js'
 import {
   CREDENTIALS_SERVICE_SUFFIX,
@@ -27,14 +27,11 @@ function getWindowsSecureStorageEntropy(): string {
 
 function getWindowsSecureStorageFilePath(): string {
   const resourceName = getLegacyResourceName().replace(/[^a-zA-Z0-9._-]/g, '_')
-  return join(getGakrcliConfigHomeDir(), `${resourceName}.secure.dpapi`)
+  return join(getGakrCLIConfigHomeDir(), `${resourceName}.secure.dpapi`)
 }
 
 function shouldUseLegacyPasswordVault(): boolean {
-  return (
-    process.env.GAKRCLI_ENABLE_LEGACY_WINDOWS_PASSWORDVAULT === '1' ||
-    process.env.GAKR_ENABLE_LEGACY_WINDOWS_PASSWORDVAULT === '1'
-  )
+  return process.env.GAKR_ENABLE_LEGACY_WINDOWS_PASSWORDVAULT === '1'
 }
 
 function runPowerShell(

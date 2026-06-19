@@ -10,6 +10,7 @@ import { toInkColor } from '../../utils/ink.js';
 import type { Color } from '../../ink/styles.js';
 import type { Theme } from '../../utils/theme.js';
 import { Byline } from '../design-system/Byline.js';
+import FullWidthRow from '../design-system/FullWidthRow.js';
 import { GlimmerMessage } from './GlimmerMessage.js';
 import { SpinnerGlyph } from './SpinnerGlyph.js';
 import type { SpinnerMode } from './types.js';
@@ -166,7 +167,7 @@ export function SpinnerAnimationRow({
   // === Token count (leader + teammates, or foregrounded teammate) ===
   const totalTokens = foregroundedTeammate && !foregroundedTeammate.isIdle ? foregroundedTeammate.progress?.tokenCount ?? 0 : leaderTokens + teammateTokens;
   const tokenCount = formatNumber(totalTokens);
-  const tokensText = hasRunningTeammates ? `${tokenCount} tokens` : `${figures.arrowDown} ${tokenCount} tokens`;
+  const tokensText = `${tokenCount} tokens`;
   const tokensWidth = stringWidth(tokensText);
 
   // === Thinking text (may shrink to fit) ===
@@ -174,11 +175,17 @@ export function SpinnerAnimationRow({
   let thinkingWidthValue = thinkingText ? stringWidth(thinkingText) : 0;
 
   // === Progressive width gating ===
+  // messageWidth = glimmer text + spinner glyph (width: 2).
+  // parensWidth = 3 accounts for " (" and ")" wrapping the status parts.
+  // The extra 1 is a safety margin so content never touches the right edge.
   const messageWidth = glimmerMessageWidth + 2;
   const sep = SEP_WIDTH;
+  // Non-teammate spins prepend the ↑/↓ mode glyph (width 2) + separator to
+  // the status parts, so reserve that space in the gating math too.
+  const parensWidth = hasRunningTeammates ? 4 : 4 + 2 + SEP_WIDTH;
   const wantsThinking = thinkingStatus !== null;
   const wantsTimerAndTokens = verbose || hasRunningTeammates || effectiveElapsedMs > SHOW_TOKENS_AFTER_MS;
-  const availableSpace = columns - messageWidth - 5;
+  const availableSpace = columns - messageWidth - parensWidth;
   let showThinking = wantsThinking && availableSpace > thinkingWidthValue;
   if (!showThinking && wantsThinking && thinkingStatus === 'thinking' && effortSuffix) {
     if (availableSpace > THINKING_BARE_WIDTH) {
@@ -191,6 +198,21 @@ export function SpinnerAnimationRow({
   const showTimer = wantsTimerAndTokens && availableSpace > usedAfterThinking + timerWidth;
   const usedAfterTimer = usedAfterThinking + (showTimer ? timerWidth + sep : 0);
   const showTokens = wantsTimerAndTokens && totalTokens > 0 && availableSpace > usedAfterTimer + tokensWidth;
+  // Second chance for narrow terminals: the gating above reserves space for
+  // the mode glyph + separator, but a would-be thinking-only spin renders
+  // neither the glyph nor the wrapping parens beyond "( )". When nothing
+  // else will show, re-try the thinking gate with that space returned so
+  // "(thinking)" appears instead of nothing.
+  if (!showThinking && wantsThinking && thinkingStatus === 'thinking' && !hasRunningTeammates && !spinnerSuffix && !showTimer && !showTokens) {
+    const bareAvailable = columns - messageWidth - 2;
+    if (bareAvailable > thinkingWidthValue) {
+      showThinking = true;
+    } else if (effortSuffix && bareAvailable > THINKING_BARE_WIDTH) {
+      thinkingText = 'thinking';
+      thinkingWidthValue = THINKING_BARE_WIDTH;
+      showThinking = true;
+    }
+  }
   const thinkingOnly = showThinking && thinkingStatus === 'thinking' && !spinnerSuffix && !showTimer && !showTokens && true;
 
   // === Thinking shimmer color (formerly ThinkingShimmerText's own timer) ===
@@ -205,14 +227,22 @@ export function SpinnerAnimationRow({
             {spinnerSuffix}
           </Text>] : []), ...(showTimer ? [<Text dimColor key="elapsedTime">
             {timerText}
-          </Text>] : []), ...(showTokens ? [<Box flexDirection="row" key="tokens">
-            {!hasRunningTeammates && <SpinnerModeGlyph mode={mode} />}
-            <Text dimColor>{tokenCount} tokens</Text>
-          </Box>] : []), ...(showThinking && thinkingText ? [thinkingStatus === 'thinking' && !reducedMotion ? <Text key="thinking" color={thinkingShimmerColor}>
+          </Text>] : []), ...(showTokens ? [<Text dimColor key="tokens">
+            {tokensText}
+          </Text>] : []), ...(showThinking && thinkingText ? [thinkingStatus === 'thinking' && !reducedMotion ? <Text key="thinking" color={thinkingShimmerColor}>
               {thinkingOnly ? `(${thinkingText})` : thinkingText}
             </Text> : <Text dimColor key="thinking">
               {thinkingText}
             </Text>] : [])];
+  // Lead the status with the request-direction glyph (↑ requesting /
+  // ↓ responding) so the mode is visible whenever any status shows — it was
+  // previously buried inside the tokens part, which only appears after 30s.
+  // Skipped for thinkingOnly (kept minimal) and teammate spins (tree has it).
+  if (!hasRunningTeammates && !thinkingOnly && parts.length > 0) {
+    parts.unshift(<Box flexDirection="row" key="mode">
+            <SpinnerModeGlyph mode={mode} />
+          </Box>);
+  }
   const status = foregroundedTeammate && !foregroundedTeammate.isIdle ? <>
         <Text dimColor>(esc to interrupt </Text>
         <Text color={toInkColor(foregroundedTeammate.identity.color)}>
@@ -224,11 +254,13 @@ export function SpinnerAnimationRow({
           <Byline>{parts}</Byline>
           <Text dimColor>)</Text>
         </> : null;
-  return <Box ref={viewportRef} flexDirection="row" flexWrap="wrap" marginTop={1} width="100%">
-      <SpinnerGlyph frame={frame} messageColor={messageColor} stalledIntensity={overrideColor ? 0 : stalledIntensity} reducedMotion={reducedMotion} time={time} />
-      <GlimmerMessage message={message} mode={mode} messageColor={messageColor} glimmerIndex={glimmerIndex} flashOpacity={flashOpacity} shimmerColor={shimmerColor} stalledIntensity={overrideColor ? 0 : stalledIntensity} />
-      {status}
-    </Box>;
+  return <FullWidthRow>
+      <Box ref={viewportRef} flexDirection="row" flexWrap="nowrap" marginTop={1}>
+        <SpinnerGlyph frame={frame} messageColor={messageColor} stalledIntensity={overrideColor ? 0 : stalledIntensity} reducedMotion={reducedMotion} time={time} />
+        <GlimmerMessage message={message} mode={mode} messageColor={messageColor} glimmerIndex={glimmerIndex} flashOpacity={flashOpacity} shimmerColor={shimmerColor} stalledIntensity={overrideColor ? 0 : stalledIntensity} />
+        {status}
+      </Box>
+    </FullWidthRow>;
 }
 function SpinnerModeGlyph(t0) {
   const $ = _c(2);

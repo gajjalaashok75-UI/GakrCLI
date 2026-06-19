@@ -129,7 +129,7 @@ export function useUnseenDivider(messageCount: number): {
     // • click-to-select at bottom: useDragToScroll.check() calls
     //   scrollTo(current) to break sticky so streaming content doesn't shift
     //   under the selection, then onScroll(false, …) — but scrollTop is still
-    //   at max (internal feedback report 2026-03-15)
+    //   at max (Sarah Deaton, #gakrcli-code-feedback 2026-03-15)
     // pendingDelta: scrollBy accumulates without updating scrollTop. Without
     // it, wheeling up from max would see scrollTop==max and suppress the pill.
     const max = Math.max(0, handle.getScrollHeight() - handle.getViewportHeight());
@@ -191,7 +191,7 @@ export function useUnseenDivider(messageCount: number): {
 
 /**
  * Counts assistant turns in messages[dividerIndex..end). A "turn" is what
- * users think of as "a new message from Gakr" — not raw assistant entries
+ * users think of as "a new message from GakrCLI" — not raw assistant entries
  * (one turn yields multiple entries: tool_use blocks + text blocks). We count
  * non-assistant→assistant transitions, but only for entries that actually
  * carry text — tool-use-only entries are skipped (like progress messages)
@@ -290,7 +290,7 @@ export function FullscreenLayout(t0) {
     rows: terminalRows,
     columns
   } = useTerminalSize();
-  const [stickyPrompt, setStickyPrompt] = useState(null);
+  const [stickyPrompt, setStickyPrompt] = useState<StickyPrompt | null>(null);
   let t4;
   if ($[0] === Symbol.for("react.memo_cache_sentinel")) {
     t4 = {

@@ -43,7 +43,7 @@ describe('buildPlanApprovalOptions', () => {
       usedPercent: 42,
       isAutoModeAvailable: false,
       dangerousPlanExitMode: 'fullAccess',
-      planAuthorName: 'OpenClaude',
+      planAuthorName: 'GakrCLI',
       onFeedbackChange: () => {},
     })
 
@@ -64,7 +64,7 @@ describe('buildPlanApprovalOptions', () => {
       usedPercent: 42,
       isAutoModeAvailable: false,
       dangerousPlanExitMode: 'bypassPermissions',
-      planAuthorName: 'OpenClaude',
+      planAuthorName: 'GakrCLI',
       onFeedbackChange: () => {},
     })
 

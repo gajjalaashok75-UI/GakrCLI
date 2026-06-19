@@ -22,7 +22,7 @@ import {
 import {
   isOAuthTokenExpired,
   refreshOAuthToken,
-  shouldUsegakrcliAIAuth,
+  shouldUseGakrCLIAIAuth,
 } from '../services/oauth/client.js'
 import { getOauthProfileFromOauthToken } from '../services/oauth/getOauthProfile.js'
 import type { OAuthTokens, SubscriptionType } from '../services/oauth/types.js'
@@ -49,7 +49,7 @@ import {
 } from './config.js'
 import { logAntError, logForDebugging } from './debug.js'
 import {
-  getGakrcliConfigHomeDir,
+  getGakrCLIConfigHomeDir,
   isBareMode,
   isEnvTruthy,
   isRunningOnHomespace,
@@ -118,6 +118,7 @@ export function isAnthropicAuthEnabled(): boolean {
     isEnvTruthy(process.env.GAKR_CODE_USE_FOUNDRY) ||
     isEnvTruthy(process.env.GAKR_CODE_USE_OPENAI) ||
     isEnvTruthy(process.env.GAKR_CODE_USE_GEMINI) ||
+    isEnvTruthy(process.env.GAKR_CODE_USE_MISTRAL) ||
     isEnvTruthy(process.env.GAKR_CODE_USE_GITHUB)
 
   // Check if user has configured an external API key source
@@ -159,7 +160,7 @@ export function isAnthropicAuthEnabled(): boolean {
   return !shouldDisableAuth
 }
 
-export const isGakrcliOAuthEnabled = isAnthropicAuthEnabled
+export const isGakrCLIOAuthEnabled = isAnthropicAuthEnabled
 
 /** Where the auth token is being sourced from, if any. */
 // this code is closely related to isAnthropicAuthEnabled
@@ -210,9 +211,9 @@ export function getAuthTokenSource() {
     return { source: 'apiKeyHelper' as const, hasToken: true }
   }
 
-  const oauthTokens = getgakrcliAIOAuthTokens()
-  if (shouldUsegakrcliAIAuth(oauthTokens?.scopes) && oauthTokens?.accessToken) {
-    return { source: 'gakr.ai' as const, hasToken: true }
+  const oauthTokens = getGakrCLIAIOAuthTokens()
+  if (shouldUseGakrCLIAIAuth(oauthTokens?.scopes) && oauthTokens?.accessToken) {
+    return { source: 'gakrcli.ai' as const, hasToken: true }
   }
 
   return { source: 'none' as const, hasToken: false }
@@ -709,7 +710,7 @@ export function refreshAwsAuth(awsAuthRefresh: string): Promise<boolean> {
               'AWS auth refresh timed out after 3 minutes. Run your auth command manually in a separate terminal.',
             )
           : chalk.red(
-              'Error running awsAuthRefresh (in settings or ~/.gakrcli/settings.json):',
+              'Error running awsAuthRefresh (in settings (~/.gakrcli/settings.json) or ~/.gakrcli.json):',
             )
         // biome-ignore lint/suspicious/noConsole:: intentional console output
         console.error(message)
@@ -787,7 +788,7 @@ async function getAwsCredsFromCredentialExport(): Promise<{
       }
     } catch (e) {
       const message = chalk.red(
-        'Error getting AWS credentials from awsCredentialExport (in settings or ~/.gakrcli/settings.json):',
+        'Error getting AWS credentials from awsCredentialExport (in settings (~/.gakrcli/settings.json) or ~/.gakrcli.json):',
       )
       if (e instanceof Error) {
         // biome-ignore lint/suspicious/noConsole:: intentional console output
@@ -977,7 +978,7 @@ export function refreshGcpAuth(gcpAuthRefresh: string): Promise<boolean> {
               'GCP auth refresh timed out after 3 minutes. Run your auth command manually in a separate terminal.',
             )
           : chalk.red(
-              'Error running gcpAuthRefresh (in settings or ~/.gakrcli/settings.json):',
+              'Error running gcpAuthRefresh (in settings (~/.gakrcli/settings.json) or ~/.gakrcli.json):',
             )
         // biome-ignore lint/suspicious/noConsole:: intentional console output
         console.error(message)
@@ -1217,7 +1218,7 @@ export function saveOAuthTokensIfNeeded(tokens: OAuthTokens): {
   success: boolean
   warning?: string
 } {
-  if (!shouldUsegakrcliAIAuth(tokens.scopes)) {
+  if (!shouldUseGakrCLIAIAuth(tokens.scopes)) {
     logEvent('tengu_oauth_tokens_not_gakrcli_ai', {})
     return { success: true }
   }
@@ -1258,7 +1259,7 @@ export function saveOAuthTokensIfNeeded(tokens: OAuthTokens): {
       logEvent('tengu_oauth_tokens_save_failed', { storageBackend })
     }
 
-    getgakrcliAIOAuthTokens.cache?.clear?.()
+    getGakrCLIAIOAuthTokens.cache?.clear?.()
     clearBetasCaches()
     clearToolSchemaCache()
     return updateStatus
@@ -1274,7 +1275,7 @@ export function saveOAuthTokensIfNeeded(tokens: OAuthTokens): {
   }
 }
 
-export const getgakrcliAIOAuthTokens = memoize((): OAuthTokens | null => {
+export const getGakrCLIAIOAuthTokens = memoize((): OAuthTokens | null => {
   // --bare: API-key-only. No OAuth env tokens, no keychain, no credentials file.
   if (isBareMode()) return null
 
@@ -1328,7 +1329,7 @@ export const getgakrcliAIOAuthTokens = memoize((): OAuthTokens | null => {
  * server (e.g., due to clock corrections after token was issued).
  */
 export function clearOAuthTokenCache(): void {
-  getgakrcliAIOAuthTokens.cache?.clear?.()
+  getGakrCLIAIOAuthTokens.cache?.clear?.()
   clearKeychainCache()
 }
 
@@ -1342,7 +1343,7 @@ let lastCredentialsMtimeMs = 0
 async function invalidateOAuthCacheIfDiskChanged(): Promise<void> {
   try {
     const { mtimeMs } = await stat(
-      join(getGakrcliConfigHomeDir(), '.credentials.json'),
+      join(getGakrCLIConfigHomeDir(), '.credentials.json'),
     )
     if (mtimeMs !== lastCredentialsMtimeMs) {
       lastCredentialsMtimeMs = mtimeMs
@@ -1353,11 +1354,11 @@ async function invalidateOAuthCacheIfDiskChanged(): Promise<void> {
     // the memoize so it delegates to the keychain cache's 30s TTL instead
     // of caching forever on top. `security find-generic-password` is
     // ~15ms; bounded to once per 30s by the keychain cache.
-    getgakrcliAIOAuthTokens.cache?.clear?.()
+    getGakrCLIAIOAuthTokens.cache?.clear?.()
   }
 }
 
-// In-flight dedup: when N gakr.ai proxy connectors hit 401 with the same
+// In-flight dedup: when N gakrcli.ai proxy connectors hit 401 with the same
 // token simultaneously (common at startup — #20930), only one should clear
 // caches and re-read the keychain. Without this, each call's clearOAuthTokenCache()
 // nukes readInFlight in macOsKeychainStorage and triggers a fresh spawn —
@@ -1397,7 +1398,7 @@ async function handleOAuth401ErrorImpl(
 ): Promise<boolean> {
   // Clear caches and re-read from keychain (async — sync read blocks ~100ms/call)
   clearOAuthTokenCache()
-  const currentTokens = await getgakrcliAIOAuthTokensAsync()
+  const currentTokens = await getGakrCLIAIOAuthTokensAsync()
 
   if (!currentTokens?.refreshToken) {
     return false
@@ -1418,7 +1419,7 @@ async function handleOAuth401ErrorImpl(
  * Delegates to the sync memoized version for env var / file descriptor tokens
  * (which don't hit the keychain), and only uses async for storage reads.
  */
-export async function getgakrcliAIOAuthTokensAsync(): Promise<OAuthTokens | null> {
+export async function getGakrCLIAIOAuthTokensAsync(): Promise<OAuthTokens | null> {
   if (isBareMode()) return null
 
   // Env var and FD tokens are sync and don't hit the keychain
@@ -1426,7 +1427,7 @@ export async function getgakrcliAIOAuthTokensAsync(): Promise<OAuthTokens | null
     process.env.GAKR_CODE_OAUTH_TOKEN ||
     getOAuthTokenFromFileDescriptor()
   ) {
-    return getgakrcliAIOAuthTokens()
+    return getGakrCLIAIOAuthTokens()
   }
 
   try {
@@ -1476,7 +1477,7 @@ async function checkAndRefreshOAuthTokenIfNeededImpl(
 
   // First check if token is expired with cached value
   // Skip this check if force=true (server already told us token is bad)
-  const tokens = getgakrcliAIOAuthTokens()
+  const tokens = getGakrCLIAIOAuthTokens()
   if (!force) {
     if (!tokens?.refreshToken || !isOAuthTokenExpired(tokens.expiresAt)) {
       return false
@@ -1487,15 +1488,15 @@ async function checkAndRefreshOAuthTokenIfNeededImpl(
     return false
   }
 
-  if (!shouldUsegakrcliAIAuth(tokens.scopes)) {
+  if (!shouldUseGakrCLIAIAuth(tokens.scopes)) {
     return false
   }
 
   // Re-read tokens async to check if they're still expired
   // Another process might have refreshed them
-  getgakrcliAIOAuthTokens.cache?.clear?.()
+  getGakrCLIAIOAuthTokens.cache?.clear?.()
   clearKeychainCache()
-  const freshTokens = await getgakrcliAIOAuthTokensAsync()
+  const freshTokens = await getGakrCLIAIOAuthTokensAsync()
   if (
     !freshTokens?.refreshToken ||
     !isOAuthTokenExpired(freshTokens.expiresAt)
@@ -1504,7 +1505,7 @@ async function checkAndRefreshOAuthTokenIfNeededImpl(
   }
 
   // Tokens are still expired, try to acquire lock and refresh
-  const gakrcliDir = getGakrcliConfigHomeDir()
+  const gakrcliDir = getGakrCLIConfigHomeDir()
   await mkdir(gakrcliDir, { recursive: true })
 
   let release
@@ -1538,9 +1539,9 @@ async function checkAndRefreshOAuthTokenIfNeededImpl(
   }
   try {
     // Check one more time after acquiring lock
-    getgakrcliAIOAuthTokens.cache?.clear?.()
+    getGakrCLIAIOAuthTokens.cache?.clear?.()
     clearKeychainCache()
-    const lockedTokens = await getgakrcliAIOAuthTokensAsync()
+    const lockedTokens = await getGakrCLIAIOAuthTokensAsync()
     if (
       !lockedTokens?.refreshToken ||
       !isOAuthTokenExpired(lockedTokens.expiresAt)
@@ -1551,25 +1552,25 @@ async function checkAndRefreshOAuthTokenIfNeededImpl(
 
     logEvent('tengu_oauth_token_refresh_starting', {})
     const refreshedTokens = await refreshOAuthToken(lockedTokens.refreshToken, {
-      // For Gakr.ai subscribers, omit scopes so the default
+      // For GakrCLI.ai subscribers, omit scopes so the default
       // GAKR_AI_OAUTH_SCOPES applies — this allows scope expansion
       // (e.g. adding user:file_upload) on refresh without re-login.
-      scopes: shouldUsegakrcliAIAuth(lockedTokens.scopes)
+      scopes: shouldUseGakrCLIAIAuth(lockedTokens.scopes)
         ? undefined
         : lockedTokens.scopes,
     })
     saveOAuthTokensIfNeeded(refreshedTokens)
 
     // Clear the cache after refreshing token
-    getgakrcliAIOAuthTokens.cache?.clear?.()
+    getGakrCLIAIOAuthTokens.cache?.clear?.()
     clearKeychainCache()
     return true
   } catch (error) {
     logError(error)
 
-    getgakrcliAIOAuthTokens.cache?.clear?.()
+    getGakrCLIAIOAuthTokens.cache?.clear?.()
     clearKeychainCache()
-    const currentTokens = await getgakrcliAIOAuthTokensAsync()
+    const currentTokens = await getGakrCLIAIOAuthTokensAsync()
     if (currentTokens && !isOAuthTokenExpired(currentTokens.expiresAt)) {
       logEvent('tengu_oauth_token_refresh_race_recovered', {})
       return true
@@ -1583,12 +1584,12 @@ async function checkAndRefreshOAuthTokenIfNeededImpl(
   }
 }
 
-export function isgakrcliAISubscriber(): boolean {
+export function isGakrCLIAISubscriber(): boolean {
   if (!isAnthropicAuthEnabled()) {
     return false
   }
 
-  return shouldUsegakrcliAIAuth(getgakrcliAIOAuthTokens()?.scopes)
+  return shouldUseGakrCLIAIAuth(getGakrCLIAIOAuthTokens()?.scopes)
 }
 
 /**
@@ -1601,13 +1602,13 @@ export function isgakrcliAISubscriber(): boolean {
  */
 export function hasProfileScope(): boolean {
   return (
-    getgakrcliAIOAuthTokens()?.scopes?.includes(GAKR_AI_PROFILE_SCOPE) ?? false
+    getGakrCLIAIOAuthTokens()?.scopes?.includes(GAKR_AI_PROFILE_SCOPE) ?? false
   )
 }
 
 export function is1PApiCustomer(): boolean {
   // 1P API customers are users who are NOT:
-  // 1. Gakr.ai subscribers (Max, Pro, Enterprise, Team)
+  // 1. GakrCLI.ai subscribers (Max, Pro, Enterprise, Team)
   // 2. Vertex AI users
   // 3. AWS Bedrock users
   // 4. Foundry users
@@ -1621,8 +1622,8 @@ export function is1PApiCustomer(): boolean {
     return false
   }
 
-  // Exclude Gakr.ai subscribers
-  if (isgakrcliAISubscriber()) {
+  // Exclude GakrCLI.ai subscribers
+  if (isGakrCLIAISubscriber()) {
     return false
   }
 
@@ -1647,7 +1648,7 @@ export function isOverageProvisioningAllowed(): boolean {
   const billingType = accountInfo?.billingType
 
   // Must be a GakrCLI subscriber with a supported subscription type
-  if (!isgakrcliAISubscriber() || !billingType) {
+  if (!isGakrCLIAISubscriber() || !billingType) {
     return false
   }
 
@@ -1690,7 +1691,7 @@ export function getSubscriptionType(): SubscriptionType | null {
   if (!isAnthropicAuthEnabled()) {
     return null
   }
-  const oauthTokens = getgakrcliAIOAuthTokens()
+  const oauthTokens = getGakrCLIAIOAuthTokens()
   if (!oauthTokens) {
     return null
   }
@@ -1725,7 +1726,7 @@ export function getRateLimitTier(): string | null {
   if (!isAnthropicAuthEnabled()) {
     return null
   }
-  const oauthTokens = getgakrcliAIOAuthTokens()
+  const oauthTokens = getGakrCLIAIOAuthTokens()
   if (!oauthTokens) {
     return null
   }
@@ -1750,7 +1751,7 @@ export function getSubscriptionName(): string {
   }
 }
 
-/** Check if using third-party services (Bedrock or Vertex or Foundry or OpenAI-compatible or Gemini or GitHub Models or NVIDIA) */
+/** Check if using third-party services (Bedrock or Vertex or Foundry or OpenAI-compatible or Gemini or GitHub Models) */
 export function isUsing3PServices(): boolean {
   return !!(
     isEnvTruthy(process.env.GAKR_CODE_USE_BEDROCK) ||
@@ -1758,6 +1759,7 @@ export function isUsing3PServices(): boolean {
     isEnvTruthy(process.env.GAKR_CODE_USE_FOUNDRY) ||
     isEnvTruthy(process.env.GAKR_CODE_USE_OPENAI) ||
     isEnvTruthy(process.env.GAKR_CODE_USE_GEMINI) ||
+    isEnvTruthy(process.env.GAKR_CODE_USE_MISTRAL) ||
     isEnvTruthy(process.env.GAKR_CODE_USE_GITHUB) ||
     isEnvTruthy(process.env.GAKR_CODE_USE_NVIDIA)
   )
@@ -1872,7 +1874,7 @@ function isConsumerPlan(plan: SubscriptionType): plan is 'max' | 'pro' {
 export function isConsumerSubscriber(): boolean {
   const subscriptionType = getSubscriptionType()
   return (
-    isgakrcliAISubscriber() &&
+    isGakrCLIAISubscriber() &&
     subscriptionType !== null &&
     isConsumerPlan(subscriptionType)
   )
@@ -1899,7 +1901,7 @@ export function getAccountInformation() {
     authTokenSource === 'GAKR_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR'
   ) {
     accountInfo.tokenSource = authTokenSource
-  } else if (isgakrcliAISubscriber()) {
+  } else if (isGakrCLIAISubscriber()) {
     accountInfo.subscription = getSubscriptionName()
   } else {
     accountInfo.tokenSource = authTokenSource
@@ -1911,7 +1913,7 @@ export function getAccountInformation() {
 
   // We don't know the organization if we're relying on an external API key or auth token
   if (
-    authTokenSource === 'gakr.ai' ||
+    authTokenSource === 'gakrcli.ai' ||
     apiKeySource === '/login managed key'
   ) {
     // Get organization name from OAuth account info
@@ -1922,7 +1924,7 @@ export function getAccountInformation() {
   }
   const email = getOauthAccountInfo()?.emailAddress
   if (
-    (authTokenSource === 'gakr.ai' ||
+    (authTokenSource === 'gakrcli.ai' ||
       apiKeySource === '/login managed key') &&
     email
   ) {
@@ -1968,14 +1970,14 @@ export async function validateForceLoginOrg(): Promise<OrgValidationResult> {
   // No-op for env-var tokens (refreshToken is null).
   await checkAndRefreshOAuthTokenIfNeeded()
 
-  const tokens = getgakrcliAIOAuthTokens()
+  const tokens = getGakrCLIAIOAuthTokens()
   if (!tokens) {
     return { valid: true }
   }
 
   // Always fetch the authoritative org UUID from the profile endpoint.
   // Even keychain-sourced tokens verify server-side: the cached org UUID
-  // in ~/.gakrcli/settings.json is user-writable and cannot be trusted.
+  // in ~/.gakrcli.json is user-writable and cannot be trusted.
   const { source } = getAuthTokenSource()
   const isEnvVarToken =
     source === 'GAKR_CODE_OAUTH_TOKEN' ||
@@ -1991,7 +1993,7 @@ export async function validateForceLoginOrg(): Promise<OrgValidationResult> {
         `This machine requires organization ${requiredOrgUuid} but the profile could not be fetched.\n` +
         `This may be a network error, or the token may lack the user:profile scope required for\n` +
         `verification (tokens from 'gakrcli setup-token' do not include this scope).\n` +
-        `Try again, or obtain a full-scope token via 'gakrcli login'.`,
+        `Try again, or obtain a full-scope token via 'gakrcli auth login'.`,
     }
   }
 

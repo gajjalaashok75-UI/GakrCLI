@@ -12,7 +12,7 @@ import { randomUUID } from 'crypto'
 import { readFile, writeFile, mkdir, readdir, unlink } from 'fs/promises'
 import { existsSync } from 'fs'
 import path from 'path'
-import { getgakrcliConfigHomeDir } from './envUtils.js'
+import { getGakrCLIConfigHomeDir } from './envUtils.js'
 
 export interface Session {
   id: string
@@ -27,10 +27,10 @@ export interface Session {
   }
 }
 
-export type SessionMessage = Record<string, unknown> & {
-  role?: 'user' | 'assistant' | 'system'
-  content?: unknown
-  timestamp?: number | string
+export interface SessionMessage {
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  timestamp: number
   tool_calls?: unknown[]
   tool_use_id?: string
 }
@@ -52,7 +52,7 @@ export interface SessionMetadata {
 }
 
 function getConfigDir(): string {
-  return getgakrcliConfigHomeDir()
+  return getGakrCLIConfigHomeDir()
 }
 
 function getSessionsDir(): string {

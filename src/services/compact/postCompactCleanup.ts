@@ -6,7 +6,6 @@ import { clearSpeculativeChecks } from '../../tools/BashTool/bashPermissions.js'
 import { clearClassifierApprovals } from '../../utils/classifierApprovals.js'
 import { resetGetMemoryFilesCache } from '../../utils/gakrclimd.js'
 import { clearSessionMessagesCache } from '../../utils/sessionStorage.js'
-import { clearBetaTracingState } from '../../utils/telemetry/betaSessionTracing.js'
 import { resetMicrocompactState } from './microCompact.js'
 
 /**
@@ -49,14 +48,14 @@ export function runPostCompactCleanup(querySource?: QuerySource): void {
     }
   }
   if (isMainThreadCompact) {
-    // getUserContext is a memoized outer layer wrapping getgakrcliMds() →
+    // getUserContext is a memoized outer layer wrapping getGakrCLIMds() →
     // getMemoryFiles(). If only the inner getMemoryFiles cache is cleared,
     // the next turn hits the getUserContext cache and never reaches
     // getMemoryFiles(), so the armed InstructionsLoaded hook never fires.
     // Manual /compact already clears this explicitly at its call sites;
     // auto-compact and reactive-compact did not — this centralizes the
     // clear so all compaction paths behave consistently.
-    getUserContext.cache?.clear?.()
+    getUserContext.cache.clear?.()
     resetGetMemoryFilesCache('compact')
   }
   clearSystemPromptSections()
@@ -67,8 +66,7 @@ export function runPostCompactCleanup(querySource?: QuerySource): void {
   // model still has SkillTool in schema, invoked_skills preserves used
   // skills, and dynamic additions are handled by skillChangeDetector /
   // cacheUtils resets. See compactConversation() for full rationale.
-  clearBetaTracingState()
-  if (feature('COMMIT_ATTRIBUTION')) {
+    if (feature('COMMIT_ATTRIBUTION')) {
     void import('../../utils/attributionHooks.js').then(m =>
       m.sweepFileContentCache(),
     )

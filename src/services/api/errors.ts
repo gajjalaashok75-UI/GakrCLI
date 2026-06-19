@@ -16,15 +16,16 @@ import type {
 } from 'src/types/message.js'
 import {
   getAnthropicApiKeyWithSource,
-  getgakrcliAIOAuthTokens,
+  getGakrCLIAIOAuthTokens,
   getOauthAccountInfo,
-  isgakrcliAISubscriber,
+  isGakrCLIAISubscriber,
 } from 'src/utils/auth.js'
 import {
   createAssistantAPIErrorMessage,
   NO_RESPONSE_REQUESTED,
 } from 'src/utils/messages.js'
 import {
+  getDefaultMainLoopModel,
   getDefaultMainLoopModelSetting,
   isNonCustomOpusModel,
 } from 'src/utils/model/model.js'
@@ -44,7 +45,7 @@ import {
   logEvent,
 } from '../analytics/index.js'
 import {
-  type gakrcliAILimits,
+  type GakrCLIAILimits,
   getRateLimitErrorMessage,
   type OverageDisabledReason,
 } from '../gakrcliAiLimits.js'
@@ -166,38 +167,6 @@ function mapOpenAICompatibilityFailureToAssistantMessage(options: {
   }
 }
 
-function isXaiEntitlementError(message: string): boolean {
-  const lower = message.toLowerCase()
-  return (
-    lower.includes('run out of credits') ||
-    lower.includes('grok subscription') ||
-    lower.includes('spending-limit') ||
-    lower.includes('personal-team-blocked')
-  )
-}
-
-function getThirdPartyAuthErrorMessage(error: APIError): string | null {
-  const provider = getAPIProvider()
-  if (
-    provider === 'firstParty' ||
-    provider === 'bedrock' ||
-    provider === 'vertex' ||
-    provider === 'foundry'
-  ) {
-    return null
-  }
-
-  if (provider === 'xai' || process.env.XAI_CREDENTIAL_SOURCE === 'oauth') {
-    if (isXaiEntitlementError(error.message)) {
-      return `${API_ERROR_MESSAGE_PREFIX}: xAI rejected the request because this account has no available Grok API credits or subscription access. Add credits at https://grok.com/?_s=usage, upgrade your Grok plan, or run /provider to switch providers. Details: ${error.message}`
-    }
-
-    return `${API_ERROR_MESSAGE_PREFIX}: xAI authentication failed. Run /provider and choose xAI OAuth again, run \`gakrcli auth xai login\`, or switch providers. Details: ${error.message}`
-  }
-
-  return `${API_ERROR_MESSAGE_PREFIX}: Authentication failed for ${provider}. Run /provider to update credentials or switch providers. Details: ${error.message}`
-}
-
 export function startsWithApiErrorPrefix(text: string): boolean {
   return (
     text.startsWith(API_ERROR_MESSAGE_PREFIX) ||
@@ -290,16 +259,28 @@ function parseSafePositiveInteger(raw: string): number | undefined {
   return value
 }
 
+/**
+ * Parses provider-returned output token caps from runtime request errors.
+ * These are lower than static model metadata because gateways may account for
+ * prompt size or route-specific output limits at request time.
+ *
+ * OpenRouter-style 402 affordability errors are intentionally excluded here.
+ * Those are adjusted inside withRetry so that path has one recovery owner.
+ */
 export function parseProviderMaxTokensCap(
   rawMessage: string,
 ): number | undefined {
   for (const pattern of PROVIDER_MAX_TOKENS_CAP_PATTERNS) {
     const match = rawMessage.match(pattern)
     const rawCap = match?.slice(1).find(Boolean)
-    if (!rawCap) continue
+    if (!rawCap) {
+      continue
+    }
 
     const cap = parseSafePositiveInteger(rawCap)
-    if (cap !== undefined) return cap
+    if (cap !== undefined) {
+      return cap
+    }
   }
 
   return undefined
@@ -308,7 +289,10 @@ export function parseProviderMaxTokensCap(
 export function getProviderMaxTokensCapFromMessage(
   msg: AssistantMessage | undefined,
 ): number | undefined {
-  if (msg?.type !== 'assistant' || msg.apiError !== 'max_tokens_too_high') {
+  if (
+    msg?.type !== 'assistant' ||
+    msg.apiError !== 'max_tokens_too_high'
+  ) {
     return undefined
   }
 
@@ -322,7 +306,10 @@ export function getProviderMaxTokensCapFromMessage(
   }
 
   const text = content
-    .filter(block => block?.type === 'text' && typeof block.text === 'string')
+    .filter(
+      (block): block is Extract<typeof block, { type: 'text' }> =>
+        block?.type === 'text' && typeof block.text === 'string',
+    )
     .map(block => block.text)
     .join('\n')
 
@@ -413,22 +400,22 @@ export function getRequestTooLargeErrorMessage(): string {
     : `Request too large (${limits}). Double press esc to go back and try with a smaller file.`
 }
 export const OAUTH_ORG_NOT_ALLOWED_ERROR_MESSAGE =
-  'Your account does not have access to Gakr. Please run /login.'
+  'Your account does not have access to GakrCLI. Please run /login.'
 
 export function getTokenRevokedErrorMessage(): string {
   return getIsNonInteractiveSession()
-    ? 'Your account does not have access to Gakr. Please login again or contact your administrator.'
+    ? 'Your account does not have access to GakrCLI. Please login again or contact your administrator.'
     : TOKEN_REVOKED_ERROR_MESSAGE
 }
 
 export function getOauthOrgNotAllowedErrorMessage(): string {
   return getIsNonInteractiveSession()
-    ? 'Your organization does not have access to Gakr. Please login again or contact your administrator.'
+    ? 'Your organization does not have access to GakrCLI. Please login again or contact your administrator.'
     : OAUTH_ORG_NOT_ALLOWED_ERROR_MESSAGE
 }
 
 /**
- * Check if we're in CCR (GakrCLI Remote) mode.
+ * Check if we're in CCR (GakrCLI Code Remote) mode.
  * In CCR mode, auth is handled via JWTs provided by the infrastructure,
  * not via /login. Transient auth errors should suggest retrying, not logging in.
  */
@@ -694,7 +681,7 @@ export function getAssistantMessageFromError(
       })
     }
   }
-  
+
   // Check for emergency capacity off switch for Opus PAYG users
   if (
     error instanceof Error &&
@@ -709,7 +696,7 @@ export function getAssistantMessageFromError(
   if (
     error instanceof APIError &&
     error.status === 429 &&
-    shouldProcessRateLimits(isgakrcliAISubscriber())
+    shouldProcessRateLimits(isGakrCLIAISubscriber())
   ) {
     // Check if this is the new API with multiple rate limit headers
     const rateLimitType = error.headers?.get?.(
@@ -723,7 +710,7 @@ export function getAssistantMessageFromError(
     // If we have the new headers, use the new message generation
     if (rateLimitType || overageStatus) {
       // Build limits object from error headers to determine the appropriate message
-      const limits: gakrcliAILimits = {
+      const limits: GakrCLIAILimits = {
         status: 'rejected',
         unifiedRateLimitFallbackAvailable: false,
         isUsingOverage: false,
@@ -783,7 +770,7 @@ export function getAssistantMessageFromError(
     // (e.g. 1M context without Extra Usage) and infra capacity 429s land here.
     if (error.message.includes('Extra usage is required for long context')) {
       const hint = getIsNonInteractiveSession()
-        ? 'enable extra usage at gakr.ai/settings/usage, or use --model to switch to standard context'
+        ? 'enable extra usage at gakrcli.ai/settings/usage, or use --model to switch to standard context'
         : 'run /extra-usage to enable, or /model to switch to standard context'
       return createAssistantAPIErrorMessage({
         content: `${API_ERROR_MESSAGE_PREFIX}: Extra usage is required for 1M context · ${hint}`,
@@ -994,7 +981,7 @@ export function getAssistantMessageFromError(
 
   // Check for invalid model name error for subscription users trying to use Opus
   if (
-    isgakrcliAISubscriber() &&
+    isGakrCLIAISubscriber() &&
     error instanceof APIError &&
     error.status === 400 &&
     error.message.toLowerCase().includes('invalid model name') &&
@@ -1002,12 +989,12 @@ export function getAssistantMessageFromError(
   ) {
     return createAssistantAPIErrorMessage({
       content:
-        'GakrCLI Opus is not available with the GakrCLI Pro plan. If you have updated your subscription plan recently, run /logout and /login for the plan to take effect.',
+        'claude opus is not available with the GakrCLI Pro plan. If you have updated your subscription plan recently, run /logout and /login for the plan to take effect.',
       error: 'invalid_request',
     })
   }
 
-  // Check for invalid model name error for Ant users. GakrCLI may be
+  // Check for invalid model name error for Ant users. GakrCLI Code may be
   // defaulting to a custom internal-only model for Ants, and there might be
   // Ants using new or unknown org IDs that haven't been gated in.
   if (
@@ -1018,7 +1005,7 @@ export function getAssistantMessageFromError(
   ) {
     // Get organization ID from config - only use OAuth account data when actively using OAuth
     const orgId = getOauthAccountInfo()?.organizationUuid
-    const baseMsg = `[ANT-ONLY] Your org isn't gated into the \`${model}\` model. Either run \`gakrcli\` with \`ANTHROPIC_MODEL=${getDefaultMainLoopModelSetting()}\``
+    const baseMsg = `[internal] Your org isn't gated into the \`${model}\` model. Either run \`gakrcli\` with \`ANTHROPIC_MODEL=${getDefaultMainLoopModelSetting()}\``
     const msg = orgId
       ? `${baseMsg} or share your orgId (${orgId}) in ${MACRO.FEEDBACK_CHANNEL} for help getting access.`
       : `${baseMsg} or reach out in ${MACRO.FEEDBACK_CHANNEL} for help getting access.`
@@ -1038,7 +1025,6 @@ export function getAssistantMessageFromError(
       error: 'billing_error',
     })
   }
-
   // "Organization has been disabled" — commonly a stale ANTHROPIC_API_KEY
   // from a previous employer/project overriding subscription auth. Only handle
   // the env-var case; apiKeyHelper and /login-managed keys mean the active
@@ -1056,9 +1042,9 @@ export function getAssistantMessageFromError(
     if (
       source === 'ANTHROPIC_API_KEY' &&
       process.env.ANTHROPIC_API_KEY &&
-      !isgakrcliAISubscriber()
+      !isGakrCLIAISubscriber()
     ) {
-      const hasStoredOAuth = getgakrcliAIOAuthTokens()?.accessToken != null
+      const hasStoredOAuth = getGakrCLIAIOAuthTokens()?.accessToken != null
       // Not 'authentication_failed' — that triggers VS Code's showLogin(), but
       // login can't fix this (approved env var keeps overriding OAuth). The fix
       // is configuration-based (unset the var), so invalid_request is correct.
@@ -1136,19 +1122,11 @@ export function getAssistantMessageFromError(
       })
     }
 
-    const thirdPartyAuthErrorMessage = getThirdPartyAuthErrorMessage(error)
-    if (thirdPartyAuthErrorMessage) {
-      return createAssistantAPIErrorMessage({
-        error: 'authentication_failed',
-        content: thirdPartyAuthErrorMessage,
-      })
-    }
-
     return createAssistantAPIErrorMessage({
       error: 'authentication_failed',
       content: getIsNonInteractiveSession()
-        ? `Failed to authenticate. ${API_ERROR_MESSAGE_PREFIX}: ${error.message}`
-        : `Please run /login · ${API_ERROR_MESSAGE_PREFIX}: ${error.message}`,
+        ? `Failed to authenticate. ${API_ERROR_MESSAGE_PREFIX}: Authentication failed (status ${error.status}). Check your API key configuration.`
+        : `Please run /login · ${API_ERROR_MESSAGE_PREFIX}: Authentication failed (status ${error.status}). Check your API key configuration.`,
     })
   }
 
@@ -1206,7 +1184,7 @@ export function getAssistantMessageFromError(
       errorDetails: `Context overflow (500): ${error.message}`,
     })
   }
-  
+
   // Connection errors (non-timeout) — use formatAPIError for detailed messages
   if (error instanceof APIConnectionError) {
     return createAssistantAPIErrorMessage({
@@ -1494,9 +1472,10 @@ export function getErrorMessageIfRefusal(
     ? `${API_ERROR_MESSAGE_PREFIX}: GakrCLI is unable to respond to this request, which appears to violate our Usage Policy (${usagePolicyUrl}). Try rephrasing the request or attempting a different approach.`
     : `${API_ERROR_MESSAGE_PREFIX}: GakrCLI is unable to respond to this request, which appears to violate our Usage Policy (${usagePolicyUrl}). Please double press esc to edit your last message or start a new session for GakrCLI to assist with a different task.`
 
+  const defaultModel = getDefaultMainLoopModel()
   const modelSuggestion =
-    model !== 'gakrcli-sonnet-4-20250514'
-      ? ' If you are seeing this refusal repeatedly, try running /model gakrcli-sonnet-4-20250514 to switch models.'
+    model !== defaultModel
+      ? ` If you are seeing this refusal repeatedly, try running /model ${defaultModel} to switch models.`
       : ''
 
   return createAssistantAPIErrorMessage({

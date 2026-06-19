@@ -1,10 +1,12 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { tmpdir } from 'os'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import {
   acquireSharedMutationLock,
   releaseSharedMutationLock,
 } from '../test/sharedMutationLock.js'
+import { setGakrCLIConfigHomeDirForTesting } from './envUtils.js'
+import * as realEnvUtils from './envUtils.js'
 
 const originalEnv = { ...process.env }
 const originalCwd = process.cwd()
@@ -19,25 +21,67 @@ beforeEach(async () => {
   await acquireSharedMutationLock('workspace.test.ts')
   fsPromises = await import('fs/promises')
   bootstrapState = await import('../bootstrap/state.js')
-  memoryFiles = await import('./gakrclimd.js')
-  workspace = await import('./workspace.js')
 
   tempDir = await fsPromises.mkdtemp(join(tmpdir(), 'gakrcli-workspace-test-'))
   process.env.GAKR_CONFIG_DIR = join(tempDir, '.gakrcli')
-  delete process.env.GAKRCLI_WORKSPACE_DIR
   delete process.env.GAKR_WORKSPACE_DIR
-  delete process.env.GAKRCLI_WORKSPACE_TEMPLATE_DIR
+  delete process.env.GAKR_WORKSPACE_TEMPLATE_DIR
   bootstrapState.setOriginalCwd(originalCwd)
+
+  // Mock envUtils so path-returning functions ignore the global override
+  // variable that concurrent tests (20+ files) corrupt without the env
+  // mutex. The mock replaces only the functions that read the override;
+  // all other exports pass through to the real implementation.
+  mock.module('./envUtils.js', () => {
+    // Don't read process.env at runtime — concurrent tests (20+ files
+    // without a lock) can corrupt GAKR_CONFIG_DIR mid-test.  Hardcode the
+    // tempDir-based path once, captured by the closure at mock creation.
+    const configHomeDir = join(tempDir, '.gakrcli').normalize('NFC')
+    const workspaceDir = join(configHomeDir, 'workspace').normalize('NFC')
+    const projectsDir = join(workspaceDir, 'projects').normalize('NFC')
+    return {
+      getGakrCLIConfigHomeDir: () => configHomeDir,
+      getgakrcliConfigHomeDir: () => configHomeDir,
+      getGakrCLIWorkspaceDir: () => workspaceDir,
+      getProjectsDir: () => projectsDir,
+      getTeamsDir: () => join(configHomeDir, 'teams'),
+      setGakrCLIConfigHomeDirForTesting: () => {},
+
+      resolveGakrCLIConfigHomeDir: realEnvUtils.resolveGakrCLIConfigHomeDir,
+      migrateLegacyGakrCLIConfigHomeDir:
+        realEnvUtils.migrateLegacyGakrCLIConfigHomeDir,
+      hasNodeOption: realEnvUtils.hasNodeOption,
+      isEnvTruthy: realEnvUtils.isEnvTruthy,
+      isEnvDefinedFalsy: realEnvUtils.isEnvDefinedFalsy,
+      isBareMode: realEnvUtils.isBareMode,
+      parseEnvVars: realEnvUtils.parseEnvVars,
+      getAWSRegion: realEnvUtils.getAWSRegion,
+      getDefaultVertexRegion: realEnvUtils.getDefaultVertexRegion,
+      shouldMaintainProjectWorkingDir:
+        realEnvUtils.shouldMaintainProjectWorkingDir,
+      isRunningOnHomespace: realEnvUtils.isRunningOnHomespace,
+      isInProtectedNamespace: realEnvUtils.isInProtectedNamespace,
+      getVertexRegionForModel: realEnvUtils.getVertexRegionForModel,
+    }
+  })
+
+  memoryFiles = await import('./gakrclimd.js')
   memoryFiles.clearMemoryFileCaches()
+
+  workspace = await import('./workspace.js')
 })
 
 afterEach(async () => {
   try {
     memoryFiles.clearMemoryFileCaches()
     process.env = { ...originalEnv }
+    setGakrCLIConfigHomeDirForTesting(undefined)
     bootstrapState.setOriginalCwd(originalCwd)
     await fsPromises.rm(tempDir, { recursive: true, force: true })
   } finally {
+    mock.module('./envUtils.js', () => ({
+      ...realEnvUtils,
+    }))
     releaseSharedMutationLock()
   }
 })
@@ -112,7 +156,7 @@ describe('GakrCLI workspace', () => {
       'custom packaged workspace instructions',
       'utf8',
     )
-    process.env.GAKRCLI_WORKSPACE_TEMPLATE_DIR = templateDir
+    process.env.GAKR_WORKSPACE_TEMPLATE_DIR = templateDir
 
     workspace = await import(`./workspace.ts?ts=${Date.now()}-${Math.random()}`)
     await workspace.ensureGakrcliWorkspace()
@@ -156,7 +200,7 @@ describe('GakrCLI workspace', () => {
       'legacy packaged workspace instructions',
       'utf8',
     )
-    process.env.GAKRCLI_WORKSPACE_TEMPLATE_DIR = templateDir
+    process.env.GAKR_WORKSPACE_TEMPLATE_DIR = templateDir
 
     workspace = await import(`./workspace.ts?ts=${Date.now()}-${Math.random()}`)
     await workspace.ensureGakrcliWorkspace()
@@ -193,7 +237,7 @@ describe('GakrCLI workspace', () => {
       true,
     )
 
-    const rendered = memoryFiles.getgakrcliMds(files)
+    const rendered = memoryFiles.getGakrCLIMds(files)
     expect(rendered).toContain('## GakrCLI Workspace Context')
     expect(rendered).toContain(
       'GakrCLI loaded these user-editable workspace files',
@@ -239,7 +283,7 @@ describe('GakrCLI workspace', () => {
     await expect(fsPromises.stat(bootstrapPath)).rejects.toThrow()
 
     memoryFiles.clearMemoryFileCaches()
-    const rendered = memoryFiles.getgakrcliMds(await memoryFiles.getMemoryFiles())
+    const rendered = memoryFiles.getGakrCLIMds(await memoryFiles.getMemoryFiles())
     expect(rendered).not.toContain('BOOTSTRAP.md: first-run workspace setup')
     expect(rendered).not.toContain('# BOOTSTRAP.md')
   })
@@ -281,7 +325,7 @@ describe('GakrCLI workspace', () => {
     expect(typeof state.setupCompletedAt).toBe('string')
 
     memoryFiles.clearMemoryFileCaches()
-    const rendered = memoryFiles.getgakrcliMds(await memoryFiles.getMemoryFiles())
+    const rendered = memoryFiles.getGakrCLIMds(await memoryFiles.getMemoryFiles())
     expect(rendered).not.toContain('BOOTSTRAP.md: first-run workspace setup')
     expect(rendered).not.toContain('# BOOTSTRAP.md')
   })

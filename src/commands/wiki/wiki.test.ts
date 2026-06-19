@@ -2,7 +2,6 @@ import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { mkdtemp, rm } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { runWithCwdOverride } from '../../utils/cwd.js'
 import { call } from './wiki.js'
 import {
   acquireSharedMutationLock,
@@ -31,11 +30,9 @@ async function makeProjectDir(): Promise<string> {
 
 async function runWiki(cwd: string, args = ''): Promise<string> {
   let output = ''
-  await runWithCwdOverride(cwd, async () => {
-    await call((message: string) => {
-      output = message
-    }, {} as never, args)
-  })
+  await call((message: string) => {
+    output = message
+  }, { cwd } as never, args)
   return output
 }
 

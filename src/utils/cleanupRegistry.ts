@@ -4,16 +4,16 @@
  */
 
 // Global registry for cleanup functions
-type CleanupFunction = () => void | Promise<void>
-
-const cleanupFunctions = new Set<CleanupFunction>()
+const cleanupFunctions = new Set<() => void | Promise<void>>()
 
 /**
  * Register a cleanup function to run during graceful shutdown.
  * @param cleanupFn - Function to run during cleanup (can be sync or async)
  * @returns Unregister function that removes the cleanup handler
  */
-export function registerCleanup(cleanupFn: CleanupFunction): () => void {
+export function registerCleanup(
+  cleanupFn: () => void | Promise<void>,
+): () => void {
   cleanupFunctions.add(cleanupFn)
   return () => cleanupFunctions.delete(cleanupFn) // Return unregister function
 }

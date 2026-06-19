@@ -24,12 +24,12 @@ import type {
 } from '../utils/providerDiscovery.js'
 import {
   fetchOpenAICompatibleModelsRaw,
-  listOpenAICompatibleModelEntries,
+  listOpenAICompatibleModels,
   probeOllamaModelCatalog,
   probeAtomicChatReadiness,
   probeOllamaGenerationReadiness,
-  type OpenAICompatibleModelInfo,
 } from '../utils/providerDiscovery.js'
+import { parseCustomHeadersEnv } from '../utils/providerCustomHeaders.js'
 import { isEssentialTrafficOnly } from '../utils/privacyLevel.js'
 
 export type RouteDiscoveryResult = {
@@ -73,7 +73,7 @@ function getCatalogEntries(
   return getRouteCatalog(routeId)?.models ?? []
 }
 
-function getDiscoveryCacheTtlMs(
+export function getDiscoveryCacheTtlMs(
   routeId: string,
 ): number {
   const ttl = getRouteCatalog(routeId)?.discoveryCacheTtl ?? 0
@@ -103,7 +103,10 @@ function normalizeDiscoveryCacheHeaders(
   headers: Record<string, string> | undefined,
 ): Array<[string, string]> {
   return Object.entries(headers ?? {})
-    .map(([name, value]) => [name.trim().toLowerCase(), value.trim()] as const)
+    .map(([name, value]): [string, string] => [
+      name.trim().toLowerCase(),
+      value.trim(),
+    ])
     .filter(([name, value]) => name && value)
     .sort(([leftName], [rightName]) => leftName.localeCompare(rightName))
 }
@@ -176,23 +179,11 @@ function getRouteDiscoveryHeaders(
   return Object.keys(headers).length > 0 ? headers : undefined
 }
 
-function toDiscoveredModelEntry(
-  model: string | OpenAICompatibleModelInfo,
-): ModelCatalogEntry {
-  if (typeof model !== 'string') {
-    return {
-      id: model.id,
-      apiName: model.id,
-      ...(model.label ? { label: model.label } : {}),
-      ...(model.owner ? { owner: model.owner } : {}),
-      ...(model.contextWindow ? { contextWindow: model.contextWindow } : {}),
-    }
-  }
-
+function toDiscoveredModelEntry(modelId: string): ModelCatalogEntry {
   return {
-    id: model,
-    apiName: model,
-    label: model,
+    id: modelId,
+    apiName: modelId,
+    label: modelId,
   }
 }
 
@@ -260,21 +251,16 @@ async function runDiscovery(
           return null
         }
         const entries: ModelCatalogEntry[] = []
-        const seenApiNames = new Set<string>()
         for (const raw of rawModels) {
           const entry = discovery.mapModel(raw)
           if (entry !== null) {
-            const normalizedApiName = entry.apiName.trim().toLowerCase()
-            if (!normalizedApiName || seenApiNames.has(normalizedApiName)) {
-              continue
-            }
-            seenApiNames.add(normalizedApiName)
             entries.push(entry)
           }
         }
         return entries
       }
-      const models = await listOpenAICompatibleModelEntries({
+
+      const models = await listOpenAICompatibleModels({
         baseUrl: getRouteBaseUrl(routeId, options),
         apiKey: getRouteDiscoveryApiKey(routeId, options),
         headers: getRouteDiscoveryHeaders(routeId, options),
@@ -450,13 +436,15 @@ export async function refreshStartupDiscoveryForActiveRoute(
     }) ??
     resolveRouteIdFromBaseUrl(baseUrl)
 
-  if (!routeId || routeId === 'anthropic' || routeId === 'custom') {
+  if (!routeId || routeId === 'anthropic') {
     return null
   }
 
   return refreshStartupDiscoveryForRoute(routeId, {
     baseUrl,
-    headers: options?.headers,
+    headers:
+      options?.headers ??
+      parseCustomHeadersEnv(processEnv.ANTHROPIC_CUSTOM_HEADERS),
     apiKey:
       options?.apiKey ??
       resolveRouteCredentialValue({

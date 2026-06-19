@@ -28,7 +28,7 @@ import { TEAM_LEAD_NAME } from './swarm/constants.js'
 import { sanitizePathComponent } from './tasks.js'
 import { getAgentName, getTeammateColor, getTeamName } from './teammate.js'
 
-// Lock options: retry with backoff so concurrent callers (multiple gakrclis
+// Lock options: retry with backoff so concurrent callers (multiple GakrCLIs
 // in a swarm) wait for the lock instead of failing immediately. The sync
 // lockSync API blocked the event loop; the async API needs explicit retries
 // to achieve the same serialization semantics.

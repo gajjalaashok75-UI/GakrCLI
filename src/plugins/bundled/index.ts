@@ -9,16 +9,23 @@
  * features with complex setup or automatic-enabling logic (e.g.
  * gakrcli-in-chrome), use src/skills/bundled/ instead.
  *
- * To add a new built-in plugin:
+ *  * To add a new built-in plugin:
  * 1. Import registerBuiltinPlugin from '../builtinPlugins.js'
  * 2. Call registerBuiltinPlugin() with the plugin definition here
+ *
+ * To add a new built-in plugin:
+ * 1. Import its registerXPlugin() helper from the plugin module here
+ * 2. Call that helper from initBuiltinPlugins()
  */
+
+import { registerKarpathyGuidelinesPlugin } from './karpathyGuidelines.js'
 
 /**
  * Initialize built-in plugins. Called during CLI startup.
  */
 export function initBuiltinPlugins(): void {
-  // No built-in plugins are registered today.
+  // one built-in plugins are registered today.
   // The official plugin source is a built-in marketplace, installed by
   // performStartupChecks(), rather than a visible @builtin plugin row.
+  registerKarpathyGuidelinesPlugin()
 }

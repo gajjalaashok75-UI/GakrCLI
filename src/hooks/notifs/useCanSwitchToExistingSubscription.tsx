@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { getOauthProfileFromApiKey } from 'src/services/oauth/getOauthProfile.js';
-import { isgakrcliAISubscriber, isUsing3PServices } from 'src/utils/auth.js';
+import { isGakrCLIAISubscriber } from 'src/utils/auth.js';
 import { Text } from '../../ink.js';
 import { logEvent } from '../../services/analytics/index.js';
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js';
@@ -19,16 +19,10 @@ export function useCanSwitchToExistingSubscription() {
  * This helps inform users they should run /login to access their subscription.
  */
 async function _temp2() {
-  // Don't show this notification when using third-party services (NVIDIA, etc.)
-  // Users of these providers don't need to login to Anthropic/Gakr
-  if (isUsing3PServices()) {
-    return null;
-  }
-
   if ((getGlobalConfig().subscriptionNoticeCount ?? 0) >= MAX_SHOW_COUNT) {
     return null;
   }
-  const subscriptionType = await getExistinggakrcliSubscription();
+  const subscriptionType = await getExistingGakrCLISubscription();
   if (subscriptionType === null) {
     return null;
   }
@@ -36,8 +30,8 @@ async function _temp2() {
   logEvent("tengu_switch_to_subscription_notice_shown", {});
   return {
     key: "switch-to-subscription",
-    jsx: <Text color="suggestion">Use your existing GakrCLI {subscriptionType} plan with Gakr<Text color="text" dimColor={true}>{" "}· /login to activate</Text></Text>,
-    priority: "low"
+    jsx: <Text color="suggestion">Use your existing GakrCLI {subscriptionType} plan with GakrCLI Code<Text color="text" dimColor={true}>{" "}· /login to activate</Text></Text>,
+    priority: "low" as const
   };
 }
 function _temp(current) {
@@ -46,9 +40,9 @@ function _temp(current) {
     subscriptionNoticeCount: (current.subscriptionNoticeCount ?? 0) + 1
   };
 }
-async function getExistinggakrcliSubscription(): Promise<'Max' | 'Pro' | null> {
+async function getExistingGakrCLISubscription(): Promise<'Max' | 'Pro' | null> {
   // If already using subscription auth, there is nothing to switch to
-  if (isgakrcliAISubscriber()) {
+  if (isGakrCLIAISubscriber()) {
     return null;
   }
   const profile = await getOauthProfileFromApiKey();

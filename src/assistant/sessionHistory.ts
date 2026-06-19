@@ -13,9 +13,10 @@ import {
   type SDKMessageCacheRecord,
 } from './sessionHistorySerialization.js'
 import {
-  createSession,
-  loadSession,
   saveSession,
+  loadSession,
+  listSessions,
+  createSession,
 } from '../utils/sessionPersistence.js'
 
 export const HISTORY_PAGE_SIZE = 100

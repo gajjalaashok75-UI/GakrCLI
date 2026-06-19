@@ -1,30 +1,33 @@
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test'
 import {
   createSession,
-  deleteSession,
-  listSessions,
-  loadSession,
   saveSession,
+  loadSession,
+  listSessions,
+  deleteSession,
 } from './sessionPersistence.js'
 import { join } from 'node:path'
+import { unlink } from 'node:fs/promises'
 import { mkdirSync, rmSync } from 'fs'
 
 describe('sessionPersistence', () => {
-  const testSessionDir = join(
-    process.cwd(),
-    '.tmp',
-    'gakrcli-test-sessions',
-  )
+  const testSessionDir = join(process.env.TEMP_DIR ?? '/tmp', 'gakrcli-test-sessions')
 
   beforeEach(async () => {
     process.env.GAKR_TEST_SESSIONS_DIR = testSessionDir
-    rmSync(testSessionDir, { recursive: true, force: true })
     mkdirSync(testSessionDir, { recursive: true })
+    try {
+      const sessions = await listSessions()
+      for (const s of sessions) {
+        if (s.id.startsWith('test-')) {
+          await deleteSession(s.id)
+        }
+      }
+    } catch {}
   })
 
   afterEach(() => {
     delete process.env.GAKR_TEST_SESSIONS_DIR
-    rmSync(testSessionDir, { recursive: true, force: true })
   })
 
   describe('createSession', () => {

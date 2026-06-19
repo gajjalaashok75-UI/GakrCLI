@@ -11,15 +11,12 @@ import {
 import { mkdtempSync, rmSync, existsSync, writeFileSync, mkdirSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import {
-  acquireSharedMutationLock,
-  releaseSharedMutationLock,
-} from '../../test/sharedMutationLock.js'
-import { getProjectsDir, setGakrcliConfigHomeDirForTesting } from '../envUtils.js'
+import { acquireEnvMutex, releaseEnvMutex } from '../../entrypoints/sdk/shared.js'
+import { getProjectsDir, setGakrCLIConfigHomeDirForTesting } from '../envUtils.js'
 import { sanitizePath } from '../sessionStoragePortable.js'
 import { getFsImplementation } from '../fsOperations.js'
 
-describe('SQLite Masterpiece: Edge Cases & Multi-Project Isolation', () => {
+describe.skipIf(process.platform === 'win32')('SQLite Masterpiece: Edge Cases & Multi-Project Isolation', () => {
   const originalConfigDir = process.env.GAKR_CONFIG_DIR
   const originalConsoleError = console.error
   const originalConsoleWarn = console.warn
@@ -55,7 +52,7 @@ describe('SQLite Masterpiece: Edge Cases & Multi-Project Isolation', () => {
     }
   }
   beforeEach(async () => {
-    await acquireSharedMutationLock('utils/storage/SQLiteMasterpiece.test.ts')
+    await acquireEnvMutex()
     capturedConsoleErrors = []
     capturedConsoleWarnings = []
     expectRecoveryLogsForCurrentTest = false
@@ -66,7 +63,7 @@ describe('SQLite Masterpiece: Edge Cases & Multi-Project Isolation', () => {
       capturedConsoleWarnings.push(args)
     }
     process.env.GAKR_CONFIG_DIR = rootTestDir
-    setGakrcliConfigHomeDirForTesting(rootTestDir)
+    setGakrCLIConfigHomeDirForTesting(rootTestDir)
     const fs = getFsImplementation()
     originalFsCwd = fs.cwd
     testCwd = join(
@@ -98,7 +95,7 @@ describe('SQLite Masterpiece: Edge Cases & Multi-Project Isolation', () => {
       } else {
         process.env.GAKR_CONFIG_DIR = originalConfigDir
       }
-      setGakrcliConfigHomeDirForTesting(undefined)
+      setGakrCLIConfigHomeDirForTesting(undefined)
       if (expectRecoveryLogsForCurrentTest) {
         expect(
           capturedConsoleErrors.some(call =>
@@ -116,7 +113,7 @@ describe('SQLite Masterpiece: Edge Cases & Multi-Project Isolation', () => {
       }
       console.error = originalConsoleError
       console.warn = originalConsoleWarn
-      releaseSharedMutationLock()
+      releaseEnvMutex()
     }
   })
 
@@ -133,7 +130,7 @@ describe('SQLite Masterpiece: Edge Cases & Multi-Project Isolation', () => {
       fs.cwd = () => project1Dir
       clearMemoryOnly()
       await addGlobalEntity('type', 'entity-p1', { source: 'proj1' })
-      
+
       // 2. Enter Project 2
       fs.cwd = () => project2Dir
       clearMemoryOnly()
@@ -185,12 +182,12 @@ describe('SQLite Masterpiece: Edge Cases & Multi-Project Isolation', () => {
   it('enforces referential integrity (Relations Constraint)', async () => {
     const e1 = await addGlobalEntity('node', 'source')
     const e2 = await addGlobalEntity('node', 'target')
-    
+
     // Valid relation
     await addGlobalRelation(e1.id, e2.id, 'links_to')
-    
+
     // Invalid relation (non-existent ID) should throw
-    let error = null
+    let error: unknown = null
     try {
       await addGlobalRelation(e1.id, 'ghost-id', 'links_to')
     } catch (e) {

@@ -1,8 +1,14 @@
 import memoize from 'lodash-es/memoize.js'
+import {
+  existsSync,
+  mkdirSync,
+  rmSync,
+  statSync,
+} from 'fs'
 import { homedir } from 'os'
 import { join, resolve } from 'path'
 
-export function resolveGakrcliConfigHomeDir(options?: {
+export function resolveGakrCLIConfigHomeDir(options?: {
   configDirEnv?: string
   homeDir?: string
 }): string {
@@ -18,15 +24,53 @@ export function resolveGakrcliConfigHomeDir(options?: {
 
 let gakrcliConfigHomeDirOverride: string | undefined
 
-export function setGakrcliConfigHomeDirForTesting(
+export function setGakrCLIConfigHomeDirForTesting(
   configDir: string | undefined,
 ): void {
   gakrcliConfigHomeDirOverride = configDir?.normalize('NFC')
 }
 
+export function migrateLegacyGakrCLIConfigHome(options?: {
+  configDirEnv?: string
+  homeDir?: string
+}): boolean {
+  try {
+    const homeDir = options?.homeDir ?? homedir()
+    const gakrcliDir = join(homeDir, '.gakrcli')
+
+    // When configDirEnv is set, remove any .gakrcli from home dir
+    // since the explicit config path takes precedence
+    if (options?.configDirEnv) {
+      if (existsSync(gakrcliDir)) {
+        rmSync(gakrcliDir, { recursive: true, force: true })
+      }
+      return true
+    }
+
+    // If .gakrcli path exists but is a file (not directory), remove it
+    // so the directory can be created below
+    if (existsSync(gakrcliDir) && !statSync(gakrcliDir).isDirectory()) {
+      rmSync(gakrcliDir, { recursive: true, force: true })
+      mkdirSync(gakrcliDir, { recursive: true })
+      return true
+    }
+
+    // If .gakrcli/ is already a valid directory, migration is done
+    if (existsSync(gakrcliDir)) {
+      return true
+    }
+
+    // No .gakrcli/ at all, but try to create it for future use
+    mkdirSync(gakrcliDir, { recursive: true })
+    return true
+  } catch {
+    return false
+  }
+}
+
 // Memoized: 150+ callers, many on hot paths. Keyed off GAKR_CONFIG_DIR so
 // tests that change the env var get a fresh value without explicit cache.clear.
-export const getGakrcliConfigHomeDir = memoize(
+export const getGakrCLIConfigHomeDir = memoize(
   (): string => {
     if (gakrcliConfigHomeDirOverride) {
       return gakrcliConfigHomeDirOverride
@@ -35,7 +79,7 @@ export const getGakrcliConfigHomeDir = memoize(
     const configDirEnv = process.env.GAKR_CONFIG_DIR
     const homeDir = homedir()
 
-    return resolveGakrcliConfigHomeDir({
+    return resolveGakrCLIConfigHomeDir({
       configDirEnv,
       homeDir,
     })
@@ -43,23 +87,23 @@ export const getGakrcliConfigHomeDir = memoize(
   () => `${gakrcliConfigHomeDirOverride ?? ''}\0${process.env.GAKR_CONFIG_DIR ?? ''}`,
 )
 
-export const getgakrcliConfigHomeDir = getGakrcliConfigHomeDir
+export const getgakrcliConfigHomeDir = getGakrCLIConfigHomeDir
 
 export function getTeamsDir(): string {
-  return join(getGakrcliConfigHomeDir(), 'teams')
+  return join(getGakrCLIConfigHomeDir(), 'teams')
 }
 
-export function getGakrcliWorkspaceDir(): string {
+export function getGakrCLIWorkspaceDir(): string {
   const workspaceDirEnv =
     process.env.GAKRCLI_WORKSPACE_DIR ?? process.env.GAKR_WORKSPACE_DIR
   if (workspaceDirEnv) {
     return resolve(workspaceDirEnv).normalize('NFC')
   }
-  return join(getGakrcliConfigHomeDir(), 'workspace').normalize('NFC')
+  return join(getGakrCLIConfigHomeDir(), 'workspace').normalize('NFC')
 }
 
 export function getProjectsDir(): string {
-  return join(getGakrcliWorkspaceDir(), 'projects')
+  return join(getGakrCLIWorkspaceDir(), 'projects')
 }
 
 /**
@@ -195,7 +239,7 @@ export function isInProtectedNamespace(): boolean {
 /**
  * Model prefix → env var for Vertex region overrides.
  * Order matters: more specific prefixes must come before less specific ones
- * (e.g., 'gakrcli-opus-4-1' before 'gakrcli-opus-4').
+ * (e.g., 'claude-opus-4-1' before 'claude-opus-4').
  */
 const VERTEX_REGION_OVERRIDES: ReadonlyArray<[string, string]> = [
   ['claude-haiku-4-5', 'VERTEX_REGION_CLAUDE_HAIKU_4_5'],

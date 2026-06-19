@@ -331,7 +331,7 @@ export function findPlainTextUrlAt(
   let url = token.slice(urlStart, urlEnd)
 
   // Strip trailing sentence punctuation. For closers () ] }, only strip
-  // if unbalanced — `/docs/Foo_(bar)` keeps `)`, `/arr[0]` keeps `]`.
+  // if unbalanced — `/wiki/Foo_(bar)` keeps `)`, `/arr[0]` keeps `]`.
   const OPENER: Record<string, string> = { ')': '(', ']': '[', '}': '{' }
   while (url.length > 0) {
     const last = url.at(-1)!

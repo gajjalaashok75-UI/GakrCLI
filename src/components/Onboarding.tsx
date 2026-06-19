@@ -2,10 +2,11 @@ import { c as _c } from "react-compiler-runtime";
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from 'src/services/analytics/index.js';
 import { setupTerminal, shouldOfferTerminalSetup } from '../commands/terminalSetup/terminalSetup.js';
+import { PRODUCT_DISPLAY_NAME } from '../constants/product.js';
 import { useExitOnCtrlCDWithKeybindings } from '../hooks/useExitOnCtrlCDWithKeybindings.js';
-import { Box, Link, Newline, Text, useTheme } from '../ink.js';
+import { Box, Newline, Text, useTheme } from '../ink.js';
 import { useKeybindings } from '../keybindings/useKeybinding.js';
-import { isGakrcliOAuthEnabled } from '../utils/auth.js';
+import { isAnthropicAuthEnabled } from '../utils/auth.js';
 import { normalizeApiKeyForConfig } from '../utils/authPortable.js';
 import { getCustomApiKeyStatus } from '../utils/config.js';
 import { env } from '../utils/env.js';
@@ -17,10 +18,9 @@ import { ConsoleOAuthFlow } from './ConsoleOAuthFlow.js';
 import { Select } from './CustomSelect/select.js';
 import { WelcomeV2 } from './LogoV2/WelcomeV2.js';
 import { PressEnterToContinue } from './PressEnterToContinue.js';
-import { ProviderManager } from './ProviderManager.js';
 import { ThemePicker } from './ThemePicker.js';
 import { OrderedList } from './ui/OrderedList.js';
-type StepId = 'preflight' | 'theme' | 'provider' | 'oauth' | 'api-key' | 'security' | 'terminal-setup';
+type StepId = 'preflight' | 'theme' | 'oauth' | 'api-key' | 'security' | 'terminal-setup';
 interface OnboardingStep {
   id: StepId;
   component: React.ReactNode;
@@ -33,7 +33,7 @@ export function Onboarding({
 }: Props): React.ReactNode {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [skipOAuth, setSkipOAuth] = useState(false);
-  const [oauthEnabled] = useState(() => isGakrcliOAuthEnabled());
+  const [oauthEnabled] = useState(() => isAnthropicAuthEnabled());
   const [theme, setTheme] = useTheme();
   useEffect(() => {
     logEvent('tengu_began_setup', {
@@ -56,9 +56,6 @@ export function Onboarding({
     setTheme(newTheme);
     goToNextStep();
   }
-  function handleProviderDone() {
-    goToNextStep();
-  }
   const exitState = useExitOnCtrlCDWithKeybindings();
 
   // Define all onboarding steps
@@ -75,9 +72,10 @@ export function Onboarding({
          */}
         <OrderedList>
           <OrderedList.Item>
-            <Text>GakrCLI can make mistakes</Text>
+            <Text>{PRODUCT_DISPLAY_NAME} can make mistakes</Text>
             <Text dimColor wrap="wrap">
-              You should always review Gakr&apos;s responses, especially when
+              You should always review {PRODUCT_DISPLAY_NAME}&apos;s responses,
+              especially when
               <Newline />
               running code.
               <Newline />
@@ -88,9 +86,8 @@ export function Onboarding({
               Due to prompt injection risks, only use it with code you trust
             </Text>
             <Text dimColor wrap="wrap">
-              For more details see:
-              <Newline />
-              <Link url="https://github.com/gakr-gakr/gakr/docs/en/security" />
+              Repository files and tool output can contain instructions that try
+              to steer {PRODUCT_DISPLAY_NAME} toward unsafe tool use.
             </Text>
           </OrderedList.Item>
         </OrderedList>
@@ -98,12 +95,12 @@ export function Onboarding({
       <PressEnterToContinue />
     </Box>;
   const preflightStep = <PreflightStep onSuccess={goToNextStep} />;
-  // Create the steps array - provider setup is always first-run GakrCLI setup;
-  // OAuth and API-key approval are optional auth-specific steps.
+  // Create the steps array - determine which steps to include based on reAuth and oauthEnabled
   const apiKeyNeedingApproval = useMemo(() => {
-    // Add API key approval only when the current provider uses that compatible
-    // environment variable and GakrCLI auth is enabled.
-    if (!process.env.ANTHROPIC_API_KEY || isRunningOnHomespace() || !isGakrcliOAuthEnabled()) {
+    // Add API key step if needed
+    // On homespace, ANTHROPIC_API_KEY is preserved in process.env for child
+    // processes but ignored by GakrCLI Code itself (see auth.ts).
+    if (!process.env.ANTHROPIC_API_KEY || isRunningOnHomespace() || !isAnthropicAuthEnabled()) {
       return '';
     }
     const customApiKeyTruncated = normalizeApiKeyForConfig(process.env.ANTHROPIC_API_KEY);
@@ -128,12 +125,6 @@ export function Onboarding({
     id: 'theme',
     component: themeStep
   });
-  steps.push({
-    id: 'provider',
-    component: <Box marginX={1}>
-        <ProviderManager mode="first-run" onDone={handleProviderDone} />
-      </Box>
-  });
   if (apiKeyNeedingApproval) {
     steps.push({
       id: 'api-key',
@@ -156,7 +147,7 @@ export function Onboarding({
     steps.push({
       id: 'terminal-setup',
       component: <Box flexDirection="column" gap={1} paddingLeft={1}>
-          <Text bold>Use Gakr&apos;s terminal setup?</Text>
+          <Text bold>Use {PRODUCT_DISPLAY_NAME}&apos;s terminal setup?</Text>
           <Box flexDirection="column" width={70} gap={1}>
             <Text>
               For the optimal coding experience, enable the recommended settings

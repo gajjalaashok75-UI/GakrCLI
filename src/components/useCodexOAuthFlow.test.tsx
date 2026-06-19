@@ -136,10 +136,14 @@ test('does not restart OAuth when an inline authenticated callback changes after
   )
 
   function Harness(): React.ReactNode {
-    const status = useCodexOAuthFlow({
-      onAuthenticated: async (tokens, persistCredentials) => {
+    const handleAuthenticated = React.useCallback(
+      async (tokens: typeof TOKENS, persistCredentials: (options?: { profileId?: string }) => void) => {
         await onAuthenticated(tokens, persistCredentials)
       },
+      [onAuthenticated],
+    )
+    const status = useCodexOAuthFlow({
+      onAuthenticated: handleAuthenticated,
       deps,
     })
 
@@ -196,13 +200,21 @@ test('does not persist credentials when downstream setup rejects', async () => {
   )
 
   function Harness(): React.ReactNode {
-    const handleAuthenticated = React.useCallback(onAuthenticated, [onAuthenticated])
+    const handleAuthenticated = React.useCallback(onAuthenticated, [
+      onAuthenticated,
+    ])
     const status = useCodexOAuthFlow({
       onAuthenticated: handleAuthenticated,
       deps,
     })
 
-    return <Text>{status.state === 'error' ? status.message : status.state}</Text>
+    return (
+      <Text>
+        {status.state === 'error'
+          ? `Codex OAuth failed: ${status.message}`
+          : status.state}
+      </Text>
+    )
   }
 
   const streams = createTestStreams()
@@ -258,7 +270,9 @@ test('persists credentials with profile linkage after downstream setup succeeds'
   )
 
   function Harness(): React.ReactNode {
-    const handleAuthenticated = React.useCallback(onAuthenticated, [onAuthenticated])
+    const handleAuthenticated = React.useCallback(onAuthenticated, [
+      onAuthenticated,
+    ])
     useCodexOAuthFlow({
       onAuthenticated: handleAuthenticated,
       deps,

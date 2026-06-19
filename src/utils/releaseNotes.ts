@@ -4,7 +4,7 @@ import { dirname, join } from 'path'
 import { coerce } from 'semver'
 import { getIsNonInteractiveSession } from '../bootstrap/state.js'
 import { getGlobalConfig, saveGlobalConfig } from './config.js'
-import { getGakrcliConfigHomeDir } from './envUtils.js'
+import { getGakrCLIConfigHomeDir } from './envUtils.js'
 import { toError } from './errors.js'
 import { logError } from './log.js'
 import { isEssentialTrafficOnly } from './privacyLevel.js'
@@ -48,7 +48,7 @@ export const RELEASES_URL = GAKR_RELEASES_URL
  * The changelog is stored at ~/.gakrcli/cache/changelog.md
  */
 function getChangelogCachePath(): string {
-  return join(getGakrcliConfigHomeDir(), 'cache', 'changelog.md')
+  return join(getGakrCLIConfigHomeDir(), 'cache', 'changelog.md')
 }
 
 // In-memory cache populated by async reads. Sync callers (React render, sync

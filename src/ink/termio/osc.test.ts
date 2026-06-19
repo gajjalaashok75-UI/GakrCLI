@@ -11,8 +11,14 @@ const mockedClipboardPath = join(process.cwd(), 'gakrcli-clipboard.txt')
 
 const generateTempFilePathMock = mock(() => mockedClipboardPath)
 
+// Mirrors the execFileNoThrow/execFileNoThrowWithCwd signature so that
+// recorded calls keep usable tuple types ([file, args, options]).
 const execFileNoThrowMock = mock(
-  async () => ({ code: 0, stdout: '', stderr: '' }),
+  async (
+    _file: string,
+    _args: string[],
+    _options?: Record<string, unknown>,
+  ) => ({ code: 0, stdout: '', stderr: '' }),
 )
 
 function installOscMocks(): void {
@@ -97,7 +103,7 @@ describe('Windows clipboard fallback', () => {
     expect(windowsCall?.[2]).not.toMatchObject({ input: 'Привет мир' })
     expect(windowsCall?.[2]).not.toMatchObject({
       env: expect.objectContaining({
-        GAKRCLI_CLIPBOARD_TEXT_B64: expect.any(String),
+        GAKR_CLIPBOARD_TEXT_B64: expect.any(String),
       }),
     })
     expect(windowsCall?.[1]).toContain(

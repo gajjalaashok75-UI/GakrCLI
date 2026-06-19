@@ -14,8 +14,8 @@ import {
   ThinkingConfigSchema,
   AgentDefinitionSchema,
   McpServerStatusSchema,
-  ModelInfoSchema,
   ModelUsageSchema,
+  ModelInfoSchema,
   FastModeStateSchema,
   HookInputSchema,
   ExitReasonSchema,
@@ -213,7 +213,14 @@ describe('SDK Zod schemas (type generation source)', () => {
 
   test('PermissionModeSchema accepts valid modes', () => {
     const schema = PermissionModeSchema()
-    const modes = ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk']
+    const modes = [
+      'default',
+      'acceptEdits',
+      'bypassPermissions',
+      'fullAccess',
+      'plan',
+      'dontAsk',
+    ]
     for (const mode of modes) {
       expect(schema.safeParse(mode).success).toBe(true)
     }
@@ -265,7 +272,7 @@ describe('SDK Zod schemas (type generation source)', () => {
     const schema = ModelInfoSchema()
     const result = schema.safeParse({
       value: 'claude-opus-4-6',
-      displayName: 'Claude Opus 4.6',
+      displayName: 'claude opus 4.6',
       description: 'Most capable model',
       supportsEffort: true,
       supportedEffortLevels: ['low', 'medium', 'high', 'max'],

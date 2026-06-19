@@ -1,5 +1,5 @@
 import type { OverageDisabledReason } from 'src/services/gakrcliAiLimits.js'
-import { isgakrcliAISubscriber } from '../auth.js'
+import { isGakrCLIAISubscriber } from '../auth.js'
 import { getGlobalConfig } from '../config.js'
 import { is1mContextDisabled } from '../context.js'
 
@@ -48,7 +48,7 @@ export function checkOpus1mAccess(): boolean {
     return false
   }
 
-  if (isgakrcliAISubscriber()) {
+  if (isGakrCLIAISubscriber()) {
     // Subscribers have access if extra usage is enabled for their account
     return isExtraUsageEnabled()
   }
@@ -62,7 +62,7 @@ export function checkSonnet1mAccess(): boolean {
     return false
   }
 
-  if (isgakrcliAISubscriber()) {
+  if (isGakrCLIAISubscriber()) {
     // Subscribers have access if extra usage is enabled for their account
     return isExtraUsageEnabled()
   }

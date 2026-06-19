@@ -1,9 +1,9 @@
 /**
  * Brave Search API adapter.
  * GET https://api.search.brave.com/res/v1/web/search?q=...
- * Auth: X-Subscription-Token: <key> (bare token, no "Bearer" prefix)
+ * Auth: X-Subscription-Token: <key>   (bare token — no "Bearer" prefix)
  *
- * Brave runs an independent web index, making it useful as a non-Google,
+ * Brave runs an independent web index (~30B pages) — useful as a non-Google,
  * non-Bing fallback in the auto chain.
  */
 

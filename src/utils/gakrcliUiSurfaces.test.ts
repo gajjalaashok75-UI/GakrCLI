@@ -6,12 +6,12 @@ import {
   releaseSharedMutationLock,
 } from '../test/sharedMutationLock.js'
 
-import { isInGlobalgakrcliFolder } from '../components/permissions/FilePermissionDialog/permissionOptions.tsx'
+import { isInGlobalGakrCLIFolder } from '../components/permissions/FilePermissionDialog/permissionOptions.tsx'
 import { optionForPermissionSaveDestination } from '../components/permissions/rules/AddPermissionRules.tsx'
 import { getDefaultPermissionModeOptions } from './permissions/defaultPermissionModeOptions.ts'
 import {
-  getgakrcliSkillScope,
-  isgakrcliSettingsPath,
+  getGakrCLISkillScope,
+  isGakrCLISettingsPath,
 } from './permissions/filesystem.ts'
 import { getValidationTip } from './settings/validationTips.ts'
 
@@ -34,15 +34,15 @@ afterEach(() => {
 })
 
 describe('GakrCLI settings path surfaces', () => {
-  test('isgakrcliSettingsPath recognizes project .gakrcli settings files', () => {
+  test('isGakrCLISettingsPath recognizes project .gakrcli settings files', () => {
     expect(
-      isgakrcliSettingsPath(
+      isGakrCLISettingsPath(
         join(process.cwd(), '.gakrcli', 'settings.json'),
       ),
     ).toBe(true)
 
     expect(
-      isgakrcliSettingsPath(
+      isGakrCLISettingsPath(
         join(process.cwd(), '.gakrcli', 'settings.local.json'),
       ),
     ).toBe(true)
@@ -74,28 +74,30 @@ describe('GakrCLI settings path surfaces', () => {
     process.env.GAKR_CONFIG_DIR = join(homedir(), '.gakrcli')
 
     expect(
-      isInGlobalgakrcliFolder(join(homedir(), '.gakrcli', 'settings.json')),
+      isInGlobalGakrCLIFolder(
+        join(homedir(), '.gakrcli', 'settings.json'),
+      ),
     ).toBe(true)
     expect(
-      isInGlobalgakrcliFolder(join(homedir(), '.claude', 'settings.json')),
-    ).toBe(false)
+      isInGlobalGakrCLIFolder(join(homedir(), '.gakrcli', 'settings.json')),
+    ).toBe(true)
   })
 
   test('permission dialog does not treat arbitrary GAKR_CONFIG_DIR as the global GakrCLI folder', () => {
     process.env.GAKR_CONFIG_DIR = join(homedir(), 'custom-gakrcli')
 
     expect(
-      isInGlobalgakrcliFolder(
+      isInGlobalGakrCLIFolder(
         join(homedir(), 'custom-gakrcli', 'settings.json'),
       ),
     ).toBe(false)
   })
 
-  test('global skill scope recognizes ~/.gakrcli skills only', () => {
+  test('global skill scope recognizes ~/.gakrcli and legacy ~/.gakrcli skills', () => {
     process.env.GAKR_CONFIG_DIR = join(homedir(), '.gakrcli')
 
     expect(
-      getgakrcliSkillScope(
+      getGakrCLISkillScope(
         join(homedir(), '.gakrcli', 'skills', 'demo', 'SKILL.md'),
       ),
     ).toEqual({
@@ -104,17 +106,20 @@ describe('GakrCLI settings path surfaces', () => {
     })
 
     expect(
-      getgakrcliSkillScope(
-        join(homedir(), '.claude', 'skills', 'legacy', 'SKILL.md'),
+      getGakrCLISkillScope(
+        join(homedir(), '.gakrcli', 'skills', 'legacy', 'SKILL.md'),
       ),
-    ).toBe(null)
+    ).toEqual({
+      skillName: 'legacy',
+      pattern: '~/.gakrcli/skills/legacy/**',
+    })
   })
 
   test('global skill scope does not emit fixed rules for arbitrary GAKR_CONFIG_DIR skills', () => {
     process.env.GAKR_CONFIG_DIR = join(homedir(), 'custom-gakrcli')
 
     expect(
-      getgakrcliSkillScope(
+      getGakrCLISkillScope(
         join(homedir(), 'custom-gakrcli', 'skills', 'demo', 'SKILL.md'),
       ),
     ).toBe(null)
@@ -122,7 +127,7 @@ describe('GakrCLI settings path surfaces', () => {
 })
 
 describe('GakrCLI validation tips', () => {
-  test('permissions.defaultMode invalid value keeps suggestion but no Claude docs link', () => {
+  test('permissions.defaultMode invalid value keeps suggestion but no GakrCLI docs link', () => {
     const tip = getValidationTip({
       path: 'permissions.defaultMode',
       code: 'invalid_value',

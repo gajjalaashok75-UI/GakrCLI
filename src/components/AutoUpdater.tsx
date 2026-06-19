@@ -8,7 +8,7 @@ import { type AutoUpdaterResult, getLatestVersion, getMaxVersion, type InstallSt
 import { getGlobalConfig, isAutoUpdaterDisabled } from '../utils/config.js';
 import { logForDebugging } from '../utils/debug.js';
 import { getCurrentInstallationType } from '../utils/doctorDiagnostic.js';
-import { installOrUpdategakrcliPackage, localInstallationExists } from '../utils/localInstaller.js';
+import { installOrUpdateGakrCLIPackage, localInstallationExists } from '../utils/localInstaller.js';
 import { removeInstalledSymlink } from '../utils/nativeInstaller/index.js';
 import { gt, gte } from '../utils/semver.js';
 import { getInitialSettings } from '../utils/settings/settings.js';
@@ -49,7 +49,7 @@ export function AutoUpdater({
     if (isUpdatingRef.current) {
       return;
     }
-    if ("production" === 'test' || "production" === 'development') {
+    if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') {
       logForDebugging('AutoUpdater: Skipping update check in test/dev environment');
       return;
     }
@@ -107,7 +107,7 @@ export function AutoUpdater({
         // Use local update for local installations
         logForDebugging('AutoUpdater: Using local update method');
         updateMethod = 'local';
-        installStatus = await installOrUpdategakrcliPackage(channel);
+        installStatus = await installOrUpdateGakrCLIPackage(channel);
       } else if (installationType === 'npm-global') {
         // Use global update for global installations
         logForDebugging('AutoUpdater: Using global update method');
@@ -124,7 +124,7 @@ export function AutoUpdater({
         const isMigrated = config.installMethod === 'local';
         updateMethod = isMigrated ? 'local' : 'global';
         if (isMigrated) {
-          installStatus = await installOrUpdategakrcliPackage(channel);
+          installStatus = await installOrUpdateGakrCLIPackage(channel);
         } else {
           installStatus = await installGlobalPackage();
         }
@@ -190,7 +190,7 @@ export function AutoUpdater({
       {(autoUpdaterResult?.status === 'install_failed' || autoUpdaterResult?.status === 'no_permissions') && <Text color="error" wrap="truncate">
           ✗ Auto-update failed &middot; Try <Text bold>gakrcli doctor</Text> or{' '}
           <Text bold>
-            {hasLocalInstall ? `cd ~/.gakrcli/local && npm update ${MACRO.PACKAGE_URL}` : `npm i -g ${MACRO.PACKAGE_URL}`}
+            {hasLocalInstall ? `cd ~/.gakrcli/local && npm update ${MACRO.PACKAGE_URL}` : `npm i -g ${MACRO.PACKAGE_URL}@latest`}
           </Text>
         </Text>}
     </Box>;

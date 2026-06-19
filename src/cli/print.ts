@@ -1,4 +1,4 @@
-// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
+// biome-ignore-all assist/source/organizeImports: internal-only import markers must not be reordered
 import { feature } from 'bun:bundle'
 import { readFile, stat } from 'fs/promises'
 import { dirname } from 'path'
@@ -127,7 +127,7 @@ import type {
   SDKControlMcpSetServersResponse,
   SDKControlReloadPluginsResponse,
 } from 'src/entrypoints/sdk/controlTypes.js'
-import type { PermissionMode } from 'src/types/permissions.js'
+import type { PermissionMode } from '@anthropic-ai/gakrcli-agent-sdk'
 import type { PermissionMode as InternalPermissionMode } from 'src/types/permissions.js'
 import { cwd } from 'process'
 import { getCwd } from 'src/utils/cwd.js'
@@ -174,12 +174,11 @@ import {
   getFastModeState,
 } from 'src/utils/fastMode.js'
 import {
-  isAutoModeGateEnabled,
-  getAutoModeUnavailableNotification,
-  getAutoModeUnavailableReason,
-  isBypassPermissionsModeDisabled,
-  transitionPermissionMode,
+  applyPermissionModeChange,
+  getPermissionModeChangeRequestDecision,
 } from 'src/utils/permissions/permissionSetup.js'
+import { requestPermissionModeChange } from 'src/utils/permissions/permissionModeChange.js'
+import { permissionModeFromString } from 'src/utils/permissions/PermissionMode.js'
 import {
   tryGenerateSuggestion,
   logSuggestionOutcome,
@@ -262,7 +261,7 @@ import { collectContextData } from 'src/commands/context/context-noninteractive.
 import { LOCAL_COMMAND_STDOUT_TAG } from 'src/constants/xml.js'
 import {
   statusListeners,
-  type gakrcliAILimits,
+  type GakrCLIAILimits,
 } from 'src/services/gakrcliAiLimits.js'
 import {
   getDefaultMainLoopModel,
@@ -273,8 +272,7 @@ import {
 import { getModelOptions } from 'src/utils/model/modelOptions.js'
 import {
   modelSupportsEffort,
-  modelSupportsMaxEffort,
-  EFFORT_LEVELS,
+  getAvailableEffortLevels,
   resolveAppliedEffort,
 } from 'src/utils/effort.js'
 import { modelSupportsAdaptiveThinking } from 'src/utils/thinking.js'
@@ -362,15 +360,9 @@ const proactiveModule =
   feature('PROACTIVE') || feature('KAIROS')
     ? (require('../proactive/index.js') as typeof import('../proactive/index.js'))
     : null
-const cronSchedulerModule = feature('AGENT_TRIGGERS')
-  ? (require('../utils/cronScheduler.js') as typeof import('../utils/cronScheduler.js'))
-  : null
-const cronJitterConfigModule = feature('AGENT_TRIGGERS')
-  ? (require('../utils/cronJitterConfig.js') as typeof import('../utils/cronJitterConfig.js'))
-  : null
-const cronGate = feature('AGENT_TRIGGERS')
-  ? (require('../tools/ScheduleCronTool/prompt.js') as typeof import('../tools/ScheduleCronTool/prompt.js'))
-  : null
+const cronSchedulerModule = require('../utils/cronScheduler.js') as typeof import('../utils/cronScheduler.js')
+const cronJitterConfigModule = require('../utils/cronJitterConfig.js') as typeof import('../utils/cronJitterConfig.js')
+const cronGate = require('../tools/ScheduleCronTool/prompt.js') as typeof import('../tools/ScheduleCronTool/prompt.js')
 const extractMemoriesModule = feature('EXTRACT_MEMORIES')
   ? (require('../services/extractMemories/extractMemories.js') as typeof import('../services/extractMemories/extractMemories.js'))
   : null
@@ -544,9 +536,16 @@ export async function runHeadless(
     proactiveModule.activateProactive('command')
   }
 
-  // Periodically force a full GC to keep memory usage in check
-  if (typeof Bun !== 'undefined') {
-    const gcTimer = setInterval(Bun.gc, 1000)
+  // Periodically force a full GC to keep memory usage in check. The package
+  // launcher starts Node with --expose-gc; Bun exposes Bun.gc directly.
+  const forceGc =
+    typeof Bun !== 'undefined'
+      ? Bun.gc
+      : typeof (globalThis as { gc?: () => void }).gc === 'function'
+        ? (globalThis as { gc: () => void }).gc
+        : null
+  if (forceGc) {
+    const gcTimer = setInterval(forceGc, 1000)
     gcTimer.unref()
   }
 
@@ -684,6 +683,7 @@ export async function runHeadless(
     turnInterruptionState,
     agentSetting: resumedAgentSetting,
   } = await loadInitialMessages(setAppState, {
+    getAppState,
     continue: options.continue,
     teleport: options.teleport,
     resume: options.resume,
@@ -1063,6 +1063,7 @@ function runHeadlessStreaming(
       newMode === 'default' ||
       newMode === 'acceptEdits' ||
       newMode === 'bypassPermissions' ||
+      newMode === 'fullAccess' ||
       newMode === 'plan' ||
       newMode === (feature('TRANSCRIPT_CLASSIFIER') && 'auto') ||
       newMode === 'dontAsk'
@@ -1126,7 +1127,7 @@ function runHeadlessStreaming(
   // Set up rate limit status listener to emit SDKRateLimitEvent for all status changes.
   // Emitting for all statuses (including 'allowed') ensures consumers can clear warnings
   // when rate limits reset. The upstream emitStatusChange already deduplicates via isEqual.
-  const rateLimitListener = (limits: gakrcliAILimits) => {
+  const rateLimitListener = (limits: GakrCLIAILimits) => {
     const rateLimitInfo = toSDKRateLimitInfo(limits)
     if (rateLimitInfo) {
       output.enqueue({
@@ -1192,7 +1193,7 @@ function runHeadlessStreaming(
   }
 
   const modelOptions = getModelOptions()
-  const modelInfos = modelOptions.map(option => {
+  const modelInfos: ModelInfo[] = modelOptions.map((option): ModelInfo => {
     const modelId = option.value === null ? 'default' : option.value
     const resolvedModel =
       modelId === 'default'
@@ -1208,9 +1209,7 @@ function runHeadlessStreaming(
       description: option.description,
       ...(hasEffort && {
         supportsEffort: true,
-        supportedEffortLevels: modelSupportsMaxEffort(resolvedModel)
-          ? [...EFFORT_LEVELS]
-          : EFFORT_LEVELS.filter(l => l !== 'max'),
+        supportedEffortLevels: getAvailableEffortLevels(resolvedModel),
       }),
       ...(hasAdaptiveThinking && { supportsAdaptiveThinking: true }),
       ...(hasFastMode && { supportsFastMode: true }),
@@ -1508,7 +1507,7 @@ function runHeadlessStreaming(
   let bridgeLastForwardedIndex = 0
 
   // Forward new messages from mutableMessages to the bridge.
-  // Called incrementally during each turn (so gakr.ai sees progress
+  // Called incrementally during each turn (so gakrcli.ai sees progress
   // and stays alive during permission waits) and again after the turn.
   //
   // writeMessages has its own UUID-based dedup (initialMessageUUIDs,
@@ -2209,7 +2208,7 @@ function runHeadlessStreaming(
               },
             })) {
               // Forward messages to bridge incrementally (mid-turn) so
-              // gakr.ai sees progress and the connection stays alive
+              // gakrcli.ai sees progress and the connection stays alive
               // while blocked on permission requests.
               forwardMessagesToBridge()
 
@@ -2701,11 +2700,7 @@ function runHeadlessStreaming(
   // the end of run() picks up the queued command.
   let cronScheduler: import('../utils/cronScheduler.js').CronScheduler | null =
     null
-  if (
-    feature('AGENT_TRIGGERS') &&
-    cronSchedulerModule &&
-    cronGate?.isKairosCronEnabled()
-  ) {
+  if (cronGate.isKairosCronEnabled()) {
     cronScheduler = cronSchedulerModule.createCronScheduler({
       onFire: prompt => {
         if (inputClosed) return
@@ -2727,8 +2722,8 @@ function runHeadlessStreaming(
         void run()
       },
       isLoading: () => running || inputClosed,
-      getJitterConfig: cronJitterConfigModule?.getCronJitterConfig,
-      isKilled: () => !cronGate?.isKairosCronEnabled(),
+      getJitterConfig: cronJitterConfigModule.getCronJitterConfig,
+      isKilled: () => !cronGate.isKairosCronEnabled(),
     })
     cronScheduler.start()
   }
@@ -2829,7 +2824,7 @@ function runHeadlessStreaming(
 
       if (message.type === 'control_request') {
         if (message.request.subtype === 'interrupt') {
-          // Track escapes for attribution (ant-only feature)
+          // Track escapes for attribution (internal-only feature)
           if (feature('COMMIT_ATTRIBUTION')) {
             setAppState(prev => ({
               ...prev,
@@ -2917,14 +2912,15 @@ function runHeadlessStreaming(
           }
         } else if (message.request.subtype === 'set_permission_mode') {
           const m = message.request // for typescript (TODO: use readonly types to avoid this)
+          const nextToolPermissionContext = await handleSetPermissionMode(
+            m,
+            message.request_id,
+            getAppState().toolPermissionContext,
+            output,
+          )
           setAppState(prev => ({
             ...prev,
-            toolPermissionContext: handleSetPermissionMode(
-              m,
-              message.request_id,
-              prev.toolPermissionContext,
-              output,
-            ),
+            toolPermissionContext: nextToolPermissionContext,
             isUltraplanMode: m.ultraplan ?? prev.isUltraplanMode,
           }))
           // handleSetPermissionMode sends the control_response; the
@@ -3517,7 +3513,7 @@ function runHeadlessStreaming(
           // both URLs and wait. Automatic URL → localhost listener catches
           // the redirect if the browser is on this host; manual URL → the
           // success page shows "code#state" for gakrcli_oauth_callback.
-          const { loginWithgakrcliAi } = message.request
+          const { loginWithGakrCLIAi } = message.request
 
           // Clean up any prior flow. cleanup() closes the localhost listener
           // and nulls the manual resolver. The prior `flow` promise is left
@@ -3527,7 +3523,7 @@ function runHeadlessStreaming(
           gakrcliOAuth?.service.cleanup()
 
           logEvent('tengu_oauth_flow_start', {
-            loginWithgakrcliAi: loginWithgakrcliAi ?? true,
+            loginWithGakrCLIAi: loginWithGakrCLIAi ?? true,
           })
 
           const service = new OAuthService()
@@ -3550,7 +3546,7 @@ function runHeadlessStreaming(
                 urlResolver({ manualUrl, automaticUrl: automaticUrl! })
               },
               {
-                loginWithgakrcliAi: loginWithgakrcliAi ?? true,
+                loginWithGakrCLIAi: loginWithGakrCLIAi ?? true,
                 skipBrowserOpen: true,
               },
             )
@@ -3558,11 +3554,11 @@ function runHeadlessStreaming(
               // installOAuthTokens: performLogout (clear stale state) →
               // store profile → saveOAuthTokensIfNeeded → clearOAuthTokenCache
               // → clearAuthRelatedCaches. After this resolves, the memoized
-              // getgakrcliAIOAuthTokens in this process is invalidated; the
+              // getGakrCLIAIOAuthTokens in this process is invalidated; the
               // next API call re-reads keychain/file and works. No respawn.
               await installOAuthTokens(tokens)
               logEvent('tengu_oauth_success', {
-                loginWithgakrcliAi: loginWithgakrcliAi ?? true,
+                loginWithGakrCLIAi: loginWithGakrCLIAi ?? true,
               })
             })
             .finally(() => {
@@ -3765,7 +3761,7 @@ function runHeadlessStreaming(
             ...getSettingsWithSources(),
             applied: {
               model,
-              // Numeric effort (ant-only) → null; SDK schema is string-level only.
+              // Numeric effort (internal-only) → null; SDK schema is string-level only.
               effort: typeof effort === 'string' ? effort : null,
             },
           })
@@ -4157,15 +4153,19 @@ export function createCanUseToolWithPermissionPrompt(
     toolUseId,
     forceDecision,
   ) => {
+    const shouldBypassForcedAsk =
+      forceDecision?.behavior === 'ask' &&
+      toolUseContext.getAppState().toolPermissionContext.mode === 'fullAccess'
     const mainPermissionResult =
-      forceDecision ??
-      (await hasPermissionsToUseTool(
+      forceDecision !== undefined && !shouldBypassForcedAsk
+        ? forceDecision
+        : await hasPermissionsToUseTool(
         tool,
         input,
         toolUseContext,
         assistantMessage,
         toolUseId,
-      ))
+      )
 
     // If the tool is allowed or denied, return the result
     if (
@@ -4281,15 +4281,20 @@ export function getCanUseToolFn(
       assistantMessage,
       toolUseId,
       forceDecision,
-    ) =>
-      forceDecision ??
-      (await hasPermissionsToUseTool(
+    ) => {
+      const shouldBypassForcedAsk =
+        forceDecision?.behavior === 'ask' &&
+        toolUseContext.getAppState().toolPermissionContext.mode === 'fullAccess'
+      return forceDecision !== undefined && !shouldBypassForcedAsk
+        ? forceDecision
+        : await hasPermissionsToUseTool(
         tool,
         input,
         toolUseContext,
         assistantMessage,
         toolUseId,
-      ))
+      )
+    }
   }
   // Lazy lookup: MCP connects are per-server incremental in print mode, so
   // the tool may not be in appState yet at init time. Resolve on first call
@@ -4565,55 +4570,37 @@ async function handleRewindFiles(
   return { canRewind: true }
 }
 
-function handleSetPermissionMode(
+async function handleSetPermissionMode(
   request: { mode: InternalPermissionMode },
   requestId: string,
   toolPermissionContext: ToolPermissionContext,
   output: Stream<StdoutMessage>,
-): ToolPermissionContext {
-  // Check if trying to switch to bypassPermissions mode
-  if (request.mode === 'bypassPermissions') {
-    if (isBypassPermissionsModeDisabled()) {
-      output.enqueue({
-        type: 'control_response',
-        response: {
-          subtype: 'error',
-          request_id: requestId,
-          error:
-            'Cannot set permission mode to bypassPermissions because it is disabled by settings or configuration',
-        },
-      })
-      return toolPermissionContext
-    }
-    if (!toolPermissionContext.isBypassPermissionsModeAvailable) {
-      output.enqueue({
-        type: 'control_response',
-        response: {
-          subtype: 'error',
-          request_id: requestId,
-          error:
-            'Cannot set permission mode to bypassPermissions because the session was not launched with --dangerously-skip-permissions',
-        },
-      })
-      return toolPermissionContext
-    }
-  }
+): Promise<ToolPermissionContext> {
+  let nextToolPermissionContext = toolPermissionContext
+  let blockedError: string | undefined
 
-  // Check if trying to switch to auto mode without the classifier gate
-  if (
-    feature('TRANSCRIPT_CLASSIFIER') &&
-    request.mode === 'auto' &&
-    !isAutoModeGateEnabled()
-  ) {
-    const reason = getAutoModeUnavailableReason()
+  const result = await requestPermissionModeChange({
+    mode: request.mode,
+    toolPermissionContext,
+    allowDangerousModeConfirmation: false,
+    onApply: () => {
+      nextToolPermissionContext = applyPermissionModeChange(
+        toolPermissionContext,
+        request.mode,
+      )
+    },
+    onBlocked: error => {
+      blockedError = error
+    },
+  })
+
+  if (result.status !== 'applied') {
     output.enqueue({
       type: 'control_response',
       response: {
         subtype: 'error',
         request_id: requestId,
-        error: reason
-          ? `Cannot set permission mode to auto: ${getAutoModeUnavailableNotification(reason)}`
-          : 'Cannot set permission mode to auto',
+        error: blockedError ?? `Cannot set permission mode to ${request.mode}`,
       },
     })
     return toolPermissionContext
@@ -4631,13 +4618,38 @@ function handleSetPermissionMode(
     },
   })
 
+  return nextToolPermissionContext
+}
+
+async function sanitizeResumedExternalMetadata(
+  metadata: SessionExternalMetadata,
+  toolPermissionContext: ToolPermissionContext,
+): Promise<SessionExternalMetadata> {
+  if (typeof metadata.permission_mode !== 'string') {
+    return metadata
+  }
+
+  const resumedMode = permissionModeFromString(metadata.permission_mode)
+  if (resumedMode !== 'bypassPermissions' && resumedMode !== 'fullAccess') {
+    return metadata
+  }
+
+  const modeDecision = await getPermissionModeChangeRequestDecision({
+    mode: resumedMode,
+    toolPermissionContext,
+  })
+  if (modeDecision.status !== 'blocked') {
+    return metadata
+  }
+
+  logForDebugging(
+    `Discarding resumed dangerous permission mode ${resumedMode}: ${modeDecision.error}`,
+    { level: 'warn' },
+  )
+  notifySessionMetadataChanged({ permission_mode: 'default' })
   return {
-    ...transitionPermissionMode(
-      toolPermissionContext.mode,
-      request.mode,
-      toolPermissionContext,
-    ),
-    mode: request.mode,
+    ...metadata,
+    permission_mode: 'default',
   }
 }
 
@@ -4893,6 +4905,7 @@ type LoadInitialMessagesResult = {
 async function loadInitialMessages(
   setAppState: (f: (prev: AppState) => AppState) => void,
   options: {
+    getAppState: () => AppState
     continue: boolean | undefined
     teleport: string | true | null | undefined
     resume: string | boolean | undefined
@@ -5025,7 +5038,7 @@ async function loadInitialMessages(
   }
 
   // Handle resume in print mode (accepts session ID or URL)
-  // URLs are [ANT-ONLY]
+  // URLs are [internal-only]
   if (options.resume) {
     try {
       logEvent('tengu_resume_print', {})
@@ -5054,7 +5067,11 @@ async function loadInitialMessages(
           options.restoredWorkerState,
         ])
         if (metadata) {
-          setAppState(externalMetadataToAppState(metadata))
+          const sanitizedMetadata = await sanitizeResumedExternalMetadata(
+            metadata,
+            options.getAppState().toolPermissionContext,
+          )
+          setAppState(externalMetadataToAppState(sanitizedMetadata))
           if (typeof metadata.model === 'string') {
             setMainLoopModelOverride(metadata.model)
           }

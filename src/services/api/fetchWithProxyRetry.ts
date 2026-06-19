@@ -30,6 +30,9 @@ export async function fetchWithProxyRetry(
         }),
       })
 
+      // If an upstream proxy or local NAT silently dropped the keep-alive socket,
+      // it might result in a 502/504 response instead of a hard network exception.
+      // We automatically disable keep-alive and retry to force a clean handshake.
       if (
         (response.status === 502 || response.status === 504) &&
         attempt < maxAttempts

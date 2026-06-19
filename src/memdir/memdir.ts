@@ -1,4 +1,5 @@
 import { feature } from 'bun:bundle'
+import { join } from 'path'
 import { getFsImplementation } from '../utils/fsOperations.js'
 import { getAutoMemPath, isAutoMemoryEnabled } from './paths.js'
 
@@ -18,7 +19,7 @@ import { GREP_TOOL_NAME } from '../tools/GrepTool/prompt.js'
 import { isReplModeEnabled } from '../tools/REPLTool/constants.js'
 import { logForDebugging } from '../utils/debug.js'
 import { hasEmbeddedSearchTools } from '../utils/embeddedTools.js'
-import { getGakrcliWorkspaceDir, isEnvTruthy } from '../utils/envUtils.js'
+import { getGakrCLIWorkspaceDir, isEnvTruthy } from '../utils/envUtils.js'
 import { formatFileSize } from '../utils/format.js'
 import { getProjectDir } from '../utils/sessionStorage.js'
 import { getInitialSettings } from '../utils/settings/settings.js'
@@ -31,10 +32,10 @@ import {
 } from './memoryTypes.js'
 
 export const ENTRYPOINT_NAME = 'MEMORY.md'
-export const MAX_ENTRYPOINT_LINES = 400
-// ~125 chars/line at 400 lines. Doubled to allow rich index content without
-// silently truncating valuable context.
-export const MAX_ENTRYPOINT_BYTES = 50_000
+export const MAX_ENTRYPOINT_LINES = 200
+// ~125 chars/line at 200 lines. At p97 today; catches long-line indexes that
+// slip past the line cap (p100 observed: 197KB under 200 lines).
+export const MAX_ENTRYPOINT_BYTES = 25_000
 const AUTO_MEM_DISPLAY_NAME = 'auto memory'
 
 export type EntrypointTruncation = {
@@ -50,7 +51,7 @@ export type EntrypointTruncation = {
  * that names which cap fired. Line-truncates first (natural boundary), then
  * byte-truncates at the last newline before the cap so we don't cut mid-line.
  *
- * Shared by buildMemoryPrompt and claudemd getMemoryFiles (previously
+ * Shared by buildMemoryPrompt and gakrclimd getMemoryFiles (previously
  * duplicated the line-only logic).
  */
 export function truncateEntrypointContent(raw: string): EntrypointTruncation {
@@ -109,7 +110,7 @@ const teamMemPrompts = feature('TEAMMEM')
 
 /**
  * Shared guidance text appended to each memory directory prompt line.
- * Shipped because Claude was burning turns on `ls`/`mkdir -p` before writing.
+ * Shipped because GakrCLI was burning turns on `ls`/`mkdir -p` before writing.
  * Harness guarantees the directory exists via ensureMemoryDirExists().
  */
 export const DIR_EXISTS_GUIDANCE =
@@ -128,7 +129,7 @@ export const DIRS_EXIST_GUIDANCE =
 export function buildWorkspacePersistenceLines(
   projectMemoryDir: string,
 ): string[] {
-  const workspaceDir = getGakrcliWorkspaceDir()
+  const workspaceDir = getGakrCLIWorkspaceDir()
   return [
     '## Workspace files vs project auto-memory',
     '',
@@ -265,9 +266,10 @@ export function buildMemoryLines(
     '',
     'If the user explicitly asks you to remember something, save it immediately as whichever type fits best. If they ask you to forget something, find and remove the relevant entry.',
     '',
-    ...buildWorkspacePersistenceLines(memoryDir),
     ...TYPES_SECTION_INDIVIDUAL,
     ...WHAT_NOT_TO_SAVE_SECTION,
+    '',
+    ...buildWorkspacePersistenceLines(memoryDir),
     '',
     ...howToSave,
     '',
@@ -291,7 +293,7 @@ export function buildMemoryLines(
 
 /**
  * Build the typed-memory prompt with MEMORY.md content included.
- * Used by agent memory (which has no getClaudeMds() equivalent).
+ * Used by agent memory (which has no getGakrCLIMds() equivalent).
  */
 export function buildMemoryPrompt(params: {
   displayName: string
@@ -340,25 +342,57 @@ export function buildMemoryPrompt(params: {
 }
 
 /**
- * Assistant-mode memory prompt. Gated behind feature('KAIROS').
+ * Assistant-mode daily-log prompt. Gated behind feature('KAIROS').
  *
- * Assistant sessions are long-lived, but they still use the standard semantic
- * topic-file layout. New memories should update topic files and MEMORY.md
- * directly instead of creating chronological session logs.
+ * Assistant sessions are effectively perpetual, so the agent writes memories
+ * append-only to a date-named log file rather than maintaining MEMORY.md as
+ * a live index. A separate nightly /dream skill distills logs into topic
+ * files + MEMORY.md. MEMORY.md is still loaded into context (via gakrclimd.ts)
+ * as the distilled index — this prompt only changes where NEW memories go.
  */
-function buildAssistantMemoryPrompt(skipIndex = false): string {
+function buildAssistantDailyLogPrompt(skipIndex = false): string {
   const memoryDir = getAutoMemPath()
-  const extraGuidelines = [
-    'This session may be long-lived, but memory should still be organized by durable topic. Do not create chronological session logs or date-named memory files.',
-    'When new information is worth keeping, update an existing semantic topic file or create a clearly named topic file, then keep `MEMORY.md` as the index.',
+  // Describe the path as a pattern rather than inlining today's literal path:
+  // this prompt is cached by systemPromptSection('memory', ...) and NOT
+  // invalidated on date change. The model derives the current date from the
+  // date_change attachment (appended at the tail on midnight rollover) rather
+  // than the user-context message — the latter is intentionally left stale to
+  // preserve the prompt cache prefix across midnight.
+  const logPathPattern = join(memoryDir, 'logs', 'YYYY', 'MM', 'YYYY-MM-DD.md')
+
+  const lines: string[] = [
+    '# auto memory',
+    '',
+    `You have a persistent, file-based memory system found at: \`${memoryDir}\``,
+    '',
+    "This session is long-lived. As you work, record anything worth remembering by **appending** to today's daily log file:",
+    '',
+    `\`${logPathPattern}\``,
+    '',
+    "Substitute today's date (from `currentDate` in your context) for `YYYY-MM-DD`. When the date rolls over mid-session, start appending to the new day's file.",
+    '',
+    'Write each entry as a short timestamped bullet. Create the file (and parent directories) on first write if it does not exist. Do not rewrite or reorganize the log — it is append-only. A separate nightly process distills these logs into `MEMORY.md` and topic files.',
+    '',
+    '## What to log',
+    '- User corrections and preferences ("use bun, not npm"; "stop summarizing diffs")',
+    '- Facts about the user, their role, or their goals',
+    '- Project context that is not derivable from the code (deadlines, incidents, decisions and their rationale)',
+    '- Pointers to external systems (dashboards, Linear projects, Slack channels)',
+    '- Anything the user explicitly asks you to remember',
+    '',
+    ...WHAT_NOT_TO_SAVE_SECTION,
+    '',
+    ...(skipIndex
+      ? []
+      : [
+          `## ${ENTRYPOINT_NAME}`,
+          `\`${ENTRYPOINT_NAME}\` is the distilled index (maintained nightly from your logs) and is loaded into your context automatically. Read it for orientation, but do not edit it directly — record new information in today's log instead.`,
+          '',
+        ]),
+    ...buildSearchingPastContextSection(memoryDir),
   ]
 
-  return buildMemoryLines(
-    'auto memory',
-    memoryDir,
-    extraGuidelines,
-    skipIndex,
-  ).join('\n')
+  return lines.join('\n')
 }
 
 /**
@@ -416,8 +450,9 @@ export async function loadMemoryPrompt(): Promise<string | null> {
     false,
   )
 
-  // KAIROS mode takes precedence over TEAMMEM so assistant-mode sessions keep
-  // one memory policy. Gating on `autoEnabled` here
+  // KAIROS daily-log mode takes precedence over TEAMMEM: the append-only
+  // log paradigm does not compose with team sync (which expects a shared
+  // MEMORY.md that both sides read + write). Gating on `autoEnabled` here
   // means the !autoEnabled case falls through to the tengu_memdir_disabled
   // telemetry block below, matching the non-KAIROS path.
   if (feature('KAIROS') && autoEnabled && getKairosActive()) {
@@ -425,7 +460,7 @@ export async function loadMemoryPrompt(): Promise<string | null> {
       memory_type:
         'auto' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
     })
-    return buildAssistantMemoryPrompt(skipIndex)
+    return buildAssistantDailyLogPrompt(skipIndex)
   }
 
   // Cowork injects memory-policy text via env var; thread into all builders.

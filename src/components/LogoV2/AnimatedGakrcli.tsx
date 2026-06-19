@@ -43,11 +43,11 @@ const IDLE: Frame = {
 };
 const FRAME_MS = 60;
 const incrementFrame = (i: number) => i + 1;
-const GAKRCLI_HEIGHT = 3;
+const GAKR_HEIGHT = 3;
 
 /**
  * Gakrcli with click-triggered animations (crouch-jump with arms up, or
- * look-around). Container height is fixed at GAKRCLI_HEIGHT — same footprint
+ * look-around). Container height is fixed at GAKR_HEIGHT — same footprint
  * as a bare `<Gakrcli />` — so the surrounding layout never shifts. During a
  * crouch only the feet row clips (see comment above). Click only fires when
  * mouse tracking is enabled (i.e. inside `<AlternateScreen>` / fullscreen);
@@ -79,7 +79,7 @@ export function AnimatedGakrcli() {
   }
   let t2;
   if ($[5] !== onClick || $[6] !== t1) {
-    t2 = <Box height={GAKRCLI_HEIGHT} flexDirection="column" onClick={onClick}>{t1}</Box>;
+    t2 = <Box height={GAKR_HEIGHT} flexDirection="column" onClick={onClick}>{t1}</Box>;
     $[5] = onClick;
     $[6] = t1;
     $[7] = t2;

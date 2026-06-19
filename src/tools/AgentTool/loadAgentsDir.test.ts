@@ -19,6 +19,7 @@ const originalEnv = {
   GAKR_CODE_ENTRYPOINT: process.env.GAKR_CODE_ENTRYPOINT,
   GAKR_CODE_USE_NATIVE_FILE_SEARCH:
     process.env.GAKR_CODE_USE_NATIVE_FILE_SEARCH,
+  USER_TYPE: process.env.USER_TYPE,
 }
 
 let tempDir: string
@@ -31,6 +32,7 @@ beforeEach(async () => {
   delete process.env.GAKR_CODE_SIMPLE
   clearAgentDefinitionsCache()
   loadMarkdownFilesForSubdir.cache.clear?.()
+  getAgentDefinitionsWithOverrides.cache.clear?.()
 })
 
 afterEach(async () => {
@@ -40,6 +42,7 @@ afterEach(async () => {
     restoreEnv('GAKR_CODE_SIMPLE')
     restoreEnv('GAKR_CODE_ENTRYPOINT')
     restoreEnv('GAKR_CODE_USE_NATIVE_FILE_SEARCH')
+    restoreEnv('USER_TYPE')
     clearAgentDefinitionsCache()
     loadMarkdownFilesForSubdir.cache.clear?.()
   } finally {
@@ -60,6 +63,7 @@ async function writeAgent(
   filePath: string,
   name: string,
   prompt = `You are ${name}.`,
+  extraFrontmatter = '',
 ): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true })
   await writeFile(
@@ -67,6 +71,7 @@ async function writeAgent(
     `---
 name: ${name}
 description: "Use for regression coverage"
+${extraFrontmatter}
 ---
 
 ${prompt}
@@ -127,7 +132,7 @@ describe('agent definition loading', () => {
   test('prefers .gakrcli project agents over legacy .claude agents', async () => {
     const projectDir = join(tempDir, 'project')
     await writeAgent(
-      join(projectDir, '.claude', 'agents', 'shared-agent.md'),
+      join(projectDir, '.gakrcli', 'agents', 'shared-agent.md'),
       'shared-agent',
       'legacy prompt',
     )
@@ -140,7 +145,7 @@ describe('agent definition loading', () => {
     const { activeAgents } = await getAgentDefinitionsWithOverrides(projectDir)
     const agent = activeAgents.find(agent => agent.agentType === 'shared-agent')
 
-    expect(agent?.getSystemPrompt()).toBe('gakrcli prompt')
+    expect(agent?.source === 'projectSettings' ? agent.getSystemPrompt() : undefined).toBe('gakrcli prompt')
   })
 
   test('deduplicates agents by name across user and project sources', async () => {
@@ -170,24 +175,42 @@ describe('agent definition loading', () => {
     )
 
     expect(activeDuplicate).toHaveLength(1)
-    expect(allDuplicate).toHaveLength(1)
+    expect(allDuplicate).toHaveLength(2)
     expect(activeDuplicate[0]?.source).toBe('userSettings')
     expect(activeAgents.some(agent => agent.agentType === 'project-only')).toBe(
       true,
     )
   })
 
-  test('ignores project agents from .claude', async () => {
+  test('accepts worktree isolation in markdown agent frontmatter', async () => {
     const projectDir = join(tempDir, 'project')
     await writeAgent(
-      join(projectDir, '.claude', 'agents', 'shared-agent.md'),
-      'shared-agent',
-      'legacy prompt',
+      join(projectDir, '.gakrcli', 'agents', 'worktree-agent.md'),
+      'worktree-agent',
+      'worktree prompt',
+      'isolation: worktree\n',
     )
 
     const { activeAgents } = await getAgentDefinitionsWithOverrides(projectDir)
-    const agent = activeAgents.find(agent => agent.agentType === 'shared-agent')
+    const agent = activeAgents.find(agent => agent.agentType === 'worktree-agent')
 
-    expect(agent).toBeUndefined()
+    expect(agent?.isolation).toBe('worktree')
+  })
+
+  test('rejects removed remote isolation in markdown agent frontmatter', async () => {
+    process.env.USER_TYPE = 'ant'
+    const projectDir = join(tempDir, 'project')
+    await writeAgent(
+      join(projectDir, '.gakrcli', 'agents', 'remote-agent.md'),
+      'remote-agent',
+      'remote prompt',
+      'isolation: remote\n',
+    )
+
+    const { activeAgents } = await getAgentDefinitionsWithOverrides(projectDir)
+    const agent = activeAgents.find(agent => agent.agentType === 'remote-agent')
+
+    expect(agent).toBeDefined()
+    expect(agent?.isolation).toBeUndefined()
   })
 })

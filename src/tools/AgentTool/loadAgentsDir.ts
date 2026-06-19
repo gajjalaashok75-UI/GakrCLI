@@ -90,10 +90,7 @@ const AgentJsonSchema = lazySchema(() =>
     initialPrompt: z.string().optional(),
     memory: z.enum(['user', 'project', 'local']).optional(),
     background: z.boolean().optional(),
-    isolation: (process.env.USER_TYPE === 'ant'
-      ? z.enum(['worktree', 'remote'])
-      : z.enum(['worktree'])
-    ).optional(),
+    isolation: z.enum(['worktree']).optional(),
   }),
 )
 
@@ -122,13 +119,13 @@ export type BaseAgentDefinition = {
   background?: boolean // Always run as background task when spawned
   initialPrompt?: string // Prepended to the first user turn (slash commands work)
   memory?: AgentMemoryScope // Persistent memory scope
-  isolation?: 'worktree' | 'remote' // Run in an isolated git worktree, or remotely in CCR (ant-only)
+  isolation?: 'worktree' // Run in an isolated git worktree
   pendingSnapshotUpdate?: { snapshotTimestamp: string }
   /** Omit GAKRCLI.md hierarchy from the agent's userContext. Read-only agents
    * (Explore, Plan) don't need commit/PR/lint guidelines — the main agent has
    * full GAKRCLI.md and interprets their output. Saves ~5-15 Gtok/week across
    * 34M+ Explore spawns. Kill-switch: tengu_slim_subagent_gakrclimd. */
-  omitgakrcliMd?: boolean
+  omitGakrCLIMd?: boolean
 }
 
 // Built-in agents - dynamic prompts only, no static systemPrompt field
@@ -194,9 +191,8 @@ export function getActiveAgentsFromList(
 ): AgentDefinition[] {
   const builtInAgents = allAgents.filter(a => a.source === 'built-in')
   const pluginAgents = allAgents.filter(a => a.source === 'plugin')
-  const projectAgents = allAgents.filter(a => a.source === 'projectSettings')
   const userAgents = allAgents.filter(a => a.source === 'userSettings')
-  const localAgents = allAgents.filter(a => a.source === 'localSettings')
+  const projectAgents = allAgents.filter(a => a.source === 'projectSettings')
   const managedAgents = allAgents.filter(a => a.source === 'policySettings')
   const flagAgents = allAgents.filter(a => a.source === 'flagSettings')
 
@@ -205,7 +201,6 @@ export function getActiveAgentsFromList(
     pluginAgents,
     projectAgents,
     userAgents,
-    localAgents,
     flagAgents,
     managedAgents,
   ]
@@ -219,19 +214,6 @@ export function getActiveAgentsFromList(
   }
 
   return Array.from(agentMap.values())
-}
-
-function deduplicateAgentsByType(
-  agents: AgentDefinition[],
-): AgentDefinition[] {
-  const deduplicated = getActiveAgentsFromList(agents)
-  const duplicatesRemoved = agents.length - deduplicated.length
-  if (duplicatesRemoved > 0) {
-    logForDebugging(
-      `Deduplicated ${duplicatesRemoved} agents by name across loader sources`,
-    )
-  }
-  return deduplicated
 }
 
 /**
@@ -361,11 +343,11 @@ export const getAgentDefinitionsWithOverrides = memoize(
 
       const builtInAgents = getBuiltInAgents()
 
-      const allAgentsList = deduplicateAgentsByType([
+      const allAgentsList: AgentDefinition[] = [
         ...builtInAgents,
         ...pluginAgents,
         ...customAgents,
-      ])
+      ]
 
       const activeAgents = getActiveAgentsFromList(allAgentsList)
 
@@ -609,10 +591,9 @@ export function parseAgentFromMarkdown(
       }
     }
 
-    // Parse isolation mode. 'remote' is ant-only; external builds reject it at parse time.
-    type IsolationMode = 'worktree' | 'remote'
-    const VALID_ISOLATION_MODES: readonly IsolationMode[] =
-      process.env.USER_TYPE === 'ant' ? ['worktree', 'remote'] : ['worktree']
+    // Parse isolation mode.
+    type IsolationMode = 'worktree'
+    const VALID_ISOLATION_MODES: readonly IsolationMode[] = ['worktree']
     const isolationRaw = frontmatter['isolation'] as string | undefined
     let isolation: IsolationMode | undefined
     if (isolationRaw !== undefined) {

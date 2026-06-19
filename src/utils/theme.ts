@@ -6,6 +6,11 @@ export type Theme = {
   bashBorder: string
   gakrcli: string
   gakrcliShimmer: string // Lighter version of gakrcli color for shimmer effect
+  // GakrCLI brand accent (gakr-gakr orange). Values MUST be rgb() strings in
+  // truecolor themes — spinner shimmer/stall interpolation parses them with
+  // parseRGB, which silently fails on hex.
+  brand: string
+  brandShimmer: string // Lighter version of brand color for shimmer effect
   gakrcliBlue_FOR_SYSTEM_SPINNER: string
   gakrcliBlueShimmer_FOR_SYSTEM_SPINNER: string
   permission: string
@@ -50,8 +55,8 @@ export type Theme = {
   // Chrome colors
   chromeYellow: string
   // TUI V2 colors
-  gakrcli_body: string
-  gakrcli_background: string
+  clawd_body: string
+  clawd_background: string
   userMessageBackground: string
   userMessageBackgroundHover: string
   /** Message-actions selection. Cool shift toward `suggestion` blue; distinct from default AND userMessageBackground. */
@@ -70,7 +75,7 @@ export type Theme = {
   fastModeShimmer: string
   // Brief/assistant mode label colors
   briefLabelYou: string
-  briefLabelgakrcli: string
+  briefLabelGakrCLI: string
   // Rainbow colors for ultrathink keyword highlighting
   rainbow_red: string
   rainbow_orange: string
@@ -115,8 +120,10 @@ export type ThemeSetting = (typeof THEME_SETTINGS)[number]
 const lightTheme: Theme = {
   autoAccept: 'rgb(135,0,255)', // Electric violet
   bashBorder: 'rgb(255,0,135)', // Vibrant pink
-  gakrcli: 'rgb(87,105,247)', // Blue color for spinner
-  gakrcliShimmer: 'rgb(117,135,255)', // Lighter blue for shimmer effect
+  gakrcli: 'rgb(209,87,0)', // Brand orange darkened for contrast on white
+  gakrcliShimmer: 'rgb(255,122,26)', // Full brand orange as the shimmer highlight
+  brand: 'rgb(209,87,0)', // Brand orange darkened for contrast on white
+  brandShimmer: 'rgb(255,122,26)', // Full brand orange as the shimmer highlight
   gakrcliBlue_FOR_SYSTEM_SPINNER: 'rgb(87,105,247)', // Medium blue for system spinner
   gakrcliBlueShimmer_FOR_SYSTEM_SPINNER: 'rgb(117,135,255)', // Lighter blue for system spinner shimmer
   permission: 'rgb(87,105,247)', // Medium blue
@@ -158,8 +165,8 @@ const lightTheme: Theme = {
   // Chrome colors
   chromeYellow: 'rgb(251,188,4)', // Chrome yellow
   // TUI V2 colors
-  gakrcli_body: 'rgb(114,198,237)',
-  gakrcli_background: 'rgb(0,0,0)',
+  clawd_body: 'rgb(209,87,0)', // Brand orange (light variant)
+  clawd_background: 'rgb(0,0,0)',
   userMessageBackground: 'rgb(240, 240, 240)', // Slightly darker grey for optimal contrast
   userMessageBackgroundHover: 'rgb(252, 252, 252)', // ≥250 to quantize distinct from base at 256-color level
   messageActionsBackground: 'rgb(232, 236, 244)', // cool gray — darker than userMsg 240 (visible on white), slight blue toward `suggestion`
@@ -169,11 +176,11 @@ const lightTheme: Theme = {
   memoryBackgroundColor: 'rgb(230, 245, 250)',
   rate_limit_fill: 'rgb(87,105,247)', // Medium blue
   rate_limit_empty: 'rgb(39,47,111)', // Dark blue
-  fastMode: 'rgb(87,105,247)', // Blue color instead of orange
-  fastModeShimmer: 'rgb(117,135,255)', // Lighter blue for shimmer
+  fastMode: 'rgb(255,106,0)', // Electric orange
+  fastModeShimmer: 'rgb(255,150,50)', // Lighter orange for shimmer
   // Brief/assistant mode
   briefLabelYou: 'rgb(37,99,235)', // Blue
-  briefLabelgakrcli: 'rgb(114,198,237)', // Brand orange
+  briefLabelGakrCLI: 'rgb(209,87,0)', // Brand orange (light variant, matches gakrcli)
   rainbow_red: 'rgb(235,95,87)',
   rainbow_orange: 'rgb(245,139,87)',
   rainbow_yellow: 'rgb(250,195,95)',
@@ -197,8 +204,10 @@ const lightTheme: Theme = {
 const lightAnsiTheme: Theme = {
   autoAccept: 'ansi:magenta',
   bashBorder: 'ansi:magenta',
-  gakrcli: 'ansi:blue',
-  gakrcliShimmer: 'ansi:blueBright',
+  gakrcli: 'ansi:redBright',
+  gakrcliShimmer: 'ansi:yellowBright',
+  brand: 'ansi:redBright', // No orange in the 16-color palette; nearest warm hue
+  brandShimmer: 'ansi:yellowBright',
   gakrcliBlue_FOR_SYSTEM_SPINNER: 'ansi:blue',
   gakrcliBlueShimmer_FOR_SYSTEM_SPINNER: 'ansi:blueBright',
   permission: 'ansi:blue',
@@ -240,8 +249,8 @@ const lightAnsiTheme: Theme = {
   // Chrome colors
   chromeYellow: 'ansi:yellow', // Chrome yellow
   // TUI V2 colors
-  gakrcli_body: 'ansi:blue',
-  gakrcli_background: 'ansi:black',
+  clawd_body: 'ansi:redBright',
+  clawd_background: 'ansi:black',
   userMessageBackground: 'ansi:white',
   userMessageBackgroundHover: 'ansi:whiteBright',
   messageActionsBackground: 'ansi:white',
@@ -249,22 +258,22 @@ const lightAnsiTheme: Theme = {
   bashMessageBackgroundColor: 'ansi:whiteBright',
 
   memoryBackgroundColor: 'ansi:white',
-  rate_limit_fill: 'ansi:blue', // Changed from yellow to blue
+  rate_limit_fill: 'ansi:yellow',
   rate_limit_empty: 'ansi:black',
-  fastMode: 'ansi:blue', // Changed from red to blue
-  fastModeShimmer: 'ansi:blueBright', // Changed from redBright to blueBright
+  fastMode: 'ansi:red',
+  fastModeShimmer: 'ansi:redBright',
   briefLabelYou: 'ansi:blue',
-  briefLabelgakrcli: 'ansi:blue',
+  briefLabelGakrCLI: 'ansi:redBright',
   rainbow_red: 'ansi:red',
-  rainbow_orange: 'ansi:blueBright', // Changed from redBright to blueBright
-  rainbow_yellow: 'ansi:cyanBright', // Changed from yellow to cyanBright
+  rainbow_orange: 'ansi:redBright',
+  rainbow_yellow: 'ansi:yellow',
   rainbow_green: 'ansi:green',
   rainbow_blue: 'ansi:cyan',
   rainbow_indigo: 'ansi:blue',
   rainbow_violet: 'ansi:magenta',
   rainbow_red_shimmer: 'ansi:redBright',
-  rainbow_orange_shimmer: 'ansi:blueBright', // Changed from yellow to blueBright
-  rainbow_yellow_shimmer: 'ansi:cyanBright', // Changed from yellowBright to cyanBright
+  rainbow_orange_shimmer: 'ansi:yellow',
+  rainbow_yellow_shimmer: 'ansi:yellowBright',
   rainbow_green_shimmer: 'ansi:greenBright',
   rainbow_blue_shimmer: 'ansi:cyanBright',
   rainbow_indigo_shimmer: 'ansi:blueBright',
@@ -278,8 +287,10 @@ const lightAnsiTheme: Theme = {
 const darkAnsiTheme: Theme = {
   autoAccept: 'ansi:magentaBright',
   bashBorder: 'ansi:magentaBright',
-  gakrcli: 'ansi:blue',
-  gakrcliShimmer: 'ansi:blueBright',
+  gakrcli: 'ansi:redBright',
+  gakrcliShimmer: 'ansi:yellowBright',
+  brand: 'ansi:redBright', // No orange in the 16-color palette; nearest warm hue
+  brandShimmer: 'ansi:yellowBright',
   gakrcliBlue_FOR_SYSTEM_SPINNER: 'ansi:blueBright',
   gakrcliBlueShimmer_FOR_SYSTEM_SPINNER: 'ansi:blueBright',
   permission: 'ansi:blueBright',
@@ -321,8 +332,8 @@ const darkAnsiTheme: Theme = {
   // Chrome colors
   chromeYellow: 'ansi:yellowBright', // Chrome yellow
   // TUI V2 colors
-  gakrcli_body: 'ansi:blue',
-  gakrcli_background: 'ansi:black',
+  clawd_body: 'ansi:redBright',
+  clawd_background: 'ansi:black',
   userMessageBackground: 'ansi:blackBright',
   userMessageBackgroundHover: 'ansi:white',
   messageActionsBackground: 'ansi:blackBright',
@@ -335,7 +346,7 @@ const darkAnsiTheme: Theme = {
   fastMode: 'ansi:redBright',
   fastModeShimmer: 'ansi:redBright',
   briefLabelYou: 'ansi:blueBright',
-  briefLabelgakrcli: 'ansi:blue',
+  briefLabelGakrCLI: 'ansi:redBright',
   rainbow_red: 'ansi:red',
   rainbow_orange: 'ansi:redBright',
   rainbow_yellow: 'ansi:yellow',
@@ -359,8 +370,10 @@ const darkAnsiTheme: Theme = {
 const lightDaltonizedTheme: Theme = {
   autoAccept: 'rgb(135,0,255)', // Electric violet
   bashBorder: 'rgb(0,102,204)', // Blue instead of pink
-  gakrcli: 'rgb(87,105,247)', // Blue color for spinner
-  gakrcliShimmer: 'rgb(117,135,255)', // Lighter blue for shimmer effect
+  gakrcli: 'rgb(200,100,0)', // Brand orange darkened for white bg, luminance-separated from warning
+  gakrcliShimmer: 'rgb(255,150,40)', // Lighter brand orange for shimmer effect
+  brand: 'rgb(200,100,0)', // Brand orange darkened for white bg, luminance-separated from warning
+  brandShimmer: 'rgb(255,150,40)', // Lighter brand orange for shimmer effect
   gakrcliBlue_FOR_SYSTEM_SPINNER: 'rgb(51,102,255)', // Bright blue for system spinner
   gakrcliBlueShimmer_FOR_SYSTEM_SPINNER: 'rgb(101,152,255)', // Lighter bright blue for system spinner shimmer
   permission: 'rgb(51,102,255)', // Bright blue
@@ -402,8 +415,8 @@ const lightDaltonizedTheme: Theme = {
   // Chrome colors
   chromeYellow: 'rgb(251,188,4)', // Chrome yellow
   // TUI V2 colors
-  gakrcli_body: 'rgb(114,198,237)',
-  gakrcli_background: 'rgb(0,0,0)',
+  clawd_body: 'rgb(200,100,0)', // Brand orange (light daltonized variant)
+  clawd_background: 'rgb(0,0,0)',
   userMessageBackground: 'rgb(220, 220, 220)', // Slightly darker grey for optimal contrast
   userMessageBackgroundHover: 'rgb(232, 232, 232)', // ≥230 to quantize distinct from base at 256-color level
   messageActionsBackground: 'rgb(210, 216, 226)', // cool gray — darker than userMsg 220, slight blue
@@ -416,7 +429,7 @@ const lightDaltonizedTheme: Theme = {
   fastMode: 'rgb(255,106,0)', // Electric orange (color-blind safe)
   fastModeShimmer: 'rgb(255,150,50)', // Lighter orange for shimmer
   briefLabelYou: 'rgb(37,99,235)', // Blue
-  briefLabelgakrcli: 'rgb(114,198,237)', // Orange adjusted for deuteranopia (matches gakrcli)
+  briefLabelGakrCLI: 'rgb(200,100,0)', // Brand orange adjusted for deuteranopia (matches gakrcli)
   rainbow_red: 'rgb(235,95,87)',
   rainbow_orange: 'rgb(245,139,87)',
   rainbow_yellow: 'rgb(250,195,95)',
@@ -440,8 +453,10 @@ const lightDaltonizedTheme: Theme = {
 const darkTheme: Theme = {
   autoAccept: 'rgb(175,135,255)', // Electric violet
   bashBorder: 'rgb(253,93,177)', // Bright pink
-  gakrcli: 'rgb(87,105,247)', // Blue color for spinner
-  gakrcliShimmer: 'rgb(117,135,255)', // Lighter blue for shimmer effect
+  gakrcli: 'rgb(255,122,26)', // GakrCLI brand orange
+  gakrcliShimmer: 'rgb(255,177,95)', // Lighter brand orange for shimmer effect
+  brand: 'rgb(255,122,26)', // GakrCLI brand orange
+  brandShimmer: 'rgb(255,177,95)', // Lighter brand orange for shimmer effect
   gakrcliBlue_FOR_SYSTEM_SPINNER: 'rgb(147,165,255)', // Blue for system spinner
   gakrcliBlueShimmer_FOR_SYSTEM_SPINNER: 'rgb(177,195,255)', // Lighter blue for system spinner shimmer
   permission: 'rgb(177,185,249)', // Light blue-purple
@@ -483,8 +498,8 @@ const darkTheme: Theme = {
   // Chrome colors
   chromeYellow: 'rgb(251,188,4)', // Chrome yellow
   // TUI V2 colors
-  gakrcli_body: 'rgb(114,198,237)',
-  gakrcli_background: 'rgb(0,0,0)',
+  clawd_body: 'rgb(255,122,26)', // Brand orange
+  clawd_background: 'rgb(0,0,0)',
   userMessageBackground: 'rgb(55, 55, 55)', // Lighter grey for better visual contrast
   userMessageBackgroundHover: 'rgb(70, 70, 70)',
   messageActionsBackground: 'rgb(44, 50, 62)', // cool gray, slight blue
@@ -497,7 +512,7 @@ const darkTheme: Theme = {
   fastMode: 'rgb(255,120,20)', // Electric orange for dark bg
   fastModeShimmer: 'rgb(255,165,70)', // Lighter orange for shimmer
   briefLabelYou: 'rgb(122,180,232)', // Light blue
-  briefLabelgakrcli: 'rgb(114,198,237)', // Brand orange
+  briefLabelGakrCLI: 'rgb(255,122,26)', // Brand orange (matches gakrcli)
   rainbow_red: 'rgb(235,95,87)',
   rainbow_orange: 'rgb(245,139,87)',
   rainbow_yellow: 'rgb(250,195,95)',
@@ -521,8 +536,10 @@ const darkTheme: Theme = {
 const darkDaltonizedTheme: Theme = {
   autoAccept: 'rgb(175,135,255)', // Electric violet
   bashBorder: 'rgb(51,153,255)', // Bright blue
-  gakrcli: 'rgb(87,105,247)', // Blue color for spinner
-  gakrcliShimmer: 'rgb(117,135,255)', // Lighter blue for shimmer effect
+  gakrcli: 'rgb(255,150,40)', // Brand orange adjusted for deuteranopia (luminance-separated from error/warning)
+  gakrcliShimmer: 'rgb(255,195,115)', // Lighter brand orange for shimmer effect
+  brand: 'rgb(255,150,40)', // Brand orange adjusted for deuteranopia (luminance-separated from error/warning)
+  brandShimmer: 'rgb(255,195,115)', // Lighter brand orange for shimmer effect
   gakrcliBlue_FOR_SYSTEM_SPINNER: 'rgb(153,204,255)', // Light blue for system spinner
   gakrcliBlueShimmer_FOR_SYSTEM_SPINNER: 'rgb(183,224,255)', // Lighter blue for system spinner shimmer
   permission: 'rgb(153,204,255)', // Light blue
@@ -564,8 +581,8 @@ const darkDaltonizedTheme: Theme = {
   // Chrome colors
   chromeYellow: 'rgb(251,188,4)', // Chrome yellow
   // TUI V2 colors
-  gakrcli_body: 'rgb(114,198,237)',
-  gakrcli_background: 'rgb(0,0,0)',
+  clawd_body: 'rgb(255,150,40)', // Brand orange (dark daltonized variant)
+  clawd_background: 'rgb(0,0,0)',
   userMessageBackground: 'rgb(55, 55, 55)', // Lighter grey for better visual contrast
   userMessageBackgroundHover: 'rgb(70, 70, 70)',
   messageActionsBackground: 'rgb(44, 50, 62)', // cool gray, slight blue
@@ -578,7 +595,7 @@ const darkDaltonizedTheme: Theme = {
   fastMode: 'rgb(255,120,20)', // Electric orange for dark bg (color-blind safe)
   fastModeShimmer: 'rgb(255,165,70)', // Lighter orange for shimmer
   briefLabelYou: 'rgb(122,180,232)', // Light blue
-  briefLabelgakrcli: 'rgb(114,198,237)', // Orange adjusted for deuteranopia (matches gakrcli)
+  briefLabelGakrCLI: 'rgb(255,150,40)', // Brand orange adjusted for deuteranopia (matches gakrcli)
   rainbow_red: 'rgb(235,95,87)',
   rainbow_orange: 'rgb(245,139,87)',
   rainbow_yellow: 'rgb(250,195,95)',

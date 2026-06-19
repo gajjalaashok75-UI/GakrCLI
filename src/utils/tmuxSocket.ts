@@ -12,14 +12,14 @@
  * 1. GakrCLI creates its own tmux socket: `gakrcli-<PID>` (e.g., `gakrcli-12345`)
  * 2. ALL Tmux tool commands use this socket via the `-L` flag
  * 3. ALL Bash tool commands inherit TMUX env var pointing to this socket
- *    (set in Shell.ts via getgakrcliTmuxEnv())
+ *    (set in Shell.ts via getGakrCLITmuxEnv())
  *
  * This means ANY tmux command run through GakrCLI - whether via the Tmux tool
  * directly or via Bash - will operate on GakrCLI's isolated socket, NOT the
  * user's tmux session.
  *
  * IMPORTANT: The user's original TMUX env var is NOT used. After socket
- * initialization, getgakrcliTmuxEnv() returns a value that overrides the
+ * initialization, getGakrCLITmuxEnv() returns a value that overrides the
  * user's TMUX in all child processes spawned by Shell.ts.
  */
 
@@ -88,7 +88,7 @@ let tmuxToolUsed = false
  * Gets the socket name for GakrCLI's isolated tmux session.
  * Format: gakrcli-<PID>
  */
-export function getgakrcliSocketName(): string {
+export function getGakrCLISocketName(): string {
   if (!socketName) {
     socketName = `${GAKR_SOCKET_PREFIX}-${process.pid}`
   }
@@ -99,7 +99,7 @@ export function getgakrcliSocketName(): string {
  * Gets the socket path if the socket has been initialized.
  * Returns null if not yet initialized.
  */
-export function getgakrcliSocketPath(): string | null {
+export function getGakrCLISocketPath(): string | null {
   return socketPath
 }
 
@@ -107,7 +107,7 @@ export function getgakrcliSocketPath(): string | null {
  * Sets socket info after initialization.
  * Called after the tmux session is created.
  */
-export function setgakrcliSocketInfo(path: string, pid: number): void {
+export function setGakrCLISocketInfo(path: string, pid: number): void {
   socketPath = path
   serverPid = pid
 }
@@ -132,7 +132,7 @@ export function isSocketInitialized(): boolean {
  * Returns null if socket is not yet initialized.
  * When null, Shell.ts does not override TMUX, preserving user's environment.
  */
-export function getgakrcliTmuxEnv(): string | null {
+export function getGakrCLITmuxEnv(): string | null {
   if (!socketPath || serverPid === null) {
     return null
   }
@@ -202,7 +202,7 @@ export function hasTmuxToolBeenUsed(): boolean {
  * Safe to call multiple times; will only initialize once.
  *
  * If tmux is not installed, this function returns gracefully without
- * initializing the socket. getgakrcliTmuxEnv() will return null, and
+ * initializing the socket. getGakrCLITmuxEnv() will return null, and
  * Bash commands will run without tmux isolation.
  */
 export async function ensureSocketInitialized(): Promise<void> {
@@ -250,7 +250,7 @@ export async function ensureSocketInitialized(): Promise<void> {
  * Called during graceful shutdown to clean up resources.
  */
 async function killTmuxServer(): Promise<void> {
-  const socket = getgakrcliSocketName()
+  const socket = getGakrCLISocketName()
   logForDebugging(`[Socket] Killing tmux server for socket: ${socket}`)
 
   const result = await execTmux(['-L', socket, 'kill-server'])
@@ -266,7 +266,7 @@ async function killTmuxServer(): Promise<void> {
 }
 
 async function doInitialize(): Promise<void> {
-  const socket = getgakrcliSocketName()
+  const socket = getGakrCLISocketName()
 
   // Create a new session with our custom socket
   // Pass GAKR_CODE_SKIP_PROMPT_HISTORY via -e so it's set in the initial shell environment
@@ -316,7 +316,7 @@ async function doInitialize(): Promise<void> {
   // Set GAKR_CODE_SKIP_PROMPT_HISTORY in the tmux GLOBAL environment (-g).
   // Without -g this would only apply to the 'base' session, and new sessions
   // created by TungstenTool (e.g. 'test', 'verify') would not inherit it.
-  // Any GakrCLI instance spawned on this socket will inherit this env var,
+  // Any GakrCLI Code instance spawned on this socket will inherit this env var,
   // preventing test/verification sessions from polluting the user's real
   // command history and --resume session list.
   await execTmux([
@@ -358,7 +358,7 @@ async function doInitialize(): Promise<void> {
     if (path && pidStr) {
       const pid = parseInt(pidStr, 10)
       if (!isNaN(pid)) {
-        setgakrcliSocketInfo(path, pid)
+        setGakrCLISocketInfo(path, pid)
         return
       }
     }
@@ -396,7 +396,7 @@ async function doInitialize(): Promise<void> {
       logForDebugging(
         `[Socket] Using fallback socket path: ${fallbackPath} (server PID: ${pid})`,
       )
-      setgakrcliSocketInfo(fallbackPath, pid)
+      setGakrCLISocketInfo(fallbackPath, pid)
       return
     }
     // PID parsing failed

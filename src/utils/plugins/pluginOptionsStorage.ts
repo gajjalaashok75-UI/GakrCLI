@@ -311,8 +311,6 @@ export function getUnconfiguredOptions(
 
 /**
  * Substitute ${GAKR_PLUGIN_ROOT} and ${GAKR_PLUGIN_DATA} with their paths.
- * Also accepts the ${GAKRCLI_PLUGIN_*} aliases used by older marketplace
- * plugins before the shorter variable names were standardized.
  * On Windows, normalizes backslashes to forward slashes so shell commands
  * don't interpret them as escape characters.
  *
@@ -331,14 +329,14 @@ export function substitutePluginVariables(
 ): string {
   const normalize = (p: string) =>
     process.platform === 'win32' ? p.replace(/\\/g, '/') : p
-  let out = value.replace(/\$\{GAKR(?:CLI)?_PLUGIN_ROOT\}/g, () =>
+  let out = value.replace(/\$\{GAKR_PLUGIN_ROOT\}/g, () =>
     normalize(plugin.path),
   )
   // source can be absent (e.g. hooks where pluginRoot is a skill root without
   // a plugin context). In that case ${GAKR_PLUGIN_DATA} is left literal.
   if (plugin.source) {
     const source = plugin.source
-    out = out.replace(/\$\{GAKR(?:CLI)?_PLUGIN_DATA\}/g, () =>
+    out = out.replace(/\$\{GAKR_PLUGIN_DATA\}/g, () =>
       normalize(getPluginDataDir(source)),
     )
   }

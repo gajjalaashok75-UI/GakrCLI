@@ -27,7 +27,7 @@ type Props = {
   onDone(result?: ConsoleOAuthFlowResult): void;
   startingMessage?: string;
   mode?: 'login' | 'setup-token';
-  forceLoginMethod?: 'gakrcliai';
+  forceLoginMethod?: 'gakrcliai' | 'console';
   initialStatus?: OAuthStatus;
 };
 type OAuthStatus = {
@@ -72,7 +72,7 @@ export function ConsoleOAuthFlow({
   const settings = getSettings_DEPRECATED() || {};
   const forceLoginMethod = forceLoginMethodProp ?? settings.forceLoginMethod;
   const orgUUID = settings.forceLoginOrgUUID;
-  const forcedMethodMessage = forceLoginMethod === 'gakrcliai' ? 'Login method pre-selected: Subscription Plan (GakrCLI Pro/Max)' : null;
+  const forcedMethodMessage = forceLoginMethod === 'gakrcliai' ? 'Login method pre-selected: Subscription Plan (GakrCLI Pro/Max)' : forceLoginMethod === 'console' ? 'Login method pre-selected: API Usage Billing (Anthropic Console)' : null;
   const terminal = useTerminalNotification();
   const [oauthStatus, setOAuthStatus] = useState<OAuthStatus>(() => {
     if (initialStatus) {
@@ -83,7 +83,7 @@ export function ConsoleOAuthFlow({
         state: 'ready_to_start'
       };
     }
-    if (forceLoginMethod === 'gakrcliai') {
+    if (forceLoginMethod === 'gakrcliai' || forceLoginMethod === 'console') {
       return {
         state: 'ready_to_start'
       };
@@ -95,7 +95,7 @@ export function ConsoleOAuthFlow({
   const [pastedCode, setPastedCode] = useState('');
   const [cursorOffset, setCursorOffset] = useState(0);
   const [oauthService] = useState(() => new OAuthService());
-  const [loginWithgakrcliAi, setLoginWithgakrcliAi] = useState(() => {
+  const [loginWithGakrCLIAi, setLoginWithGakrCLIAi] = useState(() => {
     // Use GakrCLI AI auth for setup-token mode to support user:inference scope
     return mode === 'setup-token' || forceLoginMethod === 'gakrcliai';
   });
@@ -110,6 +110,8 @@ export function ConsoleOAuthFlow({
   useEffect(() => {
     if (forceLoginMethod === 'gakrcliai') {
       logEvent('tengu_oauth_gakrcliai_forced', {});
+    } else if (forceLoginMethod === 'console') {
+      logEvent('tengu_oauth_console_forced', {});
     }
   }, [forceLoginMethod]);
 
@@ -124,7 +126,7 @@ export function ConsoleOAuthFlow({
   // Handle Enter to continue on success state
   useKeybinding('confirm:yes', () => {
     logEvent('tengu_oauth_success', {
-      loginWithgakrcliAi
+      loginWithGakrCLIAi
     });
     onDone({
       type: 'oauth'
@@ -208,7 +210,7 @@ export function ConsoleOAuthFlow({
   const startOAuth = useCallback(async () => {
     try {
       logEvent('tengu_oauth_flow_start', {
-        loginWithgakrcliAi
+        loginWithGakrCLIAi
       });
       const result = await oauthService.startOAuthFlow(async url_0 => {
         setOAuthStatus({
@@ -217,7 +219,7 @@ export function ConsoleOAuthFlow({
         });
         setTimeout(setShowPastePrompt, 3000, true);
       }, {
-        loginWithgakrcliAi,
+        loginWithGakrCLIAi,
         inferenceOnly: mode === 'setup-token',
         expiresIn: mode === 'setup-token' ? 365 * 24 * 60 * 60 : undefined,
         // 1 year for setup-token
@@ -279,7 +281,7 @@ export function ConsoleOAuthFlow({
         ssl_error: sslHint !== null
       });
     }
-  }, [oauthService, setShowPastePrompt, loginWithgakrcliAi, mode, orgUUID]);
+  }, [oauthService, setShowPastePrompt, loginWithGakrCLIAi, mode, orgUUID]);
   const pendingOAuthStartRef = useRef(false);
   useEffect(() => {
     if (oauthStatus.state === 'ready_to_start' && !pendingOAuthStartRef.current) {
@@ -295,16 +297,16 @@ export function ConsoleOAuthFlow({
   useEffect(() => {
     if (mode === 'setup-token' && oauthStatus.state === 'success') {
       // Delay to ensure static content is fully rendered before exiting
-      const timer_0 = setTimeout((loginWithgakrcliAi_0, onDone_0) => {
+      const timer_0 = setTimeout((loginWithGakrCLIAi_0, onDone_0) => {
         logEvent('tengu_oauth_success', {
-          loginWithgakrcliAi: loginWithgakrcliAi_0
+          loginWithGakrCLIAi: loginWithGakrCLIAi_0
         });
         // Don't clear terminal so the token remains visible
         onDone_0();
-      }, 500, loginWithgakrcliAi, onDone);
+      }, 500, loginWithGakrCLIAi, onDone);
       return () => clearTimeout(timer_0);
     }
-  }, [mode, oauthStatus, loginWithgakrcliAi, onDone]);
+  }, [mode, oauthStatus, loginWithGakrCLIAi, onDone]);
 
   // Cleanup OAuth service when component unmounts
   useEffect(() => {
@@ -344,7 +346,7 @@ export function ConsoleOAuthFlow({
             </Box>
           </Box>}
       <Box paddingLeft={1} flexDirection="column" gap={1}>
-        <OAuthStatusMessage oauthStatus={oauthStatus} mode={mode} startingMessage={startingMessage} forcedMethodMessage={forcedMethodMessage} showPastePrompt={showPastePrompt} pastedCode={pastedCode} setPastedCode={setPastedCode} cursorOffset={cursorOffset} setCursorOffset={setCursorOffset} textInputColumns={textInputColumns} handleSubmitCode={handleSubmitCode} setOAuthStatus={setOAuthStatus} setLoginWithgakrcliAi={setLoginWithgakrcliAi} />
+        <OAuthStatusMessage oauthStatus={oauthStatus} mode={mode} startingMessage={startingMessage} forcedMethodMessage={forcedMethodMessage} showPastePrompt={showPastePrompt} pastedCode={pastedCode} setPastedCode={setPastedCode} cursorOffset={cursorOffset} setCursorOffset={setCursorOffset} textInputColumns={textInputColumns} handleSubmitCode={handleSubmitCode} setOAuthStatus={setOAuthStatus} setLoginWithGakrCLIAi={setLoginWithGakrCLIAi} />
       </Box>
     </Box>;
 }
@@ -361,7 +363,7 @@ type OAuthStatusMessageProps = {
   textInputColumns: number;
   handleSubmitCode: (value: string, url: string) => void;
   setOAuthStatus: (status: OAuthStatus) => void;
-  setLoginWithgakrcliAi: (value: boolean) => void;
+  setLoginWithGakrCLIAi: (value: boolean) => void;
 };
 function OAuthStatusMessage({
   oauthStatus,
@@ -376,13 +378,13 @@ function OAuthStatusMessage({
   textInputColumns,
   handleSubmitCode,
   setOAuthStatus,
-  setLoginWithgakrcliAi,
+  setLoginWithGakrCLIAi,
 }: OAuthStatusMessageProps) {
   switch (oauthStatus.state) {
     case 'idle': {
       const promptText =
         startingMessage ||
-        'GakrCLI can be used with your GakrCLI subscription or 3rd-party platform.'
+        'GakrCLI can be used with your GakrCLI subscription or billed based on API usage through your Console account.'
 
       const loginOptions = [
         {
@@ -394,6 +396,16 @@ function OAuthStatusMessage({
             </Text>
           ),
           value: 'gakrcliai' as const,
+        },
+        {
+          label: (
+            <Text>
+              Anthropic Console account ·{' '}
+              <Text dimColor>API usage billing</Text>
+              {'\n'}
+            </Text>
+          ),
+          value: 'console' as const,
         },
         {
           label: (
@@ -424,7 +436,10 @@ function OAuthStatusMessage({
                 setOAuthStatus({ state: 'ready_to_start' })
                 if (value === 'gakrcliai') {
                   logEvent('tengu_oauth_gakrcliai_selected', {})
-                  setLoginWithgakrcliAi(true)
+                  setLoginWithGakrCLIAi(true)
+                } else {
+                  logEvent('tengu_oauth_console_selected', {})
+                  setLoginWithGakrCLIAi(false)
                 }
               }}
             />
@@ -438,14 +453,14 @@ function OAuthStatusMessage({
         <ProviderManager
           mode="first-run"
           onDone={result => {
-            if (!result || result.action === 'cancelled') {
+            if (!result || result.action !== 'saved' || !result.message) {
               setOAuthStatus({ state: 'idle' })
               return
             }
 
             setOAuthStatus({
               state: 'platform_setup_complete',
-              message: result.message ?? 'Provider configured.',
+              message: result.message,
             })
           }}
         />
@@ -497,7 +512,7 @@ function OAuthStatusMessage({
         <Box flexDirection="column" gap={1}>
           <Box>
             <Spinner />
-            <Text>Creating API key for Gakr…</Text>
+            <Text>Creating API key for GakrCLI…</Text>
           </Box>
         </Box>
       )

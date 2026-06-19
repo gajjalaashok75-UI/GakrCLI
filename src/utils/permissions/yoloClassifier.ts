@@ -5,7 +5,7 @@ import { mkdir, writeFile } from 'fs/promises'
 import { dirname, join } from 'path'
 import { z } from 'zod/v4'
 import {
-  getCachedgakrcliMdContent,
+  getCachedGakrCLIMdContent,
   getLastClassifierRequests,
   getSessionId,
   setLastClassifierRequests,
@@ -41,7 +41,7 @@ import {
   extractToolUseBlock,
   parseClassifierResponse,
 } from './classifierShared.js'
-import { getgakrcliTempDir } from './filesystem.js'
+import { getGakrCLITempDir } from './filesystem.js'
 
 // Dead code elimination: conditional imports for auto mode classifier prompts.
 // At build time, the bundler inlines .txt files as string literals. At test
@@ -98,7 +98,7 @@ export type AutoModeRules = {
  * captured tag contents ARE the defaults. Bullet items are single-line in the
  * template; each line starting with `- ` becomes one array entry.
  * Used by `gakrcli auto-mode defaults`. Always returns external defaults,
- * never the Anthropic-internal template.
+ * never the internal-only template.
  */
 export function getDefaultExternalAutoModeRules(): AutoModeRules {
   return {
@@ -145,7 +145,7 @@ export function buildDefaultExternalSystemPrompt(): string {
 }
 
 function getAutoModeDumpDir(): string {
-  return join(getgakrcliTempDir(), 'auto-mode')
+  return join(getGakrCLITempDir(), 'auto-mode')
 }
 
 /**
@@ -188,7 +188,7 @@ async function maybeDumpAutoMode(
  */
 export function getAutoModeClassifierErrorDumpPath(): string {
   return join(
-    getgakrcliTempDir(),
+    getGakrCLITempDir(),
     'auto-mode-classifier-errors',
     `${getSessionId()}.txt`,
   )
@@ -577,8 +577,8 @@ export function buildTranscriptForClassifier(
  * getUserContext), the classifier proceeds without GAKRCLI.md — same as
  * pre-PR behavior.
  */
-function buildgakrcliMdMessage(): Anthropic.MessageParam | null {
-  const gakrcliMd = getCachedgakrcliMdContent()
+function buildGakrCLIMdMessage(): Anthropic.MessageParam | null {
+  const gakrcliMd = getCachedGakrCLIMdContent()
   if (gakrcliMd === null) return null
   return {
     role: 'user',
@@ -1156,7 +1156,7 @@ export async function classifyYoloAction(
     tools,
     transcriptBudget,
   )
-  const gakrcliMdMessage = buildgakrcliMdMessage()
+  const gakrcliMdMessage = buildGakrCLIMdMessage()
   const prefixMessages: Anthropic.MessageParam[] = gakrcliMdMessage
     ? [gakrcliMdMessage]
     : []
@@ -1455,7 +1455,7 @@ function getClassifierModel(): string {
 }
 
 /**
- * Resolve the XML classifier setting: ant-only env var takes precedence,
+ * Resolve the XML classifier setting: internal-only env var takes precedence,
  * then GrowthBook. Returns undefined when unset (caller decides default).
  */
 function resolveTwoStageClassifier():

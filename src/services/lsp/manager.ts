@@ -15,7 +15,7 @@ type InitializationState = 'not-started' | 'pending' | 'success' | 'failed'
 
 /**
  * Global singleton instance of the LSP server manager.
- * Initialized during GakrCLI startup.
+ * Initialized during GakrCLI Code startup.
  */
 let lspManagerInstance: LSPServerManager | undefined
 
@@ -57,7 +57,7 @@ export function _resetLspManagerForTesting(): void {
  * Returns undefined if not yet initialized, initialization failed, or still pending.
  *
  * Callers should check for undefined and handle gracefully, as initialization happens
- * asynchronously during GakrCLI startup. Use getInitializationStatus() to
+ * asynchronously during GakrCLI Code startup. Use getInitializationStatus() to
  * distinguish between pending, failed, and not-started states.
  */
 export function getLspServerManager(): LSPServerManager | undefined {
@@ -135,7 +135,7 @@ export async function waitForInitialization(): Promise<void> {
 /**
  * Initialize the LSP server manager singleton.
  *
- * This function is called during GakrCLI startup. It synchronously creates
+ * This function is called during GakrCLI Code startup. It synchronously creates
  * the manager instance, then starts async initialization (loading LSP configs)
  * in the background without blocking the startup process.
  *
@@ -223,7 +223,7 @@ export function initializeLspServerManager(): void {
  * parsing (servers are lazy-started on first use). Also safe during pending
  * init: the generation counter invalidates the in-flight promise.
  */
-export async function reinitializeLspServerManager(): Promise<void> {
+export function reinitializeLspServerManager(): void {
   if (initializationState === 'not-started') {
     // initializeLspServerManager() was never called (e.g. headless subcommand
     // path). Don't start it now.
@@ -232,23 +232,15 @@ export async function reinitializeLspServerManager(): Promise<void> {
 
   logForDebugging('[LSP MANAGER] reinitializeLspServerManager() called')
 
-  // Shutdown any running servers on the old instance so /reload-plugins
-  // doesn't leak child processes. On Windows, child process shutdown can hang
-  // if the server doesn't respond to graceful shutdown, so we use a timeout.
+  // Best-effort shutdown of any running servers on the old instance so
+  // /reload-plugins doesn't leak child processes. Fire-and-forget: the
+  // primary use case (issue #15521) has 0 servers so this is usually a no-op.
   if (lspManagerInstance) {
-    const SHUTDOWN_TIMEOUT_MS = 5000
-    try {
-      await Promise.race([
-        lspManagerInstance.shutdown(),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('LSP shutdown timeout')), SHUTDOWN_TIMEOUT_MS)
-        )
-      ])
-    } catch (err) {
+    void lspManagerInstance.shutdown().catch(err => {
       logForDebugging(
-        `[LSP MANAGER] old instance shutdown during reinit failed or timed out: ${errorMessage(err)}`,
+        `[LSP MANAGER] old instance shutdown during reinit failed: ${errorMessage(err)}`,
       )
-    }
+    })
   }
 
   // Force the idempotence check in initializeLspServerManager() to fall
@@ -263,7 +255,7 @@ export async function reinitializeLspServerManager(): Promise<void> {
 /**
  * Shutdown the LSP server manager and clean up resources.
  *
- * This should be called during GakrCLI shutdown. Stops all running LSP servers
+ * This should be called during GakrCLI Code shutdown. Stops all running LSP servers
  * and clears internal state. Safe to call when not initialized (no-op).
  *
  * NOTE: Errors during shutdown are logged for monitoring but NOT propagated to the caller.

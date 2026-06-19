@@ -1,12 +1,4 @@
 import { feature } from 'bun:bundle';
-import {
-  applyProfileEnvToProcessEnv,
-  buildStartupEnvFromProfile,
-} from '../utils/providerProfile.js'
-import {
-  getProviderValidationError,
-  validateProviderEnvForStartupOrExit,
-} from '../utils/providerValidation.js'
 
 // GakrCLI: polyfill globalThis.File for Node < 20.
 // undici v7 references `File` at module evaluation time (webidl type
@@ -19,7 +11,6 @@ if (typeof globalThis.File === 'undefined') {
     // Node 18.13+ exposes File in node:buffer but not as a global.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { File: NodeFile } = require('node:buffer')
-    // @ts-expect-error -- polyfilling missing global
     globalThis.File = NodeFile
   } catch {
     // Absolute fallback: stub so `MakeTypeAssertion(File)` doesn't throw.
@@ -47,13 +38,16 @@ process.env.GAKR_CODE_DISABLE_EXPERIMENTAL_BETAS ??= 'true'
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
 process.env.COREPACK_ENABLE_AUTO_PIN = '0';
 
-// Set max heap size for child processes in CCR environments (containers have 16GB)
+// Set max heap size for child processes. The current CLI process is already
+// running by this point; the package launcher raises its heap before importing
+// dist/cli.mjs. Keeping NODE_OPTIONS here preserves the larger cap for tools or
+// subprocesses spawned after startup without overriding user-provided limits.
 // eslint-disable-next-line custom-rules/no-top-level-side-effects, custom-rules/no-process-env-top-level, custom-rules/safe-env-boolean-check
-if (process.env.GAKR_CODE_REMOTE === 'true') {
+if (!process.env.NODE_OPTIONS?.includes('--max-old-space-size')) {
   // eslint-disable-next-line custom-rules/no-top-level-side-effects, custom-rules/no-process-env-top-level
-  const existing = process.env.NODE_OPTIONS || '';
+  const existing = process.env.NODE_OPTIONS || ''
   // eslint-disable-next-line custom-rules/no-top-level-side-effects, custom-rules/no-process-env-top-level
-  process.env.NODE_OPTIONS = existing ? `${existing} --max-old-space-size=8192` : '--max-old-space-size=8192';
+  process.env.NODE_OPTIONS = existing ? `${existing} --max-old-space-size=8192` : '--max-old-space-size=8192'
 }
 
 // Harness-science L0 ablation baseline. Inlined here (not init.ts) because
@@ -110,26 +104,26 @@ async function main(): Promise<void> {
     enableConfigs()
   }
 
-  // Apply settings.env from user settings (includes GitHub provider settings from /provider)
+  // Apply settings.env from user settings (includes GitHub provider settings from /onboard-github)
   {
     const { applySafeConfigEnvironmentVariables } = await import('../utils/managedEnv.js')
     applySafeConfigEnvironmentVariables()
   }
 
-  const hasConfiguredProviderProfile = await (async () => {
-    const { getActiveProviderProfile } = await import(
-      '../utils/providerProfiles.js'
-    )
-    return getActiveProviderProfile() !== undefined
-  })()
-
+  const {
+    applyProfileEnvToProcessEnv,
+    buildStartupEnvFromProfile,
+    isDefaultStartupProviderEnv,
+  } = await import('../utils/providerProfile.js')
   const startupEnv = await buildStartupEnvFromProfile({
     processEnv: process.env,
-    hasConfiguredProviderProfile,
   })
   if (startupEnv !== process.env) {
+    const { getProviderValidationError } = await import(
+      '../utils/providerValidation.js'
+    )
     const startupProfileError = await getProviderValidationError(startupEnv)
-    if (startupProfileError) {
+    if (startupProfileError && !isDefaultStartupProviderEnv(startupEnv)) {
       console.error(
         `Warning: ignoring saved provider profile. ${startupProfileError}`,
       )
@@ -138,7 +132,24 @@ async function main(): Promise<void> {
     }
   }
 
+  // Pane/window teammates are launched as fresh CLI processes. If the parent
+  // selected a configured agentModels key, apply that route before provider
+  // validation and --model env routing run in this child process.
   {
+    const { eagerLoadSettingsFromArgs } = await import(
+      '../utils/settings/flagSettings.js'
+    )
+    const settingsLoadResult = eagerLoadSettingsFromArgs(args)
+    if (!settingsLoadResult.ok) {
+      if (settingsLoadResult.cause instanceof Error) {
+        const { logError } = await import('../utils/log.js')
+        logError(settingsLoadResult.cause)
+      }
+      const { default: chalk } = await import('chalk')
+      process.stderr.write(chalk.red(`${settingsLoadResult.message}\n`))
+      process.exit(1)
+    }
+
     const {
       applyAgentProviderOverrideToEnv,
       resolveOutOfProcessTeammateProviderFromCliArgs,
@@ -163,14 +174,17 @@ async function main(): Promise<void> {
     hydrateGithubModelsTokenFromSecureStorage()
   }
 
-  // --model alone: route the process-scoped override to the active provider's
-  // model env var after saved profiles are applied and before startup reads it.
+  const { validateProviderEnvForStartupOrExit } = await import(
+    '../utils/providerValidation.js'
+  )
+  await validateProviderEnvForStartupOrExit()
+
+  // #808: --model alone (no --provider) — route to the env var matching the
+  // active provider before the banner prints so the override is visible.
   if (args.includes('--model')) {
     const { applyModelFlagFromArgs } = await import('../utils/providerFlag.js')
     applyModelFlagFromArgs(args)
   }
-
-  await validateProviderEnvForStartupOrExit()
 
   // Parse --model early so the startup screen can display the override
   const { eagerParseCliFlag } = await import('../utils/cliArgs.js')
@@ -211,9 +225,9 @@ async function main(): Promise<void> {
   if (process.argv[2] === '--gakrcli-in-chrome-mcp') {
     profileCheckpoint('cli_gakrcli_in_chrome_mcp_path');
     const {
-      rungakrcliInChromeMcpServer
+      runGakrCLIInChromeMcpServer
     } = await import('../utils/gakrcliInChrome/mcpServer.js');
-    await rungakrcliInChromeMcpServer();
+    await runGakrCLIInChromeMcpServer();
     return;
   } else if (process.argv[2] === '--chrome-native-host') {
     profileCheckpoint('cli_chrome_native_host_path');
@@ -273,9 +287,9 @@ async function main(): Promise<void> {
     // getBridgeDisabledReason awaits GB init, so the returned value is fresh
     // (not the stale disk cache), but init still needs auth headers to work.
     const {
-      getgakrcliAIOAuthTokens
+      getGakrCLIAIOAuthTokens
     } = await import('../utils/auth.js');
-    if (!getgakrcliAIOAuthTokens()?.accessToken) {
+    if (!getGakrCLIAIOAuthTokens()?.accessToken) {
       exitWithError(BRIDGE_LOGIN_ERROR);
     }
     const disabledReason = await getBridgeDisabledReason();

@@ -1,16 +1,12 @@
+import { execFileSync } from 'child_process'
 import { diffLines } from 'diff'
-import { constants as fsConstants } from 'fs'
 import {
-  copyFile,
   mkdir,
-  mkdtemp,
   readdir,
   readFile,
-  rm,
   unlink,
   writeFile,
 } from 'fs/promises'
-import { tmpdir } from 'os'
 import { extname, join } from 'path'
 import type { Command } from '../commands.js'
 import { queryWithModel } from '../services/api/gakrcli.js'
@@ -19,12 +15,12 @@ import {
   LEGACY_AGENT_TOOL_NAME,
 } from '../tools/AgentTool/constants.js'
 import type { LogOption } from '../types/logs.js'
-import { getGakrcliConfigHomeDir, getProjectsDir } from '../utils/envUtils.js'
+import { getGakrCLIConfigHomeDir } from '../utils/envUtils.js'
 import { toError } from '../utils/errors.js'
-import { execFileNoThrow } from '../utils/execFileNoThrow.js'
 import { logError } from '../utils/log.js'
 import { extractTextContent } from '../utils/messages.js'
 import { getDefaultOpusModel } from '../utils/model/model.js'
+import { getProjectsDir } from '../utils/envUtils.js'
 import {
   getSessionFilesWithMtime,
   getSessionIdFromLog,
@@ -44,184 +40,6 @@ function getAnalysisModel(): string {
 function getInsightsModel(): string {
   return getDefaultOpusModel()
 }
-
-// ============================================================================
-// Homespace Data Collection
-// ============================================================================
-
-type RemoteHostInfo = {
-  name: string
-  sessionCount: number
-}
-
-/* eslint-disable custom-rules/no-process-env-top-level */
-const getRunningRemoteHosts: () => Promise<string[]> =
-  process.env.USER_TYPE === 'ant'
-    ? async () => {
-        const { stdout, code } = await execFileNoThrow(
-          'coder',
-          ['list', '-o', 'json'],
-          { timeout: 30000 },
-        )
-        if (code !== 0) return []
-        try {
-          const workspaces = jsonParse(stdout) as Array<{
-            name: string
-            latest_build?: { status?: string }
-          }>
-          return workspaces
-            .filter(w => w.latest_build?.status === 'running')
-            .map(w => w.name)
-        } catch {
-          return []
-        }
-      }
-    : async () => []
-
-const getRemoteHostSessionCount: (hs: string) => Promise<number> =
-  process.env.USER_TYPE === 'ant'
-    ? async (homespace: string) => {
-        const { stdout, code } = await execFileNoThrow(
-          'ssh',
-          [
-            `${homespace}.coder`,
-            'find /root/.gakrcli/workspace/projects -name "*.jsonl" 2>/dev/null | wc -l',
-          ],
-          { timeout: 30000 },
-        )
-        if (code !== 0) return 0
-        return parseInt(stdout.trim(), 10) || 0
-      }
-    : async () => 0
-
-const collectFromRemoteHost: (
-  hs: string,
-  destDir: string,
-) => Promise<{ copied: number; skipped: number }> =
-  process.env.USER_TYPE === 'ant'
-    ? async (homespace: string, destDir: string) => {
-        const result = { copied: 0, skipped: 0 }
-
-        // Create temp directory
-        const tempDir = await mkdtemp(join(tmpdir(), 'gakrcli-hs-'))
-
-        try {
-          // SCP the projects folder
-          const scpResult = await execFileNoThrow(
-            'scp',
-            [
-              '-rq',
-              `${homespace}.coder:/root/.gakrcli/workspace/projects/`,
-              tempDir,
-            ],
-            { timeout: 300000 },
-          )
-          if (scpResult.code !== 0) {
-            // SCP failed
-            return result
-          }
-
-          const projectsDir = join(tempDir, 'projects')
-          let projectDirents: Awaited<ReturnType<typeof readdir>>
-          try {
-            projectDirents = await readdir(projectsDir, { withFileTypes: true })
-          } catch {
-            return result
-          }
-
-          // Merge into destination (parallel per project directory)
-          await Promise.all(
-            projectDirents.map(async dirent => {
-              const projectName = dirent.name
-              const projectPath = join(projectsDir, projectName)
-
-              // Skip if not a directory
-              if (!dirent.isDirectory()) return
-
-              const destProjectName = `${projectName}__${homespace}`
-              const destProjectPath = join(destDir, destProjectName)
-
-              try {
-                await mkdir(destProjectPath, { recursive: true })
-              } catch {
-                // Directory may already exist
-              }
-
-              // Copy session files (skip existing)
-              let files: Awaited<ReturnType<typeof readdir>>
-              try {
-                files = await readdir(projectPath, { withFileTypes: true })
-              } catch {
-                return
-              }
-              await Promise.all(
-                files.map(async fileDirent => {
-                  const fileName = fileDirent.name
-                  if (!fileName.endsWith('.jsonl')) return
-
-                  const srcFile = join(projectPath, fileName)
-                  const destFile = join(destProjectPath, fileName)
-
-                  try {
-                    await copyFile(srcFile, destFile, fsConstants.COPYFILE_EXCL)
-                    result.copied++
-                  } catch {
-                    // EEXIST from COPYFILE_EXCL means dest already exists
-                    result.skipped++
-                  }
-                }),
-              )
-            }),
-          )
-        } finally {
-          try {
-            await rm(tempDir, { recursive: true, force: true })
-          } catch {
-            // Ignore cleanup errors
-          }
-        }
-
-        return result
-      }
-    : async () => ({ copied: 0, skipped: 0 })
-
-const collectAllRemoteHostData: (destDir: string) => Promise<{
-  hosts: RemoteHostInfo[]
-  totalCopied: number
-  totalSkipped: number
-}> =
-  process.env.USER_TYPE === 'ant'
-    ? async (destDir: string) => {
-        const rHosts = await getRunningRemoteHosts()
-        const result: RemoteHostInfo[] = []
-        let totalCopied = 0
-        let totalSkipped = 0
-
-        // Collect from all hosts in parallel (SCP per host can take seconds)
-        const hostResults = await Promise.all(
-          rHosts.map(async hs => {
-            const sessionCount = await getRemoteHostSessionCount(hs)
-            if (sessionCount > 0) {
-              const { copied, skipped } = await collectFromRemoteHost(
-                hs,
-                destDir,
-              )
-              return { name: hs, sessionCount, copied, skipped }
-            }
-            return { name: hs, sessionCount, copied: 0, skipped: 0 }
-          }),
-        )
-
-        for (const hr of hostResults) {
-          result.push({ name: hr.name, sessionCount: hr.sessionCount })
-          totalCopied += hr.copied
-          totalSkipped += hr.skipped
-        }
-
-        return { hosts: result, totalCopied, totalSkipped }
-      }
-    : async () => ({ hosts: [], totalCopied: 0, totalSkipped: 0 })
-/* eslint-enable custom-rules/no-process-env-top-level */
 
 // ============================================================================
 // Types
@@ -265,13 +83,13 @@ type SessionFacets = {
   goal_categories: Record<string, number>
   outcome: string
   user_satisfaction_counts: Record<string, number>
-  gakr_helpfulness: string
+  gakrcli_helpfulness: string
   session_type: string
   friction_counts: Record<string, number>
   friction_detail: string
   primary_success: string
   brief_summary: string
-  user_instructions_to_gakr?: string[]
+  user_instructions_to_gakrcli?: string[]
 }
 
 type AggregatedData = {
@@ -379,7 +197,7 @@ const LABEL_MAP: Record<string, string> = {
   wrong_approach: 'Wrong Approach',
   buggy_code: 'Buggy Code',
   user_rejected_action: 'User Rejected Action',
-  gakr_got_blocked: 'GakrCLI Got Blocked',
+  gakrcli_got_blocked: 'GakrCLI Got Blocked',
   user_stopped_early: 'User Stopped Early',
   wrong_file_or_location: 'Wrong File/Location',
   excessive_changes: 'Excessive Changes',
@@ -416,11 +234,11 @@ const LABEL_MAP: Record<string, string> = {
   essential: 'Essential',
 }
 
-// Lazy getters: getGakrcliConfigHomeDir() is memoized and reads process.env.
+// Lazy getters: getGakrCLIConfigHomeDir() is memoized and reads process.env.
 // Calling it at module scope would populate the memoize cache before
 // entrypoints can set GAKR_CONFIG_DIR, breaking all 150+ other callers.
 function getDataDir(): string {
-  return join(getGakrcliConfigHomeDir(), 'usage-data')
+  return join(getGakrCLIConfigHomeDir(), 'usage-data')
 }
 function getFacetsDir(): string {
   return join(getDataDir(), 'facets')
@@ -1017,7 +835,7 @@ RESPOND WITH ONLY A VALID JSON OBJECT matching this schema:
   "goal_categories": {"category_name": count, ...},
   "outcome": "fully_achieved|mostly_achieved|partially_achieved|not_achieved|unclear_from_transcript",
   "user_satisfaction_counts": {"level": count, ...},
-  "gakr_helpfulness": "unhelpful|slightly_helpful|moderately_helpful|very_helpful|essential",
+  "gakrcli_helpfulness": "unhelpful|slightly_helpful|moderately_helpful|very_helpful|essential",
   "session_type": "single_task|multi_task|iterative_refinement|exploration|quick_question",
   "friction_counts": {"friction_type": count, ...},
   "friction_detail": "One sentence describing friction or empty",
@@ -1057,11 +875,11 @@ RESPOND WITH ONLY A VALID JSON OBJECT matching this schema:
 }
 
 /**
- * Detects parallel session usage (using multiple GakrCLI sessions concurrently).
+ * Detects multi-clauding (using multiple GakrCLI sessions concurrently).
  * Uses a sliding window to find the pattern: session1 -> session2 -> session1
  * within a 30-minute window.
  */
-export function detectParallelSessions(
+export function detectMultiClauding(
   sessions: Array<{
     session_id: string
     user_message_timestamps: string[]
@@ -1087,7 +905,7 @@ export function detectParallelSessions(
 
   allSessionMessages.sort((a, b) => a.ts - b.ts)
 
-  const multigakrcliSessionPairs = new Set<string>()
+  const multiGakrCLISessionPairs = new Set<string>()
   const messagesDuringMultigakrcli = new Set<string>()
 
   // Sliding window: sessionLastIndex tracks the most recent index for each session
@@ -1116,7 +934,7 @@ export function detectParallelSessions(
         const between = allSessionMessages[j]!
         if (between.sessionId !== msg.sessionId) {
           const pair = [msg.sessionId, between.sessionId].sort().join(':')
-          multigakrcliSessionPairs.add(pair)
+          multiGakrCLISessionPairs.add(pair)
           messagesDuringMultigakrcli.add(
             `${allSessionMessages[prevIndex]!.ts}:${msg.sessionId}`,
           )
@@ -1131,14 +949,14 @@ export function detectParallelSessions(
   }
 
   const sessionsWithOverlaps = new Set<string>()
-  for (const pair of multigakrcliSessionPairs) {
+  for (const pair of multiGakrCLISessionPairs) {
     const [s1, s2] = pair.split(':')
     if (s1) sessionsWithOverlaps.add(s1)
     if (s2) sessionsWithOverlaps.add(s2)
   }
 
   return {
-    overlap_events: multigakrcliSessionPairs.size,
+    overlap_events: multiGakrCLISessionPairs.size,
     sessions_involved: sessionsWithOverlaps.size,
     user_messages_during: messagesDuringMultigakrcli.size,
   }
@@ -1264,8 +1082,8 @@ function aggregateData(
       }
 
       // Helpfulness
-      result.helpfulness[sessionFacets.gakr_helpfulness] =
-        (result.helpfulness[sessionFacets.gakr_helpfulness] || 0) + 1
+      result.helpfulness[sessionFacets.gakrcli_helpfulness] =
+        (result.helpfulness[sessionFacets.gakrcli_helpfulness] || 0) + 1
 
       // Session types
       result.session_types[sessionFacets.session_type] =
@@ -1319,7 +1137,7 @@ function aggregateData(
   // Store message hours for time-of-day chart
   result.message_hours = allMessageHours
 
-  result.multi_clauding = detectParallelSessions(sessions)
+  result.multi_clauding = detectMultiClauding(sessions)
 
   return result
 }
@@ -1347,7 +1165,7 @@ RESPOND WITH ONLY A VALID JSON OBJECT:
   ]
 }
 
-Include 4-5 areas. Skip internal GakrCLI operations.`,
+Include 4-5 areas. Skip internal CC operations.`,
     maxTokens: 8192,
   },
   {
@@ -1356,7 +1174,7 @@ Include 4-5 areas. Skip internal GakrCLI operations.`,
 
 RESPOND WITH ONLY A VALID JSON OBJECT:
 {
-  "narrative": "2-3 paragraphs analyzing HOW the user interacts with Gakr. Use second person 'you'. Describe patterns: iterate quickly vs detailed upfront specs? Interrupt often or let GakrCLI run? Include specific examples. Use **bold** for key insights.",
+  "narrative": "2-3 paragraphs analyzing HOW the user interacts with GakrCLI. Use second person 'you'. Describe patterns: iterate quickly vs detailed upfront specs? Interrupt often or let GakrCLI run? Include specific examples. Use **bold** for key insights.",
   "key_pattern": "One sentence summary of most distinctive interaction style"
 }`,
     maxTokens: 8192,
@@ -1395,7 +1213,7 @@ Include 3 friction categories with 2 examples each.`,
     name: 'suggestions',
     prompt: `Analyze this GakrCLI usage data and suggest improvements.
 
-## GakrCLI FEATURES REFERENCE (pick from these for features_to_try):
+## CC FEATURES REFERENCE (pick from these for features_to_try):
 1. **MCP Servers**: Connect GakrCLI to external tools, databases, and APIs via Model Context Protocol.
    - How to use: Run \`gakrcli mcp add <server-name> -- <command>\`
    - Good for: database queries, Slack integration, GitHub issue lookup, connecting to internal APIs
@@ -1418,20 +1236,20 @@ Include 3 friction categories with 2 examples each.`,
 
 RESPOND WITH ONLY A VALID JSON OBJECT:
 {
-  "gakr_md_additions": [
+  "gakrcli_md_additions": [
     {"addition": "A specific line or block to add to GAKRCLI.md based on workflow patterns. E.g., 'Always run tests after modifying auth-related files'", "why": "1 sentence explaining why this would help based on actual sessions", "prompt_scaffold": "Instructions for where to add this in GAKRCLI.md. E.g., 'Add under ## Testing section'"}
   ],
   "features_to_try": [
-    {"feature": "Feature name from GakrCLI FEATURES REFERENCE above", "one_liner": "What it does", "why_for_you": "Why this would help YOU based on your sessions", "example_code": "Actual command or config to copy"}
+    {"feature": "Feature name from CC FEATURES REFERENCE above", "one_liner": "What it does", "why_for_you": "Why this would help YOU based on your sessions", "example_code": "Actual command or config to copy"}
   ],
   "usage_patterns": [
     {"title": "Short title", "suggestion": "1-2 sentence summary", "detail": "3-4 sentences explaining how this applies to YOUR work", "copyable_prompt": "A specific prompt to copy and try"}
   ]
 }
 
-IMPORTANT for gakr_md_additions: PRIORITIZE instructions that appear MULTIPLE TIMES in the user data. If user told GakrCLI the same thing in 2+ sessions (e.g., 'always run tests', 'use TypeScript'), that's a PRIME candidate - they shouldn't have to repeat themselves.
+IMPORTANT for gakrcli_md_additions: PRIORITIZE instructions that appear MULTIPLE TIMES in the user data. If user told GakrCLI the same thing in 2+ sessions (e.g., 'always run tests', 'use TypeScript'), that's a PRIME candidate - they shouldn't have to repeat themselves.
 
-IMPORTANT for features_to_try: Pick 2-3 from the GakrCLI FEATURES REFERENCE above. Include 2-3 items for each category.`,
+IMPORTANT for features_to_try: Pick 2-3 from the CC FEATURES REFERENCE above. Include 2-3 items for each category.`,
     maxTokens: 8192,
   },
   {
@@ -1453,7 +1271,7 @@ Include 3 opportunities. Think BIG - autonomous workflows, parallel agents, iter
     ? [
         {
           name: 'cc_team_improvements',
-          prompt: `Analyze this GakrCLI usage data and suggest product improvements for the GakrCLI team.
+          prompt: `Analyze this GakrCLI usage data and suggest product improvements for the CC team.
 
 RESPOND WITH ONLY A VALID JSON OBJECT:
 {
@@ -1523,7 +1341,7 @@ type InsightResults = {
     }>
   }
   suggestions?: {
-    gakr_md_additions?: Array<{
+    gakrcli_md_additions?: Array<{
       addition: string
       why: string
       where?: string
@@ -1618,7 +1436,7 @@ async function generateParallelInsights(
   // Build data context string
   const facetSummaries = Array.from(facets.values())
     .slice(0, 50)
-    .map(f => `- ${f.brief_summary} (${f.outcome}, ${f.gakr_helpfulness})`)
+    .map(f => `- ${f.brief_summary} (${f.outcome}, ${f.gakrcli_helpfulness})`)
     .join('\n')
 
   const frictionDetails = Array.from(facets.values())
@@ -1628,7 +1446,7 @@ async function generateParallelInsights(
     .join('\n')
 
   const userInstructions = Array.from(facets.values())
-    .flatMap(f => f.user_instructions_to_gakrcli  || [])
+    .flatMap(f => f.user_instructions_to_gakrcli || [])
     .slice(0, 15)
     .map(i => `- ${i}`)
     .join('\n')
@@ -1663,7 +1481,7 @@ async function generateParallelInsights(
     facetSummaries +
     '\n\nFRICTION DETAILS:\n' +
     frictionDetails +
-    '\n\nUSER INSTRUCTIONS TO GAKR:\n' +
+    '\n\nUSER INSTRUCTIONS TO GAKRCLI:\n' +
     (userInstructions || 'None captured')
 
   // Run sections in parallel first (excluding at_a_glance)
@@ -2008,7 +1826,7 @@ function generateHtmlReport(
   const interactionStyle = insights.interaction_style
   const interactionHtml = interactionStyle?.narrative
     ? `
-    <h2 id="section-usage">How You Use Gakr</h2>
+    <h2 id="section-usage">How You Use GakrCLI</h2>
     <div class="narrative">
       ${markdownToHtml(interactionStyle.narrative)}
       ${interactionStyle.key_pattern ? `<div class="key-insight"><strong>Key pattern:</strong> ${escapeHtml(interactionStyle.key_pattern)}</div>` : ''}
@@ -2066,17 +1884,17 @@ function generateHtmlReport(
   const suggestionsHtml = suggestions
     ? `
     ${
-      suggestions.gakr_md_additions &&
-      suggestions.gakr_md_additions.length > 0
+      suggestions.gakrcli_md_additions &&
+      suggestions.gakrcli_md_additions.length > 0
         ? `
-    <h2 id="section-features">Existing GakrCLI Features to Try</h2>
+    <h2 id="section-features">Existing CC Features to Try</h2>
     <div class="gakrcli-md-section">
       <h3>Suggested GAKRCLI.md Additions</h3>
       <p style="font-size: 12px; color: #64748b; margin-bottom: 12px;">Just copy this into GakrCLI to add it to your GAKRCLI.md.</p>
       <div class="gakrcli-md-actions">
-        <button class="copy-all-btn" onclick="copyAllCheckedGakrMd()">Copy All Checked</button>
+        <button class="copy-all-btn" onclick="copyAllCheckedGakrCLIMd()">Copy All Checked</button>
       </div>
-      ${suggestions.gakr_md_additions
+      ${suggestions.gakrcli_md_additions
         .map(
           (add, i) => `
         <div class="gakrcli-md-item">
@@ -2131,7 +1949,7 @@ function generateHtmlReport(
     ${
       suggestions.usage_patterns && suggestions.usage_patterns.length > 0
         ? `
-    <h2 id="section-patterns">New Ways to Use Gakr</h2>
+    <h2 id="section-patterns">New Ways to Use GakrCLI</h2>
     <p style="font-size: 13px; color: #64748b; margin-bottom: 12px;">Just copy this into GakrCLI and it'll walk you through it.</p>
     <div class="patterns-section">
       ${suggestions.usage_patterns
@@ -2145,7 +1963,7 @@ function generateHtmlReport(
             pat.copyable_prompt
               ? `
           <div class="copyable-prompt-section">
-            <div class="prompt-label">Paste into Gakr:</div>
+            <div class="prompt-label">Paste into GakrCLI:</div>
             <div class="copyable-prompt-row">
               <code class="copyable-prompt">${escapeHtml(pat.copyable_prompt)}</code>
               <button class="copy-btn" onclick="copyText(this)">Copy</button>
@@ -2180,7 +1998,7 @@ function generateHtmlReport(
           <div class="horizon-title">${escapeHtml(opp.title || '')}</div>
           <div class="horizon-possible">${escapeHtml(opp.whats_possible || '')}</div>
           ${opp.how_to_try ? `<div class="horizon-tip"><strong>Getting started:</strong> ${escapeHtml(opp.how_to_try)}</div>` : ''}
-          ${opp.copyable_prompt ? `<div class="pattern-prompt"><div class="prompt-label">Paste into Gakr:</div><code>${escapeHtml(opp.copyable_prompt)}</code><button class="copy-btn" onclick="copyText(this)">Copy</button></div>` : ''}
+          ${opp.copyable_prompt ? `<div class="pattern-prompt"><div class="prompt-label">Paste into GakrCLI:</div><code>${escapeHtml(opp.copyable_prompt)}</code><button class="copy-btn" onclick="copyText(this)">Copy</button></div>` : ''}
         </div>
       `,
         )
@@ -2189,7 +2007,7 @@ function generateHtmlReport(
     `
       : ''
 
-  // Build Team Feedback section (collapsible, ant-only)
+  // Build Team Feedback section (collapsible, internal-only)
   const ccImprovements =
     process.env.USER_TYPE === 'ant'
       ? insights.cc_team_improvements?.improvements || []
@@ -2202,14 +2020,14 @@ function generateHtmlReport(
     ccImprovements.length > 0 || modelImprovements.length > 0
       ? `
     <h2 id="section-feedback" class="feedback-header">Closing the Loop: Feedback for Other Teams</h2>
-    <p class="feedback-intro">Suggestions for the GakrCLI product and model teams based on your usage patterns. Click to expand.</p>
+    <p class="feedback-intro">Suggestions for the CC product and model teams based on your usage patterns. Click to expand.</p>
     ${
       ccImprovements.length > 0
         ? `
     <div class="collapsible-section">
       <div class="collapsible-header" onclick="toggleCollapsible(this)">
         <span class="collapsible-arrow">▶</span>
-        <h3>Product Improvements for GakrCLI Team</h3>
+        <h3>Product Improvements for CC Team</h3>
       </div>
       <div class="collapsible-content">
         <div class="suggestions-section">
@@ -2285,7 +2103,7 @@ function generateHtmlReport(
     .stat { text-align: center; }
     .stat-value { font-size: 24px; font-weight: 700; color: #0f172a; }
     .stat-label { font-size: 11px; color: #64748b; text-transform: uppercase; }
-    .at-a-glance { background: linear-gradient(135deg, #aad2eb 0%, #72c6ed 100%); border: 1px solid #72c6ed; border-radius: 12px; padding: 20px 24px; margin-bottom: 32px; }
+    .at-a-glance { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; border-radius: 12px; padding: 20px 24px; margin-bottom: 32px; }
     .glance-title { font-size: 16px; font-weight: 700; color: #92400e; margin-bottom: 16px; }
     .glance-sections { display: flex; flex-direction: column; gap: 12px; }
     .glance-section { font-size: 14px; color: #78350f; line-height: 1.6; }
@@ -2370,7 +2188,7 @@ function generateHtmlReport(
     .feedback-title { font-weight: 600; font-size: 14px; color: #0f172a; margin-bottom: 6px; }
     .feedback-detail { font-size: 13px; color: #475569; line-height: 1.5; }
     .feedback-evidence { font-size: 12px; color: #64748b; margin-top: 8px; }
-    .fun-ending { background: linear-gradient(135deg, #aad2eb 0%, #72c6ed 100%); border: 1px solid #72c6ed; border-radius: 12px; padding: 24px; margin-top: 40px; text-align: center; }
+    .fun-ending { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #fbbf24; border-radius: 12px; padding: 24px; margin-top: 40px; text-align: center; }
     .fun-headline { font-size: 18px; font-weight: 600; color: #78350f; margin-bottom: 8px; }
     .fun-detail { font-size: 14px; color: #92400e; }
     .collapsible-section { margin-top: 16px; }
@@ -2408,7 +2226,7 @@ function generateHtmlReport(
         });
       }
     }
-    function copyAllCheckedGakrMd() {
+    function copyAllCheckedGakrCLIMd() {
       const checkboxes = document.querySelectorAll('.cmd-checkbox:checked');
       const texts = [];
       checkboxes.forEach(cb => {
@@ -2500,7 +2318,7 @@ function generateHtmlReport(
 
     <nav class="nav-toc">
       <a href="#section-work">What You Work On</a>
-      <a href="#section-usage">How You Use Gakr</a>
+      <a href="#section-usage">How You Use CC</a>
       <a href="#section-wins">Impressive Things</a>
       <a href="#section-friction">Where Things Go Wrong</a>
       <a href="#section-features">Features to Try</a>
@@ -2554,7 +2372,7 @@ function generateHtmlReport(
 
     <!-- Multi-clauding Section (matching Python reference) -->
     <div class="chart-card" style="margin: 24px 0;">
-      <div class="chart-title">Parallel Sessions</div>
+      <div class="chart-title">Multi-Clauding (Parallel Sessions)</div>
       ${
         data.multi_clauding.overlap_events === 0
           ? `
@@ -2578,7 +2396,7 @@ function generateHtmlReport(
           </div>
         </div>
         <p style="font-size: 13px; color: #475569; margin-top: 12px;">
-          You run multiple GakrCLI sessions simultaneously. Parallel session overlap is detected when sessions
+          You run multiple GakrCLI sessions simultaneously. Multi-clauding is detected when sessions
           overlap in time, suggesting parallel workflows.
         </p>
       `
@@ -2658,10 +2476,9 @@ export type InsightsExport = {
   metadata: {
     username: string
     generated_at: string
-    gakr_code_version: string
+    gakrcli_code_version: string
     date_range: { start: string; end: string }
     session_count: number
-    remote_hosts_collected?: string[]
   }
   aggregated_data: AggregatedData
   insights: InsightResults
@@ -2682,13 +2499,8 @@ export function buildExportData(
   data: AggregatedData,
   insights: InsightResults,
   facets: Map<string, SessionFacets>,
-  remoteStats?: { hosts: RemoteHostInfo[]; totalCopied: number },
 ): InsightsExport {
   const version = typeof MACRO !== 'undefined' ? MACRO.VERSION : 'unknown'
-
-  const remote_hosts_collected = remoteStats?.hosts
-    .filter(h => h.sessionCount > 0)
-    .map(h => h.name)
 
   const facets_summary = {
     total: facets.size,
@@ -2724,13 +2536,9 @@ export function buildExportData(
     metadata: {
       username: process.env.SAFEUSER || process.env.USER || 'unknown',
       generated_at: new Date().toISOString(),
-      gakr_code_version: version,
+      gakrcli_code_version: version,
       date_range: data.date_range,
       session_count: data.total_sessions,
-      ...(remote_hosts_collected &&
-        remote_hosts_collected.length > 0 && {
-          remote_hosts_collected,
-        }),
     },
     aggregated_data: data,
     insights,
@@ -2757,7 +2565,9 @@ type LiteSessionInfo = {
 async function scanAllSessions(): Promise<LiteSessionInfo[]> {
   const projectsDir = getProjectsDir()
 
-  let dirents: Awaited<ReturnType<typeof readdir>>
+  // `ReturnType<typeof readdir>` resolves to the last (Buffer) overload;
+  // with a string path + withFileTypes we get string-named Dirents.
+  let dirents: import('node:fs').Dirent[]
   try {
     dirents = await readdir(projectsDir, { withFileTypes: true })
   } catch {
@@ -2795,24 +2605,12 @@ async function scanAllSessions(): Promise<LiteSessionInfo[]> {
 // Main Function
 // ============================================================================
 
-export async function generateUsageReport(options?: {
-  collectRemote?: boolean
-}): Promise<{
+export async function generateUsageReport(): Promise<{
   insights: InsightResults
   htmlPath: string
   data: AggregatedData
-  remoteStats?: { hosts: RemoteHostInfo[]; totalCopied: number }
   facets: Map<string, SessionFacets>
 }> {
-  let remoteStats: { hosts: RemoteHostInfo[]; totalCopied: number } | undefined
-
-  // Optionally collect data from remote hosts first (ant-only)
-  if (process.env.USER_TYPE === 'ant' && options?.collectRemote) {
-    const destDir = getProjectsDir()
-    const { hosts, totalCopied } = await collectAllRemoteHostData(destDir)
-    remoteStats = { hosts, totalCopied }
-  }
-
   // Phase 1: Lite scan — filesystem metadata only (no JSONL parsing)
   const allScannedSessions = await scanAllSessions()
   const totalSessionsScanned = allScannedSessions.length
@@ -3019,7 +2817,6 @@ export async function generateUsageReport(options?: {
     insights,
     htmlPath,
     data: aggregated,
-    remoteStats,
     facets: substantiveFacets,
   }
 }
@@ -3045,39 +2842,11 @@ const usageReport: Command = {
   contentLength: 0, // Dynamic content
   progressMessage: 'analyzing your sessions',
   source: 'builtin',
-  async getPromptForCommand(args) {
-    let collectRemote = false
-    let remoteHosts: string[] = []
-    let hasRemoteHosts = false
-
-    if (process.env.USER_TYPE === 'ant') {
-      // Parse --homespaces flag
-      collectRemote = args?.includes('--homespaces') ?? false
-
-      // Check for available remote hosts
-      remoteHosts = await getRunningRemoteHosts()
-      hasRemoteHosts = remoteHosts.length > 0
-
-      // Show collection message if collecting
-      if (collectRemote && hasRemoteHosts) {
-        // biome-ignore lint/suspicious/noConsole: intentional
-        console.error(
-          `Collecting sessions from ${remoteHosts.length} homespace(s): ${remoteHosts.join(', ')}...`,
-        )
-      }
-    }
-
-    const { insights, htmlPath, data, remoteStats } = await generateUsageReport(
-      { collectRemote },
-    )
+  async getPromptForCommand(_args) {
+    const { insights, htmlPath, data } = await generateUsageReport()
 
     let reportUrl = `file://${htmlPath}`
     let uploadHint = ''
-
-    if (process.env.USER_TYPE === 'ant') {
-      uploadHint =
-        '\nOpen-build reports stay local. Share the file manually if you want someone else to inspect it.'
-    }
 
     // Build header with stats
     const sessionLabel =
@@ -3092,20 +2861,6 @@ const usageReport: Command = {
       `${data.git_commits} commits`,
     ].join(' · ')
 
-    // Build remote host info (ant-only)
-    let remoteInfo = ''
-    if (process.env.USER_TYPE === 'ant') {
-      if (remoteStats && remoteStats.totalCopied > 0) {
-        const hsNames = remoteStats.hosts
-          .filter(h => h.sessionCount > 0)
-          .map(h => h.name)
-          .join(', ')
-        remoteInfo = `\n_Collected ${remoteStats.totalCopied} new sessions from: ${hsNames}_\n`
-      } else if (!collectRemote && hasRemoteHosts) {
-        // Suggest using --homespaces if they have remote hosts but didn't use the flag
-        remoteInfo = `\n_Tip: Run \`/insights --homespaces\` to include sessions from your ${remoteHosts.length} running homespace(s)_\n`
-      }
-    }
 
     // Build markdown summary from insights
     const atAGlance = insights.at_a_glance
@@ -3125,7 +2880,6 @@ ${atAGlance.ambitious_workflows ? `**Ambitious workflows:** ${atAGlance.ambitiou
 
 ${stats}
 ${data.date_range.start} to ${data.date_range.end}
-${remoteInfo}
 `
 
     const userSummary = `${header}${summaryText}
