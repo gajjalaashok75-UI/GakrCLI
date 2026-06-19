@@ -68,9 +68,9 @@ The extension declares `@gakr-gakr/gakrcli` as a dependency. During source-check
 
 For this release:
 
-- GakrCLI root package: `0.5.6`
+- GakrCLI root package: `0.5.7`
 - VS Code extension: `0.2.4`
-- Extension dependency: `@gakr-gakr/gakrcli@^0.5.6`
+- Extension dependency: `@gakr-gakr/gakrcli@^0.5.7`
 
 ## Important Files
 

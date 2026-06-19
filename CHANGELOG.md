@@ -5,73 +5,48 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.9] - 2026-06-19
-
-### Removed
-- **Locally-Added SDK Runtime File**: Deleted `src/entrypoints/sdk/runtime.ts` — a locally-added file with no equivalent in `references/openclaude-main/`. Removed all imports and dependent code from:
-  - `src/entrypoints/sdk/query.ts` — stripped runtime-dependent Query interface methods (`listModels`, `getFastModeState`, `getReasoningConfig`, `setReasoningEffort`, `setFastMode`, `applySettings`, `listProviders`, `getTodoState`, `runSlashCommand`, `setMcpServers`, `getRuntimeState`, etc.) and their QueryImpl implementations
-  - `tests/sdk/sdk-slash-commands.test.ts` — deleted; tested removed runtime functions
-  - `tests/sdk/query-methods.test.ts` — removed "runtime control API" test block
-  - `tests/sdk/sdk-context-isolation.test.ts` — simplified per reference
-  - `tests/sdk/sdk-preserved-segment.test.ts` — simplified per reference
-
-### Changed
-- **SDK Reference Alignment**: All SDK entrypoint and test files now match `references/openclaude-main/` structure exactly — no locally-added runtime layer present
-- **Feature Flags**: Enabled `CONTEXT_COLLAPSE` and `BG_SESSIONS` feature flags in `scripts/build.ts`
-
-### Fixed
-- **External List Validation**: Restored `bun` and `byn` externals in `scripts/externals.ts` for background session support
-- **Automatic Interruption Bug**: Fixed 6 locations where `abortController.abort()` was called without `'interrupt'` reason, causing unwanted interruption messages in the query loop — updates in `PermissionContext.ts` (lines 206, 286), `PermissionPromptToolResultSchema.ts` (line 126), `permissions.ts` (line 469), and `print.ts` (lines 2838, 2850)
-- **GitHub Enterprise Full Wiring**: Completed orphaned GHE implementation by:
-  - Adding `'ghe'` endpoint type detection to `getGithubEndpointType()` in `providerConfig.ts` (`.ghe.com`, `GITHUB_ENTERPRISE_URL` env var, `*.github.com` GHE detection)
-  - Adding `getGithubEnterpriseUrl()`, `buildGithubEnterpriseCopilotBaseUrl()`, and `asGithubEnterpriseEnvUrl()` helpers
-  - Wiring GHE base URL routing in `resolveProviderRequest()` with `gheCopilotBaseUrl`, `isGithubGhe`, `isGithubCopilotLike` variables
-  - Adding `'github-enterprise'` compatibility mode in `providerProfiles.ts` with `isGithubCompatibilityMode()`, `deriveGithubEnterpriseUrl()`, and `buildGithubCompatibleProfileEnv()`
-  - Extending `onboard-github.tsx` — `buildGithubOnboardingSettingsEnv()`, `applyGithubOnboardingProcessEnv()`, `mergeUserSettingsEnv()`, and `getExistingGithubEnterpriseUrl()` now accept and propagate `gheUrl` parameters; `activateGithubOnboardingMode()` passes `gheUrl` through to merge/apply callbacks
-
-## [0.5.8] - 2026-06-19
-
-### Added
-- **Provider Env-File Loading**: Wired `--provider-env-file` CLI flag into `cli.tsx` with explicit env file loading before provider resolution. Added `reapplyRememberedEnvFileValues()` to `managedEnv.ts` so explicitly-loaded env files are restored after every settings.env merge, preventing saved config from clobbering provider routing inputs.
-- **GitHub Enterprise Support**: Restored GHE device flow functions (`normalizeGithubEnterpriseAuthBaseUrl`, `getGithubEnterpriseDeviceCodeUrl`, `getGithubEnterpriseAccessTokenUrl`, `getGithubEnterpriseCopilotTokenUrl`) in `deviceFlow.ts`. Added `gheUrl` params to `requestDeviceCode()`, `pollAccessToken()`, `exchangeForCopilotToken()`. Extended `githubModelsCredentials.ts` with `credentialType` field and `GITHUB_COPILOT_KEY` support. Restored GHE URL and Copilot API key flows in `onboard-github.tsx`.
-- **Commander --provider-env-file Option**: Registered the `--provider-env-file` option in `main.tsx` so `--help` displays it and unknown-option handling stays aligned.
-- **Env-File Tests**: Ported 3 envFile integration tests from reference to `cli.test.ts` — text scan for remembered values, functional test for settings+profile merge preservation, and functional test for `--provider` values beating env-file values.
-- **Importers Pattern**: Restructured `cli.tsx` to export `main()` with `CliEntrypointImporters` for dependency injection, matching the reference architecture.
-- **Background Routing Tests**: Ported 6 bg routing tests from reference — 2 text scan tests (bg before config, bg after profile but before validation) and 4 runtime tests with mock importers.
-- **Main Entry Exported**: Exported `main` function from `cli.tsx` with `GAKR_CODE_DISABLE_CLI_ENTRYPOINT_AUTO_RUN` guard for test-controlled auto-execution.
-
-### Fixed
-- **Env-File ReferenceError**: Fixed `reapplyProviderEnvFileValues` assignment in `cli.tsx` `--provider-env-file` block — added `let` declaration before the block to prevent ReferenceError.
-- **main.tsx feature() Build Error**: Fixed `feature('WEB_BROWSER_TOOL')` calls in object literals at `src/main.tsx:1525` and `src/main.tsx:1547` by extracting into proper `if (feature(...))` blocks, so `main.tsx` can be compiled in test mode.
-
 ## [0.5.7] - 2026-06-19
 
-### Fixed
-- **New File Wiring & Integration**: Wired 78+ newly added source files across bridge, CLI, commands, components, services, tools, and utils into the module graph. Resolved import gaps, missing exports, and dead code paths by cross-referencing against the OpenClaude reference.
-- **LSP Diagnostic Registry Storm Control**: Restored missing ~700 lines of storm detection, deduplication, delivery planning, per-server diagnostic windows, and cross-turn tracking in `LSPDiagnosticRegistry.ts`.
-- **Sandbox-Toggle Null Guard**: Fixed null crash in `sandbox-toggle/index.ts` when `SandboxManager.checkDependencies()` returns null.
-- **Tool Query Activity Lease Lifecycle**: Wired `queryActivityLease` acquire/release/registerActivity into `toolExecution.ts` for shell tools (BashTool, PowerShellTool).
-- **BashTool & PowerShellTool Timeout Wiring**: Replaced `getDefaultTimeoutMs()` with `getEffectiveTimeoutMs(timeout)` across both shell tools so lease-aware timeout propagation works correctly.
-- **AgentDetail Route Picker**: Integrated `AgentRouteSelector`, `useInput` for 'm' key handling, route display, and `useKeybinding` `isActive` deactivation into `AgentDetail.tsx`.
-- **Prompt Cache Break Detection**: Replaced stripped-down `promptCacheBreakDetection.ts` with full reference implementation including `PromptCacheBreakKind` taxonomy, prompt state snapshots, per-tool hashing, cache break classification, and TTL expiry detection.
-- **Cache Metrics Reliability**: Added missing `CacheMetricsReliability` type and `getCacheMetricsReliability()` function to `cacheMetrics.ts`.
-- **GitHub URL Renames**: Updated stale `anthropics/gakrcli-code-action`, `anthropics/claude-code-action`, `anthropics/gakrcli-code-marketplace`, and `gakr-gakr/gakrcli-code` references to `gajjalaashok75-UI/gakrcli-action` and `gajjalaashok75-UI/GakrCLI` across 6 files. Fixed `OFFICIAL_GITHUB_ORG` in plugin schema validation from `anthropics` → `gajjalaashok75-UI`. Fixed telemetry `isOfficialRepo()` check to use correct org for official marketplace detection.
+### Removed
+- **Locally-Added SDK Runtime File**: Deleted `src/entrypoints/sdk/runtime.ts` — a locally-added file with no equivalent in `references/openclaude-main/`. Stripped all runtime-dependent Query interface methods and test files to align SDK with reference.
+
+### Changed
+- **SDK Reference Alignment**: All SDK entrypoint and test files now match `references/openclaude-main/` structure exactly.
+- **Feature Flags**: Enabled `CONTEXT_COLLAPSE` and `BG_SESSIONS` feature flags in `scripts/build.ts`.
+- **Brand & Docs Rename**: Completed rename across 12 files — `.gitignore` (`.claude` → `.gakrcli`), `bin/gakrcli.js` re-stubbed, all docs updated from legacy names to GakrCLI branding.
 
 ### Added
-- **Batch Test Verification**: Ran 36+ new test files across 14 batches covering bridge, CLI, commands, components, services, tools, and utils. All new tests pass after wiring fixes.
-- **Context Building Verification (2026-06-19)**: End-to-end pipeline verification confirmed all 6 context layers load in correct order, workspace files render in `<GAKRCLI_WORKSPACE>` block, and `getUserContext()` / `getSystemContext()` memoized output reaches the model via `prependUserContext()`.
-- **Knowledge Graph Verification (2026-06-19)**: Verified 29/30 tests pass — core engine, stress, conversation arc all functional. `getKnowledgeStorageStatus()` runtime diagnostics added ahead of reference. 1 Windows EBUSY cleanup issue noted (pre-existing).
-- **Plugin System Verification (2026-06-19)**: Verified official marketplace points to `gajjalaashok75-UI/gakrcli-plugins-official`, plugin loader and marketplace manager flow complete. 6 stale URLs updated.
-- **Provider System Verification (2026-06-19)**: Verified 14 vendors, 25 gateways, 2 Python providers — all configured correctly. 344+ provider tests pass.
-- **Brand & Docs Rename**: Completed rename across 12 files — `.gitignore` (`.claude` → `.gakrcli`), `bin/gakrcli.js` re-stubbed, all README, docs, and env example references updated from legacy product names to GakrCLI branding.
+- **Provider Env-File Loading**: Wired `--provider-env-file` CLI flag with `reapplyRememberedEnvFileValues()` in `managedEnv.ts` so saved config doesn't clobber provider routing inputs. Registered in Commander. Ported 3 envFile integration tests and 6 background routing tests from reference.
+- **Importers Pattern**: Restructured `cli.tsx` to export `main()` with `CliEntrypointImporters` for dependency injection. Exported with `GAKR_CODE_DISABLE_CLI_ENTRYPOINT_AUTO_RUN` guard.
+- **GitHub Enterprise Restore & Full Wiring**: Restored GHE device flow functions (`normalizeGithubEnterpriseAuthBaseUrl`, `getGithubEnterpriseDeviceCodeUrl`, etc.) in `deviceFlow.ts`. Added `gheUrl` params to device flow functions and `GITHUB_COPILOT_KEY` support in `githubModelsCredentials.ts`. Added `'ghe'` endpoint type detection to `getGithubEndpointType()`, `getGithubEnterpriseUrl()`, `buildGithubEnterpriseCopilotBaseUrl()` helpers, and `isGithubGhe`/`gheCopilotBaseUrl` routing in `resolveProviderRequest()`. Added `'github-enterprise'` compatibility mode with `deriveGithubEnterpriseUrl()` and `buildGithubCompatibleProfileEnv()` in `providerProfiles.ts`. Extended onboard functions to accept and propagate `gheUrl` parameters through merge/apply callbacks.
+- **Provider System Verification**: 14 vendors, 25 gateways, 2 Python providers configured. 344+ provider tests pass.
+- **Context Building Verification**: All 6 context layers verified in correct order, workspace files render in `<GAKRCLI_WORKSPACE>` block.
+- **Knowledge Graph Verification**: 29/30 tests pass with `getKnowledgeStorageStatus()` runtime diagnostics.
+- **Plugin System Verification**: Official marketplace points to `gajjalaashok75-UI/gakrcli-plugins-official`.
+- **Batch Test Verification**: 36+ new test files across 14 batches pass after wiring fixes.
+
+### Fixed
+- **External List Validation**: Restored `bun` and `byn` externals in `scripts/externals.ts`.
+- **Env-File ReferenceError**: Fixed `reapplyProviderEnvFileValues` by adding `let` declaration before the `--provider-env-file` block.
+- **main.tsx feature() Build Error**: Fixed `feature('WEB_BROWSER_TOOL')` calls in object literals at `src/main.tsx:1525`/`1547`.
+- **Automatic Interruption Bug**: Fixed 6 `abortController.abort()` calls missing `'interrupt'` reason across `PermissionContext.ts`, `permissions.ts`, `PermissionPromptToolResultSchema.ts`, `print.ts`, and `openaiShim.ts`.
+- **New File Wiring**: Wired 78+ newly added source files across bridge, CLI, commands, components, services, tools, and utils into the module graph. Resolved import gaps and missing exports.
+- **LSP Diagnostic Registry Storm Control**: Restored ~700 lines of storm detection, deduplication, and delivery planning in `LSPDiagnosticRegistry.ts`.
+- **Sandbox-Toggle Null Guard**: Fixed null crash when `SandboxManager.checkDependencies()` returns null.
+- **Tool Query Activity Lease**: Wired `queryActivityLease` acquire/release/registerActivity into `toolExecution.ts`.
+- **BashTool & PowerShellTool Timeout Wiring**: Replaced `getDefaultTimeoutMs()` with `getEffectiveTimeoutMs(timeout)` for lease-aware timeout propagation.
+- **AgentDetail Route Picker**: Integrated `AgentRouteSelector` with 'm' key handling and route display.
+- **Prompt Cache Break Detection**: Full reference implementation with `PromptCacheBreakKind` taxonomy, per-tool hashing, and TTL expiry detection.
+- **Cache Metrics Reliability**: Added `CacheMetricsReliability` type and `getCacheMetricsReliability()` function.
+- **GitHub URL Renames**: Updated stale `anthropics/*` and `gakr-gakr/gakrcli-code` references to `gajjalaashok75-UI/*` across 6 files. Fixed `OFFICIAL_GITHUB_ORG` in plugin schema validation.
 
 ### Refactored
-- **Context Building Pipeline**: Refined workspace context rendering, memory file ordering with `WORKSPACE_CONTEXT_FILE_ORDER`, system context improvements, and `prependUserContext()` in api.ts.
-- **Knowledge Graph**: Added `getKnowledgeStorageStatus()` runtime diagnostics, proactive SQLite `saveGraph()` sync during Orama init, and refactored JSON/SQLite storage providers.
-- **Plugin System**: Updated marketplace source reconciliation, plugin loading with official marketplace and env var rename (`CLAUDE_CODE_REMOTE` → `GAKR_CODE_REMOTE`), and MCP plugin integration.
-- **Provider System**: Expanded to 14 vendors, 25 gateways with provider profiles, auto-detection priority chain, and Python provider tests for Atomic Chat and Ollama.
+- **Context Building Pipeline**: Workspace context rendering, memory file ordering with `WORKSPACE_CONTEXT_FILE_ORDER`, system context improvements, `prependUserContext()` in api.ts.
+- **Knowledge Graph**: `getKnowledgeStorageStatus()` diagnostics, proactive SQLite `saveGraph()` sync during Orama init, JSON/SQLite storage refactor.
+- **Plugin System**: Marketplace source reconciliation, env var rename (`CLAUDE_CODE_REMOTE` → `GAKR_CODE_REMOTE`), MCP plugin integration.
+- **Provider System**: Expanded to 14 vendors, 25 gateways with provider profiles and auto-detection priority chain.
 
-## [unreleased - 0.5.6]
+## [0.5.6] - 2026-06-12
 
 ### Enhanced (2026-06-12)
 - **Web Search Tools Performance Overhaul**: Implemented major performance and reliability improvements to WebSearchTool, ImageSearchTool, and VideoSearchTool:

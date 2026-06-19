@@ -1,4 +1,4 @@
-# GakrCLI Advanced Setup (v0.5.6)
+# GakrCLI Advanced Setup (v0.5.7)
 
 This guide is for users who want source builds, Bun workflows, provider profiles, diagnostics, or more control over runtime behavior.
 
@@ -353,7 +353,7 @@ bun run hardening:strict   # Typecheck + hardening
 - Check environment variable name matches provider
 
 **Windows Input Prompt Hang**
-- Update to GakrCLI 0.5.6 or later
+- Update to GakrCLI 0.5.7 or later
 - Ensure all dependencies are installed
 
 ### Debug Mode
