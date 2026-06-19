@@ -1,4 +1,4 @@
-# GakrCLI Quick Start for macOS and Linux (v0.5.6)
+# GakrCLI Quick Start for macOS and Linux
 
 This guide uses a standard shell such as Terminal, iTerm, bash, or zsh.
 
@@ -15,12 +15,16 @@ node --version
 npm --version
 ```
 
-## 2. Install Gakr
+## 2. Install GakrCLI
 
 ```bash
-npm install -g @gakr-gakr/gakrcli
+npm install -g @gakr-gakr/gakrcli@latest
 ```
+On Arch Linux, you can alternatively install GakrCLI via the community-maintained [AUR package](https://aur.archlinux.org/packages/gakrcli):
 
+```bash
+paru -S gakrcli
+```
 ## 3. Pick One Provider
 
 ### Option A: OpenAI
@@ -30,7 +34,7 @@ Replace `sk-your-key-here` with your real key.
 ```bash
 export GAKR_CODE_USE_OPENAI=1
 export OPENAI_API_KEY=sk-your-key-here
-export OPENAI_MODEL=gpt-4o  # or gpt-4.1
+export OPENAI_MODEL=gpt-4o
 
 gakrcli
 ```
@@ -41,10 +45,12 @@ gakrcli
 export GAKR_CODE_USE_OPENAI=1
 export OPENAI_API_KEY=sk-your-key-here
 export OPENAI_BASE_URL=https://api.deepseek.com/v1
-export OPENAI_MODEL=deepseek-chat
+export OPENAI_MODEL=deepseek-v4-flash
 
 gakrcli
 ```
+
+Use `deepseek-v4-pro` when you want the stronger model. `deepseek-chat` and `deepseek-reasoner` still work as DeepSeek's legacy API aliases.
 
 ### Option C: Ollama
 
@@ -55,11 +61,11 @@ Install Ollama first from:
 Then run:
 
 ```bash
-ollama pull llama3.2:3b  # or llama3.2:7b, qwen2.5-coder:7b
+ollama pull llama3.1:8b
 
 export GAKR_CODE_USE_OPENAI=1
 export OPENAI_BASE_URL=http://localhost:11434/v1
-export OPENAI_MODEL=llama3.2:3b
+export OPENAI_MODEL=llama3.1:8b
 
 gakrcli
 ```
@@ -124,16 +130,29 @@ Check the basics:
 - make sure a model is loaded in LM Studio
 - make sure the model name matches what you set in `OPENAI_MODEL`
 
-## 6. Updating Gakr
+## 6. Updating GakrCLI
 
+**Via npm:**
 ```bash
 npm install -g @gakr-gakr/gakrcli@latest
 ```
 
-## 7. Uninstalling Gakr
+**Via AUR:**
+```bash
+paru
+```
+*(Or use your preferred AUR helper like `yay -Syu`)*
 
+## 7. Uninstalling GakrCLI
+
+**Via npm:**
 ```bash
 npm uninstall -g @gakr-gakr/gakrcli
+```
+
+**Via AUR (Arch Linux):**
+```bash
+paru -Rns gakrcli
 ```
 
 ## Need Advanced Setup?
@@ -141,4 +160,4 @@ npm uninstall -g @gakr-gakr/gakrcli
 Use:
 
 - [Advanced Setup](advanced-setup.md)
-- [Provider Reference](PROVIDERS.md)
+  For Codex, Gemini, Mistral, LiteLLM, provider profiles, and runtime diagnostics.

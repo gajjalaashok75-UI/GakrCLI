@@ -1,4 +1,4 @@
-# GakrCLI for Non-Technical Users (v0.5.6)
+# GakrCLI for Non-Technical Users
 
 This guide is for people who want the easiest setup path.
 
@@ -15,11 +15,6 @@ GakrCLI lets you use an AI coding assistant with different model providers such 
 - Gemini
 - Ollama
 - Codex
-- Anthropic Claude
-- NVIDIA NIM
-- OpenRouter
-- LM Studio
-- Custom OpenAI-compatible providers
 
 For most first-time users, OpenAI is the easiest option.
 
@@ -34,8 +29,10 @@ You need:
 ## Fastest Path
 
 1. Install GakrCLI with npm
-2. Set 3 environment variables
-3. Run `gakrcli`
+2. Run `gakrcli`
+3. Inside the CLI, run `/provider` for guided provider setup
+
+The `/provider` command walks you through choosing a provider and entering credentials. You do not need to set environment variables beforehand.
 
 ## Choose Your Operating System
 
@@ -44,11 +41,13 @@ You need:
 
 ## Which Provider Should You Choose?
 
+Once you have picked a provider, run `/provider` inside GakrCLI to set it up with guided prompts.
+
 ### OpenAI
 
 Choose this if:
 
-- you want the easiest setup
+- you want the easiest cloud setup
 - you already have an OpenAI API key
 
 ### Ollama
@@ -83,12 +82,29 @@ At that point, you can ask it to:
 Cause:
 
 - npm installed the package, but your terminal has not refreshed yet
+- on Windows, npm's global bin folder may not be in your user `Path`
 
 Fix:
 
 1. Close the terminal
 2. Open a new terminal
 3. Run `gakrcli` again
+
+On Windows PowerShell, if that still does not work, add npm's global bin folder
+to your user `Path`, then open a new PowerShell window:
+
+```powershell
+$npmPrefix = npm config get prefix
+$currentUserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+
+if (($currentUserPath -split ';') -notcontains $npmPrefix) {
+    [Environment]::SetEnvironmentVariable(
+        "Path",
+        "$currentUserPath;$npmPrefix",
+        "User"
+    )
+}
+```
 
 ### Invalid API key
 
@@ -99,7 +115,7 @@ Cause:
 Fix:
 
 1. Get a fresh key from your provider
-2. Paste it again carefully
+2. Run `/provider` inside GakrCLI to update your credentials
 3. Re-run `gakrcli`
 
 ### Ollama not working
@@ -119,4 +135,22 @@ Fix:
 If you want source builds, advanced provider profiles, diagnostics, or Bun-based workflows, use:
 
 - [Advanced Setup](advanced-setup.md)
-- [Provider Reference](PROVIDERS.md)
+  This is also where to find Codex, Gemini, Mistral, LiteLLM, and profile-launcher setup.
+
+## Getting Help
+
+- **GitHub Discussions**: https://github.com/gajjalaashok75-UI/gakrcli/discussions
+  Use this for Q&A, setup help, and community conversation.
+
+- **GitHub Issues**: https://github.com/gajjalaashok75-UI/gakrcli/issues
+  Use this for confirmed bugs and feature requests.
+
+### Quick diagnostic check
+
+If GakrCLI is not working after setup, run:
+
+```bash
+gakrcli --version
+```
+
+If this prints a version number, the install succeeded. If it says "command not found," close your terminal, open a new one, and try again. On Windows, you may also need to add npm's global bin folder to your user `Path` (see the [Windows Quick Start](quick-start-windows.md) guide for details).

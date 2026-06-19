@@ -8,7 +8,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.5.7] - 2026-06-19
 
 ### Fixed
-- **GitHub URL Renames**: Updated stale `anthropics/gakrcli-code-action`, `anthropics/claude-code-action`, `anthropics/gakrcli-code-marketplace`, and `gakr-gakr/gakrcli-code` references to `gajjalaashok75-UI/gakrcli-action` and `gajjalaashok75-UI/GakrCLI` across 6 files. Fixed `OFFICIAL_GITHUB_ORG` in plugin schema validation from `anthropics` → `gajjalaashok75-UI`. Fixed telemetry `isOfficialRepo()` check to use correct org for official marketplace detection.
 - **New File Wiring & Integration**: Wired 78+ newly added source files across bridge, CLI, commands, components, services, tools, and utils into the module graph. Resolved import gaps, missing exports, and dead code paths by cross-referencing against the OpenClaude reference.
 - **LSP Diagnostic Registry Storm Control**: Restored missing ~700 lines of storm detection, deduplication, delivery planning, per-server diagnostic windows, and cross-turn tracking in `LSPDiagnosticRegistry.ts`.
 - **Sandbox-Toggle Null Guard**: Fixed null crash in `sandbox-toggle/index.ts` when `SandboxManager.checkDependencies()` returns null.
@@ -17,9 +16,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **AgentDetail Route Picker**: Integrated `AgentRouteSelector`, `useInput` for 'm' key handling, route display, and `useKeybinding` `isActive` deactivation into `AgentDetail.tsx`.
 - **Prompt Cache Break Detection**: Replaced stripped-down `promptCacheBreakDetection.ts` with full reference implementation including `PromptCacheBreakKind` taxonomy, prompt state snapshots, per-tool hashing, cache break classification, and TTL expiry detection.
 - **Cache Metrics Reliability**: Added missing `CacheMetricsReliability` type and `getCacheMetricsReliability()` function to `cacheMetrics.ts`.
+- **GitHub URL Renames**: Updated stale `anthropics/gakrcli-code-action`, `anthropics/claude-code-action`, `anthropics/gakrcli-code-marketplace`, and `gakr-gakr/gakrcli-code` references to `gajjalaashok75-UI/gakrcli-action` and `gajjalaashok75-UI/GakrCLI` across 6 files. Fixed `OFFICIAL_GITHUB_ORG` in plugin schema validation from `anthropics` → `gajjalaashok75-UI`. Fixed telemetry `isOfficialRepo()` check to use correct org for official marketplace detection.
 
 ### Added
 - **Batch Test Verification**: Ran 36+ new test files across 14 batches covering bridge, CLI, commands, components, services, tools, and utils. All new tests pass after wiring fixes.
+- **Context Building Verification (2026-06-19)**: End-to-end pipeline verification confirmed all 6 context layers load in correct order, workspace files render in `<GAKRCLI_WORKSPACE>` block, and `getUserContext()` / `getSystemContext()` memoized output reaches the model via `prependUserContext()`.
+- **Knowledge Graph Verification (2026-06-19)**: Verified 29/30 tests pass — core engine, stress, conversation arc all functional. `getKnowledgeStorageStatus()` runtime diagnostics added ahead of reference. 1 Windows EBUSY cleanup issue noted (pre-existing).
+- **Plugin System Verification (2026-06-19)**: Verified official marketplace points to `gajjalaashok75-UI/gakrcli-plugins-official`, plugin loader and marketplace manager flow complete. 6 stale URLs updated.
+- **Provider System Verification (2026-06-19)**: Verified 14 vendors, 25 gateways, 2 Python providers — all configured correctly. 344+ provider tests pass.
+- **Brand & Docs Rename**: Completed rename across 12 files — `.gitignore` (`.claude` → `.gakrcli`), `bin/gakrcli.js` re-stubbed, all README, docs, and env example references updated from legacy product names to GakrCLI branding.
+
+### Refactored
+- **Context Building Pipeline**: Refined workspace context rendering, memory file ordering with `WORKSPACE_CONTEXT_FILE_ORDER`, system context improvements, and `prependUserContext()` in api.ts.
+- **Knowledge Graph**: Added `getKnowledgeStorageStatus()` runtime diagnostics, proactive SQLite `saveGraph()` sync during Orama init, and refactored JSON/SQLite storage providers.
+- **Plugin System**: Updated marketplace source reconciliation, plugin loading with official marketplace and env var rename (`CLAUDE_CODE_REMOTE` → `GAKR_CODE_REMOTE`), and MCP plugin integration.
+- **Provider System**: Expanded to 14 vendors, 25 gateways with provider profiles, auto-detection priority chain, and Python provider tests for Atomic Chat and Ollama.
 
 ## [unreleased - 0.5.6]
 
