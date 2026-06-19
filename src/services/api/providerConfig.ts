@@ -23,22 +23,38 @@ import {
   openAIShimSupportsApiFormatForModel,
   resolveOpenAIShimRuntimeContext,
 } from '../../integrations/runtimeMetadata.js'
+
 export const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1'
 export const DEFAULT_CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex'
 export const DEFAULT_NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1'
 export const DEFAULT_MISTRAL_BASE_URL = 'https://api.mistral.ai/v1'
 export const DEFAULT_OPENCODE_BASE_URL = 'https://opencode.ai/zen/v1'
 export const DEFAULT_OPENCODE_GO_BASE_URL = 'https://opencode.ai/zen/go/v1'
-/** Default GitHub Models API model when user selects copilot / github:copilot */
+/** Default GitHub Copilot API model when user selects copilot / github:copilot */
 export const DEFAULT_GITHUB_MODELS_API_MODEL = 'gpt-4o'
-/** Default NVIDIA model */
 export const DEFAULT_NVIDIA_MODEL = 'stepfun-ai/step-3.5-flash'
-const GITHUB_COPILOT_MODEL_ALIASES: Record<string, string> = {
-  'claude-sonnet-4-6': 'claude-sonnet-4.6',
-  'claude-opus-4-6': 'claude-opus-4.6',
-  'claude-haiku-4-5': 'claude-haiku-4.5',
-}
 const warnedUndefinedEnvNames = new Set<string>()
+
+function normalizegitlawbOpengatewayBaseUrl(baseUrl: string | undefined): string | undefined {
+  if (!baseUrl) return undefined
+  try {
+    const parsed = new URL(baseUrl)
+    const hostname = parsed.hostname.toLowerCase()
+    if (hostname !== 'opengateway.gitlawb.com' && hostname !== 'opengateway.fly.dev') {
+      return baseUrl
+    }
+    const path = parsed.pathname.replace(/\/+$/, '').toLowerCase()
+    if (path === '/v1/xiaomi-mimo' || path === '/v1/gmi-cloud') {
+      parsed.pathname = '/v1'
+      parsed.search = ''
+      parsed.hash = ''
+      return parsed.toString().replace(/\/+$/, '')
+    }
+  } catch {
+    return baseUrl
+  }
+  return baseUrl
+}
 
 const CODEX_ALIAS_MODELS: Record<
   string,
@@ -54,10 +70,6 @@ const CODEX_ALIAS_MODELS: Record<
   'gpt-5.5': {
     model: 'gpt-5.5',
     reasoningEffort: 'high',
-  },
-  'gpt-5.5-mini': {
-    model: 'gpt-5.5-mini',
-    reasoningEffort: 'medium',
   },
   'gpt-5.4': {
     model: 'gpt-5.4',
@@ -84,6 +96,10 @@ const CODEX_ALIAS_MODELS: Record<
   'gpt-5.1-codex-mini': {
     model: 'gpt-5.1-codex-mini',
   },
+  'gpt-5.5-mini': {
+    model: 'gpt-5.5-mini',
+    reasoningEffort: 'medium',
+  },
   'gpt-5.4-mini': {
     model: 'gpt-5.4-mini',
     reasoningEffort: 'medium',
@@ -96,16 +112,11 @@ const CODEX_ALIAS_MODELS: Record<
 
 type CodexAlias = keyof typeof CODEX_ALIAS_MODELS
 type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh'
+
 const OPENAI_CODEX_SHORTCUT_ALIASES = new Set(['codexplan', 'codexspark'])
-export type ProviderTransport =
-  | 'chat_completions'
-  | 'responses'
-  | 'responses_compat'
-  | 'codex_responses'
-export type OpenAICompatibleApiFormat =
-  | 'chat_completions'
-  | 'responses'
-  | 'responses_compat'
+
+export type ProviderTransport = 'chat_completions' | 'responses' | 'responses_compat' | 'codex_responses'
+export type OpenAICompatibleApiFormat = 'chat_completions' | 'responses' | 'responses_compat'
 
 export type ResolvedProviderRequest = {
   transport: ProviderTransport
@@ -204,7 +215,6 @@ function asNamedEnvUrl(
   return trimmed
 }
 
-
 function readNestedString(
   value: unknown,
   paths: string[][],
@@ -251,7 +261,7 @@ export function parseOpenAICompatibleApiFormat(
   ) {
     return 'responses'
   }
-  if (normalized === 'responses_compat' || normalized === 'response_compat') {
+  if (normalized === 'responses_compat' || normalized === 'responses_text') {
     return 'responses_compat'
   }
   if (
@@ -305,11 +315,12 @@ function parseModelDescriptor(model: string): ModelDescriptor {
   }
 }
 
-function isCodexAlias(model: string): boolean {
+export function isCodexAlias(model: string): boolean {
   const normalized = model.trim().toLowerCase()
   const base = normalized.split('?', 1)[0] ?? normalized
   return base in CODEX_ALIAS_MODELS
 }
+
 function isOpenAICodexShortcutAlias(model: string): boolean {
   const normalized = model.trim().toLowerCase()
   const base = normalized.split('?', 1)[0] ?? normalized
@@ -338,6 +349,7 @@ function shouldUseGithubResponsesApi(model: string): boolean {
   if (normalized.startsWith('gpt-5-mini')) return false
   return true
 }
+
 export function isLocalProviderUrl(baseUrl: string | undefined): boolean {
   if (!baseUrl) return false
   try {
@@ -377,9 +389,29 @@ export function isLocalProviderUrl(baseUrl: string | undefined): boolean {
   }
 }
 
-// Fast-path opt-outs that are safe for local OpenAI-compatible endpoints.
-// These transforms target cloud behaviours such as prefix caching and strict
-// gateway validation; local backends do not need the extra client-side walks.
+// Fast-path opt-outs that are safe (and beneficial) when the provider is a
+// local OpenAI-compatible endpoint. These features are designed for cloud
+// behaviours that do not exist on local backends:
+//   - byte-stable serialization (`stableStringify`) targets implicit prefix
+//     caching on OpenAI/Kimi/DeepSeek/Codex; local backends do not hash
+//     request prefixes, so the deep key-sort is pure CPU overhead.
+//   - strict tool-schema normalization rewrites Anthropic schemas to the
+//     `additionalProperties: false` shape required by Groq/Azure; local
+//     llama.cpp/vLLM accept either form, so the recursive walk is wasted.
+//   - tool-result compression tiers tool_result blocks for stateless cloud
+//     providers; on a single-user local box where the conversation lives
+//     in RAM, the tier-walk is wasted unless the user opts back in.
+//
+// Issue #1016 traced cumulative client-side overhead as the dominant cause
+// of v0.5+ regressions against ~45 tok/s local models: against a 200ms cloud
+// API the layers are invisible, but against multi-second local round-trips
+// they multiply per-call.
+//
+// Set `GAKR_LOCAL_FAST_PATH=1` to force it on, `=0` to force off, or
+// leave it unset to let `isLocalProviderUrl` decide. The opt-out is intended
+// to be conservative: if the env var is set explicitly, callers can audit
+// regressions; if not, behaviour only changes for hosts already classified
+// as local by the existing detector (loopback, RFC1918, .local, ULA/LL).
 const LOCAL_FAST_PATH_ENV = 'GAKR_LOCAL_FAST_PATH'
 
 export type LocalFastPathConfig = {
@@ -405,14 +437,10 @@ const LOCAL_FAST_PATH_ON: LocalFastPathConfig = {
 
 function parseLocalFastPathOverride(raw: string | undefined): boolean | undefined {
   if (raw === undefined) return undefined
-  const value = raw.trim().toLowerCase()
-  if (value === '' || value === 'auto') return undefined
-  if (value === '0' || value === 'false' || value === 'off' || value === 'no') {
-    return false
-  }
-  if (value === '1' || value === 'true' || value === 'on' || value === 'yes') {
-    return true
-  }
+  const v = raw.trim().toLowerCase()
+  if (v === '' || v === 'auto') return undefined
+  if (v === '0' || v === 'false' || v === 'off' || v === 'no') return false
+  if (v === '1' || v === 'true' || v === 'on' || v === 'yes') return true
   return undefined
 }
 
@@ -520,6 +548,7 @@ export function shouldAttemptLocalToollessRetry(options: {
 
   return isLikelyOllamaEndpoint(options.baseUrl)
 }
+
 export function isCodexBaseUrl(baseUrl: string | undefined): boolean {
   if (!baseUrl) return false
   try {
@@ -532,6 +561,7 @@ export function isCodexBaseUrl(baseUrl: string | undefined): boolean {
     return false
   }
 }
+
 /**
  * Normalize user model string for GitHub Copilot API inference.
  * Mirrors how Copilot resolves model IDs internally.
@@ -545,9 +575,12 @@ export function normalizeGithubCopilotModel(requestedModel: string): string {
   }
   // Strip provider prefix if present (e.g., "openai/gpt-4o" -> "gpt-4o")
   const slashIndex = segment.indexOf('/')
-  const model = slashIndex !== -1 ? segment.slice(slashIndex + 1) : segment
-  return GITHUB_COPILOT_MODEL_ALIASES[model.toLowerCase()] ?? model
+  if (slashIndex !== -1) {
+    return segment.slice(slashIndex + 1)
+  }
+  return segment
 }
+
 /**
  * Normalize user model string for GitHub Models API inference.
  * Only normalizes the default alias, preserves provider-qualified models.
@@ -636,7 +669,7 @@ export function resolveProviderRequest(options?: {
     options?.fallbackModel?.trim() ||
     (isGeminiMode ? DEFAULT_GEMINI_MODEL : undefined) ||
     (isNvidiaMode ? DEFAULT_NVIDIA_MODEL : undefined) ||
-    (isGithubMode ? 'github:copilot' : 'gpt-4o')
+    (isGithubMode ? 'github:copilot' : 'codexplan')
   const descriptor = parseModelDescriptor(requestedModel)
   const explicitBaseUrl = asEnvUrl(options?.baseUrl)
 
@@ -673,13 +706,14 @@ export function resolveProviderRequest(options?: {
     ? (primaryEnvBaseUrl === undefined
       ? asNamedEnvUrl(process.env.OPENAI_API_BASE, 'OPENAI_API_BASE') ?? DEFAULT_GEMINI_BASE_URL
       : undefined)
-    : isNvidiaMode
+      : isNvidiaMode
     ? (primaryEnvBaseUrl === undefined
       ? asNamedEnvUrl(process.env.OPENAI_API_BASE, 'OPENAI_API_BASE') ?? DEFAULT_NVIDIA_BASE_URL
       : undefined)
     : (primaryEnvBaseUrl === undefined
       ? asNamedEnvUrl(process.env.OPENAI_API_BASE, 'OPENAI_API_BASE')
       : undefined)
+
   const envBaseUrlRaw =
     explicitBaseUrl ??
     primaryEnvBaseUrl ??
@@ -690,12 +724,9 @@ export function resolveProviderRequest(options?: {
     isCodexModelForGithub && envBaseUrlRaw && getGithubEndpointType(envBaseUrlRaw) === 'custom'
       ? undefined
       : envBaseUrlRaw
+
   const rawBaseUrl = explicitBaseUrl ?? envBaseUrl
-  // Use Codex transport only when:
-  // - the base URL is explicitly the Codex endpoint, OR
-  // - the model is a Codex alias AND no custom base URL has been set
-  // A custom OPENAI_BASE_URL (e.g. Azure, OpenRouter) always wins over
-  // model-name-based Codex detection to prevent auth failures (#200, #203).
+
   const shellModel = process.env.OPENAI_MODEL?.trim() ?? ''
   const envIsCodexShortcut = isOpenAICodexShortcutAlias(shellModel)
   const envResolvedCodexModel = envIsCodexShortcut
@@ -712,7 +743,7 @@ export function resolveProviderRequest(options?: {
     !isGithubMode && isCodexAliasModel && !hasUserSetBaseUrl
       ? DEFAULT_CODEX_BASE_URL
       : rawBaseUrl
-  const finalBaseUrl = finalBaseUrlRaw
+  const finalBaseUrl = normalizegitlawbOpengatewayBaseUrl(finalBaseUrlRaw)
 
   const githubEndpointType = isGithubMode
     ? getGithubEndpointType(rawBaseUrl)
@@ -724,14 +755,14 @@ export function resolveProviderRequest(options?: {
   const githubResolvedModel = isGithubMode
     ? normalizeGithubModelsApiModel(requestedModel)
     : requestedModel
+
   const requestedApiFormat =
     isGithubMode
       ? undefined
       : parseOpenAICompatibleApiFormat(options?.apiFormat) ??
         parseOpenAICompatibleApiFormat(process.env.OPENAI_API_FORMAT)
   const supportsRequestedApiFormat =
-    (requestedApiFormat !== 'responses' &&
-      requestedApiFormat !== 'responses_compat') ||
+    (requestedApiFormat !== 'responses' && requestedApiFormat !== 'responses_compat') ||
     (() => {
       const runtimeShimContext = resolveOpenAIShimRuntimeContext({
         processEnv: process.env,
@@ -750,12 +781,10 @@ export function resolveProviderRequest(options?: {
     shouldUseCodexTransport(requestedModel, finalBaseUrl) ||
       (isGithubCopilot && shouldUseGithubResponsesApi(githubResolvedModel))
       ? 'codex_responses'
-      : requestedApiFormat === 'responses' && supportsRequestedApiFormat
-        ? 'responses'
-        : requestedApiFormat === 'responses_compat' && supportsRequestedApiFormat
-          ? 'responses_compat'
+      : (requestedApiFormat === 'responses' || requestedApiFormat === 'responses_compat') && supportsRequestedApiFormat
+        ? requestedApiFormat
         : 'chat_completions'
-  
+
   // For GitHub Copilot API, normalize to real model ID (e.g., "github:copilot" -> "gpt-4o")
   // For GitHub Models/custom endpoints:
   //   - Normalize default alias (github:copilot -> gpt-4o)
@@ -785,12 +814,12 @@ export function resolveProviderRequest(options?: {
     reasoning,
   }
 }
+
 export function getAdditionalModelOptionsCacheScope(): string | null {
   if (!isEnvTruthy(process.env.GAKR_CODE_USE_OPENAI)) {
     if (!isEnvTruthy(process.env.GAKR_CODE_USE_GEMINI) &&
         !isEnvTruthy(process.env.GAKR_CODE_USE_MISTRAL) &&
         !isEnvTruthy(process.env.GAKR_CODE_USE_GITHUB) &&
-        !isEnvTruthy(process.env.GAKR_CODE_USE_NVIDIA) &&
         !isEnvTruthy(process.env.GAKR_CODE_USE_BEDROCK) &&
         !isEnvTruthy(process.env.GAKR_CODE_USE_VERTEX) &&
         !isEnvTruthy(process.env.GAKR_CODE_USE_FOUNDRY)) {
@@ -818,6 +847,7 @@ export function getAdditionalModelOptionsCacheScope(): string | null {
 
   return `openai:${request.baseUrl.toLowerCase()}:${partition}`
 }
+
 export function resolveCodexAuthPath(
   env: NodeJS.ProcessEnv = process.env,
 ): string {
@@ -844,6 +874,7 @@ function loadCodexAuthJson(
     return undefined
   }
 }
+
 function resolveCodexAuthJsonCredentials(options: {
   authJson: Record<string, unknown> | undefined
   authPath: string
@@ -934,7 +965,6 @@ function resolveEnvOrAuthJsonCodexCredentials(
   env: NodeJS.ProcessEnv,
   options?: {
     explicitAuthPathOnly?: boolean
-    includeDefaultAuthJson?: boolean
   },
 ): ResolvedCodexCredentials {
   const envApiKey = asTrimmedString(env.CODEX_API_KEY)
@@ -954,10 +984,7 @@ function resolveEnvOrAuthJsonCodexCredentials(
     asTrimmedString(env.CODEX_AUTH_JSON_PATH) ?? asTrimmedString(env.CODEX_HOME),
   )
 
-  if (
-    !explicitAuthPathConfigured &&
-    (options?.explicitAuthPathOnly || options?.includeDefaultAuthJson === false)
-  ) {
+  if (!explicitAuthPathConfigured && options?.explicitAuthPathOnly) {
     return {
       apiKey: '',
       accountId: envAccountId,
@@ -1019,9 +1046,7 @@ export function resolveRuntimeCodexCredentials(options?: {
 
 export function resolveCodexApiCredentials(
   env: NodeJS.ProcessEnv = process.env,
-  options?: {
-    includeDefaultAuthJson?: boolean
-  },
+  options?: { includeDefaultAuthJson?: boolean },
 ): ResolvedCodexCredentials {
   const envAccountId =
     asTrimmedString(env.CODEX_ACCOUNT_ID) ??
@@ -1049,9 +1074,8 @@ export function resolveCodexApiCredentials(
     })
 
     const shouldCheckDefaultAuthJson =
-      options?.includeDefaultAuthJson !== false &&
-      (!resolvedStoredCredentials.accountId ||
-        isCodexRefreshFailureCoolingDown(storedCredentials))
+      !resolvedStoredCredentials.accountId ||
+      isCodexRefreshFailureCoolingDown(storedCredentials)
 
     if (!shouldCheckDefaultAuthJson) {
       return resolvedStoredCredentials
@@ -1077,9 +1101,10 @@ export function resolveCodexApiCredentials(
     return resolvedStoredCredentials
   }
 
-  return resolveEnvOrAuthJsonCodexCredentials(env, {
-    includeDefaultAuthJson: options?.includeDefaultAuthJson,
-  })
+  return resolveEnvOrAuthJsonCodexCredentials(
+    env,
+    options?.includeDefaultAuthJson === false ? { explicitAuthPathOnly: true } : undefined,
+  )
 }
 
 export function getReasoningEffortForModel(model: string): ReasoningEffort | undefined {

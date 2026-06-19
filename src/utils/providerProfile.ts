@@ -38,15 +38,16 @@ export {
   sanitizeApiKey,
   sanitizeProviderConfigValue,
 } from './providerSecrets.js'
-import { getGakrcliConfigHomeDir, isEnvTruthy } from './envUtils.js'
+import { getGakrCLIConfigHomeDir, isEnvTruthy } from './envUtils.js'
 
 export const PROFILE_FILE_NAME = '.gakrcli-profile.json'
 export const DEFAULT_GEMINI_BASE_URL =
   'https://generativelanguage.googleapis.com/v1beta/openai'
 export const DEFAULT_GEMINI_MODEL = 'gemini-3-flash-preview'
 export const DEFAULT_MISTRAL_BASE_URL = 'https://api.mistral.ai/v1'
-export const DEFAULT_MISTRAL_MODEL = 'devstral-latest'
-const DEFAULT_NVIDIA_NIM_MODEL = 'stepfun-ai/step-3.5-flash'
+export const DEFAULT_MISTRAL_MODEL = 'mistral-vibe-cli-latest'
+export const DEFAULT_STARTUP_PROVIDER_ENV_VAR =
+  'GAKR_CODE_DEFAULT_STARTUP_PROVIDER'
 
 const PROFILE_ENV_KEYS = [
   'GAKR_CODE_USE_OPENAI',
@@ -70,6 +71,7 @@ const PROFILE_ENV_KEYS = [
   'OPENAI_AUTH_SCHEME',
   'OPENAI_AUTH_HEADER_VALUE',
   'OPENAI_API_KEY',
+  'GAKR_CODE_OPENAI_CONTEXT_WINDOWS',
   'CODEX_API_KEY',
   'CODEX_CREDENTIAL_SOURCE',
   'CHATGPT_ACCOUNT_ID',
@@ -96,7 +98,11 @@ const PROFILE_ENV_KEYS = [
   'XAI_CREDENTIAL_SOURCE',
   'VENICE_API_KEY',
   'MIMO_API_KEY',
+  'ATLAS_CLOUD_API_KEY',
+  'NEARAI_API_KEY',
+  'FIREWORKS_API_KEY',
   'OPENCODE_API_KEY',
+  DEFAULT_STARTUP_PROVIDER_ENV_VAR,
 ] as const
 
 export type CompatibilityProfileMode =
@@ -121,6 +127,9 @@ const SECRET_ENV_KEYS = [
   'XAI_API_KEY',
   'VENICE_API_KEY',
   'MIMO_API_KEY',
+  'ATLAS_CLOUD_API_KEY',
+  'NEARAI_API_KEY',
+  'FIREWORKS_API_KEY',
   'OPENCODE_API_KEY',
 ] as const
 
@@ -150,7 +159,7 @@ export type ProfileEnv = {
   OPENAI_BASE_URL?: string
   OPENAI_API_BASE?: string
   OPENAI_MODEL?: string
-  OPENAI_API_FORMAT?: 'chat_completions' | 'responses'
+  OPENAI_API_FORMAT?: 'chat_completions' | 'responses' | 'responses_compat'
   OPENAI_AUTH_HEADER?: string
   OPENAI_AUTH_SCHEME?: 'bearer' | 'raw'
   OPENAI_AUTH_HEADER_VALUE?: string
@@ -180,7 +189,11 @@ export type ProfileEnv = {
   XAI_CREDENTIAL_SOURCE?: 'oauth'
   VENICE_API_KEY?: string
   MIMO_API_KEY?: string
+  ATLAS_CLOUD_API_KEY?: string
+  NEARAI_API_KEY?: string
+  FIREWORKS_API_KEY?: string
   OPENCODE_API_KEY?: string
+  GAKR_CODE_OPENAI_CONTEXT_WINDOWS?: string
 }
 
 export type ProfileFile = {
@@ -192,6 +205,7 @@ export type ProfileFile = {
 type SecretValueSource = Partial<
   Record<
     | 'OPENAI_API_KEY'
+    | 'ANTHROPIC_API_KEY'
     | 'OPENAI_AUTH_HEADER_VALUE'
     | 'CODEX_API_KEY'
     | 'GEMINI_API_KEY'
@@ -203,7 +217,9 @@ type SecretValueSource = Partial<
     | 'XAI_API_KEY'
     | 'VENICE_API_KEY'
     | 'MIMO_API_KEY'
-    | 'OPENCODE_API_KEY',
+    | 'ATLAS_CLOUD_API_KEY'
+    | 'NEARAI_API_KEY'
+    | 'FIREWORKS_API_KEY',
     string | undefined
   >
 >
@@ -215,7 +231,7 @@ export type ProfileFileLocation = {
 }
 
 export function getDefaultProfileFilePath(configDir?: string): string {
-  return join(configDir ?? getGakrcliConfigHomeDir(), PROFILE_FILE_NAME)
+  return join(configDir ?? getGakrCLIConfigHomeDir(), PROFILE_FILE_NAME)
 }
 
 function resolveLegacyProfileFilePath(cwd = process.cwd()): string {
@@ -419,10 +435,7 @@ export function buildNvidiaNimProfileEnv(options: {
   }
 
   const defaultBaseUrl = 'https://integrate.api.nvidia.com/v1'
-  const secretSource: SecretValueSource = {
-    OPENAI_API_KEY: key,
-    NVIDIA_API_KEY: key,
-  }
+  const secretSource: SecretValueSource = { OPENAI_API_KEY: key }
 
   return {
     OPENAI_BASE_URL:
@@ -436,9 +449,8 @@ export function buildNvidiaNimProfileEnv(options: {
       normalizeProfileModel(
         sanitizeProviderConfigValue(processEnv.OPENAI_MODEL, secretSource),
       ) ||
-      DEFAULT_NVIDIA_NIM_MODEL,
+      'nvidia/llama-3.1-nemotron-70b-instruct',
     OPENAI_API_KEY: key,
-    NVIDIA_API_KEY: key,
     NVIDIA_NIM: '1',
   }
 }
@@ -573,6 +585,46 @@ export function buildXiaomiMimoProfileEnv(options: {
   }
 }
 
+export function buildAtlasCloudProfileEnv(options: {
+  model?: string | null
+  baseUrl?: string | null
+  apiKey?: string | null
+  processEnv?: NodeJS.ProcessEnv
+}): ProfileEnv | null {
+  const processEnv = options.processEnv ?? process.env
+  const key = sanitizeApiKey(options.apiKey ?? processEnv.ATLAS_CLOUD_API_KEY)
+  if (!key) {
+    return null
+  }
+
+  const defaultBaseUrl = getRouteDefaultBaseUrl('atlas-cloud')
+  const defaultModel = getRouteDefaultModel('atlas-cloud')
+  if (!defaultBaseUrl || !defaultModel) {
+    throw new Error('Atlas Cloud route defaults are missing from integration metadata.')
+  }
+  const secretSource: SecretValueSource = {
+    OPENAI_API_KEY: key,
+    ATLAS_CLOUD_API_KEY: key,
+  }
+
+  return {
+    OPENAI_BASE_URL:
+      sanitizeProviderConfigValue(options.baseUrl, secretSource) ||
+      sanitizeProviderConfigValue(processEnv.OPENAI_BASE_URL, secretSource) ||
+      defaultBaseUrl,
+    OPENAI_MODEL:
+      normalizeProfileModel(
+        sanitizeProviderConfigValue(options.model, secretSource),
+      ) ||
+      normalizeProfileModel(
+        sanitizeProviderConfigValue(processEnv.OPENAI_MODEL, secretSource),
+      ) ||
+      defaultModel,
+    OPENAI_API_KEY: key,
+    ATLAS_CLOUD_API_KEY: key,
+  }
+}
+
 export function buildGeminiProfileEnv(options: {
   model?: string | null
   baseUrl?: string | null
@@ -624,10 +676,11 @@ export function buildOpenAIProfileEnv(options: {
   model?: string | null
   baseUrl?: string | null
   apiKey?: string | null
-  apiFormat?: 'chat_completions' | 'responses' | null
+  apiFormat?: 'chat_completions' | 'responses' | 'responses_compat' | null
   authHeader?: string | null
   authScheme?: 'bearer' | 'raw' | null
   authHeaderValue?: string | null
+  maxContextLength?: number | null
   processEnv?: NodeJS.ProcessEnv
 }): ProfileEnv | null {
   const processEnv = options.processEnv ?? process.env
@@ -661,23 +714,31 @@ export function buildOpenAIProfileEnv(options: {
     apiFormat: processEnv.OPENAI_API_FORMAT,
   })
   const useShellOpenAIConfig = shellOpenAIRequest.transport !== 'codex_responses'
+  const normalizedModel =
+    normalizeProfileModel(
+      sanitizeProviderConfigValue(options.model, secretSource),
+    ) ||
+    (useShellOpenAIConfig ? shellOpenAIModel : undefined) ||
+    defaultModel
 
   return {
     OPENAI_BASE_URL:
       sanitizeProviderConfigValue(options.baseUrl, secretSource) ||
       (useShellOpenAIConfig ? shellOpenAIBaseUrl : undefined) ||
       DEFAULT_OPENAI_BASE_URL,
-    OPENAI_MODEL:
-      normalizeProfileModel(
-        sanitizeProviderConfigValue(options.model, secretSource),
-      ) ||
-      (useShellOpenAIConfig ? shellOpenAIModel : undefined) ||
-      defaultModel,
+    OPENAI_MODEL: normalizedModel,
     ...(options.apiFormat ? { OPENAI_API_FORMAT: options.apiFormat } : {}),
     ...(options.authHeader ? { OPENAI_AUTH_HEADER: options.authHeader } : {}),
     ...(options.authScheme ? { OPENAI_AUTH_SCHEME: options.authScheme } : {}),
     ...(authHeaderValue ? { OPENAI_AUTH_HEADER_VALUE: authHeaderValue } : {}),
     ...(key ? { OPENAI_API_KEY: key } : {}),
+    ...(options.maxContextLength
+      ? {
+          GAKR_CODE_OPENAI_CONTEXT_WINDOWS: JSON.stringify({
+            [normalizedModel]: options.maxContextLength,
+          }),
+        }
+      : {}),
   }
 }
 
@@ -687,16 +748,13 @@ export function buildCodexProfileEnv(options: {
   apiKey?: string | null
   credentialSource?: 'oauth' | 'existing'
   processEnv?: NodeJS.ProcessEnv
-  includeDefaultAuthJson?: boolean
 }): ProfileEnv | null {
   const processEnv = options.processEnv ?? process.env
   const key = sanitizeApiKey(options.apiKey ?? processEnv.CODEX_API_KEY)
   const credentialEnv = key
     ? ({ ...processEnv, CODEX_API_KEY: key } as NodeJS.ProcessEnv)
     : processEnv
-  const credentials = resolveCodexApiCredentials(credentialEnv, {
-    includeDefaultAuthJson: options.includeDefaultAuthJson,
-  })
+  const credentials = resolveCodexApiCredentials(credentialEnv)
   if (!credentials.apiKey || !credentials.accountId) {
     return null
   }
@@ -886,11 +944,7 @@ export function buildCompatibilityProcessEnv(options: {
 }
 
 export function isDefaultStartupProviderEnv(env: NodeJS.ProcessEnv): boolean {
-  return (
-    env.GAKR_CODE_USE_OPENAI === '1' &&
-    env.OPENAI_BASE_URL === DEFAULT_CODEX_BASE_URL &&
-    env.OPENAI_MODEL === 'codexplan'
-  )
+  return env[DEFAULT_STARTUP_PROVIDER_ENV_VAR] === 'gakr-gakr-opengateway'
 }
 
 export function buildCodexOAuthProfileEnv(
@@ -914,18 +968,6 @@ export function buildCodexOAuthProfileEnv(
     OPENAI_MODEL: 'codexplan',
     CHATGPT_ACCOUNT_ID: accountId,
     CODEX_CREDENTIAL_SOURCE: 'oauth',
-  }
-}
-
-const XAI_OAUTH_DEFAULT_BASE_URL = 'https://api.x.ai/v1'
-
-export function buildXaiOAuthProfileEnv(options: {
-  model?: string
-}): ProfileEnv {
-  return {
-    OPENAI_BASE_URL: XAI_OAUTH_DEFAULT_BASE_URL,
-    OPENAI_MODEL: options.model ?? 'grok-4.3',
-    XAI_CREDENTIAL_SOURCE: 'oauth',
   }
 }
 
@@ -963,6 +1005,18 @@ export function clearPersistedCodexOAuthProfile(
   }
 
   return removedPath
+}
+
+const XAI_OAUTH_DEFAULT_BASE_URL = 'https://api.x.ai/v1'
+
+export function buildXaiOAuthProfileEnv(options: {
+  model?: string
+}): ProfileEnv {
+  return {
+    OPENAI_BASE_URL: XAI_OAUTH_DEFAULT_BASE_URL,
+    OPENAI_MODEL: options.model ?? 'grok-4.3',
+    XAI_CREDENTIAL_SOURCE: 'oauth',
+  }
 }
 
 export function isPersistedXaiOAuthProfile(
@@ -1016,8 +1070,9 @@ export function saveProfileFile(
 
 export function deleteProfileFile(options?: ProfileFileLocation): string {
   const filePath = resolveProfileFilePath(options)
+  const cleanupPaths = new Set(resolveProfileFileCleanupPaths(options))
 
-  for (const cleanupPath of new Set(resolveProfileFileCleanupPaths(options))) {
+  for (const cleanupPath of cleanupPaths) {
     rmSync(cleanupPath, { force: true })
   }
 
@@ -1091,10 +1146,18 @@ function hasConcreteProviderSelection(
     )
   }
 
-  return (
+  if (
     isEnvTruthy(processEnv.GAKR_CODE_USE_BEDROCK) ||
     isEnvTruthy(processEnv.GAKR_CODE_USE_VERTEX) ||
     isEnvTruthy(processEnv.GAKR_CODE_USE_FOUNDRY)
+  ) {
+    return true
+  }
+
+  // Env-only provider setups — no GAKR_CODE_USE_* flag needed
+  return (
+    sanitizeApiKey(processEnv.FIREWORKS_API_KEY) !== undefined ||
+    sanitizeApiKey(processEnv.NEARAI_API_KEY) !== undefined
   )
 }
 
@@ -1102,10 +1165,6 @@ export function selectAutoProfile(
   recommendedOllamaModel: string | null,
 ): ProviderProfile {
   return recommendedOllamaModel ? 'ollama' : 'openai'
-}
-
-function getProcessProfileGoal(processEnv: NodeJS.ProcessEnv): RecommendationGoal {
-  return normalizeRecommendationGoal(processEnv.GAKR_PROFILE_GOAL)
 }
 
 export async function buildLaunchEnv(options: {
@@ -1124,7 +1183,7 @@ export async function buildLaunchEnv(options: {
     options.persisted?.profile === options.profile
       ? options.persisted.env ?? {}
       : {}
-  const rawPersistedOpenAIModel = normalizeProfileModel(
+  const persistedOpenAIModel = normalizeProfileModel(
     sanitizeProviderConfigValue(
       persistedEnv.OPENAI_MODEL,
       persistedEnv,
@@ -1142,14 +1201,12 @@ export async function buildLaunchEnv(options: {
   )
   const persistedCustomHeaders = persistedEnv.ANTHROPIC_CUSTOM_HEADERS
   const shellCustomHeaders = processEnv.ANTHROPIC_CUSTOM_HEADERS
-  const rawShellOpenAIModel = normalizeProfileModel(
+  const shellOpenAIModel = normalizeProfileModel(
     sanitizeProviderConfigValue(
       processEnv.OPENAI_MODEL,
       processEnv as SecretValueSource,
     ),
   )
-  const persistedOpenAIModel = rawPersistedOpenAIModel
-  const shellOpenAIModel = rawShellOpenAIModel
   const shellOpenAIBaseUrl = sanitizeProviderConfigValue(
     processEnv.OPENAI_BASE_URL,
     processEnv as SecretValueSource,
@@ -1376,6 +1433,13 @@ export async function buildLaunchEnv(options: {
   }
 
   if (options.profile === 'xai') {
+    // For OAuth-tagged profiles, do not fall back to OPENAI_API_KEY /
+    // persisted OPENAI_API_KEY. The user's shell OpenAI key is for
+    // api.openai.com — sending it as a bearer to api.x.ai/v1 just
+    // returns 401 (or worse, leaks the OpenAI key to xAI). When the
+    // saved profile is OAuth, only an explicit XAI_API_KEY can
+    // override; otherwise leave the env keyless and let openaiShim
+    // resolve the stored OAuth access token at request time.
     const isOAuthProfile = persistedEnv.XAI_CREDENTIAL_SOURCE === 'oauth'
     const xaiKey = isOAuthProfile
       ? sanitizeApiKey(processEnv.XAI_API_KEY) ||
@@ -1389,6 +1453,12 @@ export async function buildLaunchEnv(options: {
       model: shellOpenAIModel || persistedOpenAIModel,
       baseUrl: shellOpenAIBaseUrl || persistedOpenAIBaseUrl,
       apiKey: xaiKey,
+      // Scrub OPENAI_API_KEY before buildXaiProfileEnv reads processEnv
+      // so it can't be re-introduced via the internal fallback inside
+      // that helper. The shell key still survives in the wider
+      // processEnv copy returned by buildCompatibilityProcessEnv, but
+      // it won't be promoted into XAI_API_KEY / OPENAI_API_KEY for
+      // this profile's env.
       processEnv: isOAuthProfile
         ? { ...processEnv, OPENAI_API_KEY: undefined, XAI_API_KEY: undefined }
         : processEnv,
@@ -1397,10 +1467,18 @@ export async function buildLaunchEnv(options: {
     if (customHeaders) {
       env.ANTHROPIC_CUSTOM_HEADERS = customHeaders
     }
+    // Preserve the OAuth credential-source marker so startup validation
+    // accepts an xAI OAuth profile (no XAI_API_KEY needed; openaiShim
+    // resolves the stored access token at request time).
     if (!env.XAI_API_KEY && isOAuthProfile) {
       env.XAI_CREDENTIAL_SOURCE = 'oauth'
     }
 
+    // For OAuth profiles, also clear any ambient OPENAI_API_KEY from
+    // the returned compatibility env. openaiShim's resolver checks
+    // process.env.OPENAI_API_KEY before falling back to the stored
+    // OAuth token; leaving the shell key there would short-circuit
+    // OAuth and send the wrong bearer to api.x.ai/v1.
     const result = buildCompatibilityProcessEnv({
       processEnv,
       compatibilityMode: 'openai',
@@ -1570,9 +1648,37 @@ export async function buildLaunchEnv(options: {
   if (openAIKey) {
     env.OPENAI_API_KEY = openAIKey
   }
+  // Dedicated vendor credentials ride alongside the generic OpenAI env in
+  // persisted profiles (e.g. ATLAS_CLOUD_API_KEY). Carry them over — a live
+  // shell value wins over the persisted one, matching OPENAI_API_KEY
+  // precedence — because dedicatedCredentialsOnly routes ignore
+  // OPENAI_API_KEY, so dropping them would leave the relaunched profile
+  // unauthenticated.
+  for (const dedicatedKey of [
+    'ATLAS_CLOUD_API_KEY',
+    'NEARAI_API_KEY',
+    'FIREWORKS_API_KEY',
+    'MIMO_API_KEY',
+    'VENICE_API_KEY',
+  ] as const) {
+    const dedicatedValue =
+      sanitizeApiKey(processEnv[dedicatedKey]) ||
+      sanitizeApiKey(persistedEnv[dedicatedKey])
+    if (dedicatedValue) {
+      env[dedicatedKey] = dedicatedValue
+    }
+  }
   const customHeaders = shellCustomHeaders || persistedCustomHeaders
   if (customHeaders) {
     env.ANTHROPIC_CUSTOM_HEADERS = customHeaders
+  }
+  const contextWindows =
+    processEnv.GAKR_CODE_OPENAI_CONTEXT_WINDOWS ||
+    (usePersistedOpenAIConfig
+      ? persistedEnv.GAKR_CODE_OPENAI_CONTEXT_WINDOWS
+      : undefined)
+  if (contextWindows) {
+    env.GAKR_CODE_OPENAI_CONTEXT_WINDOWS = contextWindows
   }
 
   return buildCompatibilityProcessEnv({
@@ -1586,15 +1692,16 @@ export async function buildStartupEnvFromProfile(options?: {
   persisted?: ProfileFile | null
   goal?: RecommendationGoal
   processEnv?: NodeJS.ProcessEnv
-  hasConfiguredProviderProfile?: boolean
   getOllamaChatBaseUrl?: (baseUrl?: string) => string
   resolveOllamaDefaultModel?: (goal: RecommendationGoal) => Promise<string>
   readGeminiAccessToken?: () => string | undefined
 }): Promise<NodeJS.ProcessEnv> {
   const processEnv = options?.processEnv ?? process.env
-  const persisted = options?.persisted ?? loadProfileFile()
+  const persisted =
+    options && 'persisted' in options ? options.persisted : loadProfileFile()
 
   const profileManagedEnv = processEnv.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED === '1'
+
   // The single-profile file in the user config directory is a
   // first-run / fallback mechanism. The newer plural provider-profile
   // system (`/provider` presets + activeProviderProfileId in config) is
@@ -1612,8 +1719,8 @@ export async function buildStartupEnvFromProfile(options?: {
   }
 
   // If startup already has a concrete provider selection, keep trusting it.
-  // This keeps the legacy single-profile file from becoming a silent
-  // third precedence layer after `/provider` or explicit env chose a route.
+  // This prevents legacy profiles or the fresh-install default from becoming
+  // a silent third precedence layer over explicit env/flags.
   if (hasConcreteProviderSelection(processEnv)) {
     return processEnv
   }
@@ -1623,34 +1730,28 @@ export async function buildStartupEnvFromProfile(options?: {
   }
 
   if (!persisted) {
-    // No saved profile — default to Codex OAuth / GPT 5.5.
-    // If Codex credentials are available (OAuth or existing), use Codex.
-    // Otherwise inject the Codex env defaults so the provider picker
-    // shows GPT 5.5 as the default model when the user lands on it.
-    const codexEnv = buildCodexProfileEnv({
-      includeDefaultAuthJson: false,
-    })
-    if (codexEnv) {
-      return buildCompatibilityProcessEnv({
-        processEnv,
-        compatibilityMode: 'openai',
-        profileEnv: codexEnv,
-      })
-    }
-    return buildCompatibilityProcessEnv({
+    // No saved profile — default to gakr-gakr Opengateway.
+    const env = buildCompatibilityProcessEnv({
       processEnv,
       compatibilityMode: 'openai',
       profileEnv: {
-        OPENAI_BASE_URL: DEFAULT_CODEX_BASE_URL,
-        OPENAI_MODEL: 'codexplan',
+        OPENAI_BASE_URL:
+          getRouteDefaultBaseUrl('gakr-gakr-opengateway') ??
+          'https://opengateway.gakr-gakr.com/v1',
+        OPENAI_MODEL:
+          getRouteDefaultModel('gakr-gakr-opengateway') ?? 'mimo-v2.5-pro',
       },
     })
+    env[DEFAULT_STARTUP_PROVIDER_ENV_VAR] = 'gakr-gakr-opengateway'
+    return env
   }
 
   return buildLaunchEnv({
     profile: persisted.profile,
     persisted,
-    goal: options?.goal ?? getProcessProfileGoal(processEnv),
+    goal:
+      options?.goal ??
+      normalizeRecommendationGoal(processEnv.GAKR_PROFILE_GOAL),
     processEnv,
     getOllamaChatBaseUrl:
       options?.getOllamaChatBaseUrl ?? getOllamaChatBaseUrl,
@@ -1690,7 +1791,7 @@ export async function applySavedProfileToCurrentSession(options: {
     const explicitEnv = await buildLaunchEnv({
       profile: options.profileFile.profile,
       persisted: options.profileFile,
-      goal: getProcessProfileGoal(processEnv),
+      goal: normalizeRecommendationGoal(processEnv.GAKR_PROFILE_GOAL),
       processEnv: buildEnvSource,
       getOllamaChatBaseUrl,
       readGeminiAccessToken,
@@ -1739,7 +1840,7 @@ export async function applySavedProfileToCurrentSession(options: {
   const nextEnv = await buildLaunchEnv({
     profile: options.profileFile.profile,
     persisted: options.profileFile,
-    goal: getProcessProfileGoal(processEnv),
+    goal: normalizeRecommendationGoal(processEnv.GAKR_PROFILE_GOAL),
     processEnv: baseEnv,
     getOllamaChatBaseUrl,
     readGeminiAccessToken,
