@@ -40,7 +40,7 @@ const FILE_STABILITY_POLL_INTERVAL_MS = 500
 /**
  * Time window in milliseconds to consider a file change as internal.
  * If a file change occurs within this window after markInternalWrite() is called,
- * it's assumed to be from GakrCLI itself and won't trigger a notification.
+ * it's assumed to be from GakrCLI Code itself and won't trigger a notification.
  */
 const INTERNAL_WRITE_WINDOW_MS = 5000
 
@@ -509,8 +509,8 @@ function scheduleFanOut(source: SettingSource, generation: number): void {
       return
     }
 
-    const sources = [...pendingSettingsSources].flatMap(([src, gen]) =>
-      settingsSourceGenerations.get(src) === gen ? [src] : [],
+    const sources = [...pendingSettingsSources].flatMap(([src, generation]) =>
+      settingsSourceGenerations.get(src) === generation ? [src] : [],
     )
     pendingSettingsSources.clear()
 

@@ -103,20 +103,20 @@ const TEAMMATE_ENV_VARS = [
   'GAKR_CODE_USE_FOUNDRY',
   'GAKR_CODE_USE_GITHUB',
   'GAKR_CODE_USE_GEMINI',
-  'GAKR_CODE_USE_NVIDIA',
+  'GAKR_CODE_USE_MISTRAL',
   'GAKR_CODE_USE_OPENAI',
   'GITHUB_TOKEN',
   'GH_TOKEN',
   'OPENAI_API_KEY',
   'OPENAI_BASE_URL',
   'OPENAI_MODEL',
-  'NVIDIA_API_KEY',
-  'NVIDIA_BASE_URL',
-  'NVIDIA_MODEL',
   'GEMINI_API_KEY',
   'GEMINI_BASE_URL',
   'GEMINI_MODEL',
   'GOOGLE_API_KEY',
+  'MISTRAL_API_KEY',
+  'MISTRAL_MODEL',
+  'MISTRAL_BASE_URL',
   // Custom API endpoint
   'ANTHROPIC_BASE_URL',
   // Config directory override
@@ -150,13 +150,15 @@ const TEAMMATE_ENV_VARS = [
 
 /**
  * Builds the `env KEY=VALUE ...` string for teammate spawn commands.
- * Always includes gakrcliCODE=1 and GAKR_CODE_EXPERIMENTAL_AGENT_TEAMS=1,
+ * Always includes GAKRCLICODE=1 and GAKR_CODE_EXPERIMENTAL_AGENT_TEAMS=1,
  * plus any provider/config env vars that are set in the current process.
  */
 export function buildInheritedEnvVars(): string {
   const envVars = [
-    'gakrcliCODE=1',
+    'GAKRCLICODE=1',
     'GAKR_CODE_EXPERIMENTAL_AGENT_TEAMS=1',
+    // Teammates should inherit the leader-selected provider route instead of
+    // replaying persisted ~/.gakrcli or settings.env provider defaults.
     'GAKR_CODE_PROVIDER_MANAGED_BY_HOST=1',
   ]
 

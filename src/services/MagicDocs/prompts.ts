@@ -1,5 +1,5 @@
 import { join } from 'path'
-import { getGakrcliConfigHomeDir } from '../../utils/envUtils.js'
+import { getGakrCLIConfigHomeDir } from '../../utils/envUtils.js'
 import { getFsImplementation } from '../../utils/fsOperations.js'
 
 /**
@@ -44,7 +44,7 @@ What TO document:
 - Key entry points and where to start reading code
 - Important design decisions and their rationale
 - Critical dependencies or integration points
-- References to related files, docs, or code - help readers navigate to relevant context
+- References to related files, docs, or code (like a wiki) - help readers navigate to relevant context
 
 What NOT to document:
 - Anything obvious from reading the code itself
@@ -65,7 +65,7 @@ REMEMBER: Only update if there is substantial new information. The Magic Doc hea
  */
 async function loadMagicDocsPrompt(): Promise<string> {
   const fs = getFsImplementation()
-  const promptPath = join(getGakrcliConfigHomeDir(), 'magic-docs', 'prompt.md')
+  const promptPath = join(getGakrCLIConfigHomeDir(), 'magic-docs', 'prompt.md')
 
   try {
     return await fs.readFile(promptPath, { encoding: 'utf-8' })

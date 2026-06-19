@@ -11,6 +11,7 @@ import {
   GAKR_OPUS_4_1_CONFIG,
   GAKR_OPUS_4_5_CONFIG,
   GAKR_OPUS_4_6_CONFIG,
+  GAKR_OPUS_4_7_CONFIG,
   GAKR_OPUS_4_CONFIG,
   GAKR_SONNET_4_5_CONFIG,
   GAKR_SONNET_4_6_CONFIG,
@@ -23,7 +24,7 @@ import {
   type ModelShortName,
 } from './model/model.js'
 
-// @see https://github.com/gajjalaashok75-UI/GakrCLI/docs/en/about-gakrcli/pricing
+// @see https://platform.gakrcli.com/docs/en/about-gakrcli/pricing
 export type ModelCosts = {
   inputTokens: number
   outputTokens: number
@@ -99,7 +100,7 @@ export function getOpus46CostTier(fastMode: boolean): ModelCosts {
 }
 
 // @[MODEL LAUNCH]: Add a pricing entry for the new model below.
-// Costs from https://github.com/gajjalaashok75-UI/GakrCLI/docs/en/about-gakrcli/pricing
+// Costs from https://platform.gakrcli.com/docs/en/about-gakrcli/pricing
 // Web search cost: $10 per 1000 requests = $0.01 per request
 export const MODEL_COSTS: Record<ModelShortName, ModelCosts> = {
   [firstPartyNameToCanonical(GAKR_3_5_HAIKU_CONFIG.firstParty)]:
@@ -122,6 +123,8 @@ export const MODEL_COSTS: Record<ModelShortName, ModelCosts> = {
   [firstPartyNameToCanonical(GAKR_OPUS_4_5_CONFIG.firstParty)]:
     COST_TIER_5_25,
   [firstPartyNameToCanonical(GAKR_OPUS_4_6_CONFIG.firstParty)]:
+    COST_TIER_5_25,
+  [firstPartyNameToCanonical(GAKR_OPUS_4_7_CONFIG.firstParty)]:
     COST_TIER_5_25,
 }
 

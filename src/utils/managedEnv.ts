@@ -178,9 +178,13 @@ export function applySafeConfigEnvironmentVariables(): void {
     }
   }
 
-  // Apply active provider profiles after safe settings env so startup sees
-  // the selected profile unless an explicit provider selection already wins.
+  // Apply active provider profile only when startup did not explicitly
+  // select a provider via flags/env. Explicit startup intent should win.
   applyActiveProviderProfileFromConfig()
+
+  // If the CLI parsed --provider before settings.env was loaded, restore
+  // that explicit routing after every settings merge so saved env cannot
+  // clobber the selected provider endpoint or compatibility key mapping.
   reapplyRememberedProviderFlag()
 }
 
@@ -196,8 +200,8 @@ export function applyConfigEnvironmentVariables(): void {
 
   Object.assign(process.env, filterSettingsEnv(getSettings_DEPRECATED()?.env))
 
-  // Keep runtime provider/model env aligned with the active profile after
-  // trusted settings env is merged.
+  // Keep runtime provider/model env aligned with the active profile, except
+  // when an explicit provider selection is already present in process.env.
   applyActiveProviderProfileFromConfig()
   reapplyRememberedProviderFlag()
 

@@ -61,13 +61,17 @@ export type AutoCompactTrackingState = {
   // Unique ID per turn
   turnId: string
   // Consecutive autocompact failures. Reset on success.
-  // Used as a circuit breaker to stop retrying when the context is
-  // irrecoverably over the limit (e.g., prompt_too_long).
+  // Used by the cooldown circuit breaker to avoid retry storms when the
+  // context is irrecoverably over the limit (e.g., prompt_too_long).
   consecutiveFailures?: number
-  // Timestamp when autocompact may be retried after repeated failures.
+  // Process-local retry timestamp for the cooldown breaker. This state is
+  // threaded through query() callers rather than serialized into transcripts.
   nextRetryAtMs?: number
-  // Timestamp of the most recent autocompact failure.
   lastFailureAtMs?: number
+  // When set, bypasses shouldAutoCompact() token threshold check.
+  // Used by memory pressure and message count guards to force compaction
+  // even when token usage is below the normal autocompact threshold.
+  forceReason?: 'memory-pressure' | 'message-count'
 }
 
 export const AUTOCOMPACT_BUFFER_TOKENS = 13_000
@@ -244,7 +248,7 @@ export function isAutoCompactEnabled(): boolean {
   }
   // Check if user has disabled auto-compact in their settings
   const userConfig = getGlobalConfig()
-  return userConfig.autoCompactEnabled !== false
+  return userConfig.autoCompactEnabled
 }
 
 export async function shouldAutoCompact(
@@ -255,6 +259,10 @@ export async function shouldAutoCompact(
   // pre-snip context, so tokenCountWithEstimation can't see the savings.
   // Subtract the rough-delta that snip already computed.
   snipTokensFreed = 0,
+  // When true, skip the token-threshold check but still run all guards
+  // (recursion, disabled, reactive-only, context-collapse). Used by
+  // forceReason to bypass only the token gate, not the safety guards.
+  skipTokenCheck = false,
 ): Promise<boolean> {
   // Recursion guards. session_memory and compact are forked agents that
   // would deadlock.
@@ -312,6 +320,11 @@ export async function shouldAutoCompact(
     }
   }
 
+  if (skipTokenCheck) {
+    logForDebugging('autocompact: skipping token threshold check (forced)')
+    return true
+  }
+
   const tokenCount = tokenCountWithEstimation(messages) - snipTokensFreed
   const threshold = getAutoCompactThreshold(model)
   const effectiveWindow = getEffectiveContextWindowSize(model)
@@ -349,11 +362,20 @@ export async function autoCompactIfNeeded(
   }
 
   const model = toolUseContext.options.mainLoopModel
+  // Force compaction if a pressure/count signal set forceReason.
+  // Consume the flag so it only forces one compaction cycle.
+  // Pass skipTokenCheck to shouldAutoCompact so safety guards
+  // (disabled, reactive-only, context-collapse, recursion) still apply.
+  const forcedBy = tracking?.forceReason
+  if (tracking?.forceReason) {
+    tracking.forceReason = undefined
+  }
   const shouldCompact = await shouldAutoCompact(
     messages,
     model,
     querySource,
     snipTokensFreed,
+    !!forcedBy,
   )
 
   if (!shouldCompact) {
@@ -485,7 +507,8 @@ export async function autoCompactIfNeeded(
       consecutiveFailures: 0,
     }
   } catch (error) {
-    if (hasExactErrorMessage(error, ERROR_MESSAGE_USER_ABORT)) {
+    const wasUserAbort = hasExactErrorMessage(error, ERROR_MESSAGE_USER_ABORT)
+    if (wasUserAbort) {
       return {
         wasCompacted: false,
         consecutiveFailures: breakerState.effectiveConsecutiveFailures,
@@ -513,7 +536,7 @@ export async function autoCompactIfNeeded(
       : undefined
     if (circuitBreakerTripped) {
       logForDebugging(
-        `autocompact: circuit breaker tripped after ${nextFailures} consecutive failures — skipping future attempts this session`,
+        `autocompact: circuit breaker tripped after ${nextFailures} consecutive failures — retrying after cooldown`,
         { level: 'warn' },
       )
     }

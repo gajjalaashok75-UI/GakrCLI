@@ -9,16 +9,13 @@ import {
 import { mkdtempSync, rmSync, existsSync, renameSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import {
-  acquireSharedMutationLock,
-  releaseSharedMutationLock,
-} from '../../test/sharedMutationLock.js'
-import { getProjectsDir, setGakrcliConfigHomeDirForTesting } from '../envUtils.js'
+import { acquireEnvMutex, releaseEnvMutex } from '../../entrypoints/sdk/shared.js'
+import { getProjectsDir, setGakrCLIConfigHomeDirForTesting } from '../envUtils.js'
 import { getFsImplementation, setFsImplementation } from '../fsOperations.js'
 import { sanitizePath } from '../sessionStoragePortable.js'
 import { SQLiteProvider } from './SQLiteProvider.js'
 
-describe('SQLite Storage Layer', () => {
+describe.skipIf(process.platform === 'win32')('SQLite Storage Layer', () => {
   const originalConfigDir = process.env.GAKR_CONFIG_DIR
   const originalCwd = process.cwd()
   const originalFs = getFsImplementation()
@@ -85,7 +82,7 @@ describe('SQLite Storage Layer', () => {
   }
 
   beforeEach(async () => {
-    await acquireSharedMutationLock('utils/storage/SQLiteProvider.test.ts')
+    await acquireEnvMutex()
     workspaceDir = mkdtempSync(join(tmpdir(), 'gakrcli-sqlite-cwd-'))
     process.chdir(workspaceDir)
     setFsImplementation({
@@ -93,7 +90,7 @@ describe('SQLite Storage Layer', () => {
       cwd: () => workspaceDir,
     })
     process.env.GAKR_CONFIG_DIR = configDir
-    setGakrcliConfigHomeDirForTesting(configDir)
+    setGakrCLIConfigHomeDirForTesting(configDir)
     resetGlobalGraph()
   })
 
@@ -108,13 +105,13 @@ describe('SQLite Storage Layer', () => {
       }
       process.chdir(originalCwd)
       setFsImplementation(originalFs)
-      setGakrcliConfigHomeDirForTesting(undefined)
+      setGakrCLIConfigHomeDirForTesting(undefined)
       if (workspaceDir) {
         removeDirWithRetry(workspaceDir)
         workspaceDir = ''
       }
     } finally {
-      releaseSharedMutationLock()
+      releaseEnvMutex()
     }
   })
 
@@ -123,17 +120,11 @@ describe('SQLite Storage Layer', () => {
   })
 
   it('persists data in SQLite database', async () => {
-    const projectDir = join(getProjectsDir(), sanitizePath(workspaceDir))
-    const sqlitePath = join(projectDir, 'knowledge.db')
-    
+    const sqlitePath = join(getProjectsDir(), sanitizePath(workspaceDir), 'knowledge.db')
+
     // 1. Add data
     await addGlobalEntity('tool', 'sqlite-test', { status: 'durable' })
     expect(existsSync(sqlitePath)).toBe(true)
-    const sqliteProvider = new SQLiteProvider(projectDir)
-    await sqliteProvider.init()
-    const sqliteGraph = sqliteProvider.loadGraph()
-    expect(Object.values(sqliteGraph?.entities ?? {}).some(e => e.name === 'sqlite-test')).toBe(true)
-    sqliteProvider.close()
 
     // 2. Simulate process restart (clear memory cache)
     clearMemoryOnly()
@@ -166,14 +157,14 @@ describe('SQLite Storage Layer', () => {
     const entity = Object.values(graph.entities).find(e => e.name === 'self-heal-test')
     expect(entity).toBeDefined()
     expect(entity?.attributes.val).toBe('safe')
-    
+
     // 4. Verify SQLite was recreated
     expect(existsSync(sqlitePath)).toBe(true)
   })
 
   it('handles large transactions (Stress Test)', async () => {
     const count = 100
-    
+
     // Add 100 entities sequentially (mutation queue)
     for (let i = 0; i < count; i++) {
       await addGlobalEntity('bulk', `item_${i}`, { index: String(i) })

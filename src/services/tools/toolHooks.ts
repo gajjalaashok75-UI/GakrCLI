@@ -225,7 +225,11 @@ export async function* runPostToolUseHooks<Input extends AnyObject, Output>(
         }
       } else {
         try {
-          const cwd = toolUseContext.options?.cwd ?? process.cwd()
+          // ToolUseContext options don't declare cwd; read it defensively
+          // (no caller sets it today — falls back to process.cwd()).
+          const cwd =
+            (toolUseContext.options as { cwd?: string } | undefined)?.cwd ??
+            process.cwd()
           const autoFixResult = await runAutoFixCheck({
             lint: autoFixConfig.lint,
             test: autoFixConfig.test,
@@ -481,16 +485,15 @@ export async function resolveHookPermissionDecision(
   }
 
   // No hook decision or 'ask' — normal permission flow, possibly with
-  // forceDecision so the dialog shows the hook's ask message.
-  const forceDecision =
-    hookPermissionResult?.behavior === 'ask' ? hookPermissionResult : undefined
+  // forceDecision so the dialog shows the hook's ask message. Full Access
+  // skips hook ask prompts, while still preserving rule/tool denies.
+  const isFullAccessMode =
+    toolUseContext.getAppState().toolPermissionContext.mode === 'fullAccess'
   const askInput =
     hookPermissionResult?.behavior === 'ask' &&
     hookPermissionResult.updatedInput
       ? hookPermissionResult.updatedInput
       : input
-  const isFullAccessMode =
-    toolUseContext.getAppState().toolPermissionContext.mode === 'fullAccess'
   if (hookPermissionResult?.behavior === 'ask' && isFullAccessMode) {
     const fullAccessDecision = await hasPermissionsToUseTool(
       tool,
@@ -501,10 +504,15 @@ export async function resolveHookPermissionDecision(
     )
     return {
       decision: fullAccessDecision,
-      input: fullAccessDecision.updatedInput ?? askInput,
+      // deny decisions carry no updatedInput
+      input:
+        fullAccessDecision.behavior === 'deny'
+          ? askInput
+          : (fullAccessDecision.updatedInput ?? askInput),
     }
   }
-
+  const forceDecision =
+    hookPermissionResult?.behavior === 'ask' ? hookPermissionResult : undefined
   return {
     decision: await canUseTool(
       tool,

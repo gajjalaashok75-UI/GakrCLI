@@ -36,16 +36,8 @@ function getStdinOverride(): ReadStream | undefined {
     return undefined
   }
 
-  // Windows: use process.stdin directly (it's already a TTY in interactive mode)
-  // Don't try to open /dev/tty as it doesn't exist on Windows
+  // No /dev/tty on Windows
   if (process.platform === 'win32') {
-    // On Windows, process.stdin should already be a TTY in interactive mode
-    // If it's not, we can't override it, so return undefined
-    if (process.stdin.isTTY) {
-      cachedStdinOverride = undefined
-      return undefined
-    }
-    // If stdin is not a TTY, we can't fix it on Windows
     cachedStdinOverride = undefined
     return undefined
   }

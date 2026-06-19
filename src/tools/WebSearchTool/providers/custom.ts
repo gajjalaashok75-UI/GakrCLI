@@ -49,13 +49,15 @@ interface ProviderPreset {
   jsonPath?: string
   responseAdapter?: (data: any) => SearchHit[]
   /**
-   * When set, WEB_KEY is sent as this query parameter instead of an HTTP
-   * header. Auth headers are suppressed unless WEB_AUTH_HEADER is explicit.
+   * When set, the API key (WEB_KEY) is sent as this query parameter instead
+   * of in an HTTP header. Auth headers are suppressed automatically unless
+   * WEB_AUTH_HEADER is explicitly set by the user.
    */
   authQueryParam?: string
   /**
    * Additional query params sourced from environment variables.
-   * Format: { paramName: ENV_VAR_NAME } (for example, { cx: 'GOOGLE_CSE_ID' }).
+   * Format: { paramName: ENV_VAR_NAME } (e.g. { cx: 'GOOGLE_CSE_ID' }).
+   * The named env var must be set or the request fails fast with a clear error.
    */
   envQueryParams?: Record<string, string>
 }
@@ -78,9 +80,13 @@ const BUILT_IN_PROVIDERS: Record<string, ProviderPreset> = {
     },
   },
   google: {
-    // Google Custom Search JSON API requires key and cx query params.
-    // Set WEB_KEY=<api-key> and GOOGLE_CSE_ID=<engine-id>.
-    // Google has announced this API will be discontinued on 2027-01-01.
+    // Google Custom Search JSON API requires both `key` (API key) and
+    // `cx` (Programmable Search Engine ID) as query parameters. There is
+    // no Bearer-token auth path. Set WEB_KEY=<api-key> and
+    // GOOGLE_CSE_ID=<engine-id>.
+    //
+    // ⚠️  Google has announced this API will be discontinued on 2027-01-01
+    // and is closed to new customers. Prefer Brave/Tavily/Exa where possible.
     urlTemplate: 'https://www.googleapis.com/customsearch/v1',
     queryParam: 'q',
     authQueryParam: 'key',
@@ -98,7 +104,8 @@ const BUILT_IN_PROVIDERS: Record<string, ProviderPreset> = {
     urlTemplate: 'https://api.search.brave.com/res/v1/web/search',
     queryParam: 'q',
     authHeader: 'X-Subscription-Token',
-    // Brave wants the bare token in X-Subscription-Token, not "Bearer <token>".
+    // Brave wants the bare token in X-Subscription-Token, NOT "Bearer <token>".
+    // Empty scheme overrides the default 'Bearer' applied by buildAuthHeadersForPreset.
     authScheme: '',
     responseAdapter(data: any) {
       return (data.web?.results ?? []).map((r: any) => ({
@@ -350,7 +357,7 @@ function auditLogCustomSearch(url: string): void {
     `[web-search] ⚠️  Custom search provider is active. ` +
     `Outbound requests go to: ${safeHostname(url) ?? url}. ` +
     `Ensure this endpoint is trusted. ` +
-    `Review private-address and arbitrary-header overrides before enabling them.`,
+    `See: https://github.com/gajjalaashok75-UI/gakrcli/pull/512#security`,
   )
 }
 
@@ -359,8 +366,9 @@ function auditLogCustomSearch(url: string): void {
 // ---------------------------------------------------------------------------
 
 export function buildAuthHeadersForPreset(preset?: ProviderPreset): Record<string, string> {
-  // Presets that authenticate via query parameter (for example Google's
-  // ?key=...) do not send auth headers unless the user explicitly asks for one.
+  // Presets that authenticate via a query parameter (e.g. Google's `?key=...`)
+  // do not send an Authorization header. The user can still force a header by
+  // setting WEB_AUTH_HEADER explicitly.
   if (preset?.authQueryParam && process.env.WEB_AUTH_HEADER === undefined) {
     return {}
   }
@@ -376,6 +384,7 @@ export function buildAuthHeadersForPreset(preset?: ProviderPreset): Record<strin
   const scheme = process.env.WEB_AUTH_SCHEME !== undefined
     ? process.env.WEB_AUTH_SCHEME
     : (preset?.authScheme ?? 'Bearer')
+  // Empty scheme → bare key, no leading space (e.g. Brave's X-Subscription-Token)
   const value = scheme ? `${scheme} ${apiKey}` : apiKey
   return { [headerName]: value }
 }
@@ -438,6 +447,9 @@ function buildRequest(query: string) {
     url.searchParams.set(config.queryParam, query)
   }
 
+  // Preset env-sourced params (e.g. Google's `cx` from GOOGLE_CSE_ID).
+  // Fail fast with a clear error if the named env var isn't set, since the
+  // upstream API will reject the request anyway.
   if (preset?.envQueryParams) {
     for (const [paramName, envVar] of Object.entries(preset.envQueryParams)) {
       const value = process.env[envVar]
@@ -451,6 +463,7 @@ function buildRequest(query: string) {
     }
   }
 
+  // Preset query-param auth (e.g. Google's `?key=...`).
   if (preset?.authQueryParam) {
     const apiKey = process.env.WEB_KEY
     if (!apiKey) {
@@ -470,7 +483,7 @@ function buildRequest(query: string) {
 
   // --- Headers ---
   const headers: Record<string, string> = {
-    ...buildAuthHeadersForPreset(config.preset),
+    ...buildAuthHeadersForPreset(preset),
   }
 
   // Merge WEB_HEADERS with allowlist enforcement

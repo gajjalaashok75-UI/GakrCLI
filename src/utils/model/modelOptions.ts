@@ -2,7 +2,7 @@
 import { getInitialMainLoopModel } from '../../bootstrap/state.js'
 import { getAdditionalModelOptionsCacheScope } from '../../services/api/providerConfig.js'
 import {
-  isgakrcliAISubscriber,
+  isGakrCLIAISubscriber,
   isMaxSubscriber,
   isTeamPremiumSubscriber,
 } from '../auth.js'
@@ -19,7 +19,7 @@ import { getAPIProvider } from './providers.js'
 import { isModelAllowed } from './modelAllowlist.js'
 import {
   getCanonicalName,
-  getgakrcliAiUserDefaultModelDescription,
+  getGakrCLIAiUserDefaultModelDescription,
   getDefaultSonnetModel,
   getDefaultOpusModel,
   getDefaultHaikuModel,
@@ -41,10 +41,7 @@ import {
 import { getCachedOllamaModelOptions, isOllamaProvider } from './ollamaModels.js'
 import { getCachedNvidiaNimModelOptions, isNvidiaNimProvider } from './nvidiaNimModels.js'
 import { getCachedMiniMaxModelOptions, isMiniMaxProvider } from './minimaxModels.js'
-import {
-  getCachedXiaomiMimoModelOptions,
-  isXiaomiMimoProvider,
-} from './xiaomi-mimoModels.js'
+import { getCachedXiaomiMimoModelOptions, isXiaomiMimoProvider } from './xiaomi-mimoModels.js'
 import { getAntModels } from './antModels.js'
 
 // @[MODEL LAUNCH]: Update all the available and default model option strings below.
@@ -99,11 +96,11 @@ export function getDefaultOptionForUser(fastMode = false): ModelOption {
   }
 
   // Subscribers
-  if (isgakrcliAISubscriber()) {
+  if (isGakrCLIAISubscriber()) {
     return {
       value: null,
       label: 'Default (recommended)',
-      description: getgakrcliAiUserDefaultModelDescription(fastMode),
+      description: getGakrCLIAiUserDefaultModelDescription(fastMode),
     }
   }
 
@@ -270,7 +267,7 @@ function getMaxOpusOption(fastMode = false): ModelOption {
 
 export function getMaxSonnet46_1MOption(): ModelOption {
   const is3P = getAPIProvider() !== 'firstParty'
-  const billingInfo = isgakrcliAISubscriber() ? ' · Billed as extra usage' : ''
+  const billingInfo = isGakrCLIAISubscriber() ? ' · Billed as extra usage' : ''
   return {
     value: 'sonnet[1m]',
     label: 'Sonnet (1M context)',
@@ -279,7 +276,7 @@ export function getMaxSonnet46_1MOption(): ModelOption {
 }
 
 export function getMaxOpus46_1MOption(fastMode = false): ModelOption {
-  const billingInfo = isgakrcliAISubscriber() ? ' · Billed as extra usage' : ''
+  const billingInfo = isGakrCLIAISubscriber() ? ' · Billed as extra usage' : ''
   return {
     value: 'opus[1m]',
     label: 'Opus (1M context)',
@@ -449,7 +446,7 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
     return [defaultOption]
   }
 
-  // When using Xiaomi MiMo, show models from the MiMo catalog.
+  // When using Xiaomi MiMo, show models from the MiMo catalog
   if (isXiaomiMimoProvider()) {
     const defaultOption = getDefaultOptionForUser(fastMode)
     const xiaomiMimoModels = getCachedXiaomiMimoModelOptions()
@@ -477,7 +474,7 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
     ]
   }
 
-  if (isgakrcliAISubscriber()) {
+  if (isGakrCLIAISubscriber()) {
     if (isMaxSubscriber() || isTeamPremiumSubscriber()) {
       // Max and Team Premium users: Opus is default, show Sonnet as alternative
       const premiumOptions = [getDefaultOptionForUser(fastMode)]
@@ -615,8 +612,8 @@ function getModelFamilyInfo(
     canonical.includes('claude-sonnet-4-6') ||
     canonical.includes('claude-sonnet-4-5') ||
     canonical.includes('claude-sonnet-4-') ||
-    canonical.includes('claude-3-7-sonnet') ||
-    canonical.includes('claude-3-5-sonnet')
+    canonical.includes('gakrcli-3-7-sonnet') ||
+    canonical.includes('gakrcli-3-5-sonnet')
   ) {
     const currentName = getMarketingNameForModel(getDefaultSonnetModel())
     if (currentName) {
@@ -635,7 +632,7 @@ function getModelFamilyInfo(
   // Haiku family
   if (
     canonical.includes('claude-haiku') ||
-    canonical.includes('claude-3-5-haiku')
+    canonical.includes('gakrcli-3-5-haiku')
   ) {
     const currentName = getMarketingNameForModel(getDefaultHaikuModel())
     if (currentName) {

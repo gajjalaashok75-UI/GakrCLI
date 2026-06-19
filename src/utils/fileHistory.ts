@@ -19,10 +19,9 @@ import {
 import { logEvent } from 'src/services/analytics/index.js'
 import { notifyVscodeFileUpdated } from 'src/services/mcp/vscodeSdkMcp.js'
 import type { LogOption } from 'src/types/logs.js'
-import { inspect } from 'util'
 import { getGlobalConfig } from './config.js'
 import { logForDebugging } from './debug.js'
-import { getGakrcliConfigHomeDir, isEnvTruthy } from './envUtils.js'
+import { getGakrCLIConfigHomeDir, isEnvTruthy } from './envUtils.js'
 import { getErrnoCode, isENOENT } from './errors.js'
 import { pathExists } from './file.js'
 import { logError } from './log.js'
@@ -166,7 +165,6 @@ export async function fileHistoryTrackEdit(
         })(),
         trackedFiles: updatedTrackedFiles,
       }
-      maybeDumpStateForDebug(updatedState)
 
       // Record a snapshot update since it has changed.
       void recordFileHistorySnapshot(
@@ -311,7 +309,6 @@ export async function fileHistoryMakeSnapshot(
             : allSnapshots,
         snapshotSequence: (state.snapshotSequence ?? 0) + 1,
       }
-      maybeDumpStateForDebug(updatedState)
 
       void notifyVscodeSnapshotFilesUpdated(state, updatedState).catch(logError)
 
@@ -731,7 +728,7 @@ function getBackupFileName(filePath: string, version: number): string {
 }
 
 function resolveBackupPath(backupFileName: string, sessionId?: string): string {
-  const configDir = getGakrcliConfigHomeDir()
+  const configDir = getGakrCLIConfigHomeDir()
   return join(
     configDir,
     'file-history',
@@ -951,7 +948,7 @@ export async function copyFileHistoryForResume(log: LogOption): Promise<void> {
     // All backups share the same directory: {configDir}/file-history/{sessionId}/
     // Create it once upfront instead of once per backup file
     const newBackupDir = join(
-      getGakrcliConfigHomeDir(),
+      getGakrCLIConfigHomeDir(),
       'file-history',
       sessionId,
     )
@@ -1103,13 +1100,5 @@ async function readFileAsyncOrNull(path: string): Promise<string | null> {
     return await readFile(path, 'utf-8')
   } catch {
     return null
-  }
-}
-
-const ENABLE_DUMP_STATE = false
-function maybeDumpStateForDebug(state: FileHistoryState): void {
-  if (ENABLE_DUMP_STATE) {
-    // biome-ignore lint/suspicious/noConsole:: intentional console output
-    console.error(inspect(state, false, 5))
   }
 }

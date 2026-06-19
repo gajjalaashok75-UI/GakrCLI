@@ -2,7 +2,7 @@ import { PassThrough } from 'node:stream'
 
 import { expect, test } from 'bun:test'
 import React from 'react'
-import stripAnsi from 'strip-ansi'
+import { stripVTControlCharacters as stripAnsi } from 'node:util'
 
 import { createRoot } from '../ink.js'
 import { AppStateProvider } from '../state/AppState.js'
@@ -191,70 +191,6 @@ function DelayedControlledVimTextInput(): React.ReactNode {
   )
 }
 
-test('TextInput renders typed characters before delayed parent value commits', async () => {
-  const { stdout, stdin, getOutput } = createTestStreams()
-  const root = await createRoot({
-    stdout: stdout as unknown as NodeJS.WriteStream,
-    stdin: stdin as unknown as NodeJS.ReadStream,
-    patchConsole: false,
-  })
-
-  root.render(<DelayedControlledTextInput />)
-
-  await waitForOutput(getOutput, output => output.includes('Type here...'))
-  stdin.write('a')
-  stdin.write('b')
-
-  const output = await waitForOutput(
-    getOutput,
-    frame => frame.includes('ab') && !frame.includes('Type here...'),
-  )
-
-  root.unmount()
-  stdin.end()
-  stdout.end()
-
-  expect(output).toContain('ab')
-  expect(output).not.toContain('Type here...')
-})
-
-test('maskTextWithVisibleEdges preserves only the first and last three chars', () => {
-  expect(maskTextWithVisibleEdges('sk-secret-12345678', '*')).toBe(
-    'sk-************678',
-  )
-  expect(maskTextWithVisibleEdges('abcdef', '*')).toBe('******')
-})
-
-test('VimTextInput preserves rapid typed characters before delayed parent value commits', async () => {
-  const { stdout, stdin, getOutput } = createTestStreams()
-  const root = await createRoot({
-    stdout: stdout as unknown as NodeJS.WriteStream,
-    stdin: stdin as unknown as NodeJS.ReadStream,
-    patchConsole: false,
-  })
-
-  root.render(<DelayedControlledVimTextInput />)
-
-  await waitForOutput(getOutput, output => output.includes('Type here...'))
-  stdin.write('a')
-  stdin.write('s')
-  stdin.write('d')
-  stdin.write('f')
-
-  const output = await waitForOutput(
-    getOutput,
-    frame => frame.includes('asdf') && !frame.includes('Type here...'),
-  )
-
-  root.unmount()
-  stdin.end()
-  stdout.end()
-
-  expect(output).toContain('asdf')
-  expect(output).not.toContain('Type here...')
-})
-
-
 // Regression for #1179: parent strips the leading `!` after entering bash
 // mode (numerically: input stays "", cursor stays 0). The local mirror in
 // useTextInput must resync to the parent state even though the prop values
@@ -377,4 +313,67 @@ test('TextInput prepends `!` to existing buffer when cursor is at offset 0', asy
 
   expect(output).toContain('git status')
   expect(output).not.toMatch(/^!\s*$/m)
+})
+
+test('TextInput renders typed characters before delayed parent value commits', async () => {
+  const { stdout, stdin, getOutput } = createTestStreams()
+  const root = await createRoot({
+    stdout: stdout as unknown as NodeJS.WriteStream,
+    stdin: stdin as unknown as NodeJS.ReadStream,
+    patchConsole: false,
+  })
+
+  root.render(<DelayedControlledTextInput />)
+
+  await waitForOutput(getOutput, output => output.includes('Type here...'))
+  stdin.write('a')
+  stdin.write('b')
+
+  const output = await waitForOutput(
+    getOutput,
+    frame => frame.includes('ab') && !frame.includes('Type here...'),
+  )
+
+  root.unmount()
+  stdin.end()
+  stdout.end()
+
+  expect(output).toContain('ab')
+  expect(output).not.toContain('Type here...')
+})
+
+test('maskTextWithVisibleEdges preserves only the first and last three chars', () => {
+  expect(maskTextWithVisibleEdges('sk-secret-12345678', '*')).toBe(
+    'sk-************678',
+  )
+  expect(maskTextWithVisibleEdges('abcdef', '*')).toBe('******')
+})
+
+test('VimTextInput preserves rapid typed characters before delayed parent value commits', async () => {
+  const { stdout, stdin, getOutput } = createTestStreams()
+  const root = await createRoot({
+    stdout: stdout as unknown as NodeJS.WriteStream,
+    stdin: stdin as unknown as NodeJS.ReadStream,
+    patchConsole: false,
+  })
+
+  root.render(<DelayedControlledVimTextInput />)
+
+  await waitForOutput(getOutput, output => output.includes('Type here...'))
+  stdin.write('a')
+  stdin.write('s')
+  stdin.write('d')
+  stdin.write('f')
+
+  const output = await waitForOutput(
+    getOutput,
+    frame => frame.includes('asdf') && !frame.includes('Type here...'),
+  )
+
+  root.unmount()
+  stdin.end()
+  stdout.end()
+
+  expect(output).toContain('asdf')
+  expect(output).not.toContain('Type here...')
 })

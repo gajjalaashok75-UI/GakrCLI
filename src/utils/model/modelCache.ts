@@ -7,7 +7,7 @@
 
 import { access, readFile, writeFile, mkdir, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
-import { getGakrcliConfigHomeDir } from '../envUtils.js'
+import { getGakrCLIConfigHomeDir } from '../envUtils.js'
 import { getAPIProvider } from './providers.js'
 
 const CACHE_VERSION = '1'
@@ -22,7 +22,7 @@ interface ModelCache {
 }
 
 function getCacheDir(): string {
-  return join(getGakrcliConfigHomeDir(), CACHE_DIR_NAME)
+  return join(getGakrCLIConfigHomeDir(), CACHE_DIR_NAME)
 }
 
 async function ensureCacheDir(): Promise<boolean> {

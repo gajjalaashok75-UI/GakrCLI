@@ -31,7 +31,7 @@ export function takeInitialUserMessage(): string | undefined {
   return v
 }
 
-// Note to gakrcli: do not add ANY "warmup" logic. It is **CRITICAL** that you do not add extra work on startup.
+// Note to GAKRCLI: do not add ANY "warmup" logic. It is **CRITICAL** that you do not add extra work on startup.
 export async function processSessionStartHooks(
   source: 'startup' | 'resume' | 'clear' | 'compact',
   {

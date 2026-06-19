@@ -10,6 +10,7 @@ import {
 } from '../integrations/routeMetadata.js'
 import { getCanonicalName } from './model/model.js'
 import { getModelCapability } from './model/modelCapabilities.js'
+import { resolveAntModel } from './model/antModels.js'
 
 // Model context window size (200k tokens for all models right now)
 export const MODEL_CONTEXT_WINDOW_DEFAULT = 200_000
@@ -63,7 +64,7 @@ export function modelSupports1M(model: string): boolean {
     return false
   }
   const canonical = getCanonicalName(model)
-  return canonical.includes('gakr-sonnet-4') || canonical.includes('opus-4-6')
+  return canonical.includes('claude-sonnet-4') || canonical.includes('opus-4-6')
 }
 
 function shouldUseIntegrationRuntimeLimits(
@@ -80,6 +81,13 @@ function shouldUseIntegrationRuntimeLimits(
   )
 }
 
+/**
+ * Emit one debug-only metadata fallback warning per active route/model pair.
+ *
+ * Unknown runtime metadata is recoverable because the fallback context window
+ * keeps compaction budgets positive. Keep this out of console.error because
+ * the Ink runtime treats console errors as application errors.
+ */
 function warnUnknownIntegrationRuntimeLimits(model: string): void {
   const routeId = resolveActiveRouteIdFromEnv(process.env) ?? 'unknown-route'
   const warningKey = `${routeId}:${model}`
@@ -87,7 +95,7 @@ function warnUnknownIntegrationRuntimeLimits(model: string): void {
 
   warnedUnknownIntegrationRuntimeLimitKeys.add(warningKey)
   logForDebugging(
-    `[context] Warning: model "${model}" not in integration model metadata for route "${routeId}" - ` +
+    `[context] Warning: model "${model}" not in integration model metadata for route "${routeId}" — ` +
       `using fallback ${OPENAI_FALLBACK_CONTEXT_WINDOW} token context window. ` +
       'Add it to src/integrations/models for accurate compaction.',
     { level: 'warn' },
@@ -127,10 +135,6 @@ export function getContextWindowForModel(
       return runtimeLimits.contextWindow
     }
     warnUnknownIntegrationRuntimeLimits(model)
-    /*
-      `[context] Warning: model "${model}" not in integration model metadata — using conservative 128k default. ` +
-      'Add it to src/integrations/models for accurate compaction.',
-    */
     return OPENAI_FALLBACK_CONTEXT_WINDOW
   }
 
@@ -254,13 +258,13 @@ export function getModelMaxOutputTokens(model: string): {
   } else if (m.includes('opus-4-1') || m.includes('opus-4')) {
     defaultTokens = 32_000
     upperLimit = 32_000
-  } else if (m.includes('claude-3-opus')) {
+  } else if (m.includes('gakrcli-3-opus')) {
     defaultTokens = 4_096
     upperLimit = 4_096
-  } else if (m.includes('claude-3-sonnet')) {
+  } else if (m.includes('gakrcli-3-sonnet')) {
     defaultTokens = 8_192
     upperLimit = 8_192
-  } else if (m.includes('claude-3-haiku')) {
+  } else if (m.includes('gakrcli-3-haiku')) {
     defaultTokens = 4_096
     upperLimit = 4_096
   } else if (m.includes('3-5-sonnet') || m.includes('3-5-haiku')) {

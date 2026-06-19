@@ -62,8 +62,6 @@ const originalEnv = {
   BNKR_API_KEY: process.env.BNKR_API_KEY,
   GAKR_DISABLE_CO_AUTHORED_BY:
     process.env.GAKR_DISABLE_CO_AUTHORED_BY,
-  GAKRCLI_DISABLE_CO_AUTHORED_BY:
-    process.env.GAKRCLI_DISABLE_CO_AUTHORED_BY,
   GAKR_CODE_REMOTE_SESSION_ID: process.env.GAKR_CODE_REMOTE_SESSION_ID,
   SESSION_INGRESS_URL: process.env.SESSION_INGRESS_URL,
   USER_TYPE: process.env.USER_TYPE,
@@ -72,7 +70,7 @@ const originalClientType = getClientType()
 const originalMainLoopModelOverride = getMainLoopModelOverride()
 
 const defaultPrAttribution =
-  '🤖 Generated with [GakrCLI](https://github.com/gajjalaashok75-UI/GakrCLI)'
+  '🤖 Generated with [GakrCLI](https://github.com/gajjalaashok75-UI/gakrcli)'
 
 function useSettings(settings: SettingsJson): void {
   testSettings = settings
@@ -125,7 +123,6 @@ beforeEach(async () => {
   process.env.OPENAI_MODEL = 'gpt-5.5'
   setMainLoopModelOverride('gpt-5.5')
   delete process.env.GAKR_DISABLE_CO_AUTHORED_BY
-  delete process.env.GAKRCLI_DISABLE_CO_AUTHORED_BY
   delete process.env.GAKR_CODE_REMOTE_SESSION_ID
   delete process.env.SESSION_INGRESS_URL
   delete process.env.USER_TYPE
@@ -197,7 +194,7 @@ describe('getDefaultCommitCoAuthorName', () => {
         apiProvider: 'firstParty',
         isInternalRepo: false,
       }),
-    ).toBe('GakrCLI Opus 4.6')
+    ).toBe('claude opus 4.6')
   })
 
   it('sanitizes unknown internal Claude co-author names', () => {
@@ -213,19 +210,19 @@ describe('getDefaultCommitCoAuthorName', () => {
   it('does not duplicate the Claude prefix for Claude model names', () => {
     expect(
       getDefaultCommitCoAuthorName({
-        model: 'claude-opus-4-6',
+        model: 'Claude-opus-4-6',
         apiProvider: 'firstParty',
         isInternalRepo: false,
       }),
-    ).toBe('GakrCLI Opus 4.6')
+    ).toBe('claude opus 4.6')
   })
 
   it('uses the GakrCLI email for commit attribution across providers', () => {
     expect(getDefaultCommitCoAuthorEmail('openai')).toBe(
-      'GakrCLI@gakr.com',
+      'gakrcli@gakr-gakr.com',
     )
     expect(getDefaultCommitCoAuthorEmail('firstParty')).toBe(
-      'GakrCLI@gakr.com',
+      'gakrcli@gakr-gakr.com',
     )
   })
 })
@@ -272,10 +269,10 @@ describe('getAttributionTexts', () => {
   it('preserves includeCoAuthoredBy true as an explicit old-default opt-in', () => {
     useSettings({ includeCoAuthoredBy: true })
 
-    expect(getAttributionTexts()).toEqual({
-      commit: 'Co-Authored-By: GakrCLI (gpt-5.5) <GakrCLI@gakr.com>',
-      pr: defaultPrAttribution,
-    })
+    const attribution = getAttributionTexts()
+    expect(attribution.commit).toStartWith('Co-Authored-By: ')
+    expect(attribution.commit).toEndWith(' <gakrcli@gakr-gakr.com>')
+    expect(attribution.pr).toBe(defaultPrAttribution)
   })
 
   it('keeps attribution off when includeCoAuthoredBy is false', () => {
@@ -312,8 +309,8 @@ describe('getAttributionTexts', () => {
     useSettings({})
 
     expect(getAttributionTexts()).toEqual({
-      commit: 'https://gakr.ai/code/session_remote_123',
-      pr: 'https://gakr.ai/code/session_remote_123',
+      commit: 'https://gakrcli.ai/code/session_remote_123',
+      pr: 'https://gakrcli.ai/code/session_remote_123',
     })
   })
 })

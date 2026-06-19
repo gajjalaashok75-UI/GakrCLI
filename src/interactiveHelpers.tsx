@@ -20,18 +20,19 @@ import { onChangeAppState } from './state/onChangeAppState.js';
 import { getProviderValidationError } from './utils/providerValidation.js';
 import { applyProfileEnvToProcessEnv, buildStartupEnvFromProfile } from './utils/providerProfile.js';
 import { normalizeApiKeyForConfig } from './utils/authPortable.js';
-import { getExternalgakrcliMdIncludes, getMemoryFiles, shouldShowgakrcliMdExternalIncludesWarning } from './utils/gakrclimd.js';
+import { getExternalGakrCLIMdIncludes, getMemoryFiles, shouldShowGakrCLIMdExternalIncludesWarning } from './utils/gakrclimd.js';
 import { checkHasTrustDialogAccepted, getCustomApiKeyStatus, getGlobalConfig, saveGlobalConfig } from './utils/config.js';
 import { updateDeepLinkTerminalPreference } from './utils/deepLink/terminalPreference.js';
 import { isEnvTruthy, isRunningOnHomespace } from './utils/envUtils.js';
 import { type FpsMetrics, FpsTracker } from './utils/fpsTracker.js';
 import { updateGithubRepoPathMapping } from './utils/githubRepoPathMapping.js';
 import { applyConfigEnvironmentVariables } from './utils/managedEnv.js';
-import { usesGakrcliHostedAuthFlow } from './utils/model/providers.js';
+import { usesGakrCLIAccountFlow } from './utils/model/providers.js';
+import { showDangerousModePromptIfNeeded } from './utils/permissions/dangerousModePromptFlow.js';
 import type { PermissionMode } from './utils/permissions/PermissionMode.js';
 import { getBaseRenderOptions } from './utils/renderOptions.js';
 import { getSettingsWithAllErrors } from './utils/settings/allErrors.js';
-import { hasAutoModeOptIn, hasSkipDangerousModePermissionPrompt } from './utils/settings/settings.js';
+import { hasAutoModeOptIn } from './utils/settings/settings.js';
 export function completeOnboarding(): void {
   saveGlobalConfig(current => ({
     ...current,
@@ -105,18 +106,18 @@ export async function renderAndRun(root: Root, element: React.ReactNode): Promis
   await gracefulShutdown(0);
 }
 export async function showSetupScreens(root: Root, permissionMode: PermissionMode, allowDangerouslySkipPermissions: boolean, commands?: Command[], gakrcliInChrome?: boolean, devChannels?: ChannelEntry[]): Promise<boolean> {
-  if ("production" === 'test' || isEnvTruthy(false) || process.env.IS_DEMO // Skip onboarding in demo mode
+  if (process.env.NODE_ENV === 'test' || isEnvTruthy(false) || process.env.IS_DEMO // Skip onboarding in demo mode
   ) {
     return false;
   }
 
-  const usesGakrcliHostedAuth = usesGakrcliHostedAuthFlow();
+  const usesGakrCLISetup = usesGakrCLIAccountFlow();
   const config = getGlobalConfig();
   let onboardingShown = false;
 
   // Always show GakrCLI setup at least once. Provider-specific auth steps inside
   // Onboarding are gated, so every first-time user gets theme/provider setup.
-  if (!config.theme || !config.hasCompletedOnboarding
+  if (usesGakrCLISetup && (!config.theme || !config.hasCompletedOnboarding) // always show onboarding at least once
   ) {
     onboardingShown = true;
     const {
@@ -137,9 +138,9 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
   // Note: non-interactive sessions (CI/CD with -p) never reach showSetupScreens at all.
   // Skip permission checks in claubbit
   if (!isEnvTruthy(process.env.CLAUBBIT)) {
-    // Skip trust dialog UI for providers that do not use hosted GakrCLI auth, but still
+    // Skip trust dialog UI for third-party providers (no Anthropic auth), but still
     // run trust state initialization below so the REPL mounts correctly.
-    if (usesGakrcliHostedAuth && !checkHasTrustDialogAccepted()) {
+    if (usesGakrCLISetup && !checkHasTrustDialogAccepted()) {
       const {
         TrustDialog
       } = await import('./components/TrustDialog/TrustDialog.js');
@@ -148,7 +149,7 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
 
     // Signal that trust has been verified for this session.
     // GrowthBook checks this to decide whether to include auth headers.
-    // Critical for non-hosted providers: without this, downstream config lookups
+    // Critical for third-party providers: without this, downstream config lookups
     // may fail silently, preventing the REPL from mounting (frozen terminal).
     setSessionTrustAccepted(true);
 
@@ -161,29 +162,29 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
     // Now that trust is established, prefetch system context if it wasn't already
     void getSystemContext();
 
-    // Skip MCP approval dialogs for providers that do not use hosted auth.
-    if (usesGakrcliHostedAuth) {
-      // If settings are valid, check for any mcp.json servers that need approval.
-      // This must run AFTER trust is established — otherwise third-party providers
-      // (which skip the trust dialog) would never reach this point, and any
-      // enableAllProjectMcpServers / enabledMcpjsonServers into
-      // settings.local.json, and the servers are silently dropped from
-      // /mcp and `mcp list` (issue #696).
-      const {
-        errors: allErrors
-      } = getSettingsWithAllErrors();
-      if (allErrors.length === 0) {
-        await handleMcpjsonServerApprovals(root);
-      }
+    // MCP approval and external-includes warnings are about workspace
+    // trust, not about Anthropic auth. They must run for all providers
+    // — including third-party — otherwise project-scoped .mcp.json
+    // servers never get the approval that writes
+    // enableAllProjectMcpServers / enabledMcpjsonServers into
+    // settings.local.json, and the servers are silently dropped from
+    // /mcp and `mcp list` (issue #696).
+    const { errors: allErrors } = getSettingsWithAllErrors();
+    if (allErrors.length === 0) {
+      await handleMcpjsonServerApprovals(root);
+    }
 
-      // Check for gakrcli.md includes that need approval
-      if (await shouldShowgakrcliMdExternalIncludesWarning()) {
-        const externalIncludes = getExternalgakrcliMdIncludes(await getMemoryFiles(true));
-        const {
-          gakrcliMdExternalIncludesDialog
-        } = await import('./components/gakrcliMdExternalIncludesDialog.js');
-        await showSetupDialog(root, done => <gakrcliMdExternalIncludesDialog onDone={done} isStandaloneDialog externalIncludes={externalIncludes} />);
-      }
+    // Check for gakrcli.md includes that need approval
+    const warningScope = await shouldShowGakrCLIMdExternalIncludesWarning()
+    if (warningScope !== 'None') {
+      const files = await getMemoryFiles(true);
+      const externalIncludes = warningScope === 'User'
+        ? getExternalGakrCLIMdIncludes(files, ['User'])
+        : getExternalGakrCLIMdIncludes(files, ['Project', 'Local']);
+      const {
+        GakrCLIMdExternalIncludesDialog
+      } = await import('./components/GakrCLIMdExternalIncludesDialog.js');
+      await showSetupDialog(root, done => <GakrCLIMdExternalIncludesDialog onDone={done} isStandaloneDialog externalIncludes={externalIncludes} scope={warningScope} />);
     }
   }
 
@@ -243,7 +244,7 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
   // Check for custom API key
   // On homespace, ANTHROPIC_API_KEY is preserved in process.env for child
   // processes but ignored by GakrCLI itself (see auth.ts).
-  if (process.env.ANTHROPIC_API_KEY && !isRunningOnHomespace()) {
+  if (usesGakrCLISetup && process.env.ANTHROPIC_API_KEY && !isRunningOnHomespace()) {
     const customApiKeyTruncated = normalizeApiKeyForConfig(process.env.ANTHROPIC_API_KEY);
     const keyStatus = getCustomApiKeyStatus(customApiKeyTruncated);
     if (keyStatus === 'new') {
@@ -255,12 +256,7 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
       });
     }
   }
-  if ((permissionMode === 'bypassPermissions' || allowDangerouslySkipPermissions) && !hasSkipDangerousModePermissionPrompt()) {
-    const {
-      BypassPermissionsModeDialog
-    } = await import('./components/BypassPermissionsModeDialog.js');
-    await showSetupDialog(root, done => <BypassPermissionsModeDialog onAccept={done} />);
-  }
+  await showDangerousModePromptIfNeeded(root, permissionMode, allowDangerouslySkipPermissions, showSetupDialog);
   if (feature('TRANSCRIPT_CLASSIFIER')) {
     // Only show the opt-in dialog if auto mode actually resolved — if the
     // gate denied it (org not allowlisted, settings disabled), showing
@@ -294,7 +290,7 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
       const [{
         isChannelsEnabled
       }, {
-        getgakrcliAIOAuthTokens
+        getGakrCLIAIOAuthTokens
       }] = await Promise.all([import('./services/mcp/channelAllowlist.js'), import('./utils/auth.js')]);
       // Skip the dialog when channels are blocked (tengu_harbor off or no
       // OAuth) — accepting then immediately seeing "not available" in
@@ -303,7 +299,7 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
       // named. dev:true here is for the flag label in ChannelsNotice
       // (hasNonDev check); the allowlist bypass it also grants is moot
       // since the gate blocks upstream.
-      if (!isChannelsEnabled() || !getgakrcliAIOAuthTokens()?.accessToken) {
+      if (!isChannelsEnabled() || !getGakrCLIAIOAuthTokens()?.accessToken) {
         setAllowedChannels([...getAllowedChannels(), ...devChannels.map(c => ({
           ...c,
           dev: true
@@ -328,11 +324,11 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
   }
 
   // Show Chrome onboarding for first-time GakrCLI in Chrome users
-  if (gakrcliInChrome && !getGlobalConfig().hasCompletedgakrcliInChromeOnboarding) {
+  if (gakrcliInChrome && !getGlobalConfig().hasCompletedGakrCLIInChromeOnboarding) {
     const {
-      gakrcliInChromeOnboarding
-    } = await import('./components/gakrcliInChromeOnboarding.js');
-    await showSetupDialog(root, done => <gakrcliInChromeOnboarding onDone={done} />);
+      GakrCLIInChromeOnboarding
+    } = await import('./components/GakrCLIInChromeOnboarding.js');
+    await showSetupDialog(root, done => <GakrCLIInChromeOnboarding onDone={done} />);
   }
   return onboardingShown;
 }

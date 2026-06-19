@@ -50,16 +50,19 @@ export function sanitizeFilename(text: string): string {
 export async function call(onDone: LocalJSXCommandOnDone, context: ToolUseContext, args: string): Promise<React.ReactNode> {
   const tools = context.options.tools || [];
 
+  // Parse arguments for --format flag and filename
   const parsed = parseExportArgs(args);
   if (parsed.error) {
     onDone(parsed.error);
     return null;
   }
 
+  // Determine format: --format flag > filename extension > text default
   const format: ExportFormat = parsed.format
     ?? (parsed.filename ? inferExportFormatFromFilename(parsed.filename) : null)
     ?? 'text';
 
+  // If args are provided, render and write directly to file
   if (parsed.filename) {
     try {
       const content = await renderMessagesForExport(context.messages, tools, { format });
@@ -79,6 +82,7 @@ export async function call(onDone: LocalJSXCommandOnDone, context: ToolUseContex
     }
   }
 
+  // Generate default filename from first prompt or timestamp
   const firstPrompt = extractFirstPrompt(context.messages);
   const timestamp = formatTimestamp(new Date());
   const sanitized = firstPrompt ? sanitizeFilename(firstPrompt) : '';
@@ -86,6 +90,7 @@ export async function call(onDone: LocalJSXCommandOnDone, context: ToolUseContex
     ? `${timestamp}-${sanitized}.txt`
     : `conversation-${timestamp}.txt`;
 
+  // Return the dialog component when no args provided
   return <ExportDialog defaultFilename={defaultFilename} defaultFormat={format} getContent={async (f) => {
     return renderMessagesForExport(context.messages, tools, { format: f });
   }} onDone={result => {

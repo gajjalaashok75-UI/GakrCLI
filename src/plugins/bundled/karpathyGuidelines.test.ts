@@ -34,7 +34,7 @@ test('karpathy guidelines skill includes optional user focus', async () => {
   )
   const text = (blocks[0] as { text: string }).text
 
-  expect(text).toContain('# CLAUDE.md')
+  expect(text).toContain('# GAKRCLI.md')
   expect(text).toContain('These guidelines are working if')
   expect(text).toContain('## User Focus')
   expect(text).toContain('prefer tests over snapshots')

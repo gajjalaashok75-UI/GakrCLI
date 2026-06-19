@@ -1,6 +1,6 @@
 import { c as _c } from "react-compiler-runtime";
 import React, { useCallback, useEffect, useState } from 'react';
-import { checkIsGitClean, checkNeedsgakrcliAiLogin } from 'src/utils/background/remote/preconditions.js';
+import { checkIsGitClean, checkNeedsGakrCLIAiLogin } from 'src/utils/background/remote/preconditions.js';
 import { gracefulShutdownSync } from 'src/utils/gracefulShutdown.js';
 import { Box, Text } from '../ink.js';
 import { ConsoleOAuthFlow } from './ConsoleOAuthFlow.js';
@@ -25,7 +25,7 @@ export function TeleportError(t0) {
     errorsToIgnore: t1
   } = t0;
   const errorsToIgnore = t1 === undefined ? EMPTY_ERRORS_TO_IGNORE : t1;
-  const [currentError, setCurrentError] = useState(null);
+  const [currentError, setCurrentError] = useState<TeleportLocalErrorType | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   let t2;
   if ($[0] !== errorsToIgnore || $[1] !== onComplete) {
@@ -88,12 +88,12 @@ export function TeleportError(t0) {
   } else {
     t6 = $[8];
   }
-  const handleLoginWithgakrcliAI = t6;
+  const handleLoginWithGakrCLIAI = t6;
   let t7;
   if ($[9] === Symbol.for("react.memo_cache_sentinel")) {
     t7 = value => {
       if (value === "login") {
-        handleLoginWithgakrcliAI();
+        handleLoginWithGakrCLIAI();
       } else {
         onCancel();
       }
@@ -145,14 +145,14 @@ export function TeleportError(t0) {
         }
         let t9;
         if ($[16] === Symbol.for("react.memo_cache_sentinel")) {
-          t9 = <Box flexDirection="column"><Text dimColor={true}>Teleport requires a Gakr.ai account.</Text><Text dimColor={true}>Your GakrCLI Pro/Max subscription will be used by Gakr.</Text></Box>;
+          t9 = <Box flexDirection="column"><Text dimColor={true}>Teleport requires a GakrCLI.ai account.</Text><Text dimColor={true}>Your GakrCLI Pro/Max subscription will be used by GakrCLI Code.</Text></Box>;
           $[16] = t9;
         } else {
           t9 = $[16];
         }
         let t10;
         if ($[17] === Symbol.for("react.memo_cache_sentinel")) {
-          t10 = <Dialog title="Log in to Gakr" onCancel={onCancel}>{t9}<Select options={[{
+          t10 = <Dialog title="Log in to GakrCLI" onCancel={onCancel}>{t9}<Select options={[{
               label: "Login with GakrCLI account",
               value: "login"
             }, {
@@ -177,7 +177,7 @@ function _temp() {
 }
 export async function getTeleportErrors(): Promise<Set<TeleportLocalErrorType>> {
   const errors = new Set<TeleportLocalErrorType>();
-  const [needsLogin, isGitClean] = await Promise.all([checkNeedsgakrcliAiLogin(), checkIsGitClean()]);
+  const [needsLogin, isGitClean] = await Promise.all([checkNeedsGakrCLIAiLogin(), checkIsGitClean()]);
   if (needsLogin) {
     errors.add('needsLogin');
   }

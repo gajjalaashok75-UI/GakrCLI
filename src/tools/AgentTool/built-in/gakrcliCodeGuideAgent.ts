@@ -20,7 +20,7 @@ const CDP_DOCS_MAP_URL = 'https://github.com/gajjalaashok75-UI/GakrCLI/llms.txt'
 
 export const GAKR_CODE_GUIDE_AGENT_TYPE = 'gakrcli-code-guide'
 
-function getgakrcliCodeGuideBasePrompt(): string {
+function getGakrCLICodeGuideBasePrompt(): string {
   // Ant-native builds alias find/grep to embedded bfs/ugrep and remove the
   // dedicated Glob/Grep tools, so point at find/grep instead.
   const localSearchHint = hasEmbeddedSearchTools()
@@ -33,13 +33,13 @@ function getgakrcliCodeGuideBasePrompt(): string {
 
 1. **GakrCLI** (the CLI tool): Installation, configuration, hooks, skills, MCP servers, keyboard shortcuts, IDE integrations, settings, and workflows.
 
-2. **GakrCLI Agent SDK**: A framework for building custom AI agents based on GakrCLI technology. Available for Node.js/TypeScript and Python.
+2. **GakrCLI Agent SDK**: A framework for building custom AI agents. Available for Node.js/TypeScript and Python.
 
 3. **GakrCLI API**: The GakrCLI API (formerly known as the Anthropic API) for direct model interaction, tool use, and integrations.
 
 **Documentation sources:**
 
-- **GakrCLI docs** (${GAKR_CODE_DOCS_MAP_URL}): Fetch this for questions about the GakrCLI tool, including:
+- **GakrCLI docs** (${GAKR_CODE_DOCS_MAP_URL}): Use these as the compatibility reference for questions about the GakrCLI CLI tool, including:
   - Installation, setup, and getting started
   - Hooks (pre/post command execution)
   - Custom skills
@@ -87,17 +87,12 @@ Complete the user's request by providing accurate, documentation-based guidance.
 }
 
 function getFeedbackGuideline(): string {
-  // For 3P services (Bedrock/Vertex/Foundry), /feedback command is disabled
-  // Direct users to the appropriate feedback channel instead
-  if (isUsing3PServices()) {
-    return `- When you cannot find an answer or the feature doesn't exist, direct the user to ${MACRO.ISSUES_EXPLAINER}`
-  }
-  return "- When you cannot find an answer or the feature doesn't exist, direct the user to use /feedback to report a feature request or bug"
+  return `- When you cannot find an answer or the feature doesn't exist, direct the user to ${MACRO.ISSUES_EXPLAINER}`
 }
 
 export const GAKR_CODE_GUIDE_AGENT: BuiltInAgentDefinition = {
   agentType: GAKR_CODE_GUIDE_AGENT_TYPE,
-  whenToUse: `Use this agent when the user asks questions ("Can Gakr...", "Does Gakr...", "How do I...") about: (1) GakrCLI (the CLI tool) - features, hooks, slash commands, MCP servers, settings, IDE integrations, keyboard shortcuts; (2) GakrCLI Agent SDK - building custom agents; (3) GakrCLI API (formerly Anthropic API) - API usage, tool use, Anthropic SDK usage. **IMPORTANT:** Before spawning a new agent, check if there is already a running or recently completed gakrcli-code-guide agent that you can continue via ${SEND_MESSAGE_TOOL_NAME}.`,
+  whenToUse: `Use this agent when the user asks questions ("Can GakrCLI...", "Does GakrCLI...", "How do I...") about: (1) GakrCLI (the CLI tool) - features, hooks, slash commands, MCP servers, settings, IDE integrations, keyboard shortcuts; (2) GakrCLI Agent SDK - building custom agents; (3) GakrCLI API (formerly Anthropic API) - API usage, tool use, Anthropic SDK usage. **IMPORTANT:** Before spawning a new agent, check if there is already a running or recently completed gakrcli-code-guide agent that you can continue via ${SEND_MESSAGE_TOOL_NAME}.`,
   // Ant-native builds: Glob/Grep tools are removed; use Bash (with embedded
   // bfs/ugrep via find/grep aliases) for local file search instead.
   tools: hasEmbeddedSearchTools()
@@ -181,7 +176,7 @@ export const GAKR_CODE_GUIDE_AGENT: BuiltInAgentDefinition = {
 
     // Add the feedback guideline (conditional based on whether user is using 3P services)
     const feedbackGuideline = getFeedbackGuideline()
-    const basePromptWithFeedback = `${getgakrcliCodeGuideBasePrompt()}
+    const basePromptWithFeedback = `${getGakrCLICodeGuideBasePrompt()}
 ${feedbackGuideline}`
 
     // If we have any context to add, append it to the base system prompt

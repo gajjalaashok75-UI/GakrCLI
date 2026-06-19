@@ -4,9 +4,8 @@ import { Text } from '../../ink.js';
 import { refreshGrowthBookAfterAuthChange } from '../../services/analytics/growthbook.js';
 import { getGroveNoticeConfig, getGroveSettings } from '../../services/api/grove.js';
 import { clearPolicyLimitsCache } from '../../services/policyLimits/index.js';
-// flushTelemetry is loaded lazily to avoid pulling in ~1.1MB of OpenTelemetry at startup
 import { clearRemoteManagedSettingsCache } from '../../services/remoteManagedSettings/index.js';
-import { getgakrcliAIOAuthTokens, removeApiKey } from '../../utils/auth.js';
+import { getGakrCLIAIOAuthTokens, removeApiKey } from '../../utils/auth.js';
 import { clearBetasCaches } from '../../utils/betas.js';
 import { saveGlobalConfig } from '../../utils/config.js';
 import { gracefulShutdownSync } from '../../utils/gracefulShutdown.js';
@@ -16,11 +15,6 @@ import { resetUserCache } from '../../utils/user.js';
 export async function performLogout({
   clearOnboarding = false
 }): Promise<void> {
-  // Flush telemetry BEFORE clearing credentials to prevent org data leakage
-  const {
-    flushTelemetry
-  } = await import('../../utils/telemetry/instrumentation.js');
-  await flushTelemetry();
   await removeApiKey();
 
   // Wipe all secure storage data on logout
@@ -50,7 +44,7 @@ export async function performLogout({
 // clearing anything memoized that must be invalidated when user/session/auth changes
 export async function clearAuthRelatedCaches(): Promise<void> {
   // Clear the OAuth token cache
-  getgakrcliAIOAuthTokens.cache?.clear?.();
+  getGakrCLIAIOAuthTokens.cache?.clear?.();
   clearTrustedDeviceTokenCache();
   clearBetasCaches();
   clearToolSchemaCache();
@@ -73,7 +67,7 @@ export async function call(): Promise<React.ReactNode> {
   await performLogout({
     clearOnboarding: true
   });
-  const message = <Text>Successfully logged out from your GakrCLI account.</Text>;
+  const message = <Text>Successfully logged out from your Anthropic account.</Text>;
   setTimeout(() => {
     gracefulShutdownSync(0, 'logout');
   }, 200);

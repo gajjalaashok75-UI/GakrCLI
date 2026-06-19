@@ -1,5 +1,5 @@
 import {
-  getgakrcliAiBaseUrl,
+  getGakrCLIAiBaseUrl,
   getRemoteSessionUrl,
 } from '../constants/product.js'
 import { stringWidth } from '../ink/stringWidth.js'
@@ -40,7 +40,7 @@ export function buildBridgeConnectUrl(
   environmentId: string,
   ingressUrl?: string,
 ): string {
-  const baseUrl = getgakrcliAiBaseUrl(undefined, ingressUrl)
+  const baseUrl = getGakrCLIAiBaseUrl(undefined, ingressUrl)
   return `${baseUrl}/code?bridge=${environmentId}`
 }
 

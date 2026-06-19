@@ -87,6 +87,6 @@ export const PLAN_AGENT: BuiltInAgentDefinition = {
   model: 'inherit',
   // Plan is read-only and can Read GAKRCLI.md directly if it needs conventions.
   // Dropping it from context saves tokens without blocking access.
-  omitgakrcliMd: true,
+  omitGakrCLIMd: true,
   getSystemPrompt: () => getPlanV2SystemPrompt(),
 }

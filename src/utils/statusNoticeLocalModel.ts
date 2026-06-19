@@ -68,7 +68,7 @@ export function buildLocalModelContextLoad(
     warnings.agentWarning,
     warnings.gakrcliMdWarning,
   ]
-    .filter((warning): warning is ContextWarning => warning != null)
+    .filter((warning): warning is ContextWarning => warning !== null)
     .map(summarizeContextWarning)
     .filter(
       (contributor): contributor is LocalModelContextContributor =>
@@ -137,7 +137,7 @@ export function isActiveProviderLocalModel(
 }
 
 export async function checkLocalModelContextLoad(
-  tools: Tool[],
+  tools: readonly Tool[],
   agentDefinitions: AgentDefinitionsResult | null | undefined,
   memoryFiles: MemoryFileInfo[],
   getToolPermissionContext: () => Promise<ToolPermissionContext>,

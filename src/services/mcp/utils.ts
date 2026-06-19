@@ -6,7 +6,7 @@ import type { AgentMcpServerInfo } from '../../components/mcp/types.js'
 import type { Tool } from '../../Tool.js'
 import type { AgentDefinition } from '../../tools/AgentTool/loadAgentsDir.js'
 import { getCwd } from '../../utils/cwd.js'
-import { getGlobalGakrcliFile } from '../../utils/env.js'
+import { getGlobalGakrCLIFile } from '../../utils/env.js'
 import { isSettingSourceEnabled } from '../../utils/settings/constants.js'
 import {
   getSettings_DEPRECATED,
@@ -263,17 +263,17 @@ export function isMcpCommand(command: Command): boolean {
 export function describeMcpConfigFilePath(scope: ConfigScope): string {
   switch (scope) {
     case 'user':
-      return getGlobalGakrcliFile()
+      return getGlobalGakrCLIFile()
     case 'project':
       return join(getCwd(), '.mcp.json')
     case 'local':
-      return `${getGlobalGakrcliFile()} [project: ${getCwd()}]`
+      return `${getGlobalGakrCLIFile()} [project: ${getCwd()}]`
     case 'dynamic':
       return 'Dynamically configured'
     case 'enterprise':
       return getEnterpriseMcpFilePath()
     case 'gakrcliai':
-      return 'gakr.ai'
+      return 'gakrcli.ai'
     default:
       return scope
   }
@@ -292,7 +292,7 @@ export function getScopeLabel(scope: ConfigScope): string {
     case 'enterprise':
       return 'Enterprise config (managed by your organization)'
     case 'gakrcliai':
-      return 'gakr.ai config'
+      return 'gakrcli.ai config'
     default:
       return scope
   }
@@ -426,7 +426,7 @@ export function getMcpServerScopeFromToolName(
   // Look up server config
   const serverConfig = getMcpConfigByName(mcpInfo.serverName)
 
-  // Fallback: gakr.ai servers have normalized names starting with "gakrcli_ai_"
+  // Fallback: gakrcli.ai servers have normalized names starting with "gakrcli_ai_"
   // but aren't in getMcpConfigByName (they're fetched async separately)
   if (!serverConfig && mcpInfo.serverName.startsWith('gakrcli_ai_')) {
     return 'gakrcliai'

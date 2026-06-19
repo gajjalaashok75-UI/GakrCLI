@@ -35,7 +35,7 @@ export async function sendNotification(
   })
 }
 
-const DEFAULT_TITLE = 'Gakr'
+const DEFAULT_TITLE = 'GakrCLI'
 
 async function sendToChannel(
   channel: string,

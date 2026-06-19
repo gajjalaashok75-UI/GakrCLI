@@ -1,27 +1,26 @@
 import {
-  type gakrcliForChromeContext,
-  creategakrcliForChromeMcpServer,
+  type GakrCLIForChromeContext,
+  createGakrCLIForChromeMcpServer,
   type Logger,
   type PermissionMode,
 } from '@ant/gakrcli-for-chrome-mcp'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { format } from 'util'
 import { shutdownDatadog } from '../../services/analytics/datadog.js'
-import { shutdown1PEventLogging } from '../../services/analytics/firstPartyEventLogger.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../../services/analytics/index.js'
 import { initializeAnalyticsSink } from '../../services/analytics/sink.js'
-import { getgakrcliAIOAuthTokens } from '../auth.js'
+import { getGakrCLIAIOAuthTokens } from '../auth.js'
 import { enableConfigs, getGlobalConfig, saveGlobalConfig } from '../config.js'
 import { logForDebugging } from '../debug.js'
 import { isEnvTruthy } from '../envUtils.js'
 import { sideQuery } from '../sideQuery.js'
 import { getAllSocketPaths, getSecureSocketPath } from './common.js'
 
-const EXTENSION_DOWNLOAD_URL = 'https://gakr.ai/chrome'
+const EXTENSION_DOWNLOAD_URL = 'https://gakrcli.ai/chrome'
 const BUG_REPORT_URL =
   'https://github.com/anthropics/gakrcli-code/issues/new?labels=bug,gakrcli-in-chrome'
 
@@ -79,12 +78,12 @@ function isLocalBridge(): boolean {
 }
 
 /**
- * Build the gakrcliForChromeContext used by both the subprocess MCP server
+ * Build the GakrCLIForChromeContext used by both the subprocess MCP server
  * and the in-process path in the MCP client.
  */
 export function createChromeContext(
   env?: Record<string, string>,
-): gakrcliForChromeContext {
+): GakrCLIForChromeContext {
   const logger = new DebugLogger()
   const chromeBridgeUrl = getChromeBridgeUrl()
   logger.info(`Bridge URL: ${chromeBridgeUrl ?? 'none (using native socket)'}`)
@@ -109,11 +108,11 @@ export function createChromeContext(
     clientTypeId: 'gakrcli-code',
     onAuthenticationError: () => {
       logger.warn(
-        'Authentication error occurred. Please ensure you are logged into the GakrCLI browser extension with the same gakr.ai account as Gakr.',
+        'Authentication error occurred. Please ensure you are logged into the GakrCLI browser extension with the same gakrcli.ai account as GakrCLI.',
       )
     },
     onToolCallDisconnected: () => {
-      return `Browser extension is not connected. Please ensure the GakrCLI browser extension is installed and running (${EXTENSION_DOWNLOAD_URL}), and that you are logged into gakr.ai with the same account as Gakr. If this is your first time connecting to Chrome, you may need to restart Chrome for the installation to take effect. If you continue to experience issues, please report a bug: ${BUG_REPORT_URL}`
+      return `Browser extension is not connected. Please ensure the GakrCLI browser extension is installed and running (${EXTENSION_DOWNLOAD_URL}), and that you are logged into gakrcli.ai with the same account as GakrCLI Code. If this is your first time connecting to Chrome, you may need to restart Chrome for the installation to take effect. If you continue to experience issues, please report a bug: ${BUG_REPORT_URL}`
     },
     onExtensionPaired: (deviceId: string, name: string) => {
       saveGlobalConfig(config => {
@@ -143,7 +142,7 @@ export function createChromeContext(
           return getGlobalConfig().oauthAccount?.accountUuid
         },
         getOAuthToken: async () => {
-          return getgakrcliAIOAuthTokens()?.accessToken ?? ''
+          return getGakrCLIAIOAuthTokens()?.accessToken ?? ''
         },
         ...(isLocalBridge() && { devUserId: 'dev_user_local' }),
       },
@@ -163,12 +162,15 @@ export function createChromeContext(
     // Types inlined: AnthropicMessagesRequest/Response live in
     // @ant/gakrcli-for-chrome-mcp@0.4.0 which isn't published yet. CI installs
     // 0.3.0. The callAnthropicMessages field is also 0.4.0-only, but spreading
-    // an extra property into gakrcliForChromeContext is fine against either
+    // an extra property into GakrCLIForChromeContext is fine against either
     // version — 0.3.0 sees an unknown field (allowed in spread), 0.4.0 sees a
     // structurally-matching one. Once 0.4.0 is published, this can switch to
     // the package's exported types and the dep can be bumped.
     ...(process.env.USER_TYPE === 'ant' && {
-      callAnthropicMessages: async (req: {
+      // Cast below: the 0.3.0 stub types this field as
+      // (request: unknown) => Promise<unknown>; the inlined 0.4.0
+      // request/response shapes are intentionally narrower (see above).
+      callAnthropicMessages: (async (req: {
         model: string
         max_tokens: number
         system: string
@@ -210,7 +212,7 @@ export function createChromeContext(
             output_tokens: response.usage.output_tokens,
           },
         }
-      },
+      }) as GakrCLIForChromeContext['callAnthropicMessages'],
     }),
     trackEvent: (eventName, metadata) => {
       const safeMetadata: {
@@ -242,12 +244,12 @@ export function createChromeContext(
   }
 }
 
-export async function rungakrcliInChromeMcpServer(): Promise<void> {
+export async function runGakrCLIInChromeMcpServer(): Promise<void> {
   enableConfigs()
   initializeAnalyticsSink()
   const context = createChromeContext()
 
-  const server = creategakrcliForChromeMcpServer(context)
+  const server = createGakrCLIForChromeMcpServer(context)
   const transport = new StdioServerTransport()
 
   // Exit when parent process dies (stdin pipe closes).
@@ -258,7 +260,6 @@ export async function rungakrcliInChromeMcpServer(): Promise<void> {
       return
     }
     exiting = true
-    await shutdown1PEventLogging()
     await shutdownDatadog()
     // eslint-disable-next-line custom-rules/no-process-exit
     process.exit(0)

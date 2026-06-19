@@ -39,6 +39,7 @@ const ENV_KEYS = [
   'GOOGLE_APPLICATION_CREDENTIALS',
   'XAI_API_KEY',
   'XAI_CREDENTIAL_SOURCE',
+  'NEARAI_API_KEY',
 ] as const
 
 const originalEnv: Record<string, string | undefined> = {}
@@ -178,13 +179,15 @@ test('nvidia nim validation accepts NVIDIA_API_KEY without OPENAI_API_KEY', asyn
   await expect(getProviderValidationError(process.env)).resolves.toBeNull()
 })
 
-test('nvidia nim validation accepts OPENAI_API_KEY saved by openai-compatible profiles', async () => {
+test('nvidia nim validation rejects OPENAI_API_KEY when NVIDIA_API_KEY is not set', async () => {
   process.env.GAKR_CODE_USE_OPENAI = '1'
   process.env.OPENAI_BASE_URL = 'https://integrate.api.nvidia.com/v1'
   process.env.OPENAI_API_KEY = 'nvidia-live-key'
   delete process.env.NVIDIA_API_KEY
 
-  await expect(getProviderValidationError(process.env)).resolves.toBeNull()
+  await expect(getProviderValidationError(process.env)).resolves.toBe(
+    'NVIDIA_API_KEY is required when using NVIDIA NIM.',
+  )
 })
 
 test('nvidia nim validation accepts NVIDIA_API_KEY for custom NIM endpoints when NVIDIA_NIM is set', async () => {
@@ -204,6 +207,78 @@ test('bankr validation accepts BNKR_API_KEY without OPENAI_API_KEY', async () =>
   delete process.env.OPENAI_API_KEY
 
   await expect(getProviderValidationError(process.env)).resolves.toBeNull()
+})
+
+// xAI accepts either XAI_API_KEY (legacy) or OAuth credentials. The OAuth
+// credentials path is the saved-profile flow: applying the profile sets
+// XAI_CREDENTIAL_SOURCE=oauth in process.env, so validation must not
+// require XAI_API_KEY when that marker is present.
+test('xai validation accepts XAI_API_KEY without OPENAI_API_KEY', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://api.x.ai/v1'
+  process.env.OPENAI_MODEL = 'grok-4.3'
+  process.env.XAI_API_KEY = 'xai-live-key'
+  delete process.env.OPENAI_API_KEY
+
+  await expect(getProviderValidationError(process.env)).resolves.toBeNull()
+})
+
+test('xai validation accepts XAI_CREDENTIAL_SOURCE=oauth without an API key', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://api.x.ai/v1'
+  process.env.OPENAI_MODEL = 'grok-4.3'
+  process.env.XAI_CREDENTIAL_SOURCE = 'oauth'
+  delete process.env.XAI_API_KEY
+  delete process.env.OPENAI_API_KEY
+
+  await expect(getProviderValidationError(process.env)).resolves.toBeNull()
+})
+
+test('xai validation surfaces sign-in guidance when no credential source is set', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://api.x.ai/v1'
+  process.env.OPENAI_MODEL = 'grok-4.3'
+  delete process.env.XAI_API_KEY
+  delete process.env.XAI_CREDENTIAL_SOURCE
+  delete process.env.OPENAI_API_KEY
+
+  // Inject "no stored credentials" so this test isn't sensitive to the
+  // developer's actual login state.
+  const error = await getProviderValidationError(process.env, {
+    hasStoredXaiOAuthCredentials: async () => false,
+  })
+  expect(error).not.toBeNull()
+  expect(error!).toContain('XAI_API_KEY is required')
+  expect(error!).toContain('gakrcli auth xai login')
+})
+
+test('xai validation accepts stored OAuth credentials even without an env marker', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://api.x.ai/v1'
+  process.env.OPENAI_MODEL = 'grok-4.3'
+  delete process.env.XAI_API_KEY
+  delete process.env.XAI_CREDENTIAL_SOURCE
+  delete process.env.OPENAI_API_KEY
+
+  await expect(
+    getProviderValidationError(process.env, {
+      hasStoredXaiOAuthCredentials: async () => true,
+    }),
+  ).resolves.toBeNull()
+})
+
+test('xai validation ignores unrelated XAI_CREDENTIAL_SOURCE values', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://api.x.ai/v1'
+  process.env.OPENAI_MODEL = 'grok-4.3'
+  process.env.XAI_CREDENTIAL_SOURCE = 'something-else'
+  delete process.env.XAI_API_KEY
+  delete process.env.OPENAI_API_KEY
+
+  const error = await getProviderValidationError(process.env, {
+    hasStoredXaiOAuthCredentials: async () => false,
+  })
+  expect(error).not.toBeNull()
 })
 
 test('openai validation does not accept unrelated minimax credentials', async () => {
@@ -255,70 +330,62 @@ test('xiaomi mimo validation accepts MIMO_API_KEY without OPENAI_API_KEY', async
   await expect(getProviderValidationError(process.env)).resolves.toBeNull()
 })
 
-test('xai validation accepts XAI_API_KEY without OPENAI_API_KEY', async () => {
+test('nearai validation accepts NEARAI_API_KEY for cloud-api base URL', async () => {
   process.env.GAKR_CODE_USE_OPENAI = '1'
-  process.env.OPENAI_BASE_URL = 'https://api.x.ai/v1'
-  process.env.OPENAI_MODEL = 'grok-4.3'
-  process.env.XAI_API_KEY = 'xai-live-key'
+  process.env.OPENAI_BASE_URL = 'https://cloud-api.near.ai/v1'
+  process.env.NEARAI_API_KEY = 'nearai-live-key'
   delete process.env.OPENAI_API_KEY
 
   await expect(getProviderValidationError(process.env)).resolves.toBeNull()
 })
 
-test('xai validation accepts XAI_CREDENTIAL_SOURCE=oauth without an API key', async () => {
+test('nearai validation accepts NEARAI_API_KEY for wildcard TEE completions endpoint', async () => {
   process.env.GAKR_CODE_USE_OPENAI = '1'
-  process.env.OPENAI_BASE_URL = 'https://api.x.ai/v1'
-  process.env.OPENAI_MODEL = 'grok-4.3'
-  process.env.XAI_CREDENTIAL_SOURCE = 'oauth'
-  delete process.env.XAI_API_KEY
+  process.env.OPENAI_BASE_URL = 'https://qwen35-122b.completions.near.ai/v1'
+  process.env.NEARAI_API_KEY = 'nearai-tee-key'
   delete process.env.OPENAI_API_KEY
 
   await expect(getProviderValidationError(process.env)).resolves.toBeNull()
 })
 
-test('xai validation surfaces sign-in guidance when no credential source is set', async () => {
+test('opengateway validation fails without OPENGATEWAY_API_KEY or OPENAI_API_KEY', async () => {
   process.env.GAKR_CODE_USE_OPENAI = '1'
-  process.env.OPENAI_BASE_URL = 'https://api.x.ai/v1'
-  process.env.OPENAI_MODEL = 'grok-4.3'
-  delete process.env.XAI_API_KEY
-  delete process.env.XAI_CREDENTIAL_SOURCE
+  process.env.OPENAI_BASE_URL = 'https://opengateway.gakr-gakr.com/v1'
   delete process.env.OPENAI_API_KEY
+  delete process.env.OPENGATEWAY_API_KEY
 
-  const error = await getProviderValidationError(process.env, {
-    hasStoredXaiOAuthCredentials: async () => false,
-  })
+  const error = await getProviderValidationError(process.env)
   expect(error).not.toBeNull()
-  expect(error!).toContain('XAI_API_KEY is required')
-  expect(error!).toContain('gakrcli auth xai login')
+  expect(error!).toContain('OPENGATEWAY_API_KEY')
 })
 
-test('xai validation accepts stored OAuth credentials even without an env marker', async () => {
+test('opengateway validation passes when OPENGATEWAY_API_KEY is set', async () => {
   process.env.GAKR_CODE_USE_OPENAI = '1'
-  process.env.OPENAI_BASE_URL = 'https://api.x.ai/v1'
-  process.env.OPENAI_MODEL = 'grok-4.3'
-  delete process.env.XAI_API_KEY
-  delete process.env.XAI_CREDENTIAL_SOURCE
+  process.env.OPENAI_BASE_URL = 'https://opengateway.gakr-gakr.com/v1'
+  process.env.OPENGATEWAY_API_KEY = 'ogw_live_test_0000000000000000'
   delete process.env.OPENAI_API_KEY
 
-  await expect(
-    getProviderValidationError(process.env, {
-      hasStoredXaiOAuthCredentials: async () => true,
-    }),
-  ).resolves.toBeNull()
+  await expect(getProviderValidationError(process.env)).resolves.toBeNull()
 })
 
-test('xai validation ignores unrelated XAI_CREDENTIAL_SOURCE values', async () => {
+test('opengateway validation accepts OPENAI_API_KEY as fallback', async () => {
   process.env.GAKR_CODE_USE_OPENAI = '1'
-  process.env.OPENAI_BASE_URL = 'https://api.x.ai/v1'
-  process.env.OPENAI_MODEL = 'grok-4.3'
-  process.env.XAI_CREDENTIAL_SOURCE = 'something-else'
-  delete process.env.XAI_API_KEY
-  delete process.env.OPENAI_API_KEY
+  process.env.OPENAI_BASE_URL = 'https://opengateway.gakr-gakr.com/v1'
+  process.env.OPENAI_API_KEY = 'ogw_live_test_0000000000000000'
+  delete process.env.OPENGATEWAY_API_KEY
 
-  const error = await getProviderValidationError(process.env, {
-    hasStoredXaiOAuthCredentials: async () => false,
-  })
+  await expect(getProviderValidationError(process.env)).resolves.toBeNull()
+})
+
+test('opengateway validation still requires a key on the model-specific path', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://opengateway.gakr-gakr.com/v1/xiaomi-mimo'
+  delete process.env.OPENAI_API_KEY
+  delete process.env.OPENGATEWAY_API_KEY
+
+  const error = await getProviderValidationError(process.env)
   expect(error).not.toBeNull()
+  expect(error!).toContain('OPENGATEWAY_API_KEY')
 })
 
 test('github validation stays descriptor-selected and reports missing auth', async () => {
@@ -329,7 +396,7 @@ test('github validation stays descriptor-selected and reports missing auth', asy
 
   await expect(getProviderValidationError(process.env)).resolves.toBe(
     'GitHub Copilot authentication required.\n' +
-      'Run /provider in the CLI and choose GitHub Models to sign in with your GitHub account.\n' +
+      'Run /onboard-github in the CLI to sign in with your GitHub account.\n' +
       'This will store your OAuth token securely and enable Copilot models.',
   )
 })
@@ -345,6 +412,41 @@ test('github validation is skipped when openai mode is also active', async () =>
   const error = await getProviderValidationError(process.env)
   expect(error).not.toBeNull()
   expect(error!).toContain(
+    'OPENAI_API_KEY is required when GAKR_CODE_USE_OPENAI=1 and OPENAI_BASE_URL is not local.',
+  )
+})
+
+test('remote Ollama by hostname does not require OPENAI_API_KEY (#369)', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'http://my-ollama-server.example.com:11434/v1'
+  delete process.env.OPENAI_API_KEY
+
+  await expect(getProviderValidationError(process.env)).resolves.toBeNull()
+})
+
+test('remote Ollama on default port without API key is allowed (#369)', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'http://203.0.113.5:11434/v1'
+  delete process.env.OPENAI_API_KEY
+
+  await expect(getProviderValidationError(process.env)).resolves.toBeNull()
+})
+
+test('remote Ollama identified by "ollama" in hostname is allowed without key (#369)', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://ollama.corp.example.com/v1'
+  delete process.env.OPENAI_API_KEY
+
+  await expect(getProviderValidationError(process.env)).resolves.toBeNull()
+})
+
+test('non-Ollama remote provider still requires OPENAI_API_KEY', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1'
+  delete process.env.OPENAI_API_KEY
+
+  const message = await getProviderValidationError(process.env)
+  expect(message).toContain(
     'OPENAI_API_KEY is required when GAKR_CODE_USE_OPENAI=1 and OPENAI_BASE_URL is not local.',
   )
 })
@@ -389,46 +491,6 @@ test('startup provider validation stays strict for non-interactive launches', ()
       stdoutIsTTY: true,
     }),
   ).toBe(true)
-})
-
-test.skip('opengateway validation fails without OPENGATEWAY_API_KEY or OPENAI_API_KEY', async () => {
-  process.env.GAKR_CODE_USE_OPENAI = '1'
-  process.env.OPENAI_BASE_URL = 'https://opengateway.gitlawb.com/v1'
-  delete process.env.OPENAI_API_KEY
-  delete process.env.OPENGATEWAY_API_KEY
-
-  const error = await getProviderValidationError(process.env)
-  expect(error).not.toBeNull()
-  expect(error!).toContain('OPENGATEWAY_API_KEY')
-})
-
-test.skip('opengateway validation passes when OPENGATEWAY_API_KEY is set', async () => {
-  process.env.GAKR_CODE_USE_OPENAI = '1'
-  process.env.OPENAI_BASE_URL = 'https://opengateway.gitlawb.com/v1'
-  process.env.OPENGATEWAY_API_KEY = 'ogw_live_test_0000000000000000'
-  delete process.env.OPENAI_API_KEY
-
-  await expect(getProviderValidationError(process.env)).resolves.toBeNull()
-})
-
-test.skip('opengateway validation accepts OPENAI_API_KEY as fallback', async () => {
-  process.env.GAKR_CODE_USE_OPENAI = '1'
-  process.env.OPENAI_BASE_URL = 'https://opengateway.gitlawb.com/v1'
-  process.env.OPENAI_API_KEY = 'ogw_live_test_0000000000000000'
-  delete process.env.OPENGATEWAY_API_KEY
-
-  await expect(getProviderValidationError(process.env)).resolves.toBeNull()
-})
-
-test.skip('opengateway validation still requires a key on the model-specific path', async () => {
-  process.env.GAKR_CODE_USE_OPENAI = '1'
-  process.env.OPENAI_BASE_URL = 'https://opengateway.gitlawb.com/v1/xiaomi-mimo'
-  delete process.env.OPENAI_API_KEY
-  delete process.env.OPENGATEWAY_API_KEY
-
-  const error = await getProviderValidationError(process.env)
-  expect(error).not.toBeNull()
-  expect(error!).toContain('OPENGATEWAY_API_KEY')
 })
 
 test('non-Ollama remote provider still requires OPENAI_API_KEY', async () => {

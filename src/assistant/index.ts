@@ -1,46 +1,72 @@
-// Assistant module entry point for the open build.
-//
-// The private cloud assistant backend is not mirrored here, but the KAIROS
-// build flag can still enable local assistant-mode behavior. Keep this shim
-// deliberately small: it provides the exports that KAIROS-gated startup paths
-// expect, while leaving remote assistant/session discovery to the modules that
-// actually exist in this checkout.
+/**
+ * Assistant mode (KAIROS-gated) entry points.
+ *
+ * The closed-source implementation latches assistant mode, pre-seeds an
+ * in-process team, and contributes a system-prompt addendum. This
+ * open-source build ships inert no-ops: the KAIROS feature flag is
+ * disabled, isAssistantMode() always reports false, and the remaining
+ * functions return honest empty values.
+ */
 
-import { getInitialSettings } from '../utils/settings/settings.js'
-export { default as AssistantSessionChooser } from './AssistantSessionChooser.js'
+import type { AppState } from '../state/AppStateStore.js'
 
 let assistantForced = false
+let activationPath: string | undefined
 
-export function markAssistantForced(): void {
-  assistantForced = true
+/** Whether this process is running as an assistant-mode session. */
+export function isAssistantMode(): boolean {
+  return assistantForced
 }
 
+/**
+ * --assistant (Agent SDK daemon mode): force the assistant latch without
+ * re-checking entitlement.
+ */
+export function markAssistantForced(): void {
+  assistantForced = true
+  if (!activationPath) activationPath = '--assistant'
+}
+
+/** Whether the assistant latch was forced via --assistant. */
 export function isAssistantForced(): boolean {
   return assistantForced
 }
 
-export function isAssistantMode(): boolean {
-  return assistantForced || getInitialSettings().assistant === true
-}
-
-export async function initializeAssistantTeam(): Promise<undefined> {
+/**
+ * Pre-seed an in-process team so Agent(name) spawns teammates without
+ * TeamCreate. Returns no team context in this build.
+ */
+export async function initializeAssistantTeam(): Promise<
+  AppState['teamContext'] | undefined
+> {
   return undefined
 }
 
+/** System-prompt addendum for assistant-mode sessions. */
 export function getAssistantSystemPromptAddendum(): string {
-  return [
-    '# Assistant Mode',
-    '',
-    'You are running in GakrCLI assistant mode. Stay responsive, use brief user-facing updates when available, and keep long-running shell work in the background instead of blocking the main conversation.',
-    '',
-    'This open build provides local assistant-mode behavior. Cloud assistant backend features may be unavailable unless the corresponding private backend modules are present.',
-  ].join('\n')
+  return `# Assistant Mode
+
+This is an open build of GakrCLI. Cloud assistant backend features may be unavailable.
+
+Local assistant features:
+- Discover and connect to assistant sessions in your workspace
+- Use Agent(name) for spawning teammate agents
+- Manual tool-use flows with human-in-the-loop approval`
 }
 
-export function getAssistantActivationPath(): string {
-  return assistantForced ? '--assistant' : 'settings.assistant'
+/**
+ * How assistant mode was activated for this session (telemetry label,
+ * e.g. forced via --assistant vs. entitlement gate). Undefined in this
+ * build — assistant mode never activates.
+ */
+export function getAssistantActivationPath(): string | undefined {
+  return activationPath
 }
 
+/**
+ * Whether this build supports remote assistant sessions (cloud backend).
+ * Always false in the open build.
+ */
 export function supportsRemoteAssistantSessions(): boolean {
   return false
 }

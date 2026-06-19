@@ -4,7 +4,7 @@ import type { AddressInfo } from 'net'
 import { logEvent } from 'src/services/analytics/index.js'
 import { getOauthConfig } from '../../constants/oauth.js'
 import { logError } from '../../utils/log.js'
-import { shouldUsegakrcliAIAuth } from './client.js'
+import { shouldUseGakrCLIAIAuth } from './client.js'
 
 /**
  * Temporary localhost HTTP server that listens for OAuth authorization code redirects.
@@ -133,8 +133,8 @@ export class AuthCodeListener {
     }
 
     // Default behavior: Choose success page based on granted permissions
-    const successUrl = shouldUseGakrAIAuth(scopes)
-      ? getOauthConfig().GAKRAI_SUCCESS_URL
+    const successUrl = shouldUseGakrCLIAIAuth(scopes)
+      ? getOauthConfig().GAKRCLIAI_SUCCESS_URL
       : getOauthConfig().CONSOLE_SUCCESS_URL
 
     // Send browser to success page
@@ -164,7 +164,7 @@ export class AuthCodeListener {
     }
 
     // TODO: swap to a different url once we have an error page
-    const errorUrl = getOauthConfig().GAKRAI_SUCCESS_URL
+    const errorUrl = getOauthConfig().GAKRCLIAI_SUCCESS_URL
 
     this.respondToPendingRequest({
       handler: res => {

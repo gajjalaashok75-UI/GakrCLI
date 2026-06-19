@@ -289,6 +289,10 @@ export function classifyOpenAIHttpFailure(options: {
   const isLocalHost = isLocalhostLikeHostname(hostname)
 
   if (options.status === 401 || options.status === 403) {
+    // OAuth-issued tokens (GitHub Models via /onboard-github, Codex) expire
+    // and surface as 401 with a "token expired" body. The generic API-key
+    // hint sends users hunting for a key they never set — point them at the
+    // re-auth command instead. Issue #1042.
     const lowerBody = body.toLowerCase()
     const isExpiredOAuthToken =
       lowerBody.includes('token expired') ||
@@ -301,7 +305,7 @@ export function classifyOpenAIHttpFailure(options: {
       status: options.status,
       message: body,
       hint: isExpiredOAuthToken
-        ? 'OAuth token expired. Re-authenticate with /provider (GitHub Models) or /login (Codex OAuth) and try again.'
+        ? 'OAuth token expired. Re-authenticate with /onboard-github (GitHub Models) or /login (Codex / GakrCLI) and try again.'
         : 'Authentication failed. Verify API key, token source, and endpoint-specific auth headers.',
     }
   }

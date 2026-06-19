@@ -1,17 +1,14 @@
 import figures from 'figures'
 import * as React from 'react'
 import { DEFAULT_CODEX_BASE_URL } from '../services/api/providerConfig.js'
-import {
-  exchangeForCopilotToken,
-  openVerificationUri,
-  pollAccessToken,
-  requestDeviceCode,
-} from '../services/github/deviceFlow.js'
 import { Box, Text } from '../ink.js'
 import { useTerminalSize } from '../hooks/useTerminalSize.js'
 import { useKeybinding } from '../keybindings/useKeybinding.js'
 import { useSetAppState } from '../state/AppState.js'
-import type { ProviderProfile } from '../utils/config.js'
+import type {
+  OpenAICompatibleApiFormat,
+  ProviderProfile,
+} from '../utils/config.js'
 import {
   clearCodexCredentials,
   readCodexCredentialsAsync,
@@ -68,13 +65,7 @@ import {
   hydrateGithubModelsTokenFromSecureStorage,
   readGithubModelsToken,
   readGithubModelsTokenAsync,
-  saveGithubModelsToken,
 } from '../utils/githubModelsCredentials.js'
-import {
-  applyGithubProviderProcessEnv,
-  buildGithubProviderSettingsEnv,
-  GITHUB_PROVIDER_DEFAULT_MODEL,
-} from '../utils/githubProviderMode.js'
 import {
   type AtomicChatReadiness,
   type OllamaGenerationReadiness,
@@ -91,7 +82,6 @@ import {
   Select,
 } from './CustomSelect/index.js'
 import { Pane } from './design-system/Pane.js'
-import { Spinner } from './Spinner.js'
 import TextInput from './TextInput.js'
 import { useCodexOAuthFlow } from './useCodexOAuthFlow.js'
 import { useXaiOAuthFlow } from './useXaiOAuthFlow.js'
@@ -116,13 +106,17 @@ type Screen =
   | 'select-atomic-chat-model'
   | 'codex-oauth'
   | 'xai-oauth'
-  | 'github-setup'
   | 'form'
   | 'preset-model'
   | 'preset-api-key'
   | 'select-active'
   | 'select-edit'
   | 'select-delete'
+
+type CodexOAuthPersistenceResult = { warning?: string }
+type PersistCodexOAuthCredentials = (options?: {
+  profileId?: string
+}) => CodexOAuthPersistenceResult | void
 
 type DraftField =
   | 'name'
@@ -219,11 +213,9 @@ const FORM_STEPS: Array<{
 ]
 
 const GITHUB_PROVIDER_ID = '__github_models__'
-const GITHUB_SETUP_ID = '__github_models_setup__'
 const GITHUB_PROVIDER_LABEL = 'GitHub Models'
+const GITHUB_PROVIDER_DEFAULT_MODEL = 'github:copilot'
 const GITHUB_PROVIDER_DEFAULT_BASE_URL = 'https://models.github.ai/inference'
-
-type GithubSetupStep = 'menu' | 'device-busy' | 'pat' | 'error'
 const CODEX_OAUTH_PROVIDER_NAME = 'Codex OAuth'
 const CODEX_OAUTH_PROVIDER_MODEL = 'codexplan'
 const XAI_OAUTH_PROVIDER_NAME = 'xAI OAuth'
@@ -243,6 +235,27 @@ function toDraft(profile: ProviderProfile): ProviderDraft {
     authHeaderValue: profile.authHeaderValue ?? '',
     customHeaders: serializeProfileCustomHeaders(profile.customHeaders) ?? '',
   }
+}
+
+function getPresetLabel(preset: ProviderPreset, label: string, metadata?: { badge?: { text: string; color?: string } }): React.ReactNode {
+  if (metadata?.badge) {
+    if (metadata.badge.text.toLowerCase() === 'recommended') {
+      return (
+        <Text>
+          <Text>{label} </Text>
+          <Text color={metadata.badge.color ?? 'success'} bold>★ Recommended</Text>
+        </Text>
+      )
+    }
+
+    return (
+      <Text>
+        <Text>{label} </Text>
+        <Text color={metadata.badge.color ?? 'green'} bold>[{metadata.badge.text}]</Text>
+      </Text>
+    )
+  }
+  return label
 }
 
 function presetToDraft(preset: ProviderPreset): ProviderDraft {
@@ -281,7 +294,7 @@ function profileSummary(profile: ProviderProfile, isActive: boolean): string {
       : `${models[0]}, ${models[1]} + ${models.length - 2} more`
   const modeInfo =
     routeSupportsApiFormatSelection(routeId)
-      ? ` · ${profile.apiFormat === 'responses' ? 'responses' : 'chat/completions'}`
+      ? ` · ${profile.apiFormat === 'responses_compat' ? 'responses (compat)' : profile.apiFormat === 'responses' ? 'responses' : 'chat/completions'}`
       : ''
   const authInfo =
     routeSupportsAuthHeaders(routeId) && profile.authHeader
@@ -508,21 +521,21 @@ function XaiOAuthSetup({
   return (
     <Box flexDirection="column" gap={1}>
       <Text color="remember" bold>
-        xAI OAuth
+        xAI OAuth (Grok)
       </Text>
       <Text>
-        Sign in with your xAI account in the browser. GakrCLI will store the
-        OAuth credentials securely and switch this session to Grok when setup
-        completes.
+        Sign in with your xAI account in the browser. GakrCLI will store
+        the resulting OAuth credentials securely and switch this session to
+        Grok when setup completes.
       </Text>
       <Text dimColor>
-        The xAI consent screen may label the app "Grok Build"; that is expected
-        for xAI's shared OAuth client.
+        The xAI consent screen may label the app "Grok Build" — that's
+        expected. GakrCLI uses xAI's shared OAuth client.
       </Text>
       {status.state === 'starting' ? (
         <Text dimColor>
           Starting local callback on 127.0.0.1:56121 and preparing your
-          browser...
+          browser…
         </Text>
       ) : status.browserOpened === false ? (
         <>
@@ -540,7 +553,7 @@ function XaiOAuthSetup({
           <Text>{status.authUrl}</Text>
         </>
       ) : (
-        <Text dimColor>Opening your browser...</Text>
+        <Text dimColor>Opening your browser…</Text>
       )}
       {status.state === 'waiting' ? (
         <>
@@ -567,7 +580,7 @@ function XaiManualCodeInput({
   const inputColumns = Math.max(20, Math.min(80, terminalColumns - 8))
   return (
     <Box>
-      <Text>Code &gt; </Text>
+      <Text>Code › </Text>
       <TextInput
         value={value}
         onChange={setValue}
@@ -579,6 +592,10 @@ function XaiManualCodeInput({
           if (trimmed) onSubmit(trimmed)
         }}
         mask="*"
+        // The parent `XaiOAuthSetup` owns Esc via `useKeybinding('confirm:no')`.
+        // Without this flag, BaseTextInput's child-effect Esc handler runs
+        // before the parent keybinding, triggering the "press Esc again to
+        // clear" double-press flow and swallowing the cancel.
         disableEscapeDoublePress
       />
     </Box>
@@ -590,23 +607,32 @@ function CodexOAuthSetup({
   onConfigured,
 }: {
   onBack: () => void
-  onConfigured: (tokens: {
-    accessToken: string
-    refreshToken: string
-    accountId?: string
-    idToken?: string
-    apiKey?: string
-  }, persistCredentials: (options?: { profileId?: string }) => void) => void | Promise<void>
+  onConfigured: (
+    tokens: {
+      accessToken: string
+      refreshToken: string
+      accountId?: string
+      idToken?: string
+      apiKey?: string
+    },
+    persistCredentials: PersistCodexOAuthCredentials,
+  ) => void | Promise<void>
 }): React.ReactNode {
-  const handleAuthenticated = React.useCallback(async (tokens: {
-    accessToken: string
-    refreshToken: string
-    accountId?: string
-    idToken?: string
-    apiKey?: string
-  }, persistCredentials: (options?: { profileId?: string }) => void) => {
-    await onConfigured(tokens, persistCredentials)
-  }, [onConfigured])
+  const handleAuthenticated = React.useCallback(
+    async (
+      tokens: {
+        accessToken: string
+        refreshToken: string
+        accountId?: string
+        idToken?: string
+        apiKey?: string
+      },
+      persistCredentials: PersistCodexOAuthCredentials,
+    ) => {
+      await onConfigured(tokens, persistCredentials)
+    },
+    [onConfigured],
+  )
   useKeybinding('confirm:no', onBack)
 
   const status = useCodexOAuthFlow({
@@ -727,17 +753,6 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
   })
   const [atomicChatSelection, setAtomicChatSelection] =
     React.useState<AtomicChatSelectionState>({ state: 'idle' })
-  const [githubSetupStep, setGithubSetupStep] =
-    React.useState<GithubSetupStep>('menu')
-  const [githubSetupError, setGithubSetupError] = React.useState<string | null>(
-    null,
-  )
-  const [githubDeviceHint, setGithubDeviceHint] = React.useState<{
-    user_code: string
-    verification_uri: string
-  } | null>(null)
-  const [githubPatDraft, setGithubPatDraft] = React.useState('')
-  const [githubPatCursorOffset, setGithubPatCursorOffset] = React.useState(0)
   // Deferred initialization: useState initializers run synchronously during
   // render, so getProviderProfiles() and getActiveProviderProfile() would block
   // the UI (sync file I/O). Defer to queueMicrotask after first render.
@@ -748,24 +763,18 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
   const [isActivating, setIsActivating] = React.useState(false)
   const isRefreshingRef = React.useRef(false)
 
-  function getDisplayedActiveProfileId(): string | undefined {
-    return isEnvTruthy(process.env.GAKR_CODE_USE_GITHUB)
-      ? undefined
-      : getActiveProviderProfile()?.id
-  }
-
   React.useEffect(() => {
     // Skip deferred initialization in test environment (mocks are synchronous)
     if (process.env.NODE_ENV === 'test') {
       setProfiles(getProviderProfiles())
-      setActiveProfileId(getDisplayedActiveProfileId())
+      setActiveProfileId(getActiveProviderProfile()?.id)
       setIsInitializing(false)
       return
     }
 
     queueMicrotask(() => {
       const profilesData = getProviderProfiles()
-      const activeId = getDisplayedActiveProfileId()
+      const activeId = getActiveProviderProfile()?.id
       setProfiles(profilesData)
       setActiveProfileId(activeId)
       setIsInitializing(false)
@@ -936,6 +945,8 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
       setHasStoredXaiOAuthCredentials(
         Boolean(credentials?.accessToken && credentials?.refreshToken),
       )
+      // xAI credentials don't carry a profile id; resolve it by finding the
+      // active OAuth-flavored xAI profile (env marker XAI_CREDENTIAL_SOURCE).
       const profiles = getProviderProfiles()
       const oauthProfile = profiles.find(
         p => p.provider === 'xai' && p.name === XAI_OAUTH_PROVIDER_NAME,
@@ -1072,10 +1083,9 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
     queueMicrotask(() => {
       const nextProfiles = getProviderProfiles()
       setProfiles(nextProfiles)
-      setActiveProfileId(getDisplayedActiveProfileId())
+      setActiveProfileId(getActiveProviderProfile()?.id)
       refreshGithubProviderState()
       refreshCodexOAuthCredentialState()
-      refreshXaiOAuthCredentialState()
       isRefreshingRef.current = false
     })
   }
@@ -1113,11 +1123,9 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
     if (options.activationWarning) {
       return `${options.prefix}. Saved for next startup. Warning: ${options.warnings.join('; ')}.`
     }
-
     if (options.warnings.length > 0) {
       return `${options.prefix}. GakrCLI switched to it for this session with warnings: ${options.warnings.join('; ')}.`
     }
-
     return `${options.prefix}. GakrCLI switched to it for this session.`
   }
 
@@ -1274,9 +1282,9 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
                   : null,
               ].filter((warning): warning is string => Boolean(warning)),
             })
-        : settingsOverrideError
-          ? `Active provider: ${active.name}. Warning: could not clear startup provider override (${settingsOverrideError}).`
-          : `Active provider: ${active.name}`
+          : settingsOverrideError
+            ? `Active provider: ${active.name}. Warning: could not clear startup provider override (${settingsOverrideError}).`
+            : `Active provider: ${active.name}`
       setStatusMessage(activationMessage)
       setIsActivating(false)
       onDone({
@@ -1314,102 +1322,45 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
 
   function activateGithubProvider(): string | null {
     const { error } = updateSettingsForSource('userSettings', {
-      env: buildGithubProviderSettingsEnv(GITHUB_PROVIDER_DEFAULT_MODEL),
+      env: {
+        GAKR_CODE_USE_GITHUB: '1',
+        OPENAI_MODEL: GITHUB_PROVIDER_DEFAULT_MODEL,
+        OPENAI_API_KEY: undefined as any,
+        OPENAI_ORG: undefined as any,
+        OPENAI_PROJECT: undefined as any,
+        OPENAI_ORGANIZATION: undefined as any,
+        OPENAI_BASE_URL: undefined as any,
+        OPENAI_API_BASE: undefined as any,
+        GAKR_CODE_USE_OPENAI: undefined as any,
+        GAKR_CODE_USE_GEMINI: undefined as any,
+        GAKR_CODE_USE_BEDROCK: undefined as any,
+        GAKR_CODE_USE_VERTEX: undefined as any,
+        GAKR_CODE_USE_FOUNDRY: undefined as any,
+      },
     })
     if (error) {
       return error.message
     }
 
-    applyGithubProviderProcessEnv(GITHUB_PROVIDER_DEFAULT_MODEL)
+    process.env.GAKR_CODE_USE_GITHUB = '1'
+    process.env.OPENAI_MODEL = GITHUB_PROVIDER_DEFAULT_MODEL
+    delete process.env.OPENAI_API_KEY
+    delete process.env.OPENAI_ORG
+    delete process.env.OPENAI_PROJECT
+    delete process.env.OPENAI_ORGANIZATION
+    delete process.env.OPENAI_BASE_URL
+    delete process.env.OPENAI_API_BASE
+    delete process.env.GAKR_CODE_USE_OPENAI
+    delete process.env.GAKR_CODE_USE_GEMINI
+    delete process.env.GAKR_CODE_USE_BEDROCK
+    delete process.env.GAKR_CODE_USE_VERTEX
+    delete process.env.GAKR_CODE_USE_FOUNDRY
+    delete process.env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED
+    delete process.env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID
     delete process.env[GITHUB_MODELS_HYDRATED_ENV_MARKER]
 
     hydrateGithubModelsTokenFromSecureStorage()
     return null
-  }
-
-  function finishGithubProviderSetup(successPrefix: string): void {
-    const githubError = activateGithubProvider()
-    if (githubError) {
-      setGithubSetupError(
-        `${successPrefix}, but provider activation failed: ${githubError}`,
-      )
-      setGithubSetupStep('error')
-      return
-    }
-
-    setAppState(prev => ({
-      ...prev,
-      mainLoopModel: GITHUB_PROVIDER_DEFAULT_MODEL,
-      mainLoopModelForSession: null,
-    }))
-    refreshProfiles()
-    refreshGithubProviderState()
-
-    const message =
-      `${successPrefix}. Token stored in secure storage; user settings updated; ` +
-      `this session switched to ${GITHUB_PROVIDER_DEFAULT_MODEL}.`
-
-    setGithubSetupStep('menu')
-    setGithubSetupError(null)
-    setGithubPatDraft('')
-    setStatusMessage(message)
-    setErrorMessage(undefined)
-
-    if (mode === 'first-run') {
-      onDone({
-        action: 'saved',
-        activeProviderName: GITHUB_PROVIDER_LABEL,
-        activeProviderModel: GITHUB_PROVIDER_DEFAULT_MODEL,
-        message,
-      })
-      return
-    }
-
-    returnToMenu()
-  }
-
-  async function saveGithubPatFromProvider(token: string): Promise<void> {
-    const saved = saveGithubModelsToken(token)
-    if (!saved.success) {
-      setGithubSetupError(saved.warning ?? 'Could not save token to secure storage.')
-      setGithubSetupStep('error')
-      return
-    }
-
-    finishGithubProviderSetup('GitHub Models setup complete')
-  }
-
-  async function runGithubDeviceFlowFromProvider(): Promise<void> {
-    setGithubSetupStep('device-busy')
-    setGithubSetupError(null)
-    setGithubDeviceHint(null)
-
-    try {
-      const device = await requestDeviceCode()
-      setGithubDeviceHint({
-        user_code: device.user_code,
-        verification_uri: device.verification_uri,
-      })
-      await openVerificationUri(device.verification_uri)
-      const oauthToken = await pollAccessToken(device.device_code, {
-        initialInterval: device.interval,
-        timeoutSeconds: device.expires_in,
-      })
-      const copilotToken = await exchangeForCopilotToken(oauthToken)
-      const saved = saveGithubModelsToken(copilotToken.token, oauthToken)
-      if (!saved.success) {
-        setGithubSetupError(
-          saved.warning ?? 'Could not save token to secure storage.',
-        )
-        setGithubSetupStep('error')
-        return
-      }
-
-      finishGithubProviderSetup('GitHub Models setup complete')
-    } catch (error) {
-      setGithubSetupError(error instanceof Error ? error.message : String(error))
-      setGithubSetupStep('error')
-    }
   }
 
   function deleteGithubProvider(): string | null {
@@ -1534,10 +1485,10 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
     }
 
     const requestedResponses =
-      supportsApiFormat && nextDraft.apiFormat === 'responses'
+      supportsApiFormat && (nextDraft.apiFormat === 'responses' || nextDraft.apiFormat === 'responses_compat')
     const shouldUseChatCompletions =
       !supportsApiFormat ||
-      nextDraft.apiFormat !== 'responses' ||
+      (nextDraft.apiFormat !== 'responses' && nextDraft.apiFormat !== 'responses_compat') ||
       !routeSupportsResponsesModel(routeId, nextDraft.model)
     const payload: ProviderProfileInput = {
       provider,
@@ -1545,7 +1496,7 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
       baseUrl: nextDraft.baseUrl,
       model: nextDraft.model,
       apiKey: nextDraft.apiKey,
-      apiFormat: shouldUseChatCompletions ? 'chat_completions' : 'responses',
+      apiFormat: shouldUseChatCompletions ? 'chat_completions' : (nextDraft.apiFormat as OpenAICompatibleApiFormat),
       authHeader:
         showsAuthHeader && nextDraft.authHeader
           ? nextDraft.authHeader
@@ -1592,7 +1543,7 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
         ? `Updated provider: ${saved.name}`
         : `Added provider: ${saved.name} (now active)`
     const adjustedApiFormat =
-      requestedResponses && saved.apiFormat !== 'responses'
+      requestedResponses && saved.apiFormat !== 'responses' && saved.apiFormat !== 'responses_compat'
     const routeLabel =
       getRouteDescriptor(routeId)?.label ?? getRouteProviderTypeLabel(routeId)
     const responseModelSetLabel = getResponsesApiModelSetLabel(routeId)
@@ -1626,10 +1577,11 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
     provider: ProviderProfile['provider'],
   ): ProviderDraft {
     const routeId = resolveProviderEditorRouteId(provider, nextDraft.baseUrl)
+    const preferredResponsesMode = nextDraft.apiFormat === 'responses_compat' ? 'responses_compat' : 'responses'
     const apiFormat =
       routeSupportsApiFormatSelection(routeId) &&
       routeSupportsResponsesModel(routeId, nextDraft.model)
-        ? 'responses'
+        ? preferredResponsesMode
         : 'chat_completions'
 
     return {
@@ -1867,6 +1819,11 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
     isActive: screen === 'preset-api-key',
   })
 
+  // xAI OAuth setup renders a TextInput for the manual-code recovery
+  // path, which registers its own useInput listener. The child-component
+  // useKeybinding inside XaiOAuthSetup ends up racing the input handler
+  // and can lose. Register Esc at the top level — same pattern that
+  // makes Esc work on preset-api-key (which also has a TextInput).
   function handleBackFromXaiOAuth(): void {
     setErrorMessage(undefined)
     setScreen('select-preset')
@@ -1884,15 +1841,21 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
       const metadata = getProviderPresetUiMetadata(preset)
       return {
         value: preset,
-        label: metadata.label,
+        label: getPresetLabel(preset, metadata.label, { badge: metadata.badge }),
         description: metadata.description,
       }
     })
 
+    // Insert after DeepSeek so the OAuth options keep their established
+    // position in the picker regardless of how the preset list grows; if
+    // the anchor ever disappears, append instead of floating to the top.
+    const deepseekIndex = options.findIndex(
+      option => option.value === 'deepseek',
+    )
+    let oauthInsertIndex =
+      deepseekIndex >= 0 ? deepseekIndex + 1 : options.length
     if (canUseCodexOAuth) {
-      // Insert after DeepSeek so Codex OAuth keeps its established position
-      // in the picker.
-      options.splice(6, 0, {
+      options.splice(oauthInsertIndex, 0, {
         value: 'codex-oauth',
         label: (
           <Text>
@@ -1903,20 +1866,17 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
         description:
           'Sign in with ChatGPT in your browser and store Codex credentials securely',
       })
+      oauthInsertIndex += 1
     }
 
-    options.splice(7, 0, {
-      value: GITHUB_SETUP_ID,
-      label: GITHUB_PROVIDER_LABEL,
-      description: 'Sign in with GitHub Models using browser login or a token',
-    })
-
     if (canUseXaiOAuth) {
-      options.push({
+      // Place xAI OAuth directly under Codex OAuth so both browser-sign-in
+      // options group together visually.
+      options.splice(oauthInsertIndex, 0, {
         value: 'xai-oauth',
-        label: 'xAI OAuth',
+        label: 'xAI OAuth (Grok)',
         description:
-          'Sign in with your xAI account in the browser and store OAuth credentials securely',
+          'Sign in with your xAI account in the browser and store credentials securely',
       })
     }
 
@@ -1945,12 +1905,6 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
             }
             if (value === 'codex-oauth') {
               setScreen('codex-oauth')
-              return
-            }
-            if (value === GITHUB_SETUP_ID) {
-              setGithubSetupStep('menu')
-              setGithubSetupError(null)
-              setScreen('github-setup')
               return
             }
             if (value === 'xai-oauth') {
@@ -2005,16 +1959,21 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
                 label: 'Responses',
                 description: 'Use /responses for providers that support the Responses API',
               },
+              {
+                value: 'responses_compat',
+                label: 'Responses (Compat)',
+                description: 'Use /responses with legacy text chunks for strict gateways',
+              },
             ]}
             defaultValue={
-              currentValue === 'responses' ? 'responses' : 'chat_completions'
+              currentValue === 'responses_compat' ? 'responses_compat' : currentValue === 'responses' ? 'responses' : 'chat_completions'
             }
             defaultFocusValue={
-              currentValue === 'responses' ? 'responses' : 'chat_completions'
+              currentValue === 'responses_compat' ? 'responses_compat' : currentValue === 'responses' ? 'responses' : 'chat_completions'
             }
             onChange={(value: string) => handleFormSubmit(value)}
             onCancel={handleBackFromForm}
-            visibleOptionCount={2}
+            visibleOptionCount={3}
           />
         ) : (
           <Box flexDirection="row" gap={1}>
@@ -2177,160 +2136,6 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
         <Text dimColor>
           Press Enter to save. Press Esc to go back.
         </Text>
-      </Box>
-    )
-  }
-
-  function renderGithubSetup(): React.ReactNode {
-    if (githubSetupStep === 'error' && githubSetupError) {
-      return (
-        <Box flexDirection="column" gap={1}>
-          <Text color="remember" bold>GitHub Models setup</Text>
-          <Text color="error">{githubSetupError}</Text>
-          <Select
-            options={[
-              {
-                value: 'back',
-                label: 'Back to GitHub setup',
-                description: 'Try another setup method',
-              },
-              {
-                value: 'preset',
-                label: 'Choose another provider',
-                description: 'Return to provider presets',
-              },
-            ]}
-            onChange={(value: string) => {
-              if (value === 'preset') {
-                setGithubSetupStep('menu')
-                setGithubSetupError(null)
-                setScreen('select-preset')
-                return
-              }
-              setGithubSetupStep('menu')
-              setGithubSetupError(null)
-            }}
-            onCancel={() => {
-              setGithubSetupStep('menu')
-              setGithubSetupError(null)
-            }}
-            visibleOptionCount={2}
-          />
-        </Box>
-      )
-    }
-
-    if (githubSetupStep === 'device-busy') {
-      return (
-        <Box flexDirection="column" gap={1}>
-          <Text color="remember" bold>GitHub Models setup</Text>
-          <Text>GitHub device login</Text>
-          {githubDeviceHint ? (
-            <>
-              <Text>
-                Enter code <Text bold>{githubDeviceHint.user_code}</Text> at{' '}
-                {githubDeviceHint.verification_uri}
-              </Text>
-              <Text dimColor>
-                A browser window may have opened. Waiting for authorization...
-              </Text>
-            </>
-          ) : (
-            <Text dimColor>Requesting device code from GitHub...</Text>
-          )}
-          <Spinner />
-        </Box>
-      )
-    }
-
-    if (githubSetupStep === 'pat') {
-      return (
-        <Box flexDirection="column" gap={1}>
-          <Text color="remember" bold>GitHub Models setup</Text>
-          <Text>
-            Paste a GitHub personal access token with access to GitHub Models.
-          </Text>
-          <Text dimColor>Input is masked. Enter to submit; Esc to go back.</Text>
-          <TextInput
-            value={githubPatDraft}
-            mask="*"
-            onChange={setGithubPatDraft}
-            onSubmit={value => {
-              const token = value.trim()
-              if (!token) {
-                return
-              }
-              void saveGithubPatFromProvider(token)
-            }}
-            onExit={() => {
-              setGithubSetupStep('menu')
-              setGithubPatDraft('')
-            }}
-            columns={inputColumns}
-            cursorOffset={githubPatCursorOffset}
-            onChangeCursorOffset={setGithubPatCursorOffset}
-          />
-        </Box>
-      )
-    }
-
-    const options: OptionWithDescription<string>[] = [
-      ...(githubProviderAvailable
-        ? [
-            {
-              value: 'existing',
-              label: 'Use existing token',
-              description: 'Activate GitHub Models with the token already available',
-            },
-          ]
-        : []),
-      {
-        value: 'device',
-        label: 'Sign in with browser',
-        description: 'Use GitHub device login and store the token securely',
-      },
-      {
-        value: 'pat',
-        label: 'Paste personal access token',
-        description: 'Store a GitHub token for GitHub Models',
-      },
-      {
-        value: 'back',
-        label: 'Back',
-        description: 'Return to provider presets',
-      },
-    ]
-
-    return (
-      <Box flexDirection="column" gap={1}>
-        <Text color="remember" bold>GitHub Models setup</Text>
-        <Text dimColor>
-          Stores your token in the OS credential store and enables GitHub Models
-          in user settings.
-        </Text>
-        <Select
-          options={options}
-          onChange={(value: string) => {
-            setGithubSetupError(null)
-            if (value === 'back') {
-              setScreen('select-preset')
-              return
-            }
-            if (value === 'existing') {
-              finishGithubProviderSetup('GitHub Models activated')
-              return
-            }
-            if (value === 'pat') {
-              setGithubPatDraft('')
-              setGithubPatCursorOffset(0)
-              setGithubSetupStep('pat')
-              return
-            }
-            void runGithubDeviceFlowFromProvider()
-          }}
-          onCancel={() => setScreen('select-preset')}
-          visibleOptionCount={options.length}
-        />
       </Box>
     )
   }
@@ -2573,7 +2378,7 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
       content = (
         <XaiOAuthSetup
           onBack={() => setScreen('select-preset')}
-          onConfigured={async (_tokens, persistCredentials) => {
+          onConfigured={async (tokens, persistCredentials) => {
             const payload: ProviderProfileInput = {
               provider: 'xai',
               name: XAI_OAUTH_PROVIDER_NAME,
@@ -2617,6 +2422,11 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
             const activationWarning = await activateXaiOAuthSession({
               model: saved.model,
             })
+            // Update the running session's model — otherwise the next
+            // request keeps hitting the previous provider's model name
+            // (e.g. kimi-k2.6) and gets a 400 "Model not found" against
+            // api.x.ai. Mirrors the activateSelectedProvider /
+            // saveAndCloseProvider flows.
             setAppState(prev => ({
               ...prev,
               mainLoopModel: getPrimaryModel(saved.model),
@@ -2736,9 +2546,6 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
         />
       )
       break
-    case 'github-setup':
-      content = renderGithubSetup()
-      break
     case 'form':
       content = renderForm()
       break
@@ -2778,12 +2585,7 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
               setErrorMessage(`Could not delete GitHub provider: ${githubDeleteError}`)
             } else {
               refreshProfiles()
-              const remainingGithubCredentialSource = getGithubCredentialSourceFromEnv()
-              setStatusMessage(
-                remainingGithubCredentialSource === 'env'
-                  ? 'GitHub stored credentials deleted. GitHub Models is still visible because GITHUB_TOKEN or GH_TOKEN is set in this shell.'
-                  : 'GitHub provider deleted',
-              )
+              setStatusMessage('GitHub provider deleted')
             }
             returnToMenu()
             return
@@ -2824,6 +2626,7 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
                 )
               } else {
                 setStoredXaiOAuthProfileId(undefined)
+                setHasStoredXaiOAuthCredentials(false)
               }
               clearPersistedXaiOAuthProfile()
             }

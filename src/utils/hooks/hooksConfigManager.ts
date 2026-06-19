@@ -81,12 +81,12 @@ export const getHookEventMetadata = memoize(
       UserPromptSubmit: {
         summary: 'When the user submits a prompt',
         description:
-          'Input to command is JSON with original user prompt text.\nExit code 0 - stdout shown to Gakr\nExit code 2 - block processing, erase original prompt, and show stderr to user only\nOther exit codes - show stderr to user only',
+          'Input to command is JSON with original user prompt text.\nExit code 0 - stdout shown to GakrCLI\nExit code 2 - block processing, erase original prompt, and show stderr to user only\nOther exit codes - show stderr to user only',
       },
       SessionStart: {
         summary: 'When a new session is started',
         description:
-          'Input to command is JSON with session start source.\nExit code 0 - stdout shown to Gakr\nBlocking errors are ignored\nOther exit codes - show stderr to user only',
+          'Input to command is JSON with session start source.\nExit code 0 - stdout shown to GakrCLI\nBlocking errors are ignored\nOther exit codes - show stderr to user only',
         matcherMetadata: {
           fieldToMatch: 'source',
           values: ['startup', 'resume', 'clear', 'compact'],
@@ -172,7 +172,7 @@ export const getHookEventMetadata = memoize(
       Setup: {
         summary: 'Repo setup hooks for init and maintenance',
         description:
-          'Input to command is JSON with trigger (init or maintenance).\nExit code 0 - stdout shown to Gakr\nBlocking errors are ignored\nOther exit codes - show stderr to user only',
+          'Input to command is JSON with trigger (init or maintenance).\nExit code 0 - stdout shown to GakrCLI\nBlocking errors are ignored\nOther exit codes - show stderr to user only',
         matcherMetadata: {
           fieldToMatch: 'trigger',
           values: ['init', 'maintenance'],
@@ -350,7 +350,7 @@ export function groupHooksByEventAndMatcher(
               event: hookEvent,
               config: {
                 type: 'command',
-                command: '[ANT-ONLY] Built-in Hook',
+                command: '[internal-only] Built-in Hook',
               },
               matcher: matcher.matcher,
               source: 'builtinHook',

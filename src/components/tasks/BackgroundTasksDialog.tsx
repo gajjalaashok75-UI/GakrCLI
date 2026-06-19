@@ -103,7 +103,7 @@ type ListItem = {
   status: 'running';
 };
 
-// WORKFLOW_SCRIPTS is ant-only (build_flags.yaml). Static imports would leak
+// WORKFLOW_SCRIPTS is internal-only (build_flags.yaml). Static imports would leak
 // ~1.3K lines into external builds. Gate with feature() + require so the
 // bundler can dead-code-eliminate the branch.
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -166,7 +166,7 @@ export function BackgroundTasksDialog({
 
   // Register as modal overlay so parent Chat keybindings (up/down for history)
   // are deactivated while this dialog is open
-  useRegisterOverlay('background-tasks-dialog');
+  useRegisterOverlay('background-tasks-dialog', true);
 
   // Memoize the sorted and categorized items together to ensure stable references
   const {

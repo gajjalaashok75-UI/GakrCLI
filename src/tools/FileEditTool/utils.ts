@@ -89,121 +89,7 @@ export function findActualString(
     return fileContent.substring(searchIndex, searchIndex + searchString.length)
   }
 
-  const leadingWhitespaceFlexibleMatch = findLeadingWhitespaceFlexibleString(
-    fileContent,
-    searchString,
-  )
-  if (leadingWhitespaceFlexibleMatch !== null) {
-    return leadingWhitespaceFlexibleMatch
-  }
-
   return null
-}
-
-type LineSpan = {
-  body: string
-  eol: string
-  start: number
-  bodyEnd: number
-  end: number
-}
-
-function findLeadingWhitespaceFlexibleString(
-  fileContent: string,
-  searchString: string,
-): string | null {
-  const searchLines = splitLineSpans(searchString)
-  if (searchLines.length < 2) {
-    return null
-  }
-
-  const searchBodies = searchLines.map(line => stripLeadingHorizontalWhitespace(line.body))
-  if (searchBodies.every(body => body.length === 0)) {
-    return null
-  }
-
-  const fileLines = splitLineSpans(fileContent)
-  if (fileLines.length < searchLines.length) {
-    return null
-  }
-
-  const matches: string[] = []
-  for (let fileLineIndex = 0; fileLineIndex <= fileLines.length - searchLines.length; fileLineIndex++) {
-    let matched = true
-
-    for (let searchLineIndex = 0; searchLineIndex < searchLines.length; searchLineIndex++) {
-      const fileLine = fileLines[fileLineIndex + searchLineIndex]
-      const expectedBody = searchBodies[searchLineIndex]
-      if (
-        !fileLine ||
-        stripLeadingHorizontalWhitespace(fileLine.body) !== expectedBody
-      ) {
-        matched = false
-        break
-      }
-    }
-
-    if (matched) {
-      const firstLine = fileLines[fileLineIndex]
-      const lastLine = fileLines[fileLineIndex + searchLines.length - 1]
-      if (!firstLine || !lastLine) {
-        continue
-      }
-
-      const lastSearchLine = searchLines[searchLines.length - 1]
-      const end = lastSearchLine?.eol ? lastLine.end : lastLine.bodyEnd
-      matches.push(fileContent.slice(firstLine.start, end))
-      if (matches.length > 1) {
-        return null
-      }
-    }
-  }
-
-  return matches[0] ?? null
-}
-
-function splitLineSpans(value: string): LineSpan[] {
-  const lines: LineSpan[] = []
-  let start = 0
-
-  while (start < value.length) {
-    let newlineIndex = -1
-    for (let index = start; index < value.length; index++) {
-      const char = value[index]
-      if (char === '\n' || char === '\r') {
-        newlineIndex = index
-        break
-      }
-    }
-
-    if (newlineIndex === -1) {
-      lines.push({
-        body: value.slice(start),
-        eol: '',
-        start,
-        bodyEnd: value.length,
-        end: value.length,
-      })
-      break
-    }
-
-    const isCrLf = value[newlineIndex] === '\r' && value[newlineIndex + 1] === '\n'
-    const eol = isCrLf ? '\r\n' : value[newlineIndex]!
-    lines.push({
-      body: value.slice(start, newlineIndex),
-      eol,
-      start,
-      bodyEnd: newlineIndex,
-      end: newlineIndex + eol.length,
-    })
-    start = newlineIndex + eol.length
-  }
-
-  return lines
-}
-
-function stripLeadingHorizontalWhitespace(value: string): string {
-  return value.replace(/^[ \t]+/, '')
 }
 
 /**
@@ -638,7 +524,7 @@ export function getEditsForPatch(patch: StructuredPatchHunk[]): FileEdit[] {
 }
 
 /**
- * Contains replacements to de-sanitize strings from Gakr
+ * Contains replacements to de-sanitize strings from GakrCLI
  * Since GakrCLI can't see any of these strings (sanitized in the API)
  * It'll output the sanitized versions in the edit response
  */
@@ -725,16 +611,6 @@ export function normalizeFileEditInput({
           ? new_string
           : stripTrailingWhitespace(new_string)
 
-        const anchoredDeletionEdit = normalizeAnchoredDeletionEdit({
-          fileContent,
-          old_string,
-          new_string: normalizedNewString,
-          replace_all,
-        })
-        if (anchoredDeletionEdit) {
-          return anchoredDeletionEdit
-        }
-
         // If exact string match works, keep it as is
         if (fileContent.includes(old_string)) {
           return {
@@ -762,6 +638,35 @@ export function normalizeFileEditInput({
           }
         }
 
+        // Fallback to whitespace-agnostic match
+        const fuzzyMatch = findWhitespaceAgnosticMatch(
+          fileContent,
+          desanitizedOldString,
+          isMarkdown,
+        )
+
+        if (fuzzyMatch) {
+          // Fix P2: Apply the recovered indentation from the file to the new_string
+          let adjustedNewString = adjustNewStringIndentation(
+            desanitizedOldString,
+            fuzzyMatch,
+            normalizedNewString,
+          )
+
+          if (adjustedNewString !== null) {
+            // Apply the same exact replacements to new_string
+            for (const { from, to } of appliedReplacements) {
+              adjustedNewString = adjustedNewString.replaceAll(from, to)
+            }
+
+            return {
+              old_string: fuzzyMatch,
+              new_string: adjustedNewString,
+              replace_all,
+            }
+          }
+        }
+
         return {
           old_string,
           new_string: normalizedNewString,
@@ -778,75 +683,6 @@ export function normalizeFileEditInput({
   }
 
   return { file_path, edits }
-}
-
-function normalizeAnchoredDeletionEdit({
-  fileContent,
-  old_string,
-  new_string,
-  replace_all,
-}: {
-  fileContent: string
-  old_string: string
-  new_string: string
-  replace_all: boolean | undefined
-}): EditInput | null {
-  if (replace_all || !new_string || old_string === new_string) {
-    return null
-  }
-
-  const candidates: string[] = []
-  if (old_string.endsWith(new_string)) {
-    candidates.push(old_string.slice(0, old_string.length - new_string.length))
-  }
-  if (old_string.startsWith(new_string)) {
-    candidates.push(old_string.slice(new_string.length))
-  }
-
-  for (const candidate of candidates) {
-    if (!isSubstantialDeletionCandidate(candidate)) {
-      continue
-    }
-
-    const actualCandidate = findActualString(fileContent, candidate)
-    if (
-      actualCandidate &&
-      countOccurrences(fileContent, actualCandidate) === 1
-    ) {
-      return {
-        old_string: actualCandidate,
-        new_string: '',
-        replace_all,
-      }
-    }
-  }
-
-  return null
-}
-
-function isSubstantialDeletionCandidate(value: string): boolean {
-  const nonEmptyLines = value
-    .split(/\r\n|\n|\r/)
-    .filter(line => line.trim().length > 0)
-
-  return value.trim().length >= 40 && nonEmptyLines.length >= 2
-}
-
-function countOccurrences(value: string, search: string): number {
-  if (!search) {
-    return 0
-  }
-
-  let count = 0
-  let start = 0
-  while (true) {
-    const index = value.indexOf(search, start)
-    if (index === -1) {
-      return count
-    }
-    count++
-    start = index + search.length
-  }
 }
 
 /**
@@ -965,4 +801,240 @@ export function areFileEditsInputsEquivalent(
   }
 
   return areFileEditsEquivalent(input1.edits, input2.edits, fileContent)
+}
+
+/**
+ * Adjusts the absolute indentation of `newString` based on the difference
+ * between the base indentation of `oldString` and the actual `fileMatch`.
+ * Returns null if the indentation mapping is conflicting (e.g. LLM merged blocks).
+ */
+export function adjustNewStringIndentation(
+  oldString: string,
+  fileMatch: string,
+  newString: string,
+): string | null {
+  // If no formatting difference, no adjustment needed
+  if (oldString === fileMatch) return newString
+
+  // Tokenize both strings to build a mapping from oldString characters to fileMatch characters.
+  const oldNorm = normalizeIndentation(oldString, false)
+  const actualNorm = normalizeIndentation(fileMatch, false)
+
+  // Find where the normalized forms align
+  const matchIndex = actualNorm.normalized.indexOf(oldNorm.normalized)
+  if (matchIndex === -1) {
+    // Should not happen since fileMatch was derived from oldString, but fallback to safety
+    return newString
+  }
+
+  // Build the indent map mapping from hallucinated indent (oldIndent) to true indent (actualIndent)
+  const indentMap = new Map<string, string>()
+  const oldLines = oldString.split('\n')
+  let oldCharIndex = 0
+
+  for (let i = 0; i < oldLines.length; i++) {
+    const line = oldLines[i]!
+    const match = line.match(/^[ \t]*/)
+    const oldIndent = match ? match[0] : ''
+
+    // Find the first non-whitespace character in this line
+    const nonWsMatch = line.match(/\S/)
+    if (nonWsMatch) {
+      const nonWsIndexInLine = nonWsMatch.index!
+      const nonWsIndexInOldString = oldCharIndex + nonWsIndexInLine
+
+      // Map this character to actualNorm index
+      let normIndex = -1
+      for (let k = 0; k < oldNorm.mapping.length; k++) {
+        if (oldNorm.mapping[k] === nonWsIndexInOldString) {
+          normIndex = k
+          break
+        }
+      }
+
+      if (normIndex !== -1) {
+        const actualNormIndex = matchIndex + normIndex
+        if (actualNormIndex < actualNorm.mapping.length) {
+          const actualCharIndex = actualNorm.mapping[actualNormIndex]!
+
+          // Find the leading whitespace of the line containing `actualCharIndex` in `fileMatch`
+          let startOfLine = actualCharIndex
+          while (startOfLine > 0 && fileMatch[startOfLine - 1] !== '\n') {
+            startOfLine--
+          }
+
+          let actualIndent = ''
+          for (let k = startOfLine; k < actualCharIndex; k++) {
+            if (fileMatch[k] === ' ' || fileMatch[k] === '\t') {
+              actualIndent += fileMatch[k]
+            } else {
+              break // Should not happen if it's truly the first non-ws char
+            }
+          }
+
+          const existingIndent = indentMap.get(oldIndent)
+          if (existingIndent !== undefined && existingIndent !== actualIndent) {
+            // CodeRabbit P2 fix: Conflicting indentation map.
+            // The same hallucinated indentation corresponds to different actual indentations in the file.
+            // This means the LLM merged lines from different structural blocks.
+            // We must reject the match to prevent unsafe re-indentation.
+            return null
+          }
+
+          indentMap.set(oldIndent, actualIndent)
+        }
+      }
+    }
+
+    oldCharIndex += line.length + 1 // +1 for the '\n'
+  }
+
+  // If there's no mapping (e.g. empty strings), return newString
+  if (indentMap.size === 0) return newString
+
+  // Apply the indent map to newString
+  const newLines = newString.split('\n')
+  const adjustedLines = newLines.map(line => {
+    // Ignore completely empty lines
+    if (line.trim() === '') return line
+
+    const match = line.match(/^[ \t]*/)
+    const newIndent = match ? match[0] : ''
+
+    if (indentMap.has(newIndent)) {
+      return indentMap.get(newIndent) + line.slice(newIndent.length)
+    }
+
+    // If not found (e.g. LLM introduced a new deeper nesting level),
+    // find the longest known prefix and append the remaining relative whitespace.
+    let longestPrefix = ''
+    let mappedPrefix = ''
+    for (const [oldInd, actualInd] of indentMap.entries()) {
+      if (
+        newIndent.startsWith(oldInd) &&
+        oldInd.length > longestPrefix.length
+      ) {
+        longestPrefix = oldInd
+        mappedPrefix = actualInd
+      }
+    }
+
+    if (longestPrefix !== '') {
+      const remainingIndent = newIndent.slice(longestPrefix.length)
+      return mappedPrefix + remainingIndent + line.slice(newIndent.length)
+    }
+
+    return line // Fallback
+  })
+
+  return adjustedLines.join('\n')
+}
+
+function normalizeIndentation(str: string, isMarkdown: boolean) {
+  let normalized = ''
+  const mapping: number[] = []
+
+  let i = 0
+  while (i < str.length) {
+    if (str[i] === '\n' || str[i] === '\r') {
+      normalized += str[i]
+      mapping.push(i)
+      i++
+    } else if (/[ \t]/.test(str[i]!)) {
+      const startWs = i
+      while (i < str.length && /[ \t]/.test(str[i]!)) {
+        i++
+      }
+
+      const isLeading = startWs === 0 || str[startWs - 1] === '\n' || str[startWs - 1] === '\r'
+      const isTrailing = i === str.length || str[i] === '\n' || str[i] === '\r'
+
+      if (isLeading) {
+        // Drop leading indentation entirely. The boundary logic will recover the exact original indentation.
+      } else if (isTrailing && !isMarkdown) {
+        // Drop trailing whitespace entirely for non-markdown files to stay agnostic to garbage spaces.
+      } else {
+        // P2 Fix: Keep inline whitespace (and Markdown trailing hard breaks) exactly as is
+        // to protect string literals, regexes, and semantic Markdown breaks.
+        for (let k = startWs; k < i; k++) {
+          normalized += str[k]
+          mapping.push(k)
+        }
+      }
+    } else {
+      normalized += str[i]
+      mapping.push(i)
+      i++
+    }
+  }
+
+  return { normalized, mapping }
+}
+
+/**
+ * Finds a substring within fileContent that matches searchString, ignoring formatting differences
+ * by ignoring leading and trailing spaces, while strictly preserving
+ * inline spaces to prevent token boundary corruption (like merging operators or words).
+ * If exactly one match is found, returns the exact substring from fileContent.
+ */
+export function findWhitespaceAgnosticMatch(
+  fileContent: string,
+  searchString: string,
+  isMarkdown: boolean = false,
+): string | null {
+  const search = normalizeIndentation(searchString, isMarkdown)
+  if (search.normalized.trim().length === 0) return null
+
+  const file = normalizeIndentation(fileContent, isMarkdown)
+
+  const matchIndex = file.normalized.indexOf(search.normalized)
+  if (matchIndex === -1) return null
+
+  // Ensure the match is unique to avoid replacing the wrong block
+  const nextMatchIndex = file.normalized.indexOf(
+    search.normalized,
+    matchIndex + 1,
+  )
+  if (nextMatchIndex !== -1) {
+    return null
+  }
+
+  const originalStart = file.mapping[matchIndex]
+  const originalEnd = file.mapping[matchIndex + search.normalized.length - 1]
+
+  if (originalStart === undefined || originalEnd === undefined) return null
+
+  let start = originalStart
+  let end = originalEnd
+
+  // If caller included boundary whitespace, keep equivalent boundary whitespace
+  // from the file so replacement does not duplicate/misplace indentation.
+  if (/^[ \t]/.test(searchString)) {
+    while (start > 0 && /[ \t]/.test(fileContent[start - 1]!)) start--
+  } else if (/^\s/.test(searchString)) {
+    while (start > 0 && /\s/.test(fileContent[start - 1]!)) start--
+  }
+
+  if (/(?:\r?\n)$/.test(searchString)) {
+    // P1 fix: If the search string ends perfectly with a newline,
+    // do NOT consume the indentation of the NEXT line.
+    // The mapped originalEnd might point to the first space of the next line.
+    // Pull it back to the newline character.
+    while (end > start && /[ \t]/.test(fileContent[end]!)) {
+      end--
+    }
+  } else if (/[ \t]$/.test(searchString)) {
+    while (
+      end + 1 < fileContent.length &&
+      /[ \t]/.test(fileContent[end + 1]!)
+    ) {
+      end++
+    }
+  } else if (/\s$/.test(searchString)) {
+    while (end + 1 < fileContent.length && /\s/.test(fileContent[end + 1]!)) {
+      end++
+    }
+  }
+
+  return fileContent.substring(start, end + 1)
 }

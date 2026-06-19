@@ -10,7 +10,6 @@ import {
 import { MarketplaceSourceSchema } from '../plugins/schemas.js'
 import { GAKR_CODE_SETTINGS_SCHEMA_URL } from './constants.js'
 import { PermissionRuleSchema } from './permissionValidation.js'
-import { AutoFixConfigSchema } from '../../services/autoFix/autoFixConfig.js'
 
 // Re-export hook schemas and types from centralized location for backward compatibility
 export {
@@ -28,6 +27,7 @@ export {
 
 // Also import for use within this file
 import { type HookCommand, HooksSchema } from '../../schemas/hooks.js'
+import { AutoFixConfigSchema } from '../../services/autoFix/autoFixConfig.js'
 import { count } from '../array.js'
 
 /**
@@ -285,7 +285,7 @@ export const SettingsSchema = lazySchema(() =>
           'Command to refresh GCP authentication (e.g., gcloud auth application-default login)',
         ),
       // Gated so the SDK generator (which runs without GAKR_CODE_ENABLE_XAA)
-      // doesn't surface this in GlobalgakrcliSettings. Read via getXaaIdpSettings().
+      // doesn't surface this in GlobalGakrCLISettings. Read via getXaaIdpSettings().
       // .passthrough() on the outer object keeps an existing settings.json key
       // alive across env-var-off sessions — it's just not schema-validated then.
       ...(isEnvTruthy(process.env.GAKR_CODE_ENABLE_XAA)
@@ -361,14 +361,14 @@ export const SettingsSchema = lazySchema(() =>
         .optional()
         .describe(
           'Customize attribution text for commits and PRs. ' +
-            'Each field defaults to the standard GakrCLI attribution if not set.',
+            'Unspecified fields are off by default; set a non-empty string to opt in.',
         ),
       includeCoAuthoredBy: z
         .boolean()
         .optional()
         .describe(
           'Deprecated: Use attribution instead. ' +
-            "Whether to include GakrCLI's co-authored by attribution in commits and PRs (defaults to true)",
+            "Whether to include GakrCLI's co-authored by attribution in commits and PRs (defaults to false)",
         ),
       includeGitInstructions: z
         .boolean()
@@ -382,7 +382,7 @@ export const SettingsSchema = lazySchema(() =>
       model: z
         .string()
         .optional()
-        .describe('Override the default model used by Gakr'),
+        .describe('Override the default model used by GakrCLI'),
       // Enterprise allowlist of models
       availableModels: z
         .array(z.string())
@@ -409,7 +409,7 @@ export const SettingsSchema = lazySchema(() =>
         .record(z.string(), z.string())
         .optional()
         .describe(
-          'Override mapping from Anthropic model ID (e.g. "gakrcli-opus-4-6") to provider-specific ' +
+          'Override mapping from Anthropic model ID (e.g. "claude-opus-4-6") to provider-specific ' +
             'model ID (e.g. a Bedrock inference profile ARN). Typically set in managed settings by ' +
             'enterprise administrators.',
         ),
@@ -724,7 +724,7 @@ export const SettingsSchema = lazySchema(() =>
             'enabled automatically for supported models.',
         ),
       effortLevel: z
-        .enum(['low', 'medium', 'high', 'max'])
+        .enum(['low', 'medium', 'high', 'xhigh', 'max'])
         .optional()
         .catch(undefined)
         .describe('Persisted effort level for supported models.'),
@@ -736,14 +736,27 @@ export const SettingsSchema = lazySchema(() =>
         .record(
           z.string(),
           z.object({
-            base_url: z.string().url().describe('OpenAI-compatible API endpoint (must be https:// or http://)'),
-            api_key: z.string().describe('API key for this provider'),
+            model: z
+              .string()
+              .optional()
+              .describe('Actual model name to send to the API. Defaults to the surrounding agentModels key.'),
+            base_url: z
+              .string()
+              .url()
+              .optional()
+              .describe('OpenAI-compatible API endpoint (must be https:// or http://). Omit together with api_key to reuse the current provider (model-only route).'),
+            api_key: z
+              .string()
+              .optional()
+              .describe('API key for this provider. Omit together with base_url to reuse the current provider (model-only route).'),
           }),
         )
         .optional()
         .describe(
-          'Map of model name to provider connection info. ' +
-            'Example: { "deepseek-chat": { "base_url": "https://api.deepseek.com/v1", "api_key": "sk-xxx" } }',
+          'Map of route key to provider connection info. ' +
+            'Cross-provider: { "deepseek-chat": { "base_url": "https://api.deepseek.com/v1", "api_key": "sk-xxx" } }. ' +
+            'Model-only (reuse current provider): { "mini": { "model": "gpt-5-mini" } }. ' +
+            'Use "model" when the route key is an alias for a different API model name.',
         ),
       agentRouting: z
         .record(z.string(), z.string())
@@ -752,6 +765,15 @@ export const SettingsSchema = lazySchema(() =>
           'Map of agent identifier (subagent_type or team member name) to model name. ' +
             'Use "default" key as fallback. Model name must exist in agentModels. ' +
             'Example: { "Explore": "deepseek-chat", "general-purpose": "gpt-4o", "default": "gpt-4o" }',
+        ),
+      providerFallbackChain: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'Ordered list of providerProfile ids. When the active provider returns a rate-limit ' +
+            'or quota error, GakrCLI advances to the next profile in this list (starting after ' +
+            'the currently-active id) and retries the turn. ' +
+            'Example: ["provider_anthropic", "provider_openai", "provider_ollama"]',
         ),
       fastMode: z
         .boolean()
@@ -921,7 +943,7 @@ export const SettingsSchema = lazySchema(() =>
               .string()
               .optional()
               .describe(
-                'Display name for the assistant, shown in the gakr.ai session list',
+                'Display name for the assistant, shown in the gakrcli.ai session list',
               ),
           }
         : {}),
@@ -1100,7 +1122,7 @@ export const SettingsSchema = lazySchema(() =>
         .array(z.string())
         .optional()
         .describe(
-          'Glob patterns or absolute paths of GAKRCLI.md files to exclude from loading. ' +
+          'Glob patterns or absolute paths of AGENTS.md/GAKRCLI.md files to exclude from loading. ' +
             'Patterns are matched against absolute file paths using picomatch. ' +
             'Only applies to User, Project, and Local memory types (Managed/policy files cannot be excluded). ' +
             'Examples: "/home/user/monorepo/GAKRCLI.md", "**/code/GAKRCLI.md", "**/some-dir/.gakrcli/rules/**"',

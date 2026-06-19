@@ -140,8 +140,6 @@ const TOOL_VERBS: Record<string, string> = {
   Grep: 'Searching',
   WebFetch: 'Fetching',
   WebSearch: 'Searching',
-  ImageSearch: 'Searching images',
-  VideoSearch: 'Searching videos',
   Task: 'Running task',
   FileReadTool: 'Reading',
   FileWriteTool: 'Writing',
@@ -370,7 +368,7 @@ export function createSessionSpawner(deps: SessionSpawnerDeps): SessionSpawner {
 
       const env = buildChildEnv(deps.env, {
         accessToken: opts.accessToken,
-        useCcrV2: opts.useCcrV2,
+        useCcrV2: opts.useCcrV2 ?? false,
         workerEpoch: opts.workerEpoch,
         sandbox: deps.sandbox,
       })

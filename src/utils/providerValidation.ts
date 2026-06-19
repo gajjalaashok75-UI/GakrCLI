@@ -15,6 +15,7 @@ import {
   getRouteCredentialValue,
   getRouteDescriptor,
   getRouteDefaultModel,
+  matchHostnameAgainstRouteHosts,
   resolveActiveRouteIdFromEnv,
   resolveRouteIdFromBaseUrl,
 } from '../integrations/routeMetadata.js'
@@ -26,13 +27,18 @@ import {
   resolveProviderRequest,
   shouldUseCodexTransport,
 } from '../services/api/providerConfig.js'
-import { getGlobalGakrcliFile } from './env.js'
+import { getGlobalGakrCLIFile } from './env.js'
 import { isBareMode } from './envUtils.js'
 import {
   type GeminiResolvedCredential,
   resolveGeminiCredential,
 } from './geminiAuth.js'
 import { readXaiCredentialsAsync } from './xaiCredentials.js'
+
+async function defaultHasStoredXaiOAuthCredentials(): Promise<boolean> {
+  const stored = await readXaiCredentialsAsync()
+  return Boolean(stored?.accessToken && stored?.refreshToken)
+}
 import { PROFILE_FILE_NAME } from './providerProfile.js'
 import {
   redactSecretValueForDisplay,
@@ -95,7 +101,7 @@ function checkGithubTokenStatus(
 }
 
 function getOpenAIMissingKeyMessage(): string {
-  const globalConfigPath = getGlobalGakrcliFile()
+  const globalConfigPath = getGlobalGakrCLIFile()
   const profilePath = resolve(process.cwd(), PROFILE_FILE_NAME)
 
   return [
@@ -110,11 +116,6 @@ function hasNonEmptyEnvValue(
   envVar: string,
 ): boolean {
   return typeof env[envVar] === 'string' && env[envVar]!.trim() !== ''
-}
-
-async function defaultHasStoredXaiOAuthCredentials(): Promise<boolean> {
-  const credentials = await readXaiCredentialsAsync()
-  return Boolean(credentials?.accessToken && credentials?.refreshToken)
 }
 
 function normalizeBaseUrl(baseUrl: string | undefined): string | undefined {
@@ -234,9 +235,8 @@ function getRuntimeValidationTarget(
     }
 
     return (
-      routing.matchBaseUrlHosts?.some(
-        host => requestHost === host.toLowerCase(),
-      ) ?? false
+      routing.matchBaseUrlHosts &&
+      matchHostnameAgainstRouteHosts(requestHost, routing.matchBaseUrlHosts)
     )
   })
 
@@ -326,14 +326,15 @@ async function getDescriptorValidationError(
     }
 
     case 'xai-credential': {
+      // 1. API key in env (legacy / explicit override path)
       if (
-        validation.credentialEnvVars.some(envVar =>
-          hasNonEmptyEnvValue(env, envVar),
-        )
+        validation.credentialEnvVars.some(envVar => hasNonEmptyEnvValue(env, envVar))
       ) {
         return null
       }
-
+      // 2. OAuth profile marker, e.g. XAI_CREDENTIAL_SOURCE=oauth set by
+      // the saved profile's env. Cheap synchronous check before we touch
+      // secure storage.
       const markers = validation.credentialSourceEnvMarkers
       if (markers) {
         for (const [markerEnv, allowedValues] of Object.entries(markers)) {
@@ -343,14 +344,18 @@ async function getDescriptorValidationError(
           }
         }
       }
-
+      // 3. Stored OAuth credentials — covers the gap where a user has
+      // signed in (secure storage populated) but the profile env hasn't
+      // been applied yet (e.g. fresh process before applySavedProfile).
+      // Bare mode short-circuits inside readXaiCredentialsAsync, so this
+      // is safe to call unconditionally. Injectable so tests don't
+      // depend on the developer's actual login state.
       const hasStored = options.hasStoredXaiOAuthCredentials
         ? await options.hasStoredXaiOAuthCredentials()
         : await defaultHasStoredXaiOAuthCredentials()
       if (hasStored) {
         return null
       }
-
       return validation.missingCredentialMessage
     }
   }
@@ -484,8 +489,7 @@ export async function getProviderValidationError(
         {
           request,
           resolveGeminiCredential: options?.resolveGeminiCredential,
-          hasStoredXaiOAuthCredentials:
-            options?.hasStoredXaiOAuthCredentials,
+          hasStoredXaiOAuthCredentials: options?.hasStoredXaiOAuthCredentials,
         },
       )
 
@@ -516,10 +520,14 @@ export async function getProviderValidationError(
     !isLocalProviderUrl(request.baseUrl) &&
     !isLikelyOllamaEndpoint(request.baseUrl)
   ) {
+    // If we have a validation target that explicitly says it doesn't require auth,
+    // we should not require OPENAI_API_KEY.
     if (validationTarget?.descriptor.setup?.requiresAuth === false) {
       return null
     }
 
+    // For other OpenAI-compatible providers, check if any of their specific
+    // credential env vars are set before falling back to the generic error.
     const envVars = validationTarget?.descriptor.setup?.credentialEnvVars ?? []
     if (envVars.some(v => env[v])) {
       return null

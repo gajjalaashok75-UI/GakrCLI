@@ -2,15 +2,15 @@ import * as React from 'react';
 import type { LocalJSXCommandContext } from '../../commands.js';
 import { getOauthProfileFromOauthToken } from '../../services/oauth/getOauthProfile.js';
 import type { LocalJSXCommandOnDone } from '../../types/command.js';
-import { getgakrcliAIOAuthTokens, isgakrcliAISubscriber } from '../../utils/auth.js';
+import { getGakrCLIAIOAuthTokens, isGakrCLIAISubscriber } from '../../utils/auth.js';
 import { openBrowser } from '../../utils/browser.js';
 import { logError } from '../../utils/log.js';
 import { Login } from '../login/login.js';
 export async function call(onDone: LocalJSXCommandOnDone, context: LocalJSXCommandContext): Promise<React.ReactNode | null> {
   try {
     // Check if user is already on the highest Max plan (20x)
-    if (isgakrcliAISubscriber()) {
-      const tokens = getgakrcliAIOAuthTokens();
+    if (isGakrCLIAISubscriber()) {
+      const tokens = getGakrCLIAIOAuthTokens();
       let isMax20x = false;
       if (tokens?.subscriptionType && tokens?.rateLimitTier) {
         isMax20x = tokens.subscriptionType === 'max' && tokens.rateLimitTier === 'default_gakrcli_max_20x';
@@ -23,7 +23,7 @@ export async function call(onDone: LocalJSXCommandOnDone, context: LocalJSXComma
         return null;
       }
     }
-    const url = 'https://gakr.ai/upgrade/max';
+    const url = 'https://gakrcli.ai/upgrade/max';
     await openBrowser(url);
     return <Login startingMessage={'Starting new login following /upgrade. Exit with Ctrl-C to use existing account.'} onDone={success => {
       context.onChangeAPIKey();
@@ -31,7 +31,7 @@ export async function call(onDone: LocalJSXCommandOnDone, context: LocalJSXComma
     }} />;
   } catch (error) {
     logError(error as Error);
-    setTimeout(onDone, 0, 'Failed to open browser. Please visit https://gakr.ai/upgrade/max to upgrade.');
+    setTimeout(onDone, 0, 'Failed to open browser. Please visit https://gakrcli.ai/upgrade/max to upgrade.');
   }
   return null;
 }

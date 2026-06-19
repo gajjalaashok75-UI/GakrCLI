@@ -88,6 +88,7 @@ describe('Session timeout fix', () => {
 describe('Agent loop continuation nudge', () => {
   test('continuation logic has been moved to utility', async () => {
     const content = await file('query.ts').text()
+    // query.ts should now call the utility
     expect(content).toContain('analyzeContinuationIntent')
   })
 
@@ -96,106 +97,42 @@ describe('Agent loop continuation nudge', () => {
 
     expect(content).toContain('CONTINUATION_SIGNALS')
     expect(content).toContain('COMPLETION_MARKERS')
+    // Should detect tightened patterns requiring explicit action verbs
     expect(content).toMatch(/so now \(i\|let me\|we\)/)
   })
 
   test('analyzeContinuationIntent behavior follows project standards', async () => {
     const { analyzeContinuationIntent } = await import('../utils/continuation.js')
 
-    expect(analyzeContinuationIntent('So now I will start task 2').shouldNudge).toBe(true)
-    expect(analyzeContinuationIntent('I will now do the following').shouldNudge).toBe(true)
+    // Transition intent detected (requires explicit action verb or transition phrase)
+    expect(analyzeContinuationIntent("So now I will start task 2").shouldNudge).toBe(true)
+    expect(analyzeContinuationIntent("I will now do the following").shouldNudge).toBe(true)
+    
+    // Completion marker suppresses nudge
+    expect(analyzeContinuationIntent("Task finished").shouldNudge).toBe(false)
+    
+    // Punctuation-less completion suppresses nudge (Reviewer Feedback)
+    expect(analyzeContinuationIntent("The analysis is complete and no code changes are needed here").shouldNudge).toBe(false)
+    expect(analyzeContinuationIntent("I changed package.json and src/query.ts and added tests").shouldNudge).toBe(false)
+    expect(analyzeContinuationIntent("Updated src/query.ts and added coverage in bugfixes.test.ts").shouldNudge).toBe(false)
+    expect(analyzeContinuationIntent("This should be ready after the latest test updates").shouldNudge).toBe(false)
 
-    expect(analyzeContinuationIntent('Task finished').shouldNudge).toBe(false)
+    // Mixed Intent: Late continuation survives earlier completion (Reviewer Feedback)
+    expect(analyzeContinuationIntent("Task 1 is done. Let me update the status.").shouldNudge).toBe(true)
+    expect(analyzeContinuationIntent("Task 1 finished. I will now run tests.").shouldNudge).toBe(true)
+    expect(analyzeContinuationIntent("Analysis complete. Now I will edit src/query.ts").shouldNudge).toBe(true)
+    expect(analyzeContinuationIntent("No issues in the first file. I will now inspect the next one.").shouldNudge).toBe(true)
 
-    expect(
-      analyzeContinuationIntent(
-        'The analysis is complete and no code changes are needed here',
-      ).shouldNudge,
-    ).toBe(false)
-    expect(
-      analyzeContinuationIntent(
-        'I changed package.json and src/query.ts and added tests',
-      ).shouldNudge,
-    ).toBe(false)
-    expect(
-      analyzeContinuationIntent(
-        'Updated src/query.ts and added coverage in bugfixes.test.ts',
-      ).shouldNudge,
-    ).toBe(false)
-    expect(
-      analyzeContinuationIntent(
-        'This should be ready after the latest test updates',
-      ).shouldNudge,
-    ).toBe(false)
+    // Structural truncation survives earlier completion (Reviewer Feedback)
+    expect(analyzeContinuationIntent("Setup is complete. Here is the code:\n```typescript\nfunction run() {").shouldNudge).toBe(true)
+    expect(analyzeContinuationIntent("Task complete. Please inspect (src/query.ts").shouldNudge).toBe(true)
+    expect(analyzeContinuationIntent("The analysis is done and now I am editing files and").shouldNudge).toBe(true)
 
-    expect(
-      analyzeContinuationIntent('Task 1 is done. Let me update the status.')
-        .shouldNudge,
-    ).toBe(true)
-    expect(
-      analyzeContinuationIntent('Task 1 finished. I will now run tests.')
-        .shouldNudge,
-    ).toBe(true)
-    expect(
-      analyzeContinuationIntent('Analysis complete. Now I will edit src/query.ts')
-        .shouldNudge,
-    ).toBe(true)
-    expect(
-      analyzeContinuationIntent(
-        'No issues in the first file. I will now inspect the next one.',
-      ).shouldNudge,
-    ).toBe(true)
-
-    expect(
-      analyzeContinuationIntent(
-        'Setup is complete. Here is the code:\n```typescript\nfunction run() {',
-      ).shouldNudge,
-    ).toBe(true)
-    expect(
-      analyzeContinuationIntent('Task complete. Please inspect (src/query.ts')
-        .shouldNudge,
-    ).toBe(true)
-    expect(
-      analyzeContinuationIntent(
-        'The analysis is done and now I am editing files and',
-      ).shouldNudge,
-    ).toBe(true)
-
-    expect(
-      analyzeContinuationIntent('I am currently updating the following files and')
-        .shouldNudge,
-    ).toBe(true)
-    expect(
-      analyzeContinuationIntent('Please check the results in (src/query.ts')
-        .shouldNudge,
-    ).toBe(true)
-    expect(analyzeContinuationIntent('The plan is as follows:').shouldNudge).toBe(
-      true,
-    )
-    expect(
-      analyzeContinuationIntent(
-        'Here is the code:\n```typescript\nfunction test() {',
-      ).shouldNudge,
-    ).toBe(true)
-  })
-
-  test('query.ts has continuation signal detection', async () => {
-    const content = await file('query.ts').text()
-
-    expect(content).toContain('continuationSignals')
-    expect(content).toContain('Continuation nudge triggered')
-    expect(content).toContain('continuation_nudge')
-  })
-
-  test('continuation signals include tightened patterns', async () => {
-    const content = await file('query.ts').text()
-
-    // Should detect tightened patterns requiring explicit action verbs
-    expect(content).toMatch(/so now \(i\|let me\|we\)/)
-    expect(content).toContain('completionMarkers')
-    expect(content).toContain('MAX_CONTINUATION_NUDGES')
-    // Verify the nudge counter guard exists
-    expect(content).toMatch(/continuationNudgeCount\s*<\s*MAX_CONTINUATION_NUDGES/)
+    // Structural truncation detection (Supreme Logic)
+    expect(analyzeContinuationIntent("I am currently updating the following files and").shouldNudge).toBe(true)
+    expect(analyzeContinuationIntent("Please check the results in (src/query.ts").shouldNudge).toBe(true)
+    expect(analyzeContinuationIntent("The plan is as follows:").shouldNudge).toBe(true)
+    expect(analyzeContinuationIntent("Here is the code:\n```typescript\nfunction test() {").shouldNudge).toBe(true)
   })
 
   test('nudge creates a meta user message to continue', async () => {
@@ -325,22 +262,13 @@ describe('MCP tool timeout fix', () => {
 // Cross-cutting: verify no regressions
 // ---------------------------------------------------------------------------
 describe('Regression checks', () => {
-  test('store field remains opt-out by per-route config rather than unconditional deletion', async () => {
-    const openaiShim = await file('services/api/openaiShim.ts').text()
-    const runtimeMetadata = await file('integrations/runtimeMetadata.ts').text()
-
-    expect(openaiShim).toMatch(/store:\s*false/)
-    expect(openaiShim).toContain('for (const field of shimConfig.removeBodyFields ?? [])')
-    expect(runtimeMetadata).toContain('mergeRemoveBodyFields')
-  })
-
   test('duplicate plugin hooks are deduplicated before execution', async () => {
     clearRegisteredHooks()
 
     const hookA: PluginHookMatcher = {
-      pluginId: 'gakr-mem@example',
-      pluginName: 'gakr-mem',
-      pluginRoot: '/plugins/gakr-mem-a',
+      pluginId: 'gakrcli-mem@thedotmack',
+      pluginName: 'gakrcli-mem',
+      pluginRoot: '/plugins/gakrcli-mem-a',
       matcher: 'startup',
       hooks: [
         {
@@ -352,9 +280,9 @@ describe('Regression checks', () => {
       ],
     }
     const hookB: PluginHookMatcher = {
-      pluginId: 'gakr-mem@example',
-      pluginName: 'gakr-mem',
-      pluginRoot: '/plugins/gakr-mem-a',
+      pluginId: 'gakrcli-mem@thedotmack',
+      pluginName: 'gakrcli-mem',
+      pluginRoot: '/plugins/gakrcli-mem-a',
       matcher: 'startup',
       hooks: [
         {
@@ -367,7 +295,7 @@ describe('Regression checks', () => {
     }
     const hookDifferentRoot: PluginHookMatcher = {
       ...hookA,
-      pluginRoot: '/plugins/gakr-mem-b',
+      pluginRoot: '/plugins/gakrcli-mem-b',
     }
 
     try {
@@ -387,12 +315,21 @@ describe('Regression checks', () => {
 
       expect(matched).toHaveLength(2)
       expect(matched.map(hook => hook.pluginRoot)).toEqual([
-        '/plugins/gakr-mem-a',
-        '/plugins/gakr-mem-b',
+        '/plugins/gakrcli-mem-a',
+        '/plugins/gakrcli-mem-b',
       ])
     } finally {
       clearRegisteredHooks()
     }
+  })
+
+  test('store field remains opt-out by per-route config rather than unconditional deletion', async () => {
+    const openaiShim = await file('services/api/openaiShim.ts').text()
+    const runtimeMetadata = await file('integrations/runtimeMetadata.ts').text()
+
+    expect(openaiShim).toMatch(/store:\s*false/)
+    expect(openaiShim).toContain('for (const field of shimConfig.removeBodyFields ?? [])')
+    expect(runtimeMetadata).toContain('mergeRemoveBodyFields')
   })
 })
 
@@ -451,21 +388,21 @@ describe('Context overflow 500 fix', () => {
 // Fix N: Project-scope MCP servers from .mcp.json not detected for 3P providers (issue #696)
 // ---------------------------------------------------------------------------
 describe('Project-scope MCP approval — third-party providers (issue #696)', () => {
-  test('handleMcpjsonServerApprovals is NOT gated behind hosted auth setup', async () => {
+  test('handleMcpjsonServerApprovals is NOT gated behind usesAnthropicSetup', async () => {
     const content = await file('interactiveHelpers.tsx').text()
 
     // The call site for handleMcpjsonServerApprovals must not sit inside an
-    // `if (usesGakrcliHostedAuth) { ... }` block, or third-party providers will
+    // `if (usesAnthropicSetup) { ... }` block, or third-party providers will
     // never get the dialog and project-scope .mcp.json servers will be silently
     // dropped from /mcp listings (issue #696).
     const approvalCallIdx = content.indexOf('await handleMcpjsonServerApprovals(root)')
     expect(approvalCallIdx).toBeGreaterThan(-1)
 
-    // Look at the 800 chars BEFORE the call site for any `if (usesGakrcliHostedAuth)`
+    // Look at the 800 chars BEFORE the call site for any `if (usesAnthropicSetup)`
     // block that would still be open. Pick a window that's definitely inside the
     // showSetupScreens function but not in earlier dialogs.
     const before = content.slice(Math.max(0, approvalCallIdx - 800), approvalCallIdx)
-    expect(before).not.toMatch(/if\s*\(\s*usesGakrcliHostedAuth\s*\)\s*{[^}]*$/)
+    expect(before).not.toMatch(/if\s*\(\s*usesAnthropicSetup\s*\)\s*{[^}]*$/)
   })
 
   test('issue #696 is referenced from the comment so future readers can find context', async () => {

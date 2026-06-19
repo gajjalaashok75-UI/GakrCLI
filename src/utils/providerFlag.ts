@@ -5,11 +5,11 @@
  * that the rest of the codebase uses for provider detection.
  *
  * Usage:
- *   GakrCLI --provider openai --model gpt-4o
- *   GakrCLI --provider gemini --model gemini-2.0-flash
- *   GakrCLI --provider mistral --model ministral-3b-latest
- *   GakrCLI --provider ollama --model llama3.2
- *   GakrCLI --provider anthropic   (default, no-op)
+ *   gakrcli --provider openai --model gpt-4o
+ *   gakrcli --provider gemini --model gemini-2.0-flash
+ *   gakrcli --provider mistral --model ministral-3b-latest
+ *   gakrcli --provider ollama --model llama3.2
+ *   gakrcli --provider anthropic   (default, no-op)
  */
 
 import '../integrations/index.js'
@@ -20,6 +20,7 @@ import {
   getGateway,
   getVendor,
   resolveProfileRoute,
+  resolveRouteIdFromBaseUrl,
 } from '../integrations/index.js'
 import { PRESET_VENDOR_MAP } from '../integrations/compatibility.js'
 
@@ -39,6 +40,9 @@ const PREFERRED_PROVIDER_ORDER = [
   'nvidia-nim',
   'minimax',
   'venice',
+  'atlas-cloud',
+  'nearai',
+  'fireworks',
 ] as const
 
 function buildValidProviders(): string[] {
@@ -154,16 +158,67 @@ function getRouteDefaults(provider: string): {
   }
 }
 
+function normalizeBaseUrlEnv(value: string | undefined): string | undefined {
+  const trimmed = value?.trim()
+  return trimmed && trimmed !== 'undefined' ? trimmed : undefined
+}
+
+function getConfiguredOpenAIBaseUrl(): string | undefined {
+  const baseUrl = normalizeBaseUrlEnv(process.env.OPENAI_BASE_URL)
+  if (baseUrl) {
+    return baseUrl
+  }
+
+  return normalizeBaseUrlEnv(process.env.OPENAI_API_BASE)
+}
+
+function shouldReplaceStaleKnownBaseUrl(provider: string): boolean {
+  const currentRouteId = resolveRouteIdFromBaseUrl(
+    getConfiguredOpenAIBaseUrl(),
+  )
+  if (!currentRouteId) {
+    return false
+  }
+
+  const targetRouteId = resolveProfileRoute(provider).routeId
+  return (
+    targetRouteId !== 'openai' &&
+    targetRouteId !== 'custom' &&
+    targetRouteId !== 'unknown-fallback' &&
+    currentRouteId !== targetRouteId
+  )
+}
+
+function applyOpenAIBaseUrlDefault(provider: string, baseUrl?: string): void {
+  const normalizedBaseUrl = baseUrl?.trim()
+  if (!normalizedBaseUrl) {
+    return
+  }
+
+  if (
+    !getConfiguredOpenAIBaseUrl() ||
+    shouldReplaceStaleKnownBaseUrl(provider)
+  ) {
+    process.env.OPENAI_BASE_URL = normalizedBaseUrl
+  }
+}
+
 /**
- * Apply --model without --provider to process.env for this process only.
+ * Apply --model (without --provider) to process.env for the current process only.
  *
- * This runs after saved provider profiles are applied, so it can route the
- * override to the already-active provider's model env var before startup
- * rendering and request resolution read it.
+ * Issue #808: `gakrcli --model <name>` should work standalone so users can
+ * override the session model without reconfiguring a profile or polluting the
+ * shell with OPENAI_MODEL=... Must run before the startup banner so the
+ * displayed model matches the flag, and before resolution paths that read the
+ * provider-specific *_MODEL env var directly.
+ *
+ * Routes the value to the env var matching the already-active provider
+ * (detected from GAKR_CODE_USE_* vars set by saved profile or env). Returns
+ * undefined when --model is absent or --provider is present (that path is
+ * handled by applyProviderFlagFromArgs).
  */
 export function applyModelFlagFromArgs(args: string[]): void {
   if (args.includes('--provider')) return
-
   const model = parseModelFlag(args)
   if (!model) return
 
@@ -179,17 +234,11 @@ export function applyModelFlagFromArgs(args: string[]): void {
   const useGithub =
     process.env.GAKR_CODE_USE_GITHUB === '1' ||
     process.env.GAKR_CODE_USE_GITHUB === 'true'
-  const useNvidia =
-    process.env.GAKR_CODE_USE_NVIDIA === '1' ||
-    process.env.GAKR_CODE_USE_NVIDIA === 'true'
 
   if (useGemini) {
     process.env.GEMINI_MODEL = model
   } else if (useMistral) {
     process.env.MISTRAL_MODEL = model
-  } else if (useNvidia) {
-    process.env.NVIDIA_MODEL = model
-    process.env.OPENAI_MODEL = model
   } else if (useOpenAI || useGithub) {
     process.env.OPENAI_MODEL = model
   } else {
@@ -200,8 +249,10 @@ export function applyModelFlagFromArgs(args: string[]): void {
 /**
  * Apply a provider name to process.env.
  * Sets the required GAKR_CODE_USE_* flag and any provider-specific
- * defaults (Ollama base URL, model routing). Does NOT overwrite values
- * that are already set — explicit env vars always win.
+ * defaults (Ollama base URL, model routing). Preserves explicit custom
+ * endpoint env vars for descriptor-backed defaults, while replacing stale
+ * known provider endpoints when the user explicitly chooses a different
+ * descriptor-backed provider.
  *
  * Returns { error } if the provider name is not recognized.
  */
@@ -215,6 +266,7 @@ export function applyProviderFlag(
     }
   }
 
+  const opengatewayApiKey = process.env.OPENGATEWAY_API_KEY?.trim()
   const copiedOpenAIKeyProvider =
     process.env.OPENAI_API_KEY !== undefined &&
     process.env.OPENAI_API_KEY === process.env.NVIDIA_API_KEY &&
@@ -235,7 +287,21 @@ export function applyProviderFlag(
               : process.env.OPENAI_API_KEY !== undefined &&
                   process.env.OPENAI_API_KEY === process.env.MINIMAX_API_KEY
                 ? 'minimax'
-                : null
+                  : process.env.OPENAI_API_KEY !== undefined &&
+                      process.env.OPENAI_API_KEY === process.env.ATLAS_CLOUD_API_KEY
+                    ? 'atlas-cloud'
+                    : process.env.OPENAI_API_KEY !== undefined &&
+                        process.env.OPENAI_API_KEY === process.env.NEARAI_API_KEY
+                      ? 'nearai'
+                      : process.env.OPENAI_API_KEY !== undefined &&
+                        process.env.OPENAI_API_KEY === process.env.FIREWORKS_API_KEY
+                      ? 'fireworks'
+                      : process.env.OPENAI_API_KEY !== undefined &&
+                      opengatewayApiKey !== undefined &&
+                      opengatewayApiKey.length > 0 &&
+                      process.env.OPENAI_API_KEY === opengatewayApiKey
+                    ? 'gakr-gakr-opengateway'
+                    : null
 
   delete process.env.GAKR_CODE_USE_OPENAI
   delete process.env.GAKR_CODE_USE_GEMINI
@@ -300,7 +366,7 @@ export function applyProviderFlag(
       if (process.env.NVIDIA_API_KEY && !process.env.OPENAI_API_KEY) {
         process.env.OPENAI_API_KEY = process.env.NVIDIA_API_KEY
       }
-      process.env.OPENAI_MODEL ??= 'stepfun-ai/step-3.5-flash'
+      process.env.OPENAI_MODEL ??= 'nvidia/llama-3.1-nemotron-70b-instruct'
       if (model) process.env.OPENAI_MODEL = model
       break
 
@@ -314,15 +380,54 @@ export function applyProviderFlag(
       }
       break
 
-    default:
-      process.env.GAKR_CODE_USE_OPENAI = '1'
-      if (defaultBaseUrl) {
-        process.env.OPENAI_BASE_URL ??= defaultBaseUrl
+    case 'minimax':
+      delete process.env.OPENAI_BASE_URL
+      delete process.env.OPENAI_API_BASE
+      delete process.env.OPENAI_MODEL
+      delete process.env.OPENAI_API_FORMAT
+      delete process.env.OPENAI_AUTH_HEADER
+      delete process.env.OPENAI_AUTH_SCHEME
+      delete process.env.OPENAI_AUTH_HEADER_VALUE
+      process.env.ANTHROPIC_BASE_URL = defaultBaseUrl ?? 'https://api.minimax.io/anthropic'
+      process.env.ANTHROPIC_MODEL = defaultModel ?? 'MiniMax-M3'
+      if (model) process.env.ANTHROPIC_MODEL = model
+      if (process.env.MINIMAX_API_KEY && !process.env.ANTHROPIC_API_KEY) {
+        process.env.ANTHROPIC_API_KEY = process.env.MINIMAX_API_KEY
       }
+      if (copiedOpenAIKeyProvider === 'minimax') {
+        delete process.env.OPENAI_API_KEY
+      }
+      break
+
+    case 'gakr-gakr-opengateway':
+      process.env.GAKR_CODE_USE_OPENAI = '1'
+      if (process.env.OPENGATEWAY_BASE_URL?.trim()) {
+        process.env.OPENAI_BASE_URL = process.env.OPENGATEWAY_BASE_URL.trim()
+      } else {
+        applyOpenAIBaseUrlDefault(
+          provider,
+          defaultBaseUrl ?? 'https://opengateway.gakr-gakr.com/v1',
+        )
+      }
+      process.env.OPENAI_MODEL ??= defaultModel ?? 'mimo-v2.5-pro'
+      if (model) process.env.OPENAI_MODEL = model
+      if (opengatewayApiKey) {
+        process.env.OPENAI_API_KEY = opengatewayApiKey
+      }
+      break
+
+    case 'nearai':
+      process.env.GAKR_CODE_USE_OPENAI = '1'
+      applyOpenAIBaseUrlDefault(provider, defaultBaseUrl)
       if (defaultModel) {
         process.env.OPENAI_MODEL ??= defaultModel
       }
       if (model) process.env.OPENAI_MODEL = model
+      if (process.env.NEARAI_API_KEY) {
+        process.env.OPENAI_API_KEY = process.env.NEARAI_API_KEY
+      } else {
+        delete process.env.OPENAI_API_KEY
+      }
       break
 
     case 'xai':
@@ -353,6 +458,48 @@ export function applyProviderFlag(
       if (process.env.VENICE_API_KEY && !process.env.OPENAI_API_KEY) {
         process.env.OPENAI_API_KEY = process.env.VENICE_API_KEY
       }
+      break
+
+    case 'atlas-cloud':
+      process.env.GAKR_CODE_USE_OPENAI = '1'
+      applyOpenAIBaseUrlDefault(
+        provider,
+        defaultBaseUrl ?? 'https://api.atlascloud.ai/v1',
+      )
+      process.env.OPENAI_MODEL ??= defaultModel ?? 'deepseek-ai/deepseek-v4-pro'
+      if (model) process.env.OPENAI_MODEL = model
+      // The dedicated key always wins so a lingering OPENAI_API_KEY from
+      // another provider is never sent to Atlas Cloud; without it the
+      // generic key is cleared for the same reason and validation reports
+      // the missing ATLAS_CLOUD_API_KEY instead.
+      if (process.env.ATLAS_CLOUD_API_KEY) {
+        process.env.OPENAI_API_KEY = process.env.ATLAS_CLOUD_API_KEY
+      } else {
+        delete process.env.OPENAI_API_KEY
+      }
+      break
+
+    case 'fireworks':
+      process.env.GAKR_CODE_USE_OPENAI = '1'
+      applyOpenAIBaseUrlDefault(provider, defaultBaseUrl)
+      if (defaultModel) {
+        process.env.OPENAI_MODEL ??= defaultModel
+      }
+      if (model) process.env.OPENAI_MODEL = model
+      if (process.env.FIREWORKS_API_KEY) {
+        process.env.OPENAI_API_KEY = process.env.FIREWORKS_API_KEY
+      } else {
+        delete process.env.OPENAI_API_KEY
+      }
+      break
+
+    default:
+      process.env.GAKR_CODE_USE_OPENAI = '1'
+      applyOpenAIBaseUrlDefault(provider, defaultBaseUrl)
+      if (defaultModel) {
+        process.env.OPENAI_MODEL ??= defaultModel
+      }
+      if (model) process.env.OPENAI_MODEL = model
       break
   }
 

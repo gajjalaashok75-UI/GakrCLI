@@ -124,10 +124,17 @@ export function createSyntheticOutputTool(
   return result
 }
 
+// Anthropic tool_use blocks require the input to be a JSON object — the
+// `input` field is typed as a map. A top-level array (or any non-object root)
+// schema is valid JSON Schema but cannot be expressed as a tool input, so the
+// model emits `{}` and downstream validation fails (issue #1256). Wrap
+// non-object root schemas as `{result: <orig>}` so the model has a valid
+// object to fill, then unwrap before emitting `structured_output`. Users see
+// the same shape they asked for.
 const WRAPPED_FIELD = 'result'
 
 function isObjectRootSchema(schema: Record<string, unknown>): boolean {
-  const t = schema.type
+  const t = schema['type']
   if (t === 'object') return true
   if (Array.isArray(t) && t.includes('object')) return true
   return false
@@ -153,6 +160,7 @@ function buildSyntheticOutputTool(
     if (!isValidSchema) {
       return { error: ajv.errorsText(ajv.errors) }
     }
+
     const needsWrapping = !isObjectRootSchema(jsonSchema)
     const effectiveSchema = needsWrapping
       ? wrapNonObjectSchema(jsonSchema)
@@ -174,6 +182,9 @@ function buildSyntheticOutputTool(
               `StructuredOutput schema mismatch: ${(errors ?? '').slice(0, 150)}`,
             )
           }
+          // Unwrap the synthetic `{result: ...}` envelope before surfacing so
+          // the CLI emits the array (or whatever non-object shape) the user
+          // actually asked for.
           const structured = needsWrapping
             ? (input as Record<string, unknown>)[WRAPPED_FIELD]
             : input

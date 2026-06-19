@@ -95,7 +95,7 @@ function Web({
           logEvent('tengu_remote_setup_result', {
             result: 'not_signed_in' as SafeString
           });
-          onDone('Not signed in to Gakr. Run /login first.');
+          onDone('Not signed in to GakrCLI. Run /login first.');
           return;
         case 'gh_not_installed':
         case 'gh_not_authenticated':
@@ -153,7 +153,7 @@ function Web({
     return <LoadingState message="Checking login status…" />;
   }
   if (step.name === 'uploading') {
-    return <LoadingState message="Connecting GitHub to Gakr…" />;
+    return <LoadingState message="Connecting GitHub to GakrCLI…" />;
   }
   const token = step.token;
   return <Dialog title="Connect GakrCLI on the web to GitHub?" onCancel={handleCancel} hideInputGuide>

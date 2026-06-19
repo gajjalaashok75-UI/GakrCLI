@@ -153,16 +153,16 @@ export function sanitizeSurfaceKey(surfaceKey: string): string {
  */
 export function sanitizeModelName(shortName: string): string {
   // Map internal variants to public equivalents based on model family
-  if (shortName.includes('opus-4-6')) return 'gakrcli-opus-4-6'
-  if (shortName.includes('opus-4-5')) return 'gakrcli-opus-4-5'
-  if (shortName.includes('opus-4-1')) return 'gakrcli-opus-4-1'
-  if (shortName.includes('opus-4')) return 'gakrcli-opus-4'
-  if (shortName.includes('sonnet-4-6')) return 'gakrcli-sonnet-4-6'
-  if (shortName.includes('sonnet-4-5')) return 'gakrcli-sonnet-4-5'
-  if (shortName.includes('sonnet-4')) return 'gakrcli-sonnet-4'
-  if (shortName.includes('sonnet-3-7')) return 'gakrcli-sonnet-3-7'
-  if (shortName.includes('haiku-4-5')) return 'gakrcli-haiku-4-5'
-  if (shortName.includes('haiku-3-5')) return 'gakrcli-haiku-3-5'
+  if (shortName.includes('opus-4-6')) return 'claude-opus-4-6'
+  if (shortName.includes('opus-4-5')) return 'claude-opus-4-5'
+  if (shortName.includes('opus-4-1')) return 'claude-opus-4-1'
+  if (shortName.includes('opus-4')) return 'claude-opus-4'
+  if (shortName.includes('sonnet-4-6')) return 'claude-sonnet-4-6'
+  if (shortName.includes('sonnet-4-5')) return 'claude-sonnet-4-5'
+  if (shortName.includes('sonnet-4')) return 'claude-sonnet-4'
+  if (shortName.includes('sonnet-3-7')) return 'claude-sonnet-3-7'
+  if (shortName.includes('haiku-4-5')) return 'claude-haiku-4-5'
+  if (shortName.includes('haiku-3-5')) return 'claude-haiku-3-5'
   // Unknown models get a generic name
   return 'gakrcli'
 }
@@ -232,7 +232,7 @@ export function getClientSurface(): string {
 
 /**
  * Build a surface key that includes the model name.
- * Format: "surface/model" (e.g., "cli/gakrcli-sonnet")
+ * Format: "surface/model" (e.g., "cli/claude-sonnet")
  */
 export function buildSurfaceKey(surface: string, model: ModelName): string {
   return `${surface}/${getCanonicalName(model)}`
@@ -396,7 +396,7 @@ export async function getFileMtime(filePath: string): Promise<number> {
 }
 
 /**
- * Track a file modification by Gakr.
+ * Track a file modification by GakrCLI.
  * Called after Edit/Write tool completes.
  */
 export function trackFileModification(
@@ -557,7 +557,7 @@ export async function calculateCommitAttribution(
   const surfaces = new Set<string>()
   const surfaceCounts: Record<string, number> = {}
 
-  let totalgakrcliChars = 0
+  let totalGakrCLIChars = 0
   let totalHumanChars = 0
 
   // Merge file states from all sessions
@@ -662,7 +662,7 @@ export async function calculateCommitAttribution(
             const diffSize = await getGitDiffSize(file)
             humanChars = diffSize > 0 ? diffSize : stats.size
           } else {
-            // New file not created by Gakr
+            // New file not created by GakrCLI
             humanChars = stats.size
           }
         } catch {
@@ -705,16 +705,16 @@ export async function calculateCommitAttribution(
       surface: result.surface,
     }
 
-    totalgakrcliChars += result.gakrcliChars
+    totalGakrCLIChars += result.gakrcliChars
     totalHumanChars += result.humanChars
 
     surfaceCounts[result.surface] =
       (surfaceCounts[result.surface] ?? 0) + result.gakrcliChars
   }
 
-  const totalChars = totalgakrcliChars + totalHumanChars
+  const totalChars = totalGakrCLIChars + totalHumanChars
   const gakrcliPercent =
-    totalChars > 0 ? Math.round((totalgakrcliChars / totalChars) * 100) : 0
+    totalChars > 0 ? Math.round((totalGakrCLIChars / totalChars) * 100) : 0
 
   // Calculate surface breakdown (percentage of total content per surface)
   const surfaceBreakdown: Record<
@@ -731,7 +731,7 @@ export async function calculateCommitAttribution(
     version: 1,
     summary: {
       gakrcliPercent,
-      gakrcliChars: totalgakrcliChars,
+      gakrcliChars: totalGakrCLIChars,
       humanChars: totalHumanChars,
       surfaces: Array.from(surfaces),
     },

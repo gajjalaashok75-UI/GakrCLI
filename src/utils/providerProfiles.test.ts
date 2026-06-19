@@ -1,24 +1,11 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  mock,
-  setDefaultTimeout,
-  test,
-} from 'bun:test'
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
-import {
-  acquireSharedMutationLock,
-  releaseSharedMutationLock,
-} from '../test/sharedMutationLock.js'
+import { acquireEnvMutex, releaseEnvMutex } from '../entrypoints/sdk/shared.js'
 import type { ProviderProfile } from './config.js'
-
-setDefaultTimeout(60_000)
 
 async function importFreshProvidersModule() {
   return import(`./model/providers.ts?ts=${Date.now()}-${Math.random()}`)
@@ -74,7 +61,9 @@ const RESTORED_KEYS = [
   'XAI_API_KEY',
   'VENICE_API_KEY',
   'MIMO_API_KEY',
+  'ATLAS_CLOUD_API_KEY',
   'HICAP_API_KEY',
+  'GAKR_CODE_OPENAI_CONTEXT_WINDOWS',
 ] as const
 
 type MockConfigState = {
@@ -107,7 +96,7 @@ function saveMockGlobalConfig(
 }
 
 beforeEach(async () => {
-  await acquireSharedMutationLock('utils/providerProfiles.test.ts')
+  await acquireEnvMutex()
   for (const key of RESTORED_KEYS) {
     delete process.env[key]
   }
@@ -133,7 +122,7 @@ afterEach(() => {
       testConfigDir = null
     }
   } finally {
-    releaseSharedMutationLock()
+    releaseEnvMutex()
   }
 })
 
@@ -142,7 +131,16 @@ async function importFreshProviderProfileModules() {
   const actualConfig = await import(`./config.js?ts=${Date.now()}-${Math.random()}`)
   mock.module('./config.js', () => ({
     ...actualConfig,
-    getGlobalConfig: () => mockConfigState,
+    // Spread the real config so the mock stays a COMPLETE GlobalConfig and only
+    // the provider-profile fields are overridden. bun's mock.restore() does NOT
+    // revert mock.module(), so this replacement leaks into later test files in
+    // the same process; returning a partial object (missing e.g.
+    // autoCompactEnabled) silently broke unrelated suites that read other config
+    // fields via getGlobalConfig().
+    getGlobalConfig: () => ({
+      ...actualConfig.getGlobalConfig(),
+      ...mockConfigState,
+    }),
     saveGlobalConfig: (
       updater: (current: MockConfigState) => MockConfigState,
     ) => {
@@ -212,15 +210,35 @@ function buildVeniceProfile(overrides: Partial<ProviderProfile> = {}): ProviderP
   })
 }
 
-function buildXiaomiMimoProfile(
-  overrides: Partial<ProviderProfile> = {},
-): ProviderProfile {
+function buildXiaomiMimoProfile(overrides: Partial<ProviderProfile> = {}): ProviderProfile {
   return buildProfile({
     provider: 'xiaomi-mimo',
     name: 'Xiaomi MiMo',
     baseUrl: 'https://api.xiaomimimo.com/v1',
     model: 'mimo-v2.5-pro',
     apiKey: 'mimo-test-key',
+    ...overrides,
+  })
+}
+
+function buildFireworksProfile(overrides: Partial<ProviderProfile> = {}): ProviderProfile {
+  return buildProfile({
+    provider: 'fireworks',
+    name: 'Fireworks AI',
+    baseUrl: 'https://api.fireworks.ai/inference/v1',
+    model: 'accounts/fireworks/models/deepseek-v3',
+    apiKey: 'fireworks-test-key',
+    ...overrides,
+  })
+}
+
+function buildAtlasCloudProfile(overrides: Partial<ProviderProfile> = {}): ProviderProfile {
+  return buildProfile({
+    provider: 'atlas-cloud',
+    name: 'Atlas Cloud',
+    baseUrl: 'https://api.atlascloud.ai/v1',
+    model: 'deepseek-ai/deepseek-v4-pro',
+    apiKey: 'atlas-test-key',
     ...overrides,
   })
 }
@@ -438,6 +456,24 @@ describe('applyProviderProfileToProcessEnv', () => {
     expect(String(process.env.GAKR_CODE_USE_OPENAI)).toBe('1')
   })
 
+  test('openai responses_compat profile sets OPENAI_API_FORMAT', async () => {
+    const { applyProviderProfileToProcessEnv } =
+      await importFreshProviderProfileModules()
+
+    applyProviderProfileToProcessEnv(
+      buildProfile({
+        provider: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-5.4',
+        apiFormat: 'responses_compat',
+      }),
+    )
+
+    expect(process.env.OPENAI_MODEL).toBe('gpt-5.4')
+    expect(process.env.OPENAI_API_FORMAT).toBe('responses_compat')
+    expect(String(process.env.GAKR_CODE_USE_OPENAI)).toBe('1')
+  })
+
   test('custom OpenAI-compatible responses profile sets OPENAI_API_FORMAT', async () => {
     const { applyProviderProfileToProcessEnv } =
       await importFreshProviderProfileModules()
@@ -486,7 +522,7 @@ describe('applyProviderProfileToProcessEnv', () => {
       buildProfile({
         provider: 'minimax',
         baseUrl: 'https://api.minimax.io/anthropic',
-        model: 'MiniMax-M3',
+        model: 'MiniMax-M2.7',
         apiKey: 'minimax-live-key',
         apiFormat: 'responses',
         authHeader: 'api-key',
@@ -499,14 +535,106 @@ describe('applyProviderProfileToProcessEnv', () => {
     )
 
     expect(process.env.ANTHROPIC_BASE_URL).toBe('https://api.minimax.io/anthropic')
-    expect(process.env.ANTHROPIC_MODEL).toBe('MiniMax-M3')
-    expect(process.env.OPENAI_API_KEY).toBeUndefined()
+    expect(process.env.ANTHROPIC_MODEL).toBe('MiniMax-M2.7')
+    expect(process.env.ANTHROPIC_API_KEY).toBe('minimax-live-key')
     expect(process.env.MINIMAX_API_KEY).toBe('minimax-live-key')
+    expect(process.env.GAKR_CODE_USE_OPENAI).toBeUndefined()
     expect(process.env.OPENAI_API_FORMAT).toBeUndefined()
     expect(process.env.OPENAI_AUTH_HEADER).toBeUndefined()
     expect(process.env.OPENAI_AUTH_SCHEME).toBeUndefined()
     expect(process.env.OPENAI_AUTH_HEADER_VALUE).toBeUndefined()
     expect(process.env.ANTHROPIC_CUSTOM_HEADERS).toBeUndefined()
+  })
+
+  test('venice profile applies OpenAI-compatible env with VENICE_API_KEY mirror', async () => {
+    const { applyProviderProfileToProcessEnv } =
+      await importFreshProviderProfileModules()
+    process.env.GAKR_CODE_USE_GEMINI = '1'
+
+    applyProviderProfileToProcessEnv(buildVeniceProfile())
+    const { getAPIProvider: getFreshAPIProvider } =
+      await importFreshProvidersModule()
+
+    expect(process.env.GAKR_CODE_USE_GEMINI).toBeUndefined()
+    expect(String(process.env.GAKR_CODE_USE_OPENAI)).toBe('1')
+    expect(process.env.OPENAI_BASE_URL).toBe('https://api.venice.ai/api/v1')
+    expect(process.env.OPENAI_MODEL).toBe('venice-uncensored')
+    expect(process.env.OPENAI_API_KEY).toBe('venice-test-key')
+    expect(process.env.VENICE_API_KEY).toBe('venice-test-key')
+    expect(getFreshAPIProvider()).toBe('openai')
+  })
+
+  test('xiaomi mimo profile applies OpenAI-compatible env with MIMO_API_KEY mirror', async () => {
+    const { applyProviderProfileToProcessEnv } =
+      await importFreshProviderProfileModules()
+    process.env.GAKR_CODE_USE_GEMINI = '1'
+
+    applyProviderProfileToProcessEnv(buildXiaomiMimoProfile())
+    const { getAPIProvider: getFreshAPIProvider } =
+      await importFreshProvidersModule()
+
+    expect(process.env.GAKR_CODE_USE_GEMINI).toBeUndefined()
+    expect(String(process.env.GAKR_CODE_USE_OPENAI)).toBe('1')
+    expect(process.env.OPENAI_BASE_URL).toBe('https://api.xiaomimimo.com/v1')
+    expect(process.env.OPENAI_MODEL).toBe('mimo-v2.5-pro')
+    expect(process.env.OPENAI_API_KEY).toBe('mimo-test-key')
+    expect(process.env.MIMO_API_KEY).toBe('mimo-test-key')
+    expect(getFreshAPIProvider()).toBe('xiaomi-mimo')
+  })
+
+  test('atlas cloud profile applies OpenAI-compatible env with ATLAS_CLOUD_API_KEY mirror', async () => {
+    const { applyProviderProfileToProcessEnv } =
+      await importFreshProviderProfileModules()
+    process.env.GAKR_CODE_USE_GEMINI = '1'
+
+    applyProviderProfileToProcessEnv(buildAtlasCloudProfile())
+    const { getAPIProvider: getFreshAPIProvider } =
+      await importFreshProvidersModule()
+
+    expect(process.env.GAKR_CODE_USE_GEMINI).toBeUndefined()
+    expect(String(process.env.GAKR_CODE_USE_OPENAI)).toBe('1')
+    expect(process.env.OPENAI_BASE_URL).toBe('https://api.atlascloud.ai/v1')
+    expect(process.env.OPENAI_MODEL).toBe('deepseek-ai/deepseek-v4-pro')
+    expect(process.env.OPENAI_API_KEY).toBe('atlas-test-key')
+    expect(process.env.ATLAS_CLOUD_API_KEY).toBe('atlas-test-key')
+    expect(getFreshAPIProvider()).toBe('openai')
+  })
+
+  test('xiaomi mimo profile normalizes stale docs endpoint to resolving API host', async () => {
+    const { applyProviderProfileToProcessEnv } =
+      await importFreshProviderProfileModules()
+
+    applyProviderProfileToProcessEnv(buildXiaomiMimoProfile({
+      baseUrl: 'https://api.mimo-v2.com/v1',
+    }))
+    const { getAPIProvider: getFreshAPIProvider } =
+      await importFreshProvidersModule()
+
+    expect(process.env.OPENAI_BASE_URL).toBe('https://api.xiaomimimo.com/v1')
+    expect(process.env.MIMO_API_KEY).toBe('mimo-test-key')
+    expect(getFreshAPIProvider()).toBe('xiaomi-mimo')
+  })
+
+  test('fireworks profile applies OpenAI-compatible env with FIREWORKS_API_KEY mirror', async () => {
+    const { applyProviderProfileToProcessEnv } =
+      await importFreshProviderProfileModules()
+    process.env.GAKR_CODE_USE_GEMINI = '1'
+
+    applyProviderProfileToProcessEnv(buildFireworksProfile())
+    const { getAPIProvider: getFreshAPIProvider } =
+      await importFreshProvidersModule()
+
+    expect(process.env.GAKR_CODE_USE_GEMINI).toBeUndefined()
+    expect(String(process.env.GAKR_CODE_USE_OPENAI)).toBe('1')
+    expect(process.env.OPENAI_BASE_URL).toBe(
+      'https://api.fireworks.ai/inference/v1',
+    )
+    expect(process.env.OPENAI_MODEL).toBe(
+      'accounts/fireworks/models/deepseek-v3',
+    )
+    expect(process.env.OPENAI_API_KEY).toBe('fireworks-test-key')
+    expect(process.env.FIREWORKS_API_KEY).toBe('fireworks-test-key')
+    expect(getFreshAPIProvider()).toBe('openai')
   })
 
   test('legacy OpenAI profile on restricted route ignores advanced settings', async () => {
@@ -652,57 +780,80 @@ describe('applyProviderProfileToProcessEnv', () => {
     expect(getFreshAPIProvider()).toBe('xai')
   })
 
-  test('venice profile applies OpenAI-compatible env with VENICE_API_KEY mirror', async () => {
-    const { applyProviderProfileToProcessEnv } =
-      await importFreshProviderProfileModules()
-    process.env.GAKR_CODE_USE_GEMINI = '1'
-
-    applyProviderProfileToProcessEnv(buildVeniceProfile())
-    const { getAPIProvider: getFreshAPIProvider } =
-      await importFreshProvidersModule()
-
-    expect(process.env.GAKR_CODE_USE_GEMINI).toBeUndefined()
-    expect(process.env.GAKR_CODE_USE_OPENAI).toBe('1')
-    expect(process.env.OPENAI_BASE_URL).toBe('https://api.venice.ai/api/v1')
-    expect(process.env.OPENAI_MODEL).toBe('venice-uncensored')
-    expect(process.env.OPENAI_API_KEY).toBe('venice-test-key')
-    expect(process.env.VENICE_API_KEY).toBe('venice-test-key')
-    expect(getFreshAPIProvider()).toBe('openai')
-  })
-
-  test('xiaomi mimo profile applies OpenAI-compatible env with MIMO_API_KEY mirror', async () => {
-    const { applyProviderProfileToProcessEnv } =
-      await importFreshProviderProfileModules()
-    process.env.GAKR_CODE_USE_GEMINI = '1'
-
-    applyProviderProfileToProcessEnv(buildXiaomiMimoProfile())
-    const { getAPIProvider: getFreshAPIProvider } =
-      await importFreshProvidersModule()
-
-    expect(process.env.GAKR_CODE_USE_GEMINI).toBeUndefined()
-    expect(process.env.GAKR_CODE_USE_OPENAI).toBe('1')
-    expect(process.env.OPENAI_BASE_URL).toBe('https://api.xiaomimimo.com/v1')
-    expect(process.env.OPENAI_MODEL).toBe('mimo-v2.5-pro')
-    expect(process.env.OPENAI_API_KEY).toBe('mimo-test-key')
-    expect(process.env.MIMO_API_KEY).toBe('mimo-test-key')
-    expect(getFreshAPIProvider()).toBe('xiaomi-mimo')
-  })
-
-  test('xiaomi mimo profile normalizes stale docs endpoint to resolving API host', async () => {
+  test('openai-compatible profile applies maxContextLength env override', async () => {
     const { applyProviderProfileToProcessEnv } =
       await importFreshProviderProfileModules()
 
     applyProviderProfileToProcessEnv(
-      buildXiaomiMimoProfile({
-        baseUrl: 'https://api.mimo-v2.com/v1',
+      buildProfile({
+        provider: 'custom',
+        baseUrl: 'http://localhost:4000/v1',
+        model: 'gpt-4o',
+        maxContextLength: 200_000,
       }),
     )
-    const { getAPIProvider: getFreshAPIProvider } =
-      await importFreshProvidersModule()
 
-    expect(process.env.OPENAI_BASE_URL).toBe('https://api.xiaomimimo.com/v1')
-    expect(process.env.MIMO_API_KEY).toBe('mimo-test-key')
-    expect(getFreshAPIProvider()).toBe('xiaomi-mimo')
+    expect(process.env.OPENAI_BASE_URL).toBe('http://localhost:4000/v1')
+    expect(process.env.OPENAI_MODEL).toBe('gpt-4o')
+    expect(process.env.GAKR_CODE_OPENAI_CONTEXT_WINDOWS).toBe(
+      JSON.stringify({ 'gpt-4o': 200_000 }),
+    )
+  })
+
+  test('openai-compatible profile switch clears previous same-model context override', async () => {
+    const { applyProviderProfileToProcessEnv } =
+      await importFreshProviderProfileModules()
+    const { resolveModelRuntimeLimits } = await import(
+      '../integrations/runtimeMetadata.js'
+    )
+
+    applyProviderProfileToProcessEnv(
+      buildProfile({
+        provider: 'custom',
+        baseUrl: 'http://localhost:4000/v1',
+        model: 'gpt-4o',
+        maxContextLength: 1_000_000,
+      }),
+    )
+    expect(
+      resolveModelRuntimeLimits({
+        model: 'gpt-4o',
+        processEnv: process.env,
+      }).contextWindow,
+    ).toBe(1_000_000)
+
+    applyProviderProfileToProcessEnv(
+      buildProfile({
+        provider: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-4o',
+      }),
+    )
+
+    expect(process.env.GAKR_CODE_OPENAI_CONTEXT_WINDOWS).toBeUndefined()
+    expect(
+      resolveModelRuntimeLimits({
+        model: 'gpt-4o',
+        processEnv: process.env,
+      }).contextWindow,
+    ).not.toBe(1_000_000)
+  })
+
+  test('non-openai-compatible profile ignores maxContextLength override', async () => {
+    const { applyProviderProfileToProcessEnv } =
+      await importFreshProviderProfileModules()
+
+    applyProviderProfileToProcessEnv(
+      buildProfile({
+        provider: 'anthropic',
+        baseUrl: 'https://api.anthropic.com',
+        model: 'claude-sonnet-4-6',
+        maxContextLength: 200_000,
+      }),
+    )
+
+    expect(process.env.ANTHROPIC_MODEL).toBe('claude-sonnet-4-6')
+    expect(process.env.GAKR_CODE_OPENAI_CONTEXT_WINDOWS).toBeUndefined()
   })
 })
 
@@ -729,63 +880,32 @@ describe('getProviderProfiles', () => {
     expect(profiles[0]?.provider).toBe('moonshot')
   })
 
-  test('sanitizes credential fields and rejects secret-poisoned model routing', async () => {
-    const { addProviderProfile, getProviderProfiles } =
-      await importFreshProviderProfileModules()
-
-    const clean = addProviderProfile(
-      {
-        provider: 'nvidia-nim',
-        name: 'NVIDIA NIM',
-        baseUrl: 'https://integrate.api.nvidia.com/v1',
-        model: 'nvidia/llama-3.1-nemotron-70b-instruct',
-        apiKey: '  nvapi-live  ',
-        authHeader: 'nvapi-live',
-        authHeaderValue: 'SUA_CHAVE',
-      },
-      { makeActive: false },
-    )
-
-    expect(clean?.apiKey).toBe('nvapi-live')
-    expect(clean?.authHeader).toBeUndefined()
-    expect(clean?.authHeaderValue).toBeUndefined()
-
-    const poisoned = addProviderProfile(
-      {
-        provider: 'openai',
-        name: 'Poisoned',
-        baseUrl: 'sk-live',
-        model: 'sk-live',
-        apiKey: 'sk-live',
-      },
-      { makeActive: false },
-    )
-
-    expect(poisoned).toBeNull()
-    expect(getProviderProfiles().map(profile => profile.name)).toEqual([
-      'NVIDIA NIM',
-    ])
-  })
-
-  test('preserves NVIDIA profiles saved with the default model', async () => {
+  test('sanitizes maxContextLength to positive finite integers', async () => {
     const { getProviderProfiles } = await importFreshProviderProfileModules()
 
     saveMockGlobalConfig(current => ({
       ...current,
       providerProfiles: [
-        buildProfile({
-          provider: 'nvidia-nim',
-          name: 'NVIDIA NIM',
-          baseUrl: 'https://integrate.api.nvidia.com/v1',
-          model: 'stepfun-ai/step-3.5-flash',
-          apiKey: 'nvapi-live',
-        }),
+        buildProfile({ id: 'valid', maxContextLength: 128_000 }),
+        buildProfile({ id: 'negative', maxContextLength: -1 }),
+        buildProfile({ id: 'float', maxContextLength: 128_000.5 }),
+        buildProfile({ id: 'zero', maxContextLength: 0 }),
+        buildProfile({ id: 'infinity', maxContextLength: Infinity }),
+        buildProfile({ id: 'string', maxContextLength: '128000' as unknown as number }),
+        buildProfile({ id: 'missing' }),
       ],
     }))
 
     const profiles = getProviderProfiles()
 
-    expect(profiles[0]?.model).toBe('stepfun-ai/step-3.5-flash')
+    const byId = (id: string) => profiles.find(p => p.id === id)
+    expect(byId('valid')?.maxContextLength).toBe(128_000)
+    expect(byId('negative')?.maxContextLength).toBeUndefined()
+    expect(byId('float')?.maxContextLength).toBeUndefined()
+    expect(byId('zero')?.maxContextLength).toBeUndefined()
+    expect(byId('infinity')?.maxContextLength).toBeUndefined()
+    expect(byId('string')?.maxContextLength).toBeUndefined()
+    expect(byId('missing')?.maxContextLength).toBeUndefined()
   })
 })
 
@@ -906,6 +1026,34 @@ describe('applyActiveProviderProfileFromConfig', () => {
     expect(process.env.OPENAI_MODEL).toBe('gpt-4o-mini')
   })
 
+  test('does not override explicit env-only MiniMax selection with saved profile', async () => {
+    const { applyActiveProviderProfileFromConfig } =
+      await importFreshProviderProfileModules()
+    process.env.MINIMAX_API_KEY = 'minimax-live-key'
+    process.env.ANTHROPIC_BASE_URL = 'https://api.minimax.io/anthropic'
+    process.env.ANTHROPIC_MODEL = 'MiniMax-M2.7'
+
+    const applied = applyActiveProviderProfileFromConfig({
+      providerProfiles: [
+        buildProfile({
+          id: 'saved_openai',
+          baseUrl: 'https://api.openai.com/v1',
+          model: 'gpt-4o',
+        }),
+      ],
+      activeProviderProfileId: 'saved_openai',
+    } as any)
+
+    expect(applied).toBeUndefined()
+    expect(process.env.MINIMAX_API_KEY).toBe('minimax-live-key')
+    expect(process.env.ANTHROPIC_BASE_URL).toBe(
+      'https://api.minimax.io/anthropic',
+    )
+    expect(process.env.ANTHROPIC_MODEL).toBe('MiniMax-M2.7')
+    expect(process.env.GAKR_CODE_USE_OPENAI).toBeUndefined()
+    expect(process.env.OPENAI_BASE_URL).toBeUndefined()
+  })
+
   test('does not override explicit startup selection when profile marker is stale', async () => {
     const { applyActiveProviderProfileFromConfig } =
       await importFreshProviderProfileModules()
@@ -961,6 +1109,34 @@ describe('applyActiveProviderProfileFromConfig', () => {
     expect(process.env.OPENAI_BASE_URL).toBe('http://192.168.33.108:11434/v1')
   })
 
+  test('re-applies active profile when context-window override drifts', async () => {
+    const { applyActiveProviderProfileFromConfig, applyProviderProfileToProcessEnv } =
+      await importFreshProviderProfileModules()
+    const activeProfile = buildProfile({
+      id: 'saved_openai',
+      baseUrl: 'http://localhost:4000/v1',
+      model: 'gpt-4o',
+      maxContextLength: 1_000_000,
+    })
+    applyProviderProfileToProcessEnv(activeProfile)
+
+    // Simulate an upgraded or partially restored process where the profile
+    // marker and core OpenAI env survived, but this PR's new override did not.
+    delete process.env.GAKR_CODE_OPENAI_CONTEXT_WINDOWS
+
+    const applied = applyActiveProviderProfileFromConfig({
+      providerProfiles: [activeProfile],
+      activeProviderProfileId: 'saved_openai',
+    } as any)
+
+    expect(applied?.id).toBe('saved_openai')
+    expect(process.env.OPENAI_MODEL).toBe('gpt-4o')
+    expect(process.env.OPENAI_BASE_URL).toBe('http://localhost:4000/v1')
+    expect(String(process.env.GAKR_CODE_OPENAI_CONTEXT_WINDOWS)).toBe(
+      JSON.stringify({ 'gpt-4o': 1_000_000 }),
+    )
+  })
+
   test('does not re-apply active profile when flags conflict with current provider', async () => {
     const { applyActiveProviderProfileFromConfig, applyProviderProfileToProcessEnv } =
       await importFreshProviderProfileModules()
@@ -1007,6 +1183,24 @@ describe('applyActiveProviderProfileFromConfig', () => {
 
     expect(applied?.id).toBe('saved_xai')
     expect(String(process.env.XAI_API_KEY)).toBe('xai-test-key')
+  })
+
+  test('re-applies Fireworks AI active profile when FIREWORKS_API_KEY is missing (env drift)', async () => {
+    const { applyActiveProviderProfileFromConfig, applyProviderProfileToProcessEnv } =
+      await importFreshProviderProfileModules()
+    const fwProfile = buildFireworksProfile({ id: 'saved_fw' })
+    applyProviderProfileToProcessEnv(fwProfile)
+
+    // Simulate relaunch where the shell exported OPENAI vars but not FIREWORKS_API_KEY
+    delete process.env.FIREWORKS_API_KEY
+
+    const applied = applyActiveProviderProfileFromConfig({
+      providerProfiles: [fwProfile],
+      activeProviderProfileId: 'saved_fw',
+    } as any)
+
+    expect(applied?.id).toBe('saved_fw')
+    expect(String(process.env.FIREWORKS_API_KEY)).toBe('fireworks-test-key')
   })
 
   test('does not re-apply xai active profile when XAI_API_KEY is aligned', async () => {
@@ -1063,9 +1257,13 @@ describe('applyActiveProviderProfileFromConfig', () => {
 })
 
 describe('persistActiveProviderProfileModel', () => {
-  test('returns active profile without rewriting model or current env for profile-managed sessions', async () => {
+  // The runtime active-model selection is owned by mainLoopModelOverride
+  // (set by onChangeAppState before this helper is called). This helper
+  // intentionally no longer mutates the profile's model list — see the
+  // docstring in providerProfiles.ts. Coverage below locks the no-op
+  // contract for both single- and multi-model profiles.
+  test('returns the active profile unchanged for a single-model profile', async () => {
     const {
-      applyProviderProfileToProcessEnv,
       getProviderProfiles,
       persistActiveProviderProfileModel,
     } = await importFreshProviderProfileModules()
@@ -1080,13 +1278,49 @@ describe('persistActiveProviderProfileModel', () => {
       providerProfiles: [activeProfile],
       activeProviderProfileId: activeProfile.id,
     }))
-    applyProviderProfileToProcessEnv(activeProfile)
 
     const updated = persistActiveProviderProfileModel('minimax-m2.5:cloud')
 
     expect(updated?.id).toBe(activeProfile.id)
     expect(updated?.model).toBe('kimi-k2.5:cloud')
-    expect(process.env.OPENAI_MODEL).toBe('kimi-k2.5:cloud')
+    const saved = getProviderProfiles().find(
+      (profile: ProviderProfile) => profile.id === activeProfile.id,
+    )
+    expect(saved?.model).toBe('kimi-k2.5:cloud')
+  })
+
+  test('does not mutate multi-model mistral profile when chosen model is out of list', async () => {
+    // Regression for #1360: the picker must never silently rewrite a
+    // provider's configured model list. The active model is a session-level
+    // choice handled by mainLoopModelOverride; the profile's model list
+    // only changes via an explicit provider edit. An earlier
+    // implementation prepended the chosen model to the list, which
+    // contradicted the documented contract and grew the list unboundedly
+    // on rotation.
+    const {
+      applyProviderProfileToProcessEnv,
+      getProviderProfiles,
+      persistActiveProviderProfileModel,
+    } = await importFreshProviderProfileModules()
+    const activeProfile = buildMistralProfile({
+      id: 'saved_mistral',
+      baseUrl: 'https://api.mistral.ai/v1',
+      model: 'devstral-latest; mistral-small-latest',
+    })
+
+    saveMockGlobalConfig(current => ({
+      ...current,
+      providerProfiles: [activeProfile],
+      activeProviderProfileId: activeProfile.id,
+    }))
+    applyProviderProfileToProcessEnv(activeProfile)
+
+    const updated = persistActiveProviderProfileModel('mistral-large-latest')
+
+    expect(updated?.id).toBe(activeProfile.id)
+    // The configured list is preserved verbatim regardless of the chosen
+    // model being in or out of the list.
+    expect(updated?.model).toBe('devstral-latest; mistral-small-latest')
     expect(process.env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID).toBe(
       activeProfile.id,
     )
@@ -1094,74 +1328,20 @@ describe('persistActiveProviderProfileModel', () => {
     const saved = getProviderProfiles().find(
       (profile: ProviderProfile) => profile.id === activeProfile.id,
     )
-    expect(saved?.model).toBe('kimi-k2.5:cloud')
+    expect(saved?.model).toBe('devstral-latest; mistral-small-latest')
   })
 
-  test('does not update restart startup profile when session model changes', async () => {
-    const {
-      applyProviderProfileToProcessEnv,
-      persistActiveProviderProfileModel,
-    } = await importFreshProviderProfileModules()
-    const activeProfile = buildProfile({
-      id: 'nvidia_prof',
-      name: 'NVIDIA NIM',
-      provider: 'nvidia-nim',
-      baseUrl: 'https://integrate.api.nvidia.com/v1',
-      model: 'z-ai/glm-5.1',
-      apiKey: 'nvapi-test-key',
-    })
-
-    saveMockGlobalConfig(current => ({
-      ...current,
-      providerProfiles: [activeProfile],
-      activeProviderProfileId: activeProfile.id,
-    }))
-    applyProviderProfileToProcessEnv(activeProfile)
-
-    const updated = persistActiveProviderProfileModel('stepfun-ai/step-3.5-flash')
-
-    expect(updated?.model).toBe('z-ai/glm-5.1')
-    expect(process.env.OPENAI_MODEL).toBe('z-ai/glm-5.1')
-    expect(existsSync(join(testConfigDir!, '.gakrcli-profile.json'))).toBe(false)
-  })
-
-  test('preserves multi-model active profiles when session model changes', async () => {
-    const {
-      applyProviderProfileToProcessEnv,
-      getProviderProfiles,
-      persistActiveProviderProfileModel,
-    } = await importFreshProviderProfileModules()
-    const activeProfile = buildProfile({
-      id: 'multi_openai',
-      model: 'glm-4.5, glm-4.7, glm-4.7-flash',
-    })
-
-    saveMockGlobalConfig(current => ({
-      ...current,
-      providerProfiles: [activeProfile],
-      activeProviderProfileId: activeProfile.id,
-    }))
-    applyProviderProfileToProcessEnv(activeProfile)
-
-    persistActiveProviderProfileModel('glm-4.7')
-
-    const saved = getProviderProfiles().find(
-      (profile: ProviderProfile) => profile.id === activeProfile.id,
-    )
-
-    expect(saved?.model).toBe('glm-4.5, glm-4.7, glm-4.7-flash')
-    expect(process.env.OPENAI_MODEL).toBe('glm-4.5')
-    expect(existsSync(join(testConfigDir!, '.gakrcli-profile.json'))).toBe(false)
-  })
-
-  test('does not mutate process env when session is not profile-managed', async () => {
+  test('preserves comma-separated multi-model list when chosen model is already a member', async () => {
+    // Switching between models already in the list is a session-level
+    // choice. The list itself must be preserved exactly as configured.
     const {
       getProviderProfiles,
       persistActiveProviderProfileModel,
     } = await importFreshProviderProfileModules()
-    const activeProfile = buildProfile({
-      id: 'saved_openai',
-      model: 'kimi-k2.5:cloud',
+    const activeProfile = buildMistralProfile({
+      id: 'saved_mistral',
+      baseUrl: 'https://api.mistral.ai/v1',
+      model: 'devstral-latest, mistral-small-latest, mistral-large-latest',
     })
 
     saveMockGlobalConfig(current => ({
@@ -1170,51 +1350,17 @@ describe('persistActiveProviderProfileModel', () => {
       activeProviderProfileId: activeProfile.id,
     }))
 
-    process.env.GAKR_CODE_USE_OPENAI = '1'
-    process.env.OPENAI_MODEL = 'cli-model'
-    delete process.env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED
-    delete process.env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID
+    const updated = persistActiveProviderProfileModel('mistral-small-latest')
 
-    persistActiveProviderProfileModel('minimax-m2.5:cloud')
-
-    expect(process.env.OPENAI_MODEL).toBe('cli-model')
+    expect(updated?.model).toBe(
+      'devstral-latest, mistral-small-latest, mistral-large-latest',
+    )
     const saved = getProviderProfiles().find(
       (profile: ProviderProfile) => profile.id === activeProfile.id,
     )
-    expect(saved?.model).toBe('kimi-k2.5:cloud')
-  })
-
-  test('does not rewrite saved provider profile while GitHub provider mode is active', async () => {
-    const {
-      getProviderProfiles,
-      persistActiveProviderProfileModel,
-    } = await importFreshProviderProfileModules()
-    const activeProfile = buildProfile({
-      id: 'nvidia_prof',
-      name: 'NVIDIA NIM',
-      provider: 'nvidia-nim',
-      baseUrl: 'https://integrate.api.nvidia.com/v1',
-      model: 'nvidia/llama-3.1-nemotron-70b-instruct',
-      apiKey: 'nvapi-test-key',
-    })
-
-    saveMockGlobalConfig(current => ({
-      ...current,
-      providerProfiles: [activeProfile],
-      activeProviderProfileId: activeProfile.id,
-    }))
-
-    process.env.GAKR_CODE_USE_GITHUB = '1'
-    process.env.OPENAI_MODEL = 'github:copilot'
-
-    const updated = persistActiveProviderProfileModel('gpt-4o')
-
-    expect(updated).toBeNull()
-    expect(process.env.OPENAI_MODEL).toBe('github:copilot')
-    const saved = getProviderProfiles().find(
-      (profile: ProviderProfile) => profile.id === activeProfile.id,
+    expect(saved?.model).toBe(
+      'devstral-latest, mistral-small-latest, mistral-large-latest',
     )
-    expect(saved?.model).toBe('nvidia/llama-3.1-nemotron-70b-instruct')
   })
 })
 
@@ -1300,20 +1446,6 @@ describe('getProviderPresetDefaults', () => {
     expect(defaults.requiresApiKey).toBe(true)
   })
 
-  test('xai preset defaults to Grok 4.3', async () => {
-    const { getProviderPresetDefaults } = await importFreshProviderProfileModules()
-    process.env.XAI_API_KEY = 'xai-live-key'
-
-    const defaults = getProviderPresetDefaults('xai')
-
-    expect(defaults.provider).toBe('xai')
-    expect(defaults.name).toBe('xAI')
-    expect(defaults.baseUrl).toBe('https://api.x.ai/v1')
-    expect(defaults.model).toBe('grok-4.3')
-    expect(defaults.apiKey).toBe('xai-live-key')
-    expect(defaults.requiresApiKey).toBe(true)
-  })
-
   test('venice preset defaults to the official Venice endpoint', async () => {
     const { getProviderPresetDefaults } = await importFreshProviderProfileModules()
     process.env.VENICE_API_KEY = 'venice-live-key'
@@ -1342,6 +1474,22 @@ describe('getProviderPresetDefaults', () => {
     expect(defaults.requiresApiKey).toBe(true)
   })
 
+  test('xai preset ignores stale generic OpenAI model when creating defaults', async () => {
+    const { getProviderPresetDefaults } = await importFreshProviderProfileModules()
+    process.env.OPENAI_MODEL = 'gpt-5.4'
+    process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1'
+    process.env.XAI_API_KEY = 'xai-live-key'
+
+    const defaults = getProviderPresetDefaults('xai')
+
+    expect(defaults.provider).toBe('xai')
+    expect(defaults.name).toBe('xAI')
+    expect(defaults.baseUrl).toBe('https://api.x.ai/v1')
+    expect(defaults.model).toBe('grok-4.3')
+    expect(defaults.apiKey).toBe('xai-live-key')
+    expect(defaults.requiresApiKey).toBe(true)
+  })
+
   test('zai preset defaults to Z.AI GLM Coding Plan endpoint', async () => {
     const { getProviderPresetDefaults } = await importFreshProviderProfileModules()
 
@@ -1351,6 +1499,23 @@ describe('getProviderPresetDefaults', () => {
     expect(defaults.name).toBe('Z.AI - GLM Coding Plan')
     expect(defaults.baseUrl).toBe('https://api.z.ai/api/coding/paas/v4')
     expect(defaults.model).toBe('GLM-5.1')
+    expect(defaults.requiresApiKey).toBe(true)
+  })
+
+  test('fireworks preset defaults to the official Fireworks AI endpoint', async () => {
+    const { getProviderPresetDefaults } =
+      await importFreshProviderProfileModules()
+    process.env.FIREWORKS_API_KEY = 'fireworks-live-key'
+
+    const defaults = getProviderPresetDefaults('fireworks')
+
+    expect(defaults.provider).toBe('fireworks')
+    expect(defaults.name).toBe('Fireworks AI')
+    expect(defaults.baseUrl).toBe('https://api.fireworks.ai/inference/v1')
+    expect(defaults.model).toBe(
+      'accounts/fireworks/models/llama-v3p1-70b-instruct',
+    )
+    expect(defaults.apiKey).toBe('fireworks-live-key')
     expect(defaults.requiresApiKey).toBe(true)
   })
 })
@@ -1376,7 +1541,9 @@ describe('setActiveProviderProfile', () => {
         providerProfiles: [openaiProfile],
       }))
 
-      const result = setActiveProviderProfile('openai_prof')
+      const result = setActiveProviderProfile('openai_prof', {
+        configDir: testConfigDir ?? undefined,
+      })
 
       expect(result?.id).toBe('openai_prof')
       expect(String(process.env.GAKR_CODE_USE_OPENAI)).toBe('1')
@@ -1390,44 +1557,61 @@ describe('setActiveProviderProfile', () => {
     }
   })
 
-  test('persists startup profile to an explicit config directory', async () => {
-    const envConfigDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-env-config-'))
-    const explicitConfigDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-explicit-config-'))
-    process.env.GAKR_CONFIG_DIR = envConfigDir
+  // xAI OAuth profile (provider='xai', no API key) must persist the
+  // startup file as profile='xai' with XAI_CREDENTIAL_SOURCE='oauth' so
+  // (a) startup validation accepts it without XAI_API_KEY, and (b)
+  // clearPersistedXaiOAuthProfile() can find and remove it on logout.
+  // Regression: previously written as profile='openai' with no marker,
+  // leaving a stale startup file that hit the missing-cred warning on
+  // every non-interactive launch after logout.
+  test('persists xAI OAuth profile with marker so logout cleanup can clear it', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-'))
+    const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-config-'))
+    process.chdir(tempDir)
+    process.env.GAKR_CONFIG_DIR = configDir
 
     try {
       const { setActiveProviderProfile } =
         await importFreshProviderProfileModules()
-      const openaiProfile = buildProfile({
-        id: 'openai_prof',
-        name: 'OpenAI Provider',
-        provider: 'openai',
-        baseUrl: 'https://api.openai.com/v1',
-        model: 'gpt-4o',
+      const { clearPersistedXaiOAuthProfile, isPersistedXaiOAuthProfile } =
+        await import('./providerProfile.js')
+
+      const xaiOAuthProfile = buildProfile({
+        id: 'xai_oauth_prof',
+        name: 'xAI OAuth',
+        provider: 'xai',
+        baseUrl: 'https://api.x.ai/v1',
+        model: 'grok-4.3',
+        apiKey: '',
       })
 
       saveMockGlobalConfig(current => ({
         ...current,
-        providerProfiles: [openaiProfile],
+        providerProfiles: [xaiOAuthProfile],
       }))
 
-      const result = setActiveProviderProfile('openai_prof', {
-        configDir: explicitConfigDir,
-      })
-      const persisted = JSON.parse(
-        readFileSync(join(explicitConfigDir, '.gakrcli-profile.json'), 'utf8'),
-      )
+      const result = setActiveProviderProfile('xai_oauth_prof', { configDir })
+      const profilePath = join(configDir, '.gakrcli-profile.json')
+      const persisted = JSON.parse(readFileSync(profilePath, 'utf8'))
 
-      expect(result?.id).toBe('openai_prof')
-      expect(existsSync(join(envConfigDir, '.gakrcli-profile.json'))).toBe(false)
-      expect(persisted.profile).toBe('openai')
-      expect(persisted.env).toEqual({
-        OPENAI_BASE_URL: 'https://api.openai.com/v1',
-        OPENAI_MODEL: 'gpt-4o',
-      })
+      expect(result?.id).toBe('xai_oauth_prof')
+      expect(persisted.profile).toBe('xai')
+      expect(persisted.env.XAI_CREDENTIAL_SOURCE).toBe('oauth')
+      expect(persisted.env.OPENAI_BASE_URL).toBe('https://api.x.ai/v1')
+      expect(persisted.env.OPENAI_MODEL).toBe('grok-4.3')
+      // No leaked API key fields.
+      expect(persisted.env.OPENAI_API_KEY).toBeUndefined()
+      expect(persisted.env.XAI_API_KEY).toBeUndefined()
+
+      // Logout cleanup recognises and removes the marker-tagged file.
+      expect(isPersistedXaiOAuthProfile(persisted)).toBe(true)
+      const removed = clearPersistedXaiOAuthProfile({ configDir })
+      expect(removed).toBe(profilePath)
+      expect(existsSync(profilePath)).toBe(false)
     } finally {
-      rmSync(envConfigDir, { recursive: true, force: true })
-      rmSync(explicitConfigDir, { recursive: true, force: true })
+      process.chdir(originalCwd)
+      rmSync(tempDir, { recursive: true, force: true })
+      rmSync(configDir, { recursive: true, force: true })
     }
   })
 
@@ -1455,7 +1639,9 @@ describe('setActiveProviderProfile', () => {
         providerProfiles: [ollamaProfile],
       }))
 
-      const result = setActiveProviderProfile('ollama_prof')
+      const result = setActiveProviderProfile('ollama_prof', {
+        configDir,
+      })
       const persisted = JSON.parse(
         readFileSync(join(configDir, '.gakrcli-profile.json'), 'utf8'),
       )
@@ -1498,7 +1684,9 @@ describe('setActiveProviderProfile', () => {
         providerProfiles: [deepSeekProfile],
       }))
 
-      const result = setActiveProviderProfile('deepseek_prof')
+      const result = setActiveProviderProfile('deepseek_prof', {
+        configDir,
+      })
       const persisted = JSON.parse(
         readFileSync(join(configDir, '.gakrcli-profile.json'), 'utf8'),
       )
@@ -1541,7 +1729,9 @@ describe('setActiveProviderProfile', () => {
         providerProfiles: [deepSeekProfile],
       }))
 
-      const result = setActiveProviderProfile('deepseek_vendor_prof')
+      const result = setActiveProviderProfile('deepseek_vendor_prof', {
+        configDir,
+      })
       const persisted = JSON.parse(
         readFileSync(join(configDir, '.gakrcli-profile.json'), 'utf8'),
       )
@@ -1553,6 +1743,183 @@ describe('setActiveProviderProfile', () => {
         OPENAI_BASE_URL: 'https://api.deepseek.com/v1',
         OPENAI_MODEL: 'deepseek-chat',
         OPENAI_API_KEY: 'sk-deepseek-live',
+      })
+    } finally {
+      process.chdir(originalCwd)
+      rmSync(tempDir, { recursive: true, force: true })
+      rmSync(configDir, { recursive: true, force: true })
+    }
+  })
+
+  test('persists the Atlas key for generic openai profiles targeting Atlas Cloud', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-'))
+    const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-config-'))
+    process.chdir(tempDir)
+    process.env.GAKR_CONFIG_DIR = configDir
+
+    try {
+      const { setActiveProviderProfile } =
+        await importFreshProviderProfileModules()
+      const genericAtlasProfile = buildProfile({
+        id: 'generic_atlas_prof',
+        name: 'Atlas via custom OpenAI',
+        baseUrl: 'https://api.atlascloud.ai/v1',
+        model: 'deepseek-ai/deepseek-v4-pro',
+        apiKey: 'atlas-generic-key',
+      })
+
+      saveMockGlobalConfig(current => ({
+        ...current,
+        providerProfiles: [genericAtlasProfile],
+      }))
+
+      const result = setActiveProviderProfile('generic_atlas_prof', {
+        configDir,
+      })
+      const persisted = JSON.parse(
+        readFileSync(join(configDir, '.gakrcli-profile.json'), 'utf8'),
+      )
+
+      expect(result?.id).toBe('generic_atlas_prof')
+      expect(persisted.profile).toBe('openai')
+      expect(persisted.env.OPENAI_BASE_URL).toBe('https://api.atlascloud.ai/v1')
+      expect(persisted.env.OPENAI_API_KEY).toBe('atlas-generic-key')
+      expect(persisted.env.ATLAS_CLOUD_API_KEY).toBe('atlas-generic-key')
+    } finally {
+      process.chdir(originalCwd)
+      rmSync(tempDir, { recursive: true, force: true })
+      rmSync(configDir, { recursive: true, force: true })
+    }
+  })
+
+  test('persists Venice profiles using a legacy-compatible openai startup profile', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-'))
+    const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-config-'))
+    process.chdir(tempDir)
+    process.env.GAKR_CONFIG_DIR = configDir
+
+    try {
+      const { setActiveProviderProfile } =
+        await importFreshProviderProfileModules()
+      const veniceProfile = buildVeniceProfile({
+        id: 'venice_prof',
+        model: 'venice-uncensored, venice-coding',
+      })
+
+      saveMockGlobalConfig(current => ({
+        ...current,
+        providerProfiles: [veniceProfile],
+      }))
+
+      const result = setActiveProviderProfile('venice_prof', {
+        configDir,
+      })
+      const persisted = JSON.parse(
+        readFileSync(join(configDir, '.gakrcli-profile.json'), 'utf8'),
+      )
+
+      expect(result?.id).toBe('venice_prof')
+      expect(existsSync(join(tempDir, '.gakrcli-profile.json'))).toBe(false)
+      expect(persisted.profile).toBe('openai')
+      expect(persisted.env).toEqual({
+        OPENAI_BASE_URL: 'https://api.venice.ai/api/v1',
+        OPENAI_MODEL: 'venice-uncensored',
+        OPENAI_API_KEY: 'venice-test-key',
+        VENICE_API_KEY: 'venice-test-key',
+      })
+    } finally {
+      process.chdir(originalCwd)
+      rmSync(tempDir, { recursive: true, force: true })
+      rmSync(configDir, { recursive: true, force: true })
+    }
+  })
+
+  test('persists Fireworks AI profiles using a legacy-compatible openai startup profile', async () => {
+    const tempDir = mkdtempSync(
+      join(tmpdir(), 'gakrcli-provider-'),
+    )
+    const configDir = mkdtempSync(
+      join(tmpdir(), 'gakrcli-provider-config-'),
+    )
+    process.chdir(tempDir)
+    process.env.GAKR_CONFIG_DIR = configDir
+
+    try {
+      const { setActiveProviderProfile } =
+        await importFreshProviderProfileModules()
+      const fireworksProfile = buildFireworksProfile({
+        id: 'fireworks_prof',
+        model: 'accounts/fireworks/models/deepseek-v3, accounts/fireworks/models/llama-v3p1-70b-instruct',
+      })
+
+      saveMockGlobalConfig(current => ({
+        ...current,
+        providerProfiles: [fireworksProfile],
+      }))
+
+      const result = setActiveProviderProfile('fireworks_prof', {
+        configDir,
+      })
+      const persisted = JSON.parse(
+        readFileSync(
+          join(configDir, '.gakrcli-profile.json'),
+          'utf8',
+        ),
+      )
+
+      expect(result?.id).toBe('fireworks_prof')
+      expect(
+        existsSync(join(tempDir, '.gakrcli-profile.json')),
+      ).toBe(false)
+      expect(persisted.profile).toBe('openai')
+      expect(persisted.env).toEqual({
+        OPENAI_BASE_URL: 'https://api.fireworks.ai/inference/v1',
+        OPENAI_MODEL: 'accounts/fireworks/models/deepseek-v3',
+        OPENAI_API_KEY: 'fireworks-test-key',
+        FIREWORKS_API_KEY: 'fireworks-test-key',
+      })
+    } finally {
+      process.chdir(originalCwd)
+      rmSync(tempDir, { recursive: true, force: true })
+      rmSync(configDir, { recursive: true, force: true })
+    }
+  })
+
+  test('persists Xiaomi MiMo profiles using a legacy-compatible openai startup profile', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-'))
+    const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-config-'))
+    process.chdir(tempDir)
+    process.env.GAKR_CONFIG_DIR = configDir
+
+    try {
+      const { setActiveProviderProfile } =
+        await importFreshProviderProfileModules()
+      const mimoProfile = buildXiaomiMimoProfile({
+        baseUrl: 'https://api.mimo-v2.com/v1',
+        id: 'mimo_prof',
+        model: 'mimo-v2.5-pro, mimo-v2-flash',
+      })
+
+      saveMockGlobalConfig(current => ({
+        ...current,
+        providerProfiles: [mimoProfile],
+      }))
+
+      const result = setActiveProviderProfile('mimo_prof', {
+        configDir,
+      })
+      const persisted = JSON.parse(
+        readFileSync(join(configDir, '.gakrcli-profile.json'), 'utf8'),
+      )
+
+      expect(result?.id).toBe('mimo_prof')
+      expect(existsSync(join(tempDir, '.gakrcli-profile.json'))).toBe(false)
+      expect(persisted.profile).toBe('openai')
+      expect(persisted.env).toEqual({
+        OPENAI_BASE_URL: 'https://api.xiaomimimo.com/v1',
+        OPENAI_MODEL: 'mimo-v2.5-pro',
+        OPENAI_API_KEY: 'mimo-test-key',
+        MIMO_API_KEY: 'mimo-test-key',
       })
     } finally {
       process.chdir(originalCwd)
@@ -1583,7 +1950,9 @@ describe('setActiveProviderProfile', () => {
         providerProfiles: [bedrockProfile],
       }))
 
-      const result = setActiveProviderProfile('bedrock_prof')
+      const result = setActiveProviderProfile('bedrock_prof', {
+        configDir,
+      })
       const persisted = JSON.parse(
         readFileSync(join(configDir, '.gakrcli-profile.json'), 'utf8'),
       )
@@ -1595,226 +1964,6 @@ describe('setActiveProviderProfile', () => {
         ANTHROPIC_MODEL: 'claude-sonnet-4-6',
         ANTHROPIC_BEDROCK_BASE_URL: 'https://bedrock-proxy.example',
       })
-    } finally {
-      process.chdir(originalCwd)
-      rmSync(tempDir, { recursive: true, force: true })
-      rmSync(configDir, { recursive: true, force: true })
-    }
-  })
-
-  test('persists nvidia nim profiles with both openai and nvidia credential env vars', async () => {
-    const tempDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-'))
-    const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-config-'))
-    process.chdir(tempDir)
-    process.env.GAKR_CONFIG_DIR = configDir
-
-    try {
-      const { setActiveProviderProfile } =
-        await importFreshProviderProfileModules()
-      const nvidiaProfile = buildProfile({
-        id: 'nvidia_prof',
-        name: 'NVIDIA NIM',
-        provider: 'nvidia-nim',
-        baseUrl: 'https://integrate.api.nvidia.com/v1',
-        model: 'nvidia/llama-3.1-nemotron-70b-instruct',
-        apiKey: 'nvapi-live',
-      })
-
-      saveMockGlobalConfig(current => ({
-        ...current,
-        providerProfiles: [nvidiaProfile],
-      }))
-
-      const result = setActiveProviderProfile('nvidia_prof')
-      const persisted = JSON.parse(
-        readFileSync(join(configDir, '.gakrcli-profile.json'), 'utf8'),
-      )
-
-      expect(result?.id).toBe('nvidia_prof')
-      expect(persisted.profile).toBe('nvidia-nim')
-      expect(persisted.env).toEqual({
-        OPENAI_BASE_URL: 'https://integrate.api.nvidia.com/v1',
-        OPENAI_MODEL: 'nvidia/llama-3.1-nemotron-70b-instruct',
-        OPENAI_API_KEY: 'nvapi-live',
-        NVIDIA_API_KEY: 'nvapi-live',
-        NVIDIA_NIM: '1',
-      })
-    } finally {
-      process.chdir(originalCwd)
-      rmSync(tempDir, { recursive: true, force: true })
-      rmSync(configDir, { recursive: true, force: true })
-    }
-  })
-
-  test('persists Venice profiles using a legacy-compatible openai startup profile', async () => {
-    const tempDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-'))
-    const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-config-'))
-    process.chdir(tempDir)
-    process.env.GAKR_CONFIG_DIR = configDir
-
-    try {
-      const { setActiveProviderProfile } =
-        await importFreshProviderProfileModules()
-      const veniceProfile = buildVeniceProfile({
-        id: 'venice_prof',
-        model: 'venice-uncensored, venice-coding',
-      })
-
-      saveMockGlobalConfig(current => ({
-        ...current,
-        providerProfiles: [veniceProfile],
-      }))
-
-      const result = setActiveProviderProfile('venice_prof')
-      const persisted = JSON.parse(
-        readFileSync(join(configDir, '.gakrcli-profile.json'), 'utf8'),
-      )
-
-      expect(result?.id).toBe('venice_prof')
-      expect(persisted.profile).toBe('openai')
-      expect(persisted.env).toEqual({
-        OPENAI_BASE_URL: 'https://api.venice.ai/api/v1',
-        OPENAI_MODEL: 'venice-uncensored',
-        OPENAI_API_KEY: 'venice-test-key',
-        VENICE_API_KEY: 'venice-test-key',
-      })
-    } finally {
-      process.chdir(originalCwd)
-      rmSync(tempDir, { recursive: true, force: true })
-      rmSync(configDir, { recursive: true, force: true })
-    }
-  })
-
-  test('persists Xiaomi MiMo profiles using a legacy-compatible openai startup profile', async () => {
-    const tempDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-'))
-    const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-config-'))
-    process.chdir(tempDir)
-    process.env.GAKR_CONFIG_DIR = configDir
-
-    try {
-      const { setActiveProviderProfile } =
-        await importFreshProviderProfileModules()
-      const mimoProfile = buildXiaomiMimoProfile({
-        baseUrl: 'https://api.mimo-v2.com/v1',
-        id: 'mimo_prof',
-        model: 'mimo-v2.5-pro, mimo-v2-flash',
-      })
-
-      saveMockGlobalConfig(current => ({
-        ...current,
-        providerProfiles: [mimoProfile],
-      }))
-
-      const result = setActiveProviderProfile('mimo_prof')
-      const persisted = JSON.parse(
-        readFileSync(join(configDir, '.gakrcli-profile.json'), 'utf8'),
-      )
-
-      expect(result?.id).toBe('mimo_prof')
-      expect(persisted.profile).toBe('openai')
-      expect(persisted.env).toEqual({
-        OPENAI_BASE_URL: 'https://api.xiaomimimo.com/v1',
-        OPENAI_MODEL: 'mimo-v2.5-pro',
-        OPENAI_API_KEY: 'mimo-test-key',
-        MIMO_API_KEY: 'mimo-test-key',
-      })
-    } finally {
-      process.chdir(originalCwd)
-      rmSync(tempDir, { recursive: true, force: true })
-      rmSync(configDir, { recursive: true, force: true })
-    }
-  })
-
-  test('ignores nvidia api key accidentally saved as auth header', async () => {
-    const tempDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-'))
-    const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-config-'))
-    process.chdir(tempDir)
-    process.env.GAKR_CONFIG_DIR = configDir
-
-    try {
-      const { setActiveProviderProfile } =
-        await importFreshProviderProfileModules()
-      const nvidiaProfile = buildProfile({
-        id: 'nvidia_prof',
-        name: 'NVIDIA NIM',
-        provider: 'nvidia-nim',
-        baseUrl: 'https://integrate.api.nvidia.com/v1',
-        model: 'nvidia/llama-3.1-nemotron-70b-instruct',
-        apiKey: 'nvapi-live',
-        authHeader: 'nvapi-live',
-      })
-
-      saveMockGlobalConfig(current => ({
-        ...current,
-        providerProfiles: [nvidiaProfile],
-      }))
-
-      const result = setActiveProviderProfile('nvidia_prof')
-      const persisted = JSON.parse(
-        readFileSync(join(configDir, '.gakrcli-profile.json'), 'utf8'),
-      )
-
-      expect(result?.authHeader).toBeUndefined()
-      expect(process.env.OPENAI_AUTH_HEADER).toBeUndefined()
-      expect(persisted.env.OPENAI_AUTH_HEADER).toBeUndefined()
-      expect(persisted.env.OPENAI_API_KEY).toBe('nvapi-live')
-      expect(persisted.env.NVIDIA_API_KEY).toBe('nvapi-live')
-    } finally {
-      process.chdir(originalCwd)
-      rmSync(tempDir, { recursive: true, force: true })
-      rmSync(configDir, { recursive: true, force: true })
-    }
-  })
-
-  test('persists codex oauth profiles over a stale nvidia startup profile', async () => {
-    const tempDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-'))
-    const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-config-'))
-    process.chdir(tempDir)
-    process.env.GAKR_CONFIG_DIR = configDir
-
-    try {
-      const { setActiveProviderProfile } =
-        await importFreshProviderProfileModules()
-      const codexProfile = buildProfile({
-        id: 'codex_prof',
-        name: 'Codex OAuth',
-        provider: 'openai',
-        baseUrl: 'https://chatgpt.com/backend-api/codex',
-        model: 'codexplan',
-      })
-
-      saveMockGlobalConfig(current => ({
-        ...current,
-        providerProfiles: [codexProfile],
-      }))
-
-      writeFileSync(
-        join(configDir, '.gakrcli-profile.json'),
-        JSON.stringify({
-          profile: 'nvidia-nim',
-          env: {
-            OPENAI_BASE_URL: 'https://integrate.api.nvidia.com/v1',
-            OPENAI_MODEL: 'stepfun-ai/step-3.5-flash',
-            NVIDIA_NIM: '1',
-          },
-          createdAt: '2026-05-13T00:00:00.000Z',
-        }),
-        'utf8',
-      )
-
-      const result = setActiveProviderProfile('codex_prof')
-      const persisted = JSON.parse(
-        readFileSync(join(configDir, '.gakrcli-profile.json'), 'utf8'),
-      )
-
-      expect(result?.id).toBe('codex_prof')
-      expect(persisted.profile).toBe('codex')
-      expect(persisted.env).toEqual({
-        OPENAI_BASE_URL: 'https://chatgpt.com/backend-api/codex',
-        OPENAI_MODEL: 'codexplan',
-        CODEX_CREDENTIAL_SOURCE: 'oauth',
-      })
-      expect(persisted.env.NVIDIA_NIM).toBeUndefined()
     } finally {
       process.chdir(originalCwd)
       rmSync(tempDir, { recursive: true, force: true })
@@ -1845,7 +1994,9 @@ describe('setActiveProviderProfile', () => {
         providerProfiles: [anthropicProfile],
       }))
 
-      const result = setActiveProviderProfile('anthro_persisted_prof')
+      const result = setActiveProviderProfile('anthro_persisted_prof', {
+        configDir,
+      })
       const persisted = JSON.parse(
         readFileSync(join(configDir, '.gakrcli-profile.json'), 'utf8'),
       )
@@ -1881,7 +2032,9 @@ describe('setActiveProviderProfile', () => {
       providerProfiles: [anthropicProfile],
     }))
 
-    const result = setActiveProviderProfile('anthro_prof')
+    const result = setActiveProviderProfile('anthro_prof', {
+      configDir: testConfigDir ?? undefined,
+    })
 
     expect(result?.id).toBe('anthro_prof')
     expect(process.env.ANTHROPIC_MODEL).toBe('claude-sonnet-4-6')
@@ -1919,12 +2072,16 @@ describe('setActiveProviderProfile', () => {
     }))
 
     // First activate the openai profile
-    setActiveProviderProfile('openai_prof')
+    setActiveProviderProfile('openai_prof', {
+      configDir: testConfigDir ?? undefined,
+    })
     expect(process.env.OPENAI_MODEL).toBe('gpt-4o')
     expect(String(process.env.GAKR_CODE_USE_OPENAI)).toBe('1')
 
     // Now switch to the anthropic profile
-    const result = setActiveProviderProfile('anthro_prof')
+    const result = setActiveProviderProfile('anthro_prof', {
+      configDir: testConfigDir ?? undefined,
+    })
 
     expect(result?.id).toBe('anthro_prof')
     expect(process.env.ANTHROPIC_MODEL).toBe('claude-sonnet-4-6')
@@ -1964,12 +2121,16 @@ describe('setActiveProviderProfile', () => {
     }))
 
     // First activate the anthropic profile
-    setActiveProviderProfile('anthro_prof')
+    setActiveProviderProfile('anthro_prof', {
+      configDir: testConfigDir ?? undefined,
+    })
     expect(process.env.ANTHROPIC_MODEL).toBe('claude-sonnet-4-6')
     expect(process.env.ANTHROPIC_BASE_URL).toBe('https://api.anthropic.com')
 
     // Now switch to the openai profile
-    const result = setActiveProviderProfile('openai_prof')
+    const result = setActiveProviderProfile('openai_prof', {
+      configDir: testConfigDir ?? undefined,
+    })
 
     expect(result?.id).toBe('openai_prof')
     expect(String(process.env.GAKR_CODE_USE_OPENAI)).toBe('1')
@@ -1993,7 +2154,9 @@ describe('setActiveProviderProfile', () => {
       providerProfiles: [openaiProfile],
     }))
 
-    const result = setActiveProviderProfile('nonexistent_prof')
+    const result = setActiveProviderProfile('nonexistent_prof', {
+      configDir: testConfigDir ?? undefined,
+    })
 
     expect(result).toBeNull()
   })
@@ -2085,6 +2248,94 @@ describe('deleteProviderProfile', () => {
 })
 
 describe('getProfileModelOptions', () => {
+  test('getConfiguredProfileModelOptions ignores discovered cache entries', async () => {
+    const { getConfiguredProfileModelOptions } =
+      await importFreshProviderProfileModules()
+    const profile = buildProfile({
+      id: 'multi_provider',
+      name: 'Multi Provider',
+      model: 'glm-4.7, glm-4.7-flash',
+    })
+
+    mockConfigState = {
+      ...createMockConfigState(),
+      providerProfiles: [profile],
+      activeProviderProfileId: 'multi_provider',
+      openaiAdditionalModelOptionsCacheByProfile: {
+        multi_provider: [
+          {
+            value: 'glm-4.7-plus',
+            label: 'glm-4.7-plus',
+            description: 'Discovered from API',
+          },
+        ],
+      },
+    }
+
+    expect(getConfiguredProfileModelOptions(profile)).toEqual([
+      {
+        value: 'glm-4.7',
+        label: 'glm-4.7',
+        description: 'Provider: Multi Provider',
+      },
+      {
+        value: 'glm-4.7-flash',
+        label: 'glm-4.7-flash',
+        description: 'Provider: Multi Provider',
+      },
+    ])
+  })
+
+  test('route-scoped OpenAI cache ignores active profile cache entries', async () => {
+    process.env.GAKR_CODE_USE_OPENAI = '1'
+    process.env.OPENAI_BASE_URL = 'http://localhost:7777/v1'
+    process.env.OPENAI_MODEL = 'route-model'
+
+    const { getAdditionalModelOptionsCacheScope } = await import(
+      '../services/api/providerConfig.js'
+    )
+    const { getActiveOpenAIRouteModelOptionsCache } =
+      await importFreshProviderProfileModules()
+    const profile = buildProfile({
+      id: 'multi_provider',
+      name: 'Multi Provider',
+      baseUrl: 'http://localhost:7777/v1',
+      model: 'profile-model',
+    })
+
+    mockConfigState = {
+      ...createMockConfigState(),
+      providerProfiles: [profile],
+      activeProviderProfileId: 'multi_provider',
+      additionalModelOptionsCache: [
+        {
+          value: 'route-model',
+          label: 'Route Model',
+          description: 'Detected from route',
+        },
+      ],
+      additionalModelOptionsCacheScope:
+        getAdditionalModelOptionsCacheScope() ?? undefined,
+      openaiAdditionalModelOptionsCacheByProfile: {
+        multi_provider: [
+          {
+            value: 'profile-model',
+            label: 'profile-model',
+            description: 'Provider: Multi Provider',
+          },
+        ],
+      },
+    }
+
+    expect(getActiveOpenAIRouteModelOptionsCache()).toEqual([
+      {
+        value: 'route-model',
+        label: 'Route Model',
+        description: 'Detected from route',
+      },
+    ])
+  })
+
   test('generates options for multi-model profile', async () => {
     const { getProfileModelOptions } =
       await importFreshProviderProfileModules()
@@ -2208,7 +2459,9 @@ describe('setActiveProviderProfile model cache', () => {
       ],
     }
 
-    setActiveProviderProfile('multi_provider')
+    setActiveProviderProfile('multi_provider', {
+      configDir: testConfigDir ?? undefined,
+    })
 
     const cache = getActiveOpenAIModelOptionsCache()
     const cacheValues = cache.map((opt: { value: string }) => opt.value)
@@ -2249,7 +2502,9 @@ describe('setActiveProviderProfile model cache', () => {
       },
     }
 
-    setActiveProviderProfile('multi_provider')
+    setActiveProviderProfile('multi_provider', {
+      configDir: testConfigDir ?? undefined,
+    })
 
     expect(getActiveOpenAIModelOptionsCache()).toEqual([
       {
@@ -2353,320 +2608,6 @@ describe('setActiveProviderProfile model cache', () => {
     ])
   })
 })
-
-test('openai responses_compat profile sets OPENAI_API_FORMAT', async () => {
-    const { applyProviderProfileToProcessEnv } =
-      await importFreshProviderProfileModules()
-
-    applyProviderProfileToProcessEnv(
-      buildProfile({
-        provider: 'openai',
-        baseUrl: 'https://api.openai.com/v1',
-        model: 'gpt-5.4',
-        apiFormat: 'responses_compat',
-      }),
-    )
-
-    expect(process.env.OPENAI_MODEL).toBe('gpt-5.4')
-    expect(process.env.OPENAI_API_FORMAT).toBe('responses_compat')
-    expect(String(process.env.GAKR_CODE_USE_OPENAI)).toBe('1')
-  })
-
-test('does not override explicit env-only MiniMax selection with saved profile', async () => {
-    const { applyActiveProviderProfileFromConfig } =
-      await importFreshProviderProfileModules()
-    process.env.MINIMAX_API_KEY = 'minimax-live-key'
-    process.env.ANTHROPIC_BASE_URL = 'https://api.minimax.io/anthropic'
-    process.env.ANTHROPIC_MODEL = 'MiniMax-M2.7'
-
-    const applied = applyActiveProviderProfileFromConfig({
-      providerProfiles: [
-        buildProfile({
-          id: 'saved_openai',
-          baseUrl: 'https://api.openai.com/v1',
-          model: 'gpt-4o',
-        }),
-      ],
-      activeProviderProfileId: 'saved_openai',
-    } as any)
-
-    expect(applied).toBeUndefined()
-    expect(process.env.MINIMAX_API_KEY).toBe('minimax-live-key')
-    expect(process.env.ANTHROPIC_BASE_URL).toBe(
-      'https://api.minimax.io/anthropic',
-    )
-    expect(process.env.ANTHROPIC_MODEL).toBe('MiniMax-M2.7')
-    expect(process.env.GAKR_CODE_USE_OPENAI).toBeUndefined()
-    expect(process.env.OPENAI_BASE_URL).toBeUndefined()
-  })
-
-test('returns the active profile unchanged for a single-model profile', async () => {
-    const {
-      getProviderProfiles,
-      persistActiveProviderProfileModel,
-    } = await importFreshProviderProfileModules()
-    const activeProfile = buildProfile({
-      id: 'saved_openai',
-      baseUrl: 'http://192.168.33.108:11434/v1',
-      model: 'kimi-k2.5:cloud',
-    })
-
-    saveMockGlobalConfig(current => ({
-      ...current,
-      providerProfiles: [activeProfile],
-      activeProviderProfileId: activeProfile.id,
-    }))
-
-    const updated = persistActiveProviderProfileModel('minimax-m2.5:cloud')
-
-    expect(updated?.id).toBe(activeProfile.id)
-    expect(updated?.model).toBe('kimi-k2.5:cloud')
-    const saved = getProviderProfiles().find(
-      (profile: ProviderProfile) => profile.id === activeProfile.id,
-    )
-    expect(saved?.model).toBe('kimi-k2.5:cloud')
-  })
-
-test('does not mutate multi-model mistral profile when chosen model is out of list', async () => {
-    // Regression for #1360: the picker must never silently rewrite a
-    // provider's configured model list. The active model is a session-level
-    // choice handled by mainLoopModelOverride; the profile's model list
-    // only changes via an explicit provider edit. An earlier
-    // implementation prepended the chosen model to the list, which
-    // contradicted the documented contract and grew the list unboundedly
-    // on rotation.
-    const {
-      applyProviderProfileToProcessEnv,
-      getProviderProfiles,
-      persistActiveProviderProfileModel,
-    } = await importFreshProviderProfileModules()
-    const activeProfile = buildMistralProfile({
-      id: 'saved_mistral',
-      baseUrl: 'https://api.mistral.ai/v1',
-      model: 'devstral-latest; mistral-small-latest',
-    })
-
-    saveMockGlobalConfig(current => ({
-      ...current,
-      providerProfiles: [activeProfile],
-      activeProviderProfileId: activeProfile.id,
-    }))
-    applyProviderProfileToProcessEnv(activeProfile)
-
-    const updated = persistActiveProviderProfileModel('mistral-large-latest')
-
-    expect(updated?.id).toBe(activeProfile.id)
-    // The configured list is preserved verbatim regardless of the chosen
-    // model being in or out of the list.
-    expect(updated?.model).toBe('devstral-latest; mistral-small-latest')
-    expect(process.env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID).toBe(
-      activeProfile.id,
-    )
-
-    const saved = getProviderProfiles().find(
-      (profile: ProviderProfile) => profile.id === activeProfile.id,
-    )
-    expect(saved?.model).toBe('devstral-latest; mistral-small-latest')
-  })
-
-test('preserves comma-separated multi-model list when chosen model is already a member', async () => {
-    // Switching between models already in the list is a session-level
-    // choice. The list itself must be preserved exactly as configured.
-    const {
-      getProviderProfiles,
-      persistActiveProviderProfileModel,
-    } = await importFreshProviderProfileModules()
-    const activeProfile = buildMistralProfile({
-      id: 'saved_mistral',
-      baseUrl: 'https://api.mistral.ai/v1',
-      model: 'devstral-latest, mistral-small-latest, mistral-large-latest',
-    })
-
-    saveMockGlobalConfig(current => ({
-      ...current,
-      providerProfiles: [activeProfile],
-      activeProviderProfileId: activeProfile.id,
-    }))
-
-    const updated = persistActiveProviderProfileModel('mistral-small-latest')
-
-    expect(updated?.model).toBe(
-      'devstral-latest, mistral-small-latest, mistral-large-latest',
-    )
-    const saved = getProviderProfiles().find(
-      (profile: ProviderProfile) => profile.id === activeProfile.id,
-    )
-    expect(saved?.model).toBe(
-      'devstral-latest, mistral-small-latest, mistral-large-latest',
-    )
-  })
-
-test('minimax preset defaults to MiniMax M3', async () => {
-    const { getProviderPresetDefaults } = await importFreshProviderProfileModules()
-
-    const defaults = getProviderPresetDefaults('minimax')
-
-    expect(defaults.provider).toBe('minimax')
-    expect(defaults.name).toBe('MiniMax')
-    expect(defaults.baseUrl).toBe('https://api.minimax.io/anthropic')
-    expect(defaults.model).toBe('MiniMax-M3')
-    expect(defaults.requiresApiKey).toBe(true)
-  })
-
-test('xai preset ignores stale generic OpenAI model when creating defaults', async () => {
-    const { getProviderPresetDefaults } = await importFreshProviderProfileModules()
-    process.env.OPENAI_MODEL = 'gpt-5.4'
-    process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1'
-    process.env.XAI_API_KEY = 'xai-live-key'
-
-    const defaults = getProviderPresetDefaults('xai')
-
-    expect(defaults.provider).toBe('xai')
-    expect(defaults.name).toBe('xAI')
-    expect(defaults.baseUrl).toBe('https://api.x.ai/v1')
-    expect(defaults.model).toBe('grok-4.3')
-    expect(defaults.apiKey).toBe('xai-live-key')
-    expect(defaults.requiresApiKey).toBe(true)
-  })
-
-test('persists xAI OAuth profile with marker so logout cleanup can clear it', async () => {
-    const tempDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-'))
-    const configDir = mkdtempSync(join(tmpdir(), 'gakrcli-provider-config-'))
-    process.chdir(tempDir)
-    process.env.GAKR_CONFIG_DIR = configDir
-
-    try {
-      const { setActiveProviderProfile } =
-        await importFreshProviderProfileModules()
-      const { clearPersistedXaiOAuthProfile, isPersistedXaiOAuthProfile } =
-        await import('./providerProfile.js')
-
-      const xaiOAuthProfile = buildProfile({
-        id: 'xai_oauth_prof',
-        name: 'xAI OAuth',
-        provider: 'xai',
-        baseUrl: 'https://api.x.ai/v1',
-        model: 'grok-4.3',
-        apiKey: '',
-      })
-
-      saveMockGlobalConfig(current => ({
-        ...current,
-        providerProfiles: [xaiOAuthProfile],
-      }))
-
-      const result = setActiveProviderProfile('xai_oauth_prof', { configDir })
-      const profilePath = join(configDir, '.gakrcli-profile.json')
-      const persisted = JSON.parse(readFileSync(profilePath, 'utf8'))
-
-      expect(result?.id).toBe('xai_oauth_prof')
-      expect(persisted.profile).toBe('xai')
-      expect(persisted.env.XAI_CREDENTIAL_SOURCE).toBe('oauth')
-      expect(persisted.env.OPENAI_BASE_URL).toBe('https://api.x.ai/v1')
-      expect(persisted.env.OPENAI_MODEL).toBe('grok-4.3')
-      // No leaked API key fields.
-      expect(persisted.env.OPENAI_API_KEY).toBeUndefined()
-      expect(persisted.env.XAI_API_KEY).toBeUndefined()
-
-      // Logout cleanup recognises and removes the marker-tagged file.
-      expect(isPersistedXaiOAuthProfile(persisted)).toBe(true)
-      const removed = clearPersistedXaiOAuthProfile({ configDir })
-      expect(removed).toBe(profilePath)
-      expect(existsSync(profilePath)).toBe(false)
-    } finally {
-      process.chdir(originalCwd)
-      rmSync(tempDir, { recursive: true, force: true })
-      rmSync(configDir, { recursive: true, force: true })
-    }
-  })
-
-test('getConfiguredProfileModelOptions ignores discovered cache entries', async () => {
-    const { getConfiguredProfileModelOptions } =
-      await importFreshProviderProfileModules()
-    const profile = buildProfile({
-      id: 'multi_provider',
-      name: 'Multi Provider',
-      model: 'glm-4.7, glm-4.7-flash',
-    })
-
-    mockConfigState = {
-      ...createMockConfigState(),
-      providerProfiles: [profile],
-      activeProviderProfileId: 'multi_provider',
-      openaiAdditionalModelOptionsCacheByProfile: {
-        multi_provider: [
-          {
-            value: 'glm-4.7-plus',
-            label: 'glm-4.7-plus',
-            description: 'Discovered from API',
-          },
-        ],
-      },
-    }
-
-    expect(getConfiguredProfileModelOptions(profile)).toEqual([
-      {
-        value: 'glm-4.7',
-        label: 'glm-4.7',
-        description: 'Provider: Multi Provider',
-      },
-      {
-        value: 'glm-4.7-flash',
-        label: 'glm-4.7-flash',
-        description: 'Provider: Multi Provider',
-      },
-    ])
-  })
-
-test('route-scoped OpenAI cache ignores active profile cache entries', async () => {
-    process.env.GAKR_CODE_USE_OPENAI = '1'
-    process.env.OPENAI_BASE_URL = 'http://localhost:7777/v1'
-    process.env.OPENAI_MODEL = 'route-model'
-
-    const { getAdditionalModelOptionsCacheScope } = await import(
-      '../services/api/providerConfig.js'
-    )
-    const { getActiveOpenAIRouteModelOptionsCache } =
-      await importFreshProviderProfileModules()
-    const profile = buildProfile({
-      id: 'multi_provider',
-      name: 'Multi Provider',
-      baseUrl: 'http://localhost:7777/v1',
-      model: 'profile-model',
-    })
-
-    mockConfigState = {
-      ...createMockConfigState(),
-      providerProfiles: [profile],
-      activeProviderProfileId: 'multi_provider',
-      additionalModelOptionsCache: [
-        {
-          value: 'route-model',
-          label: 'Route Model',
-          description: 'Detected from route',
-        },
-      ],
-      additionalModelOptionsCacheScope:
-        getAdditionalModelOptionsCacheScope() ?? undefined,
-      openaiAdditionalModelOptionsCacheByProfile: {
-        multi_provider: [
-          {
-            value: 'profile-model',
-            label: 'profile-model',
-            description: 'Provider: Multi Provider',
-          },
-        ],
-      },
-    }
-
-    expect(getActiveOpenAIRouteModelOptionsCache()).toEqual([
-      {
-        value: 'route-model',
-        label: 'Route Model',
-        description: 'Detected from route',
-      },
-    ])
-  })
 
 test('DEFAULT_MISTRAL_MODEL matches the mistral gateway defaultModel', async () => {
   const { DEFAULT_MISTRAL_MODEL } = await import('./providerProfile.js')

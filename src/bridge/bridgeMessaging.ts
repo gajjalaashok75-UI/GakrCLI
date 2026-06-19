@@ -142,32 +142,35 @@ export function handleIngressMessage(
 
     // control_response is not an SDKMessage — check before the type guard
     if (isSDKControlResponse(parsed)) {
+      const controlResponse = parsed as SDKControlResponse
       logForDebugging('[bridge:repl] Ingress message type=control_response')
-      onPermissionResponse?.(parsed)
+      onPermissionResponse?.(controlResponse)
       return
     }
 
     // control_request from the server (initialize, set_model, can_use_tool).
     // Must respond promptly or the server kills the WS (~10-14s timeout).
     if (isSDKControlRequest(parsed)) {
+      const controlRequest = parsed as SDKControlRequest
       logForDebugging(
-        `[bridge:repl] Inbound control_request subtype=${parsed.request.subtype}`,
+        `[bridge:repl] Inbound control_request subtype=${controlRequest.request.subtype}`,
       )
-      onControlRequest?.(parsed)
+      onControlRequest?.(controlRequest)
       return
     }
 
     if (!isSDKMessage(parsed)) return
+    const sdkMessage = parsed as SDKMessage
 
     // Check for UUID to detect echoes of our own messages
     const uuid =
-      'uuid' in parsed && typeof parsed.uuid === 'string'
-        ? parsed.uuid
+      'uuid' in sdkMessage && typeof sdkMessage.uuid === 'string'
+        ? sdkMessage.uuid
         : undefined
 
     if (uuid && recentPostedUUIDs.has(uuid)) {
       logForDebugging(
-        `[bridge:repl] Ignoring echo: type=${parsed.type} uuid=${uuid}`,
+        `[bridge:repl] Ignoring echo: type=${sdkMessage.type} uuid=${uuid}`,
       )
       return
     }
@@ -179,25 +182,25 @@ export function handleIngressMessage(
     // receiving any frames, etc).
     if (uuid && recentInboundUUIDs.has(uuid)) {
       logForDebugging(
-        `[bridge:repl] Ignoring re-delivered inbound: type=${parsed.type} uuid=${uuid}`,
+        `[bridge:repl] Ignoring re-delivered inbound: type=${sdkMessage.type} uuid=${uuid}`,
       )
       return
     }
 
     logForDebugging(
-      `[bridge:repl] Ingress message type=${parsed.type}${uuid ? ` uuid=${uuid}` : ''}`,
+      `[bridge:repl] Ingress message type=${sdkMessage.type}${uuid ? ` uuid=${uuid}` : ''}`,
     )
 
-    if (parsed.type === 'user') {
+    if (sdkMessage.type === 'user') {
       if (uuid) recentInboundUUIDs.add(uuid)
       logEvent('tengu_bridge_message_received', {
         is_repl: true,
       })
       // Fire-and-forget — handler may be async (attachment resolution).
-      void onInboundMessage?.(parsed)
+      void onInboundMessage?.(sdkMessage)
     } else {
       logForDebugging(
-        `[bridge:repl] Ignoring non-user inbound message: type=${parsed.type}`,
+        `[bridge:repl] Ignoring non-user inbound message: type=${sdkMessage.type}`,
       )
     }
   } catch (err) {
@@ -216,7 +219,7 @@ export type ServerControlRequestHandlers = {
    * When true, all mutable requests (interrupt, set_model, set_permission_mode,
    * set_max_thinking_tokens) reply with an error instead of false-success.
    * initialize still replies success — the server kills the connection otherwise.
-   * Used by the outbound-only bridge mode and the SDK's /bridge subpath so gakr.ai sees a
+   * Used by the outbound-only bridge mode and the SDK's /bridge subpath so gakrcli.ai sees a
    * proper error instead of "action succeeded but nothing happened locally".
    */
   outboundOnly?: boolean
@@ -225,7 +228,10 @@ export type ServerControlRequestHandlers = {
   onSetMaxThinkingTokens?: (maxTokens: number | null) => void
   onSetPermissionMode?: (
     mode: PermissionMode,
-  ) => { ok: true } | { ok: false; error: string }
+  ) =>
+    | { ok: true }
+    | { ok: false; error: string }
+    | Promise<{ ok: true } | { ok: false; error: string }>
 }
 
 const OUTBOUND_ONLY_ERROR =
@@ -240,10 +246,10 @@ const OUTBOUND_ONLY_ERROR =
  * Previously a closure inside initBridgeCore's onWorkReceived; now takes
  * collaborators as params so both cores can use it.
  */
-export function handleServerControlRequest(
+export async function handleServerControlRequest(
   request: SDKControlRequest,
   handlers: ServerControlRequestHandlers,
-): void {
+): Promise<void> {
   const {
     transport,
     sessionId,
@@ -262,7 +268,7 @@ export function handleServerControlRequest(
 
   let response: SDKControlResponse
 
-  // Outbound-only: reply error for mutable requests so gakr.ai doesn't show
+  // Outbound-only: reply error for mutable requests so gakrcli.ai doesn't show
   // false success. initialize must still succeed (server kills the connection
   // if it doesn't — see comment above).
   if (outboundOnly && request.request.subtype !== 'initialize') {
@@ -333,7 +339,7 @@ export function handleServerControlRequest(
       // see daemonBridge.ts), return an error verdict rather than a silent
       // false-success: the mode is never actually applied in that context,
       // so success would lie to the client.
-      const verdict = onSetPermissionMode?.(request.request.mode) ?? {
+      const verdict = (await onSetPermissionMode?.(request.request.mode)) ?? {
         ok: false,
         error:
           'set_permission_mode is not supported in this context (onSetPermissionMode callback not registered)',

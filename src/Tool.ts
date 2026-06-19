@@ -154,6 +154,7 @@ export type CompactProgressEvent =
     }
   | { type: 'compact_start' }
   | { type: 'compact_end' }
+  | { type: 'compact_progress'; ratio: number }
 
 export type ToolUseContext = {
   options: {
@@ -249,6 +250,11 @@ export type ToolUseContext = {
   /** When true, canUseTool must always be called even when hooks auto-approve.
    *  Used by speculation for overlay file path rewriting. */
   requireCanUseTool?: boolean
+  /**
+   * Optional callback used by hook-chain fallback actions that launch
+   * AgentTool from hook runtime paths.
+   */
+  hookChainsCanUseTool?: CanUseToolFn
   messages: Message[]
   fileReadingLimits?: {
     maxTokens?: number
@@ -354,17 +360,14 @@ export type AnyObject = z.ZodType<{ [key: string]: unknown }>
 
 /**
  * Checks if a tool matches the given name (primary name or alias).
- * Matching is case-insensitive for better UX.
  */
 export function toolMatchesName(
-  tool: { name: string; aliases?: string[] } | null | undefined,
+  tool: { name: string; aliases?: string[] },
   name: string,
 ): boolean {
   if (!tool) return false
-  const normalizedName = name.toLowerCase()
-  const normalizedToolName = tool.name.toLowerCase()
-  const normalizedAliases = tool.aliases?.map(a => a.toLowerCase())
-  return normalizedToolName === normalizedName || (normalizedAliases?.includes(normalizedName) ?? false)
+  const lower = name.toLowerCase()
+  return tool.name.toLowerCase() === lower || (tool.aliases?.some(a => a.toLowerCase() === lower) ?? false)
 }
 
 /**

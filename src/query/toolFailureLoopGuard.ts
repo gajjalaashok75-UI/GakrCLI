@@ -163,7 +163,6 @@ export function updateToolFailureLoopGuard(params: {
       params.state.categoryCounts,
       failure.errorCategory,
     )
-
     if (signatureCount >= threshold) {
       return {
         tripped: true,

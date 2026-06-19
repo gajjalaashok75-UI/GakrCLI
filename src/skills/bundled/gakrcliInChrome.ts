@@ -1,7 +1,7 @@
 import { BROWSER_TOOLS } from '@ant/gakrcli-for-chrome-mcp'
 import { BASE_CHROME_PROMPT } from '../../utils/gakrcliInChrome/prompt.js'
-import { shouldAutoEnablegakrcliInChrome } from '../../utils/gakrcliInChrome/setup.js'
 import { registerBundledSkill } from '../bundledSkills.js'
+import { shouldEnableGakrCLIInChromeSkill } from './gakrcliInChromeAccess.js'
 
 const GAKR_IN_CHROME_MCP_TOOLS = BROWSER_TOOLS.map(
   tool => `mcp__gakrcli-in-chrome__${tool.name}`,
@@ -13,7 +13,7 @@ Now that this skill is invoked, you have access to Chrome browser automation too
 IMPORTANT: Start by calling mcp__gakrcli-in-chrome__tabs_context_mcp to get information about the user's current browser tabs.
 `
 
-export function registergakrcliInChromeSkill(): void {
+export function registerGakrCLIInChromeSkill(): void {
   registerBundledSkill({
     name: 'gakrcli-in-chrome',
     description:
@@ -22,7 +22,7 @@ export function registergakrcliInChromeSkill(): void {
       'When the user wants to interact with web pages, automate browser tasks, capture screenshots, read console logs, or perform any browser-based actions. Always invoke BEFORE attempting to use any mcp__gakrcli-in-chrome__* tools.',
     allowedTools: GAKR_IN_CHROME_MCP_TOOLS,
     userInvocable: true,
-    isEnabled: () => shouldAutoEnablegakrcliInChrome(),
+    isEnabled: () => shouldEnableGakrCLIInChromeSkill(),
     async getPromptForCommand(args) {
       let prompt = `${BASE_CHROME_PROMPT}\n${SKILL_ACTIVATION_MESSAGE}`
       if (args) {

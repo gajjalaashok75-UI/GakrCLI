@@ -203,12 +203,16 @@ export function jsonStringify(
  */
 export const jsonParse: typeof JSON.parse = (text, reviver) => {
   using _ = slowLogging`JSON.parse(${text})`
-  const normalizedText = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text
+  // Strip UTF-8 BOM if present — JSON.parse does not handle it
+  const cleanText =
+    typeof text === 'string' && text.charCodeAt(0) === 0xfeff
+      ? text.slice(1)
+      : text
   // V8 de-opts JSON.parse when a second argument is passed, even if undefined.
   // Branch explicitly so the common (no-reviver) path stays on the fast path.
   return typeof reviver === 'undefined'
-    ? JSON.parse(normalizedText)
-    : JSON.parse(normalizedText, reviver)
+    ? JSON.parse(cleanText)
+    : JSON.parse(cleanText, reviver)
 }
 
 /**

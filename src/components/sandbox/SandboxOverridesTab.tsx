@@ -175,7 +175,7 @@ function OverridesSelect(t0) {
   }
   let t13;
   if ($[22] === Symbol.for("react.memo_cache_sentinel")) {
-    t13 = <Box flexDirection="column" marginTop={1} gap={1}>{t11}{t12}<Text dimColor={true}>Learn more:{" "}<Link url="https://github.com/gakr-gakr/gakr/docs/en/sandboxing#configure-sandboxing">code.gakrcli.com/docs/en/sandboxing#configure-sandboxing</Link></Text></Box>;
+    t13 = <Box flexDirection="column" marginTop={1} gap={1}>{t11}{t12}<Text dimColor={true}>Learn more:{" "}<Link url="https://code.gakrcli.com/docs/en/sandboxing#configure-sandboxing">code.gakrcli.com/docs/en/sandboxing#configure-sandboxing</Link></Text></Box>;
     $[22] = t13;
   } else {
     t13 = $[22];

@@ -1,10 +1,12 @@
 /**
- * Open-build KAIROS gate.
+ * Assistant mode (KAIROS) entitlement gate.
  *
- * Private builds can replace this with entitlement-backed checks. In this
- * source mirror, enabling the KAIROS build flag means local assistant mode is
- * allowed whenever startup already requested it via settings or --assistant.
+ * The closed-source implementation checks a disk-cached GrowthBook gate
+ * (tengu_kairos) with a lazy fresh fetch. This open-source build ships an
+ * inert gate that always reports disabled.
  */
+
+/** Whether assistant mode is entitled for this user. Always true in open builds. */
 export async function isKairosEnabled(): Promise<boolean> {
   return true
 }

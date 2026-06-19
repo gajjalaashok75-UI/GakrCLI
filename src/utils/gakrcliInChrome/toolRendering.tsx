@@ -5,7 +5,7 @@ import { Link, Text } from '../../ink.js';
 import { renderToolResultMessage as renderDefaultMCPToolResultMessage } from '../../tools/MCPTool/UI.js';
 import type { MCPToolResult } from '../../utils/mcpValidation.js';
 import { truncateToWidth } from '../format.js';
-import { trackgakrcliInChromeTabId } from './common.js';
+import { trackGakrCLIInChromeTabId } from './common.js';
 export type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
 /**
@@ -17,7 +17,7 @@ const CHROME_EXTENSION_FOCUS_TAB_URL_BASE = 'https://clau.de/chrome/tab/';
 function renderChromeToolUseMessage(input: Record<string, unknown>, toolName: ChromeToolName, verbose: boolean): React.ReactNode {
   const tabId = input.tabId;
   if (typeof tabId === 'number') {
-    trackgakrcliInChromeTabId(tabId);
+    trackGakrCLIInChromeTabId(tabId);
   }
 
   // Build secondary info based on tool type and input
@@ -218,7 +218,7 @@ export function renderChromeToolResultMessage(output: MCPToolResult, toolName: C
  * Returns tool method overrides for GakrCLI in Chrome MCP tools. Use this to customize
  * rendering for chrome tools in a single spread operation.
  */
-export function getgakrcliInChromeMCPToolOverrides(toolName: string): {
+export function getGakrCLIInChromeMCPToolOverrides(toolName: string): {
   userFacingName: (input?: Record<string, unknown>) => string;
   renderToolUseMessage: (input: Record<string, unknown>, options: {
     verbose: boolean;

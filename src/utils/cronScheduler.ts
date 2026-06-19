@@ -183,7 +183,7 @@ export function createCronScheduler(
 
     // Only surface missed tasks on initial load. Chokidar-triggered
     // reloads leave overdue tasks to check() (which anchors from createdAt
-    // and fires immediately). This avoids a misleading "missed while Gakr
+    // and fires immediately). This avoids a misleading "missed while GakrCLI
     // was not running" prompt for tasks that became overdue mid-session.
     //
     // Recurring tasks are NOT surfaced or deleted — check() handles them
@@ -405,7 +405,7 @@ export function createCronScheduler(
 
     // Acquire the per-project scheduler lock. Only the owning session runs
     // check(). Other sessions probe periodically to take over if the owner
-    // dies. Prevents double-firing when multiple gakrclis share a cwd.
+    // dies. Prevents double-firing when multiple GakrCLIs share a cwd.
     isOwner = await tryAcquireSchedulerLock(lockOpts).catch(() => false)
     if (stopped) {
       if (isOwner) {

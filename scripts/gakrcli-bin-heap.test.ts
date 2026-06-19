@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, test } from 'bun:test'
 
-const BIN_PATH = join(import.meta.dir, '..', 'bin', 'gakrcli.js')
+const BIN_PATH = join(import.meta.dir, '..', 'bin', 'gakrcli')
 
 describe('gakrcli launcher heap guard', () => {
   test('raises the current Node heap before loading dist/cli.mjs', () => {

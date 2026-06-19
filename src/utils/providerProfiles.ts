@@ -4,7 +4,6 @@ import {
   isCodexBaseUrl,
   parseOpenAICompatibleApiFormat,
 } from '../services/api/providerConfig.js'
-import { readCodexCredentials } from './codexCredentials.js'
 import {
   getGlobalConfig,
   saveGlobalConfig,
@@ -26,16 +25,14 @@ import {
   buildVeniceProfileEnv,
   buildXaiOAuthProfileEnv,
   buildXiaomiMimoProfileEnv,
+  buildAtlasCloudProfileEnv,
   buildVertexProfileEnv,
   clearManagedProfileEnv,
-  sanitizeApiKey,
-  sanitizeProviderConfigValue,
   type ProfileFileLocation,
   type ProfileEnv,
   type ProviderProfile as ProviderProfileStartup,
 } from './providerProfile.js'
 import { refreshStartupDiscoveryForRoute } from '../integrations/discoveryService.js'
-import { resolveEnvOnlyProviderRouteId } from '../integrations/routeMetadata.js'
 import {
   getProviderPresetUiMetadata,
   normalizeXiaomiMimoBaseUrl,
@@ -47,8 +44,8 @@ import {
   type ResolvedProfileRoute,
   type ProviderPreset,
 } from '../integrations/index.js'
+import { isFireworksBaseUrl, isNearaiBaseUrl, resolveEnvOnlyProviderRouteId } from '../integrations/routeMetadata.js'
 import { logForDebugging } from './debug.js'
-import { isEnvTruthy } from './envUtils.js'
 import {
   sanitizeProfileCustomHeaders,
   serializeProfileCustomHeaders,
@@ -67,6 +64,7 @@ export type ProviderProfileInput = {
   authScheme?: ProviderProfile['authScheme']
   authHeaderValue?: ProviderProfile['authHeaderValue']
   customHeaders?: ProviderProfile['customHeaders']
+  maxContextLength?: ProviderProfile['maxContextLength']
 }
 
 export type ProviderPresetDefaults = Omit<ProviderProfileInput, 'provider'> & {
@@ -76,7 +74,6 @@ export type ProviderPresetDefaults = Omit<ProviderProfileInput, 'provider'> & {
 
 const PROFILE_ENV_APPLIED_FLAG = 'GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED'
 const PROFILE_ENV_APPLIED_ID = 'GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID'
-const DEFAULT_NVIDIA_NIM_MODEL = 'stepfun-ai/step-3.5-flash'
 
 type ProfileCompatibilityMode =
   | 'anthropic'
@@ -128,12 +125,12 @@ function trimOrUndefined(value: string | undefined): string | undefined {
 }
 
 function sanitizeAuthHeader(value: string | undefined): string | undefined {
-  const sanitized = sanitizeProviderConfigValue(value)
-  if (!sanitized) {
+  const trimmed = trimOrUndefined(value)
+  if (!trimmed) {
     return undefined
   }
-  return /^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/.test(sanitized)
-    ? sanitized
+  return /^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/.test(trimmed)
+    ? trimmed
     : undefined
 }
 
@@ -159,36 +156,12 @@ function sanitizeProfile(profile: ProviderProfile): ProviderProfile | null {
   const id = trimValue(profile.id)
   const name = trimValue(profile.name)
   const provider = trimValue(profile.provider)
-  const apiKey = sanitizeApiKey(profile.apiKey)
-  const authHeaderValue = sanitizeApiKey(profile.authHeaderValue)
-  const secretSource = {
-    OPENAI_API_KEY: apiKey,
-    OPENAI_AUTH_HEADER_VALUE: authHeaderValue,
-    CODEX_API_KEY: apiKey,
-    GEMINI_API_KEY: apiKey,
-    GOOGLE_API_KEY: apiKey,
-    MINIMAX_API_KEY: apiKey,
-    MISTRAL_API_KEY: apiKey,
-    NVIDIA_API_KEY: apiKey,
-    BNKR_API_KEY: apiKey,
-    XAI_API_KEY: apiKey,
-    VENICE_API_KEY: apiKey,
-    MIMO_API_KEY: apiKey,
-  }
-  const baseUrl = normalizeBaseUrl(
-    sanitizeProviderConfigValue(profile.baseUrl, secretSource) ?? '',
-  )
-  let model = trimValue(
-    sanitizeProviderConfigValue(profile.model, secretSource),
-  )
+  const baseUrl = normalizeBaseUrl(profile.baseUrl)
+  const model = trimValue(profile.model)
   const apiFormat = parseOpenAICompatibleApiFormat(profile.apiFormat)
-  const sanitizedAuthHeader = sanitizeAuthHeader(profile.authHeader)
-  const authHeader =
-    (apiKey && sanitizedAuthHeader === apiKey) ||
-    (authHeaderValue && sanitizedAuthHeader === authHeaderValue)
-      ? undefined
-      : sanitizedAuthHeader
+  const authHeader = sanitizeAuthHeader(profile.authHeader)
   const authScheme = sanitizeAuthScheme(profile.authScheme)
+  const authHeaderValue = trimOrUndefined(profile.authHeaderValue)
   const capabilityRouteId = resolveProfileCapabilityRouteId(provider, baseUrl)
   const supportsApiFormat = routeSupportsApiFormatSelection(capabilityRouteId)
   const supportsAuthHeaders = routeSupportsAuthHeaders(capabilityRouteId)
@@ -200,13 +173,21 @@ function sanitizeProfile(profile: ProviderProfile): ProviderProfile | null {
     return null
   }
 
+  const maxContextLength =
+    typeof profile.maxContextLength === 'number' &&
+    Number.isFinite(profile.maxContextLength) &&
+    profile.maxContextLength > 0 &&
+    Number.isInteger(profile.maxContextLength)
+      ? profile.maxContextLength
+      : undefined
+
   const sanitized: ProviderProfile = {
     id,
     name,
     provider,
     baseUrl,
     model,
-    apiKey,
+    apiKey: trimOrUndefined(profile.apiKey),
   }
   if (supportsApiFormat && apiFormat) {
     sanitized.apiFormat = apiFormat
@@ -220,6 +201,9 @@ function sanitizeProfile(profile: ProviderProfile): ProviderProfile | null {
   }
   if (customHeaders) {
     sanitized.customHeaders = customHeaders
+  }
+  if (maxContextLength !== undefined) {
+    sanitized.maxContextLength = maxContextLength
   }
   return sanitized
 }
@@ -260,6 +244,7 @@ function toProfile(
     authScheme: input.authScheme,
     authHeaderValue: input.authHeaderValue,
     customHeaders: input.customHeaders,
+    maxContextLength: input.maxContextLength,
   })
 }
 
@@ -322,6 +307,8 @@ export function getProviderPresetDefaults(
   preset: ProviderPreset,
 ): ProviderPresetDefaults {
   const metadata = getProviderPresetUiMetadata(preset)
+  // Keep preset-pinned endpoints/models even when generic OpenAI env values
+  // are present, but still read provider-specific credential env vars above.
   const routeDefaults =
     preset === 'custom'
       ? metadata
@@ -543,6 +530,12 @@ function isProcessEnvAlignedWithProfile(
     )
   }
 
+  const expectedContextWindows = profile.maxContextLength
+    ? JSON.stringify({
+        [getPrimaryModel(profile.model)]: profile.maxContextLength,
+      })
+    : undefined
+
   return (
     processEnv.GAKR_CODE_USE_OPENAI !== undefined &&
     processEnv.GAKR_CODE_USE_GEMINI === undefined &&
@@ -557,6 +550,10 @@ function isProcessEnvAlignedWithProfile(
     sameOptionalEnvValue(processEnv.OPENAI_AUTH_HEADER, profile.authHeader) &&
     sameOptionalEnvValue(processEnv.OPENAI_AUTH_SCHEME, profile.authScheme) &&
     sameOptionalEnvValue(processEnv.OPENAI_AUTH_HEADER_VALUE, profile.authHeaderValue) &&
+    sameOptionalEnvValue(
+      processEnv.GAKR_CODE_OPENAI_CONTEXT_WINDOWS,
+      expectedContextWindows,
+    ) &&
     (!includeApiKey ||
       sameOptionalEnvValue(processEnv.OPENAI_API_KEY, profile.apiKey)) &&
     (profile.baseUrl?.toLowerCase().includes('bankr')
@@ -575,6 +572,18 @@ function isProcessEnvAlignedWithProfile(
       profile.baseUrl?.toLowerCase().includes('api.mimo-v2.com')
       ? !includeApiKey ||
         sameOptionalEnvValue(processEnv.MIMO_API_KEY, profile.apiKey)
+      : true) &&
+    (profile.baseUrl?.toLowerCase().includes('atlascloud')
+      ? !includeApiKey ||
+        sameOptionalEnvValue(processEnv.ATLAS_CLOUD_API_KEY, profile.apiKey)
+      : true) &&
+    (isNearaiBaseUrl(profile.baseUrl)
+      ? !includeApiKey ||
+        sameOptionalEnvValue(processEnv.NEARAI_API_KEY, profile.apiKey)
+      : true) &&
+    (isFireworksBaseUrl(profile.baseUrl)
+      ? !includeApiKey ||
+        sameOptionalEnvValue(processEnv.FIREWORKS_API_KEY, profile.apiKey)
       : true)
   )
 }
@@ -710,9 +719,23 @@ export function applyProviderProfileToProcessEnv(profile: ProviderProfile): void
       if (route.routeId === 'xiaomi-mimo' || profile.baseUrl.toLowerCase().includes('api.xiaomimimo.com') || profile.baseUrl.toLowerCase().includes('api.mimo-v2.com')) {
         openAIProfileEnv.MIMO_API_KEY = profile.apiKey
       }
+      if (route.routeId === 'atlas-cloud' || profile.baseUrl.toLowerCase().includes('atlascloud')) {
+        openAIProfileEnv.ATLAS_CLOUD_API_KEY = profile.apiKey
+      }
+      if (route.routeId === 'nearai' || isNearaiBaseUrl(profile.baseUrl)) {
+        openAIProfileEnv.NEARAI_API_KEY = profile.apiKey
+      }
+      if (route.routeId === 'fireworks' || isFireworksBaseUrl(profile.baseUrl)) {
+        openAIProfileEnv.FIREWORKS_API_KEY = profile.apiKey
+      }
     }
     if (route.gatewayId === 'nvidia-nim') {
       openAIProfileEnv.NVIDIA_NIM = '1'
+    }
+    if (profile.maxContextLength) {
+      openAIProfileEnv.GAKR_CODE_OPENAI_CONTEXT_WINDOWS = JSON.stringify({
+        [primaryModel]: profile.maxContextLength,
+      })
     }
 
     profileEnv = openAIProfileEnv
@@ -881,16 +904,35 @@ export function persistActiveProviderProfileModel(
     return null
   }
 
-  if (isEnvTruthy(process.env.GAKR_CODE_USE_GITHUB)) {
-    return null
-  }
-
   const activeProfile = getActiveProviderProfile()
   if (!activeProfile) {
     return null
   }
 
+  // Runtime model selection is a session-level choice handled by
+  // mainLoopModelOverride (see src/hooks/useMainLoopModel.ts), not a
+  // profile edit. Whether the chosen model is already part of the
+  // profile's list or not, do NOT mutate profile.model here:
+  //   - if it IS in the list, the list is already correct (no-op)
+  //   - if it ISN'T, the user picked an out-of-list model for the
+  //     session and the profile's list should only change via an
+  //     explicit provider edit, not by side-effect of /model.
+  // An earlier implementation prepended out-of-list models to the
+  // profile, which (a) contradicted this contract, (b) caused
+  // unbounded list growth on rotation, and (c) used a separator
+  // inferred from a single-character substring of the model field
+  // that broke on mixed-separator inputs.
   return activeProfile
+}
+
+export function getConfiguredProfileModelOptions(
+  profile: ProviderProfile,
+): ModelOption[] {
+  return parseModelList(profile.model).map(model => ({
+    value: model,
+    label: model,
+    description: `Provider: ${profile.name}`,
+  }))
 }
 
 /**
@@ -904,21 +946,10 @@ export function getProfileModelOptions(
   config = getGlobalConfig(),
 ): ModelOption[] {
   const configuredOptions = getConfiguredProfileModelOptions(profile)
-
   return mergeModelOptionsByValue(
     configuredOptions,
     getModelCacheByProfile(profile.id, config),
   )
-}
-
-export function getConfiguredProfileModelOptions(
-  profile: ProviderProfile,
-): ModelOption[] {
-  return parseModelList(profile.model).map(model => ({
-    value: model,
-    label: model,
-    description: `Provider: ${profile.name}`,
-  }))
 }
 
 function buildOpenAICompatibleStartupEnv(
@@ -938,9 +969,22 @@ function buildOpenAICompatibleStartupEnv(
       authHeader: activeProfile.authHeader,
       authScheme: activeProfile.authScheme,
       authHeaderValue: activeProfile.authHeaderValue,
+      maxContextLength: activeProfile.maxContextLength,
       processEnv: {},
     })
     if (strictEnv) {
+      // Atlas Cloud is dedicatedCredentialsOnly: its route ignores
+      // OPENAI_API_KEY, so a generic OpenAI profile pointed at Atlas must
+      // persist the dedicated key too or it relaunches unauthenticated.
+      if (activeProfile.baseUrl?.toLowerCase().includes('atlascloud')) {
+        strictEnv.ATLAS_CLOUD_API_KEY = activeProfile.apiKey
+      }
+      if (isNearaiBaseUrl(activeProfile.baseUrl)) {
+        strictEnv.NEARAI_API_KEY = activeProfile.apiKey
+      }
+      if (isFireworksBaseUrl(activeProfile.baseUrl)) {
+        strictEnv.FIREWORKS_API_KEY = activeProfile.apiKey
+      }
       return applySupportedProfileCustomHeaders(activeProfile, strictEnv)
     }
   }
@@ -948,19 +992,19 @@ function buildOpenAICompatibleStartupEnv(
   const env: ProfileEnv = {
     OPENAI_BASE_URL: activeProfile.baseUrl,
     OPENAI_MODEL: getPrimaryModel(activeProfile.model),
+    ...(activeProfile.apiFormat ? { OPENAI_API_FORMAT: activeProfile.apiFormat } : {}),
+    ...(activeProfile.authHeader ? { OPENAI_AUTH_HEADER: activeProfile.authHeader } : {}),
+    ...(activeProfile.authScheme ? { OPENAI_AUTH_SCHEME: activeProfile.authScheme } : {}),
+    ...(activeProfile.authHeaderValue ? { OPENAI_AUTH_HEADER_VALUE: activeProfile.authHeaderValue } : {}),
+    ...(activeProfile.maxContextLength
+      ? {
+          GAKR_CODE_OPENAI_CONTEXT_WINDOWS: JSON.stringify({
+            [getPrimaryModel(activeProfile.model)]: activeProfile.maxContextLength,
+          }),
+        }
+      : {}),
   }
-  if (activeProfile.apiFormat) {
-    env.OPENAI_API_FORMAT = activeProfile.apiFormat
-  }
-  if (activeProfile.authHeader) {
-    env.OPENAI_AUTH_HEADER = activeProfile.authHeader
-    env.OPENAI_AUTH_SCHEME = activeProfile.authScheme ?? (
-      activeProfile.authHeader.toLowerCase() === 'authorization' ? 'bearer' : 'raw'
-    )
-    if (activeProfile.authHeaderValue) {
-      env.OPENAI_AUTH_HEADER_VALUE = activeProfile.authHeaderValue
-    }
-  }
+
   if (activeProfile.apiKey) {
     env.OPENAI_API_KEY = activeProfile.apiKey
     if (activeProfile.baseUrl?.toLowerCase().includes('bankr')) {
@@ -978,6 +1022,15 @@ function buildOpenAICompatibleStartupEnv(
     ) {
       env.MIMO_API_KEY = activeProfile.apiKey
     }
+    if (activeProfile.baseUrl?.toLowerCase().includes('atlascloud')) {
+      env.ATLAS_CLOUD_API_KEY = activeProfile.apiKey
+    }
+    if (isNearaiBaseUrl(activeProfile.baseUrl)) {
+      env.NEARAI_API_KEY = activeProfile.apiKey
+    }
+    if (isFireworksBaseUrl(activeProfile.baseUrl)) {
+      env.FIREWORKS_API_KEY = activeProfile.apiKey
+    }
   } else {
     delete env.OPENAI_API_KEY
   }
@@ -994,6 +1047,18 @@ function buildStartupProfileFromActiveProfile(
 
   switch (compatibilityMode) {
     case 'anthropic':
+      if (route.vendorId === 'minimax') {
+        const env =
+          buildMiniMaxProfileEnv({
+            model: getPrimaryModel(activeProfile.model),
+            baseUrl: activeProfile.baseUrl,
+            apiKey: activeProfile.apiKey,
+            processEnv: process.env,
+          }) ?? null
+        return env
+          ? { profile: 'minimax', env: applySupportedProfileCustomHeaders(activeProfile, env) }
+          : null
+      }
       return {
         profile: 'anthropic',
         env: applySupportedProfileCustomHeaders(activeProfile, {
@@ -1054,24 +1119,6 @@ function buildStartupProfileFromActiveProfile(
         })),
       }
     case 'openai': {
-      if (isCodexBaseUrl(activeProfile.baseUrl)) {
-        const storedCodexCredentials = readCodexCredentials()
-        const accountId =
-          trimOrUndefined(process.env.CHATGPT_ACCOUNT_ID) ??
-          trimOrUndefined(process.env.CODEX_ACCOUNT_ID) ??
-          trimOrUndefined(storedCodexCredentials?.accountId)
-
-        return {
-          profile: 'codex',
-          env: {
-            OPENAI_BASE_URL: activeProfile.baseUrl,
-            OPENAI_MODEL: getPrimaryModel(activeProfile.model),
-            CODEX_CREDENTIAL_SOURCE: 'oauth',
-            ...(accountId ? { CHATGPT_ACCOUNT_ID: accountId } : {}),
-          },
-        }
-      }
-
       if (route.gatewayId === 'nvidia-nim') {
         const env =
           buildNvidiaNimProfileEnv({
@@ -1124,6 +1171,32 @@ function buildStartupProfileFromActiveProfile(
           : null
       }
 
+      if (route.vendorId === 'atlas-cloud') {
+        const env =
+          buildAtlasCloudProfileEnv({
+            model: getPrimaryModel(activeProfile.model),
+            baseUrl: activeProfile.baseUrl,
+            apiKey: activeProfile.apiKey,
+            processEnv: process.env,
+          }) ?? null
+        return env
+          ? { profile: 'openai', env: applySupportedProfileCustomHeaders(activeProfile, env) }
+          : null
+      }
+
+      if (route.vendorId === 'nearai') {
+        const env = buildOpenAICompatibleStartupEnv(activeProfile)
+        return env ? { profile: 'openai', env } : null
+      }
+
+      // xAI OAuth profile (provider=xai with no API key). Tag the startup
+      // file with profile='xai' + XAI_CREDENTIAL_SOURCE=oauth so:
+      //   1. validation accepts it at startup (no spurious
+      //      "XAI_API_KEY is required" before openaiShim resolves the
+      //      stored OAuth token)
+      //   2. `clearPersistedXaiOAuthProfile()` can identify and remove it
+      //      on logout, instead of leaving a stale openai-shaped file
+      //      pointing at api.x.ai with no credential.
       if (route.vendorId === 'xai' && !activeProfile.apiKey) {
         const env = applySupportedProfileCustomHeaders(activeProfile, {
           ...buildXaiOAuthProfileEnv({

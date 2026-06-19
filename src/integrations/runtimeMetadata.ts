@@ -6,6 +6,11 @@ import {
   getOpenAIContextWindowMatches,
   getOpenAIMaxOutputTokenMatches,
 } from '../utils/model/openaiContextWindows.js'
+import { getCachedModelsSync } from './discoveryCache.js'
+import {
+  getDiscoveryCacheKey,
+  getDiscoveryCacheTtlMs,
+} from './discoveryService.js'
 import { ensureIntegrationsLoaded } from './index.js'
 import {
   getAllModels,
@@ -14,10 +19,12 @@ import {
 } from './registry.js'
 import {
   getRouteDescriptor,
+  resolveRouteCredentialValue,
   resolveActiveRouteIdFromEnv,
   resolveRouteIdFromBaseUrl,
   type RouteDescriptor,
 } from './routeMetadata.js'
+import { parseCustomHeadersEnv } from '../utils/providerCustomHeaders.js'
 
 function normalizeModelApiName(
   value: string | undefined,
@@ -142,11 +149,19 @@ function inferRemoteModelOpenAIShimConfig(
     return undefined
   }
 
-  // Segment-boundary-aware matcher: avoids false positives like
-  // "my-deepseek-rag" while still catching aggregator paths such as
-  // "openrouter/deepseek/deepseek-chat".
+  if (normalizedModel.startsWith('mimo-v2')) {
+    return {
+      preserveReasoningContent: true,
+      requireReasoningContentOnAssistantMessages: true,
+      maxTokensField: 'max_completion_tokens',
+      removeBodyFields: ['store', 'stream_options'],
+    }
+  }
+
+  // Segment-boundary-aware matcher: avoids false-positives like "my-deepseek-rag"
+  // while still catching aggregator paths e.g. "openrouter/deepseek/deepseek-chat".
   const segments = normalizedModel.split('/')
-  const hasDeepseek = segments.some(segment => segment.startsWith('deepseek'))
+  const hasDeepseek = segments.some(s => s.startsWith('deepseek'))
   if (hasDeepseek) {
     return {
       preserveReasoningContent: true,
@@ -158,10 +173,10 @@ function inferRemoteModelOpenAIShimConfig(
     }
   }
 
-  const hasKimiMoonshot = segments.some(
-    segment => segment.startsWith('kimi') || segment.startsWith('moonshot'),
-  )
-  if (hasKimiMoonshot) {
+   const hasKimiMoonshot = segments.some(
+     s => s.startsWith('kimi') || s.startsWith('moonshot'),
+   )
+   if (hasKimiMoonshot) {
     return {
       preserveReasoningContent: true,
       requireReasoningContentOnAssistantMessages: true,
@@ -321,6 +336,40 @@ function findCatalogEntryForApiName(
   return getCatalogEntryForModel(routeId, modelApiName)
 }
 
+function findCachedCatalogEntryForApiName(
+  routeId: string | null,
+  modelApiName: string | undefined,
+  runtimeEnv: NodeJS.ProcessEnv,
+): ModelCatalogEntry | null {
+  const normalizedModel = normalizeModelApiName(modelApiName)
+  if (!routeId || routeId === 'anthropic' || !normalizedModel) {
+    return null
+  }
+
+  const catalog = getRouteDescriptor(routeId)?.catalog
+  if (!catalog?.discovery) {
+    return null
+  }
+
+  const baseUrl = runtimeEnv.OPENAI_BASE_URL ?? runtimeEnv.OPENAI_API_BASE
+  const cacheKey = getDiscoveryCacheKey(routeId, {
+    baseUrl,
+    apiKey: resolveRouteCredentialValue({
+      routeId,
+      baseUrl,
+      processEnv: runtimeEnv,
+    }),
+    headers: parseCustomHeadersEnv(runtimeEnv.ANTHROPIC_CUSTOM_HEADERS),
+  })
+  const cached = getCachedModelsSync(cacheKey, getDiscoveryCacheTtlMs(routeId))
+
+  return (
+    cached?.models.find(entry =>
+      matchesCatalogEntryModel(routeId, entry, normalizedModel),
+    ) ?? null
+  )
+}
+
 export function resolveModelRuntimeLimits(options: {
   model: string
   processEnv?: NodeJS.ProcessEnv
@@ -337,8 +386,14 @@ export function resolveModelRuntimeLimits(options: {
     activeProfileProvider: options.activeProfileProvider,
   })
   const catalogEntry = findCatalogEntryForApiName(routeId, options.model)
+  const cachedCatalogEntry = findCachedCatalogEntryForApiName(
+    routeId,
+    options.model,
+    runtimeEnv,
+  )
   const modelDescriptor =
     getModelDescriptorForCatalogEntry(catalogEntry) ??
+    getModelDescriptorForCatalogEntry(cachedCatalogEntry) ??
     findModelDescriptorForApiName(routeId, options.model)
   const externalContextWindow = getOpenAIContextWindowMatches(
     options.model,
@@ -353,11 +408,13 @@ export function resolveModelRuntimeLimits(options: {
     contextWindow:
       externalContextWindow.exact ??
       catalogEntry?.contextWindow ??
+      cachedCatalogEntry?.contextWindow ??
       externalContextWindow.prefix ??
       modelDescriptor?.contextWindow,
     maxOutputTokens:
       externalMaxOutputTokens.exact ??
       catalogEntry?.maxOutputTokens ??
+      cachedCatalogEntry?.maxOutputTokens ??
       externalMaxOutputTokens.prefix ??
       modelDescriptor?.maxOutputTokens,
   }
@@ -413,5 +470,5 @@ export function usesAnthropicNativeMessageFormat(options?: {
   }
 
   const model = options?.model?.trim() || processEnv.OPENAI_MODEL?.trim() || ''
-  return model.toLowerCase().includes('claude-')
+  return model.toLowerCase().includes('claude-') || model.toLowerCase().includes('gakrcli-')
 }

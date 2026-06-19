@@ -7,7 +7,7 @@ import { getRelativeMemoryPath } from '../../components/memory/MemoryUpdateNotif
 import { Box, Link, Text } from '../../ink.js';
 import type { LocalJSXCommandCall } from '../../types/command.js';
 import { clearMemoryFileCaches, getMemoryFiles } from '../../utils/gakrclimd.js';
-import { getGakrcliConfigHomeDir } from '../../utils/envUtils.js';
+import { getGakrCLIConfigHomeDir } from '../../utils/envUtils.js';
 import { getErrnoCode } from '../../utils/errors.js';
 import { logError } from '../../utils/log.js';
 import { editFileInEditor } from '../../utils/promptEditor.js';
@@ -21,8 +21,8 @@ function MemoryCommand({
   const handleSelectMemoryFile = async (memoryPath: string) => {
     try {
       // Create gakrcli directory if it doesn't exist (idempotent with recursive)
-      if (memoryPath.includes(getGakrcliConfigHomeDir())) {
-        await mkdir(getGakrcliConfigHomeDir(), {
+      if (memoryPath.includes(getGakrCLIConfigHomeDir())) {
+        await mkdir(getGakrCLIConfigHomeDir(), {
           recursive: true
         });
       }
@@ -74,7 +74,7 @@ function MemoryCommand({
 
         <Box marginTop={1}>
           <Text dimColor>
-            Learn more: <Link url="https://github.com/gakr-gakr/gakr/docs/en/memory" />
+            Learn more: <Link url="https://code.gakrcli.com/docs/en/memory" />
           </Text>
         </Box>
       </Box>

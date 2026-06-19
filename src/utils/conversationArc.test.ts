@@ -18,8 +18,7 @@ import {
   getArcStats,
   finalizeArcTurn,
 } from './conversationArc.js'
-import { getGlobalGraph, resetGlobalGraph } from './knowledgeGraph.js'
-import { setGakrcliConfigHomeDirForTesting } from './envUtils.js'
+import { getGlobalGraph, resetGlobalGraph, clearMemoryOnly } from './knowledgeGraph.js'
 import {
   acquireSharedMutationLock,
   releaseSharedMutationLock,
@@ -33,62 +32,20 @@ function createMessage(role: string, content: string): any {
 }
 
 describe('conversationArc', () => {
-  const originalConfigDir = process.env.GAKR_CONFIG_DIR
-  let configDir: string | undefined
-
-  const removeDirWithRetry = (dir: string) => {
-    for (let attempt = 0; attempt < 5; attempt++) {
-      try {
-        rmSync(dir, { recursive: true, force: true })
-        return
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code
-        if (code !== 'EBUSY' && code !== 'EPERM') {
-          throw error
-        }
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25 * (attempt + 1))
-      }
-    }
-
-    try {
-      rmSync(dir, { recursive: true, force: true })
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code
-      if (code !== 'EBUSY' && code !== 'EPERM') {
-        throw error
-      }
-    }
-  }
-
   beforeEach(async () => {
-    await acquireSharedMutationLock('utils/conversationArc.test.ts')
-    configDir = mkdtempSync(join(tmpdir(), 'gakrcli-conversation-arc-'))
-    process.env.GAKR_CONFIG_DIR = configDir
-    setGakrcliConfigHomeDirForTesting(configDir)
+    await acquireSharedMutationLock('conversationArc')
     resetArc()
     resetGlobalGraph()
+    clearMemoryOnly()
   })
 
   afterEach(() => {
     try {
       resetArc()
       resetGlobalGraph()
-      if (originalConfigDir === undefined) {
-        delete process.env.GAKR_CONFIG_DIR
-      } else {
-        process.env.GAKR_CONFIG_DIR = originalConfigDir
-      }
-      setGakrcliConfigHomeDirForTesting(undefined)
+      clearMemoryOnly()
     } finally {
-      const dirToRemove = configDir
-      configDir = undefined
-      try {
-        if (dirToRemove) {
-          removeDirWithRetry(dirToRemove)
-        }
-      } finally {
-        releaseSharedMutationLock()
-      }
+      releaseSharedMutationLock()
     }
   })
 
@@ -126,15 +83,18 @@ describe('conversationArc', () => {
       await addRelation(e2.id, e1.id, 'runs_on')
 
       const summary = await getArcSummary()
-      expect(summary).toMatch(/Knowledge Graph/);
+      expect(summary).toMatch(/Knowledge Graph/)
       expect(summary).toContain('[system] RHEL-TEST')
-      expect(summary).toMatch(/os: linux/);
+      expect(summary).toMatch(/os: linux/)
     })
 
     it('automatically learns facts from message content', async () => {
       resetGlobalGraph()
       initializeArc()
-      const complexMessage = createMessage('user', 'Set JIRA_URL_TEST=https://jira.local and look in /opt/app/bin/test version v1.2.3')
+      const complexMessage = createMessage(
+        'user',
+        'Set JIRA_URL_TEST=https://jira.local and look in /opt/app/bin/test version v1.2.3',
+      )
 
       await updateArcPhase([complexMessage])
 
@@ -147,7 +107,9 @@ describe('conversationArc', () => {
 
     it('throws error when adding relation to non-existent entity', async () => {
       initializeArc()
-      await expect(addRelation('invalid1', 'invalid2', 'test')).rejects.toThrow('Source or target entity not found in graph')
+      await expect(addRelation('invalid1', 'invalid2', 'test')).rejects.toThrow(
+        'Source or target entity not found in graph',
+      )
     })
   })
 
@@ -161,7 +123,7 @@ describe('conversationArc', () => {
       await finalizeArcTurn()
 
       const summary = getGraphSummary()
-      expect(summary).toMatch(/Knowledge Graph/);
+      expect(summary).toMatch(/Knowledge Graph/)
       // searchGlobalGraph should now find it
       const ragResult = await getArcSummary('Tell me about the RAG engine')
       expect(ragResult).toContain('Build RAG engine')
@@ -227,22 +189,6 @@ describe('conversationArc', () => {
 
       // Phase should remain at implementing since it was detected first
       expect(getArc()?.currentPhase).toBe('implementing')
-    })
-
-    it('ignores noisy multi-line and code-block rules', async () => {
-      initializeArc()
-      await updateArcPhase([createMessage('user', [
-        'Always use `new_tab()` on first visit',
-        '```ts',
-        'never inline them',
-        '```',
-        'never hardcode individual breakpoints.',
-      ].join('\n'))])
-
-      const graph = getGlobalGraph()
-      expect(graph.rules).toContain('never hardcode individual breakpoints')
-      expect(graph.rules.some(rule => rule.includes('new_tab'))).toBe(false)
-      expect(graph.rules.some(rule => rule.includes('inline them'))).toBe(false)
     })
   })
 

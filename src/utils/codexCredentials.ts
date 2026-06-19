@@ -143,8 +143,9 @@ async function readCodexFromPlainTextStorageAsync(): Promise<
   }
 }
 
-// Keep Codex fallback writes scoped to the Codex record so unrelated native
-// secrets are never copied into plaintext after a native-storage failure.
+// Do not use the generic secure-storage fallback for Codex writes. Its update()
+// path receives the whole storage document, so a native-write failure can copy
+// unrelated native-only secrets into plaintext.
 function writeCodexToPlainTextStorage(
   codex: CodexCredentialBlob,
 ): { success: boolean; warning?: string } {
@@ -332,6 +333,9 @@ export function saveCodexCredentials(
     return result
   }
 
+  // If native storage still contains a Codex record and unrelated secrets, a
+  // plaintext Codex-only fallback would be shadowed by the stale native record.
+  // Deleting the native document would remove unrelated secrets, so fail closed.
   if (previousNativeCodex && hasNonCodexStorageFields(previous)) {
     return result
   }
@@ -454,7 +458,8 @@ export async function refreshCodexAccessTokenIfNeeded(options?: {
     return { refreshed: false }
   }
 
-  if (!current.refreshToken) {
+  const refreshToken = current.refreshToken
+  if (!refreshToken) {
     return { refreshed: false, credentials: current }
   }
 
@@ -477,7 +482,7 @@ export async function refreshCodexAccessTokenIfNeeded(options?: {
       const body = new URLSearchParams({
         client_id: getCodexOAuthClientId(),
         grant_type: 'refresh_token',
-        refresh_token: current.refreshToken,
+        refresh_token: refreshToken,
       })
 
       const { signal, cleanup } = createCombinedAbortSignal(undefined, {

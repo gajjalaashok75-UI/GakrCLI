@@ -66,7 +66,6 @@ import { validateModel } from '../../utils/model/validateModel.js'
 import { getLocalOpenAICompatibleProviderLabel } from '../../utils/providerDiscovery.js'
 import { isEssentialTrafficOnly } from '../../utils/privacyLevel.js'
 import { parseCustomHeadersEnv } from '../../utils/providerCustomHeaders.js'
-import { hydrateGithubModelsTokenFromSecureStorage } from '../../utils/githubModelsCredentials.js'
 import {
   getActiveOpenAIRouteModelOptionsCache,
   getActiveProviderProfile,
@@ -243,7 +242,8 @@ function isActiveProfileAppliedToRoute(
 ): boolean {
   return (
     process.env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED === '1' &&
-    process.env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID === activeProfile.id &&
+    process.env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID ===
+      activeProfile.id &&
     getActiveProfileRouteId(activeProfile) === routeId
   )
 }
@@ -307,9 +307,13 @@ function getLegacyOpenAIOptionsOverride(options: {
     ])
   }
 
-  return mergeActiveProfileModelOptions(options.routeId, scopedOptions, {
-    profileModelSurface: options.profileModelSurface,
-  })
+  return mergeActiveProfileModelOptions(
+    options.routeId,
+    scopedOptions,
+    {
+      profileModelSurface: options.profileModelSurface,
+    },
+  )
 }
 
 function getOpenAIDiscoveryRequestOptions(routeId?: string | null): {
@@ -317,10 +321,6 @@ function getOpenAIDiscoveryRequestOptions(routeId?: string | null): {
   baseUrl?: string
   headers?: Record<string, string>
 } {
-  if (routeId === 'github') {
-    hydrateGithubModelsTokenFromSecureStorage()
-  }
-
   const request = resolveProviderRequest({
     model: process.env.OPENAI_MODEL,
     baseUrl: process.env.OPENAI_BASE_URL,
@@ -742,7 +742,10 @@ function ModelPickerWrapper({
       const activeProfile = getActiveProviderProfile()
       const profileApplied = Boolean(
         activeProfile &&
-          isActiveProfileAppliedToRoute(activeProfile, discoveryContext.routeId),
+          isActiveProfileAppliedToRoute(
+            activeProfile,
+            discoveryContext.routeId,
+          ),
       )
       const nextOptions = profileApplied
         ? mergeActiveProfileModelOptions(
@@ -849,7 +852,7 @@ function SetModelAndClose({
 
       if (model && isOpus1mUnavailable(model)) {
         onDone(
-          'Opus 4.6 with 1M context is not available for your account. Learn more: https://code.gakr.com/docs/en/model-config#extended-context-with-1m',
+          'Opus 4.6 with 1M context is not available for your account. Learn more: https://code.gakrcli.com/docs/en/model-config#extended-context-with-1m',
           {
             display: 'system',
           },
@@ -858,7 +861,7 @@ function SetModelAndClose({
       }
       if (model && isSonnet1mUnavailable(model)) {
         onDone(
-          'Sonnet 4.6 with 1M context is not available for your account. Learn more: https://code.gakr.com/docs/en/model-config#extended-context-with-1m',
+          'Sonnet 4.6 with 1M context is not available for your account. Learn more: https://code.gakrcli.com/docs/en/model-config#extended-context-with-1m',
           {
             display: 'system',
           },

@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { isInputModeCharacter } from 'src/components/PromptInput/inputModes.js'
 import { useNotifications } from 'src/context/notifications.js'
-import stripAnsi from 'strip-ansi'
+import { stripVTControlCharacters as stripAnsi } from 'node:util'
 import { markBackslashReturnUsed } from '../commands/terminalSetup/terminalSetup.js'
 import { addToHistory } from '../history.js'
 import type { Key } from '../ink.js'
@@ -305,13 +305,10 @@ export function useTextInput({
     ['d', handleCtrlD],
     ['e', () => getLiveCursor().endOfLine()],
     ['f', () => getLiveCursor().right()],
-    [
-      'h',
-      () => {
-        const cursor = getLiveCursor()
-        return cursor.deleteTokenBefore() ?? cursor.backspace()
-      },
-    ],
+    ['h', () => {
+      const cursor = getLiveCursor()
+      return cursor.deleteTokenBefore() ?? cursor.backspace()
+    }],
     ['k', killToLineEnd],
     ['n', () => downOrHistoryDown()],
     ['p', () => upOrHistoryUp()],
@@ -493,6 +490,17 @@ export function useTextInput({
                 cursor.isAtStart() &&
                 isInputModeCharacter(input)
               ) {
+                // Issue #1179: emit the mode character as a one-shot
+                // onChange notification but do NOT advance the local cursor
+                // mirror. Returning undefined here means setValue is not
+                // called, so liveValueRef="" / liveOffsetRef=0 stay clean
+                // and the parent's strip handler operates on (and renders
+                // into) an empty buffer. Previous behaviour was
+                // `cursor.insert(text).left()` which left `!` in the local
+                // mirror, and because the parent's strip leaves controlled
+                // props numerically equal to what they were before the
+                // keystroke, useLayoutEffect never resynced the mirror — so
+                // the next character landed beside the retained `!`.
                 onChange(text)
                 return undefined
               }

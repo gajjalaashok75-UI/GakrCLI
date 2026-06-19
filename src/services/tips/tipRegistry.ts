@@ -53,6 +53,7 @@ import {
   formatCreditAmount,
   getCachedReferrerReward,
 } from '../api/referral.js'
+import { sponsoredTips } from './sponsoredTips.js'
 import { getSessionsSinceLastShown } from './tipHistory.js'
 import type { Tip, TipContext } from './types.js'
 
@@ -109,7 +110,6 @@ const externalTips: Tip[] = [
       `Use Plan Mode to prepare for a complex request before making changes. Press ${getShortcutDisplay('chat:cycleMode', 'Chat', 'shift+tab')} twice to enable.`,
     cooldownSessions: 5,
     isRelevant: async () => {
-      if (process.env.USER_TYPE === 'ant') return false
       const config = getGlobalConfig()
       // Show to users who haven't used plan mode recently (7+ days)
       const daysSinceLastUse = config.lastPlanModeUse
@@ -325,29 +325,9 @@ const externalTips: Tip[] = [
   {
     id: 'install-github-app',
     content: async () =>
-      'Run /install-github-app to tag @gakrcli right from your Github issues and PRs',
+      'Run /install-github-app to enable GitHub issue and PR tagging from GakrCLI',
     cooldownSessions: 10,
     isRelevant: async () => !getGlobalConfig().githubActionSetupCount,
-  },
-  {
-    id: 'provider-profiles',
-    content: async () =>
-      'Use /provider to connect multiple model providers and switch between them when a task needs a different model',
-    cooldownSessions: 15,
-    isRelevant: async () => {
-      const config = getGlobalConfig()
-      return (config.providerProfiles?.length ?? 0) < 2
-    },
-  },
-  {
-    id: 'provider-github-models',
-    content: async () =>
-      'Use /provider to sign in to GitHub Models and switch GakrCLI to github:copilot',
-    cooldownSessions: 15,
-    isRelevant: async () =>
-      !['1', 'true'].includes(
-        process.env.GAKR_CODE_USE_GITHUB?.toLowerCase() ?? '',
-      ),
   },
   {
     id: 'install-slack-app',
@@ -411,7 +391,7 @@ const externalTips: Tip[] = [
   {
     id: 'custom-commands',
     content: async () =>
-      'Create skills by adding .md files to .gakrcli/skills/ in your project or ~/.gakrcli/skills/ for skills that work in any project',
+      'Create skills at .gakrcli/skills/<name>/SKILL.md in your project or ~/.gakrcli/skills/<name>/SKILL.md for skills that work in any project',
     cooldownSessions: 15,
     async isRelevant() {
       const config = getGlobalConfig()
@@ -421,9 +401,7 @@ const externalTips: Tip[] = [
   {
     id: 'shift-tab',
     content: async () =>
-      process.env.USER_TYPE === 'ant'
-        ? `Hit ${getShortcutDisplay('chat:cycleMode', 'Chat', 'shift+tab')} to cycle between default mode and auto mode`
-        : `Hit ${getShortcutDisplay('chat:cycleMode', 'Chat', 'shift+tab')} to cycle between default mode, auto-accept edit mode, and plan mode`,
+      `Hit ${getShortcutDisplay('chat:cycleMode', 'Chat', 'shift+tab')} to cycle between default mode, auto-accept edit mode, and plan mode`,
     cooldownSessions: 10,
     isRelevant: async () => true,
   },
@@ -457,7 +435,7 @@ const externalTips: Tip[] = [
   {
     id: 'desktop-app',
     content: async () =>
-      'Run GakrCLI locally or remotely using the GakrCLI desktop app: clau.de/desktop',
+      'Run GakrCLI locally or remotely with /desktop',
     cooldownSessions: 15,
     isRelevant: async () => getPlatform() !== 'linux',
   },
@@ -465,7 +443,7 @@ const externalTips: Tip[] = [
     id: 'desktop-shortcut',
     content: async ctx => {
       const blue = color('suggestion', ctx.theme)
-      return `Continue your session in GakrCLI Desktop with ${blue('/desktop')}`
+      return `Continue your session with ${blue('/desktop')}`
     },
     cooldownSessions: 15,
     isRelevant: async () => {
@@ -479,24 +457,16 @@ const externalTips: Tip[] = [
   {
     id: 'web-app',
     content: async () =>
-      'Run tasks in the cloud while you keep coding locally · clau.de/web',
-    cooldownSessions: 15,
-    isRelevant: async () => true,
-  },
-  {
-    id: 'mobile-app',
-    content: async () =>
-      '/mobile to use GakrCLI from the GakrCLI app on your phone',
+      'Run tasks in the cloud while you keep coding locally · /web',
     cooldownSessions: 15,
     isRelevant: async () => true,
   },
   {
     id: 'opusplan-mode-reminder',
     content: async () =>
-      `Your default model setting is Opus Plan Mode. Press ${getShortcutDisplay('chat:cycleMode', 'Chat', 'shift+tab')} twice to activate Plan Mode and plan with GakrCLI Opus.`,
+      `Your default model setting is Opus Plan Mode. Press ${getShortcutDisplay('chat:cycleMode', 'Chat', 'shift+tab')} twice to activate Plan Mode and plan with Opus.`,
     cooldownSessions: 2,
     async isRelevant() {
-      if (process.env.USER_TYPE === 'ant') return false
       const config = getGlobalConfig()
       const modelSetting = getUserSpecifiedModelSetting()
       const hasOpusPlanMode = modelSetting === 'opusplan'
@@ -641,36 +611,15 @@ const externalTips: Tip[] = [
   },
   {
     id: 'feedback-command',
-    content: async () => 'Use /feedback to help us improve!',
+    content: async () => 'Report bugs or feature requests in the issue tracker to help us improve.',
     cooldownSessions: 15,
     async isRelevant() {
-      if (process.env.USER_TYPE === 'ant') {
-        return false
-      }
       const config = getGlobalConfig()
       return config.numStartups > 5
     },
   },
 ]
-const internalOnlyTips: Tip[] =
-  process.env.USER_TYPE === 'ant'
-    ? [
-        {
-          id: 'important-gakrclimd',
-          content: async () =>
-            '[ANT-ONLY] Use "IMPORTANT:" prefix for must-follow GAKRCLI.md rules',
-          cooldownSessions: 30,
-          isRelevant: async () => true,
-        },
-        {
-          id: 'skillify',
-          content: async () =>
-            '[ANT-ONLY] Use /skillify at the end of a workflow to turn it into a reusable skill',
-          cooldownSessions: 15,
-          isRelevant: async () => true,
-        },
-      ]
-    : []
+const internalOnlyTips: Tip[] = []
 
 function getCustomTips(): Tip[] {
   const settings = getInitialSettings()
@@ -691,12 +640,15 @@ export async function getRelevantTips(context?: TipContext): Promise<Tip[]> {
   const customTips = getCustomTips()
 
   // If excludeDefault is true and there are custom tips, skip built-in tips entirely.
+  // Sponsored tips are also excluded — user has opted into their own list.
   if (override?.excludeDefault && customTips.length > 0) {
     return customTips
   }
 
-  // Otherwise, filter built-in tips as before and combine with custom tips.
-  const tips = [...externalTips, ...internalOnlyTips]
+  // Otherwise, filter built-in tips as before and combine with custom + sponsored.
+  // The scheduler enforces the sponsored frequency cap; this just returns
+  // everything currently eligible.
+  const tips = [...externalTips, ...internalOnlyTips, ...sponsoredTips]
   const isRelevant = await Promise.all(tips.map(_ => _.isRelevant(context)))
   const filtered = tips
     .filter((_, index) => isRelevant[index])

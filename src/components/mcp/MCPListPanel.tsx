@@ -89,7 +89,7 @@ function groupServersByScope(serverList: ServerInfo[]): Map<ConfigScope, ServerI
   }
   return groups;
 }
-export function MCPListPanel(t0) {
+export function MCPListPanel(t0: Props): React.ReactNode {
   const $ = _c(78);
   const {
     servers,
@@ -106,7 +106,7 @@ export function MCPListPanel(t0) {
   } else {
     t2 = $[1];
   }
-  const agentServers = t2;
+  const agentServers = t2 as AgentMcpServerInfo[];
   const [theme] = useTheme();
   const [selectedIndex, setSelectedIndex] = useState(0);
   let t3;
@@ -396,7 +396,7 @@ export function MCPListPanel(t0) {
   }
   let t23;
   if ($[51] !== gakrcliAiServers || $[52] !== renderServerItem) {
-    t23 = gakrcliAiServers.length > 0 && <Box flexDirection="column" marginBottom={1}><Box paddingLeft={2}><Text bold={true}>gakr.ai</Text></Box>{gakrcliAiServers.map(server_5 => renderServerItem(server_5))}</Box>;
+    t23 = gakrcliAiServers.length > 0 && <Box flexDirection="column" marginBottom={1}><Box paddingLeft={2}><Text bold={true}>gakrcli.ai</Text></Box>{gakrcliAiServers.map(server_5 => renderServerItem(server_5))}</Box>;
     $[51] = gakrcliAiServers;
     $[52] = renderServerItem;
     $[53] = t23;
@@ -431,7 +431,7 @@ export function MCPListPanel(t0) {
   }
   let t27;
   if ($[62] === Symbol.for("react.memo_cache_sentinel")) {
-    t27 = <Text dimColor={true}><Link url="https://github.com/gakr-gakr/gakr/docs/en/mcp">https://github.com/gakr-gakr/gakr/docs/en/mcp</Link>{" "}for help</Text>;
+    t27 = <Text dimColor={true}><Link url="https://code.gakrcli.com/docs/en/mcp">https://code.gakrcli.com/docs/en/mcp</Link>{" "}for help</Text>;
     $[62] = t27;
   } else {
     t27 = $[62];
@@ -483,7 +483,7 @@ export function MCPListPanel(t0) {
   }
   return t32;
 }
-function _temp6(s_2) {
+function _temp6(s_2: AgentMcpServerInfo) {
   return s_2.sourceAgents;
 }
 function _temp5(s_1) {

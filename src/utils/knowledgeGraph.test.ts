@@ -12,11 +12,8 @@ import {
 import { mkdtempSync, rmSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import {
-  acquireSharedMutationLock,
-  releaseSharedMutationLock,
-} from '../test/sharedMutationLock.js'
-import { getProjectsDir, setGakrcliConfigHomeDirForTesting } from './envUtils.js'
+import { acquireEnvMutex, releaseEnvMutex } from '../entrypoints/sdk/shared.js'
+import { getProjectsDir, setGakrCLIConfigHomeDirForTesting } from './envUtils.js'
 import { sanitizePath } from './sessionStoragePortable.js'
 
 describe('KnowledgeGraph Global Persistence & RAG', () => {
@@ -49,10 +46,10 @@ describe('KnowledgeGraph Global Persistence & RAG', () => {
   }
 
   beforeEach(async () => {
-    await acquireSharedMutationLock('utils/knowledgeGraph.test.ts')
+    await acquireEnvMutex()
     configDir = mkdtempSync(join(tmpdir(), 'gakrcli-test-'))
     process.env.GAKR_CONFIG_DIR = configDir
-    setGakrcliConfigHomeDirForTesting(configDir)
+    setGakrCLIConfigHomeDirForTesting(configDir)
     resetGlobalGraph()
   })
 
@@ -65,7 +62,7 @@ describe('KnowledgeGraph Global Persistence & RAG', () => {
       } else {
         process.env.GAKR_CONFIG_DIR = originalConfigDir
       }
-      setGakrcliConfigHomeDirForTesting(undefined)
+      setGakrCLIConfigHomeDirForTesting(undefined)
     } finally {
       const dirToRemove = configDir
       configDir = undefined
@@ -74,7 +71,7 @@ describe('KnowledgeGraph Global Persistence & RAG', () => {
           removeDirWithRetry(dirToRemove)
         }
       } finally {
-        releaseSharedMutationLock()
+        releaseEnvMutex()
       }
     }
   })

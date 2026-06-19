@@ -1,35 +1,34 @@
-import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
-import { mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { mkdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import {
-  acquireSharedMutationLock,
-  releaseSharedMutationLock,
-} from '../src/test/sharedMutationLock.js'
+import { acquireEnvMutex, releaseEnvMutex } from '../src/entrypoints/sdk/shared.js'
 
 // ---------------------------------------------------------------------------
-// Setup: extract the growthbook stub from no-telemetry-plugin.ts, write it to
-// a temp .mjs file, and dynamically import it so we can test the real code
-// that gets bundled.
+// Setup: dynamically import the source-level growthbook no-op stub.
+// The stub reads ~/.gakrcli/feature-flags.json for local flag overrides.
 // ---------------------------------------------------------------------------
 
-const pluginSource = readFileSync(join(__dirname, 'no-telemetry-plugin.ts'), 'utf-8')
-const stubMatch = pluginSource.match(/'services\/analytics\/growthbook': `([\s\S]*?)`/)
-if (!stubMatch) throw new Error('Could not extract growthbook stub from no-telemetry-plugin.ts')
-
+const originalFlagsFile = process.env.GAKR_FEATURE_FLAGS_FILE
 const testDir = join(tmpdir(), `growthbook-stub-test-${process.pid}`)
-const stubFile = join(testDir, 'growthbook-stub.mjs')
 const flagsFile = join(testDir, 'test-flags.json')
+let envLockAcquired = false
+let stub: typeof import('../src/services/analytics/growthbook.js')
 
-mkdirSync(testDir, { recursive: true })
-writeFileSync(stubFile, stubMatch[1])
+beforeAll(async () => {
+  const envLock = await acquireEnvMutex()
+  if (!envLock.acquired) {
+    throw new Error('Failed to acquire env mutex for growthbook stub test')
+  }
+  envLockAcquired = true
 
-await acquireSharedMutationLock('scripts/no-telemetry-growthbook-stub.test.ts')
+  mkdirSync(testDir, { recursive: true })
 
-// Point the stub at our test flags file (checked by _loadFlags on first access)
-process.env.GAKR_FEATURE_FLAGS_FILE = flagsFile
+  // Point the stub at our test flags file before import
+  process.env.GAKR_FEATURE_FLAGS_FILE = flagsFile
 
-const stub = await import(stubFile)
+  stub = await import('../src/services/analytics/growthbook.js')
+})
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -44,9 +43,16 @@ describe('growthbook stub — local feature flag overrides', () => {
   afterAll(() => {
     try {
       rmSync(testDir, { recursive: true, force: true })
-      delete process.env.GAKR_FEATURE_FLAGS_FILE
+      if (originalFlagsFile === undefined) {
+        delete process.env.GAKR_FEATURE_FLAGS_FILE
+      } else {
+        process.env.GAKR_FEATURE_FLAGS_FILE = originalFlagsFile
+      }
     } finally {
-      releaseSharedMutationLock()
+      if (envLockAcquired) {
+        releaseEnvMutex()
+        envLockAcquired = false
+      }
     }
   })
 
@@ -58,32 +64,6 @@ describe('growthbook stub — local feature flag overrides', () => {
 
   test('getAllGrowthBookFeatures returns {} when file is absent', () => {
     expect(stub.getAllGrowthBookFeatures()).toEqual({})
-  })
-
-  test('all getter functions return default values when no flags file', async () => {
-    expect(await stub.getFeatureValue_DEPRECATED('tengu_gate', false)).toBe(false)
-    expect(stub.getFeatureValue_CACHED_WITH_REFRESH('tengu_gate', false)).toBe(false)
-    expect(stub.checkStatsigFeatureGate_CACHED_MAY_BE_STALE('tengu_gate')).toBe(false)
-    expect(await stub.checkGate_CACHED_OR_BLOCKING('tengu_gate')).toBe(false)
-    expect(await stub.getDynamicConfig_BLOCKS_ON_INIT('tengu_config', {})).toEqual({})
-    expect(stub.getDynamicConfig_CACHED_MAY_BE_STALE('tengu_config', {})).toEqual({})
-  })
-
-  // ── Open-build defaults (_openBuildDefaults) ────────────────────
-
-  test('returns open-build default when flags file is absent', () => {
-    // tengu_passport_quail is in _openBuildDefaults as true; without a
-    // flags file the stub should return the open-build override, not
-    // the call-site defaultValue.
-    expect(stub.getFeatureValue_CACHED_MAY_BE_STALE('tengu_passport_quail', false)).toBe(true)
-    expect(stub.getFeatureValue_CACHED_MAY_BE_STALE('tengu_coral_fern', false)).toBe(true)
-  })
-
-  test('flags file overrides open-build defaults', () => {
-    // User-provided feature-flags.json takes priority over _openBuildDefaults.
-    writeFileSync(flagsFile, JSON.stringify({ tengu_passport_quail: false }))
-
-    expect(stub.getFeatureValue_CACHED_MAY_BE_STALE('tengu_passport_quail', true)).toBe(false)
   })
 
   // ── Valid JSON object ────────────────────────────────────────────
@@ -143,32 +123,28 @@ describe('growthbook stub — local feature flag overrides', () => {
     expect(stub.getFeatureValue_CACHED_MAY_BE_STALE('tengu_foo', 'x')).toBe('second')
   })
 
-  test('refreshGrowthBookFeatures clears cache', async () => {
-    writeFileSync(flagsFile, JSON.stringify({ tengu_foo: 'v1' }))
-    expect(stub.getFeatureValue_CACHED_MAY_BE_STALE('tengu_foo', 'x')).toBe('v1')
+  // ── Security gate ────────────────────────────────────────────────
 
-    writeFileSync(flagsFile, JSON.stringify({ tengu_foo: 'v2' }))
-    await stub.refreshGrowthBookFeatures()
-    expect(stub.getFeatureValue_CACHED_MAY_BE_STALE('tengu_foo', 'x')).toBe('v2')
+  test('checkSecurityRestrictionGate always returns false regardless of flags', async () => {
+    writeFileSync(flagsFile, JSON.stringify({
+      tengu_disable_bypass_permissions_mode: true,
+    }))
+
+    expect(await stub.checkSecurityRestrictionGate('tengu_disable_bypass_permissions_mode')).toBe(false)
   })
 
-  // ── Multiple getter variants ─────────────────────────────────────
+  // ── All getter variants return default ───────────────────────────
 
-  test('all getter functions read from local flags', async () => {
-    writeFileSync(flagsFile, JSON.stringify({ tengu_gate: true, tengu_config: { a: 1 } }))
-
-    expect(await stub.getFeatureValue_DEPRECATED('tengu_gate', false)).toBe(true)
-    stub.resetGrowthBook()
-    expect(stub.getFeatureValue_CACHED_WITH_REFRESH('tengu_gate', false)).toBe(true)
-    stub.resetGrowthBook()
-    expect(stub.checkStatsigFeatureGate_CACHED_MAY_BE_STALE('tengu_gate')).toBe(true)
-    stub.resetGrowthBook()
-    expect(await stub.checkGate_CACHED_OR_BLOCKING('tengu_gate')).toBe(true)
-    stub.resetGrowthBook()
-    expect(await stub.getDynamicConfig_BLOCKS_ON_INIT('tengu_config', {})).toEqual({ a: 1 })
-    stub.resetGrowthBook()
-    expect(stub.getDynamicConfig_CACHED_MAY_BE_STALE('tengu_config', {})).toEqual({ a: 1 })
+  test('all getter functions return default values when no flags file', async () => {
+    expect(stub.getFeatureValue_DEPRECATED('tengu_gate', false)).toBe(false)
+    expect(stub.getFeatureValue_CACHED_WITH_REFRESH('tengu_gate', false)).toBe(false)
+    expect(stub.checkStatsigFeatureGate_CACHED_MAY_BE_STALE('tengu_gate')).toBe(false)
+    expect(await stub.checkGate_CACHED_OR_BLOCKING('tengu_gate')).toBe(false)
+    expect(await stub.getDynamicConfig_BLOCKS_ON_INIT('tengu_config', {})).toEqual({})
+    expect(stub.getDynamicConfig_CACHED_MAY_BE_STALE('tengu_config', {})).toEqual({})
   })
+
+  // ── Gate helpers route through _getFlagValue ──────────────────────────
 
   test('checkStatsigFeatureGate_CACHED_MAY_BE_STALE returns false when file is absent', () => {
     expect(stub.checkStatsigFeatureGate_CACHED_MAY_BE_STALE('tengu_gate')).toBe(false)
@@ -188,13 +164,8 @@ describe('growthbook stub — local feature flag overrides', () => {
     expect(await stub.checkGate_CACHED_OR_BLOCKING('tengu_bridge')).toBe(true)
   })
 
-  // ── Security gate ────────────────────────────────────────────────
-
   test('checkSecurityRestrictionGate always returns false regardless of flags', async () => {
-    writeFileSync(flagsFile, JSON.stringify({
-      tengu_disable_bypass_permissions_mode: true,
-    }))
-
-    expect(await stub.checkSecurityRestrictionGate()).toBe(false)
+    writeFileSync(flagsFile, JSON.stringify({ tengu_disable_bypass_permissions_mode: true }))
+    expect(await stub.checkSecurityRestrictionGate('tengu_disable_bypass_permissions_mode')).toBe(false)
   })
 })

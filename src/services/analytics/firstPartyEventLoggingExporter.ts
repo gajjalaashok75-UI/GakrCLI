@@ -22,7 +22,7 @@ import {
 } from '../../utils/auth.js'
 import { checkHasTrustDialogAccepted } from '../../utils/config.js'
 import { logForDebugging } from '../../utils/debug.js'
-import { getGakrcliConfigHomeDir } from '../../utils/envUtils.js'
+import { getGakrCLIConfigHomeDir } from '../../utils/envUtils.js'
 import { errorMessage, isFsInaccessible, toError } from '../../utils/errors.js'
 import { getAuthHeaders } from '../../utils/http.js'
 import { readJSONLFile } from '../../utils/json.js'
@@ -42,7 +42,7 @@ const FILE_PREFIX = '1p_failed_events.'
 
 // Storage directory for failed events - evaluated at runtime to respect GAKR_CONFIG_DIR in tests
 function getStorageDir(): string {
-  return path.join(getGakrcliConfigHomeDir(), 'telemetry')
+  return path.join(getGakrCLIConfigHomeDir(), 'telemetry')
 }
 
 // API envelope - event_data is the JSON output from proto toJSON()

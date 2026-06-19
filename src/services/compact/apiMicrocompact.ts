@@ -6,8 +6,6 @@ import { GREP_TOOL_NAME } from 'src/tools/GrepTool/prompt.js'
 import { NOTEBOOK_EDIT_TOOL_NAME } from 'src/tools/NotebookEditTool/constants.js'
 import { WEB_FETCH_TOOL_NAME } from 'src/tools/WebFetchTool/prompt.js'
 import { WEB_SEARCH_TOOL_NAME } from 'src/tools/WebSearchTool/prompt.js'
-import { IMAGE_SEARCH_TOOL_NAME } from 'src/tools/ImageSearchTool/prompt.js'
-import { VIDEO_SEARCH_TOOL_NAME } from 'src/tools/VideoSearchTool/prompt.js'
 import { SHELL_TOOL_NAMES } from 'src/utils/shell/shellToolUtils.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
 
@@ -25,8 +23,6 @@ const TOOLS_CLEARABLE_RESULTS = [
   FILE_READ_TOOL_NAME,
   WEB_FETCH_TOOL_NAME,
   WEB_SEARCH_TOOL_NAME,
-  IMAGE_SEARCH_TOOL_NAME,
-  VIDEO_SEARCH_TOOL_NAME,
 ]
 
 const TOOLS_CLEARABLE_USES = [
@@ -90,7 +86,7 @@ export function getAPIContextManagement(options?: {
     })
   }
 
-  // Tool clearing strategies are ant-only
+  // Tool clearing strategies are internal-only
   if (process.env.USER_TYPE !== 'ant') {
     return strategies.length > 0 ? { edits: strategies } : undefined
   }

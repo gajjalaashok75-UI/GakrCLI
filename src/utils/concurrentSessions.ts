@@ -8,7 +8,7 @@ import {
 } from '../bootstrap/state.js'
 import { registerCleanup } from './cleanupRegistry.js'
 import { logForDebugging } from './debug.js'
-import { getGakrcliConfigHomeDir } from './envUtils.js'
+import { getGakrCLIConfigHomeDir } from './envUtils.js'
 import { errorMessage, isFsInaccessible } from './errors.js'
 import { isProcessRunning } from './genericProcessUtils.js'
 import { getPlatform } from './platform.js'
@@ -19,7 +19,7 @@ export type SessionKind = 'interactive' | 'bg' | 'daemon' | 'daemon-worker'
 export type SessionStatus = 'busy' | 'idle' | 'waiting'
 
 function getSessionsDir(): string {
-  return join(getGakrcliConfigHomeDir(), 'sessions')
+  return join(getGakrCLIConfigHomeDir(), 'sessions')
 }
 
 /**
@@ -201,4 +201,34 @@ export async function countConcurrentSessions(): Promise<number> {
     }
   }
   return count
+}
+
+/**
+ * Calculate per-session memory budget based on concurrent sessions.
+ * For 32GB system: 4 sessions = ~7GB each, 8 sessions = ~3.5GB each.
+ * Respects GAKR_MAX_MEMORY_MB env var if set.
+ */
+const OS_OVERHEAD_MB = 4096
+const MIN_PER_SESSION_MB = 512
+
+export async function calculatePerSessionMemoryBudget(): Promise<number> {
+  const envBudget = Number.parseInt(
+    process.env.GAKR_MAX_MEMORY_MB ?? '0',
+    10,
+  )
+  if (envBudget > 0) return envBudget
+
+  const os = await import('os')
+  const totalMemMB = Math.floor(os.totalmem() / 1024 / 1024)
+  const sessionCount = await countConcurrentSessions()
+  const availableMB = totalMemMB - OS_OVERHEAD_MB
+  const budget = Math.max(
+    MIN_PER_SESSION_MB,
+    Math.floor(availableMB / Math.max(1, sessionCount)),
+  )
+
+  logForDebugging(
+    `[ConcurrentSessions] ${sessionCount} sessions, budget: ${budget}MB each (total: ${totalMemMB}MB)`,
+  )
+  return budget
 }

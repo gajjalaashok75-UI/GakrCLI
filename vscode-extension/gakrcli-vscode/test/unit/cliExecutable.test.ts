@@ -47,7 +47,7 @@ describe('resolveCliExecutable', () => {
       join(sourceRoot, 'package.json'),
       JSON.stringify({
         name: '@gakr-gakr/gakrcli',
-        bin: { gakrcli: 'bin/gakrcli.js' },
+        bin: { gakrcli: 'bin/gakrcli' },
       }),
     );
 
@@ -86,7 +86,7 @@ describe('resolveCliExecutable', () => {
       join(workspace, 'package.json'),
       JSON.stringify({
         name: '@gakr-gakr/gakrcli',
-        bin: { gakrcli: 'bin/gakrcli.js' },
+        bin: { gakrcli: 'bin/gakrcli' },
       }),
     );
 
@@ -117,7 +117,7 @@ describe('resolveCliExecutable', () => {
       join(sourceRoot, 'package.json'),
       JSON.stringify({
         name: '@gakr-gakr/gakrcli',
-        bin: { gakrcli: 'bin/gakrcli.js' },
+        bin: { gakrcli: 'bin/gakrcli' },
       }),
     );
 

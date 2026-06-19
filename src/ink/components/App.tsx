@@ -3,8 +3,8 @@ import { updateLastInteractionTime } from '../../bootstrap/state.js';
 import { stopCapturingEarlyInput } from '../../utils/earlyInput.js';
 import { isEnvTruthy } from '../../utils/envUtils.js';
 import { isMouseClicksDisabled } from '../../utils/fullscreen.js';
-import { logError } from '../../utils/log.js';
 import { logForDebugging } from '../../utils/debug.js';
+import { logError } from '../../utils/log.js';
 import { EventEmitter } from '../events/emitter.js';
 import { InputEvent } from '../events/input-event.js';
 import { TerminalFocusEvent } from '../events/terminal-focus-event.js';
@@ -116,11 +116,10 @@ export default class App extends PureComponent<Props, State> {
   keyParseState = INITIAL_STATE;
   // Timer for flushing incomplete escape sequences
   incompleteEscapeTimer: NodeJS.Timeout | null = null;
-  stdinMode: 'readable' | 'data' =
-    (process.env.GAKR_USE_READABLE_STDIN ??
-      process.env.OPENGAKR_USE_READABLE_STDIN) === '1'
-      ? 'readable'
-      : 'data';
+  // Default to readable-mode stdin (legacy Ink behavior). The data-mode path
+  // is kept as an explicit opt-in because some terminals can enter a state
+  // where startup input appears frozen when data mode is the default.
+  stdinMode: 'readable' | 'data' = process.env.GAKR_USE_DATA_STDIN === '1' || process.env.GAKR_USE_READABLE_STDIN === '0' ? 'data' : 'readable';
   // Timeout durations for incomplete sequences (ms)
   readonly NORMAL_TIMEOUT = 50; // Short timeout for regular esc sequences
   readonly PASTE_TIMEOUT = 500; // Longer timeout for paste operations
@@ -225,6 +224,13 @@ export default class App extends PureComponent<Props, State> {
     }
     stdin.setEncoding('utf8');
     if (isEnabled) {
+      // Guard against negative count from async races or effect cleanup bugs.
+      // If count is negative, reset to 0 so setup runs on this enable.
+      if (this.rawModeEnabledCount < 0) {
+        logForDebugging(`handleSetRawMode: recovering rawModeEnabledCount from ${this.rawModeEnabledCount} to 0`);
+        this.rawModeEnabledCount = 0;
+      }
+
       // Ensure raw mode is enabled only once
       if (this.rawModeEnabledCount === 0) {
         // Stop early input capture right before we add our own readable handler.
@@ -273,6 +279,13 @@ export default class App extends PureComponent<Props, State> {
         });
       }
       this.rawModeEnabledCount++;
+      return;
+    }
+
+    // Guard against unbalanced disable calls (e.g. from rapid mount/unmount
+    // during MCP-driven re-renders). Prevent count from going negative.
+    if (this.rawModeEnabledCount <= 0) {
+      logForDebugging(`handleSetRawMode: ignoring disable call with count=${this.rawModeEnabledCount}`);
       return;
     }
 
@@ -443,7 +456,7 @@ export default class App extends PureComponent<Props, State> {
       this.props.stdout.write(SHOW_CURSOR + DFE + DISABLE_MOUSE_TRACKING);
     }
 
-    // Emit suspend event for GakrCLI to handle. Mostly just has a notification
+    // Emit suspend event for GakrCLI Code to handle. Mostly just has a notification
     this.internal_eventEmitter.emit('suspend');
 
     // Set up resume handler
@@ -464,7 +477,7 @@ export default class App extends PureComponent<Props, State> {
         this.props.stdout.write(EFE);
       }
 
-      // Emit resume event for GakrCLI to handle
+      // Emit resume event for GakrCLI Code to handle
       this.internal_eventEmitter.emit('resume');
       process.removeListener('SIGCONT', resumeHandler);
     };

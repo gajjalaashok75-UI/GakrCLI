@@ -1,4 +1,4 @@
-// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
+// biome-ignore-all assist/source/organizeImports: internal-only import markers must not be reordered
 /**
  * Shared event metadata enrichment for analytics systems
  *
@@ -21,7 +21,7 @@ import {
 } from '../../bootstrap/state.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
 import { isOfficialMcpUrl } from '../mcp/officialRegistry.js'
-import { isgakrcliAISubscriber, getSubscriptionType } from '../../utils/auth.js'
+import { isGakrCLIAISubscriber, getSubscriptionType } from '../../utils/auth.js'
 import { getRepoRemoteHash } from '../../utils/git.js'
 import {
   getWslVersion,
@@ -93,7 +93,7 @@ export function isToolDetailsLoggingEnabled(): boolean {
  *
  * Per go/taxonomy, MCP names are medium PII. We log them for:
  * - Cowork (entrypoint=local-agent) — no ZDR concept, log all MCPs
- * - gakr.ai-proxied connectors — always official (from gakr.ai's list)
+ * - gakrcli.ai-proxied connectors — always official (from gakrcli.ai's list)
  * - Servers whose URL matches the official MCP registry — directory
  *   connectors added via `gakrcli mcp add`, not customer-specific config
  *
@@ -425,7 +425,7 @@ export type EnvContext = {
   isRunningWithBun: boolean
   isCi: boolean
   isClaubbit: boolean
-  isgakrcliCodeRemote: boolean
+  isGakrCLICodeRemote: boolean
   isLocalAgentMode: boolean
   isConductor: boolean
   remoteEnvironmentType?: string
@@ -434,8 +434,8 @@ export type EnvContext = {
   gakrcliCodeRemoteSessionId?: string
   tags?: string
   isGithubAction: boolean
-  isgakrcliCodeAction: boolean
-  isgakrcliAiAuth: boolean
+  isGakrCLICodeAction: boolean
+  isGakrCLIAiAuth: boolean
   version: string
   versionBase?: string
   buildTime: string
@@ -490,9 +490,9 @@ export type EventMetadata = {
   teamName?: string // Team name for swarm agents (from env var or AsyncLocalStorage)
   subscriptionType?: string // OAuth subscription tier (max, pro, enterprise, team)
   rh?: string // Hashed repo remote URL (first 16 chars of SHA256), for joining with server-side data
-  kairosActive?: true // KAIROS assistant mode active (ant-only; set in main.tsx after gate check)
-  skillMode?: 'discovery' | 'coach' | 'discovery_and_coach' // Which skill surfacing mechanism(s) are gated on (ant-only; for BQ session segmentation)
-  observerMode?: 'backseat' | 'skillcoach' | 'both' // Which observer classifiers are gated on (ant-only; for BQ cohort splits on tengu_backseat_* events)
+  kairosActive?: true // KAIROS assistant mode active (internal-only; set in main.tsx after gate check)
+  skillMode?: 'discovery' | 'coach' | 'discovery_and_coach' // Which skill surfacing mechanism(s) are gated on (internal-only; for BQ session segmentation)
+  observerMode?: 'backseat' | 'skillcoach' | 'both' // Which observer classifiers are gated on (internal-only; for BQ cohort splits on tengu_backseat_* events)
 }
 
 /**
@@ -593,7 +593,7 @@ const buildEnvContext = memoize(async (): Promise<EnvContext> => {
     isRunningWithBun: env.isRunningWithBun(),
     isCi: isEnvTruthy(process.env.CI),
     isClaubbit: isEnvTruthy(process.env.CLAUBBIT),
-    isgakrcliCodeRemote: isEnvTruthy(process.env.GAKR_CODE_REMOTE),
+    isGakrCLICodeRemote: isEnvTruthy(process.env.GAKR_CODE_REMOTE),
     isLocalAgentMode: process.env.GAKR_CODE_ENTRYPOINT === 'local-agent',
     isConductor: env.isConductor(),
     ...(process.env.GAKR_CODE_REMOTE_ENVIRONMENT_TYPE && {
@@ -615,8 +615,8 @@ const buildEnvContext = memoize(async (): Promise<EnvContext> => {
       tags: process.env.GAKR_CODE_TAGS,
     }),
     isGithubAction: isEnvTruthy(process.env.GITHUB_ACTIONS),
-    isgakrcliCodeAction: isEnvTruthy(process.env.GAKR_CODE_ACTION),
-    isgakrcliAiAuth: isgakrcliAISubscriber(),
+    isGakrCLICodeAction: isEnvTruthy(process.env.GAKR_CODE_ACTION),
+    isGakrCLIAiAuth: isGakrCLIAISubscriber(),
     version: MACRO.VERSION,
     versionBase: getVersionBase(),
     buildTime: MACRO.BUILD_TIME,
@@ -771,14 +771,14 @@ export type FirstPartyEventLoggingCoreMetadata = {
 export type FirstPartyEventLoggingMetadata = {
   env: EnvironmentMetadata
   process?: string
-  // auth is a top-level field on gakrcliCodeInternalEvent (proto PublicApiAuth).
+  // auth is a top-level field on GakrCLICodeInternalEvent (proto PublicApiAuth).
   // account_id is intentionally omitted — only UUID fields are populated client-side.
   auth?: PublicApiAuth
-  // core fields correspond to the top level of gakrcliCodeInternalEvent.
+  // core fields correspond to the top level of GakrCLICodeInternalEvent.
   // They get directly exported to their individual columns in the BigQuery tables
   core: FirstPartyEventLoggingCoreMetadata
   // additional fields are populated in the additional_metadata field of the
-  // gakrcliCodeInternalEvent proto. Includes but is not limited to information
+  // GakrCLICodeInternalEvent proto. Includes but is not limited to information
   // that differs by event type.
   additional: Record<string, unknown>
 }
@@ -828,12 +828,12 @@ export function to1PEventFormat(
     is_running_with_bun: envContext.isRunningWithBun,
     is_ci: envContext.isCi,
     is_claubbit: envContext.isClaubbit,
-    is_gakrcli_code_remote: envContext.isgakrcliCodeRemote,
+    is_gakrcli_code_remote: envContext.isGakrCLICodeRemote,
     is_local_agent_mode: envContext.isLocalAgentMode,
     is_conductor: envContext.isConductor,
     is_github_action: envContext.isGithubAction,
-    is_gakrcli_code_action: envContext.isgakrcliCodeAction,
-    is_gakrcli_ai_auth: envContext.isgakrcliAiAuth,
+    is_gakrcli_code_action: envContext.isGakrCLICodeAction,
+    is_gakrcli_ai_auth: envContext.isGakrCLIAiAuth,
     version: envContext.version,
     build_time: envContext.buildTime,
     deployment_environment: envContext.deploymentEnvironment,
@@ -934,10 +934,10 @@ export function to1PEventFormat(
 
   // Map userMetadata to output fields.
   // Based on src/utils/user.ts getUser(), but with fields present in other
-  // parts of gakrcliCodeInternalEvent deduplicated.
+  // parts of GakrCLICodeInternalEvent deduplicated.
   // Convert camelCase GitHubActionsMetadata to snake_case for 1P API
   // Note: github_actions_metadata is placed inside env (EnvironmentMetadata)
-  // rather than at the top level of gakrcliCodeInternalEvent
+  // rather than at the top level of GakrCLICodeInternalEvent
   if (userMetadata.githubActionsMetadata) {
     const ghMeta = userMetadata.githubActionsMetadata
     env.github_actions_metadata = {

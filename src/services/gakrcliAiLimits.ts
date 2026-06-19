@@ -2,7 +2,7 @@ import { APIError } from '@anthropic-ai/sdk'
 import type { MessageParam } from '@anthropic-ai/sdk/resources/index.mjs'
 import isEqual from 'lodash-es/isEqual.js'
 import { getIsNonInteractiveSession } from '../bootstrap/state.js'
-import { isgakrcliAISubscriber } from '../utils/auth.js'
+import { isGakrCLIAISubscriber } from '../utils/auth.js'
 import { getModelBetas } from '../utils/betas.js'
 import { getGlobalConfig, saveGlobalConfig } from '../utils/config.js'
 import { logError } from '../utils/log.js'
@@ -120,7 +120,7 @@ export type OverageDisabledReason =
   | 'no_limits_configured' // No overage limits configured for account
   | 'unknown' // Unknown reason, should not happen
 
-export type gakrcliAILimits = {
+export type GakrCLIAILimits = {
   status: QuotaStatus
   // unifiedRateLimitFallbackAvailable is currently used to warn users that set
   // their model to Opus whenever they are about to run out of quota. It does
@@ -137,7 +137,7 @@ export type gakrcliAILimits = {
 }
 
 // Exported for testing only
-export let currentLimits: gakrcliAILimits = {
+export let currentLimits: GakrCLIAILimits = {
   status: 'allowed',
   unifiedRateLimitFallbackAvailable: false,
   isUsingOverage: false,
@@ -179,10 +179,10 @@ function extractRawUtilization(headers: globalThis.Headers): RawUtilization {
   return result
 }
 
-type StatusChangeListener = (limits: gakrcliAILimits) => void
+type StatusChangeListener = (limits: GakrCLIAILimits) => void
 export const statusListeners: Set<StatusChangeListener> = new Set()
 
-export function emitStatusChange(limits: gakrcliAILimits) {
+export function emitStatusChange(limits: GakrCLIAILimits) {
   currentLimits = limits
   statusListeners.forEach(listener => listener(limits))
   const hoursTillReset = Math.round(
@@ -229,7 +229,7 @@ export async function checkQuotaStatus(): Promise<void> {
   }
 
   // Check if we should process rate limits (real subscriber or mock testing)
-  if (!shouldProcessRateLimits(isgakrcliAISubscriber())) {
+  if (!shouldProcessRateLimits(isGakrCLIAISubscriber())) {
     return
   }
 
@@ -255,12 +255,12 @@ export async function checkQuotaStatus(): Promise<void> {
 
 /**
  * Check if early warning should be triggered based on surpassed-threshold header.
- * Returns gakrcliAILimits if a threshold was surpassed, null otherwise.
+ * Returns GakrCLIAILimits if a threshold was surpassed, null otherwise.
  */
 function getHeaderBasedEarlyWarning(
   headers: globalThis.Headers,
   unifiedRateLimitFallbackAvailable: boolean,
-): gakrcliAILimits | null {
+): GakrCLIAILimits | null {
   // Check each claim type for surpassed threshold header
   for (const [claimAbbrev, rateLimitType] of Object.entries(
     EARLY_WARNING_CLAIM_MAP,
@@ -301,13 +301,13 @@ function getHeaderBasedEarlyWarning(
 /**
  * Check if time-relative early warning should be triggered for a rate limit type.
  * Fallback when server doesn't send surpassed-threshold header.
- * Returns gakrcliAILimits if thresholds are exceeded, null otherwise.
+ * Returns GakrCLIAILimits if thresholds are exceeded, null otherwise.
  */
 function getTimeRelativeEarlyWarning(
   headers: globalThis.Headers,
   config: EarlyWarningConfig,
   unifiedRateLimitFallbackAvailable: boolean,
-): gakrcliAILimits | null {
+): GakrCLIAILimits | null {
   const { rateLimitType, claimAbbrev, windowSeconds, thresholds } = config
 
   const utilizationHeader = headers.get(
@@ -352,7 +352,7 @@ function getTimeRelativeEarlyWarning(
 function getEarlyWarningFromHeaders(
   headers: globalThis.Headers,
   unifiedRateLimitFallbackAvailable: boolean,
-): gakrcliAILimits | null {
+): GakrCLIAILimits | null {
   // Try header-based detection first (preferred when API sends the header)
   const headerBasedWarning = getHeaderBasedEarlyWarning(
     headers,
@@ -380,7 +380,7 @@ function getEarlyWarningFromHeaders(
 
 function computeNewLimitsFromHeaders(
   headers: globalThis.Headers,
-): gakrcliAILimits {
+): GakrCLIAILimits {
   const status =
     (headers.get('anthropic-ratelimit-unified-status') as QuotaStatus) ||
     'allowed'
@@ -460,13 +460,13 @@ export function extractQuotaStatusFromHeaders(
   headers: globalThis.Headers,
 ): void {
   // Check if we need to process rate limits
-  const isSubscriber = isgakrcliAISubscriber()
+  const isSubscriber = isGakrCLIAISubscriber()
 
   if (!shouldProcessRateLimits(isSubscriber)) {
     // If we have any rate limit state, clear it
     rawUtilization = {}
     if (currentLimits.status !== 'allowed' || currentLimits.resetsAt) {
-      const defaultLimits: gakrcliAILimits = {
+      const defaultLimits: GakrCLIAILimits = {
         status: 'allowed',
         unifiedRateLimitFallbackAvailable: false,
         isUsingOverage: false,
@@ -491,7 +491,7 @@ export function extractQuotaStatusFromHeaders(
 
 export function extractQuotaStatusFromError(error: APIError): void {
   if (
-    !shouldProcessRateLimits(isgakrcliAISubscriber()) ||
+    !shouldProcessRateLimits(isGakrCLIAISubscriber()) ||
     error.status !== 429
   ) {
     return

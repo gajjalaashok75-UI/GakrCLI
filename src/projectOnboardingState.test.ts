@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -8,25 +8,13 @@ import {
   isProjectOnboardingComplete,
 } from './projectOnboardingSteps.js'
 import { runWithCwdOverride } from './utils/cwd.js'
-import {
-  acquireSharedMutationLock,
-  releaseSharedMutationLock,
-} from './test/sharedMutationLock.js'
 
 let tempDir: string | undefined
 
-beforeEach(async () => {
-  await acquireSharedMutationLock('projectOnboardingState.test.ts')
-})
-
 afterEach(async () => {
-  try {
-    if (tempDir) {
-      await rm(tempDir, { recursive: true, force: true })
-      tempDir = undefined
-    }
-  } finally {
-    releaseSharedMutationLock()
+  if (tempDir) {
+    await rm(tempDir, { recursive: true, force: true })
+    tempDir = undefined
   }
 })
 

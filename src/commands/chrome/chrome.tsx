@@ -4,14 +4,14 @@ import { type OptionWithDescription, Select } from '../../components/CustomSelec
 import { Dialog } from '../../components/design-system/Dialog.js';
 import { Box, Text } from '../../ink.js';
 import { useAppState } from '../../state/AppState.js';
-import { isgakrcliAISubscriber } from '../../utils/auth.js';
+import { isGakrCLIAISubscriber } from '../../utils/auth.js';
 import { openBrowser } from '../../utils/browser.js';
 import { GAKR_IN_CHROME_MCP_SERVER_NAME, openInChrome } from '../../utils/gakrcliInChrome/common.js';
 import { isChromeExtensionInstalled } from '../../utils/gakrcliInChrome/setup.js';
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js';
 import { env } from '../../utils/env.js';
 import { isRunningOnHomespace } from '../../utils/envUtils.js';
-const CHROME_EXTENSION_URL = 'https://gakr.ai/chrome';
+const CHROME_EXTENSION_URL = 'https://gakrcli.ai/chrome';
 const CHROME_PERMISSIONS_URL = 'https://clau.de/chrome/permissions';
 const CHROME_RECONNECT_URL = 'https://clau.de/chrome/reconnect';
 type MenuAction = 'install-extension' | 'reconnect' | 'manage-permissions' | 'toggle-default';
@@ -19,16 +19,16 @@ type Props = {
   onDone: (result?: string) => void;
   isExtensionInstalled: boolean;
   configEnabled: boolean | undefined;
-  isgakrcliAISubscriber: boolean;
+  isGakrCLIAISubscriber: boolean;
   isWSL: boolean;
 };
-function gakrcliInChromeMenu(t0) {
+function GakrCLIInChromeMenu(t0) {
   const $ = _c(41);
   const {
     onDone,
     isExtensionInstalled: installed,
     configEnabled,
-    isgakrcliAISubscriber,
+    isGakrCLIAISubscriber,
     isWSL
   } = t0;
   const mcpClients = useAppState(_temp);
@@ -186,7 +186,7 @@ function gakrcliInChromeMenu(t0) {
   } else {
     options = $[8];
   }
-  const isDisabled = isWSL || true && !isgakrcliAISubscriber;
+  const isDisabled = isWSL || true && !isGakrCLIAISubscriber;
   let t5;
   if ($[18] !== onDone) {
     t5 = () => onDone();
@@ -197,7 +197,7 @@ function gakrcliInChromeMenu(t0) {
   }
   let t6;
   if ($[20] === Symbol.for("react.memo_cache_sentinel")) {
-    t6 = <Text>GakrCLI in Chrome works with the Chrome extension to let you control your browser directly from Gakr. Navigate websites, fill forms, capture screenshots, record GIFs, and debug with console logs and network requests.</Text>;
+    t6 = <Text>GakrCLI in Chrome works with the Chrome extension to let you control your browser directly from GakrCLI. Navigate websites, fill forms, capture screenshots, record GIFs, and debug with console logs and network requests.</Text>;
     $[20] = t6;
   } else {
     t6 = $[20];
@@ -211,9 +211,9 @@ function gakrcliInChromeMenu(t0) {
     t7 = $[22];
   }
   let t8;
-  if ($[23] !== isgakrcliAISubscriber) {
-    t8 = true && !isgakrcliAISubscriber && <Text color="error">GakrCLI in Chrome requires a gakr.ai subscription.</Text>;
-    $[23] = isgakrcliAISubscriber;
+  if ($[23] !== isGakrCLIAISubscriber) {
+    t8 = true && !isGakrCLIAISubscriber && <Text color="error">GakrCLI in Chrome requires a gakrcli.ai subscription.</Text>;
+    $[23] = isGakrCLIAISubscriber;
     $[24] = t8;
   } else {
     t8 = $[24];
@@ -234,7 +234,7 @@ function gakrcliInChromeMenu(t0) {
   }
   let t10;
   if ($[33] === Symbol.for("react.memo_cache_sentinel")) {
-    t10 = <Text dimColor={true}>Learn more: https://github.com/gakr-gakr/gakr/docs/en/chrome</Text>;
+    t10 = <Text dimColor={true}>Learn more: https://code.gakrcli.com/docs/en/chrome</Text>;
     $[33] = t10;
   } else {
     t10 = $[33];
@@ -278,7 +278,7 @@ function _temp(s) {
 export const call = async function (onDone: (result?: string) => void): Promise<React.ReactNode> {
   const isExtensionInstalled = await isChromeExtensionInstalled();
   const config = getGlobalConfig();
-  const isSubscriber = isgakrcliAISubscriber();
+  const isSubscriber = isGakrCLIAISubscriber();
   const isWSL = env.isWslEnvironment();
-  return <gakrcliInChromeMenu onDone={onDone} isExtensionInstalled={isExtensionInstalled} configEnabled={config.gakrcliInChromeDefaultEnabled} isgakrcliAISubscriber={isSubscriber} isWSL={isWSL} />;
+  return <GakrCLIInChromeMenu onDone={onDone} isExtensionInstalled={isExtensionInstalled} configEnabled={config.gakrcliInChromeDefaultEnabled} isGakrCLIAISubscriber={isSubscriber} isWSL={isWSL} />;
 };

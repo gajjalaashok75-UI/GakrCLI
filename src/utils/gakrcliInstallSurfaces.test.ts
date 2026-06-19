@@ -71,7 +71,7 @@ test('install command displays gakrcli.exe path on Windows', async () => {
   )
 })
 
-test('cleanupNpmInstallations removes the gakrcli local install dir', async () => {
+test('cleanupNpmInstallations removes both gakrcli and legacy gakrcli local install dirs', async () => {
   const removedPaths: string[] = []
   ;(globalThis as Record<string, unknown>).MACRO = {
     PACKAGE_URL: '@gakr-gakr/gakrcli',
@@ -95,8 +95,7 @@ test('cleanupNpmInstallations removes the gakrcli local install dir', async () =
 
   mock.module('./envUtils.js', () => ({
     ...realEnvUtils,
-    getClaudeConfigHomeDir: () => join(homedir(), '.gakrcli'),
-    isEnvTruthy: (value: string | undefined) => value === '1',
+    getGakrCLIConfigHomeDir: () => join(homedir(), '.gakrcli'),
   }))
 
   const { cleanupNpmInstallations } = await importFreshInstaller()
@@ -104,5 +103,4 @@ test('cleanupNpmInstallations removes the gakrcli local install dir', async () =
 
   expect(removedPaths).toContain(join(homedir(), '.gakrcli', 'local'))
   expect(removedPaths).not.toContain(join(homedir(), '.claude', 'local'))
-  
 })

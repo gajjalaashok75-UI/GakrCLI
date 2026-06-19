@@ -12,9 +12,9 @@ import {
 } from '../../constants/oauth.js'
 import {
   checkAndRefreshOAuthTokenIfNeeded,
-  getgakrcliAIOAuthTokens,
+  getGakrCLIAIOAuthTokens,
   hasProfileScope,
-  isgakrcliAISubscriber,
+  isGakrCLIAISubscriber,
   saveApiKey,
 } from '../../utils/auth.js'
 import type { AccountInfo } from '../../utils/config.js'
@@ -32,10 +32,10 @@ import type {
 } from './types.js'
 
 /**
- * Check if the user has Gakr.ai authentication scope
+ * Check if the user has GakrCLI.ai authentication scope
  * @private Only call this if you're OAuth / auth related code!
  */
-export function shouldUsegakrcliAIAuth(scopes: string[] | undefined): boolean {
+export function shouldUseGakrCLIAIAuth(scopes: string[] | undefined): boolean {
   return Boolean(scopes?.includes(GAKR_AI_INFERENCE_SCOPE))
 }
 
@@ -48,7 +48,7 @@ export function buildAuthUrl({
   state,
   port,
   isManual,
-  loginWithgakrcliAi,
+  loginWithGakrCLIAi,
   inferenceOnly,
   orgUUID,
   loginHint,
@@ -58,13 +58,13 @@ export function buildAuthUrl({
   state: string
   port: number
   isManual: boolean
-  loginWithgakrcliAi?: boolean
+  loginWithGakrCLIAi?: boolean
   inferenceOnly?: boolean
   orgUUID?: string
   loginHint?: string
   loginMethod?: string
 }): string {
-  const authUrlBase = loginWithgakrcliAi
+  const authUrlBase = loginWithGakrCLIAi
     ? getOauthConfig().GAKR_AI_AUTHORIZE_URL
     : getOauthConfig().CONSOLE_AUTHORIZE_URL
 
@@ -198,7 +198,7 @@ export async function refreshOAuthToken(
     // the re-login path writes cached ?? wiped ?? null = cached; and if secure
     // storage was already empty we fall through to the fetch.
     const config = getGlobalConfig()
-    const existing = getgakrcliAIOAuthTokens()
+    const existing = getGakrCLIAIOAuthTokens()
     const haveProfileAlready =
       config.oauthAccount?.billingType !== undefined &&
       config.oauthAccount?.accountCreatedAt !== undefined &&
@@ -432,7 +432,7 @@ export async function getOrganizationUUID(): Promise<string | null> {
   }
 
   // Fall back to fetching from profile (requires user:profile scope)
-  const accessToken = getgakrcliAIOAuthTokens()?.accessToken
+  const accessToken = getGakrCLIAIOAuthTokens()?.accessToken
   if (accessToken === undefined || !hasProfileScope()) {
     return null
   }
@@ -460,14 +460,14 @@ function hasCompleteOAuthAccountInfo(): boolean {
 
 export function shouldRefreshOAuthAccountInfo({
   hasCompleteAccountInfo,
-  isGakrcliAiSubscriber,
+  isGakrCLIAiSubscriber,
   hasProfileScope,
 }: {
   hasCompleteAccountInfo: boolean
-  isGakrcliAiSubscriber: boolean
+  isGakrCLIAiSubscriber: boolean
   hasProfileScope: boolean
 }): boolean {
-  return !hasCompleteAccountInfo && isGakrcliAiSubscriber && hasProfileScope
+  return !hasCompleteAccountInfo && isGakrCLIAiSubscriber && hasProfileScope
 }
 
 export async function populateOAuthAccountInfoIfNeeded(): Promise<boolean> {
@@ -495,7 +495,7 @@ export async function populateOAuthAccountInfoIfNeeded(): Promise<boolean> {
   if (
     !shouldRefreshOAuthAccountInfo({
       hasCompleteAccountInfo: hasCompleteOAuthAccountInfo(),
-      isGakrcliAiSubscriber: isgakrcliAISubscriber(),
+      isGakrCLIAiSubscriber: isGakrCLIAISubscriber(),
       hasProfileScope: hasProfileScope(),
     })
   ) {
@@ -509,7 +509,7 @@ export async function populateOAuthAccountInfoIfNeeded(): Promise<boolean> {
     return false
   }
 
-  const tokens = getgakrcliAIOAuthTokens()
+  const tokens = getGakrCLIAIOAuthTokens()
   if (tokens?.accessToken) {
     const profile = await getOauthProfileFromOauthToken(tokens.accessToken)
     if (profile) {

@@ -177,7 +177,7 @@ function buildPrompt(
   return parts.join('\n\n')
 }
 
-export function registergakrcliApiSkill(): void {
+export function registerGakrCLIApiSkill(): void {
   registerBundledSkill({
     name: 'gakrcli-api',
     description:

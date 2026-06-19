@@ -1,24 +1,43 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import * as realAxios from 'axios'
+import * as realOauthConstants from 'src/constants/oauth.js'
+import * as realGrowthbook from 'src/services/analytics/growthbook.js'
 import {
   acquireSharedMutationLock,
   releaseSharedMutationLock,
 } from '../test/sharedMutationLock.js'
+import * as realAuth from './auth.js'
+import * as realModel from './model/model.js'
+type ProvidersModule = typeof import('./model/providers.js')
+type AxiosModule = typeof import('axios')
 
 const originalEnv = { ...process.env }
+let originalProvidersModule: ProvidersModule | undefined
+let originalAxiosModule: AxiosModule | undefined
 
 async function importFreshFastModeModule() {
   return import(`./fastMode.ts?ts=${Date.now()}-${Math.random()}`)
 }
 
-function installCommonMocks(options?: {
+async function installCommonMocks(options?: {
   cachedEnabled?: boolean
   apiKey?: string | null
   oauthToken?: string | null
   hasProfileScope?: boolean
   axiosReject?: boolean
 }) {
+  originalProvidersModule ??= await importActualProviders()
+  originalAxiosModule ??= await import('axios')
+
   mock.module('axios', () => ({
     default: {
+      defaults: {},
+      interceptors: {
+        request: {
+          use: () => 0,
+          eject: () => {},
+        },
+      },
       get: options?.axiosReject
         ? async () => {
             throw new Error('network fail')
@@ -75,18 +94,18 @@ function installCommonMocks(options?: {
     CONSOLE_OAUTH_SCOPES: ['org:create_api_key', 'user:profile'],
     GAKR_AI_OAUTH_SCOPES: ['user:profile', 'user:inference'],
     ALL_OAUTH_SCOPES: ['org:create_api_key', 'user:profile', 'user:inference'],
-    MCP_CLIENT_METADATA_URL: 'https://gakr.ai/oauth/gakr-code-client-metadata',
+    MCP_CLIENT_METADATA_URL: 'https://gakrcli.ai/oauth/gakrcli-code-client-metadata',
     getOauthConfig: () => ({
       BASE_API_URL: 'https://api.anthropic.com',
-      CONSOLE_AUTHORIZE_URL: 'https://platform.gakr.com/oauth/authorize',
-      GAKR_AI_AUTHORIZE_URL: 'https://gakr.com/cai/oauth/authorize',
-      GAKR_AI_ORIGIN: 'https://gakr.ai',
-      TOKEN_URL: 'https://platform.gakr.com/v1/oauth/token',
-      API_KEY_URL: 'https://api.anthropic.com/api/oauth/gakr_cli/create_api_key',
-      ROLES_URL: 'https://api.anthropic.com/api/oauth/gakr_cli/roles',
-      CONSOLE_SUCCESS_URL: 'https://platform.gakr.com/oauth/code/success',
-      GAKRAI_SUCCESS_URL: 'https://platform.gakr.com/oauth/code/success',
-      MANUAL_REDIRECT_URL: 'https://platform.gakr.com/oauth/code/callback',
+      CONSOLE_AUTHORIZE_URL: 'https://platform.gakrcli.com/oauth/authorize',
+      GAKR_AI_AUTHORIZE_URL: 'https://gakrcli.com/cai/oauth/authorize',
+      GAKR_AI_ORIGIN: 'https://gakrcli.ai',
+      TOKEN_URL: 'https://platform.gakrcli.com/v1/oauth/token',
+      API_KEY_URL: 'https://api.anthropic.com/api/oauth/gakrcli_cli/create_api_key',
+      ROLES_URL: 'https://api.anthropic.com/api/oauth/gakrcli_cli/roles',
+      CONSOLE_SUCCESS_URL: 'https://platform.gakrcli.com/oauth/code/success',
+      GAKRCLIAI_SUCCESS_URL: 'https://platform.gakrcli.com/oauth/code/success',
+      MANUAL_REDIRECT_URL: 'https://platform.gakrcli.com/oauth/code/callback',
       CLIENT_ID: 'test-client-id',
       OAUTH_FILE_SUFFIX: '',
       MCP_PROXY_URL: 'https://mcp-proxy.anthropic.com',
@@ -127,14 +146,14 @@ function installCommonMocks(options?: {
     isCustomApiKeyApproved: () => false,
     removeApiKey: async () => {},
     saveOAuthTokensIfNeeded: () => ({ didSave: false }),
-    getGakrcliAIOAuthTokens: () =>
+    getGakrCLIAIOAuthTokens: () =>
       options?.oauthToken ? { accessToken: options.oauthToken } : null,
     clearOAuthTokenCache: () => {},
     handleOAuth401Error: async () => {},
-    getGakrcliAIOAuthTokensAsync: async () =>
+    getGakrCLIAIOAuthTokensAsync: async () =>
       options?.oauthToken ? { accessToken: options.oauthToken } : null,
     checkAndRefreshOAuthTokenIfNeeded: async () => null,
-    isGakrcliAISubscriber: () => Boolean(options?.oauthToken),
+    isGakrCLIAISubscriber: () => Boolean(options?.oauthToken),
     hasProfileScope: () => options?.hasProfileScope ?? false,
     is1PApiCustomer: () => Boolean(options?.apiKey),
     getOauthAccountInfo: () => undefined,
@@ -157,12 +176,19 @@ function installCommonMocks(options?: {
   }))
 
   mock.module('./model/providers.js', () => ({
+    ...originalProvidersModule!,
     getAPIProvider: () => 'firstParty',
     getAPIProviderForStatsig: () => 'firstParty',
     isFirstPartyAnthropicBaseUrl: () => true,
     isGithubNativeAnthropicMode: () => false,
     usesAnthropicAccountFlow: () => true,
   }))
+}
+
+async function importActualProviders(): Promise<ProvidersModule> {
+  return import(
+    `./model/providers.ts?fastModeActual=${Date.now()}-${Math.random()}`
+  )
 }
 
 async function prepareFastModeTestState(): Promise<void> {
@@ -199,6 +225,14 @@ beforeEach(async () => {
 afterEach(async () => {
   try {
     mock.restore()
+    if (originalProvidersModule) {
+      mock.module('./model/providers.js', () => originalProvidersModule!)
+    }
+    mock.module('axios', () => originalAxiosModule ?? realAxios)
+    mock.module('src/constants/oauth.js', () => realOauthConstants)
+    mock.module('src/services/analytics/growthbook.js', () => realGrowthbook)
+    mock.module('./auth.js', () => realAuth)
+    mock.module('./model/model.js', () => realModel)
     process.env = { ...originalEnv }
     const { resetStateForTests } = await import('../bootstrap/state.js')
     resetStateForTests()
@@ -213,7 +247,7 @@ describe('fastMode ant-only fallback cleanup', () => {
   test('resolveFastModeStatusFromCache does not force-enable from USER_TYPE=ant', async () => {
     process.env.USER_TYPE = 'ant'
     forceFirstPartyProviderEnv()
-    installCommonMocks({ cachedEnabled: false })
+    await installCommonMocks({ cachedEnabled: false })
 
     const {
       resolveFastModeStatusFromCache,
@@ -231,7 +265,7 @@ describe('fastMode ant-only fallback cleanup', () => {
   test('prefetchFastModeStatus without auth does not force-enable from USER_TYPE=ant', async () => {
     process.env.USER_TYPE = 'ant'
     forceFirstPartyProviderEnv()
-    installCommonMocks({ cachedEnabled: false, apiKey: null, oauthToken: null })
+    await installCommonMocks({ cachedEnabled: false, apiKey: null, oauthToken: null })
 
     const {
       prefetchFastModeStatus,
@@ -249,7 +283,7 @@ describe('fastMode ant-only fallback cleanup', () => {
   test('prefetchFastModeStatus network failure does not force-enable from USER_TYPE=ant', async () => {
     process.env.USER_TYPE = 'ant'
     forceFirstPartyProviderEnv()
-    installCommonMocks({
+    await installCommonMocks({
       cachedEnabled: false,
       apiKey: 'test-key',
       axiosReject: true,

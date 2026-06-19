@@ -1,7 +1,6 @@
 import { roughTokenCountEstimation } from '../services/tokenEstimation.js'
-import type { Tool, ToolPermissionContext } from '../Tool.js'
+import type { ToolPermissionContext, Tools } from '../Tool.js'
 import type { AgentDefinitionsResult } from '../tools/AgentTool/loadAgentsDir.js'
-import { TOOL_SEARCH_TOOL_NAME } from '../tools/ToolSearchTool/constants.js'
 import { countMcpToolTokens } from './analyzeContext.js'
 import {
   getLargeMemoryFiles,
@@ -35,16 +34,6 @@ export type CheckContextWarningsOptions = {
   includeUnreachableRules?: boolean
 }
 
-async function safeWarning(
-  run: () => Promise<ContextWarning | null>,
-): Promise<ContextWarning | null> {
-  try {
-    return await run()
-  } catch {
-    return null
-  }
-}
-
 export type ContextWarning = {
   type:
     | 'gakrclimd_files'
@@ -65,7 +54,17 @@ export type ContextWarnings = {
   unreachableRulesWarning: ContextWarning | null
 }
 
-async function checkgakrcliMdFiles(
+async function safeWarning(
+  run: () => Promise<ContextWarning | null>,
+): Promise<ContextWarning | null> {
+  try {
+    return await run()
+  } catch {
+    return null
+  }
+}
+
+async function checkGakrCLIMdFiles(
   memoryFiles?: MemoryFileInfo[],
 ): Promise<ContextWarning | null> {
   const largeFiles = getLargeMemoryFiles(memoryFiles ?? (await getMemoryFiles()))
@@ -144,7 +143,7 @@ async function checkAgentDescriptions(
  * Check MCP tools token count
  */
 async function estimateMcpToolTokens(
-  tools: Tool[],
+  tools: Tools,
   getToolPermissionContext: () => Promise<ToolPermissionContext>,
   agentInfo: AgentDefinitionsResult | null,
 ): Promise<{
@@ -189,23 +188,21 @@ async function estimateMcpToolTokens(
     }),
   )
 
-  let isDeferred = false
-  if (tools.some(tool => tool.name === TOOL_SEARCH_TOOL_NAME)) {
-    const model = getMainLoopModel()
-    const { isToolSearchEnabled } = await import('./toolSearch.js')
-    try {
-      isDeferred = await isToolSearchEnabled(
-        model,
-        tools,
-        getToolPermissionContext,
-        agentInfo?.activeAgents ?? [],
-        'analyzeMcp',
-      )
-    } catch {
-      isDeferred = false
-    }
-  }
+  const model = getMainLoopModel()
+  const { isToolSearchEnabled } = await import('./toolSearch.js')
   const { isDeferredTool } = await import('../tools/ToolSearchTool/prompt.js')
+  let isDeferred = false
+  try {
+    isDeferred = await isToolSearchEnabled(
+      model,
+      tools,
+      getToolPermissionContext,
+      agentInfo?.activeAgents ?? [],
+      'analyzeMcp',
+    )
+  } catch {
+    isDeferred = false
+  }
 
   const mcpToolDetails = estimates.map((detail, index) => ({
     ...detail,
@@ -269,7 +266,7 @@ function buildMcpToolsWarning(
 }
 
 async function checkMcpTools(
-  tools: Tool[],
+  tools: Tools,
   getToolPermissionContext: () => Promise<ToolPermissionContext>,
   agentInfo: AgentDefinitionsResult | null,
   tokenStrategy: CheckContextWarningsOptions['mcpTokenStrategy'] = 'api',
@@ -350,7 +347,7 @@ async function checkUnreachableRules(
  * Check all context warnings for the doctor command
  */
 export async function checkContextWarnings(
-  tools: Tool[],
+  tools: Tools,
   agentInfo: AgentDefinitionsResult | null,
   getToolPermissionContext: () => Promise<ToolPermissionContext>,
   options: CheckContextWarningsOptions = {},
@@ -358,7 +355,7 @@ export async function checkContextWarnings(
   const includeUnreachableRules = options.includeUnreachableRules ?? true
   const [gakrcliMdWarning, agentWarning, mcpWarning, unreachableRulesWarning] =
     await Promise.all([
-      safeWarning(() => checkgakrcliMdFiles(options.memoryFiles)),
+      safeWarning(() => checkGakrCLIMdFiles(options.memoryFiles)),
       safeWarning(() => checkAgentDescriptions(agentInfo)),
       safeWarning(() =>
         checkMcpTools(

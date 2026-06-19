@@ -45,10 +45,10 @@ describe('GakrCLI paths', () => {
   test('defaults user config home to ~/.gakrcli', async () => {
     await acquireEnvMutex()
     delete process.env.GAKR_CONFIG_DIR
-    const { resolveGakrcliConfigHomeDir } = await importFreshEnvUtils()
+    const { resolveGakrCLIConfigHomeDir } = await importFreshEnvUtils()
 
     expect(
-      resolveGakrcliConfigHomeDir({
+      resolveGakrCLIConfigHomeDir({
         homeDir: homedir(),
       }),
     ).toBe(join(homedir(), '.gakrcli'))
@@ -57,52 +57,142 @@ describe('GakrCLI paths', () => {
   test('hard-cuts user config home to ~/.gakrcli by default', async () => {
     await acquireEnvMutex()
     delete process.env.GAKR_CONFIG_DIR
-    const { resolveGakrcliConfigHomeDir } = await importFreshEnvUtils()
+    const { resolveGakrCLIConfigHomeDir } = await importFreshEnvUtils()
 
     expect(
-      resolveGakrcliConfigHomeDir({
+      resolveGakrCLIConfigHomeDir({
         homeDir: homedir(),
       }),
     ).toBe(join(homedir(), '.gakrcli'))
   })
-  
-  test('uses GAKR_CONFIG_DIR override when provided', async () => {
-    process.env.GAKR_CONFIG_DIR = '/tmp/custom-gakrcli'
-    const { getgakrcliConfigHomeDir, resolveGakrcliConfigHomeDir } =
-      await importFreshEnvUtils()
 
-    expect(getgakrcliConfigHomeDir()).toBe('/tmp/custom-gakrcli')
-    expect(
-      resolveGakrcliConfigHomeDir({
-        configDirEnv: '/tmp/custom-gakrcli',
-      }),
-    ).toBe('/tmp/custom-gakrcli')
+  test('migrates legacy config home and global config files to .gakrcli', async () => {
+    await acquireEnvMutex()
+    const tempHome = mkdtempSync(join(tmpdir(), 'gakrcli-paths-test-'))
+    try {
+      mkdirSync(join(tempHome, '.gakrcli', 'skills', 'legacy-skill'), {
+        recursive: true,
+      })
+      writeFileSync(
+        join(tempHome, '.gakrcli', 'skills', 'legacy-skill', 'SKILL.md'),
+        'legacy skill',
+      )
+      writeFileSync(join(tempHome, '.gakrcli', 'settings.json'), '{}')
+      writeFileSync(join(tempHome, '.gakrcli.json'), '{"legacy":true}')
+      writeFileSync(
+        join(tempHome, '.gakrcli-custom-oauth.json'),
+        '{"custom":true}',
+      )
+
+      const { migrateLegacyGakrCLIConfigHome } = await importFreshEnvUtils()
+
+      expect(migrateLegacyGakrCLIConfigHome({ homeDir: tempHome })).toBe(true)
+      expect(
+        readFileSync(
+          join(tempHome, '.gakrcli', 'skills', 'legacy-skill', 'SKILL.md'),
+          'utf8',
+        ),
+      ).toBe('legacy skill')
+      expect(existsSync(join(tempHome, '.gakrcli', 'settings.json'))).toBe(
+        true,
+      )
+      expect(readFileSync(join(tempHome, '.gakrcli.json'), 'utf8')).toBe(
+        '{"legacy":true}',
+      )
+      expect(
+        readFileSync(join(tempHome, '.gakrcli-custom-oauth.json'), 'utf8'),
+      ).toBe('{"custom":true}')
+    } finally {
+      rmSync(tempHome, { recursive: true, force: true })
+    }
   })
 
-  test('defaults workspace projects under ~/.gakrcli/workspace', async () => {
-    delete process.env.GAKR_CONFIG_DIR
-    delete process.env.GAKRCLI_WORKSPACE_DIR
-    delete process.env.GAKR_WORKSPACE_DIR
-    const { getGakrcliWorkspaceDir, getProjectsDir } =
-      await importFreshEnvUtils()
+  test('migration preserves existing .gakrcli data while copying missing legacy data', async () => {
+    await acquireEnvMutex()
+    const tempHome = mkdtempSync(join(tmpdir(), 'gakrcli-paths-test-'))
+    try {
+      mkdirSync(join(tempHome, '.gakrcli', 'skills', 'legacy-skill'), {
+        recursive: true,
+      })
+      mkdirSync(join(tempHome, '.gakrcli', 'skills'), { recursive: true })
+      writeFileSync(join(tempHome, '.gakrcli', 'settings.json'), 'legacy')
+      writeFileSync(join(tempHome, '.gakrcli', 'settings.json'), 'current')
+      writeFileSync(
+        join(tempHome, '.gakrcli', 'skills', 'legacy-skill', 'SKILL.md'),
+        'legacy skill',
+      )
 
-    expect(getGakrcliWorkspaceDir()).toBe(
-      join(homedir(), '.gakrcli', 'workspace'),
-    )
-    expect(getProjectsDir()).toBe(
-      join(homedir(), '.gakrcli', 'workspace', 'projects'),
-    )
+      const { migrateLegacyGakrCLIConfigHome } = await importFreshEnvUtils()
+
+      expect(migrateLegacyGakrCLIConfigHome({ homeDir: tempHome })).toBe(true)
+      expect(
+        readFileSync(join(tempHome, '.gakrcli', 'settings.json'), 'utf8'),
+      ).toBe('current')
+      expect(
+        readFileSync(
+          join(tempHome, '.gakrcli', 'skills', 'legacy-skill', 'SKILL.md'),
+          'utf8',
+        ),
+      ).toBe('legacy skill')
+    } finally {
+      rmSync(tempHome, { recursive: true, force: true })
+    }
   })
 
-  test('workspace override controls projects directory', async () => {
-    process.env.GAKR_CONFIG_DIR = '/tmp/custom-gakrcli'
-    const workspaceOverride = join(homedir(), 'custom-workspace')
-    process.env.GAKRCLI_WORKSPACE_DIR = workspaceOverride
-    const { getGakrcliWorkspaceDir, getProjectsDir } =
-      await importFreshEnvUtils()
+  test('migration skips explicit GAKR_CONFIG_DIR overrides', async () => {
+    await acquireEnvMutex()
+    const tempHome = mkdtempSync(join(tmpdir(), 'gakrcli-paths-test-'))
+    try {
+      mkdirSync(join(tempHome, '.gakrcli'), { recursive: true })
+      writeFileSync(join(tempHome, '.gakrcli', 'settings.json'), 'legacy')
 
-    expect(getGakrcliWorkspaceDir()).toBe(workspaceOverride)
-    expect(getProjectsDir()).toBe(join(workspaceOverride, 'projects'))
+      const { migrateLegacyGakrCLIConfigHome } = await importFreshEnvUtils()
+
+      expect(
+        migrateLegacyGakrCLIConfigHome({
+          configDirEnv: join(tempHome, 'custom-config'),
+          homeDir: tempHome,
+        }),
+      ).toBe(true)
+      expect(existsSync(join(tempHome, '.gakrcli'))).toBe(false)
+    } finally {
+      rmSync(tempHome, { recursive: true, force: true })
+    }
+  })
+
+  test('migration ignores non-directory legacy config homes', async () => {
+    await acquireEnvMutex()
+    const tempHome = mkdtempSync(join(tmpdir(), 'gakrcli-paths-test-'))
+    try {
+      writeFileSync(join(tempHome, '.gakrcli'), 'not a directory')
+
+      const { migrateLegacyGakrCLIConfigHome } = await importFreshEnvUtils()
+
+      expect(migrateLegacyGakrCLIConfigHome({ homeDir: tempHome })).toBe(true)
+      expect(existsSync(join(tempHome, '.gakrcli'))).toBe(true)
+    } finally {
+      rmSync(tempHome, { recursive: true, force: true })
+    }
+  })
+
+  test('config home falls back to legacy when migration fails on a non-directory .gakrcli collision', async () => {
+    await acquireEnvMutex()
+    const tempHome = mkdtempSync(join(tmpdir(), 'gakrcli-paths-test-'))
+    try {
+      writeFileSync(join(tempHome, '.gakrcli'), 'not a directory')
+
+      mock.module('os', () => ({
+        homedir: () => tempHome,
+        tmpdir,
+      }))
+      delete process.env.GAKR_CONFIG_DIR
+
+      const { getGakrCLIConfigHomeDir } = await importFreshEnvUtils()
+
+      expect(getGakrCLIConfigHomeDir()).toBe(join(tempHome, '.gakrcli'))
+    } finally {
+      rmSync(tempHome, { recursive: true, force: true })
+    }
   })
 
   test('default plans directory uses ~/.gakrcli/plans', async () => {
@@ -145,12 +235,12 @@ describe('GakrCLI paths', () => {
   test('uses GAKR_CONFIG_DIR override when provided', async () => {
     await acquireEnvMutex()
     process.env.GAKR_CONFIG_DIR = '/tmp/custom-gakrcli'
-    const { getGakrcliConfigHomeDir, resolveGakrcliConfigHomeDir } =
+    const { getGakrCLIConfigHomeDir, resolveGakrCLIConfigHomeDir } =
       await importFreshEnvUtils()
 
-    expect(getGakrcliConfigHomeDir()).toBe('/tmp/custom-gakrcli')
+    expect(getGakrCLIConfigHomeDir()).toBe('/tmp/custom-gakrcli')
     expect(
-      resolveGakrcliConfigHomeDir({
+      resolveGakrCLIConfigHomeDir({
         configDirEnv: '/tmp/custom-gakrcli',
       }),
     ).toBe('/tmp/custom-gakrcli')
@@ -171,11 +261,11 @@ describe('GakrCLI paths', () => {
   test('local installer uses gakrcli wrapper path', async () => {
     await acquireEnvMutex()
     // Force .gakrcli config home so the test doesn't fall back to
-    // ~/.claude when ~/.gakrcli doesn't exist on this machine.
+    // ~/.gakrcli when ~/.gakrcli doesn't exist on this machine.
     process.env.GAKR_CONFIG_DIR = join(homedir(), '.gakrcli')
-    const { getLocalGakrcliPath } = await importFreshLocalInstaller()
+    const { getLocalGakrCLIPath } = await importFreshLocalInstaller()
 
-    expect(getLocalGakrcliPath()).toBe(
+    expect(getLocalGakrCLIPath()).toBe(
       join(homedir(), '.gakrcli', 'local', 'gakrcli'),
     )
   })
@@ -192,18 +282,20 @@ describe('GakrCLI paths', () => {
     ).toBe(true)
   })
 
-  test('local installation detection does not match legacy .claude path', async () => {
+  test('local installation detection still matches legacy .gakrcli path', async () => {
+    await acquireEnvMutex()
     const { isManagedLocalInstallationPath } =
       await importFreshLocalInstaller()
 
     expect(
       isManagedLocalInstallationPath(
-        `${join(homedir(), '.claude', 'local')}/node_modules/.bin/gakrcli`,
+        `${join(homedir(), '.gakrcli', 'local')}/node_modules/.bin/gakrcli`,
       ),
-    ).toBe(false)
+    ).toBe(true)
   })
 
-  test('candidate local install dirs include only the gakrcli path', async () => {
+  test('candidate local install dirs include both gakrcli and legacy gakrcli paths', async () => {
+    await acquireEnvMutex()
     const { getCandidateLocalInstallDirs } = await importFreshLocalInstaller()
 
     expect(
@@ -211,16 +303,18 @@ describe('GakrCLI paths', () => {
         configHomeDir: join(homedir(), '.gakrcli'),
         homeDir: homedir(),
       }),
-    ).toEqual([join(homedir(), '.gakrcli', 'local')])
+    ).toEqual([
+      join(homedir(), '.gakrcli', 'local'),
+    ])
   })
 
-  test('legacy local installs are ignored when they expose only the claude binary', async () => {
+  test('legacy local installs are detected when they still expose the gakrcli binary', async () => {
+    await acquireEnvMutex()
     mock.module('fs/promises', () => ({
       ...fsPromises,
       access: async (path: string) => {
         if (
-          path ===
-          join(homedir(), '.claude', 'local', 'node_modules', '.bin', 'claude')
+          path === join(homedir(), '.gakrcli', 'local', 'node_modules', '.bin', 'gakrcli')
         ) {
           return
         }
@@ -231,7 +325,9 @@ describe('GakrCLI paths', () => {
     const { getDetectedLocalInstallDir, localInstallationExists } =
       await importFreshLocalInstaller()
 
-    expect(await localInstallationExists()).toBe(false)
-    expect(await getDetectedLocalInstallDir()).toBe(null)
+    expect(await localInstallationExists()).toBe(true)
+    expect(await getDetectedLocalInstallDir()).toBe(
+      join(homedir(), '.gakrcli', 'local'),
+    )
   })
 })

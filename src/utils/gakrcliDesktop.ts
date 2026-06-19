@@ -10,7 +10,7 @@ import { safeParseJSON } from './json.js'
 import { logError } from './log.js'
 import { getPlatform, SUPPORTED_PLATFORMS } from './platform.js'
 
-export async function getgakrcliDesktopConfigPath(): Promise<string> {
+export async function getGakrCLIDesktopConfigPath(): Promise<string> {
   const platform = getPlatform()
 
   if (!SUPPORTED_PLATFORMS.includes(platform)) {
@@ -24,7 +24,7 @@ export async function getgakrcliDesktopConfigPath(): Promise<string> {
       homedir(),
       'Library',
       'Application Support',
-      'Gakr',
+      'GakrCLI',
       'gakrcli_desktop_config.json',
     )
   }
@@ -37,7 +37,7 @@ export async function getgakrcliDesktopConfigPath(): Promise<string> {
   if (windowsHome) {
     // Remove drive letter and convert to WSL path format
     const wslPath = windowsHome.replace(/^[A-Z]:/, '')
-    const configPath = `/mnt/c${wslPath}/AppData/Roaming/Gakr/gakrcli_desktop_config.json`
+    const configPath = `/mnt/c${wslPath}/AppData/Roaming/GakrCLI/gakrcli_desktop_config.json`
 
     // Check if the file exists
     try {
@@ -72,7 +72,7 @@ export async function getgakrcliDesktopConfigPath(): Promise<string> {
           user.name,
           'AppData',
           'Roaming',
-          'Gakr',
+          'GakrCLI',
           'gakrcli_desktop_config.json',
         )
 
@@ -95,7 +95,7 @@ export async function getgakrcliDesktopConfigPath(): Promise<string> {
   )
 }
 
-export async function readgakrcliDesktopMcpServers(): Promise<
+export async function readGakrCLIDesktopMcpServers(): Promise<
   Record<string, McpServerConfig>
 > {
   if (!SUPPORTED_PLATFORMS.includes(getPlatform())) {
@@ -104,7 +104,7 @@ export async function readgakrcliDesktopMcpServers(): Promise<
     )
   }
   try {
-    const configPath = await getgakrcliDesktopConfigPath()
+    const configPath = await getGakrCLIDesktopConfigPath()
 
     let configContent: string
     try {

@@ -52,36 +52,6 @@ export const TOOL_VALIDATION_CONFIG: ToolValidationConfig = {
       return { valid: true }
     },
 
-    ImageSearch: content => {
-      if (content.includes('*') || content.includes('?')) {
-        return {
-          valid: false,
-          error: 'ImageSearch does not support wildcards',
-          suggestion: 'Use exact search terms without * or ?',
-          examples: [
-            'ImageSearch(product photography reference)',
-            'ImageSearch(mountain landscape sunrise)',
-          ],
-        }
-      }
-      return { valid: true }
-    },
-
-    VideoSearch: content => {
-      if (content.includes('*') || content.includes('?')) {
-        return {
-          valid: false,
-          error: 'VideoSearch does not support wildcards',
-          suggestion: 'Use exact search terms without * or ?',
-          examples: [
-            'VideoSearch(rust async tutorial)',
-            'VideoSearch(css grid animation example)',
-          ],
-        }
-      }
-      return { valid: true }
-    },
-
     // WebFetch uses domain: prefix for hostname-based permissions
     WebFetch: content => {
       // Check if it's trying to use a URL format

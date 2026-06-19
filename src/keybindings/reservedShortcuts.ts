@@ -11,7 +11,7 @@ export type ReservedShortcut = {
 }
 
 /**
- * Shortcuts that cannot be rebound - they are hardcoded in Gakr.
+ * Shortcuts that cannot be rebound - they are hardcoded in GakrCLI Code.
  */
 export const NON_REBINDABLE: ReservedShortcut[] = [
   {

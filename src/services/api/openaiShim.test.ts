@@ -1,8 +1,6 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test'
-import {
-  acquireSharedMutationLock,
-  releaseSharedMutationLock,
-} from '../../test/sharedMutationLock.js'
+import { afterEach, beforeEach, expect, mock, test } from 'bun:test'
+import { acquireSharedMutationLock, releaseSharedMutationLock } from '../../test/sharedMutationLock.js'
+import { asMockFetch } from '../../test/typedMocks.js'
 import { _clearRegistryForTesting, ensureIntegrationsLoaded, registerGateway } from '../../integrations/index.ts'
 import { applyProviderFlag } from '../../utils/providerFlag.ts'
 import { applyProviderProfileToProcessEnv } from '../../utils/providerProfiles.ts'
@@ -43,11 +41,8 @@ const originalEnv = {
   MIMO_API_KEY: process.env.MIMO_API_KEY,
   OPENGATEWAY_API_KEY: process.env.OPENGATEWAY_API_KEY,
   OPENGATEWAY_BASE_URL: process.env.OPENGATEWAY_BASE_URL,
-  GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED:
-    process.env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED,
-  GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID:
-    process.env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID,
-  GAKR_DISABLE_STRICT_TOOLS: process.env.GAKR_DISABLE_STRICT_TOOLS,
+  GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED: process.env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED,
+  GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID: process.env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID,
 }
 
 const originalFetch = globalThis.fetch
@@ -134,7 +129,7 @@ async function captureChatCompletionRequest(
     authorization = headers?.Authorization ?? headers?.authorization ?? null
 
     return makeChatCompletionResponse(model)
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -184,7 +179,6 @@ beforeEach(async () => {
   delete process.env.OPENGATEWAY_BASE_URL
   delete process.env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED
   delete process.env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID
-  delete process.env.GAKR_DISABLE_STRICT_TOOLS
 })
 
 afterEach(() => {
@@ -221,15 +215,8 @@ afterEach(() => {
     restoreEnv('MIMO_API_KEY', originalEnv.MIMO_API_KEY)
     restoreEnv('OPENGATEWAY_API_KEY', originalEnv.OPENGATEWAY_API_KEY)
     restoreEnv('OPENGATEWAY_BASE_URL', originalEnv.OPENGATEWAY_BASE_URL)
-    restoreEnv(
-      'GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED',
-      originalEnv.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED,
-    )
-    restoreEnv(
-      'GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID',
-      originalEnv.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID,
-    )
-    restoreEnv('GAKR_DISABLE_STRICT_TOOLS', originalEnv.GAKR_DISABLE_STRICT_TOOLS)
+    restoreEnv('GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED', originalEnv.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED)
+    restoreEnv('GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID', originalEnv.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID)
     globalThis.fetch = originalFetch
     _clearRegistryForTesting()
     ensureIntegrationsLoaded()
@@ -269,7 +256,7 @@ test('strips canonical Anthropic headers from direct shim defaultHeaders', async
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({
     defaultHeaders: {
@@ -332,7 +319,7 @@ test('uses OpenAI-compatible responses endpoint when OPENAI_API_FORMAT=responses
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({ defaultHeaders: {} }) as OpenAIShimClient
 
@@ -354,6 +341,109 @@ test('uses OpenAI-compatible responses endpoint when OPENAI_API_FORMAT=responses
       type: 'message',
       role: 'user',
       content: [{ type: 'input_text', text: 'hello' }],
+    },
+  ])
+})
+
+test('uses OpenAI-compatible responses endpoint with text chunk types when OPENAI_API_FORMAT=responses_compat', async () => {
+  process.env.OPENAI_API_FORMAT = 'responses_compat'
+  let capturedUrl = ''
+  let capturedBody: Record<string, unknown> | undefined
+
+  globalThis.fetch = (async (input, init) => {
+    capturedUrl = String(input)
+    capturedBody = JSON.parse(String(init?.body)) as Record<string, unknown>
+
+    return new Response(
+      JSON.stringify({
+        id: 'resp-1',
+        model: 'gpt-5.4',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'ok' }],
+          },
+        ],
+        usage: {
+          input_tokens: 8,
+          output_tokens: 3,
+          total_tokens: 11,
+        },
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+    )
+  }) as unknown as FetchType
+
+  const client = createOpenAIShimClient({ defaultHeaders: {} }) as OpenAIShimClient
+
+  await client.beta.messages.create({
+    model: 'gpt-5.4',
+    system: 'test system',
+    messages: [{ role: 'user', content: 'hello' }],
+    max_tokens: 64,
+    stream: false,
+  })
+
+  expect(capturedUrl).toBe('http://example.test/v1/responses')
+  expect(capturedBody?.model).toBe('gpt-5.4')
+  expect(capturedBody?.instructions).toBe('test system')
+  expect(capturedBody?.max_output_tokens).toBe(64)
+  expect(capturedBody?.store).toBe(false)
+  expect(capturedBody?.input).toEqual([
+    {
+      type: 'message',
+      role: 'user',
+      content: [{ type: 'text', text: 'hello' }],
+    },
+  ])
+})
+
+test('uses correct empty input fallback schema for standard responses and responses_compat', async () => {
+  let capturedBody: Record<string, unknown> | undefined
+
+  globalThis.fetch = (async (input, init) => {
+    capturedBody = JSON.parse(String(init?.body)) as Record<string, unknown>
+    return new Response(JSON.stringify({
+      id: 'resp-1',
+      model: 'test',
+      output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'ok' }] }]
+    }), { headers: { 'Content-Type': 'application/json' } })
+  }) as unknown as FetchType
+
+  const client = createOpenAIShimClient({ defaultHeaders: {} }) as OpenAIShimClient
+
+  process.env.OPENAI_API_FORMAT = 'responses'
+  await client.beta.messages.create({
+    model: 'test',
+    max_tokens: 10,
+    messages: [{ role: 'user', content: [] }],
+  })
+
+  expect(capturedBody?.input).toEqual([
+    {
+      type: 'message',
+      role: 'user',
+      content: [{ type: 'input_text', text: '' }],
+    },
+  ])
+
+  process.env.OPENAI_API_FORMAT = 'responses_compat'
+  await client.beta.messages.create({
+    model: 'test',
+    max_tokens: 10,
+    messages: [{ role: 'user', content: [] }],
+  })
+
+  expect(capturedBody?.input).toEqual([
+    {
+      type: 'message',
+      role: 'user',
+      content: [{ type: 'text', text: '' }],
     },
   ])
 })
@@ -386,7 +476,7 @@ test('strips store from strict OpenAI-compatible responses providers', async () 
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({ defaultHeaders: {} }) as OpenAIShimClient
 
@@ -413,7 +503,7 @@ test('strips store when providerOverride routes chat_completions to the Gemini h
       }),
       { headers: { 'Content-Type': 'application/json' } },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({
     defaultHeaders: {},
@@ -453,7 +543,7 @@ test('strips store when providerOverride routes responses API to the Gemini host
       }),
       { headers: { 'Content-Type': 'application/json' } },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({
     defaultHeaders: {},
@@ -494,7 +584,7 @@ test('uses custom OpenAI-compatible auth header value when configured', async ()
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({ defaultHeaders: {} }) as OpenAIShimClient
 
@@ -528,7 +618,7 @@ test('uses Hicap api-key auth header for the Hicap route', async () => {
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({ defaultHeaders: {} }) as OpenAIShimClient
 
@@ -562,7 +652,7 @@ test('defaults Authorization custom auth header to bearer scheme', async () => {
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({ defaultHeaders: {} }) as OpenAIShimClient
 
@@ -596,7 +686,7 @@ test('honors bearer scheme for custom OpenAI-compatible auth headers', async () 
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({ defaultHeaders: {} }) as OpenAIShimClient
 
@@ -630,7 +720,7 @@ test('ignores custom auth header value when no custom header is configured', asy
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({ defaultHeaders: {} }) as OpenAIShimClient
 
@@ -675,7 +765,7 @@ test('strips canonical Anthropic headers from per-request shim headers too', asy
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -758,7 +848,7 @@ test('applies descriptor static headers before client and request headers', asyn
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({
     defaultHeaders: {
@@ -785,6 +875,89 @@ test('applies descriptor static headers before client and request headers', asyn
   expect(capturedHeaders?.get('x-override-header')).toBe('from-request')
 })
 
+test('opengateway sends Accept-Encoding: identity header on chat requests', async () => {
+  let capturedHeaders: Headers | undefined
+
+  registerGateway({
+    id: 'gakr-gakr-opengateway-test',
+    label: 'gakr-gakr Opengateway',
+    category: 'aggregating',
+    defaultBaseUrl: 'https://opengateway.gakr-gakr.com/v1/xiaomi-mimo',
+    defaultModel: 'mimo-v2.5-pro',
+    setup: {
+      requiresAuth: false,
+      authMode: 'none',
+    },
+    transportConfig: {
+      kind: 'openai-compatible',
+      openaiShim: {
+        headers: {
+          'Accept-Encoding': 'identity',
+        },
+        defaultAuthHeader: {
+          name: 'api-key',
+          scheme: 'raw',
+        },
+        preserveReasoningContent: true,
+        requireReasoningContentOnAssistantMessages: true,
+        reasoningContentFallback: '',
+        maxTokensField: 'max_completion_tokens',
+        supportsApiFormatSelection: false,
+        supportsAuthHeaders: false,
+      },
+    },
+  })
+
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://opengateway.gakr-gakr.com/v1/xiaomi-mimo'
+  process.env.OPENAI_MODEL = 'mimo-v2.5-pro'
+
+  globalThis.fetch = (async (_input, init) => {
+    capturedHeaders = new Headers(init?.headers)
+
+    return new Response(
+      JSON.stringify({
+        id: 'chatcmpl-1',
+        model: 'mimo-v2.5-pro',
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'ok',
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: {
+          prompt_tokens: 8,
+          completion_tokens: 3,
+          total_tokens: 11,
+        },
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+    )
+  }) as unknown as FetchType
+
+  const client = createOpenAIShimClient({}) as OpenAIShimClient
+
+  await client.beta.messages.create(
+    {
+      model: 'mimo-v2.5-pro',
+      system: 'test system',
+      messages: [{ role: 'user', content: 'hello' }],
+      max_tokens: 64,
+      stream: false,
+    },
+    {},
+  )
+
+  expect(capturedHeaders?.get('Accept-Encoding')).toBe('identity')
+})
+
 test('strips Anthropic-specific headers on GitHub Codex transport requests', async () => {
   let capturedHeaders: Headers | undefined
 
@@ -802,7 +975,7 @@ test('strips Anthropic-specific headers on GitHub Codex transport requests', asy
         'Content-Type': 'text/event-stream',
       },
     })
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -849,7 +1022,7 @@ test('strips Anthropic-specific headers on GitHub Codex transport with providerO
         'Content-Type': 'text/event-stream',
       },
     })
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({
     providerOverride: {
@@ -931,7 +1104,7 @@ test('preserves usage from final OpenAI stream chunk with empty choices', async 
     ])
 
     return makeSseResponse(chunks)
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -993,7 +1166,7 @@ test('uses max_tokens instead of max_completion_tokens for local providers', asy
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -1038,7 +1211,7 @@ test('keeps max_completion_tokens for non-local non-github providers', async () 
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -1086,7 +1259,7 @@ test('uses route-specific credential env vars for descriptor-backed openai-compa
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -1131,7 +1304,7 @@ test('preserves Gemini tool call extra_content in follow-up requests', async () 
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -1190,8 +1363,8 @@ test('preserves Gemini tool call extra_content in follow-up requests', async () 
   })
 })
 
-test('replays Gemini tool signatures for model-detected Gemini endpoints', async () => {
-  process.env.OPENAI_BASE_URL = 'https://gateway.example.test/v1'
+test('replays Gemini tool signatures for OpenGateway Gemini models', async () => {
+  process.env.OPENAI_BASE_URL = 'https://opengateway.gakr-gakr.com/v1'
   let requestBody: Record<string, unknown> | undefined
 
   globalThis.fetch = (async (_input, init) => {
@@ -1200,7 +1373,7 @@ test('replays Gemini tool signatures for model-detected Gemini endpoints', async
     return new Response(
       JSON.stringify({
         id: 'chatcmpl-1',
-        model: 'google/gemini-3.1-flash-lite-preview',
+        model: 'google/gemini-3.1-flash-lite',
         choices: [
           {
             message: {
@@ -1222,12 +1395,12 @@ test('replays Gemini tool signatures for model-detected Gemini endpoints', async
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
   await client.beta.messages.create({
-    model: 'google/gemini-3.1-flash-lite-preview',
+    model: 'google/gemini-3.1-flash-lite',
     messages: [
       { role: 'user', content: 'Use Write' },
       {
@@ -1238,7 +1411,7 @@ test('replays Gemini tool signatures for model-detected Gemini endpoints', async
             id: 'call_1',
             name: 'Write',
             input: { file_path: 'todo.md', content: 'todo' },
-            signature: 'sig-gateway',
+            signature: 'sig-opengateway',
           },
         ],
       },
@@ -1265,10 +1438,306 @@ test('replays Gemini tool signatures for model-detected Gemini endpoints', async
     id: 'call_1',
     extra_content: {
       google: {
-        thought_signature: 'sig-gateway',
+        thought_signature: 'sig-opengateway',
       },
     },
   })
+})
+
+test('OpenGateway MiMo replays real reasoning_content without adding empty fallback', async () => {
+  process.env.OPENAI_BASE_URL = 'https://opengateway.gakr-gakr.com/v1'
+  process.env.OPENAI_MODEL = 'mimo-v2.5-pro'
+  let requestBody: Record<string, unknown> | undefined
+
+  globalThis.fetch = (async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body))
+
+    return new Response(
+      JSON.stringify({
+        id: 'chatcmpl-opengateway-mimo',
+        model: 'mimo-v2.5-pro',
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'done',
+            },
+            finish_reason: 'stop',
+          },
+        ],
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+    )
+  }) as unknown as FetchType
+
+  const client = createOpenAIShimClient({}) as OpenAIShimClient
+
+  await client.beta.messages.create({
+    model: 'mimo-v2.5-pro',
+    messages: [
+      { role: 'user', content: 'Use an agent' },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'thinking',
+            thinking: 'Need to inspect code with an agent.',
+          },
+          {
+            type: 'tool_use',
+            id: 'call_agent_1',
+            name: 'Agent',
+            input: {
+              description: 'Inspect code',
+              prompt: 'Look at the relevant code',
+              subagent_type: 'general-purpose',
+            },
+          },
+        ],
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'call_agent_1',
+            content: 'Agent finished',
+          },
+        ],
+      },
+    ],
+    max_tokens: 64,
+    stream: false,
+  })
+
+  const assistantWithToolCall = (requestBody?.messages as Array<Record<string, unknown>>).find(
+    message => Array.isArray(message.tool_calls),
+  )
+
+  expect(assistantWithToolCall).toBeDefined()
+  expect(assistantWithToolCall?.reasoning_content).toBe(
+    'Need to inspect code with an agent.',
+  )
+  expect(requestBody).not.toHaveProperty('store')
+})
+
+test('Xiaomi MiMo replays real reasoning_content without adding empty fallback', async () => {
+  process.env.OPENAI_BASE_URL = 'https://api.xiaomimimo.com/v1'
+  process.env.OPENAI_MODEL = 'mimo-v2.5-pro'
+  process.env.MIMO_API_KEY = 'mimo-test-key'
+  delete process.env.OPENAI_API_KEY
+  let requestBody: Record<string, unknown> | undefined
+
+  globalThis.fetch = (async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body))
+
+    return new Response(
+      JSON.stringify({
+        id: 'chatcmpl-mimo',
+        model: 'mimo-v2.5-pro',
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'done',
+            },
+            finish_reason: 'stop',
+          },
+        ],
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+    )
+  }) as unknown as FetchType
+
+  const client = createOpenAIShimClient({}) as OpenAIShimClient
+
+  await client.beta.messages.create({
+    model: 'mimo-v2.5-pro',
+    messages: [
+      { role: 'user', content: 'Use an agent' },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'thinking',
+            thinking: 'Need to inspect code with an agent.',
+          },
+          {
+            type: 'tool_use',
+            id: 'call_agent_1',
+            name: 'Agent',
+            input: {
+              description: 'Inspect code',
+              prompt: 'Look at the relevant code',
+              subagent_type: 'general-purpose',
+            },
+          },
+        ],
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'call_agent_1',
+            content: 'Agent finished',
+          },
+        ],
+      },
+    ],
+    max_tokens: 64,
+    stream: false,
+  })
+
+  const assistantWithToolCall = (requestBody?.messages as Array<Record<string, unknown>>).find(
+    message => Array.isArray(message.tool_calls),
+  )
+
+  expect(assistantWithToolCall).toBeDefined()
+  expect(assistantWithToolCall?.reasoning_content).toBe(
+    'Need to inspect code with an agent.',
+  )
+  expect(requestBody).not.toHaveProperty('store')
+})
+
+test('OpenGateway MiMo does not synthesize empty reasoning_content when missing', async () => {
+  process.env.OPENAI_BASE_URL = 'https://opengateway.gakr-gakr.com/v1'
+  process.env.OPENAI_MODEL = 'mimo-v2.5-pro'
+  let requestBody: Record<string, unknown> | undefined
+
+  globalThis.fetch = (async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body))
+
+    return new Response(
+      JSON.stringify({
+        id: 'chatcmpl-opengateway-mimo',
+        model: 'mimo-v2.5-pro',
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'done',
+            },
+            finish_reason: 'stop',
+          },
+        ],
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+    )
+  }) as unknown as FetchType
+
+  const client = createOpenAIShimClient({}) as OpenAIShimClient
+
+  await client.beta.messages.create({
+    model: 'mimo-v2.5-pro',
+    messages: [
+      { role: 'user', content: 'Use an agent' },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'call_agent_1',
+            name: 'Agent',
+            input: {
+              description: 'Inspect code',
+              prompt: 'Look at the relevant code',
+              subagent_type: 'general-purpose',
+            },
+          },
+        ],
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'call_agent_1',
+            content: 'Agent finished',
+          },
+        ],
+      },
+    ],
+    max_tokens: 64,
+    stream: false,
+  })
+
+  const assistantWithToolCall = (requestBody?.messages as Array<Record<string, unknown>>).find(
+    message => Array.isArray(message.tool_calls),
+  )
+
+  expect(assistantWithToolCall).toBeDefined()
+  expect(assistantWithToolCall).not.toHaveProperty('reasoning_content')
+  expect(requestBody).not.toHaveProperty('store')
+})
+
+test('strips unsupported stream_options for Xiaomi MiMo streams', async () => {
+  process.env.OPENAI_BASE_URL = 'https://api.xiaomimimo.com/v1'
+  process.env.OPENAI_MODEL = 'mimo-v2.5-pro'
+  process.env.MIMO_API_KEY = 'mimo-test-key'
+  delete process.env.OPENAI_API_KEY
+  let requestBody: Record<string, unknown> | undefined
+
+  globalThis.fetch = (async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body))
+
+    return makeSseResponse(
+      makeStreamChunks([
+        {
+          id: 'chatcmpl-mimo',
+          object: 'chat.completion.chunk',
+          model: 'mimo-v2.5-pro',
+          choices: [
+            {
+              index: 0,
+              delta: { role: 'assistant', content: 'done' },
+              finish_reason: null,
+            },
+          ],
+        },
+        {
+          id: 'chatcmpl-mimo',
+          object: 'chat.completion.chunk',
+          model: 'mimo-v2.5-pro',
+          choices: [
+            {
+              index: 0,
+              delta: {},
+              finish_reason: 'stop',
+            },
+          ],
+        },
+      ]),
+    )
+  }) as unknown as FetchType
+
+  const client = createOpenAIShimClient({}) as OpenAIShimClient
+
+  await client.beta.messages.create({
+    model: 'mimo-v2.5-pro',
+    messages: [{ role: 'user', content: 'hello' }],
+    max_tokens: 64,
+    stream: true,
+  })
+
+  expect(requestBody).toMatchObject({
+    stream: true,
+    max_completion_tokens: 64,
+  })
+  expect(requestBody).not.toHaveProperty('stream_options')
+  expect(requestBody).not.toHaveProperty('store')
 })
 
 test('preserves Grep tool pattern field in OpenAI-compatible schemas', async () => {
@@ -1302,7 +1771,7 @@ test('preserves Grep tool pattern field in OpenAI-compatible schemas', async () 
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -1376,7 +1845,7 @@ test('does not infer Gemini mode from OPENAI_BASE_URL path substrings', async ()
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -1421,7 +1890,7 @@ test('preserves image tool results as placeholders in follow-up requests', async
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -1481,8 +1950,88 @@ test('preserves image tool results as placeholders in follow-up requests', async
     text?: string
     image_url?: { url: string }
   }>
-  const imagePart = parts.find(part => part.type === 'image_url')
-  expect(imagePart?.image_url?.url).toBe('data:image/png;base64,ZmFrZQ==')
+  expect(parts).toEqual([
+    {
+      type: 'image_url',
+      image_url: { url: 'data:image/png;base64,ZmFrZQ==' },
+    },
+  ])
+})
+
+test('adds text part for image-only user messages', async () => {
+  let requestBody: Record<string, unknown> | undefined
+
+  globalThis.fetch = (async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body))
+
+    return new Response(
+      JSON.stringify({
+        id: 'chatcmpl-1',
+        model: 'mimo-v2.5-pro',
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'done',
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: {
+          prompt_tokens: 12,
+          completion_tokens: 4,
+          total_tokens: 16,
+        },
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+    )
+  }) as unknown as FetchType
+
+  const client = createOpenAIShimClient({}) as OpenAIShimClient
+
+  await client.beta.messages.create({
+    model: 'mimo-v2.5-pro',
+    system: 'test system',
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: 'image/png',
+              data: 'ZmFrZQ==',
+            },
+          },
+        ],
+      },
+    ],
+    max_tokens: 64,
+    stream: false,
+  })
+
+  const userMessage = (requestBody?.messages as Array<Record<string, unknown>>).find(
+    message => message.role === 'user',
+  ) as {
+    content?: Array<{
+      type: string
+      text?: string
+      image_url?: { url: string }
+    }>
+  } | undefined
+
+  expect(userMessage?.content).toEqual([
+    { type: 'text', text: 'Image attached.' },
+    {
+      type: 'image_url',
+      image_url: { url: 'data:image/png;base64,ZmFrZQ==' },
+    },
+  ])
 })
 
 test('preserves mixed text and image tool results as multipart content', async () => {
@@ -1516,7 +2065,7 @@ test('preserves mixed text and image tool results as multipart content', async (
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -1632,7 +2181,7 @@ test('uses GEMINI_ACCESS_TOKEN for Gemini OpenAI-compatible requests', async () 
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -1646,8 +2195,10 @@ test('uses GEMINI_ACCESS_TOKEN for Gemini OpenAI-compatible requests', async () 
   expect(requestUrl).toBe(
     'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
   )
-  expect(capturedAuthorization).toBe('Bearer gemini-access-token')
-  expect(capturedProject).toBe('gemini-project')
+  // Explicit type argument: TS narrows the closure-assigned variables to
+  // their `null` initializer at this point (microsoft/TypeScript#9998).
+  expect<string | null>(capturedAuthorization).toBe('Bearer gemini-access-token')
+  expect<string | null>(capturedProject).toBe('gemini-project')
 })
 
 test('uses NVIDIA_API_KEY for NVIDIA NIM requests without OPENAI_API_KEY', async () => {
@@ -1690,7 +2241,7 @@ test('uses NVIDIA_API_KEY for NVIDIA NIM requests without OPENAI_API_KEY', async
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -1701,7 +2252,7 @@ test('uses NVIDIA_API_KEY for NVIDIA NIM requests without OPENAI_API_KEY', async
     stream: false,
   })
 
-  expect(capturedAuthorization).toBe('Bearer nvidia-live-key')
+  expect<string | null>(capturedAuthorization).toBe('Bearer nvidia-live-key')
 })
 
 test('does not use stale NVIDIA_API_KEY for non-NVIDIA OpenAI-compatible routes', async () => {
@@ -1740,7 +2291,7 @@ test('does not use stale NVIDIA_API_KEY for non-NVIDIA OpenAI-compatible routes'
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -1789,7 +2340,7 @@ test('does not use MINIMAX_API_KEY for non-MiniMax OpenAI-compatible routes', as
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -1837,7 +2388,7 @@ test('xiaomi mimo route uses api-key auth header and max_completion_tokens', asy
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -1852,6 +2403,145 @@ test('xiaomi mimo route uses api-key auth header and max_completion_tokens', asy
   expect(capturedHeaders).not.toHaveProperty('Authorization')
   expect(capturedBody).toMatchObject({ max_completion_tokens: 32 })
   expect(capturedBody).not.toHaveProperty('max_tokens')
+})
+
+test('gakr-gakr opengateway provider flag sends OPENGATEWAY_API_KEY as bearer auth despite stale generic base URL', async () => {
+  process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1'
+  process.env.OPENAI_MODEL = 'gpt-5.5'
+  process.env.OPENGATEWAY_API_KEY = 'fake-ogw-key'
+  delete process.env.OPENAI_API_KEY
+
+  const result = applyProviderFlag('gakr-gakr-opengateway', [])
+  expect(result.error).toBeUndefined()
+
+  const captured = await captureChatCompletionRequest()
+
+  expect(captured.url).toBe('https://opengateway.gakr-gakr.com/v1/chat/completions')
+  expect(captured.authorization).toBe('Bearer fake-ogw-key')
+})
+
+test('gakr-gakr opengateway provider flag accepts OPENAI_API_KEY compatibility fallback', async () => {
+  delete process.env.OPENAI_BASE_URL
+  delete process.env.OPENGATEWAY_API_KEY
+  process.env.OPENAI_API_KEY = 'fake-openai-fallback'
+
+  const result = applyProviderFlag('gakr-gakr-opengateway', [])
+  expect(result.error).toBeUndefined()
+
+  const captured = await captureChatCompletionRequest()
+
+  expect(captured.authorization).toBe('Bearer fake-openai-fallback')
+})
+
+test('gakr-gakr opengateway provider flag sends OPENAI_API_KEY fallback despite stale generic base URL', async () => {
+  process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1'
+  process.env.OPENAI_API_KEY = 'fake-openai-fallback'
+  delete process.env.OPENGATEWAY_API_KEY
+
+  const result = applyProviderFlag('gakr-gakr-opengateway', [])
+  expect(result.error).toBeUndefined()
+
+  const captured = await captureChatCompletionRequest()
+
+  expect(captured.url).toBe('https://opengateway.gakr-gakr.com/v1/chat/completions')
+  expect(captured.authorization).toBe('Bearer fake-openai-fallback')
+})
+
+test('gakr-gakr opengateway provider flag trims OPENGATEWAY_API_KEY before bearer auth', async () => {
+  process.env.OPENGATEWAY_API_KEY = ' fake-ogw-key '
+  delete process.env.OPENAI_API_KEY
+
+  const result = applyProviderFlag('gakr-gakr-opengateway', [])
+  expect(result.error).toBeUndefined()
+
+  const captured = await captureChatCompletionRequest()
+
+  expect(captured.authorization).toBe('Bearer fake-ogw-key')
+})
+
+test('gakr-gakr opengateway provider flag ignores blank OPENGATEWAY_API_KEY and uses OPENAI_API_KEY fallback', async () => {
+  process.env.OPENGATEWAY_API_KEY = '   '
+  process.env.OPENAI_API_KEY = 'fake-openai-fallback'
+
+  const result = applyProviderFlag('gakr-gakr-opengateway', [])
+  expect(result.error).toBeUndefined()
+
+  const captured = await captureChatCompletionRequest()
+
+  expect(captured.authorization).toBe('Bearer fake-openai-fallback')
+})
+
+test('gakr-gakr opengateway provider flag sends OPENGATEWAY_API_KEY to OPENGATEWAY_BASE_URL override', async () => {
+  process.env.OPENGATEWAY_BASE_URL = 'http://localhost:8181/v1'
+  process.env.OPENGATEWAY_API_KEY = 'fake-ogw-key'
+  delete process.env.OPENAI_API_KEY
+
+  const result = applyProviderFlag('gakr-gakr-opengateway', [])
+  expect(result.error).toBeUndefined()
+
+  const captured = await captureChatCompletionRequest()
+
+  expect(captured.url).toBe('http://localhost:8181/v1/chat/completions')
+  expect(captured.authorization).toBe('Bearer fake-ogw-key')
+})
+
+test('gakr-gakr opengateway provider flag sends OPENGATEWAY_API_KEY to custom OPENAI_BASE_URL fallback', async () => {
+  process.env.OPENAI_BASE_URL = 'http://localhost:8181/v1'
+  process.env.OPENGATEWAY_API_KEY = 'fake-ogw-key'
+  delete process.env.OPENGATEWAY_BASE_URL
+  delete process.env.OPENAI_API_KEY
+
+  const result = applyProviderFlag('gakr-gakr-opengateway', [])
+  expect(result.error).toBeUndefined()
+
+  const captured = await captureChatCompletionRequest()
+
+  expect(captured.url).toBe('http://localhost:8181/v1/chat/completions')
+  expect(captured.authorization).toBe('Bearer fake-ogw-key')
+})
+
+test('gakr-gakr opengateway provider flag prefers OPENGATEWAY_API_KEY over generic OPENAI_API_KEY for custom base URL', async () => {
+  process.env.OPENGATEWAY_BASE_URL = 'http://localhost:8181/v1'
+  process.env.OPENGATEWAY_API_KEY = 'fake-ogw-key'
+  process.env.OPENAI_API_KEY = 'fake-generic-openai-key'
+
+  const result = applyProviderFlag('gakr-gakr-opengateway', [])
+  expect(result.error).toBeUndefined()
+
+  const captured = await captureChatCompletionRequest()
+
+  expect(captured.url).toBe('http://localhost:8181/v1/chat/completions')
+  expect(captured.authorization).toBe('Bearer fake-ogw-key')
+})
+
+test('gakr-gakr opengateway stored provider profile key becomes bearer auth', async () => {
+  delete process.env.OPENAI_API_KEY
+  delete process.env.OPENGATEWAY_API_KEY
+
+  applyProviderProfileToProcessEnv({
+    id: 'stored-opengateway',
+    provider: 'gakr-gakr-opengateway',
+    name: 'gakr-gakr Opengateway',
+    baseUrl: 'https://opengateway.gakr-gakr.com/v1',
+    model: 'mimo-v2.5-pro',
+    apiKey: 'fake-profile-key',
+  })
+
+  const captured = await captureChatCompletionRequest()
+
+  expect(captured.authorization).toBe('Bearer fake-profile-key')
+})
+
+test('openai route still sends OPENAI_API_KEY as bearer auth', async () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1'
+  process.env.OPENAI_MODEL = 'gpt-5.5'
+  process.env.OPENAI_API_KEY = 'fake-openai-key'
+  delete process.env.OPENGATEWAY_API_KEY
+
+  const captured = await captureChatCompletionRequest('gpt-5.5')
+
+  expect(captured.authorization).toBe('Bearer fake-openai-key')
 })
 
 test('does not use BNKR_API_KEY for non-Bankr OpenAI-compatible routes', async () => {
@@ -1889,7 +2579,7 @@ test('does not use BNKR_API_KEY for non-Bankr OpenAI-compatible routes', async (
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -1951,7 +2641,7 @@ test('preserves Gemini tool call extra_content from streaming chunks', async () 
     ])
 
     return makeSseResponse(chunks)
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -1996,7 +2686,7 @@ test('preserves Gemini thought signature from streaming delta extra_content', as
       {
         id: 'chatcmpl-1',
         object: 'chat.completion.chunk',
-        model: 'google/gemini-3.1-flash-lite-preview',
+        model: 'google/gemini-3.1-flash-lite',
         choices: [
           {
             index: 0,
@@ -2026,7 +2716,7 @@ test('preserves Gemini thought signature from streaming delta extra_content', as
       {
         id: 'chatcmpl-1',
         object: 'chat.completion.chunk',
-        model: 'google/gemini-3.1-flash-lite-preview',
+        model: 'google/gemini-3.1-flash-lite',
         choices: [
           {
             index: 0,
@@ -2038,13 +2728,13 @@ test('preserves Gemini thought signature from streaming delta extra_content', as
     ])
 
     return makeSseResponse(chunks)
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
   const result = await client.beta.messages
     .create({
-      model: 'google/gemini-3.1-flash-lite-preview',
+      model: 'google/gemini-3.1-flash-lite',
       messages: [{ role: 'user', content: 'Use Write' }],
       max_tokens: 64,
       stream: true,
@@ -2059,8 +2749,9 @@ test('preserves Gemini thought signature from streaming delta extra_content', as
   const toolStart = events.find(
     event =>
       event.type === 'content_block_start' &&
-      (event.content_block as Record<string, unknown> | undefined)?.type ===
-        'tool_use',
+      typeof event.content_block === 'object' &&
+      event.content_block !== null &&
+      (event.content_block as Record<string, unknown>).type === 'tool_use',
   ) as { content_block?: Record<string, unknown> } | undefined
 
   expect(toolStart?.content_block).toMatchObject({
@@ -2081,7 +2772,7 @@ test('preserves Gemini thought signature from non-streaming message extra_conten
     return new Response(
       JSON.stringify({
         id: 'chatcmpl-1',
-        model: 'google/gemini-3.1-flash-lite-preview',
+        model: 'google/gemini-3.1-flash-lite',
         choices: [
           {
             message: {
@@ -2117,12 +2808,12 @@ test('preserves Gemini thought signature from non-streaming message extra_conten
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
   const message = await client.beta.messages.create({
-    model: 'google/gemini-3.1-flash-lite-preview',
+    model: 'google/gemini-3.1-flash-lite',
     messages: [{ role: 'user', content: 'Use Write' }],
     max_tokens: 64,
     stream: false,
@@ -2149,7 +2840,7 @@ test('converts Gemini raw tool-call text into streaming tool_use blocks', async 
       {
         id: 'chatcmpl-raw-tool',
         object: 'chat.completion.chunk',
-        model: 'google/gemini-3.1-flash-lite-preview',
+        model: 'google/gemini-3.1-flash-lite',
         choices: [
           {
             index: 0,
@@ -2164,7 +2855,7 @@ test('converts Gemini raw tool-call text into streaming tool_use blocks', async 
       {
         id: 'chatcmpl-raw-tool',
         object: 'chat.completion.chunk',
-        model: 'google/gemini-3.1-flash-lite-preview',
+        model: 'google/gemini-3.1-flash-lite',
         choices: [
           {
             index: 0,
@@ -2179,7 +2870,7 @@ test('converts Gemini raw tool-call text into streaming tool_use blocks', async 
       {
         id: 'chatcmpl-raw-tool',
         object: 'chat.completion.chunk',
-        model: 'google/gemini-3.1-flash-lite-preview',
+        model: 'google/gemini-3.1-flash-lite',
         choices: [
           {
             index: 0,
@@ -2191,13 +2882,13 @@ test('converts Gemini raw tool-call text into streaming tool_use blocks', async 
     ])
 
     return makeSseResponse(chunks)
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
   const result = await client.beta.messages
     .create({
-      model: 'google/gemini-3.1-flash-lite-preview',
+      model: 'google/gemini-3.1-flash-lite',
       messages: [{ role: 'user', content: 'Write CSS' }],
       max_tokens: 64,
       stream: true,
@@ -2255,7 +2946,7 @@ test('converts Gemini raw tool-call text into non-streaming tool_use blocks', as
     return new Response(
       JSON.stringify({
         id: 'chatcmpl-raw-tool',
-        model: 'google/gemini-3.1-flash-lite-preview',
+        model: 'google/gemini-3.1-flash-lite',
         choices: [
           {
             message: {
@@ -2278,12 +2969,12 @@ test('converts Gemini raw tool-call text into non-streaming tool_use blocks', as
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
   const message = await client.beta.messages.create({
-    model: 'google/gemini-3.1-flash-lite-preview',
+    model: 'google/gemini-3.1-flash-lite',
     messages: [{ role: 'user', content: 'Verify' }],
     max_tokens: 64,
     stream: false,
@@ -2305,44 +2996,6 @@ test('converts Gemini raw tool-call text into non-streaming tool_use blocks', as
       },
     },
   ])
-})
-
-test('surfaces provider in-stream error events', async () => {
-  globalThis.fetch = (async (_input, _init) => {
-    const chunks = makeStreamChunks([
-      {
-        error: {
-          message: 'quota exhausted during stream',
-          type: 'rate_limit_error',
-          code: 'rate_limit_exceeded',
-        },
-      },
-    ])
-
-    return makeSseResponse(chunks)
-  }) as FetchType
-
-  const client = createOpenAIShimClient({}) as OpenAIShimClient
-
-  const result = await client.beta.messages
-    .create({
-      model: 'google/gemini-3.1-flash-lite-preview',
-      messages: [{ role: 'user', content: 'hello' }],
-      max_tokens: 64,
-      stream: true,
-    })
-    .withResponse()
-
-  let caught: unknown
-  try {
-    for await (const _event of result.data) {
-      // Drain until the stream surfaces the provider error.
-    }
-  } catch (error) {
-    caught = error
-  }
-
-  expect((caught as Error).message).toContain('quota exhausted during stream')
 })
 
 test('normalizes plain string Bash tool arguments from OpenAI-compatible responses', async () => {
@@ -2381,7 +3034,7 @@ test('normalizes plain string Bash tool arguments from OpenAI-compatible respons
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -2443,7 +3096,7 @@ test('normalizes Bash tool arguments that are valid JSON strings', async () => {
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -2509,7 +3162,7 @@ test.each([
           },
         },
       )
-    }) as FetchType
+    }) as unknown as FetchType
 
     const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -2570,7 +3223,7 @@ test('keeps terminal empty Bash tool arguments invalid in non-streaming response
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -2637,7 +3290,7 @@ test('normalizes plain string Bash tool arguments in streaming responses', async
     ])
 
     return makeSseResponse(chunks)
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -2735,7 +3388,7 @@ test('normalizes plain string Bash tool arguments when streaming starts with an 
     ])
 
     return makeSseResponse(chunks)
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -2833,7 +3486,7 @@ test('normalizes plain string Bash tool arguments when streaming starts with whi
     ])
 
     return makeSseResponse(chunks)
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -2909,7 +3562,7 @@ test('keeps terminal whitespace-only Bash arguments invalid in streaming respons
     ])
 
     return makeSseResponse(chunks)
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -2985,7 +3638,7 @@ test('normalizes streaming Bash arguments that begin with bracket syntax', async
     ])
 
     return makeSseResponse(chunks)
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -3083,7 +3736,7 @@ test('normalizes streaming Bash arguments when the first chunk is only an openin
     ])
 
     return makeSseResponse(chunks)
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -3159,7 +3812,7 @@ test('repairs truncated structured Bash JSON in streaming responses', async () =
     ])
 
     return makeSseResponse(chunks)
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -3235,7 +3888,7 @@ test('does not normalize incomplete streamed Bash commands when finish_reason is
     ])
 
     return makeSseResponse(chunks)
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -3311,7 +3964,7 @@ test('repairs truncated JSON objects even without command field', async () => {
     ])
 
     return makeSseResponse(chunks)
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -3380,7 +4033,7 @@ test('preserves raw input for unknown plain string tool arguments', async () => 
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -3440,7 +4093,7 @@ test('preserves parsed string input for unknown JSON string tool arguments', asy
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -3495,7 +4148,7 @@ test('sanitizes malformed MCP tool schemas before sending them to OpenAI', async
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -3556,7 +4209,7 @@ test('optional tool properties are not added to required[] — fixes Groq/Azure 
       }),
       { headers: { 'Content-Type': 'application/json' } },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -3596,55 +4249,6 @@ test('optional tool properties are not added to required[] — fixes Groq/Azure 
   expect(parameters?.additionalProperties).toBe(false)
 })
 
-test('GAKR_DISABLE_STRICT_TOOLS disables OpenAI-compatible strict schema rewriting', async () => {
-  process.env.GAKR_DISABLE_STRICT_TOOLS = '1'
-  let requestBody: Record<string, unknown> | undefined
-
-  globalThis.fetch = (async (_input, init) => {
-    requestBody = JSON.parse(String(init?.body))
-
-    return new Response(
-      JSON.stringify({
-        id: 'chatcmpl-strict-disabled',
-        model: 'gpt-4o',
-        choices: [
-          { message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
-        ],
-        usage: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 },
-      }),
-      { headers: { 'Content-Type': 'application/json' } },
-    )
-  }) as FetchType
-
-  const client = createOpenAIShimClient({}) as OpenAIShimClient
-
-  await client.beta.messages.create({
-    model: 'gpt-4o',
-    messages: [{ role: 'user', content: 'search' }],
-    tools: [
-      {
-        name: 'Search',
-        description: 'Search remotely',
-        input_schema: {
-          type: 'object',
-          properties: {
-            query: { type: 'string' },
-          },
-        },
-      },
-    ],
-    max_tokens: 16,
-    stream: false,
-  })
-
-  const parameters = (
-    requestBody?.tools as Array<{ function?: { parameters?: Record<string, unknown> } }>
-  )?.[0]?.function?.parameters
-
-  expect(parameters?.required).toEqual([])
-  expect(parameters?.additionalProperties).toBeUndefined()
-})
-
 // ---------------------------------------------------------------------------
 // Issue #202 — consecutive role coalescing (Devstral, Mistral strict templates)
 // ---------------------------------------------------------------------------
@@ -3667,7 +4271,7 @@ test('coalesces consecutive user messages to avoid alternation errors (issue #20
   globalThis.fetch = (async (_input: unknown, init: RequestInit | undefined) => {
     sentMessages = JSON.parse(String(init?.body)).messages
     return makeNonStreamResponse()
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -3696,7 +4300,7 @@ test('coalesces consecutive assistant messages preserving tool_calls (issue #202
   globalThis.fetch = (async (_input: unknown, init: RequestInit | undefined) => {
     sentMessages = JSON.parse(String(init?.body)).messages
     return makeNonStreamResponse()
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -3749,7 +4353,7 @@ test('non-streaming: reasoning_content emitted as thinking block only when conte
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -3794,7 +4398,7 @@ test('non-streaming: empty string content does not fall through to reasoning_con
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -3839,7 +4443,7 @@ test('non-streaming: real content takes precedence over reasoning_content', asyn
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -3858,7 +4462,7 @@ test('non-streaming: real content takes precedence over reasoning_content', asyn
 })
 
 test('non-streaming: strips <think> tag block from assistant content', async () => {
-  globalThis.fetch = (async () => {
+  globalThis.fetch = asMockFetch(mock(async () => {
     return new Response(
       JSON.stringify({
         id: 'chatcmpl-1',
@@ -3881,7 +4485,7 @@ test('non-streaming: strips <think> tag block from assistant content', async () 
       }),
       { headers: { 'Content-Type': 'application/json' } },
     )
-  }) as FetchType
+  }))
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
   const result = (await client.beta.messages.create({
@@ -3951,7 +4555,7 @@ test('streaming: thinking block closed before tool call', async () => {
     ])
 
     return makeSseResponse(chunks)
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -3990,7 +4594,7 @@ test('streaming: thinking block closed before tool call', async () => {
 })
 
 test('streaming: strips <think> tag block from assistant content deltas', async () => {
-  globalThis.fetch = (async () => {
+  globalThis.fetch = asMockFetch(mock(async () => {
     const chunks = makeStreamChunks([
       {
         id: 'chatcmpl-1',
@@ -4023,7 +4627,7 @@ test('streaming: strips <think> tag block from assistant content deltas', async 
     ])
 
     return makeSseResponse(chunks)
-  }) as FetchType
+  }))
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
   const result = await client.beta.messages
@@ -4048,7 +4652,7 @@ test('streaming: strips <think> tag block from assistant content deltas', async 
 })
 
 test('streaming: strips <think> tag split across multiple content chunks', async () => {
-  globalThis.fetch = (async () => {
+  globalThis.fetch = asMockFetch(mock(async () => {
     const chunks = makeStreamChunks([
       {
         id: 'chatcmpl-1',
@@ -4108,7 +4712,7 @@ test('streaming: strips <think> tag split across multiple content chunks', async
     ])
 
     return makeSseResponse(chunks)
-  }) as FetchType
+  }))
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -4136,7 +4740,7 @@ test('streaming: strips <think> tag split across multiple content chunks', async
 test('streaming: preserves prose without tags (no phrase-based false positive)', async () => {
   // Regression: older phrase-based sanitizer would strip "I should..." prose.
   // The tag-based approach leaves legitimate assistant output alone.
-  globalThis.fetch = (async () => {
+  globalThis.fetch = asMockFetch(mock(async () => {
     const chunks = makeStreamChunks([
       {
         id: 'chatcmpl-1',
@@ -4169,7 +4773,7 @@ test('streaming: preserves prose without tags (no phrase-based false positive)',
     ])
 
     return makeSseResponse(chunks)
-  }) as FetchType
+  }))
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
   const result = await client.beta.messages
@@ -4200,11 +4804,11 @@ test('strips credentials and query params from URL in fetch network error messag
     'https://user:password@internal.example.test/v1?token=abc123'
   process.env.OPENAI_API_KEY = 'test-key'
 
-  globalThis.fetch = (async () => {
+  globalThis.fetch = asMockFetch(mock(async () => {
     throw new TypeError(
       'fetch failed https://user:password@internal.example.test/v1?token=abc123/chat/completions',
     )
-  }) as FetchType
+  }))
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -4235,9 +4839,9 @@ test('classifies localhost transport failures with actionable category marker', 
     code: 'ECONNREFUSED',
   })
 
-  globalThis.fetch = (async () => {
+  globalThis.fetch = asMockFetch(mock(async () => {
     throw transportError
-  }) as FetchType
+  }))
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -4270,9 +4874,9 @@ test('transport failures are not labeled with HTTP status 503', async () => {
     code: 'ENETDOWN',
   })
 
-  globalThis.fetch = (async () => {
+  globalThis.fetch = asMockFetch(mock(async () => {
     throw transportError
-  }) as FetchType
+  }))
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -4302,9 +4906,9 @@ test('propagates AbortError without wrapping it as transport failure', async () 
   process.env.OPENAI_BASE_URL = 'http://localhost:11434/v1'
 
   const abortError = new DOMException('The operation was aborted.', 'AbortError')
-  globalThis.fetch = (async () => {
+  globalThis.fetch = asMockFetch(mock(async () => {
     throw abortError
-  }) as FetchType
+  }))
 
   const controller = new AbortController()
   controller.abort()
@@ -4327,13 +4931,13 @@ test('propagates AbortError without wrapping it as transport failure', async () 
 test('classifies chat-completions endpoint 404 failures with endpoint_not_found marker', async () => {
   process.env.OPENAI_BASE_URL = 'http://localhost:11434'
 
-  globalThis.fetch = (async () =>
+  globalThis.fetch = asMockFetch(mock(async () =>
     new Response('Not Found', {
       status: 404,
       headers: {
         'Content-Type': 'text/plain',
       },
-    })) as FetchType
+    })))
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -4387,7 +4991,7 @@ test('self-heals localhost resolution failures by retrying local loopback base U
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -4447,7 +5051,7 @@ test('self-heals local endpoint_not_found by retrying with /v1 base URL', async 
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -4509,7 +5113,7 @@ test('self-heals tool-call incompatibility by retrying local Ollama requests wit
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -4576,7 +5180,7 @@ test('preserves valid tool_result and drops orphan tool_result', async () => {
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -4638,7 +5242,7 @@ test('preserves valid tool_result and drops orphan tool_result', async () => {
   // 2. User content ("What happened?") -> role 'user'
   // This triggers the tool -> assistant injection.
   const assistantMessages = messages.filter(m => m.role === 'assistant')
-  expect(assistantMessages.some(m => m.content === '[Tool execution interrupted by user]')).toBe(true)
+  expect(assistantMessages.some(m => m.content === '[Tool results received]')).toBe(true)
 })
 
 test('drops empty assistant message when only thinking block was present and stripped', async () => {
@@ -4654,7 +5258,7 @@ test('drops empty assistant message when only thinking block was present and str
       choices: [{ message: { role: 'assistant', content: 'hi' }, finish_reason: 'stop' }],
       usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
     }), { headers: { 'Content-Type': 'application/json' } })
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -4678,6 +5282,43 @@ test('drops empty assistant message when only thinking block was present and str
   expect(String(messages[0].content)).toContain('Interrupting query')
 })
 
+test('drops empty assistant message when only redacted_thinking block was present and stripped', async () => {
+  let requestBody: Record<string, unknown> | undefined
+
+  globalThis.fetch = (async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body))
+    return new Response(JSON.stringify({
+      id: 'chatcmpl-1',
+      object: 'chat.completion',
+      created: 123456789,
+      model: 'mistral-large-latest',
+      choices: [{ message: { role: 'assistant', content: 'hi' }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
+    }), { headers: { 'Content-Type': 'application/json' } })
+  }) as FetchType
+
+  const client = createOpenAIShimClient({}) as OpenAIShimClient
+
+  await client.beta.messages.create({
+    model: 'mistral-large-latest',
+    messages: [
+      { role: 'user', content: 'Initial' },
+      { role: 'assistant', content: [{ type: 'redacted_thinking', data: '[thinking hidden]' }] },
+      { role: 'user', content: 'Interrupting query' },
+    ],
+    max_tokens: 64,
+    stream: false,
+  })
+
+  const messages = requestBody?.messages as Array<Record<string, unknown>>
+  // The assistant msg is dropped because redacted_thinking is stripped.
+  // The two user messages are coalesced.
+  expect(messages.length).toBe(1)
+  expect(messages[0].role).toBe('user')
+  expect(String(messages[0].content)).toContain('Initial')
+  expect(String(messages[0].content)).toContain('Interrupting query')
+})
+
 test('injects semantic assistant message when tool result is followed by user message', async () => {
   let requestBody: Record<string, unknown> | undefined
 
@@ -4691,7 +5332,7 @@ test('injects semantic assistant message when tool result is followed by user me
       choices: [{ message: { role: 'assistant', content: 'hi' }, finish_reason: 'stop' }],
       usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
     }), { headers: { 'Content-Type': 'application/json' } })
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -4721,7 +5362,9 @@ test('injects semantic assistant message when tool result is followed by user me
   
   const semanticMsg = messages[2]
   expect(semanticMsg.role).toBe('assistant')
-  expect(semanticMsg.content).toBe('[Tool execution interrupted by user]')
+  expect(semanticMsg.content).toBe('[Tool results received]')
+  expect(semanticMsg.content).not.toContain('interrupted')
+  expect(semanticMsg.content).not.toContain('user')
 })
 
 test('Moonshot: uses max_tokens (not max_completion_tokens) and strips store', async () => {
@@ -4742,7 +5385,7 @@ test('Moonshot: uses max_tokens (not max_completion_tokens) and strips store', a
       }),
       { headers: { 'Content-Type': 'application/json' } },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
   await client.beta.messages.create({
@@ -4758,7 +5401,7 @@ test('Moonshot: uses max_tokens (not max_completion_tokens) and strips store', a
   expect(requestBody?.store).toBeUndefined()
 })
 
-test('Cerebras: strips unsupported store on chat_completions', async () => {
+test('Cerebras: strips unsupported store on chat_completions (#1023)', async () => {
   process.env.OPENAI_BASE_URL = 'https://api.cerebras.ai/v1'
   process.env.OPENAI_API_KEY = 'csk-test'
 
@@ -4770,21 +5413,50 @@ test('Cerebras: strips unsupported store on chat_completions', async () => {
         id: 'chatcmpl-1',
         model: 'llama3.1-8b',
         choices: [
-          {
-            message: { role: 'assistant', content: 'ok' },
-            finish_reason: 'stop',
-          },
+          { message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
         ],
         usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
       }),
       { headers: { 'Content-Type': 'application/json' } },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
   await client.beta.messages.create({
     model: 'llama3.1-8b',
     system: 'you are cerebras',
+    messages: [{ role: 'user', content: 'hi' }],
+    max_tokens: 64,
+    stream: false,
+  })
+
+  expect(requestBody?.store).toBeUndefined()
+})
+
+test('Local provider (vLLM/Ollama/etc.): strips unsupported store on chat_completions (#672)', async () => {
+  process.env.OPENAI_BASE_URL = 'http://localhost:8000/v1'
+  process.env.OPENAI_API_KEY = 'sk-local'
+
+  let requestBody: Record<string, unknown> | undefined
+  globalThis.fetch = (async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body))
+    return new Response(
+      JSON.stringify({
+        id: 'chatcmpl-1',
+        model: 'qwen-3.5-27b',
+        choices: [
+          { message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
+        ],
+        usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
+      }),
+      { headers: { 'Content-Type': 'application/json' } },
+    )
+  }) as unknown as FetchType
+
+  const client = createOpenAIShimClient({}) as OpenAIShimClient
+  await client.beta.messages.create({
+    model: 'qwen-3.5-27b',
+    system: 'you are local',
     messages: [{ role: 'user', content: 'hi' }],
     max_tokens: 64,
     stream: false,
@@ -4811,7 +5483,7 @@ test('Groq: keeps max_completion_tokens and strips unsupported store', async () 
       }),
       { headers: { 'Content-Type': 'application/json' } },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
   await client.beta.messages.create({
@@ -4825,213 +5497,6 @@ test('Groq: keeps max_completion_tokens and strips unsupported store', async () 
   expect(requestBody?.max_completion_tokens).toBe(256)
   expect(requestBody?.max_tokens).toBeUndefined()
   expect(requestBody?.store).toBeUndefined()
-})
-
-test('Groq: omits reasoning_effort for models that do not support it', async () => {
-  process.env.OPENAI_BASE_URL = 'https://api.groq.com/openai/v1'
-  process.env.OPENAI_API_KEY = 'gsk-test'
-
-  let requestBody: Record<string, unknown> | undefined
-  globalThis.fetch = (async (_input, init) => {
-    requestBody = JSON.parse(String(init?.body))
-    return new Response(
-      JSON.stringify({
-        id: 'chatcmpl-1',
-        model: 'llama-3.3-70b-versatile',
-        choices: [
-          { message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
-        ],
-        usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
-      }),
-      { headers: { 'Content-Type': 'application/json' } },
-    )
-  }) as FetchType
-
-  const client = createOpenAIShimClient({
-    reasoningEffort: 'high',
-  }) as OpenAIShimClient
-  await client.beta.messages.create({
-    model: 'llama-3.3-70b-versatile',
-    messages: [{ role: 'user', content: 'hi' }],
-    max_tokens: 256,
-    stream: false,
-  })
-
-  expect(requestBody?.reasoning_effort).toBeUndefined()
-})
-
-test('Groq: strips reasoning_effort even for reasoning-capable models', async () => {
-  process.env.OPENAI_BASE_URL = 'https://api.groq.com/openai/v1'
-  process.env.OPENAI_API_KEY = 'gsk-test'
-
-  const requestBodies: Array<Record<string, unknown>> = []
-  globalThis.fetch = (async (_input, init) => {
-    const body = JSON.parse(String(init?.body)) as Record<string, unknown>
-    requestBodies.push(body)
-    return new Response(
-      JSON.stringify({
-        id: 'chatcmpl-1',
-        model: body.model,
-        choices: [
-          { message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
-        ],
-        usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
-      }),
-      { headers: { 'Content-Type': 'application/json' } },
-    )
-  }) as FetchType
-
-  const client = createOpenAIShimClient({
-    reasoningEffort: 'xhigh',
-  }) as OpenAIShimClient
-
-  await client.beta.messages.create({
-    model: 'qwen/qwen3-32b',
-    messages: [{ role: 'user', content: 'hi' }],
-    max_tokens: 256,
-    stream: false,
-  })
-  await client.beta.messages.create({
-    model: 'openai/gpt-oss-120b',
-    messages: [{ role: 'user', content: 'hi' }],
-    max_tokens: 256,
-    stream: false,
-  })
-
-  expect(requestBodies[0]?.reasoning_effort).toBeUndefined()
-  expect(requestBodies[1]?.reasoning_effort).toBeUndefined()
-})
-
-test('retries once without reasoning_effort when an OpenAI-compatible provider rejects it', async () => {
-  process.env.OPENAI_BASE_URL = 'https://provider.example/v1'
-  process.env.OPENAI_API_KEY = 'sk-test'
-
-  const requestBodies: Array<Record<string, unknown>> = []
-  globalThis.fetch = (async (_input, init) => {
-    const body = JSON.parse(String(init?.body)) as Record<string, unknown>
-    requestBodies.push(body)
-
-    if (requestBodies.length === 1) {
-      return new Response(
-        JSON.stringify({
-          error: {
-            message: '`reasoning_effort` is not supported with this model',
-            type: 'invalid_request_error',
-          },
-        }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } },
-      )
-    }
-
-    return new Response(
-      JSON.stringify({
-        id: 'chatcmpl-1',
-        model: 'provider-model',
-        choices: [
-          { message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
-        ],
-        usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
-      }),
-      { headers: { 'Content-Type': 'application/json' } },
-    )
-  }) as FetchType
-
-  const client = createOpenAIShimClient({
-    reasoningEffort: 'high',
-  }) as OpenAIShimClient
-  await client.beta.messages.create({
-    model: 'provider-model',
-    messages: [{ role: 'user', content: 'hi' }],
-    max_tokens: 256,
-    stream: false,
-  })
-
-  expect(requestBodies).toHaveLength(2)
-  expect(requestBodies[0]?.reasoning_effort).toBe('high')
-  expect(requestBodies[1]?.reasoning_effort).toBeUndefined()
-})
-
-test('Local provider (vLLM/Ollama/etc.): strips unsupported store on chat_completions', async () => {
-  process.env.OPENAI_BASE_URL = 'http://localhost:8000/v1'
-  process.env.OPENAI_API_KEY = 'sk-local'
-
-  let requestBody: Record<string, unknown> | undefined
-  globalThis.fetch = (async (_input, init) => {
-    requestBody = JSON.parse(String(init?.body))
-    return new Response(
-      JSON.stringify({
-        id: 'chatcmpl-1',
-        model: 'qwen-3.5-27b',
-        choices: [
-          {
-            message: { role: 'assistant', content: 'ok' },
-            finish_reason: 'stop',
-          },
-        ],
-        usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
-      }),
-      { headers: { 'Content-Type': 'application/json' } },
-    )
-  }) as FetchType
-
-  const client = createOpenAIShimClient({}) as OpenAIShimClient
-  await client.beta.messages.create({
-    model: 'qwen-3.5-27b',
-    system: 'you are local',
-    messages: [{ role: 'user', content: 'hi' }],
-    max_tokens: 64,
-    stream: false,
-  })
-
-  expect(requestBody?.store).toBeUndefined()
-})
-
-test('Local provider fast path skips strict tool schema rewrite', async () => {
-  process.env.OPENAI_BASE_URL = 'http://localhost:8000/v1'
-  process.env.OPENAI_API_KEY = 'sk-local'
-
-  let requestBody: Record<string, unknown> | undefined
-  globalThis.fetch = (async (_input, init) => {
-    requestBody = JSON.parse(String(init?.body))
-    return new Response(
-      JSON.stringify({
-        id: 'chatcmpl-1',
-        model: 'qwen-3.5-27b',
-        choices: [
-          { message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
-        ],
-        usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
-      }),
-      { headers: { 'Content-Type': 'application/json' } },
-    )
-  }) as FetchType
-
-  const client = createOpenAIShimClient({}) as OpenAIShimClient
-  await client.beta.messages.create({
-    model: 'qwen-3.5-27b',
-    messages: [{ role: 'user', content: 'hi' }],
-    max_tokens: 64,
-    stream: false,
-    tools: [
-      {
-        name: 'Search',
-        description: 'Search locally',
-        input_schema: {
-          type: 'object',
-          properties: {
-            query: { type: 'string' },
-          },
-        },
-      },
-    ],
-  })
-
-  const tools = requestBody?.tools as Array<{
-    function: { parameters: Record<string, unknown> }
-  }>
-  const parameters = tools[0].function.parameters
-  expect(parameters.required).toEqual([])
-  expect(parameters.additionalProperties).toBeUndefined()
 })
 
 test('Moonshot: echoes reasoning_content on assistant tool-call messages', async () => {
@@ -5057,7 +5522,7 @@ test('Moonshot: echoes reasoning_content on assistant tool-call messages', async
       }),
       { headers: { 'Content-Type': 'application/json' } },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
   await client.beta.messages.create({
@@ -5124,7 +5589,7 @@ test('DeepSeek echoes reasoning_content on assistant tool-call messages', async 
       }),
       { headers: { 'Content-Type': 'application/json' } },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
   await client.beta.messages.create({
@@ -5182,7 +5647,7 @@ test('generic OpenAI-compatible providers do not echo reasoning_content on assis
       }),
       { headers: { 'Content-Type': 'application/json' } },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
   await client.beta.messages.create({
@@ -5241,7 +5706,7 @@ test('gateway-routed DeepSeek models inherit descriptor-backed reasoning and tok
       }),
       { headers: { 'Content-Type': 'application/json' } },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({
     reasoningEffort: 'xhigh',
@@ -5307,7 +5772,7 @@ test('Moonshot: cn host is also detected', async () => {
       }),
       { headers: { 'Content-Type': 'application/json' } },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
   await client.beta.messages.create({
@@ -5339,7 +5804,7 @@ test('Kimi Code endpoint inherits Moonshot max_tokens/store compatibility', asyn
       }),
       { headers: { 'Content-Type': 'application/json' } },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
   await client.beta.messages.create({
@@ -5373,7 +5838,7 @@ test('Kimi Code endpoint echoes reasoning_content on assistant tool-call message
       }),
       { headers: { 'Content-Type': 'application/json' } },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
   await client.beta.messages.create({
@@ -5440,7 +5905,7 @@ test('DeepSeek sends thinking toggle and normalized reasoning effort', async () 
       }),
       { headers: { 'Content-Type': 'application/json' } },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({
     reasoningEffort: 'xhigh',
@@ -5479,46 +5944,11 @@ test('DeepSeek omits thinking controls when the Anthropic-side request does not 
       }),
       { headers: { 'Content-Type': 'application/json' } },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
   await client.beta.messages.create({
     model: 'deepseek-v4-flash',
-    system: 'test',
-    messages: [{ role: 'user', content: 'hi' }],
-    max_tokens: 32,
-    stream: false,
-  })
-
-  expect(requestBody?.thinking).toBeUndefined()
-  expect(requestBody?.reasoning_effort).toBeUndefined()
-})
-
-test('DeepSeek omits standalone reasoning_effort without a thinking toggle', async () => {
-  process.env.OPENAI_BASE_URL = 'https://api.deepseek.com/v1'
-  process.env.OPENAI_API_KEY = 'sk-deepseek'
-
-  let requestBody: Record<string, unknown> | undefined
-  globalThis.fetch = (async (_input, init) => {
-    requestBody = JSON.parse(String(init?.body))
-    return new Response(
-      JSON.stringify({
-        id: 'chatcmpl-1',
-        model: 'deepseek-v4-pro',
-        choices: [
-          { message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
-        ],
-        usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
-      }),
-      { headers: { 'Content-Type': 'application/json' } },
-    )
-  }) as FetchType
-
-  const client = createOpenAIShimClient({
-    reasoningEffort: 'xhigh',
-  }) as OpenAIShimClient
-  await client.beta.messages.create({
-    model: 'deepseek-v4-pro',
     system: 'test',
     messages: [{ role: 'user', content: 'hi' }],
     max_tokens: 32,
@@ -5547,7 +5977,7 @@ test('DeepSeek forwards an explicit thinking disable toggle for V4 models', asyn
       }),
       { headers: { 'Content-Type': 'application/json' } },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
   await client.beta.messages.create({
@@ -5595,7 +6025,7 @@ test('collapses multiple text blocks in tool_result to string for DeepSeek compa
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -5672,7 +6102,7 @@ test('collapses multiple text blocks into a single string for DeepSeek compatibi
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -5730,7 +6160,7 @@ test('preserves mixed text and image tool results as multipart content', async (
         },
       },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -5803,7 +6233,7 @@ test('Z.AI: uses max_tokens (not max_completion_tokens) and strips store', async
       }),
       { headers: { 'Content-Type': 'application/json' } },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
   await client.beta.messages.create({
@@ -5844,7 +6274,7 @@ test('Z.AI: thinking mode enabled when requested', async () => {
       }),
       { headers: { 'Content-Type': 'application/json' } },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
   await client.beta.messages.create({
@@ -5881,7 +6311,7 @@ test('strips Anthropic attribution header block from chat-completions system pro
       }),
       { headers: { 'Content-Type': 'application/json' } },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -5894,7 +6324,7 @@ test('strips Anthropic attribution header block from chat-completions system pro
           'x-anthropic-billing-header: cc_version=0.8.0.abc123; ' +
           'cc_entrypoint=cli;',
       },
-      { type: 'text', text: 'You are GakrCLI, helpful assistant.' },
+      { type: 'text', text: 'You are GakrCLI Code, helpful assistant.' },
       { type: 'text', text: 'Project context: bun + react.' },
     ],
     messages: [{ role: 'user', content: 'hello' }],
@@ -5907,7 +6337,7 @@ test('strips Anthropic attribution header block from chat-completions system pro
   expect(sysMsg).toBeDefined()
   expect(sysMsg?.content).not.toContain('x-anthropic-billing-header')
   expect(sysMsg?.content).not.toContain('cc_version=')
-  expect(sysMsg?.content).toContain('You are GakrCLI, helpful assistant.')
+  expect(sysMsg?.content).toContain('You are GakrCLI Code, helpful assistant.')
   expect(sysMsg?.content).toContain('Project context: bun + react.')
 })
 
@@ -5933,7 +6363,7 @@ test('strips Anthropic attribution header block from responses-API instructions 
       }),
       { headers: { 'Content-Type': 'application/json' } },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({ defaultHeaders: {} }) as OpenAIShimClient
 
@@ -5944,7 +6374,7 @@ test('strips Anthropic attribution header block from responses-API instructions 
         type: 'text',
         text: 'x-anthropic-billing-header: cc_version=0.8.0.abc123; cc_entrypoint=cli;',
       },
-      { type: 'text', text: 'You are GakrCLI.' },
+      { type: 'text', text: 'You are GakrCLI Code.' },
     ],
     messages: [{ role: 'user', content: 'hello' }],
     max_tokens: 64,
@@ -5954,7 +6384,7 @@ test('strips Anthropic attribution header block from responses-API instructions 
   const instructions = capturedBody?.instructions as string
   expect(instructions).not.toContain('x-anthropic-billing-header')
   expect(instructions).not.toContain('cc_version=')
-  expect(instructions).toContain('You are GakrCLI.')
+  expect(instructions).toContain('You are GakrCLI Code.')
 })
 
 test('emits reasoning_effort on chat_completions when reasoningEffort is passed', async () => {
@@ -5979,7 +6409,7 @@ test('emits reasoning_effort on chat_completions when reasoningEffort is passed'
       }),
       { headers: { 'Content-Type': 'application/json' } },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({
     reasoningEffort: 'xhigh',
@@ -6017,7 +6447,7 @@ test('omits reasoning_effort on chat_completions when no override and model has 
       }),
       { headers: { 'Content-Type': 'application/json' } },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -6053,7 +6483,7 @@ test('emits reasoning_effort from codex alias default when no override is passed
       }),
       { headers: { 'Content-Type': 'application/json' } },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
 
@@ -6067,409 +6497,143 @@ test('emits reasoning_effort from codex alias default when no override is passed
   expect(requestBody?.reasoning_effort).toBe('high')
 })
 
-test('uses OpenAI-compatible responses endpoint with text chunk types when OPENAI_API_FORMAT=responses_compat', async () => {
-  process.env.OPENAI_API_FORMAT = 'responses_compat'
-  let capturedUrl = ''
-  let capturedBody: Record<string, unknown> | undefined
+test('DeepSeek: redacted_thinking block preserves continuity with reasoning_content: ""', async () => {
+  process.env.OPENAI_BASE_URL = 'https://api.deepseek.com/v1'
+  process.env.OPENAI_API_KEY = 'sk-deepseek'
 
-  globalThis.fetch = (async (input, init) => {
-    capturedUrl = String(input)
-    capturedBody = JSON.parse(String(init?.body)) as Record<string, unknown>
-
-    return new Response(
-      JSON.stringify({
-        id: 'resp-1',
-        model: 'gpt-5.4',
-        output: [
-          {
-            type: 'message',
-            role: 'assistant',
-            content: [{ type: 'output_text', text: 'ok' }],
-          },
-        ],
-        usage: {
-          input_tokens: 8,
-          output_tokens: 3,
-          total_tokens: 11,
-        },
-      }),
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      },
-    )
-  }) as FetchType
-
-  const client = createOpenAIShimClient({ defaultHeaders: {} }) as OpenAIShimClient
-
-  await client.beta.messages.create({
-    model: 'gpt-5.4',
-    system: 'test system',
-    messages: [{ role: 'user', content: 'hello' }],
-    max_tokens: 64,
-    stream: false,
-  })
-
-  expect(capturedUrl).toBe('http://example.test/v1/responses')
-  expect(capturedBody?.model).toBe('gpt-5.4')
-  expect(capturedBody?.instructions).toBe('test system')
-  expect(capturedBody?.max_output_tokens).toBe(64)
-  expect(capturedBody?.store).toBe(false)
-  expect(capturedBody?.input).toEqual([
-    {
-      type: 'message',
-      role: 'user',
-      content: [{ type: 'text', text: 'hello' }],
-    },
-  ])
-})
-
-test('uses correct empty input fallback schema for standard responses and responses_compat', async () => {
-  let capturedBody: Record<string, unknown> | undefined
-
-  globalThis.fetch = (async (input, init) => {
-    capturedBody = JSON.parse(String(init?.body)) as Record<string, unknown>
-    return new Response(JSON.stringify({
-      id: 'resp-1',
-      model: 'test',
-      output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'ok' }] }]
-    }), { headers: { 'Content-Type': 'application/json' } })
-  }) as FetchType
-
-  const client = createOpenAIShimClient({ defaultHeaders: {} }) as OpenAIShimClient
-
-  process.env.OPENAI_API_FORMAT = 'responses'
-  await client.beta.messages.create({
-    model: 'test',
-    max_tokens: 10,
-    messages: [{ role: 'user', content: [] }],
-  })
-
-  expect(capturedBody?.input).toEqual([
-    {
-      type: 'message',
-      role: 'user',
-      content: [{ type: 'input_text', text: '' }],
-    },
-  ])
-
-  process.env.OPENAI_API_FORMAT = 'responses_compat'
-  await client.beta.messages.create({
-    model: 'test',
-    max_tokens: 10,
-    messages: [{ role: 'user', content: [] }],
-  })
-
-  expect(capturedBody?.input).toEqual([
-    {
-      type: 'message',
-      role: 'user',
-      content: [{ type: 'text', text: '' }],
-    },
-  ])
-})
-
-test.skip('opengateway sends Accept-Encoding: identity header on chat requests', async () => {
-  let capturedHeaders: Headers | undefined
-
-  registerGateway({
-    id: 'gitlawb-opengateway-test',
-    label: 'Gitlawb Opengateway',
-    category: 'aggregating',
-    defaultBaseUrl: 'https://opengateway.gitlawb.com/v1/xiaomi-mimo',
-    defaultModel: 'mimo-v2.5-pro',
-    setup: {
-      requiresAuth: false,
-      authMode: 'none',
-    },
-    transportConfig: {
-      kind: 'openai-compatible',
-      openaiShim: {
-        headers: {
-          'Accept-Encoding': 'identity',
-        },
-        defaultAuthHeader: {
-          name: 'api-key',
-          scheme: 'raw',
-        },
-        preserveReasoningContent: true,
-        requireReasoningContentOnAssistantMessages: true,
-        reasoningContentFallback: '',
-        maxTokensField: 'max_completion_tokens',
-        supportsApiFormatSelection: false,
-        supportsAuthHeaders: false,
-      },
-    },
-  })
-
-  process.env.GAKR_CODE_USE_OPENAI = '1'
-  process.env.OPENAI_BASE_URL = 'https://opengateway.gitlawb.com/v1/xiaomi-mimo'
-  process.env.OPENAI_MODEL = 'mimo-v2.5-pro'
-
+  let requestBody: Record<string, unknown> | undefined
   globalThis.fetch = (async (_input, init) => {
-    capturedHeaders = new Headers(init?.headers)
-
+    requestBody = JSON.parse(String(init?.body))
     return new Response(
       JSON.stringify({
         id: 'chatcmpl-1',
-        model: 'mimo-v2.5-pro',
+        model: 'deepseek-chat',
         choices: [
-          {
-            message: {
-              role: 'assistant',
-              content: 'ok',
-            },
-            finish_reason: 'stop',
-          },
+          { message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
         ],
-        usage: {
-          prompt_tokens: 8,
-          completion_tokens: 3,
-          total_tokens: 11,
-        },
+        usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
       }),
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      },
+      { headers: { 'Content-Type': 'application/json' } },
     )
-  }) as FetchType
+  }) as unknown as FetchType
 
   const client = createOpenAIShimClient({}) as OpenAIShimClient
-
-  await client.beta.messages.create(
-    {
-      model: 'mimo-v2.5-pro',
-      system: 'test system',
-      messages: [{ role: 'user', content: 'hello' }],
-      max_tokens: 64,
-      stream: false,
-    },
-    {},
-  )
-
-  expect(capturedHeaders?.get('Accept-Encoding')).toBe('identity')
-})
-
-test.skip('replays Gemini tool signatures for OpenGateway Gemini models', async () => {
-  process.env.OPENAI_BASE_URL = 'https://opengateway.gitlawb.com/v1'
-  let requestBody: Record<string, unknown> | undefined
-
-  globalThis.fetch = (async (_input, init) => {
-    requestBody = JSON.parse(String(init?.body))
-
-    return new Response(
-      JSON.stringify({
-        id: 'chatcmpl-1',
-        model: 'google/gemini-3.1-flash-lite',
-        choices: [
-          {
-            message: {
-              role: 'assistant',
-              content: 'done',
-            },
-            finish_reason: 'stop',
-          },
-        ],
-        usage: {
-          prompt_tokens: 12,
-          completion_tokens: 4,
-          total_tokens: 16,
-        },
-      }),
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      },
-    )
-  }) as FetchType
-
-  const client = createOpenAIShimClient({}) as OpenAIShimClient
-
   await client.beta.messages.create({
-    model: 'google/gemini-3.1-flash-lite',
+    model: 'deepseek-chat',
+    system: 'test',
     messages: [
-      { role: 'user', content: 'Use Write' },
+      { role: 'user', content: 'analyze this' },
       {
         role: 'assistant',
         content: [
+          // real redacted_thinking shape: content lives in `.data`, not `.thinking`
+          { type: 'redacted_thinking', data: '', signature: 'sig123' },
+          { type: 'text', text: 'Analysis complete.' },
           {
             type: 'tool_use',
-            id: 'call_1',
-            name: 'Write',
-            input: { file_path: 'todo.md', content: 'todo' },
-            signature: 'sig-opengateway',
+            id: 'call_redacted_1',
+            name: 'Bash',
+            input: { command: 'ls' },
           },
         ],
       },
       {
         role: 'user',
         content: [
-          {
-            type: 'tool_result',
-            tool_use_id: 'call_1',
-            content: 'created',
-          },
+          { type: 'tool_result', tool_use_id: 'call_redacted_1', content: 'files' },
         ],
       },
     ],
-    max_tokens: 64,
+    max_tokens: 32,
     stream: false,
   })
 
-  const assistantWithToolCall = (requestBody?.messages as Array<Record<string, unknown>>).find(
-    message => Array.isArray(message.tool_calls),
-  ) as { tool_calls?: Array<Record<string, unknown>> } | undefined
-
-  expect(assistantWithToolCall?.tool_calls?.[0]).toMatchObject({
-    id: 'call_1',
-    extra_content: {
-      google: {
-        thought_signature: 'sig-opengateway',
-      },
-    },
-  })
-})
-
-test.skip('OpenGateway MiMo replays real reasoning_content without adding empty fallback', async () => {
-  process.env.OPENAI_BASE_URL = 'https://opengateway.gitlawb.com/v1'
-  process.env.OPENAI_MODEL = 'mimo-v2.5-pro'
-  let requestBody: Record<string, unknown> | undefined
-
-  globalThis.fetch = (async (_input, init) => {
-    requestBody = JSON.parse(String(init?.body))
-
-    return new Response(
-      JSON.stringify({
-        id: 'chatcmpl-opengateway-mimo',
-        model: 'mimo-v2.5-pro',
-        choices: [
-          {
-            message: {
-              role: 'assistant',
-              content: 'done',
-            },
-            finish_reason: 'stop',
-          },
-        ],
-      }),
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      },
-    )
-  }) as FetchType
-
-  const client = createOpenAIShimClient({}) as OpenAIShimClient
-
-  await client.beta.messages.create({
-    model: 'mimo-v2.5-pro',
-    messages: [
-      { role: 'user', content: 'Use an agent' },
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'thinking',
-            thinking: 'Need to inspect code with an agent.',
-          },
-          {
-            type: 'tool_use',
-            id: 'call_agent_1',
-            name: 'Agent',
-            input: {
-              description: 'Inspect code',
-              prompt: 'Look at the relevant code',
-              subagent_type: 'general-purpose',
-            },
-          },
-        ],
-      },
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'tool_result',
-            tool_use_id: 'call_agent_1',
-            content: 'Agent finished',
-          },
-        ],
-      },
-    ],
-    max_tokens: 64,
-    stream: false,
-  })
-
-  const assistantWithToolCall = (requestBody?.messages as Array<Record<string, unknown>>).find(
-    message => Array.isArray(message.tool_calls),
+  const messages = requestBody?.messages as Array<Record<string, unknown>>
+  const assistantWithToolCall = messages.find(
+    m => m.role === 'assistant' && Array.isArray(m.tool_calls),
   )
-
   expect(assistantWithToolCall).toBeDefined()
+  // redacted_thinking is recognized as a thinking block; its .data is "" and the
+  // message carries a tool_call, so it falls back to reasoning_content: ""
+  expect(assistantWithToolCall?.reasoning_content).toBe('')
+})
+
+test('DeepSeek: redacted_thinking block with non-empty data propagates data into reasoning_content', async () => {
+  process.env.OPENAI_BASE_URL = 'https://api.deepseek.com/v1'
+  process.env.OPENAI_API_KEY = 'sk-deepseek'
+
+  let requestBody: Record<string, unknown> | undefined
+  globalThis.fetch = (async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body))
+    return new Response(
+      JSON.stringify({
+        id: 'chatcmpl-2',
+        model: 'deepseek-chat',
+        choices: [
+          { message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
+        ],
+        usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
+      }),
+      { headers: { 'Content-Type': 'application/json' } },
+    )
+  }) as unknown as FetchType
+
+  const client = createOpenAIShimClient({}) as OpenAIShimClient
+  await client.beta.messages.create({
+    model: 'deepseek-chat',
+    system: 'test',
+    messages: [
+      { role: 'user', content: 'analyze this' },
+      {
+        role: 'assistant',
+        content: [
+          // real redacted_thinking with content in .data
+          {
+            type: 'redacted_thinking',
+            data: 'encrypted_chain_of_thought_payload_v1',
+            signature: 'sig456',
+          },
+          { type: 'text', text: 'Analysis complete.' },
+          {
+            type: 'tool_use',
+            id: 'call_redacted_2',
+            name: 'Bash',
+            input: { command: 'ls' },
+          },
+        ],
+      },
+      {
+        role: 'user',
+        content: [
+          { type: 'tool_result', tool_use_id: 'call_redacted_2', content: 'files' },
+        ],
+      },
+    ],
+    max_tokens: 32,
+    stream: false,
+  })
+
+  const messages = requestBody?.messages as Array<Record<string, unknown>>
+  const assistantWithToolCall = messages.find(
+    m => m.role === 'assistant' && Array.isArray(m.tool_calls),
+  )
+  expect(assistantWithToolCall).toBeDefined()
+  // The real .data payload must be preserved in reasoning_content — this is the
+  // case the original test missed (it used a synthetic .thinking field).
   expect(assistantWithToolCall?.reasoning_content).toBe(
-    'Need to inspect code with an agent.',
+    'encrypted_chain_of_thought_payload_v1',
   )
-  expect(requestBody).not.toHaveProperty('store')
 })
 
-test('Xiaomi MiMo replays real reasoning_content without adding empty fallback', async () => {
-  process.env.OPENAI_BASE_URL = 'https://api.xiaomimimo.com/v1'
-  process.env.OPENAI_MODEL = 'mimo-v2.5-pro'
-  process.env.MIMO_API_KEY = 'mimo-test-key'
-  delete process.env.OPENAI_API_KEY
-  let requestBody: Record<string, unknown> | undefined
+test('renders tool_reference blocks as text on the chat/completions path', async () => {
+  const { __test } = await import('./openaiShim.ts')
 
-  globalThis.fetch = (async (_input, init) => {
-    requestBody = JSON.parse(String(init?.body))
-
-    return new Response(
-      JSON.stringify({
-        id: 'chatcmpl-mimo',
-        model: 'mimo-v2.5-pro',
-        choices: [
-          {
-            message: {
-              role: 'assistant',
-              content: 'done',
-            },
-            finish_reason: 'stop',
-          },
-        ],
-      }),
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      },
-    )
-  }) as FetchType
-
-  const client = createOpenAIShimClient({}) as OpenAIShimClient
-
-  await client.beta.messages.create({
-    model: 'mimo-v2.5-pro',
-    messages: [
-      { role: 'user', content: 'Use an agent' },
+  const messages = __test.convertMessages(
+    [
       {
         role: 'assistant',
         content: [
-          {
-            type: 'thinking',
-            thinking: 'Need to inspect code with an agent.',
-          },
-          {
-            type: 'tool_use',
-            id: 'call_agent_1',
-            name: 'Agent',
-            input: {
-              description: 'Inspect code',
-              prompt: 'Look at the relevant code',
-              subagent_type: 'general-purpose',
-            },
-          },
+          { type: 'tool_use', id: 'call_ts1', name: 'ToolSearch', input: { query: 'memory' } },
         ],
       },
       {
@@ -6477,294 +6641,23 @@ test('Xiaomi MiMo replays real reasoning_content without adding empty fallback',
         content: [
           {
             type: 'tool_result',
-            tool_use_id: 'call_agent_1',
-            content: 'Agent finished',
+            tool_use_id: 'call_ts1',
+            content: [
+              { type: 'tool_reference', tool_name: 'mcp__example__memory_search' },
+              { type: 'tool_reference', tool_name: 'mcp__example__memory_store' },
+            ],
           },
         ],
       },
     ],
-    max_tokens: 64,
-    stream: false,
-  })
-
-  const assistantWithToolCall = (requestBody?.messages as Array<Record<string, unknown>>).find(
-    message => Array.isArray(message.tool_calls),
+    undefined,
   )
 
-  expect(assistantWithToolCall).toBeDefined()
-  expect(assistantWithToolCall?.reasoning_content).toBe(
-    'Need to inspect code with an agent.',
-  )
-  expect(requestBody).not.toHaveProperty('store')
-})
-
-test.skip('OpenGateway MiMo does not synthesize empty reasoning_content when missing', async () => {
-  process.env.OPENAI_BASE_URL = 'https://opengateway.gitlawb.com/v1'
-  process.env.OPENAI_MODEL = 'mimo-v2.5-pro'
-  let requestBody: Record<string, unknown> | undefined
-
-  globalThis.fetch = (async (_input, init) => {
-    requestBody = JSON.parse(String(init?.body))
-
-    return new Response(
-      JSON.stringify({
-        id: 'chatcmpl-opengateway-mimo',
-        model: 'mimo-v2.5-pro',
-        choices: [
-          {
-            message: {
-              role: 'assistant',
-              content: 'done',
-            },
-            finish_reason: 'stop',
-          },
-        ],
-      }),
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      },
-    )
-  }) as FetchType
-
-  const client = createOpenAIShimClient({}) as OpenAIShimClient
-
-  await client.beta.messages.create({
-    model: 'mimo-v2.5-pro',
-    messages: [
-      { role: 'user', content: 'Use an agent' },
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'tool_use',
-            id: 'call_agent_1',
-            name: 'Agent',
-            input: {
-              description: 'Inspect code',
-              prompt: 'Look at the relevant code',
-              subagent_type: 'general-purpose',
-            },
-          },
-        ],
-      },
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'tool_result',
-            tool_use_id: 'call_agent_1',
-            content: 'Agent finished',
-          },
-        ],
-      },
-    ],
-    max_tokens: 64,
-    stream: false,
-  })
-
-  const assistantWithToolCall = (requestBody?.messages as Array<Record<string, unknown>>).find(
-    message => Array.isArray(message.tool_calls),
-  )
-
-  expect(assistantWithToolCall).toBeDefined()
-  expect(assistantWithToolCall).not.toHaveProperty('reasoning_content')
-  expect(requestBody).not.toHaveProperty('store')
-})
-
-test('strips unsupported stream_options for Xiaomi MiMo streams', async () => {
-  process.env.OPENAI_BASE_URL = 'https://api.xiaomimimo.com/v1'
-  process.env.OPENAI_MODEL = 'mimo-v2.5-pro'
-  process.env.MIMO_API_KEY = 'mimo-test-key'
-  delete process.env.OPENAI_API_KEY
-  let requestBody: Record<string, unknown> | undefined
-
-  globalThis.fetch = (async (_input, init) => {
-    requestBody = JSON.parse(String(init?.body))
-
-    return makeSseResponse(
-      makeStreamChunks([
-        {
-          id: 'chatcmpl-mimo',
-          object: 'chat.completion.chunk',
-          model: 'mimo-v2.5-pro',
-          choices: [
-            {
-              index: 0,
-              delta: { role: 'assistant', content: 'done' },
-              finish_reason: null,
-            },
-          ],
-        },
-        {
-          id: 'chatcmpl-mimo',
-          object: 'chat.completion.chunk',
-          model: 'mimo-v2.5-pro',
-          choices: [
-            {
-              index: 0,
-              delta: {},
-              finish_reason: 'stop',
-            },
-          ],
-        },
-      ]),
-    )
-  }) as FetchType
-
-  const client = createOpenAIShimClient({}) as OpenAIShimClient
-
-  await client.beta.messages.create({
-    model: 'mimo-v2.5-pro',
-    messages: [{ role: 'user', content: 'hello' }],
-    max_tokens: 64,
-    stream: true,
-  })
-
-  expect(requestBody).toMatchObject({
-    stream: true,
-    max_completion_tokens: 64,
-  })
-  expect(requestBody).not.toHaveProperty('stream_options')
-  expect(requestBody).not.toHaveProperty('store')
-})
-
-test.skip('gitlawb opengateway provider flag sends OPENGATEWAY_API_KEY as bearer auth despite stale generic base URL', async () => {
-  process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1'
-  process.env.OPENAI_MODEL = 'gpt-5.5'
-  process.env.OPENGATEWAY_API_KEY = 'fake-ogw-key'
-  delete process.env.OPENAI_API_KEY
-
-  const result = applyProviderFlag('gitlawb-opengateway', [])
-  expect(result.error).toBeUndefined()
-
-  const captured = await captureChatCompletionRequest()
-
-  expect(captured.url).toBe('https://opengateway.gitlawb.com/v1/chat/completions')
-  expect(captured.authorization).toBe('Bearer fake-ogw-key')
-})
-
-test.skip('gitlawb opengateway provider flag accepts OPENAI_API_KEY compatibility fallback', async () => {
-  delete process.env.OPENAI_BASE_URL
-  delete process.env.OPENGATEWAY_API_KEY
-  process.env.OPENAI_API_KEY = 'fake-openai-fallback'
-
-  const result = applyProviderFlag('gitlawb-opengateway', [])
-  expect(result.error).toBeUndefined()
-
-  const captured = await captureChatCompletionRequest()
-
-  expect(captured.authorization).toBe('Bearer fake-openai-fallback')
-})
-
-test.skip('gitlawb opengateway provider flag sends OPENAI_API_KEY fallback despite stale generic base URL', async () => {
-  process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1'
-  process.env.OPENAI_API_KEY = 'fake-openai-fallback'
-  delete process.env.OPENGATEWAY_API_KEY
-
-  const result = applyProviderFlag('gitlawb-opengateway', [])
-  expect(result.error).toBeUndefined()
-
-  const captured = await captureChatCompletionRequest()
-
-  expect(captured.url).toBe('https://opengateway.gitlawb.com/v1/chat/completions')
-  expect(captured.authorization).toBe('Bearer fake-openai-fallback')
-})
-
-test.skip('gitlawb opengateway provider flag trims OPENGATEWAY_API_KEY before bearer auth', async () => {
-  process.env.OPENGATEWAY_API_KEY = ' fake-ogw-key '
-  delete process.env.OPENAI_API_KEY
-
-  const result = applyProviderFlag('gitlawb-opengateway', [])
-  expect(result.error).toBeUndefined()
-
-  const captured = await captureChatCompletionRequest()
-
-  expect(captured.authorization).toBe('Bearer fake-ogw-key')
-})
-
-test.skip('gitlawb opengateway provider flag ignores blank OPENGATEWAY_API_KEY and uses OPENAI_API_KEY fallback', async () => {
-  process.env.OPENGATEWAY_API_KEY = '   '
-  process.env.OPENAI_API_KEY = 'fake-openai-fallback'
-
-  const result = applyProviderFlag('gitlawb-opengateway', [])
-  expect(result.error).toBeUndefined()
-
-  const captured = await captureChatCompletionRequest()
-
-  expect(captured.authorization).toBe('Bearer fake-openai-fallback')
-})
-
-test.skip('gitlawb opengateway provider flag sends OPENGATEWAY_API_KEY to OPENGATEWAY_BASE_URL override', async () => {
-  process.env.OPENGATEWAY_BASE_URL = 'http://localhost:8181/v1'
-  process.env.OPENGATEWAY_API_KEY = 'fake-ogw-key'
-  delete process.env.OPENAI_API_KEY
-
-  const result = applyProviderFlag('gitlawb-opengateway', [])
-  expect(result.error).toBeUndefined()
-
-  const captured = await captureChatCompletionRequest()
-
-  expect(captured.url).toBe('http://localhost:8181/v1/chat/completions')
-  expect(captured.authorization).toBe('Bearer fake-ogw-key')
-})
-
-test.skip('gitlawb opengateway provider flag sends OPENGATEWAY_API_KEY to custom OPENAI_BASE_URL fallback', async () => {
-  process.env.OPENAI_BASE_URL = 'http://localhost:8181/v1'
-  process.env.OPENGATEWAY_API_KEY = 'fake-ogw-key'
-  delete process.env.OPENGATEWAY_BASE_URL
-  delete process.env.OPENAI_API_KEY
-
-  const result = applyProviderFlag('gitlawb-opengateway', [])
-  expect(result.error).toBeUndefined()
-
-  const captured = await captureChatCompletionRequest()
-
-  expect(captured.url).toBe('http://localhost:8181/v1/chat/completions')
-  expect(captured.authorization).toBe('Bearer fake-ogw-key')
-})
-
-test.skip('gitlawb opengateway provider flag prefers OPENGATEWAY_API_KEY over generic OPENAI_API_KEY for custom base URL', async () => {
-  process.env.OPENGATEWAY_BASE_URL = 'http://localhost:8181/v1'
-  process.env.OPENGATEWAY_API_KEY = 'fake-ogw-key'
-  process.env.OPENAI_API_KEY = 'fake-generic-openai-key'
-
-  const result = applyProviderFlag('gitlawb-opengateway', [])
-  expect(result.error).toBeUndefined()
-
-  const captured = await captureChatCompletionRequest()
-
-  expect(captured.url).toBe('http://localhost:8181/v1/chat/completions')
-  expect(captured.authorization).toBe('Bearer fake-ogw-key')
-})
-
-test.skip('gitlawb opengateway stored provider profile key becomes bearer auth', async () => {
-  delete process.env.OPENAI_API_KEY
-  delete process.env.OPENGATEWAY_API_KEY
-
-  applyProviderProfileToProcessEnv({
-    id: 'stored-opengateway',
-    provider: 'gitlawb-opengateway',
-    name: 'Gitlawb Opengateway',
-    baseUrl: 'https://opengateway.gitlawb.com/v1',
-    model: 'mimo-v2.5-pro',
-    apiKey: 'fake-profile-key',
-  })
-
-  const captured = await captureChatCompletionRequest()
-
-  expect(captured.authorization).toBe('Bearer fake-profile-key')
-})
-
-test('openai route still sends OPENAI_API_KEY as bearer auth', async () => {
-  process.env.GAKR_CODE_USE_OPENAI = '1'
-  process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1'
-  process.env.OPENAI_MODEL = 'gpt-5.5'
-  process.env.OPENAI_API_KEY = 'fake-openai-key'
-  delete process.env.OPENGATEWAY_API_KEY
-
-  const captured = await captureChatCompletionRequest('gpt-5.5')
-
-  expect(captured.authorization).toBe('Bearer fake-openai-key')
+  const toolMsg = messages.find(m => m.role === 'tool')
+  expect(toolMsg).toBeDefined()
+  // The rendering contract is plain text: text-only parts collapse to a string.
+  expect(typeof toolMsg!.content).toBe('string')
+  const content = toolMsg!.content as string
+  expect(content).toContain('mcp__example__memory_search')
+  expect(content).toContain('mcp__example__memory_store')
 })

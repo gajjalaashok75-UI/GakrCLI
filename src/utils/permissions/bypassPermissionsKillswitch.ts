@@ -83,15 +83,16 @@ export function useKickOffCheckAndDisableBypassPermissionsIfNeeded(): void {
   const toolPermissionContext = useAppState(s => s.toolPermissionContext)
   const setAppState = useSetAppState()
 
-  // Run once, when the component mounts
+  // Kick off the authoritative check on mount and whenever dangerous-mode
+  // availability appears later in the session (for example after settings load
+  // or org-aware login changes).
   useEffect(() => {
     if (getIsRemoteMode()) return
     void checkAndDisableBypassPermissionsIfNeeded(
       toolPermissionContext,
       setAppState,
     )
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [toolPermissionContext, setAppState])
 }
 
 let autoModeCheckRan = false

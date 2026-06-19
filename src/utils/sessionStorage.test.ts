@@ -1,14 +1,21 @@
-import { afterEach, expect, test } from 'bun:test'
+import { afterEach, beforeEach, expect, test } from 'bun:test'
+import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
 import { type UUID } from 'node:crypto'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import {
+  acquireSharedMutationLock,
+  releaseSharedMutationLock,
+} from '../test/sharedMutationLock.js'
+
+import {
   adoptResumedSessionFile,
   buildConversationChain,
   loadTranscriptFile,
   recordGoalState,
+  flushSessionStorage,
   resetProjectForTesting,
   resetSessionFilePointer,
   setSessionFileForTesting,
@@ -16,7 +23,12 @@ import {
   stripPersistedToolUseResultsFromJSONLBuffer,
 } from './sessionStorage.ts'
 import { createGoalState } from '../services/goal/state.js'
-import { getSessionId, switchSession } from '../bootstrap/state.js'
+import {
+  getSessionId,
+  isSessionPersistenceDisabled,
+  setSessionPersistenceDisabled,
+  switchSession,
+} from '../bootstrap/state.js'
 import type { GoalState } from '../services/goal/types.js'
 
 const tempDirs: string[] = []
@@ -27,7 +39,7 @@ function id(n: number): UUID {
   return `00000000-0000-4000-8000-${String(n).padStart(12, '0')}` as UUID
 }
 
-function base(uuid: string, parentUuid: string | null) {
+function base(uuid: UUID, parentUuid: UUID | null) {
   return {
     uuid,
     parentUuid,
@@ -40,7 +52,11 @@ function base(uuid: string, parentUuid: string | null) {
   }
 }
 
-function user(uuid: string, parentUuid: string | null, content: string) {
+function user(
+  uuid: UUID,
+  parentUuid: UUID | null,
+  content: string | ToolResultBlockParam[],
+) {
   return {
     ...base(uuid, parentUuid),
     type: 'user',
@@ -52,7 +68,7 @@ function user(uuid: string, parentUuid: string | null, content: string) {
   }
 }
 
-function assistant(uuid: string, parentUuid: string | null, text: string) {
+function assistant(uuid: UUID, parentUuid: UUID | null, text: string) {
   return {
     ...base(uuid, parentUuid),
     type: 'assistant',
@@ -74,12 +90,12 @@ function assistant(uuid: string, parentUuid: string | null, text: string) {
 }
 
 function compactBoundary(
-  uuid: string,
-  parentUuid: string | null,
+  uuid: UUID,
+  parentUuid: UUID | null,
   preservedSegment: {
-    headUuid: string
-    anchorUuid: string
-    tailUuid: string
+    headUuid: UUID
+    anchorUuid: UUID
+    tailUuid: UUID
   },
 ) {
   return {
@@ -98,9 +114,9 @@ function compactBoundary(
 }
 
 function snipBoundary(
-  uuid: string,
-  parentUuid: string | null,
-  removedUuids: string[],
+  uuid: UUID,
+  parentUuid: UUID | null,
+  removedUuids: UUID[],
 ) {
   return {
     ...base(uuid, parentUuid),
@@ -121,6 +137,23 @@ async function writeJsonl(entries: unknown[]): Promise<string> {
   return filePath
 }
 
+function getToolResultContent(content: unknown): string | undefined {
+  if (!Array.isArray(content)) return undefined
+
+  const [block] = content
+  if (
+    typeof block !== 'object' ||
+    block === null ||
+    !('type' in block) ||
+    block.type !== 'tool_result' ||
+    !('content' in block)
+  ) {
+    return undefined
+  }
+
+  return typeof block.content === 'string' ? block.content : undefined
+}
+
 function readGoalStateEntries(text: string): Array<{ goal: GoalState | null }> {
   return text
     .split('\n')
@@ -137,8 +170,16 @@ function readGoalStateEntries(text: string): Array<{ goal: GoalState | null }> {
 
 async function withSessionPersistence<T>(fn: () => Promise<T>): Promise<T> {
   const originalPersistence = process.env.TEST_ENABLE_SESSION_PERSISTENCE
+  const originalSessionPersistence = process.env.ENABLE_SESSION_PERSISTENCE
+  const originalSkipPromptHistory = process.env.GAKR_CODE_SKIP_PROMPT_HISTORY
+  const originalNodeEnv = process.env.NODE_ENV
   const originalSessionId = getSessionId()
+  const originalSessionPersistenceDisabled = isSessionPersistenceDisabled()
+  process.env.NODE_ENV = 'development'
   process.env.TEST_ENABLE_SESSION_PERSISTENCE = 'true'
+  process.env.ENABLE_SESSION_PERSISTENCE = 'true'
+  delete process.env.GAKR_CODE_SKIP_PROMPT_HISTORY
+  setSessionPersistenceDisabled(false)
   try {
     resetProjectForTesting()
     return await fn()
@@ -148,13 +189,37 @@ async function withSessionPersistence<T>(fn: () => Promise<T>): Promise<T> {
     } else {
       process.env.TEST_ENABLE_SESSION_PERSISTENCE = originalPersistence
     }
+    if (originalSessionPersistence === undefined) {
+      delete process.env.ENABLE_SESSION_PERSISTENCE
+    } else {
+      process.env.ENABLE_SESSION_PERSISTENCE = originalSessionPersistence
+    }
+    if (originalSkipPromptHistory === undefined) {
+      delete process.env.GAKR_CODE_SKIP_PROMPT_HISTORY
+    } else {
+      process.env.GAKR_CODE_SKIP_PROMPT_HISTORY = originalSkipPromptHistory
+    }
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV
+    } else {
+      process.env.NODE_ENV = originalNodeEnv
+    }
+    setSessionPersistenceDisabled(originalSessionPersistenceDisabled)
     switchSession(originalSessionId)
     resetProjectForTesting()
   }
 }
 
+beforeEach(async () => {
+  await acquireSharedMutationLock('utils/sessionStorage.test.ts')
+})
+
 afterEach(async () => {
-  await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
+  try {
+    await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })))
+  } finally {
+    releaseSharedMutationLock()
+  }
 })
 
 test('loadTranscriptFile replays a persisted snip boundary, pruning and relinking', async () => {
@@ -300,18 +365,14 @@ test('loadTranscriptFile fails closed when preserved-segment anchor is missing',
 })
 
 test('stripPersistedToolUseResultsFromJSONLBuffer drops raw toolUseResult while preserving persisted preview content', () => {
-  const persisted = user(id(31), null, 'placeholder')
-  persisted.message = {
-    role: 'user',
-    content: [
-      {
-        type: 'tool_result',
-        tool_use_id: 'tool-31',
-        is_error: false,
-        content: '<persisted-output>\nPreview text\n</persisted-output>',
-      },
-    ],
-  }
+  const persisted = user(id(31), null, [
+    {
+      type: 'tool_result',
+      tool_use_id: 'tool-31',
+      is_error: false,
+      content: '<persisted-output>\nPreview text\n</persisted-output>',
+    },
+  ])
   ;(persisted as typeof persisted & { toolUseResult?: unknown }).toolUseResult = {
     stdout: 'x'.repeat(200_000),
     stderr: '',
@@ -324,24 +385,18 @@ test('stripPersistedToolUseResultsFromJSONLBuffer drops raw toolUseResult while 
   >
 
   expect(parsed?.toolUseResult).toBeUndefined()
-  expect(
-    (parsed?.message.content as Array<{ content: string }>)[0]?.content,
-  ).toContain('Preview text')
+  expect(getToolResultContent(parsed?.message.content)).toContain('Preview text')
 })
 
 test('loadTranscriptFile omits raw toolUseResult for persisted-output transcript entries', async () => {
-  const persisted = user(id(41), null, 'placeholder')
-  persisted.message = {
-    role: 'user',
-    content: [
-      {
-        type: 'tool_result',
-        tool_use_id: 'tool-41',
-        is_error: false,
-        content: '<persisted-output>\nPreview text\n</persisted-output>',
-      },
-    ],
-  }
+  const persisted = user(id(41), null, [
+    {
+      type: 'tool_result',
+      tool_use_id: 'tool-41',
+      is_error: false,
+      content: '<persisted-output>\nPreview text\n</persisted-output>',
+    },
+  ])
   ;(persisted as typeof persisted & { toolUseResult?: unknown }).toolUseResult = {
     stdout: 'y'.repeat(200_000),
     stderr: '',
@@ -355,9 +410,7 @@ test('loadTranscriptFile omits raw toolUseResult for persisted-output transcript
 
   expect(loaded).toBeDefined()
   expect(loaded?.toolUseResult).toBeUndefined()
-  expect(
-    (loaded?.message.content as Array<{ content: string }>)[0]?.content,
-  ).toContain('Preview text')
+  expect(getToolResultContent(loaded?.message.content)).toContain('Preview text')
 })
 
 test('loadTranscriptFile restores last goal-state metadata entry', async () => {
@@ -507,7 +560,7 @@ test('recordGoalState writes goal metadata durably before resolving', async () =
     const dir = await mkdtemp(join(tmpdir(), 'gakrcli-session-storage-'))
     tempDirs.push(dir)
     const filePath = join(dir, `${sessionId}.jsonl`)
-    switchSession(sessionId as never)
+    switchSession(sessionId as never, dir)
     setSessionFileForTesting(filePath)
 
     await recordGoalState(
@@ -524,6 +577,7 @@ test('recordGoalState writes goal metadata durably before resolving', async () =
       },
       sessionId as never,
     )
+    await flushSessionStorage()
 
     const text = await readFile(filePath, 'utf8')
     expect(text).toContain('"type":"goal-state"')

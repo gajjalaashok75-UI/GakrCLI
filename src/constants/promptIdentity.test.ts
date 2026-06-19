@@ -22,8 +22,6 @@ let EXPLORE_AGENT:
 let PLAN_AGENT: typeof import('../tools/AgentTool/built-in/planAgent.js').PLAN_AGENT
 let STATUSLINE_SETUP_AGENT:
   typeof import('../tools/AgentTool/built-in/statuslineSetup.js').STATUSLINE_SETUP_AGENT
-let getCoordinatorSystemPrompt:
-  typeof import('../coordinator/coordinatorMode.js').getCoordinatorSystemPrompt
 
 beforeAll(async () => {
   await acquireSharedMutationLock('constants/promptIdentity.test.ts')
@@ -35,7 +33,7 @@ beforeAll(async () => {
     DISPLAY_VERSION: '0.0.0-test',
     BUILD_TIME: new Date().toISOString(),
     ISSUES_EXPLAINER:
-      'report the issue at https://github.com/gajjalaashok75-UI/GakrCLI/issues',
+      'report the issue at https://github.com/gajjalaashok75-UI/gakrcli/issues',
     PACKAGE_URL: '@gakr-gakr/gakrcli',
     NATIVE_PACKAGE_URL: undefined,
   }
@@ -55,9 +53,6 @@ beforeAll(async () => {
   ;({ PLAN_AGENT } = await import('../tools/AgentTool/built-in/planAgent.js'))
   ;({ STATUSLINE_SETUP_AGENT } = await import(
     '../tools/AgentTool/built-in/statuslineSetup.js'
-  ))
-  ;({ getCoordinatorSystemPrompt } = await import(
-    '../coordinator/coordinatorMode.js'
   ))
 })
 
@@ -82,10 +77,10 @@ afterEach(() => {
   clearSystemPromptSections()
 })
 
-test('CLI identity prefixes describe GakrCLI instead of Claude Code', () => {
+test('CLI identity prefixes describe GakrCLI instead of GakrCLI Code', () => {
   expect(getCLISyspromptPrefix()).toContain('GakrCLI')
-  expect(getCLISyspromptPrefix()).not.toContain('Claude Code')
-  expect(getCLISyspromptPrefix()).not.toContain("Anthropic's official CLI for Claude")
+  expect(getCLISyspromptPrefix()).not.toContain('GakrCLI Code')
+  expect(getCLISyspromptPrefix()).not.toContain("Anthropic's official CLI for GakrCLI")
 
   for (const prefix of CLI_SYSPROMPT_PREFIXES) {
     expect(prefix).toContain('GakrCLI')
@@ -100,7 +95,7 @@ test('simple mode identity describes GakrCLI instead of Claude Code', async () =
   const prompt = await getSystemPrompt([], 'gpt-4o')
 
   expect(prompt[0]).toContain('GakrCLI')
-  expect(prompt[0]).not.toContain('Claude Code')
+  expect(prompt[0]).not.toContain('claude Code')
   expect(prompt[0]).not.toContain("Anthropic's official CLI for Claude")
 })
 
@@ -162,14 +157,6 @@ test('built-in agent prompts describe GakrCLI instead of Claude Code', () => {
   expect(guidePrompt).toContain('GakrCLI')
   expect(guidePrompt).toContain('You are the GakrCLI guide agent.')
   expect(guidePrompt).toContain('**GakrCLI** (the CLI tool)')
-  expect(guidePrompt).not.toContain('You are the Claude guide agent.')
-  expect(guidePrompt).not.toContain('**Claude Code** (the CLI tool)')
-})
-
-test('coordinator prompt describes GakrCLI instead of Claude Code', () => {
-  const prompt = getCoordinatorSystemPrompt()
-
-  expect(prompt).toContain('You are GakrCLI')
-  expect(prompt).not.toContain('Claude Code')
-  expect(prompt).not.toContain('anthropics/claude-code')
+  expect(guidePrompt).not.toContain('You are the Claude Code guide agent.')
+  expect(guidePrompt).not.toContain('**GakrCLI Code** (the CLI tool)')
 })

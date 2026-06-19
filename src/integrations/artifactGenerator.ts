@@ -218,6 +218,7 @@ function buildPresetManifestEntry(
     modelEnvVars: preset.modelEnvVars,
     fallbackBaseUrl: preset.fallbackBaseUrl,
     fallbackModel: preset.fallbackModel,
+    badge: preset.badge,
   }
 }
 
@@ -230,6 +231,15 @@ function compareProviderPresetEntries(
 
   if (leftPreset === rightPreset) {
     return 0
+  }
+
+  // Pin gakr-gakr Opengateway first so the startup-default provider is also
+  // the first guided setup option when users need to add an API key.
+  if (leftPreset === 'gakr-gakr-opengateway') {
+    return -1
+  }
+  if (rightPreset === 'gakr-gakr-opengateway') {
+    return 1
   }
 
   if (leftPreset === 'anthropic') {
@@ -383,6 +393,14 @@ function renderIntegrationArtifacts(
     ...brandModules.map(module => `import ${module.importName} from '${module.importPath}'`),
     ...modelModules.map(module => `import ${module.importName} from '${module.importPath}'`),
   ]
+
+  const allModelDescriptors = loadedModules.modelModules.flatMap(m => m.descriptors)
+  const uniqueKeys = new Set(allModelDescriptors.map(m => `${m.id}::${m.vendorId}`))
+  if (allModelDescriptors.length > uniqueKeys.size) {
+    throw new Error(
+      `Duplicate model (id, vendorId) pairs detected: ${allModelDescriptors.length} entries, ${uniqueKeys.size} unique.`,
+    )
+  }
 
   const presetManifest = loadedModules.routeModules
     .filter(routeModule => routeModule.descriptor.preset)

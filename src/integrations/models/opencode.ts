@@ -333,6 +333,24 @@ export default [
     maxOutputTokens: 65_536,
   }),
   defineModel({
+    id: 'opencode-claude-opus-4-8',
+    label: 'Claude Opus 4.8',
+
+    vendorId: 'openai',
+    classification: ['chat', 'reasoning'],
+    defaultModel: 'opencode-claude-opus-4-8',
+    capabilities: {
+      supportsVision: true,
+      supportsStreaming: true,
+      supportsFunctionCalling: true,
+      supportsJsonMode: true,
+      supportsReasoning: true,
+      supportsPreciseTokenCount: false,
+    },
+    contextWindow: 200_000,
+    maxOutputTokens: 65_536,
+  }),
+  defineModel({
     id: 'opencode-claude-opus-4-6',
     label: 'Claude Opus 4.6',
 
@@ -459,12 +477,12 @@ export default [
     maxOutputTokens: 8_192,
   }),
   defineModel({
-    id: 'opencode-claude-3-5-haiku',
+    id: 'opencode-gakrcli-3-5-haiku',
     label: 'Claude Haiku 3.5',
 
     vendorId: 'openai',
     classification: ['chat'],
-    defaultModel: 'opencode-claude-3-5-haiku',
+    defaultModel: 'opencode-gakrcli-3-5-haiku',
     capabilities: {
       supportsVision: true,
       supportsStreaming: true,
@@ -731,8 +749,8 @@ export default [
       supportsReasoning: false,
       supportsPreciseTokenCount: false,
     },
-    contextWindow: 131_072,
-    maxOutputTokens: 32_768,
+    contextWindow: 200_000,
+    maxOutputTokens: 128_000,
   }),
   defineModel({
     id: 'opencode-nemotron-3-super-free',
@@ -741,6 +759,24 @@ export default [
     vendorId: 'openai',
     classification: ['chat'],
     defaultModel: 'opencode-nemotron-3-super-free',
+    capabilities: {
+      supportsVision: false,
+      supportsStreaming: true,
+      supportsFunctionCalling: true,
+      supportsJsonMode: true,
+      supportsReasoning: false,
+      supportsPreciseTokenCount: false,
+    },
+    contextWindow: 131_072,
+    maxOutputTokens: 32_768,
+  }),
+  defineModel({
+    id: 'opencode-mimo-v2.5-free',
+    label: 'MiMo V2.5 Free',
+
+    vendorId: 'openai',
+    classification: ['chat'],
+    defaultModel: 'opencode-mimo-v2.5-free',
     capabilities: {
       supportsVision: false,
       supportsStreaming: true,
@@ -971,6 +1007,24 @@ export default [
       supportsFunctionCalling: true,
       supportsJsonMode: true,
       supportsReasoning: true,
+      supportsPreciseTokenCount: false,
+    },
+    contextWindow: 131_072,
+    maxOutputTokens: 32_768,
+  }),
+  defineModel({
+    id: 'opencode-go-minimax-m3',
+    label: 'MiniMax M3',
+
+    vendorId: 'openai',
+    classification: ['chat'],
+    defaultModel: 'minimax-m3',
+    capabilities: {
+      supportsVision: false,
+      supportsStreaming: true,
+      supportsFunctionCalling: true,
+      supportsJsonMode: true,
+      supportsReasoning: false,
       supportsPreciseTokenCount: false,
     },
     contextWindow: 131_072,

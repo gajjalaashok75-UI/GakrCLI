@@ -77,6 +77,9 @@ test('sandbox auto-allow still enforces Bash path constraints', async () => {
   )
 
   expect(result.behavior).toBe('ask')
+  if (result.behavior !== 'ask') {
+    throw new Error(`expected ask, got ${result.behavior}`)
+  }
   expect(result.message).toContain('was blocked')
   expect(result.message).toContain('passwd')
 })
@@ -129,7 +132,7 @@ test('sandbox auto-allow caps subcommand fanout when AST is unavailable', async 
 })
 
 // CC-643 follow-up: when tree-sitter has parsed the chain cleanly
-// (astSubcommands !== null), the cap must NOT fire; AST-validated long
+// (astSubcommands !== null), the cap must NOT fire — AST-validated long
 // chains are intentional, and pre-emptively asking is a user-visible
 // regression for legitimate compound commands. Driven directly via
 // checkSandboxAutoAllow so the assertion does not depend on tree-sitter WASM
@@ -155,7 +158,7 @@ test('sandbox auto-allow does not cap when astSubcommands is provided', () => {
   })
 })
 
-// Symmetric direct check: AST unavailable (null) means the cap fires.
+// Symmetric direct check: AST unavailable (null) → cap fires.
 test('checkSandboxAutoAllow caps fanout when astSubcommands is null', () => {
   ;(globalThis as unknown as { MACRO: { VERSION: string } }).MACRO = {
     VERSION: 'test',
@@ -179,10 +182,10 @@ test('checkSandboxAutoAllow caps fanout when astSubcommands is null', () => {
 // SEC-02 regression: array subscript with command substitution must NOT be stripped.
 // Bash executes FOO[$(cmd)]=val as a side effect; if the pattern matched the
 // subscript, the env-var prefix would be stripped while $(cmd) silently ran.
-describe('stripAllLeadingEnvVars - SEC-02 subscript expansion guard', () => {
+describe('stripAllLeadingEnvVars — SEC-02 subscript expansion guard', () => {
   test('does not strip env var whose subscript contains $()', () => {
     const cmd = 'FOO[$(id)]=val denied_cmd'
-    // Pattern must NOT match; command stays intact, deny check sees the full string.
+    // Pattern must NOT match — command stays intact, deny check sees the full string.
     expect(stripAllLeadingEnvVars(cmd)).toBe(cmd.trim())
   })
 
@@ -197,7 +200,7 @@ describe('stripAllLeadingEnvVars - SEC-02 subscript expansion guard', () => {
   })
 
   test('still strips a safe numeric array subscript', () => {
-    // FOO[0]=val cmd becomes cmd (safe, no expansion in subscript)
+    // FOO[0]=val cmd → cmd (safe, no expansion in subscript)
     expect(stripAllLeadingEnvVars('FOO[0]=val cmd')).toBe('cmd')
   })
 

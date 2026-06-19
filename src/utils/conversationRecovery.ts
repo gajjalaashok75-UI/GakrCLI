@@ -54,6 +54,7 @@ import {
 } from './sessionStorage.js'
 import { jsonStringify } from './slowOperations.js'
 import type { ContentReplacementRecord } from './toolResultStorage.js'
+import { isDangerousPermissionMode } from './permissions/PermissionMode.js'
 
 // Dead code elimination: internal-only tool names are conditionally required so
 // their strings don't leak into external builds. Static imports always bundle.
@@ -201,6 +202,17 @@ function stripThinkingBlocks(messages: NormalizedMessage[]): NormalizedMessage[]
   }, [])
 }
 
+// Some 3P providers require `reasoning_content` echoed back on assistant
+// messages (DeepSeek thinking mode, Moonshot/Kimi, Z.AI GLM, MiMo, etc.). The
+// openai-shim re-shapes those messages and reads the source-of-truth from the
+// `thinking` block on the Anthropic side. Stripping the block leaves the shim
+// with no reasoning text and the provider 400s with
+// "reasoning_content in the thinking mode must be passed back" (issue #957).
+//
+// Vendors declare this need via `openaiShim.preserveReasoningContent: true`
+// in their descriptor, so derive the answer from the resolved shim config
+// instead of hardcoding model name prefixes — that automatically covers any
+// future vendor that opts in without code changes here.
 function shouldPreserveThinkingBlocksForProviderReplay(): boolean {
   return (
     resolveOpenAIShimRuntimeContext({
@@ -236,14 +248,16 @@ export function deserializeMessagesWithInterruptDetection(
       migrateLegacyAttachmentTypes,
     )
 
-    // Strip invalid permissionMode values from deserialized user messages.
-    // The field is unvalidated JSON from disk and may contain modes from a different build.
+    // Strip invalid or dangerous permissionMode values from deserialized user
+    // messages. The field is unvalidated JSON from disk and only
+    // non-dangerous modes are eligible for rewind restoration.
     const validModes = new Set<string>(PERMISSION_MODES)
     for (const msg of migratedMessages) {
       if (
         msg.type === 'user' &&
         msg.permissionMode !== undefined &&
-        !validModes.has(msg.permissionMode)
+        (!validModes.has(msg.permissionMode) ||
+          isDangerousPermissionMode(msg.permissionMode))
       ) {
         msg.permissionMode = undefined
       }
@@ -264,11 +278,22 @@ export function deserializeMessagesWithInterruptDetection(
     // Strip thinking/redacted_thinking content blocks from assistant messages
     // when resuming against a 3P provider. These Anthropic-specific blocks cause
     // 400 errors or context corruption on OpenAI-compatible providers (issue #248 finding 5).
+    //
+    // Exception: providers that require `reasoning_content` echoed back on
+    // assistant messages (DeepSeek thinking mode, Moonshot/Kimi, Z.AI GLM, etc.)
+    // read the source-of-truth from the `thinking` block when re-shaping the
+    // outgoing OpenAI-format message. Stripping the block leaves the shim with
+    // no reasoning text to attach, and the provider 400s with
+    // "reasoning_content in the thinking mode must be passed back" (issue #957).
     const provider = getAPIProvider()
     const isAnthropicNativeTransport = usesAnthropicNativeMessageFormat({
       processEnv: process.env,
       model: process.env.OPENAI_MODEL,
-      providerCategory: provider,
+      // runtimeMetadata's inline providerCategory union predates the newer
+      // 'xai'/'xiaomi-mimo' categories; they take the same third-party path.
+      providerCategory: provider as NonNullable<
+        Parameters<typeof usesAnthropicNativeMessageFormat>[0]
+      >['providerCategory'],
     })
     const isThirdPartyProvider =
       provider !== 'foundry' && !isAnthropicNativeTransport

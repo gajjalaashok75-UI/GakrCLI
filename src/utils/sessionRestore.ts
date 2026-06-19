@@ -21,8 +21,6 @@ import {
 } from '../tools/AgentTool/loadAgentsDir.js'
 import { TODO_WRITE_TOOL_NAME } from '../tools/TodoWriteTool/constants.js'
 import { asSessionId } from '../types/ids.js'
-import { prepareGoalForSessionResume } from '../services/goal/state.js'
-import type { GoalState } from '../services/goal/types.js'
 import type {
   AttributionSnapshotMessage,
   ContextCollapseCommitEntry,
@@ -54,6 +52,8 @@ import {
   saveMode,
   saveWorktreeState,
 } from './sessionStorage.js'
+import { prepareGoalForSessionResume } from '../services/goal/state.js'
+import type { GoalState } from '../services/goal/types.js'
 import { isTodoV2Enabled } from './tasks.js'
 import type { TodoList } from './todo/types.js'
 import { TodoListSchema } from './todo/types.js'
@@ -110,7 +110,7 @@ export function restoreSessionStateFromLog(
     })
   }
 
-  // Restore attribution state (ant-only feature)
+  // Restore attribution state (internal-only feature)
   if (
     feature('COMMIT_ATTRIBUTION') &&
     result.attributionSnapshots &&
@@ -138,9 +138,6 @@ export function restoreSessionStateFromLog(
     /* eslint-enable @typescript-eslint/no-require-imports */
   }
 
-  const goal = prepareGoalForSessionResume(result.goal ?? null)
-  setAppState(prev => ({ ...prev, goal }))
-
   // Restore TodoWrite state from transcript (SDK/non-interactive only).
   // Interactive mode uses file-backed v2 tasks, so AppState.todos is unused there.
   if (!isTodoV2Enabled() && result.messages && result.messages.length > 0) {
@@ -153,6 +150,9 @@ export function restoreSessionStateFromLog(
       }))
     }
   }
+
+  const goal = prepareGoalForSessionResume(result.goal ?? null)
+  setAppState(prev => ({ ...prev, goal }))
 }
 
 /**
@@ -552,8 +552,8 @@ export async function processResumedConversation(
       ...(resumedAgentType && { agent: resumedAgentType }),
       ...(restoredAttribution && { attribution: restoredAttribution }),
       ...(standaloneAgentContext && { standaloneAgentContext }),
-      agentDefinitions: refreshedAgentDefs,
       goal: prepareGoalForSessionResume(result.goal ?? null),
+      agentDefinitions: refreshedAgentDefs,
     },
   }
 }

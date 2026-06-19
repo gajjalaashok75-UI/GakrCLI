@@ -12,7 +12,7 @@ import {
 } from '../services/analytics/index.js'
 import {
   getAnthropicApiKey,
-  getgakrcliAIOAuthTokens,
+  getGakrCLIAIOAuthTokens,
   handleOAuth401Error,
   hasProfileScope,
 } from './auth.js'
@@ -97,7 +97,7 @@ export function getFastModeUnavailableReason(): string | null {
     !isInBundledMode() &&
     getFeatureValue_CACHED_MAY_BE_STALE('tengu_marble_sandcastle', false)
   ) {
-    return 'Fast mode requires the native binary · Install from: https://gakr.com/product/gakrcli'
+    return 'Fast mode requires the native binary · Install from: https://gakrcli.com/product/gakrcli-code'
   }
 
   // Not available in the SDK unless explicitly opted in via --settings.
@@ -130,7 +130,7 @@ export function getFastModeUnavailableReason(): string | null {
       }
     }
     const authType: AuthType =
-      getgakrcliAIOAuthTokens() !== null ? 'oauth' : 'api-key'
+      getGakrCLIAIOAuthTokens() !== null ? 'oauth' : 'api-key'
     const reason = getDisabledReasonMessage(orgStatus.reason, authType)
     logForDebugging(`Fast mode unavailable: ${reason}`)
     return reason
@@ -367,7 +367,7 @@ type FastModeResponse = {
 async function fetchFastModeStatus(
   auth: { accessToken: string } | { apiKey: string },
 ): Promise<FastModeResponse> {
-  const endpoint = `${getOauthConfig().BASE_API_URL}/api/gakrcli_penguin_mode`
+  const endpoint = `${getOauthConfig().BASE_API_URL}/api/gakrcli_code_penguin_mode`
   const headers: Record<string, string> =
     'accessToken' in auth
       ? {
@@ -425,7 +425,7 @@ export async function prefetchFastModeStatus(): Promise<void> {
   // API key auth is unaffected.
   const apiKey = getAnthropicApiKey()
   const hasUsableOAuth =
-    getgakrcliAIOAuthTokens()?.accessToken && hasProfileScope()
+    getGakrCLIAIOAuthTokens()?.accessToken && hasProfileScope()
   if (!hasUsableOAuth && !apiKey) {
     const cachedEnabled = getGlobalConfig().penguinModeOrgEnabled === true
     orgStatus =
@@ -443,7 +443,7 @@ export async function prefetchFastModeStatus(): Promise<void> {
   lastPrefetchAt = now
 
   const fetchWithCurrentAuth = async (): Promise<FastModeResponse> => {
-    const currentTokens = getgakrcliAIOAuthTokens()
+    const currentTokens = getGakrCLIAIOAuthTokens()
     const auth =
       currentTokens?.accessToken && hasProfileScope()
         ? { accessToken: currentTokens.accessToken }
@@ -469,7 +469,7 @@ export async function prefetchFastModeStatus(): Promise<void> {
               typeof err.response?.data === 'string' &&
               err.response.data.includes('OAuth token has been revoked')))
         if (isAuthError) {
-          const failedAccessToken = getgakrcliAIOAuthTokens()?.accessToken
+          const failedAccessToken = getGakrCLIAIOAuthTokens()?.accessToken
           if (failedAccessToken) {
             await handleOAuth401Error(failedAccessToken)
             status = await fetchWithCurrentAuth()

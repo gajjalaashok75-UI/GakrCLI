@@ -9,16 +9,19 @@
  * picker flow should take over.
  *
  * Detection priority (first match wins):
- *   1. ANTHROPIC_API_KEY → first-party Claude (most capable default)
+ *   1. ANTHROPIC_API_KEY → first-party GakrCLI (most capable default)
  *   2. Codex: CODEX_API_KEY, CHATGPT_ACCOUNT_ID, or valid ~/.codex/auth.json
  *   3. GitHub Copilot: GITHUB_TOKEN or GH_TOKEN
  *   4. OPENAI_API_KEY / OPENAI_API_KEYS
  *   5. GEMINI_API_KEY or GOOGLE_API_KEY
  *   6. MISTRAL_API_KEY
  *   7. MINIMAX_API_KEY
- *   8. XAI_API_KEY
- *   9. Local Ollama reachable (default localhost:11434)
- *  10. Local LM Studio reachable (default localhost:1234)
+ *   8. MIMO_API_KEY (Xiaomi Mimo)
+ *   9. XAI_API_KEY
+ *  10. NEARAI_API_KEY
+ *  11. FIREWORKS_API_KEY
+ *  12. Local Ollama reachable (default localhost:11434)
+ *  13. Local LM Studio reachable (default localhost:1234)
  *
  * Local-service probes are parallelized and cheap (short timeout, no
  * request body). Env scans are synchronous and run first so we don't make
@@ -43,8 +46,11 @@ export type DetectedProviderKind =
   | 'minimax'
   | 'xiaomi-mimo'
   | 'xai'
+  | 'nearai'
+  | 'fireworks'
   | 'ollama'
   | 'lm-studio'
+  | 'gakr-gakr-opengateway'
 
 export type DetectedProvider = {
   kind: DetectedProviderKind
@@ -170,6 +176,20 @@ export function detectProviderFromEnv(
     return { kind: 'xai', source: 'XAI_API_KEY set' }
   }
 
+  if (envHasNonEmpty(env, 'NEARAI_API_KEY')) {
+    return {
+      kind: 'nearai',
+      source: 'NEARAI_API_KEY set',
+    }
+  }
+
+  if (envHasNonEmpty(env, 'FIREWORKS_API_KEY')) {
+    return {
+      kind: 'fireworks',
+      source: 'FIREWORKS_API_KEY set',
+    }
+  }
+
   return null
 }
 
@@ -267,6 +287,54 @@ export async function detectLocalService(options?: {
  * Orchestrator: env scan first (sync, free), then local-service probes
  * (async, ~1-2s worst case) only if nothing was found in env.
  */
+const OPENGATEWAY_DEFAULT_BASE_URL = 'https://opengateway.gakr-gakr.com/v1'
+const OPENGATEWAY_DEFAULT_MODEL = 'mimo-v2.5-pro'
+
+function normalizeOpengatewayBaseUrl(baseUrl: string): string {
+  try {
+    const parsed = new URL(baseUrl)
+    const hostname = parsed.hostname.toLowerCase()
+    const path = parsed.pathname.replace(/\/+$/, '').toLowerCase()
+    if (
+      (hostname === 'opengateway.gakr-gakr.com' || hostname === 'opengateway.fly.dev') &&
+      (path === '/v1/xiaomi-mimo' || path === '/v1/gmi-cloud')
+    ) {
+      parsed.pathname = '/v1'
+      parsed.search = ''
+      parsed.hash = ''
+      return parsed.toString().replace(/\/+$/, '')
+    }
+  } catch {
+    return baseUrl
+  }
+  return baseUrl
+}
+
+/**
+ * Fallback: the gakr-gakr Opengateway exposes partner inference through a
+ * smart OpenAI-compatible route. As of 2026-05-22 it requires a per-user API
+ * key (signup at https://gakr-gakr.com/opengateway/keys); without a key we return
+ * null so the caller surfaces the missing-credential prompt instead of
+ * silently routing to an endpoint that will 401.
+ */
+function defaultOpengatewayProvider(env: EnvLike): DetectedProvider | null {
+  const hasKey =
+    (typeof env.OPENGATEWAY_API_KEY === 'string' && env.OPENGATEWAY_API_KEY.trim().length > 0) ||
+    (typeof env.OPENAI_API_KEY === 'string' && env.OPENAI_API_KEY.trim().length > 0)
+  if (!hasKey) return null
+
+  const baseUrl =
+    (typeof env.OPENGATEWAY_BASE_URL === 'string' && env.OPENGATEWAY_BASE_URL.trim()) ||
+    OPENGATEWAY_DEFAULT_BASE_URL
+  return {
+    kind: 'gakr-gakr-opengateway',
+    source:
+      'gakr-gakr Opengateway (API key required, signup at https://gakr-gakr.com/opengateway/keys)',
+    baseUrl: normalizeOpengatewayBaseUrl(baseUrl),
+    model: OPENGATEWAY_DEFAULT_MODEL,
+  }
+}
+
 export async function detectBestProvider(options?: {
   env?: EnvLike
   fetchImpl?: typeof fetch
@@ -275,6 +343,11 @@ export async function detectBestProvider(options?: {
   skipLocal?: boolean
   /** Override for Codex auth-file detection. See detectProviderFromEnv. */
   hasCodexAuth?: () => boolean
+  /**
+   * Disable the gakr-gakr Opengateway fallback. Returns null when no other
+   * provider is detected. Use this in tests that need to assert "nothing found".
+   */
+  skipOpengatewayFallback?: boolean
 }): Promise<DetectedProvider | null> {
   const env = options?.env ?? process.env
 
@@ -293,5 +366,7 @@ export async function detectBestProvider(options?: {
     if (local) return local
   }
 
-  return null
+  if (options?.skipOpengatewayFallback) return null
+
+  return defaultOpengatewayProvider(env)
 }

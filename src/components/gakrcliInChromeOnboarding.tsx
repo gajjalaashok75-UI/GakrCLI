@@ -6,12 +6,12 @@ import { Box, Link, Newline, Text, useInput } from '../ink.js';
 import { isChromeExtensionInstalled } from '../utils/gakrcliInChrome/setup.js';
 import { saveGlobalConfig } from '../utils/config.js';
 import { Dialog } from './design-system/Dialog.js';
-const CHROME_EXTENSION_URL = 'https://gakr.ai/chrome';
+const CHROME_EXTENSION_URL = 'https://gakrcli.ai/chrome';
 const CHROME_PERMISSIONS_URL = 'https://clau.de/chrome/permissions';
 type Props = {
   onDone(): void;
 };
-export function gakrcliInChromeOnboarding(t0) {
+export function GakrCLIInChromeOnboarding(t0) {
   const $ = _c(20);
   const {
     onDone
@@ -56,7 +56,7 @@ export function gakrcliInChromeOnboarding(t0) {
   }
   let t5;
   if ($[6] !== t4) {
-    t5 = <Text>GakrCLI in Chrome works with the Chrome extension to let you control your browser directly from Gakr. You can navigate websites, fill forms, capture screenshots, record GIFs, and debug with console logs and network requests.{t4}</Text>;
+    t5 = <Text>GakrCLI in Chrome works with the Chrome extension to let you control your browser directly from GakrCLI. You can navigate websites, fill forms, capture screenshots, record GIFs, and debug with console logs and network requests.{t4}</Text>;
     $[6] = t4;
     $[7] = t5;
   } else {
@@ -87,7 +87,7 @@ export function gakrcliInChromeOnboarding(t0) {
   }
   let t9;
   if ($[13] === Symbol.for("react.memo_cache_sentinel")) {
-    t9 = <Text dimColor={true}>For more info, use{" "}{t8}{" "}or visit <Link url="https://github.com/gakr-gakr/gakr/docs/en/chrome" /></Text>;
+    t9 = <Text dimColor={true}>For more info, use{" "}{t8}{" "}or visit <Link url="https://code.gakrcli.com/docs/en/chrome" /></Text>;
     $[13] = t9;
   } else {
     t9 = $[13];
@@ -115,6 +115,6 @@ export function gakrcliInChromeOnboarding(t0) {
 function _temp(current) {
   return {
     ...current,
-    hasCompletedgakrcliInChromeOnboarding: true
+    hasCompletedGakrCLIInChromeOnboarding: true
   };
 }

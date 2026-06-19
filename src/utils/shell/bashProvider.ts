@@ -18,7 +18,7 @@ import { getSessionEnvironmentScript } from '../sessionEnvironment.js'
 import { getSessionEnvVars } from '../sessionEnvVars.js'
 import {
   ensureSocketInitialized,
-  getgakrcliTmuxEnv,
+  getGakrCLITmuxEnv,
   hasTmuxToolBeenUsed,
 } from '../tmuxSocket.js'
 import { windowsPathToPosixPath } from '../windowsPaths.js'
@@ -224,7 +224,7 @@ export async function createBashShellProvider(
       ) {
         await ensureSocketInitialized()
       }
-      const gakrcliTmuxEnv = getgakrcliTmuxEnv()
+      const gakrcliTmuxEnv = getGakrCLITmuxEnv()
       const env: Record<string, string> = {}
       // CRITICAL: Override TMUX to isolate ALL tmux commands to GakrCLI's socket.
       // This is NOT the user's TMUX value - it points to GakrCLI's isolated socket.

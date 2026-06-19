@@ -232,7 +232,7 @@ export async function validatePluginManifest(
           path: key,
           message:
             `Field '${key}' belongs in the marketplace entry (marketplace.json), ` +
-            `not plugin.json. It's harmless here but unused — GakrCLI ` +
+            `not plugin.json. It's harmless here but unused — GakrCLI Code ` +
             `ignores it at load time.`,
         })
       }
@@ -255,14 +255,14 @@ export async function validatePluginManifest(
     const manifest = result.data
 
     // Warn if name isn't strict kebab-case. CC's schema only rejects spaces,
-    // but the Gakr.ai marketplace sync rejects non-kebab names. Surfacing
+    // but the GakrCLI.ai marketplace sync rejects non-kebab names. Surfacing
     // this here lets authors catch it in CI before the sync fails on them.
     if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(manifest.name)) {
       warnings.push({
         path: 'name',
         message:
-          `Plugin name "${manifest.name}" is not kebab-case. GakrCLI accepts ` +
-          `it, but the Gakr.ai marketplace sync requires kebab-case ` +
+          `Plugin name "${manifest.name}" is not kebab-case. GakrCLI Code accepts ` +
+          `it, but the GakrCLI.ai marketplace sync requires kebab-case ` +
           `(lowercase letters, digits, and hyphens only, e.g., "my-plugin").`,
       })
     }

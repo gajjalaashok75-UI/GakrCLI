@@ -3,8 +3,8 @@ import { mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import {
-  getGakrcliConfigHomeDir,
-  setGakrcliConfigHomeDirForTesting,
+  getGakrCLIConfigHomeDir,
+  setGakrCLIConfigHomeDirForTesting,
 } from '../../utils/envUtils.js'
 import { resetSettingsCache } from '../../utils/settings/settingsCache.js'
 import {
@@ -18,8 +18,8 @@ import {
 let tempSettingsDir: string | null = null
 
 afterEach(() => {
-  setGakrcliConfigHomeDirForTesting(undefined)
-  getGakrcliConfigHomeDir.cache?.clear?.()
+  setGakrCLIConfigHomeDirForTesting(undefined)
+  getGakrCLIConfigHomeDir.cache?.clear?.()
   resetSettingsCache()
   if (tempSettingsDir) {
     rmSync(tempSettingsDir, { recursive: true, force: true })
@@ -79,8 +79,8 @@ describe('commit-message command helpers', () => {
 
   it('describes default reset as privacy-preserving', async () => {
     tempSettingsDir = mkdtempSync(join(tmpdir(), 'gakrcli-settings-'))
-    setGakrcliConfigHomeDirForTesting(tempSettingsDir)
-    getGakrcliConfigHomeDir.cache?.clear?.()
+    setGakrCLIConfigHomeDirForTesting(tempSettingsDir)
+    getGakrCLIConfigHomeDir.cache?.clear?.()
 
     await expect(call('default', {} as never)).resolves.toEqual({
       type: 'text',

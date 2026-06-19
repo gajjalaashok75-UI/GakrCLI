@@ -39,6 +39,11 @@ describe('redactUrlForDisplay', () => {
     expect(redactUrlForDisplay(url)).toBe(url)
   })
 
+  // Regression: the openaiShim copy of this list dropped these four names,
+  // so `?passwd=…`, `?pwd=…`, `?auth=…`, `?apikey=…` (the no-underscore
+  // form) were leaking into self-heal/error diagnostic logs (#1069). Pin
+  // them here so any future fork of the list trips the test instead of
+  // silently regressing.
   test('redacts passwd / pwd / auth / apikey variants', () => {
     expect(
       redactUrlForDisplay('https://api.example.com/v1?passwd=hunter2'),

@@ -5,6 +5,7 @@ const mobile = {
   name: 'mobile',
   aliases: ['ios', 'android'],
   description: 'Show QR code to download the GakrCLI mobile app',
+  isEnabled: () => false,
   load: () => import('./mobile.js'),
 } satisfies Command
 

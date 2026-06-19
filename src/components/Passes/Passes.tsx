@@ -166,7 +166,7 @@ export function Passes({
 
         <Box flexDirection="column" marginLeft={2}>
           <Text dimColor>
-            {referrerReward ? `Share a free week of GakrCLI with friends. If they love it and subscribe, you'll get ${formatCreditAmount(referrerReward)} of extra usage to keep building. ` : 'Share a free week of GakrCLI with friends. '}
+            {referrerReward ? `Share a free week of GakrCLI Code with friends. If they love it and subscribe, you'll get ${formatCreditAmount(referrerReward)} of extra usage to keep building. ` : 'Share a free week of GakrCLI Code with friends. '}
             <Link url={referrerReward ? 'https://support.gakrcli.com/en/articles/13456702-gakrcli-code-guest-passes' : 'https://support.gakrcli.com/en/articles/12875061-gakrcli-code-guest-passes'}>
               Terms apply.
             </Link>

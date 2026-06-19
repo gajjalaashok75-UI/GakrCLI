@@ -28,6 +28,9 @@ import { getPlatform } from '../../utils/platform.js'
 import { getSecureStorage } from '../../utils/secureStorage/index.js'
 import { getInitialSettings } from '../../utils/settings/settings.js'
 import { jsonParse } from '../../utils/slowOperations.js'
+import {
+  validateXaaIdpCallbackParams,
+} from './xaaIdpCallback.js'
 import { buildRedirectUri, findAvailablePort } from './oauthPort.js'
 
 export function isXaaEnabled(): boolean {
@@ -208,41 +211,40 @@ export async function discoverOidc(
   const { signal, cleanup } = createCombinedAbortSignal(undefined, {
     timeoutMs: IDP_REQUEST_TIMEOUT_MS,
   })
-  let res: Response
   try {
     // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
-    res = await fetch(url, {
+    const res = await fetch(url, {
       headers: { Accept: 'application/json' },
       signal,
     })
+    if (!res.ok) {
+      throw new Error(
+        `XAA IdP: OIDC discovery failed: HTTP ${res.status} at ${url}`,
+      )
+    }
+    // Captive portals and proxy auth pages return 200 with HTML. res.json()
+    // throws a raw SyntaxError before safeParse can give a useful message.
+    let body: unknown
+    try {
+      body = await res.json()
+    } catch {
+      throw new Error(
+        `XAA IdP: OIDC discovery returned non-JSON at ${url} (captive portal or proxy?)`,
+      )
+    }
+    const parsed = OpenIdProviderDiscoveryMetadataSchema.safeParse(body)
+    if (!parsed.success) {
+      throw new Error(`XAA IdP: invalid OIDC metadata: ${parsed.error.message}`)
+    }
+    if (new URL(parsed.data.token_endpoint).protocol !== 'https:') {
+      throw new Error(
+        `XAA IdP: refusing non-HTTPS token endpoint: ${parsed.data.token_endpoint}`,
+      )
+    }
+    return parsed.data
   } finally {
     cleanup()
   }
-  if (!res.ok) {
-    throw new Error(
-      `XAA IdP: OIDC discovery failed: HTTP ${res.status} at ${url}`,
-    )
-  }
-  // Captive portals and proxy auth pages return 200 with HTML. res.json()
-  // throws a raw SyntaxError before safeParse can give a useful message.
-  let body: unknown
-  try {
-    body = await res.json()
-  } catch {
-    throw new Error(
-      `XAA IdP: OIDC discovery returned non-JSON at ${url} (captive portal or proxy?)`,
-    )
-  }
-  const parsed = OpenIdProviderDiscoveryMetadataSchema.safeParse(body)
-  if (!parsed.success) {
-    throw new Error(`XAA IdP: invalid OIDC metadata: ${parsed.error.message}`)
-  }
-  if (new URL(parsed.data.token_endpoint).protocol !== 'https:') {
-    throw new Error(
-      `XAA IdP: refusing non-HTTPS token endpoint: ${parsed.data.token_endpoint}`,
-    )
-  }
-  return parsed.data
 }
 
 /**
@@ -333,30 +335,42 @@ function waitForCallback(
         res.end()
         return
       }
-      const code = parsed.query.code as string | undefined
-      const state = parsed.query.state as string | undefined
-      const err = parsed.query.error as string | undefined
+      const result = validateXaaIdpCallbackParams(
+        {
+          code: parsed.query.code,
+          state: parsed.query.state,
+          error: parsed.query.error,
+          error_description: parsed.query.error_description,
+        },
+        expectedState,
+      )
 
-      if (err) {
-        const desc = parsed.query.error_description as string | undefined
-        const safeErr = xss(err)
-        const safeDesc = desc ? xss(desc) : ''
+      if (result.type === 'state_mismatch') {
+        res.writeHead(400, { 'Content-Type': 'text/html' })
+        res.end('<html><body><h3>State mismatch</h3></body></html>')
+        return
+      }
+
+      if (result.type === 'error') {
+        const safeErr = xss(result.error)
+        const safeDesc = result.errorDescription
+          ? xss(result.errorDescription)
+          : ''
         res.writeHead(400, { 'Content-Type': 'text/html' })
         res.end(
           `<html><body><h3>IdP login failed</h3><p>${safeErr}</p><p>${safeDesc}</p></body></html>`,
         )
-        rejectOnce(new Error(`XAA IdP: ${err}${desc ? ` — ${desc}` : ''}`))
+        rejectOnce(
+          new Error(
+            `XAA IdP: ${result.error}${
+              result.errorDescription ? ` — ${result.errorDescription}` : ''
+            }`,
+          ),
+        )
         return
       }
 
-      if (state !== expectedState) {
-        res.writeHead(400, { 'Content-Type': 'text/html' })
-        res.end('<html><body><h3>State mismatch</h3></body></html>')
-        rejectOnce(new Error('XAA IdP: state mismatch (possible CSRF)'))
-        return
-      }
-
-      if (!code) {
+      if (result.type === 'missing_code') {
         res.writeHead(400, { 'Content-Type': 'text/html' })
         res.end('<html><body><h3>Missing code</h3></body></html>')
         rejectOnce(new Error('XAA IdP: callback missing code'))
@@ -367,7 +381,7 @@ function waitForCallback(
       res.end(
         '<html><body><h3>IdP login complete — you can close this window.</h3></body></html>',
       )
-      resolveOnce(code)
+      resolveOnce(result.code)
     })
 
     server.on('error', (err: NodeJS.ErrnoException) => {
@@ -466,7 +480,7 @@ export async function acquireIdpIdToken(
     codeVerifier,
     redirectUri,
     fetchFn: (url, init) => {
-      const { signal, cleanup } = createCombinedAbortSignal(init?.signal, {
+      const { signal, cleanup } = createCombinedAbortSignal(init?.signal ?? undefined, {
         timeoutMs: IDP_REQUEST_TIMEOUT_MS,
       })
       // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins

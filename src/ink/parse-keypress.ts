@@ -265,6 +265,8 @@ function flushPendingUtf8(pendingUtf8?: Buffer): string {
     return ''
   }
 
+  // Preserve the legacy 8-bit meta-key fallback when a lone high-bit byte
+  // really was a complete keypress rather than a split UTF-8 character.
   if (pendingUtf8.length === 1 && pendingUtf8[0]! > 127) {
     return '\x1b' + String.fromCharCode(pendingUtf8[0]! - 128)
   }

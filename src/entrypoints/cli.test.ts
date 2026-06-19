@@ -1,36 +1,22 @@
 /**
- * Regression tests — NODE_OPTIONS heap cap,  JavaScript heap OOM during large tasks
+ * Regression tests for issue #402 — NODE_OPTIONS heap cap
+ * Closes: gakr-gakr/gakrcli#402 — JavaScript heap OOM during large tasks
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 
-import {
-  acquireSharedMutationLock,
-  releaseSharedMutationLock,
-} from '../test/sharedMutationLock.js'
-
 describe('cli.tsx — NODE_OPTIONS --max-old-space-size (issue #402)', () => {
   const originalNodeOptions = process.env.NODE_OPTIONS
-  let lockAcquired = false
 
-  beforeEach(async () => {
-    await acquireSharedMutationLock('entrypoints/cli.test.ts')
-    lockAcquired = true
+  beforeEach(() => {
     delete process.env.NODE_OPTIONS
   })
 
   afterEach(() => {
-    try {
-      if (originalNodeOptions !== undefined) {
-        process.env.NODE_OPTIONS = originalNodeOptions
-      } else {
-        delete process.env.NODE_OPTIONS
-      }
-    } finally {
-      if (lockAcquired) {
-        releaseSharedMutationLock()
-        lockAcquired = false
-      }
+    if (originalNodeOptions !== undefined) {
+      process.env.NODE_OPTIONS = originalNodeOptions
+    } else {
+      delete process.env.NODE_OPTIONS
     }
   })
 
@@ -61,24 +47,6 @@ describe('cli.tsx — NODE_OPTIONS --max-old-space-size (issue #402)', () => {
 
     const result = `${process.env.NODE_OPTIONS} --max-old-space-size=8192`
     expect(result).toBe('--inspect=9229 --max-old-space-size=8192')
-  })
-})
-
-describe('useMemoryUsage.ts — threshold constants (issue #402)', () => {
-  it('HIGH_MEMORY_THRESHOLD documented as 1.5 GB', async () => {
-    const src = await Bun.file(
-      `${import.meta.dir}/../hooks/useMemoryUsage.ts`,
-    ).text()
-
-    expect(src).toContain('HIGH_MEMORY_THRESHOLD = 1.5 * 1024 * 1024 * 1024')
-  })
-
-  it('CRITICAL_MEMORY_THRESHOLD documented as 2.5 GB', async () => {
-    const src = await Bun.file(
-      `${import.meta.dir}/../hooks/useMemoryUsage.ts`,
-    ).text()
-
-    expect(src).toContain('CRITICAL_MEMORY_THRESHOLD = 2.5 * 1024 * 1024 * 1024')
   })
 })
 

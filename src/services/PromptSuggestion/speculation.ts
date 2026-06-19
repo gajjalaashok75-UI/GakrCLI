@@ -39,7 +39,7 @@ import {
   INTERRUPT_MESSAGE,
   INTERRUPT_MESSAGE_FOR_TOOL_USE,
 } from '../../utils/messages.js'
-import { getgakrcliTempDir } from '../../utils/permissions/filesystem.js'
+import { getGakrCLITempDir } from '../../utils/permissions/filesystem.js'
 import { extractReadFilesFromMessages } from '../../utils/queryHelpers.js'
 import { getTranscriptPath } from '../../utils/sessionStorage.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
@@ -78,7 +78,7 @@ function safeRemoveOverlay(overlayPath: string): void {
 }
 
 function getOverlayPath(id: string): string {
-  return join(getgakrcliTempDir(), 'speculation', String(process.pid), id)
+  return join(getGakrCLITempDir(), 'speculation', String(process.pid), id)
 }
 
 function denySpeculation(
@@ -283,7 +283,7 @@ function createSpeculationFeedbackMessage(
   const toolUses = countToolsInMessages(messages)
   const tokens = boundary?.type === 'complete' ? boundary.outputTokens : null
 
-  const parts = []
+  const parts: string[] = []
   if (toolUses > 0) {
     parts.push(`Speculated ${toolUses} tool ${toolUses === 1 ? 'use' : 'uses'}`)
   } else {
@@ -302,7 +302,7 @@ function createSpeculationFeedbackMessage(
       : ''
 
   return createSystemMessage(
-    `[ANT-ONLY] ${parts.join(' · ')} · ${savedText}${sessionSuffix}`,
+    `[internal-only] ${parts.join(' · ')} · ${savedText}${sessionSuffix}`,
     'warning',
   )
 }
@@ -471,6 +471,7 @@ export async function startSpeculation(
           const canAutoAcceptEdits =
             mode === 'acceptEdits' ||
             mode === 'bypassPermissions' ||
+            mode === 'fullAccess' ||
             (mode === 'plan' && isBypassPermissionsModeAvailable)
 
           if (!canAutoAcceptEdits) {

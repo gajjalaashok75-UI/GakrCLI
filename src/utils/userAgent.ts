@@ -5,8 +5,6 @@
  * import without pulling in auth.ts and its transitive dependency tree.
  */
 
-export function getgakrcliCodeUserAgent(): string {
-  const macroValue = (globalThis as { MACRO?: { VERSION?: string } }).MACRO
-  const version = macroValue?.VERSION ?? 'unknown'
-  return `gakrcli-code/${version}`
+export function getGakrCLICodeUserAgent(): string {
+  return `gakrcli-code/${MACRO.VERSION}`
 }

@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { getEmptyToolPermissionContext } from '../Tool.js'
 import { BashTool } from '../tools/BashTool/BashTool.js'
+import { executeShellCommandsInPrompt } from './promptShellExecution.js'
 import {
   acquireSharedMutationLock,
   releaseSharedMutationLock,
 } from '../test/sharedMutationLock.js'
-import { executeShellCommandsInPrompt } from './promptShellExecution.js'
 
 const originalCall = BashTool.call
 const originalMapToolResultToToolResultBlockParam =
