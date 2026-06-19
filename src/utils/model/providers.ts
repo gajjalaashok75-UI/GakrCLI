@@ -80,21 +80,22 @@ export function getAPIProvider(): LegacyAPIProvider {
   }
 }
 
-export function usesAnthropicAccountFlow(): boolean {
+export function usesGakrCLIAccountFlow(): boolean {
   return getAPIProvider() === 'firstParty'
 }
-
-export const usesGakrcliHostedAuthFlow = usesAnthropicAccountFlow
+// Backward-compatible alias — kept so existing callers and test imports
+// that reference the pre-rename name continue to work.
+export const usesAnthropicAccountFlow = usesGakrCLIAccountFlow
 
 /**
  * Returns true when the GitHub provider should use Anthropic's native API
  * format instead of the OpenAI-compatible shim.
  *
- * Enabled when GAKR_CODE_USE_GITHUB=1 and the model string contains "claude-"
+ * Enabled when GAKR_CODE_USE_GITHUB=1 and the model string contains "gakrcli-"
  * anywhere (handles bare names like "claude-sonnet-4" and compound formats like
  * "github:copilot:claude-sonnet-4" or any future provider-prefixed variants).
  *
- * api.githubcopilot.com supports Anthropic native format for Claude models,
+ * api.githubcopilot.com supports Anthropic native format for GakrCLI models,
  * enabling prompt caching via cache_control blocks which significantly reduces
  * per-turn token costs by caching the system prompt and tool definitions.
  */
