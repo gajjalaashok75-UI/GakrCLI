@@ -27,8 +27,6 @@ import {
   SKIP_PRECOMPACT_THRESHOLD,
 } from '../../utils/sessionStoragePortable.js'
 import { readJSONLFile } from '../../utils/json.js'
-import { getProjectDir } from '../../utils/sessionStorage.js'
-import { getCwdState, setGlobalCwdState } from '../../bootstrap/state.js'
 import { stat } from 'fs/promises'
 import {
   switchSession,
@@ -38,7 +36,6 @@ import {
 } from '../../bootstrap/state.js'
 import type { SessionId } from '../../types/ids.js'
 import { getAgentDefinitionsWithOverrides } from '../../tools/AgentTool/loadAgentsDir.js'
-import { getCommandName } from '../../types/command.js'
 import type {
   RewindFilesResult,
   McpServerStatus,
@@ -77,34 +74,6 @@ import {
   listSessions,
   forkSession,
 } from './sessions.js'
-import {
-  buildRuntimeState,
-  getFastModeState,
-  getReasoningConfig,
-  getSettingsSnapshot,
-  getTodoStateFromState,
-  listProviders,
-  listModelsFromState,
-  listPluginCommandsFromStore,
-  loadSlashCommandsForSdk,
-  listSlashCommandsFromState,
-  commandToInfo,
-  updateStoreFastMode,
-  applyModelToProfile,
-} from './runtime.js'
-import type {
-  SDKRuntimeState,
-  SDKFastModeState,
-  SDKReasoningConfig,
-  SDKSettingsSnapshot,
-  SDKTodoState,
-  SDKProviderInfo,
-  SDKModelInfo,
-  SDKApplySettingsInput,
-  SDKMutationResult,
-  SDKRunSlashCommandResult,
-  SDKSlashCommandInfo,
-} from './runtime.js'
 import {
   parseJsonlEntries as parseJsonlLines,
   findLastCompactBoundary,
@@ -230,36 +199,10 @@ export interface Query {
   supportedAgents(): string[]
   /** Get MCP server connection status. */
   mcpServerStatus(): McpServerStatus[]
-  /** List available models. */
-  listModels(): SDKModelInfo[]
-  /** Get the current permission mode. */
-  getPermissionMode(): QueryPermissionMode
-  /** Get the current fast mode state. */
-  getFastModeState(): SDKFastModeState
-  /** Get the current reasoning configuration. */
-  getReasoningConfig(): SDKReasoningConfig
-  /** List MCP servers. */
-  listMcpServers(): McpServerStatus[]
   /** Get account/authentication info. */
   accountInfo(): Promise<{ apiKeySource: ApiKeySource; [key: string]: unknown }>
   /** Set the thinking token budget. */
   setMaxThinkingTokens(tokens: number): void
-  /** Set reasoning effort (low/medium/high/max or token count). */
-  setReasoningEffort(effort: 'low' | 'medium' | 'high' | 'max' | number | null): SDKReasoningConfig
-  /** Enable or disable fast mode. */
-  setFastMode(enabled: boolean): SDKFastModeState
-  /** Apply multiple settings at once. */
-  applySettings(settings: SDKApplySettingsInput): Promise<SDKSettingsSnapshot>
-  /** List available providers. */
-  listProviders(): SDKProviderInfo[]
-  /** Get TodoWrite state for headless hosts. */
-  getTodoState(): SDKTodoState
-  /** Run a slash command. */
-  runSlashCommand(command: string, args?: string): Promise<SDKRunSlashCommandResult>
-  /** Set MCP server configurations. */
-  setMcpServers(servers: Record<string, unknown>): Promise<SDKMutationResult>
-  /** Get a runtime snapshot of the current session state. */
-  getRuntimeState(): Promise<SDKRuntimeState>
 }
 
 // ============================================================================
@@ -452,8 +395,6 @@ class QueryImpl implements Query {
   private resumeSessionAt?: string
   private userAgents?: QueryOptions['agents']
   private mcpServers?: Record<string, unknown>
-  private slashCommandRegistry: unknown[] = []
-  private slashCommandInfos: SDKSlashCommandInfo[] = []
   private permissionContext: ToolPermissionContext
   private timeoutQueue: SDKPermissionTimeoutMessage[] = []
   private agentFailureQueue: SDKAgentLoadFailureMessage[] = []
@@ -720,41 +661,34 @@ class QueryImpl implements Query {
               regenerateSessionId()
               effectiveSessionId = getSessionId()
             }
-            switchSession(effectiveSessionId as SessionId, resolvedTranscriptDir ?? getProjectDir(self.cwd))
+            switchSession(effectiveSessionId as SessionId, resolvedTranscriptDir)
 
             // Sync resolved sessionId and transcript dir back to authoritative fields
             self._sessionId = effectiveSessionId
             sdkContext.sessionId = effectiveSessionId as SessionId
-            sdkContext.sessionProjectDir = resolvedTranscriptDir ?? getProjectDir(self.cwd)
+            sdkContext.sessionProjectDir = resolvedTranscriptDir
 
-            // Submit to engine with STATE.cwd set to SDK cwd (bypasses
-            // AsyncLocalStorage which bun loses across async generator yields)
-            const prevCwd = getCwdState()
-            setGlobalCwdState(self.cwd)
-            try {
-              if (typeof self.prompt === 'string') {
-                for await (const engineMsg of self.engine.submitMessage(self.prompt)) {
+            // Submit to engine
+            if (typeof self.prompt === 'string') {
+              for await (const engineMsg of self.engine.submitMessage(self.prompt)) {
+                yield engineMsg
+                yield* self.drainTimeoutQueue()
+                yield* self.drainAgentFailureQueue()
+              }
+            } else {
+              for await (const userMessage of self.prompt) {
+                if (self.abortController.signal.aborted) break
+                const content = extractPromptFromUserMessage(userMessage)
+                for await (const engineMsg of self.engine.submitMessage(content, { uuid: userMessage.uuid })) {
                   yield engineMsg
                   yield* self.drainTimeoutQueue()
                   yield* self.drainAgentFailureQueue()
                 }
-              } else {
-                for await (const userMessage of self.prompt) {
-                  if (self.abortController.signal.aborted) break
-                  const content = extractPromptFromUserMessage(userMessage)
-                  for await (const engineMsg of self.engine.submitMessage(content, { uuid: userMessage.uuid })) {
-                    yield engineMsg
-                    yield* self.drainTimeoutQueue()
-                    yield* self.drainAgentFailureQueue()
-                  }
-                }
               }
-              // Final drain for timeout/failure messages that fired on the last engine yield
-              yield* self.drainTimeoutQueue()
-              yield* self.drainAgentFailureQueue()
-            } finally {
-              setGlobalCwdState(prevCwd)
             }
+            // Final drain for timeout/failure messages that fired on the last engine yield
+            yield* self.drainTimeoutQueue()
+            yield* self.drainAgentFailureQueue()
           } finally {
             // Clean up timeout and agent failure queues
             self.timeoutQueue.length = 0
@@ -941,8 +875,7 @@ class QueryImpl implements Query {
     // Commands come from MCP servers and plugins
     const mcpCommands = state.mcp.commands?.map(c => c.name ?? c) ?? []
     const pluginCommands = state.plugins.commands?.map(c => c.name ?? c) ?? []
-    const storeCommands = listPluginCommandsFromStore().map(c => c.name ?? c)
-    return [...mcpCommands, ...pluginCommands, ...storeCommands]
+    return [...mcpCommands, ...pluginCommands]
   }
 
   supportedModels(): string[] {
@@ -1011,22 +944,6 @@ class QueryImpl implements Query {
     }
   }
 
-  async getRuntimeState(): Promise<SDKRuntimeState> {
-    const state = this.appStateStore.getState()
-    return buildRuntimeState({
-      sessionId: this._sessionId,
-      cwd: this.cwd,
-      status: 'idle',
-      state,
-      mcpServers: this.mcpServerStatus(),
-      account: await this.accountInfo(),
-      slashCommands: listPluginCommandsFromStore().map(cmd => ({
-        name: cmd.name ?? cmd,
-        description: 'description' in cmd ? (cmd as any).description ?? '' : '',
-      })),
-    })
-  }
-
   setMaxThinkingTokens(tokens: number): void {
     this.appStateStore.setState(prev => ({
       ...prev,
@@ -1037,156 +954,6 @@ class QueryImpl implements Query {
     this.engine.setThinkingConfig(tokens > 0
       ? { type: 'enabled', budgetTokens: tokens }
       : { type: 'disabled' })
-  }
-
-  setReasoningEffort(effort: 'low' | 'medium' | 'high' | 'max' | number | null): SDKReasoningConfig {
-    const effortToTokens = (value: typeof effort): number | undefined => {
-      if (typeof value === 'number') return value
-      switch (value) {
-        case 'low':
-          return 1000
-        case 'medium':
-          return 8000
-        case 'high':
-          return 16000
-        case 'max':
-          return undefined
-        default:
-          return 0
-      }
-    }
-    const tokens = effortToTokens(effort)
-    this.appStateStore.setState(prev => ({
-      ...prev,
-      effortValue: effort === null ? undefined : effort,
-      thinkingEnabled: effort !== null && tokens !== 0,
-      thinkingBudgetTokens: tokens && tokens > 0 ? tokens : undefined,
-    }))
-    this.engine.setThinkingConfig(
-      effort === null || tokens === 0
-        ? { type: 'disabled' }
-        : tokens
-          ? { type: 'enabled', budgetTokens: tokens }
-          : { type: 'adaptive' },
-    )
-    return getReasoningConfig(this.appStateStore.getState())
-  }
-
-  setFastMode(enabled: boolean): SDKFastModeState {
-    return updateStoreFastMode(this.appStateStore, enabled)
-  }
-
-  async applySettings(settings: SDKApplySettingsInput): Promise<SDKSettingsSnapshot> {
-    if (settings.model !== undefined && settings.model !== null) {
-      await this.setModel(settings.model)
-    }
-    if (settings.permissionMode) {
-      await this.setPermissionMode(settings.permissionMode)
-    }
-    if (settings.maxThinkingTokens !== undefined) {
-      this.setMaxThinkingTokens(settings.maxThinkingTokens ?? 0)
-    } else if (settings.effort !== undefined) {
-      this.setReasoningEffort(settings.effort)
-    }
-    if (settings.fastMode !== undefined) {
-      this.setFastMode(settings.fastMode)
-    }
-    if (settings.env) {
-      this.envOverrides = {
-        ...(this.envOverrides ?? {}),
-        ...settings.env,
-      }
-    }
-    return this.getSettings()
-  }
-
-  private getSettings(): SDKSettingsSnapshot {
-    return getSettingsSnapshot(this.appStateStore.getState())
-  }
-
-  listProviders(): SDKProviderInfo[] {
-    return listProviders()
-  }
-
-  listModels(): SDKModelInfo[] {
-    return listModelsFromState(this.appStateStore.getState())
-  }
-
-  getPermissionMode(): QueryPermissionMode {
-    return this.appStateStore.getState().toolPermissionContext.mode as QueryPermissionMode
-  }
-
-  getFastModeState(): SDKFastModeState {
-    return getFastModeState(this.appStateStore.getState())
-  }
-
-  getReasoningConfig(): SDKReasoningConfig {
-    return getReasoningConfig(this.appStateStore.getState())
-  }
-
-  getTodoState(): SDKTodoState {
-    return getTodoStateFromState(this.appStateStore.getState())
-  }
-
-  listMcpServers(): McpServerStatus[] {
-    return this.mcpServerStatus()
-  }
-
-  async runSlashCommand(commandName: string, args = ''): Promise<SDKRunSlashCommandResult> {
-    const normalized = commandName.replace(/^\/+/, '')
-    await this.refreshSlashCommands()
-    const state = this.appStateStore.getState()
-    const command = [
-      ...this.slashCommandRegistry,
-      ...(state.mcp.commands ?? []),
-      ...(state.plugins.commands ?? []),
-      ...listPluginCommandsFromStore(),
-    ].find(cmd => {
-      const name = getCommandName(cmd).replace(/^\/+/, '')
-      return name === normalized || cmd.aliases?.some(alias => alias.replace(/^\/+/, '') === normalized)
-    })
-
-    if (!command) {
-      return { type: 'not_found', command: commandName }
-    }
-
-    const info = commandToInfo(command)
-    if (command.type === 'local-jsx') {
-      return { type: 'requires_ui', command: info }
-    }
-    if (command.type === 'prompt') {
-      return {
-        type: 'unsupported',
-        command: info,
-        reason: 'Prompt slash command execution requires a full ToolUseContext and is not yet available through the headless SDK.',
-      }
-    }
-    return {
-      type: 'unsupported',
-      command: info,
-      reason: `Local command execution is not yet available through the headless SDK. Args: ${args}`,
-    }
-  }
-
-  private async refreshSlashCommands(): Promise<void> {
-    const { loadSlashCommandsForSdk } = await import('./runtime.js')
-    this.slashCommandRegistry = await loadSlashCommandsForSdk(this.cwd)
-    this.slashCommandInfos = listSlashCommandsFromState(this.appStateStore.getState(), this.slashCommandRegistry)
-  }
-
-  async setMcpServers(servers: Record<string, unknown>): Promise<SDKMutationResult> {
-    const previous = new Set(Object.keys(this.mcpServers ?? {}))
-    this.mcpServers = {
-      ...(this.mcpServers ?? {}),
-      ...servers,
-    }
-    const next = new Set(Object.keys(this.mcpServers))
-    return {
-      success: true,
-      added: [...next].filter(name => !previous.has(name)),
-      removed: [...previous].filter(name => !next.has(name)),
-      mcpServers: this.mcpServerStatus(),
-    }
   }
 }
 

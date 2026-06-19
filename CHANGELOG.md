@@ -5,6 +5,23 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.9] - 2026-06-19
+
+### Removed
+- **Locally-Added SDK Runtime File**: Deleted `src/entrypoints/sdk/runtime.ts` — a locally-added file with no equivalent in `references/openclaude-main/`. Removed all imports and dependent code from:
+  - `src/entrypoints/sdk/query.ts` — stripped runtime-dependent Query interface methods (`listModels`, `getFastModeState`, `getReasoningConfig`, `setReasoningEffort`, `setFastMode`, `applySettings`, `listProviders`, `getTodoState`, `runSlashCommand`, `setMcpServers`, `getRuntimeState`, etc.) and their QueryImpl implementations
+  - `tests/sdk/sdk-slash-commands.test.ts` — deleted; tested removed runtime functions
+  - `tests/sdk/query-methods.test.ts` — removed "runtime control API" test block
+  - `tests/sdk/sdk-context-isolation.test.ts` — simplified per reference
+  - `tests/sdk/sdk-preserved-segment.test.ts` — simplified per reference
+
+### Changed
+- **SDK Reference Alignment**: All SDK entrypoint and test files now match `references/openclaude-main/` structure exactly — no locally-added runtime layer present
+- **Feature Flags**: Enabled `CONTEXT_COLLAPSE` and `BG_SESSIONS` feature flags in `scripts/build.ts`
+
+### Fixed
+- **External List Validation**: Restored `bun` and `byn` externals in `scripts/externals.ts` for background session support
+
 ## [0.5.8] - 2026-06-19
 
 ### Added
