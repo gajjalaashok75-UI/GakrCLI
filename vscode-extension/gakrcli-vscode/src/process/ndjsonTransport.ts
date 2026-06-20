@@ -1,5 +1,5 @@
 // src/process/ndjsonTransport.ts
-// Line-buffered NDJSON transport for communication with the GakrCLI CLI.
+// Line-buffered NDJSON transport for communication with the GakrCLI.
 // Reads line-delimited JSON from a readable stream (CLI stdout).
 // Writes JSON + newline to a writable stream (CLI stdin).
 
@@ -57,7 +57,7 @@ export class NdjsonTransport {
       for (const cb of this.messageCallbacks) {
         cb(parsed);
       }
-    } catch {
+    } catch (err) {
       const error = new Error(
         `Failed to parse NDJSON line: ${trimmed.substring(0, 200)}${trimmed.length > 200 ? '...' : ''}`,
       );

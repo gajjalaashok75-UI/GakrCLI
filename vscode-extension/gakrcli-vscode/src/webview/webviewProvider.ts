@@ -3,11 +3,20 @@ import { WebviewManager } from './webviewManager';
 
 /**
  * WebviewViewProvider for the sidebar (both primary and secondary).
+ *
+ * Extracted from Claude Code extension.js:
+ *   registerWebviewViewProvider("claudeVSCodeSidebar", Z, { webviewOptions: { retainContextWhenHidden: true } })
+ *   registerWebviewViewProvider("claudeVSCodeSidebarSecondary", Z, ...)
+ *
  * The provider delegates all work to WebviewManager, which handles HTML generation,
  * bridge setup, and message routing.
  */
 export class GakrCLIWebviewProvider implements vscode.WebviewViewProvider {
-  constructor(private readonly manager: WebviewManager) {}
+  private readonly manager: WebviewManager;
+
+  constructor(manager: WebviewManager) {
+    this.manager = manager;
+  }
 
   resolveWebviewView(
     webviewView: vscode.WebviewView,
@@ -20,11 +29,26 @@ export class GakrCLIWebviewProvider implements vscode.WebviewViewProvider {
 
 /**
  * Serializer for restoring webview panels when VS Code is restarted.
+ *
+ * Extracted from Claude Code extension.js:
+ *   registerWebviewPanelSerializer("claudeVSCodePanel", {
+ *     async deserializeWebviewPanel(A, I) {
+ *       let w = I, v;
+ *       if (typeof w?.isFullEditor === "boolean") v = w.isFullEditor;
+ *       else v = ... findIndex ...
+ *       Z.setupPanel(A, void 0, void 0, v)
+ *     }
+ *   })
+ *
  * When VS Code restarts, it calls deserializeWebviewPanel with the saved panel
  * and its state. We re-create the bridge and restore the panel.
  */
 export class GakrCLIPanelSerializer implements vscode.WebviewPanelSerializer {
-  constructor(private readonly manager: WebviewManager) {}
+  private readonly manager: WebviewManager;
+
+  constructor(manager: WebviewManager) {
+    this.manager = manager;
+  }
 
   async deserializeWebviewPanel(
     panel: vscode.WebviewPanel,

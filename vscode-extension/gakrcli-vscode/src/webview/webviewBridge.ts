@@ -19,6 +19,10 @@ type MessageHandler<T extends WebviewToHostMessage['type']> = (
  * - Typed message sending (host -> webview)
  * - Typed message receiving with handler registration (webview -> host)
  * - Automatic disposal of event listeners
+ *
+ * Pattern extracted from Claude Code extension.js:
+ *   webview.onDidReceiveMessage((N) => { x?.fromClient(N) })
+ *   webview.postMessage({ type: '...', ...payload })
  */
 export class WebviewBridge implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = [];

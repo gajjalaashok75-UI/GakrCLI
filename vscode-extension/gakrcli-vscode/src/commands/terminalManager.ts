@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { resolveCliLaunchCommand } from '../settings/cliExecutable';
+import { resolveCliExecutable } from '../settings/cliExecutable';
 
 /**
  * Manages the GakrCLI integrated terminal instance.
@@ -10,7 +10,7 @@ export class TerminalManager implements vscode.Disposable {
   private terminal: vscode.Terminal | undefined;
   private readonly disposables: vscode.Disposable[] = [];
 
-  constructor(private readonly extensionPath?: string) {
+  constructor() {
     this.disposables.push(
       vscode.window.onDidCloseTerminal((closed) => {
         if (closed === this.terminal) {
@@ -31,11 +31,8 @@ export class TerminalManager implements vscode.Disposable {
     }
 
     const config = vscode.workspace.getConfiguration('gakrcliCode');
+    const cliCommand = resolveCliExecutable(config);
     const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    const cliCommand = resolveCliLaunchCommand(config, {
-      workspaceFolder: cwd,
-      extensionPath: this.extensionPath,
-    }).displayCommand;
 
     const envVars = config.get<Array<{ name: string; value: string }>>(
       'environmentVariables',
@@ -63,35 +60,8 @@ export class TerminalManager implements vscode.Disposable {
       flags.push('--permission-mode', permMode);
     }
 
-    this.terminal.sendText([cliCommand, ...flags.map(quoteShellToken)].join(' '));
+    this.terminal.sendText([cliCommand, ...flags].join(' '));
     this.terminal.show();
-  }
-
-  /**
-   * Run a one-off GakrCLI command in its own terminal.
-   */
-  runCommand(args: string[], name = 'GakrCLI'): void {
-    const config = vscode.workspace.getConfiguration('gakrcliCode');
-    const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    const cliCommand = resolveCliLaunchCommand(config, {
-      workspaceFolder: cwd,
-      extensionPath: this.extensionPath,
-    }).displayCommand;
-    const terminal = vscode.window.createTerminal({
-      name,
-      cwd,
-      iconPath: new vscode.ThemeIcon('sparkle'),
-    });
-    terminal.sendText([cliCommand, ...args.map(quoteShellToken)].join(' '));
-    terminal.show();
-  }
-
-  /**
-   * Send text to the managed GakrCLI terminal without submitting it.
-   */
-  sendText(text: string): void {
-    this.open();
-    this.terminal?.sendText(text, false);
   }
 
   dispose(): void {
@@ -100,10 +70,4 @@ export class TerminalManager implements vscode.Disposable {
       d.dispose();
     }
   }
-}
-
-function quoteShellToken(value: string): string {
-  if (!value) return '""';
-  if (!/[\s"'&()<>^|]/.test(value)) return value;
-  return `"${value.replace(/"/g, '\\"')}"`;
 }

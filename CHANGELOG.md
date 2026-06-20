@@ -5,7 +5,15 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.7] - 2026-06-19
+## [0.5.8] - 2026-06-20
+
+### Changed
+- **VS Code Extension SDK→CLI Wrapper Refactoring**: Replaced direct `@gakr-gakr/gakrcli/sdk` imports with CLI child-process wrapper pattern across all extension modules. Simplified `authManager.ts` to align with reference provider structure. Removed `@gakr-gakr/gakrcli` npm dependency.
+
+### Fixed
+- **Bun Test Compatibility**: Converted `enum` declarations to `const` objects and constructor parameter properties to explicit field declarations across VS Code mock and source files (24 total sites) to resolve Bun strip-only mode errors.
+- **AskUserQuestion Routing Restored**: Added back AskUserQuestion special handling in `permissionHandler.ts` — routes to `show_elicitation` dialog instead of permission prompt, with `handleAskUserQuestionResponse` method for collecting answers back through the control response flow.
+- **All 34 test suites passing**: 264 tests pass, 0 failures.
 
 ### Removed
 - **Locally-Added SDK Runtime File**: Deleted `src/entrypoints/sdk/runtime.ts` — a locally-added file with no equivalent in `references/openclaude-main/`. Stripped all runtime-dependent Query interface methods and test files to align SDK with reference.

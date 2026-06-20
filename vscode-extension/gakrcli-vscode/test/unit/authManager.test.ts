@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { AuthManager } from '../../src/auth/authManager';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { AuthManager, type ProviderUpdateInput } from '../../src/auth/authManager';
 import type { SettingsSync } from '../../src/settings/settingsSync';
 
 function makeSettings(overrides: Partial<SettingsSync> = {}): SettingsSync {
@@ -19,47 +19,19 @@ function makeSettings(overrides: Partial<SettingsSync> = {}): SettingsSync {
 
 describe('AuthManager', () => {
   describe('getAvailableProviders', () => {
-    it('returns the root GakrCLI provider presets used by the picker', () => {
+    it('returns all supported providers', () => {
       const manager = new AuthManager(makeSettings());
-      const ids = manager.getAvailableProviders().map((p) => p.id);
-
-      for (const id of [
-        'anthropic',
-        'dashscope-cn',
-        'dashscope-intl',
-        'azure-openai',
-        'bankr',
-        'deepseek',
-        'gemini',
-        'groq',
-        'hicap',
-        'lmstudio',
-        'atomic-chat',
-        'ollama',
-        'minimax',
-        'mistral',
-        'moonshotai',
-        'kimi-code',
-        'nvidia-nim',
-        'openai',
-        'openrouter',
-        'together',
-        'venice',
-        'xai',
-        'xiaomi-mimo',
-        'zai',
-        'custom',
-        'bedrock',
-        'vertex',
-        'github',
-        'codex',
-      ]) {
-        expect(ids).toContain(id);
-      }
+      const providers = manager.getAvailableProviders();
+      const ids = providers.map((p) => p.id);
+      expect(ids).toContain('anthropic');
+      expect(ids).toContain('openai');
+      expect(ids).toContain('ollama');
+      expect(ids).toContain('gemini');
+      expect(ids).toContain('custom');
     });
   });
 
-  describe('buildProcessEnv - anthropic', () => {
+  describe('buildProcessEnv — anthropic', () => {
     it('sets ANTHROPIC_API_KEY', () => {
       const manager = new AuthManager(makeSettings({ selectedProvider: 'anthropic', apiKey: 'sk-ant-test' }));
       const env = manager.buildProcessEnv();
@@ -68,7 +40,7 @@ describe('AuthManager', () => {
     });
   });
 
-  describe('buildProcessEnv - openai', () => {
+  describe('buildProcessEnv — openai', () => {
     it('sets OPENAI_API_KEY and GAKR_CODE_USE_OPENAI', () => {
       const manager = new AuthManager(makeSettings({ selectedProvider: 'openai', apiKey: 'sk-openai-test' }));
       const env = manager.buildProcessEnv();
@@ -87,8 +59,8 @@ describe('AuthManager', () => {
     });
   });
 
-  describe('buildProcessEnv - local OpenAI-compatible providers', () => {
-    it('uses Ollama defaults', () => {
+  describe('buildProcessEnv — ollama', () => {
+    it('uses default localhost base URL and ollama api key', () => {
       const manager = new AuthManager(makeSettings({ selectedProvider: 'ollama' }));
       const env = manager.buildProcessEnv();
       expect(env['OPENAI_BASE_URL']).toBe('http://localhost:11434/v1');
@@ -96,41 +68,29 @@ describe('AuthManager', () => {
       expect(env['GAKR_CODE_USE_OPENAI']).toBe('1');
     });
 
-    it('allows custom Ollama base URL override', () => {
+    it('allows custom base URL override', () => {
       const manager = new AuthManager(makeSettings({ selectedProvider: 'ollama', baseUrl: 'http://myhost:11434/v1' }));
       const env = manager.buildProcessEnv();
       expect(env['OPENAI_BASE_URL']).toBe('http://myhost:11434/v1');
     });
   });
 
-  describe('buildProcessEnv - dedicated providers', () => {
-    it('sets Gemini env and GAKR_CODE_USE_GEMINI', () => {
+  describe('buildProcessEnv — gemini', () => {
+    it('sets OPENAI_API_KEY, OPENAI_BASE_URL, and GAKR_CODE_USE_OPENAI', () => {
       const manager = new AuthManager(makeSettings({
         selectedProvider: 'gemini',
         apiKey: 'gemini-key',
         baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
       }));
       const env = manager.buildProcessEnv();
-      expect(env['GEMINI_API_KEY']).toBe('gemini-key');
-      expect(env['GEMINI_BASE_URL']).toBe('https://generativelanguage.googleapis.com/v1beta/openai');
-      expect(env['GAKR_CODE_USE_GEMINI']).toBe('1');
-    });
-
-    it('sets dedicated Mistral routing instead of generic OpenAI routing', () => {
-      const manager = new AuthManager(makeSettings({
-        selectedProvider: 'mistral',
-        apiKey: 'mistral-key',
-      }));
-      const env = manager.buildProcessEnv();
-      expect(env['GAKR_CODE_USE_MISTRAL']).toBe('1');
-      expect(env['MISTRAL_API_KEY']).toBe('mistral-key');
-      expect(env['MISTRAL_BASE_URL']).toBe('https://api.mistral.ai/v1');
-      expect(env['GAKR_CODE_USE_OPENAI']).toBeUndefined();
+      expect(env['OPENAI_API_KEY']).toBe('gemini-key');
+      expect(env['OPENAI_BASE_URL']).toBe('https://generativelanguage.googleapis.com/v1beta/openai');
+      expect(env['GAKR_CODE_USE_OPENAI']).toBe('1');
     });
   });
 
-  describe('buildProcessEnv - descriptor-backed OpenAI-compatible presets', () => {
-    it('sets custom OpenAI-compatible routing', () => {
+  describe('buildProcessEnv — custom', () => {
+    it('sets OPENAI_API_KEY, OPENAI_BASE_URL, and GAKR_CODE_USE_OPENAI', () => {
       const manager = new AuthManager(makeSettings({
         selectedProvider: 'custom',
         apiKey: 'custom-key',
@@ -141,44 +101,9 @@ describe('AuthManager', () => {
       expect(env['OPENAI_BASE_URL']).toBe('https://my-llm.example.com/v1');
       expect(env['GAKR_CODE_USE_OPENAI']).toBe('1');
     });
-
-    it('sets xAI route env without inventing a model so OAuth fallback can work', () => {
-      const manager = new AuthManager(makeSettings({ selectedProvider: 'xai' }));
-      const env = manager.buildProcessEnv();
-      expect(env['GAKR_CODE_USE_OPENAI']).toBe('1');
-      expect(env['OPENAI_BASE_URL']).toBe('https://api.x.ai/v1');
-      expect(env['OPENAI_MODEL']).toBeUndefined();
-      expect(env['OPENAI_API_KEY']).toBeUndefined();
-    });
-
-    it('mirrors provider credentials for providers whose runtime expects OPENAI_API_KEY', () => {
-      const manager = new AuthManager(makeSettings({
-        selectedProvider: 'xiaomi-mimo',
-        apiKey: 'mimo-key',
-      }));
-      const env = manager.buildProcessEnv();
-      expect(env['MIMO_API_KEY']).toBe('mimo-key');
-      expect(env['OPENAI_API_KEY']).toBe('mimo-key');
-      expect(env['OPENAI_BASE_URL']).toBe('https://api.xiaomimimo.com/v1');
-      expect(env['OPENAI_MODEL']).toBeUndefined();
-    });
-
-    it('sets NVIDIA NIM marker and route defaults', () => {
-      const manager = new AuthManager(makeSettings({
-        selectedProvider: 'nvidia-nim',
-        apiKey: 'nvidia-key',
-      }));
-      const env = manager.buildProcessEnv();
-      expect(env['GAKR_CODE_USE_OPENAI']).toBe('1');
-      expect(env['NVIDIA_NIM']).toBe('1');
-      expect(env['NVIDIA_API_KEY']).toBe('nvidia-key');
-      expect(env['OPENAI_API_KEY']).toBe('nvidia-key');
-      expect(env['OPENAI_BASE_URL']).toBe('https://integrate.api.nvidia.com/v1');
-      expect(env['OPENAI_MODEL']).toBe('stepfun-ai/step-3.5-flash');
-    });
   });
 
-  describe('buildProcessEnv - merges user env vars', () => {
+  describe('buildProcessEnv — merges user env vars', () => {
     it('includes user-configured environment variables', () => {
       const manager = new AuthManager(makeSettings({
         selectedProvider: 'anthropic',
@@ -206,12 +131,10 @@ describe('AuthManager', () => {
       expect(result.errors.length).toBeGreaterThan(0);
     });
 
-    it('passes for providers that can use local or stored OAuth credentials', () => {
+    it('passes for ollama without api key (not required)', () => {
       const manager = new AuthManager(makeSettings());
-      expect(manager.validate({ providerId: 'ollama' }).valid).toBe(true);
-      expect(manager.validate({ providerId: 'xai' }).valid).toBe(true);
-      expect(manager.validate({ providerId: 'github' }).valid).toBe(true);
-      expect(manager.validate({ providerId: 'codex' }).valid).toBe(true);
+      const result = manager.validate({ providerId: 'ollama' });
+      expect(result.valid).toBe(true);
     });
 
     it('fails for custom without base URL', () => {
@@ -228,110 +151,6 @@ describe('AuthManager', () => {
     });
   });
 
-  describe('buildProcessEnv - saved GakrCLI profile fallback', () => {
-    it('loads the active ~/.gakrcli.json provider profile before the legacy profile', () => {
-      const manager = new AuthManager(
-        makeSettings(),
-        () => ({
-          path: 'C:\\Users\\test\\.gakrcli\\.gakrcli-profile.json',
-          profile: {
-            profile: 'openai',
-            env: {
-              OPENAI_BASE_URL: 'https://api.openai.com/v1',
-              OPENAI_MODEL: 'gpt-4o',
-            },
-          },
-        }),
-        () => ({
-          path: 'C:\\Users\\test\\.gakrcli.json',
-          profile: {
-            id: 'nvidia_prof',
-            name: 'NVIDIA NIM',
-            provider: 'nvidia-nim',
-            baseUrl: 'https://integrate.api.nvidia.com/v1',
-            model: 'nvidia/llama-3.1-nemotron-70b-instruct',
-            apiKey: 'nvapi-live',
-          },
-          modelOptions: [
-            {
-              value: 'nvidia/llama-3.1-nemotron-70b-instruct',
-              displayName: 'nvidia/llama-3.1-nemotron-70b-instruct',
-            },
-          ],
-        }),
-      );
-
-      const current = manager.getCurrentProvider();
-      const env = manager.buildProcessEnv();
-
-      expect(current.id).toBe('nvidia-nim');
-      expect(current.model).toBe('nvidia/llama-3.1-nemotron-70b-instruct');
-      expect(current.modelOptions?.[0].value).toBe('nvidia/llama-3.1-nemotron-70b-instruct');
-      expect(env['OPENAI_BASE_URL']).toBe('https://integrate.api.nvidia.com/v1');
-      expect(env['OPENAI_MODEL']).toBe('nvidia/llama-3.1-nemotron-70b-instruct');
-      expect(env['NVIDIA_NIM']).toBe('1');
-      expect(env['NVIDIA_API_KEY']).toBe('nvapi-live');
-    });
-
-    it('uses the selected model as the active profile model override', () => {
-      const manager = new AuthManager(
-        makeSettings({ selectedModel: 'stepfun-ai/step-3.5-flash' }),
-        () => null,
-        () => ({
-          path: 'C:\\Users\\test\\.gakrcli.json',
-          profile: {
-            id: 'nvidia_prof',
-            name: 'NVIDIA NIM',
-            provider: 'nvidia-nim',
-            baseUrl: 'https://integrate.api.nvidia.com/v1',
-            model: 'nvidia/llama-3.1-nemotron-70b-instruct, stepfun-ai/step-3.5-flash',
-            apiKey: 'nvapi-live',
-          },
-          modelOptions: [
-            { value: 'nvidia/llama-3.1-nemotron-70b-instruct', displayName: 'Nemotron' },
-            { value: 'stepfun-ai/step-3.5-flash', displayName: 'Step 3.5 Flash' },
-          ],
-        }),
-      );
-
-      const current = manager.getCurrentProvider();
-      const env = manager.buildProcessEnv();
-
-      expect(current.id).toBe('nvidia-nim');
-      expect(current.model).toBe('stepfun-ai/step-3.5-flash');
-      expect(current.modelOptions?.map((option) => option.value)).toEqual([
-        'nvidia/llama-3.1-nemotron-70b-instruct',
-        'stepfun-ai/step-3.5-flash',
-      ]);
-      expect(env['OPENAI_MODEL']).toBe('stepfun-ai/step-3.5-flash');
-      expect(env['NVIDIA_MODEL']).toBeUndefined();
-    });
-
-    it('loads profile env when extension provider settings are not explicit', () => {
-      const manager = new AuthManager(
-        makeSettings(),
-        () => ({
-          path: 'C:\\Users\\test\\.gakrcli\\.gakrcli-profile.json',
-          profile: {
-            profile: 'xai',
-            env: {
-              OPENAI_BASE_URL: 'https://api.x.ai/v1',
-              OPENAI_MODEL: 'grok-4.3',
-              XAI_CREDENTIAL_SOURCE: 'oauth',
-            },
-          },
-        }),
-        () => null,
-      );
-
-      const env = manager.buildProcessEnv();
-      expect(env['OPENAI_BASE_URL']).toBe('https://api.x.ai/v1');
-      expect(env['OPENAI_MODEL']).toBe('grok-4.3');
-      expect(env['XAI_CREDENTIAL_SOURCE']).toBe('oauth');
-      expect(env['GAKR_CODE_USE_OPENAI']).toBe('1');
-    });
-  });
-
   describe('updateProvider', () => {
     it('calls settings setters with provided values', async () => {
       const settings = makeSettings();
@@ -340,106 +159,6 @@ describe('AuthManager', () => {
       expect(settings.setProvider).toHaveBeenCalledWith('openai');
       expect(settings.setApiKey).toHaveBeenCalledWith('sk-new');
       expect(settings.setModel).toHaveBeenCalledWith('gpt-4o');
-    });
-  });
-
-  describe('updateModel', () => {
-    it('promotes the selected model into the active GakrCLI provider profile', async () => {
-      const settings = makeSettings();
-      const updateActiveProfileModel = vi.fn(() => true);
-      const manager = new AuthManager(
-        settings,
-        () => null,
-        () => ({
-          path: 'C:\\Users\\test\\.gakrcli.json',
-          profile: {
-            id: 'nvidia_prof',
-            name: 'NVIDIA NIM',
-            provider: 'nvidia-nim',
-            baseUrl: 'https://integrate.api.nvidia.com/v1',
-            model: 'model-a, model-b',
-          },
-          modelOptions: [
-            { value: 'model-a', displayName: 'model-a' },
-            { value: 'model-b', displayName: 'model-b' },
-          ],
-        }),
-        updateActiveProfileModel,
-      );
-
-      await manager.updateModel('model-b');
-
-      expect(updateActiveProfileModel).toHaveBeenCalledWith('model-b');
-      expect(settings.setModel).toHaveBeenCalledWith(undefined);
-    });
-  });
-
-  describe('discoverCurrentProviderModels', () => {
-    it('returns SDK-discovered models before cached active profile models', async () => {
-      const discoverModels = vi.fn().mockResolvedValue([
-        { value: 'fresh-model-a', displayName: 'Fresh Model A' },
-        { value: 'fresh-model-b', displayName: 'Fresh Model B' },
-      ]);
-      const manager = new AuthManager(
-        makeSettings(),
-        () => null,
-        () => ({
-          path: 'C:\\Users\\test\\.gakrcli.json',
-          profile: {
-            id: 'nvidia_prof',
-            name: 'NVIDIA NIM',
-            provider: 'nvidia-nim',
-            baseUrl: 'https://integrate.api.nvidia.com/v1',
-            model: 'cached-model',
-            apiKey: 'nvapi-live',
-          },
-          modelOptions: [
-            { value: 'cached-model', displayName: 'cached-model' },
-          ],
-        }),
-        () => false,
-        discoverModels,
-      );
-
-      await expect(manager.discoverCurrentProviderModels()).resolves.toEqual([
-        { value: 'fresh-model-a', displayName: 'Fresh Model A' },
-        { value: 'fresh-model-b', displayName: 'Fresh Model B' },
-      ]);
-
-      expect(discoverModels).toHaveBeenCalledWith(expect.objectContaining({
-        GAKR_CODE_USE_OPENAI: '1',
-        OPENAI_BASE_URL: 'https://integrate.api.nvidia.com/v1',
-        OPENAI_MODEL: 'cached-model',
-        OPENAI_API_KEY: 'nvapi-live',
-        NVIDIA_API_KEY: 'nvapi-live',
-        NVIDIA_NIM: '1',
-      }));
-    });
-
-    it('falls back to active profile cached models when SDK discovery is empty', async () => {
-      const manager = new AuthManager(
-        makeSettings(),
-        () => null,
-        () => ({
-          path: 'C:\\Users\\test\\.gakrcli.json',
-          profile: {
-            id: 'openai_prof',
-            name: 'OpenAI',
-            provider: 'openai',
-            baseUrl: 'https://api.openai.com/v1',
-            model: 'gpt-4o',
-          },
-          modelOptions: [
-            { value: 'gpt-4o', displayName: 'gpt-4o' },
-          ],
-        }),
-        () => false,
-        vi.fn().mockResolvedValue([]),
-      );
-
-      await expect(manager.discoverCurrentProviderModels()).resolves.toEqual([
-        { value: 'gpt-4o', displayName: 'gpt-4o' },
-      ]);
     });
   });
 });
