@@ -71,20 +71,7 @@ export class ControlRouter {
     this.activeRequests.set(request_id, abortController);
 
     try {
-      const abortResult = new Promise<typeof SELF_HANDLED>((resolve) => {
-        abortController.signal.addEventListener(
-          'abort',
-          () => resolve(SELF_HANDLED),
-          { once: true },
-        );
-      });
-      const result = await Promise.race([
-        handler(request.request, abortController.signal, request_id),
-        abortResult,
-      ]);
-      if (abortController.signal.aborted) {
-        return;
-      }
+      const result = await handler(request.request, abortController.signal, request_id);
       // If the handler returned SELF_HANDLED, it manages its own response
       if (result !== SELF_HANDLED) {
         this.sendSuccessResponse(request_id, result as Record<string, unknown>);

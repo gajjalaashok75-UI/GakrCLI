@@ -12,12 +12,6 @@ export class SettingsSync {
     return this.config.get<string>('selectedProvider', 'anthropic');
   }
 
-  hasConfiguredProvider(): boolean {
-    return this.config.inspect<string>('selectedProvider')?.globalValue !== undefined ||
-      this.config.inspect<string>('selectedProvider')?.workspaceValue !== undefined ||
-      this.config.inspect<string>('selectedProvider')?.workspaceFolderValue !== undefined;
-  }
-
   get selectedModel(): string | undefined {
     const v = this.config.get<string>('selectedModel');
     return v && v !== 'default' ? v : undefined;

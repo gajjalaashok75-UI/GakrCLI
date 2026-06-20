@@ -3,11 +3,10 @@
 // Serves virtual documents via gakrcli-diff-original:// and
 // gakrcli-diff-proposed:// URI schemes for the native diff editor.
 
-import type * as VSCode from 'vscode';
-import { vscode } from '../vscodeCompat';
+import * as vscode from 'vscode';
 
-export class DiffContentProvider implements VSCode.TextDocumentContentProvider {
-  private readonly _onDidChange = new vscode.EventEmitter<VSCode.Uri>();
+export class DiffContentProvider implements vscode.TextDocumentContentProvider {
+  private readonly _onDidChange = new vscode.EventEmitter<vscode.Uri>();
   readonly onDidChange = this._onDidChange.event;
 
   // Key: normalized file path, Value: content string
@@ -35,7 +34,7 @@ export class DiffContentProvider implements VSCode.TextDocumentContentProvider {
   /**
    * VS Code calls this to get the text content for a URI with our scheme.
    */
-  provideTextDocumentContent(uri: VSCode.Uri): string {
+  provideTextDocumentContent(uri: vscode.Uri): string {
     const filePath = uri.path;
     return this.contentMap.get(filePath) ?? '';
   }
@@ -66,7 +65,7 @@ export class DiffContentProvider implements VSCode.TextDocumentContentProvider {
 export function createDiffContentProviders(): {
   original: DiffContentProvider;
   proposed: DiffContentProvider;
-  disposables: VSCode.Disposable[];
+  disposables: vscode.Disposable[];
 } {
   const original = new DiffContentProvider();
   original.scheme = 'gakrcli-diff-original';

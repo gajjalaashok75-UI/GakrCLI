@@ -1,8 +1,7 @@
-import type * as VSCode from 'vscode';
+import * as vscode from 'vscode';
 import { WebviewBridge } from './webviewBridge';
 import { generateWebviewHtml } from './htmlGenerator';
 import { getThemeKind, getFontConfig } from './htmlGenerator';
-import { vscode } from '../vscodeCompat';
 import type {
   WebviewToHostMessage,
   HostToWebviewMessage,
@@ -24,6 +23,7 @@ type MessageHandler<T extends WebviewToHostMessage['type']> = (
 /**
  * Manages all GakrCLI webview panels across sidebar, editor tabs, and new windows.
  *
+ * Extracted from Claude Code extension.js `DQ` class:
  * - createPanel() creates editor tab panels (ViewColumn.Beside or unused column)
  * - resolveWebviewView() handles sidebar panels
  * - setupPanel() wires message handlers
@@ -31,11 +31,11 @@ type MessageHandler<T extends WebviewToHostMessage['type']> = (
  * - Broadcasts session state across all panels
  * - Handles panel serialization/deserialization for persistence
  */
-export class WebviewManager implements VSCode.Disposable {
+export class WebviewManager implements vscode.Disposable {
   private readonly bridges = new Map<string, WebviewBridge>();
-  private readonly panelMap = new Map<string, VSCode.WebviewPanel>();
+  private readonly panelMap = new Map<string, vscode.WebviewPanel>();
   private readonly sessionPanels = new Map<string, string>(); // sessionId -> panelId
-  private readonly disposables: VSCode.Disposable[] = [];
+  private readonly disposables: vscode.Disposable[] = [];
   private readonly globalHandlers = new Map<string, MessageHandler<never>[]>();
 
   /** Track session states for badge updates and cross-panel sync */
@@ -43,9 +43,9 @@ export class WebviewManager implements VSCode.Disposable {
   private activeSessionId?: string;
 
   constructor(
-    private readonly extensionUri: VSCode.Uri,
-    private readonly context: VSCode.ExtensionContext,
-    private readonly output: VSCode.OutputChannel,
+    private readonly extensionUri: vscode.Uri,
+    private readonly context: vscode.ExtensionContext,
+    private readonly output: vscode.OutputChannel,
   ) {
     // Listen for theme changes and broadcast to all panels
     this.disposables.push(
@@ -79,13 +79,13 @@ export class WebviewManager implements VSCode.Disposable {
   onMessage<T extends WebviewToHostMessage['type']>(
     type: T,
     handler: MessageHandler<T>,
-  ): VSCode.Disposable {
+  ): vscode.Disposable {
     const handlers = this.globalHandlers.get(type) || [];
     handlers.push(handler as MessageHandler<never>);
     this.globalHandlers.set(type, handlers);
 
     // Also register on all existing bridges
-    const bridgeDisposables: VSCode.Disposable[] = [];
+    const bridgeDisposables: vscode.Disposable[] = [];
     for (const bridge of this.bridges.values()) {
       bridgeDisposables.push(bridge.onMessage(type, handler));
     }
@@ -144,16 +144,17 @@ export class WebviewManager implements VSCode.Disposable {
   /**
    * Create a new webview panel in an editor tab.
    *
- * - Finds an unused column or reuses one with only GakrCLI tabs
- * - Sets retainContextWhenHidden, enableFindWidget, enableScripts
- * - Sets icon, wires message handlers, registers disposal
+   * Extracted from Claude Code DQ.createPanel():
+   * - Finds an unused column or reuses one with only GakrCLI tabs
+   * - Sets retainContextWhenHidden, enableFindWidget, enableScripts
+   * - Sets icon, wires message handlers, registers disposal
    *
    * Returns { panelId, startedInNewColumn }.
    */
   createPanel(
     sessionId?: string,
     initialPrompt?: string,
-    viewColumn?: VSCode.ViewColumn,
+    viewColumn?: vscode.ViewColumn,
   ): { panelId: string; startedInNewColumn: boolean } {
     // If session already has an open panel, reveal it
     if (sessionId) {
@@ -174,7 +175,7 @@ export class WebviewManager implements VSCode.Disposable {
 
     // Determine target column
     let startedInNewColumn = false;
-    let targetColumn: VSCode.ViewColumn;
+    let targetColumn: vscode.ViewColumn;
 
     if (viewColumn !== undefined) {
       targetColumn = viewColumn;
@@ -239,9 +240,10 @@ export class WebviewManager implements VSCode.Disposable {
    * Set up a panel — generate HTML, wire bridge, register disposal.
    * Used by both createPanel() and the WebviewPanelSerializer for restoring panels.
    *
+   * Extracted from Claude Code DQ.setupPanel().
    */
   setupPanel(
-    panel: VSCode.WebviewPanel,
+    panel: vscode.WebviewPanel,
     panelId: string,
     location: PanelLocation,
     sessionId?: string,
@@ -342,9 +344,10 @@ export class WebviewManager implements VSCode.Disposable {
   /**
    * Resolve a sidebar WebviewView — called by the WebviewViewProvider.
    *
+   * Extracted from Claude Code DQ.resolveWebviewView().
    */
   resolveSidebarView(
-    webviewView: VSCode.WebviewView,
+    webviewView: vscode.WebviewView,
   ): string {
     const panelId = createPanelId();
 
@@ -414,6 +417,7 @@ export class WebviewManager implements VSCode.Disposable {
 
   /**
    * Update session state and broadcast to all panels.
+   * Extracted from Claude Code DQ.updateSessionState() / broadcastSessionStates().
    */
   updateSessionState(sessionId: string, state: SessionInfo['state'], title?: string): void {
     this.sessionStates.set(sessionId, { sessionId, state, title });
@@ -445,9 +449,10 @@ export class WebviewManager implements VSCode.Disposable {
 
   /**
    * Find an unused editor column.
+   * Extracted from Claude Code DQ.findUnusedColumn().
    */
-  private findUnusedColumn(): VSCode.ViewColumn {
-    const usedColumns = new Set<VSCode.ViewColumn>();
+  private findUnusedColumn(): vscode.ViewColumn {
+    const usedColumns = new Set<vscode.ViewColumn>();
     vscode.window.tabGroups.all.forEach((group) => {
       if (group.viewColumn !== undefined) {
         usedColumns.add(group.viewColumn);

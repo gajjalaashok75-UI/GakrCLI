@@ -4,10 +4,9 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import type * as VSCode from 'vscode';
+import * as vscode from 'vscode';
 import type { IdeLockfile, JsonRpcRequest, JsonRpcResponse } from './types';
 import { IDE_TOOLS } from './types';
-import { vscode } from '../vscodeCompat';
 
 // ── Pure helpers (exported for testing) ──────────────────────────
 
@@ -16,16 +15,11 @@ export function generateLockfile(
   port: number,
   workspaceFolder: string,
 ): IdeLockfile {
-  const token = crypto.randomBytes(32).toString('hex');
   return {
     pid,
     port,
-    authToken: token,
-    token,
-    workspaceFolders: [workspaceFolder],
+    token: crypto.randomBytes(32).toString('hex'),
     workspaceFolder,
-    ideName: 'VS Code',
-    transport: 'sse',
     createdAt: new Date().toISOString(),
   };
 }
@@ -48,13 +42,10 @@ export type ToolHandlers = {
 export async function routeRequest(
   request: JsonRpcRequest,
   handlers: ToolHandlers,
-): Promise<JsonRpcResponse | null> {
+): Promise<JsonRpcResponse> {
   const base = { jsonrpc: '2.0' as const, id: request.id };
 
   switch (request.method) {
-    case 'notifications/initialized':
-      return null;
-
     case 'initialize':
       return {
         ...base,
@@ -108,28 +99,23 @@ export async function routeRequest(
   }
 }
 
-export function formatSseEvent(event: string, data: string): string {
-  const lines = data.split(/\r?\n/).map((line) => `data: ${line}`).join('\n');
-  return `event: ${event}\n${lines}\n\n`;
-}
-
 // ── VS Code-specific implementation ──────────────────────────────
 
-export class McpIdeServer implements VSCode.Disposable {
+export class McpIdeServer implements vscode.Disposable {
   private server: http.Server | null = null;
   private lockfilePath: string | null = null;
   private token: string = '';
   private port: number = 0;
-  private sseClients = new Map<string, http.ServerResponse>();
-  private disposables: VSCode.Disposable[] = [];
+  private disposables: vscode.Disposable[] = [];
 
-  constructor(private readonly workspaceFolder: string) {}
+  constructor(workspaceFolder: string) {
+    this.workspaceFolder = workspaceFolder;
+  }
 
   /** Start the server on a random localhost port */
   async start(): Promise<{ port: number; token: string }> {
     const lockfile = generateLockfile(process.pid, 0, this.workspaceFolder);
-    this.token = lockfile.authToken;
-    lockfile.token = this.token;
+    this.token = lockfile.token;
 
     const handlers: ToolHandlers = {
       getDiagnostics: this.handleGetDiagnostics.bind(this),
@@ -141,18 +127,6 @@ export class McpIdeServer implements VSCode.Disposable {
       if (req.socket.remoteAddress !== '127.0.0.1' && req.socket.remoteAddress !== '::1') {
         res.writeHead(403);
         res.end('Forbidden');
-        return;
-      }
-
-      const requestUrl = new URL(req.url ?? '/', `http://${req.headers.host ?? '127.0.0.1'}`);
-
-      if (req.method === 'GET' && requestUrl.pathname === '/sse') {
-        this.handleSseConnection(req, res);
-        return;
-      }
-
-      if (req.method === 'POST' && requestUrl.pathname === '/message') {
-        await this.handleSseMessagePost(req, res, handlers, requestUrl);
         return;
       }
 
@@ -180,7 +154,7 @@ export class McpIdeServer implements VSCode.Disposable {
         const body = JSON.parse(Buffer.concat(chunks).toString('utf-8')) as JsonRpcRequest;
         const response = await routeRequest(body, handlers);
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(response ?? { jsonrpc: '2.0' }));
+        res.end(JSON.stringify(response));
       } catch {
         res.writeHead(400);
         res.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32700, message: 'Parse error' } }));
@@ -204,62 +178,14 @@ export class McpIdeServer implements VSCode.Disposable {
     return { port: this.port, token: this.token };
   }
 
-  private handleSseConnection(req: http.IncomingMessage, res: http.ServerResponse): void {
-    const sessionId = crypto.randomBytes(16).toString('hex');
-    this.sseClients.set(sessionId, res);
-
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
-      'X-Accel-Buffering': 'no',
-    });
-    res.write(formatSseEvent('endpoint', `/message?sessionId=${sessionId}`));
-
-    req.on('close', () => {
-      this.sseClients.delete(sessionId);
-    });
-  }
-
-  private async handleSseMessagePost(
-    req: http.IncomingMessage,
-    res: http.ServerResponse,
-    handlers: ToolHandlers,
-    requestUrl: URL,
-  ): Promise<void> {
-    const sessionId = requestUrl.searchParams.get('sessionId') ?? '';
-    const client = this.sseClients.get(sessionId);
-    if (!client) {
-      res.writeHead(404);
-      res.end('Unknown SSE session');
-      return;
-    }
-
-    const chunks: Buffer[] = [];
-    for await (const chunk of req) {
-      chunks.push(chunk as Buffer);
-    }
-
-    try {
-      const body = JSON.parse(Buffer.concat(chunks).toString('utf-8')) as JsonRpcRequest;
-      const response = await routeRequest(body, handlers);
-      if (response) {
-        client.write(formatSseEvent('message', JSON.stringify(response)));
-      }
-      res.writeHead(202);
-      res.end('Accepted');
-    } catch {
-      res.writeHead(400);
-      res.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32700, message: 'Parse error' } }));
-    }
-  }
-
-  /** Write lockfile to ~/.gakrcli/ide/<port>.lock for CLI /ide discovery. */
+  /** Write lockfile to ~/.gakrcli/ide/<workspace-hash>.json */
   private async writeLockfile(lockfile: IdeLockfile): Promise<void> {
-    const ideDir = path.join(process.env.GAKR_CONFIG_DIR || path.join(os.homedir(), '.gakrcli'), 'ide');
+    const ideDir = path.join(os.homedir(), '.gakrcli', 'ide');
     await fs.promises.mkdir(ideDir, { recursive: true });
 
-    this.lockfilePath = path.join(ideDir, `${lockfile.port}.lock`);
+    // Use workspace folder hash as filename to avoid collisions
+    const hash = crypto.createHash('sha256').update(this.workspaceFolder).digest('hex').slice(0, 12);
+    this.lockfilePath = path.join(ideDir, `${hash}.json`);
 
     await fs.promises.writeFile(this.lockfilePath, JSON.stringify(lockfile, null, 2), 'utf-8');
   }
@@ -306,12 +232,12 @@ export class McpIdeServer implements VSCode.Disposable {
     const minSeverityOrder = severityOrder[minSeverity] ?? 3;
 
     // Filter by URI if provided
-    let diagnosticEntries: [VSCode.Uri, readonly VSCode.Diagnostic[]][];
+    let diagnosticEntries: [vscode.Uri, readonly vscode.Diagnostic[]][];
     if (args.uri) {
       const uri = vscode.Uri.parse(args.uri as string);
       diagnosticEntries = [[uri, vscode.languages.getDiagnostics(uri)]];
     } else {
-      diagnosticEntries = vscode.languages.getDiagnostics() as [VSCode.Uri, VSCode.Diagnostic[]][];
+      diagnosticEntries = vscode.languages.getDiagnostics() as [vscode.Uri, vscode.Diagnostic[]][];
     }
 
     for (const [uri, diagnostics] of diagnosticEntries) {
@@ -417,10 +343,6 @@ export class McpIdeServer implements VSCode.Disposable {
   /** Dispose: stop server and clean up lockfile */
   dispose(): void {
     if (this.server) {
-      for (const client of this.sseClients.values()) {
-        client.end();
-      }
-      this.sseClients.clear();
       this.server.close();
       this.server = null;
     }
