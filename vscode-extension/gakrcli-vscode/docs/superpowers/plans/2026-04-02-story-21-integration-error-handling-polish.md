@@ -407,7 +407,7 @@ git commit -m "feat(integration): add error banners, rate limit UI, system messa
 - Modify: `webview/tailwind.config.ts`
 - Modify: Various component files for spacing/font fixes
 
-Reference: `~/.vscode/extensions/anthropic.claude-code-2.1.85-darwin-arm64/`
+Reference: `~\.vscode\extensions\anthropic.claude-code-2.1.183-win32-x64`
 
 - [ ] **Step 1: Extract Claude Code's exact CSS variables and Tailwind tokens**
 

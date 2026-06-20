@@ -10,7 +10,7 @@
 
 **Spec:** [2026-04-02-gakrcli-vscode-extension-design.md](../specs/2026-04-02-gakrcli-vscode-extension-design.md) — Story 1
 
-**Claude Code extension (source to extract from):** `~/.vscode/extensions/anthropic.claude-code-2.1.85-darwin-arm64/`
+**Claude Code extension (source to extract from):** `~\.vscode\extensions\anthropic.claude-code-2.1.183-win32-x64`
 
 ---
 
