@@ -68,7 +68,7 @@ The extension.js is minified but still readable with a formatter. We extract:
 | Tailwind config | Start fresh with Tailwind, match the visual output by referencing extracted CSS classes |
 
 **Reference implementation locations:**
-- Claude Code extension: `~/.vscode/extensions/anthropic.claude-code-2.1.85-darwin-arm64/`
+- Claude Code extension: `~\.vscode\extensions\anthropic.claude-code-2.1.183-win32-x64`
 - gakrcli CLI source: `~/Documents/workspace/gakrcli/`
 - SDK protocol schemas: `gakrcli/src/entrypoints/sdk/controlSchemas.ts`
 

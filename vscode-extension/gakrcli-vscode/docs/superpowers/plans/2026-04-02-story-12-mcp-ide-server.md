@@ -10,7 +10,7 @@
 
 **Spec:** [2026-04-02-gakrcli-vscode-extension-design.md](../specs/2026-04-02-gakrcli-vscode-extension-design.md) — Story 12, Sections 2.1, 2.3.3, 3.4, 5.2
 
-**Claude Code extension (reference):** `~/.vscode/extensions/anthropic.claude-code-2.1.85-darwin-arm64/`
+**Claude Code extension (reference):** `~\.vscode\extensions\anthropic.claude-code-2.1.183-win32-x64`
 
 **Depends on:** Story 2 (ProcessManager, NdjsonTransport, control request plumbing)
 
