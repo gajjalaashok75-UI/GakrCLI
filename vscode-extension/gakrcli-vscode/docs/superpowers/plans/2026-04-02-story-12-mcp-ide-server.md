@@ -4,13 +4,13 @@
 
 **Goal:** Implement a local MCP IDE server that exposes VS Code tools (diagnostics, code execution) to the gakrcli CLI, plus a webview McpServerManager dialog for viewing/managing all connected MCP servers.
 
-**Architecture:** The `McpIdeServer` runs a localhost-only HTTP server on a random port, generates an auth token, and writes a lockfile to `~/.claude/ide/` so the CLI can auto-discover it. It exposes two tools: `getDiagnostics` (reads VS Code Problems panel) and `executeCode` (runs Python via Jupyter kernel with user confirmation). The webview `McpServerManager` dialog displays all MCP servers from CLI state with status indicators and reconnect/toggle controls. The host bridges webview actions to CLI control requests (`mcp_set_servers`, `mcp_reconnect`, `mcp_toggle`).
+**Architecture:** The `McpIdeServer` runs a localhost-only HTTP server on a random port, generates an auth token, and writes a lockfile to `~/.gakrcli/ide/` so the CLI can auto-discover it. It exposes two tools: `getDiagnostics` (reads VS Code Problems panel) and `executeCode` (runs Python via Jupyter kernel with user confirmation). The webview `McpServerManager` dialog displays all MCP servers from CLI state with status indicators and reconnect/toggle controls. The host bridges webview actions to CLI control requests (`mcp_set_servers`, `mcp_reconnect`, `mcp_toggle`).
 
 **Tech Stack:** TypeScript 5.x, Node.js `http` + `crypto` + `fs`, VS Code Extension API, React 18, Tailwind CSS 3, Vitest
 
 **Spec:** [2026-04-02-gakrcli-vscode-extension-design.md](../specs/2026-04-02-gakrcli-vscode-extension-design.md) — Story 12, Sections 2.1, 2.3.3, 3.4, 5.2
 
-**Claude Code extension (reference):** `~\.vscode\extensions\anthropic.claude-code-2.1.183-win32-x64`
+**Claude Code extension (reference):** `~\.vscode\extensions\anthropic.gakrcli-code-2.1.183-win32-x64`
 
 **Depends on:** Story 2 (ProcessManager, NdjsonTransport, control request plumbing)
 
@@ -76,7 +76,7 @@ export interface JsonRpcResponse {
   error?: { code: number; message: string; data?: unknown };
 }
 
-/** Lockfile written to ~/.claude/ide/ for CLI discovery */
+/** Lockfile written to ~/.gakrcli/ide/ for CLI discovery */
 export interface IdeLockfile {
   pid: number;
   port: number;
@@ -176,7 +176,7 @@ import * as os from 'os';
 // The actual VS Code API calls are mocked
 
 describe('McpIdeServer', () => {
-  const lockfileDir = path.join(os.homedir(), '.claude', 'ide');
+  const lockfileDir = path.join(os.homedir(), '.gakrcli', 'ide');
 
   describe('lockfile generation', () => {
     it('should generate a lockfile with required fields', async () => {
@@ -355,7 +355,7 @@ export async function routeRequest(
         result: {
           protocolVersion: '2024-11-05',
           capabilities: { tools: {} },
-          serverInfo: { name: 'gakrcli-ide', version: '0.1.0' },
+          serverInfo: { name: 'gakrcli-ide', version: '0.2.5' },
         },
       };
 
@@ -479,9 +479,9 @@ export class McpIdeServer implements vscode.Disposable {
     return { port: this.port, token: this.token };
   }
 
-  /** Write lockfile to ~/.claude/ide/<workspace-hash>.json */
+  /** Write lockfile to ~/.gakrcli/ide/<workspace-hash>.json */
   private async writeLockfile(lockfile: IdeLockfile): Promise<void> {
-    const ideDir = path.join(os.homedir(), '.claude', 'ide');
+    const ideDir = path.join(os.homedir(), '.gakrcli', 'ide');
     await fs.promises.mkdir(ideDir, { recursive: true });
 
     // Use workspace folder hash as filename to avoid collisions
@@ -821,7 +821,7 @@ export function McpServerManager({ isOpen, onClose }: McpServerManagerProps) {
         <div className="flex-1 overflow-y-auto">
           {servers.length === 0 ? (
             <div className="px-4 py-8 text-center text-xs text-[var(--vscode-descriptionForeground)]">
-              No MCP servers configured. Add one below or configure in .claude/settings.json.
+              No MCP servers configured. Add one below or configure in .gakrcli/settings.json.
             </div>
           ) : (
             <ul className="divide-y divide-[var(--vscode-panel-border)]">
@@ -1141,7 +1141,7 @@ git commit -m "feat(mcp): wire MCP IDE server into extension host and CLI handsh
 
 - [ ] Run: `npm run build`
 - [ ] Run: `npx vitest run test/unit/mcpIdeServer.test.ts`
-- [ ] Manual: F5 launch → verify lockfile appears in `~/.claude/ide/`
+- [ ] Manual: F5 launch → verify lockfile appears in `~/.gakrcli/ide/`
 - [ ] Manual: verify MCP Server Manager dialog opens and shows IDE server status
 - [ ] Manual: verify `/mcp` slash command output renders in chat
 - [ ] Check: lockfile is removed on extension deactivation

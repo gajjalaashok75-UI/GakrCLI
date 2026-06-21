@@ -2445,7 +2445,7 @@ Expected: No errors (warnings OK). Fix any errors before proceeding.
 
 Run: `cd /Users/harshagarwal/Documents/workspace/gakrcli-vscode && npx @vscode/vsce package --no-dependencies --allow-missing-repository`
 
-Expected: Produces `gakrcli-vscode-0.1.0.vsix`
+Expected: Produces `gakrcli-vscode-0.2.5.vsix`
 
 - [ ] **Step 6: Commit any build fixes**
 

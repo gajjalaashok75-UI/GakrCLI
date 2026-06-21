@@ -30,7 +30,7 @@ export class TerminalManager implements vscode.Disposable {
       return;
     }
 
-    const config = vscode.workspace.getConfiguration('gakrcliCode');
+    const config = vscode.workspace.getConfiguration('gakrcli');
     const cliCommand = resolveCliExecutable(config);
     const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 

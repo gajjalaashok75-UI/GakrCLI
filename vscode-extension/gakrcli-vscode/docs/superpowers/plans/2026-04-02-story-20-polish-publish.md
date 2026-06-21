@@ -26,7 +26,7 @@
 | `.github/workflows/ci.yml` | Build, lint, test on push/PR |
 | `.github/workflows/publish.yml` | Package and publish to marketplace on release |
 | `README.md` | User-facing docs with screenshots and provider setup |
-| `CHANGELOG.md` | Release notes for v0.1.0 |
+| `CHANGELOG.md` | Release notes for v0.2.5 |
 | `.vscodeignore` | Optimized packaging exclusions |
 | `resources/gakrcli-logo.svg` | Final branding (if not already finalized) |
 | `resources/screenshots/` | README screenshots |
@@ -441,7 +441,7 @@ describe('ProcessManager', () => {
       customEnvVars: { CUSTOM_VAR: 'value' },
     });
 
-    expect(env.CLAUDE_CODE_USE_OPENAI).toBe('1');
+    expect(env.GAKR_CODE_USE_OPENAI).toBe('1');
     expect(env.OPENAI_API_KEY).toBe('sk-test-key');
     expect(env.OPENAI_BASE_URL).toBe('https://api.openai.com/v1');
     expect(env.OPENAI_MODEL).toBe('gpt-4o');
@@ -690,7 +690,7 @@ All notable changes to the gakrcli VS Code extension will be documented in this 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [0.1.0] - 2026-04-02
+## [0.2.5] - 2026-04-02
 
 ### Added
 - Full chat UI with streaming markdown responses and syntax-highlighted code blocks
@@ -717,7 +717,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Status bar with state indicators (idle, pending, done)
 - Onboarding walkthrough (4 steps)
 - URI handler for deep links
-- Settings schema with validation for .claude/settings.json (70+ properties)
+- Settings schema with validation for .gakrcli/settings.json (70+ properties)
 - Full keyboard shortcut support (Cmd+Escape, Alt+K, etc.)
 - Dark and light theme support via VS Code theme integration
 ```
@@ -726,7 +726,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ```bash
 git add CHANGELOG.md
-git commit -m "docs: add CHANGELOG for v0.1.0 initial release"
+git commit -m "docs: add CHANGELOG for v0.2.5 initial release"
 ```
 
 ---
@@ -773,7 +773,7 @@ node_modules/.cache/**
 
 # Development files
 .gitignore
-CLAUDE.md
+GAKR.md
 *.md
 !README.md
 !CHANGELOG.md
@@ -1017,7 +1017,7 @@ If any targets are missed, create issues or fix inline. Common fixes:
 - [ ] Final checklist:
   - [ ] Logo/branding finalized (SVG icons for all states)
   - [ ] README with screenshots, installation, provider setup
-  - [ ] CHANGELOG with v0.1.0 release notes
+  - [ ] CHANGELOG with v0.2.5 release notes
   - [ ] .vscodeignore excludes dev-only files
   - [ ] .vsix < 5MB
   - [ ] Webview loads in < 500ms

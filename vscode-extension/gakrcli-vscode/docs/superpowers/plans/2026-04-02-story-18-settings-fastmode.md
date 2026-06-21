@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Fork and rebrand the Claude Code settings schema (70+ properties) for JSON validation of `.claude/settings.json` files, add a fast mode toggle in the webview, render AI-generated prompt suggestions, show company announcements on startup, add a feedback survey dialog, and support spinner customization during tool execution.
+**Goal:** Fork and rebrand the Claude Code settings schema (70+ properties) for JSON validation of `.gakrcli/settings.json` files, add a fast mode toggle in the webview, render AI-generated prompt suggestions, show company announcements on startup, add a feedback survey dialog, and support spinner customization during tool execution.
 
 **Architecture:** The settings schema is a standalone JSON file contributed via `package.json` for IDE validation/autocomplete. Fast mode state comes from the CLI's initialize response and `result` messages. Prompt suggestions arrive via `prompt_suggestion` stdout messages. Company announcements come from managed settings. The feedback survey fires based on `feedbackSurveyRate` probability after session completion. Spinner customization reads `spinnerVerbs` and `spinnerTipsOverride` from settings.
 
@@ -10,7 +10,7 @@
 
 **Spec:** [2026-04-02-gakrcli-vscode-extension-design.md](../specs/2026-04-02-gakrcli-vscode-extension-design.md) — Story 18, Sections 2.3.1, 2.3.2, 4.7, 5.2
 
-**Claude Code extension (reference):** `~/.vscode/extensions/anthropic.claude-code-2.1.85-darwin-arm64/claude-code-settings.schema.json`
+**Claude Code extension (reference):** `~/.vscode/extensions/anthropic.gakrcli-code-2.1.85-darwin-arm64/claude-code-settings.schema.json`
 
 **Depends on:** Story 1 (Project Scaffolding)
 
@@ -37,7 +37,7 @@
 - Create: `gakrcli-settings.schema.json`
 - Modify: `package.json` (verify jsonValidation contributions)
 
-This is the largest single file in this story. We fork from `~/.vscode/extensions/anthropic.claude-code-2.1.85-darwin-arm64/claude-code-settings.schema.json` and rebrand.
+This is the largest single file in this story. We fork from `~/.vscode/extensions/anthropic.gakrcli-code-2.1.85-darwin-arm64/claude-code-settings.schema.json` and rebrand.
 
 - [ ] **Step 1: Create the full settings schema**
 
@@ -45,7 +45,7 @@ This is the largest single file in this story. We fork from `~/.vscode/extension
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "gakrcli Settings",
-  "description": "Configuration schema for gakrcli CLI settings files (.claude/settings.json, .claude/settings.local.json)",
+  "description": "Configuration schema for gakrcli CLI settings files (.gakrcli/settings.json, .gakrcli/settings.local.json)",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -239,7 +239,7 @@ This is the largest single file in this story. We fork from `~/.vscode/extension
     "claudeMdExcludes": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Glob patterns to exclude from CLAUDE.md search"
+      "description": "Glob patterns to exclude from GAKR.md search"
     },
     "attribution": {
       "type": "object",
@@ -530,11 +530,11 @@ The `package.json` (from Story 1) should already contain:
 "contributes": {
   "jsonValidation": [
     {
-      "fileMatch": "**/.claude/settings.json",
+      "fileMatch": "**/.gakrcli/settings.json",
       "url": "./gakrcli-settings.schema.json"
     },
     {
-      "fileMatch": "**/.claude/settings.local.json",
+      "fileMatch": "**/.gakrcli/settings.local.json",
       "url": "./gakrcli-settings.schema.json"
     },
     {
@@ -1240,7 +1240,7 @@ git commit -m "feat(settings): wire FastModeToggle, announcements, spinner, and 
 - [ ] Run: `cd /Users/harshagarwal/Documents/workspace/gakrcli-vscode && npm run build`
 - [ ] Run: `cd /Users/harshagarwal/Documents/workspace/gakrcli-vscode && npx vitest run test/unit/settings.test.ts`
 - [ ] Manual verification checklist:
-  - Open a `.claude/settings.json` file in VS Code — get autocomplete and validation from the schema
+  - Open a `.gakrcli/settings.json` file in VS Code — get autocomplete and validation from the schema
   - Fast mode toggle: click toggles state, sends control_request, badge shows when enabled
   - Prompt suggestions: appear after assistant response, clicking fills input
   - Company announcements: banner renders at top, dismissible, respects severity colors

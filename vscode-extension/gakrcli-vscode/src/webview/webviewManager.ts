@@ -293,7 +293,7 @@ export class WebviewManager implements vscode.Disposable {
         theme: getThemeKind(),
         initialSessionId: sessionId,
         initialPrompt,
-        extensionVersion: this.context.extension.packageJSON.version || '0.1.0',
+        extensionVersion: this.context.extension.packageJSON.version || '0.2.5',
       });
     });
 
@@ -387,7 +387,7 @@ export class WebviewManager implements vscode.Disposable {
         isFullEditor: false,
         isSessionListOnly: false,
         theme: getThemeKind(),
-        extensionVersion: this.context.extension.packageJSON.version || '0.1.0',
+        extensionVersion: this.context.extension.packageJSON.version || '0.2.5',
       });
     });
 

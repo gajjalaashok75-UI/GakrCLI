@@ -312,7 +312,7 @@ export function ChatPanel() {
               }}
             />
           </div>
-        </div>
+          </div>
       </div>
 
       {/* Dialogs */}
@@ -475,7 +475,7 @@ function InputArea({
   const doSend = useCallback(() => {
     const text = inputValue.trim();
     if (!text && attachments.length === 0) return;
-    if (isStarting) return;
+    if (isStreaming || isStarting) return;
     onSend(buildMessageText(text, attachments));
     setInputValue('');
     setAttachments([]);
@@ -485,11 +485,11 @@ function InputArea({
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [inputValue, attachments, isStarting, onSend, clearAtMentions]);
+  }, [inputValue, attachments, isStreaming, isStarting, onSend, clearAtMentions]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // If a picker is open, let it handle arrow keys / enter
-    if (atPickerVisible || hasVisibleSlashMenu) {
+    if (atPickerVisible || hasVisibleSlashMenu || slashMenuVisible) {
       if (['ArrowUp', 'ArrowDown', 'Enter', 'Tab'].includes(e.key)) {
         return; // pickers handle these via capture listener
       }

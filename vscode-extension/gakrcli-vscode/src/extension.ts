@@ -197,11 +197,18 @@ export function activate(context: vscode.ExtensionContext) {
       return processManager;
     }
     if (isSpawning) {
-      // Wait for the in-flight spawn
-      return new Promise((resolve) => {
+      // Wait for the in-flight spawn with 120s timeout
+      output.info('[GakrCLI] Waiting for in-flight spawn...');
+      return new Promise<ProcessManager | undefined>((resolve) => {
+        const timeout = setTimeout(() => {
+          clearInterval(check);
+          output.error('[GakrCLI] Spawn timed out after 120s while waiting for in-flight spawn');
+          resolve(undefined);
+        }, 120_000);
         const check = setInterval(() => {
           if (!isSpawning) {
             clearInterval(check);
+            clearTimeout(timeout);
             resolve(processManager);
           }
         }, 100);
@@ -215,9 +222,11 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     isSpawning = true;
+    statusBarManager.setStarting(true);
     webviewManager!.broadcast({ type: 'process_state', state: 'starting' });
+    output.info('[GakrCLI] Spawning CLI process...');
 
-    const config = vscode.workspace.getConfiguration('gakrcliCode');
+    const config = vscode.workspace.getConfiguration('gakrcli');
     const executable = resolveCliExecutable(config);
     // Use the permission handler's current mode (reflects user's UI selection),
     // falling back to the config default only on first launch
@@ -395,6 +404,7 @@ export function activate(context: vscode.ExtensionContext) {
     try {
       const response = await processManager.spawn();
       isSpawning = false;
+      statusBarManager.setStarting(false);
       if (response) {
         // The response might be the InitializeResponse directly, or nested under .response
         const resp = response as Record<string, unknown>;
@@ -439,6 +449,7 @@ export function activate(context: vscode.ExtensionContext) {
       return processManager;
     } catch (err) {
       isSpawning = false;
+      statusBarManager.setStarting(false);
       const msg = err instanceof Error ? err.message : String(err);
       output.error(`[GakrCLI] Failed to start: ${msg}`);
       vscode.window.showErrorMessage(`GakrCLI failed to start: ${msg}`);
@@ -591,7 +602,7 @@ export function activate(context: vscode.ExtensionContext) {
       return;
     }
 
-    const config = vscode.workspace.getConfiguration('gakrcliCode');
+    const config = vscode.workspace.getConfiguration('gakrcli');
     const executable = resolveCliExecutable(config);
     const model = config.get<string>('selectedModel');
     const permissionMode = config.get<string>('initialPermissionMode') as
@@ -617,7 +628,9 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     isSpawning = true;
+    statusBarManager.setStarting(true);
     webviewManager!.broadcast({ type: 'process_state', state: 'starting' });
+    output.info('[GakrCLI] Spawning CLI process...');
 
     processManager = new ProcessManager({
       cwd: workspaceFolder.uri.fsPath,
@@ -689,6 +702,7 @@ export function activate(context: vscode.ExtensionContext) {
     try {
       await processManager.spawn();
       isSpawning = false;
+      statusBarManager.setStarting(false);
       const session = sessionTracker.getSession(message.sessionId);
       webviewManager!.broadcast({
         type: 'sessionResumed',
@@ -697,6 +711,7 @@ export function activate(context: vscode.ExtensionContext) {
       } as never);
     } catch (err) {
       isSpawning = false;
+      statusBarManager.setStarting(false);
       const msg = err instanceof Error ? err.message : String(err);
       output.error(`[GakrCLI] Failed to resume: ${msg}`);
       vscode.window.showErrorMessage(`GakrCLI failed to resume session: ${msg}`);
@@ -768,7 +783,7 @@ export function activate(context: vscode.ExtensionContext) {
       const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
       if (!workspaceFolder) return;
       const executable = resolveCliExecutable(
-        vscode.workspace.getConfiguration('gakrcliCode'),
+        vscode.workspace.getConfiguration('gakrcli'),
       );
       const forkPm = new ProcessManager({
         cwd: workspaceFolder.uri.fsPath,
@@ -792,7 +807,7 @@ export function activate(context: vscode.ExtensionContext) {
       const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
       if (!workspaceFolder) return;
       const executable = resolveCliExecutable(
-        vscode.workspace.getConfiguration('gakrcliCode'),
+        vscode.workspace.getConfiguration('gakrcli'),
       );
       const forkPm = new ProcessManager({
         cwd: workspaceFolder.uri.fsPath,

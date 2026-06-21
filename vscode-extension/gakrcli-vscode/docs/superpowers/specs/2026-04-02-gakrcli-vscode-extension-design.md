@@ -68,7 +68,7 @@ The extension.js is minified but still readable with a formatter. We extract:
 | Tailwind config | Start fresh with Tailwind, match the visual output by referencing extracted CSS classes |
 
 **Reference implementation locations:**
-- Claude Code extension: `~\.vscode\extensions\anthropic.claude-code-2.1.183-win32-x64`
+- Claude Code extension: `~\.vscode\extensions\anthropic.gakrcli-code-2.1.183-win32-x64`
 - gakrcli CLI source: `~/Documents/workspace/gakrcli/`
 - SDK protocol schemas: `gakrcli/src/entrypoints/sdk/controlSchemas.ts`
 
@@ -143,7 +143,7 @@ gakrcli \
 - `--plugin-dir <path>` — plugin directories
 
 **Environment variables injected:**
-- Provider-specific: `CLAUDE_CODE_USE_OPENAI=1`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_BASE_URL`, etc.
+- Provider-specific: `GAKR_CODE_USE_OPENAI=1`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_BASE_URL`, etc.
 - Custom env vars from VS Code settings (`gakrcliCode.environmentVariables`)
 - Python environment activation if enabled
 
@@ -556,8 +556,8 @@ Rebranded from `claude-vscode.*` to `gakrcli.*`:
 ### 4.7 Settings Schema (CLI Settings Validation)
 
 The extension contributes JSON schema validation for:
-- `**/.claude/settings.json`
-- `**/.claude/settings.local.json`
+- `**/.gakrcli/settings.json`
+- `**/.gakrcli/settings.local.json`
 - `**/gakrcli/managed-settings.json`
 
 The schema covers ALL CLI settings (70+ properties). Key categories:
@@ -658,7 +658,7 @@ Claude can ask structured questions during tool execution:
 | Permission dialog | Medium | Webview modal rendering control_request |
 | Elicitation dialog | Medium | Structured question rendering + response |
 | Multiple panel locations | Medium | WebviewPanel + WebviewView providers |
-| Session list UI | Medium | Read `~/.claude/projects/` JSONL files (all entry types) |
+| Session list UI | Medium | Read `~/.gakrcli/workspace/projects/` JSONL files (all entry types) |
 | Checkpoint/rewind | Medium | File snapshot tracking per assistant message |
 | Plan mode inline comments | Medium | Rich HTML with text selection, comment anchoring, numbered indicators |
 | Teleport/session transfer | Medium | Handle teleported-from messages, QR code display |
@@ -1036,7 +1036,7 @@ Each story is scoped to be completable in **one session** (~2-4 hours of focused
 **Points:** 5 | **Priority:** P1 | **Dependency:** Story 4
 
 **Acceptance Criteria:**
-- [ ] SessionTracker reads JSONL files from `~/.claude/projects/`
+- [ ] SessionTracker reads JSONL files from `~/.gakrcli/workspace/projects/`
 - [ ] SessionList shows past sessions searchable by keyword
 - [ ] Sessions grouped by: Today, Yesterday, This Week, This Month, Older
 - [ ] SessionCard shows: title, model/provider, timestamp, message count
@@ -1122,7 +1122,7 @@ Each story is scoped to be completable in **one session** (~2-4 hours of focused
 
 **Acceptance Criteria:**
 - [ ] McpIdeServer starts local HTTP server on random port (127.0.0.1 only)
-- [ ] Generates auth token, writes lockfile to `~/.claude/ide/`
+- [ ] Generates auth token, writes lockfile to `~/.gakrcli/ide/`
 - [ ] Exposes `getDiagnostics` tool (reads VS Code Problems panel)
 - [ ] Exposes `executeCode` tool (runs Python in Jupyter kernel with confirmation)
 - [ ] CLI auto-discovers and connects to IDE MCP server
@@ -1179,7 +1179,7 @@ Each story is scoped to be completable in **one session** (~2-4 hours of focused
 - [ ] Dismissable via `gakrcliCode.hideOnboarding` setting
 - [ ] Walkthrough step markdown files with screenshots
 - [ ] URI handler: `vscode://gajjalaashok75-UI.gakrcli-vscode/open?prompt=...&session=...`
-- [ ] JSON schema validation for `.claude/settings.json` and `.claude/settings.local.json`
+- [ ] JSON schema validation for `.gakrcli/settings.json` and `.gakrcli/settings.local.json`
 - [ ] Settings schema file contributed
 
 **Files to create:**
@@ -1240,7 +1240,7 @@ Each story is scoped to be completable in **one session** (~2-4 hours of focused
 
 **Acceptance Criteria:**
 - [ ] Fork Claude Code's settings schema, rebrand to gakrcli
-- [ ] Contribute JSON validation for `.claude/settings.json`, `.claude/settings.local.json`, managed settings
+- [ ] Contribute JSON validation for `.gakrcli/settings.json`, `.gakrcli/settings.local.json`, managed settings
 - [ ] All 70+ properties present and validated
 - [ ] Fast mode toggle in webview UI (setting + badge)
 - [ ] Prompt suggestions rendering (configurable via `promptSuggestionEnabled`)

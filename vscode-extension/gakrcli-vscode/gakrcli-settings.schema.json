@@ -533,7 +533,7 @@
       "type": "boolean"
     },
     "strictPluginOnlyCustomization": {
-      "description": "When set in managed settings, blocks non-plugin customization sources for the listed surfaces. Array form locks specific surfaces (e.g. [\"skills\", \"hooks\"]); `true` locks all four; `false` is an explicit no-op. Blocked: ~/.claude/{surface}/, .claude/{surface}/ (project), settings.json hooks, .mcp.json. NOT blocked: managed (policySettings) sources, plugin-provided customizations. Composes with strictKnownMarketplaces for end-to-end admin control — plugins gated by marketplace allowlist, everything else blocked here.",
+      "description": "When set in managed settings, blocks non-plugin customization sources for the listed surfaces. Array form locks specific surfaces (e.g. [\"skills\", \"hooks\"]); `true` locks all four; `false` is an explicit no-op. Blocked: ~/.gakrcli/{surface}/, .gakrcli/{surface}/ (project), settings.json hooks, .mcp.json. NOT blocked: managed (policySettings) sources, plugin-provided customizations. Composes with strictKnownMarketplaces for end-to-end admin control — plugins gated by marketplace allowlist, everything else blocked here.",
       "anyOf": [
         {
           "type": "boolean"
@@ -596,7 +596,7 @@
       }
     },
     "extraKnownMarketplaces": {
-      "description": "Additional marketplaces to make available for this repository. Typically used in repository .claude/settings.json to ensure team members have required plugin sources.",
+      "description": "Additional marketplaces to make available for this repository. Typically used in repository .gakrcli/settings.json to ensure team members have required plugin sources.",
       "type": "object",
       "propertyNames": {
         "type": "string"
@@ -651,11 +651,11 @@
                     "type": "string"
                   },
                   "path": {
-                    "description": "Path to marketplace.json within repo (defaults to .claude-plugin/marketplace.json)",
+                    "description": "Path to marketplace.json within repo (defaults to .gakrcli-plugin/marketplace.json)",
                     "type": "string"
                   },
                   "sparsePaths": {
-                    "description": "Directories to include via git sparse-checkout (cone mode). Use for monorepos where the marketplace lives in a subdirectory. Example: [\".claude-plugin\", \"plugins\"]. If omitted, the full repository is cloned.",
+                    "description": "Directories to include via git sparse-checkout (cone mode). Use for monorepos where the marketplace lives in a subdirectory. Example: [\".gakrcli-plugin\", \"plugins\"]. If omitted, the full repository is cloned.",
                     "type": "array",
                     "items": {
                       "type": "string"
@@ -683,11 +683,11 @@
                     "type": "string"
                   },
                   "path": {
-                    "description": "Path to marketplace.json within repo (defaults to .claude-plugin/marketplace.json)",
+                    "description": "Path to marketplace.json within repo (defaults to .gakrcli-plugin/marketplace.json)",
                     "type": "string"
                   },
                   "sparsePaths": {
-                    "description": "Directories to include via git sparse-checkout (cone mode). Use for monorepos where the marketplace lives in a subdirectory. Example: [\".claude-plugin\", \"plugins\"]. If omitted, the full repository is cloned.",
+                    "description": "Directories to include via git sparse-checkout (cone mode). Use for monorepos where the marketplace lives in a subdirectory. Example: [\".gakrcli-plugin\", \"plugins\"]. If omitted, the full repository is cloned.",
                     "type": "array",
                     "items": {
                       "type": "string"
@@ -741,7 +741,7 @@
                     "const": "directory"
                   },
                   "path": {
-                    "description": "Local directory containing .claude-plugin/marketplace.json",
+                    "description": "Local directory containing .gakrcli-plugin/marketplace.json",
                     "type": "string"
                   }
                 },
@@ -812,7 +812,7 @@
                           "description": "Where to fetch the plugin from. Must be a remote source — relative paths have no marketplace repository to resolve against.",
                           "anyOf": [
                             {
-                              "description": "Path to the plugin root, relative to the marketplace root (the directory containing .claude-plugin/, not .claude-plugin/ itself)",
+                              "description": "Path to the plugin root, relative to the marketplace root (the directory containing .gakrcli-plugin/, not .gakrcli-plugin/ itself)",
                               "type": "string",
                               "pattern": "^\\.\\/.*"
                             },
@@ -1079,11 +1079,11 @@
                 "type": "string"
               },
               "path": {
-                "description": "Path to marketplace.json within repo (defaults to .claude-plugin/marketplace.json)",
+                "description": "Path to marketplace.json within repo (defaults to .gakrcli-plugin/marketplace.json)",
                 "type": "string"
               },
               "sparsePaths": {
-                "description": "Directories to include via git sparse-checkout (cone mode). Use for monorepos where the marketplace lives in a subdirectory. Example: [\".claude-plugin\", \"plugins\"]. If omitted, the full repository is cloned.",
+                "description": "Directories to include via git sparse-checkout (cone mode). Use for monorepos where the marketplace lives in a subdirectory. Example: [\".gakrcli-plugin\", \"plugins\"]. If omitted, the full repository is cloned.",
                 "type": "array",
                 "items": {
                   "type": "string"
@@ -1111,11 +1111,11 @@
                 "type": "string"
               },
               "path": {
-                "description": "Path to marketplace.json within repo (defaults to .claude-plugin/marketplace.json)",
+                "description": "Path to marketplace.json within repo (defaults to .gakrcli-plugin/marketplace.json)",
                 "type": "string"
               },
               "sparsePaths": {
-                "description": "Directories to include via git sparse-checkout (cone mode). Use for monorepos where the marketplace lives in a subdirectory. Example: [\".claude-plugin\", \"plugins\"]. If omitted, the full repository is cloned.",
+                "description": "Directories to include via git sparse-checkout (cone mode). Use for monorepos where the marketplace lives in a subdirectory. Example: [\".gakrcli-plugin\", \"plugins\"]. If omitted, the full repository is cloned.",
                 "type": "array",
                 "items": {
                   "type": "string"
@@ -1169,7 +1169,7 @@
                 "const": "directory"
               },
               "path": {
-                "description": "Local directory containing .claude-plugin/marketplace.json",
+                "description": "Local directory containing .gakrcli-plugin/marketplace.json",
                 "type": "string"
               }
             },
@@ -1240,7 +1240,7 @@
                       "description": "Where to fetch the plugin from. Must be a remote source — relative paths have no marketplace repository to resolve against.",
                       "anyOf": [
                         {
-                          "description": "Path to the plugin root, relative to the marketplace root (the directory containing .claude-plugin/, not .claude-plugin/ itself)",
+                          "description": "Path to the plugin root, relative to the marketplace root (the directory containing .gakrcli-plugin/, not .gakrcli-plugin/ itself)",
                           "type": "string",
                           "pattern": "^\\.\\/.*"
                         },
@@ -1494,11 +1494,11 @@
                 "type": "string"
               },
               "path": {
-                "description": "Path to marketplace.json within repo (defaults to .claude-plugin/marketplace.json)",
+                "description": "Path to marketplace.json within repo (defaults to .gakrcli-plugin/marketplace.json)",
                 "type": "string"
               },
               "sparsePaths": {
-                "description": "Directories to include via git sparse-checkout (cone mode). Use for monorepos where the marketplace lives in a subdirectory. Example: [\".claude-plugin\", \"plugins\"]. If omitted, the full repository is cloned.",
+                "description": "Directories to include via git sparse-checkout (cone mode). Use for monorepos where the marketplace lives in a subdirectory. Example: [\".gakrcli-plugin\", \"plugins\"]. If omitted, the full repository is cloned.",
                 "type": "array",
                 "items": {
                   "type": "string"
@@ -1526,11 +1526,11 @@
                 "type": "string"
               },
               "path": {
-                "description": "Path to marketplace.json within repo (defaults to .claude-plugin/marketplace.json)",
+                "description": "Path to marketplace.json within repo (defaults to .gakrcli-plugin/marketplace.json)",
                 "type": "string"
               },
               "sparsePaths": {
-                "description": "Directories to include via git sparse-checkout (cone mode). Use for monorepos where the marketplace lives in a subdirectory. Example: [\".claude-plugin\", \"plugins\"]. If omitted, the full repository is cloned.",
+                "description": "Directories to include via git sparse-checkout (cone mode). Use for monorepos where the marketplace lives in a subdirectory. Example: [\".gakrcli-plugin\", \"plugins\"]. If omitted, the full repository is cloned.",
                 "type": "array",
                 "items": {
                   "type": "string"
@@ -1584,7 +1584,7 @@
                 "const": "directory"
               },
               "path": {
-                "description": "Local directory containing .claude-plugin/marketplace.json",
+                "description": "Local directory containing .gakrcli-plugin/marketplace.json",
                 "type": "string"
               }
             },
@@ -1655,7 +1655,7 @@
                       "description": "Where to fetch the plugin from. Must be a remote source — relative paths have no marketplace repository to resolve against.",
                       "anyOf": [
                         {
-                          "description": "Path to the plugin root, relative to the marketplace root (the directory containing .claude-plugin/, not .claude-plugin/ itself)",
+                          "description": "Path to the plugin root, relative to the marketplace root (the directory containing .gakrcli-plugin/, not .gakrcli-plugin/ itself)",
                           "type": "string",
                           "pattern": "^\\.\\/.*"
                         },
@@ -2219,7 +2219,7 @@
       "type": "string"
     },
     "plansDirectory": {
-      "description": "Custom directory for plan files, relative to project root. If not set, defaults to ~/.claude/plans/",
+      "description": "Custom directory for plan files, relative to project root. If not set, defaults to ~/.gakrcli/plans/",
       "type": "string"
     },
     "channelsEnabled": {
@@ -2254,7 +2254,7 @@
       "type": "boolean"
     },
     "autoMemoryDirectory": {
-      "description": "Custom directory path for auto-memory storage. Supports ~/ prefix for home directory expansion. Ignored if set in projectSettings (checked-in .claude/settings.json) for security. When unset, defaults to ~/.claude/projects/<sanitized-cwd>/memory/.",
+      "description": "Custom directory path for auto-memory storage. Supports ~/ prefix for home directory expansion. Ignored if set in projectSettings (checked-in .gakrcli/settings.json) for security. When unset, defaults to ~/.gakrcli/workspace/projects/<sanitized-cwd>/memory/.",
       "type": "string"
     },
     "autoDreamEnabled": {
@@ -2317,7 +2317,7 @@
       }
     },
     "claudeMdExcludes": {
-      "description": "Glob patterns or absolute paths of CLAUDE.md files to exclude from loading. Patterns are matched against absolute file paths using picomatch. Only applies to User, Project, and Local memory types (Managed/policy files cannot be excluded). Examples: \"/home/user/monorepo/CLAUDE.md\", \"**/code/CLAUDE.md\", \"**/some-dir/.claude/rules/**\"",
+      "description": "Glob patterns or absolute paths of GAKRCLI.md files to exclude from loading. Patterns are matched against absolute file paths using picomatch. Only applies to User, Project, and Local memory types (Managed/policy files cannot be excluded). Examples: \"/home/user/monorepo/GAKRCLI.md\", \"**/code/GAKRCLI.md\", \"**/some-dir/.gakrcli/rules/**\"",
       "type": "array",
       "items": {
         "type": "string"
@@ -2330,6 +2330,6 @@
   },
   "additionalProperties": {},
   "title": "GakrCLI Settings",
-  "description": "Configuration settings for GakrCLI. Learn more: https://code.claude.com/docs/en/settings",
+  "description": "Configuration settings for GakrCLI. Learn more: https://code.gakrcli.com/docs/en/settings",
   "$comment": "Generated on 2026-03-26T21:31:58.421Z"
 }

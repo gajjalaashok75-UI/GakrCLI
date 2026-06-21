@@ -407,7 +407,7 @@ git commit -m "feat(integration): add error banners, rate limit UI, system messa
 - Modify: `webview/tailwind.config.ts`
 - Modify: Various component files for spacing/font fixes
 
-Reference: `~\.vscode\extensions\anthropic.claude-code-2.1.183-win32-x64`
+Reference: `~\.vscode\extensions\anthropic.gakrcli-code-2.1.183-win32-x64`
 
 - [ ] **Step 1: Extract Claude Code's exact CSS variables and Tailwind tokens**
 
@@ -653,7 +653,7 @@ Run: `npx @vscode/vsce package --no-dependencies --allow-missing-repository`
 
 - [ ] **Step 4: Install and verify in VS Code**
 
-Run: `code --install-extension gakrcli-vscode-0.1.0.vsix --force`
+Run: `code --install-extension gakrcli-vscode-0.2.5.vsix --force`
 
 Manual verification checklist:
 - [ ] Extension activates without errors

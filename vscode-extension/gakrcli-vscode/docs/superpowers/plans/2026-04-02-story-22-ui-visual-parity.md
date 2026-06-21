@@ -2,12 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make gakrcli's webview UI pixel-for-pixel identical to the Claude Code VS Code extension. This story replaces all placeholder Tailwind classes with the exact CSS variables, spacing values, border radii, animations, and component structures extracted directly from `~/.vscode/extensions/anthropic.claude-code-2.1.90-darwin-arm64/webview/index.css` and `extension.js`.
+**Goal:** Make gakrcli's webview UI pixel-for-pixel identical to the Claude Code VS Code extension. This story replaces all placeholder Tailwind classes with the exact CSS variables, spacing values, border radii, animations, and component structures extracted directly from `~/.vscode/extensions/anthropic.gakrcli-code-2.1.90-darwin-arm64/webview/index.css` and `extension.js`.
 
 **Reference files (extract from these):**
-- CSS: `~/.vscode/extensions/anthropic.claude-code-2.1.90-darwin-arm64/webview/index.css` (371KB)
-- Webview JS: `~/.vscode/extensions/anthropic.claude-code-2.1.90-darwin-arm64/webview/index.js` (4.7MB)
-- Extension JS: `~/.vscode/extensions/anthropic.claude-code-2.1.90-darwin-arm64/extension.js` (1.8MB)
+- CSS: `~/.vscode/extensions/anthropic.gakrcli-code-2.1.90-darwin-arm64/webview/index.css` (371KB)
+- Webview JS: `~/.vscode/extensions/anthropic.gakrcli-code-2.1.90-darwin-arm64/webview/index.js` (4.7MB)
+- Extension JS: `~/.vscode/extensions/anthropic.gakrcli-code-2.1.90-darwin-arm64/extension.js` (1.8MB)
 
 **Depends on:** Stories 1–21
 
@@ -663,7 +663,7 @@ Run: `npm run build`
 - [ ] **Step 2: Package and install**
 
 Run: `npx @vscode/vsce package --no-dependencies --allow-missing-repository`
-Run: `"/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code" --install-extension gakrcli-vscode-0.1.0.vsix --force`
+Run: `"/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code" --install-extension gakrcli-vscode-0.2.5.vsix --force`
 
 - [ ] **Step 3: Side-by-side visual comparison checklist**
 

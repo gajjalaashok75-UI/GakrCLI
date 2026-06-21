@@ -1,5 +1,5 @@
 // src/process/processManager.ts
-// Spawns and manages the GakrCLI child process.
+// Spawns and manages the GakrCLI CLI child process.
 // Wires NdjsonTransport for communication, ControlRouter for control_request dispatch.
 // Performs the initialize handshake on spawn.
 //
@@ -18,6 +18,13 @@ import type {
   StdoutMessage,
 } from '../types/messages';
 import type { PermissionMode } from '../types/session';
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/** Maximum time to wait for the CLI initialize handshake (2 minutes for provider discovery). */
+export const INIT_TIMEOUT_MS = 120_000;
 
 // ============================================================================
 // Types
@@ -141,6 +148,10 @@ export class ProcessManager {
     | undefined;
   private pendingInitReject: ((error: Error) => void) | undefined;
   private initRequestId: string | undefined;
+  private initTimeout: ReturnType<typeof setTimeout> | undefined;
+
+  /** Timestamp (Date.now) when spawn() was called, for diagnostic timing. */
+  private spawnStartTime: number = 0;
 
   // Callbacks
   private messageCallbacks: MessageCallback[] = [];
@@ -169,6 +180,11 @@ export class ProcessManager {
     return this._initializeResponse;
   }
 
+  /** Milliseconds since spawn() was called, or 0 if never spawned. */
+  getSpawnElapsedMs(): number {
+    return this.spawnStartTime > 0 ? Date.now() - this.spawnStartTime : 0;
+  }
+
   /** Get the current NDJSON transport (available after spawn). */
   get ndjsonTransport(): NdjsonTransport | undefined {
     return this.transport;
@@ -183,6 +199,7 @@ export class ProcessManager {
       return;
     }
 
+    this.spawnStartTime = Date.now();
     this.setState(ProcessState.Spawning);
 
     const executable = (this.options.executable ?? 'gakrcli').trim() || 'gakrcli';
@@ -238,6 +255,7 @@ export class ProcessManager {
 
     // Handle process lifecycle
     this.process.on('error', (err) => {
+      this.clearInitTimeout();
       this.setState(ProcessState.Idle);
       this.emitError(err);
       if (this.pendingInitReject) {
@@ -248,6 +266,7 @@ export class ProcessManager {
     });
 
     this.process.on('exit', (code, signal) => {
+      this.clearInitTimeout();
       this.cleanup();
       this.setState(ProcessState.Idle);
 
@@ -330,6 +349,7 @@ export class ProcessManager {
    */
   dispose(): void {
     this.stopKeepAlive();
+    this.clearInitTimeout();
     this.kill();
     this.transport?.dispose();
     this.router?.dispose();
@@ -373,9 +393,10 @@ export class ProcessManager {
     const args: string[] = [
       '--output-format',
       'stream-json',
-      '--verbose',
       '--input-format',
       'stream-json',
+      '--print',
+      '--verbose',
     ];
 
     if (this.options.model) {
@@ -445,6 +466,23 @@ export class ProcessManager {
       };
 
       this.transport?.write(initRequest);
+
+      // Timeout: reject if CLI doesn't respond within INIT_TIMEOUT_MS
+      this.initTimeout = setTimeout(() => {
+        this.initTimeout = undefined;
+        this.kill(); // Kill the hung process
+        this.cleanup();
+        this.setState(ProcessState.Idle);
+        this.pendingInitReject?.(
+          new Error(
+            `Initialize handshake timed out after ${INIT_TIMEOUT_MS / 1000}s. ` +
+            `Provider/model discovery may be hanging. Check CLI output for details.`,
+          ),
+        );
+        this.pendingInitResolve = undefined;
+        this.pendingInitReject = undefined;
+        this.initRequestId = undefined;
+      }, INIT_TIMEOUT_MS);
     });
   }
 
@@ -456,6 +494,11 @@ export class ProcessManager {
 
       // Check if this is the initialize response
       if (requestId === this.initRequestId && this.pendingInitResolve) {
+        // Clear the init timeout
+        if (this.initTimeout !== undefined) {
+          clearTimeout(this.initTimeout);
+          this.initTimeout = undefined;
+        }
         if (response.subtype === 'success') {
           const initResponse = response.response as unknown as InitializeResponse;
           this._initializeResponse = initResponse;
@@ -547,8 +590,16 @@ export class ProcessManager {
     }, 1000);
   }
 
+  private clearInitTimeout(): void {
+    if (this.initTimeout !== undefined) {
+      clearTimeout(this.initTimeout);
+      this.initTimeout = undefined;
+    }
+  }
+
   private cleanup(): void {
     this.stopKeepAlive();
+    this.clearInitTimeout();
     this.transport?.dispose();
     this.transport = undefined;
     this.router?.dispose();

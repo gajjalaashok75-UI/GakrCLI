@@ -10,7 +10,7 @@
 
 **Spec:** [2026-04-02-gakrcli-vscode-extension-design.md](../specs/2026-04-02-gakrcli-vscode-extension-design.md) — Story 3
 
-**Claude Code extension (source to extract from):** `~/.vscode/extensions/anthropic.claude-code-2.1.85-darwin-arm64/extension.js` — Lines 803+ (DQ class: getHtmlForWebview, resolveWebviewView, createPanel, setupPanel) and the postMessage handling in `fromClient` / `onDidReceiveMessage`.
+**Claude Code extension (source to extract from):** `~/.vscode/extensions/anthropic.gakrcli-code-2.1.85-darwin-arm64/extension.js` — Lines 803+ (DQ class: getHtmlForWebview, resolveWebviewView, createPanel, setupPanel) and the postMessage handling in `fromClient` / `onDidReceiveMessage`.
 
 **Depends on:** Story 1 (project scaffolding must be complete — package.json, esbuild, Vite, basic extension.ts, webview scaffold)
 
@@ -1018,7 +1018,7 @@ export class WebviewManager implements vscode.Disposable {
         theme: getThemeKind(),
         initialSessionId: sessionId,
         initialPrompt,
-        extensionVersion: this.context.extension.packageJSON.version || '0.1.0',
+        extensionVersion: this.context.extension.packageJSON.version || '0.2.5',
       });
     });
 
@@ -1112,7 +1112,7 @@ export class WebviewManager implements vscode.Disposable {
         isFullEditor: false,
         isSessionListOnly: false,
         theme: getThemeKind(),
-        extensionVersion: this.context.extension.packageJSON.version || '0.1.0',
+        extensionVersion: this.context.extension.packageJSON.version || '0.2.5',
       });
     });
 
@@ -1804,7 +1804,7 @@ function App() {
         <div className="flex items-center gap-2">
           <span className="text-xs opacity-50">{theme}</span>
           <span className="text-xs opacity-50">
-            {initState?.extensionVersion ?? 'v0.1.0'}
+            {initState?.extensionVersion ?? 'v0.2.5'}
           </span>
         </div>
       </div>
@@ -2795,7 +2795,7 @@ function createMockContext(): vscode.ExtensionContext {
     subscriptions: [],
     extension: {
       id: 'gajjalaashok75-UI.gakrcli-vscode',
-      packageJSON: { version: '0.1.0' },
+      packageJSON: { version: '0.2.5' },
     },
     globalState: {
       get: () => undefined,
@@ -2953,11 +2953,11 @@ Expected: All tests pass
 
 Run: `cd /Users/harshagarwal/Documents/workspace/gakrcli-vscode && npx @vscode/vsce package --no-dependencies --allow-missing-repository`
 
-Expected: Produces `gakrcli-vscode-0.1.0.vsix`
+Expected: Produces `gakrcli-vscode-0.2.5.vsix`
 
 - [ ] **Step 6: Manual verification checklist**
 
-Install: `code --install-extension gakrcli-vscode-0.1.0.vsix`
+Install: `code --install-extension gakrcli-vscode-0.2.5.vsix`
 
 Verify:
 - Extension appears in secondary sidebar with gakrcli icon

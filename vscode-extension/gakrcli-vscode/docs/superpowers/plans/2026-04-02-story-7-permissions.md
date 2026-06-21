@@ -1590,7 +1590,7 @@ function App() {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-vscode-border">
         <h1 className="text-sm font-semibold">gakrcli</h1>
-        <span className="text-xs opacity-50">v0.1.0</span>
+        <span className="text-xs opacity-50">v0.2.5</span>
       </div>
 
       {/* Message area (placeholder — full implementation in Story 4) */}
@@ -1616,7 +1616,7 @@ function App() {
         {/* Footer: permission mode indicator + version */}
         <div className="flex items-center justify-between mt-1.5 px-0.5">
           <PermissionModeIndicator mode={permissionMode} />
-          <span className="text-[10px] opacity-25">gakrcli v0.1.0</span>
+          <span className="text-[10px] opacity-25">gakrcli v0.2.5</span>
         </div>
       </div>
 

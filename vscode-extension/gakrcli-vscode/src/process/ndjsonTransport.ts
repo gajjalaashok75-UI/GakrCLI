@@ -1,5 +1,5 @@
 // src/process/ndjsonTransport.ts
-// Line-buffered NDJSON transport for communication with the GakrCLI.
+// Line-buffered NDJSON transport for communication with the GakrCLI CLI.
 // Reads line-delimited JSON from a readable stream (CLI stdout).
 // Writes JSON + newline to a writable stream (CLI stdin).
 

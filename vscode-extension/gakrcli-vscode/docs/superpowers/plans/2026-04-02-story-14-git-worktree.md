@@ -246,7 +246,7 @@ export class WorktreeManager implements vscode.Disposable {
 
     // 4. Read worktree settings for custom base dir
     const config = vscode.workspace.getConfiguration('gakrcliCode');
-    // Settings path: worktree.baseDir in .claude/settings.json (not VS Code settings)
+    // Settings path: worktree.baseDir in .gakrcli/settings.json (not VS Code settings)
     // For now, use the default sibling directory pattern
     const worktreePath = deriveWorktreePath(repoRoot, worktreeName);
 

@@ -44,7 +44,7 @@ export function MessageList({ messages, isStreaming, processState, onEditMessage
         className="messages-container"
         style={{ position: 'absolute', inset: 0 }}
       >
-        {/* Message list */}
+         {/* Message list */}
         <div>
           {messages.map((msg, index) => (
             <div key={msg.id} className="message">
@@ -151,7 +151,7 @@ function SystemMessage({
         <span className="compact-boundary-line" />
       </div>
     );
-  }
+  }  
 
   return (
     <div
@@ -195,3 +195,4 @@ function CompactBoundaryIcon({ active }: { active: boolean }) {
     </svg>
   );
 }
+

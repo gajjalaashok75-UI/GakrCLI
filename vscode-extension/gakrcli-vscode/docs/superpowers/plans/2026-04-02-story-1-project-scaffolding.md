@@ -66,7 +66,7 @@ Create `package.json` with these changes from the original:
 | `"displayName": "Claude Code for VS Code"` | `"displayName": "gakrcli VS Code"` |
 | `"publisher": "Anthropic"` | `"publisher": "gajjalaashok75-UI"` |
 | `"description": "Claude Code for VS Code: ..."` | `"description": "gakrcli VS Code: AI coding assistant powered by any LLM"` |
-| `"version": "2.1.85"` | `"version": "0.1.0"` |
+| `"version": "2.1.85"` | `"version": "0.2.5"` |
 | All `claude-vscode.*` commands | `gakrcli.*` commands |
 | All `claude-code.*` commands | `gakrcli.*` commands |
 | All `claudeCode.*` settings | `gakrcliCode.*` settings |
@@ -76,7 +76,7 @@ Create `package.json` with these changes from the original:
 | Icon paths `resources/claude-logo.*` | `resources/gakrcli-logo.*` |
 | Walkthrough ID `claude-code-walkthrough` | `gakrcli-walkthrough` |
 | Schema path `./claude-code-settings.schema.json` | `./gakrcli-settings.schema.json` |
-| JSON validation paths `**/.claude/settings.json` | Keep same (CLI uses `.claude/` dir) |
+| JSON validation paths `**/.gakrcli/settings.json` | Keep same (CLI uses `.gakrcli/` dir) |
 | `main: "./extension.js"` | `main: "./dist/extension.js"` |
 | Remove `__metadata` block | — |
 | Remove `license` (Anthropic copyright) | `"license": "MIT"` |
@@ -734,7 +734,7 @@ function App() {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-vscode-border">
         <h1 className="text-sm font-semibold">gakrcli</h1>
-        <span className="text-xs opacity-50">v0.1.0</span>
+        <span className="text-xs opacity-50">v0.2.5</span>
       </div>
 
       {/* Message area (placeholder) */}
@@ -967,13 +967,13 @@ git commit -m "feat: add WebviewViewProvider for sidebar and editor tab panels"
 
 - [ ] **Step 1: Copy and rebrand the settings schema**
 
-Run: `cp ~/.vscode/extensions/anthropic.claude-code-2.1.85-darwin-arm64/claude-code-settings.schema.json /Users/harshagarwal/Documents/workspace/gakrcli-vscode/gakrcli-settings.schema.json`
+Run: `cp ~/.vscode/extensions/anthropic.gakrcli-code-2.1.85-darwin-arm64/claude-code-settings.schema.json /Users/harshagarwal/Documents/workspace/gakrcli-vscode/gakrcli-settings.schema.json`
 
 Then search-and-replace:
 - `"claude-code-settings.json"` → `"gakrcli-settings.json"`
 - `"Claude Code"` → `"gakrcli"` (in description strings)
 
-Keep all 70+ properties identical — the gakrcli CLI reads the same `.claude/settings.json` files.
+Keep all 70+ properties identical — the gakrcli CLI reads the same `.gakrcli/settings.json` files.
 
 - [ ] **Step 2: Verify it's valid JSON**
 
@@ -1002,11 +1002,11 @@ Expected: Build completes with no errors
 
 Run: `cd /Users/harshagarwal/Documents/workspace/gakrcli-vscode && npx @vscode/vsce package --no-dependencies --allow-missing-repository`
 
-Expected: Produces `gakrcli-vscode-0.1.0.vsix`
+Expected: Produces `gakrcli-vscode-0.2.5.vsix`
 
 - [ ] **Step 3: Test in VS Code (manual)**
 
-Install the extension: `code --install-extension gakrcli-vscode-0.1.0.vsix`
+Install the extension: `code --install-extension gakrcli-vscode-0.2.5.vsix`
 
 Verify:
 - Extension appears in sidebar (secondary sidebar) with gakrcli icon

@@ -1,17 +1,19 @@
 import * as vscode from 'vscode';
 
-export type StatusBarState = 'idle' | 'pending' | 'completed-hidden';
+export type StatusBarState = 'idle' | 'starting' | 'pending' | 'completed-hidden';
 
 /**
- * Manages the GakrCLI status bar item with three visual states:
+ * Manages the GakrCLI status bar item with four visual states:
  * - idle: default sparkle icon
+ * - starting: spinning loading indicator (CLI process is being spawned)
  * - pending: blue dot (permission request waiting)
  * - completed-hidden: orange dot (GakrCLI finished while panel hidden)
  *
- * Priority: pending > completed-hidden > idle.
+ * Priority: pending > starting > completed-hidden > idle.
  */
 export class StatusBarManager implements vscode.Disposable {
   private readonly item: vscode.StatusBarItem;
+  private starting = false;
   private pendingPermission = false;
   private completedWhileHidden = false;
 
@@ -23,6 +25,13 @@ export class StatusBarManager implements vscode.Disposable {
     this.item.command = 'gakrcli.editor.openLast';
     this.updateDisplay();
     this.item.show();
+  }
+
+  setStarting(starting: boolean): void {
+    if (this.starting !== starting) {
+      this.starting = starting;
+      this.updateDisplay();
+    }
   }
 
   setPendingPermission(pending: boolean): void {
@@ -44,6 +53,7 @@ export class StatusBarManager implements vscode.Disposable {
 
   getState(): StatusBarState {
     if (this.pendingPermission) return 'pending';
+    if (this.starting) return 'starting';
     if (this.completedWhileHidden) return 'completed-hidden';
     return 'idle';
   }
@@ -54,6 +64,11 @@ export class StatusBarManager implements vscode.Disposable {
       this.item.tooltip = 'GakrCLI — Permission request pending';
       this.item.color = new vscode.ThemeColor('statusBarItem.warningForeground');
       this.item.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+    } else if (this.starting) {
+      this.item.text = '$(sync~spin) GakrCLI';
+      this.item.tooltip = 'GakrCLI — Starting...';
+      this.item.color = new vscode.ThemeColor('statusBarItem.prominentForeground');
+      this.item.backgroundColor = new vscode.ThemeColor('statusBarItem.prominentBackground');
     } else if (this.completedWhileHidden) {
       this.item.text = '$(circle-filled) $(sparkle) GakrCLI';
       this.item.tooltip = 'GakrCLI — Response ready (click to view)';

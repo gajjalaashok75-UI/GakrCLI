@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a session management system that reads JSONL session files from `~/.claude/projects/`, displays them in a searchable and time-grouped list, supports resume/delete/new conversation, auto-updates session titles from `ai-title` messages, and provides a dedicated sessions sidebar view in the activity bar.
+**Goal:** Build a session management system that reads JSONL session files from `~/.gakrcli/workspace/projects/`, displays them in a searchable and time-grouped list, supports resume/delete/new conversation, auto-updates session titles from `ai-title` messages, and provides a dedicated sessions sidebar view in the activity bar.
 
 **Architecture:** `SessionTracker` (extension host) discovers, streams, and indexes JSONL files using Node.js `readline`. It exposes grouped/searchable session data via an EventEmitter. The webview receives session data via the postMessage bridge and renders `ChatHeader` (title + new/history buttons), `SessionList` (search + grouped overlay), and `SessionCard` (metadata row with delete). Resume spawns CLI with `--resume <uuid>`. A standalone `SessionsViewProvider` populates the `gakrcliSessionsList` webview view registered in `package.json`.
 
@@ -12,7 +12,7 @@
 
 **Dependencies:** Story 4 (ChatPanel, useChat, message rendering), Story 3 (postMessage bridge, WebviewManager), Story 2 (ProcessManager for spawn/resume)
 
-**JSONL file location:** `~/.claude/projects/<project-dir>/<uuid>.jsonl` where `<project-dir>` is the workspace path with `/` replaced by `-` (e.g., `-Users-harsh-workspace-myproject`).
+**JSONL file location:** `~/.gakrcli/workspace/projects/<project-dir>/<uuid>.jsonl` where `<project-dir>` is the workspace path with `/` replaced by `-` (e.g., `-Users-harsh-workspace-myproject`).
 
 **JSONL entry format (observed from real session files):**
 ```json
@@ -43,7 +43,7 @@
 **Files:**
 - Create: `src/session/sessionTracker.ts`
 
-The SessionTracker is the core extension-host module. It reads `~/.claude/projects/<project-dir>/*.jsonl`, extracts session metadata by streaming each file line-by-line, and provides methods for listing, grouping, searching, and deleting sessions.
+The SessionTracker is the core extension-host module. It reads `~/.gakrcli/workspace/projects/<project-dir>/*.jsonl`, extracts session metadata by streaming each file line-by-line, and provides methods for listing, grouping, searching, and deleting sessions.
 
 - [ ] **Step 1: Create the directory**
 
@@ -71,7 +71,7 @@ export interface SessionInfo {
   createdAt: Date;
   /** Count of user + assistant messages, excluding isMeta and file-history-snapshot */
   messageCount: number;
-  /** Project directory name in ~/.claude/projects/ */
+  /** Project directory name in ~/.gakrcli/workspace/projects/ */
   projectDir: string;
   /** Absolute path to the .jsonl file */
   filePath: string;
@@ -105,9 +105,9 @@ export class SessionTracker implements vscode.Disposable {
     this.startWatching();
   }
 
-  /** ~/.claude/projects/ */
+  /** ~/.gakrcli/workspace/projects/ */
   private getProjectsDir(): string {
-    return path.join(os.homedir(), '.claude', 'projects');
+    return path.join(os.homedir(), '.gakrcli', 'projects');
   }
 
   /**
@@ -356,7 +356,7 @@ export class SessionTracker implements vscode.Disposable {
     return this.sessions.get(id);
   }
 
-  /** Delete a session by removing its JSONL file. Only deletes inside ~/.claude/projects/. */
+  /** Delete a session by removing its JSONL file. Only deletes inside ~/.gakrcli/workspace/projects/. */
   async deleteSession(id: string): Promise<boolean> {
     const session = this.sessions.get(id);
     if (!session) {
@@ -1758,7 +1758,7 @@ Expected: All tests pass.
 2. Verify the gakrcli activity bar icon appears (sessions sidebar)
 3. Click it to see the sessions sidebar with grouped sessions
 4. Open the main chat panel, verify ChatHeader shows "New Conversation"
-5. Click "History" button, verify SessionList overlay appears with sessions from `~/.claude/projects/`
+5. Click "History" button, verify SessionList overlay appears with sessions from `~/.gakrcli/workspace/projects/`
 6. Type in the search box, verify filtering works
 7. Click a session card, verify CLI spawns with `--resume <uuid>`
 8. Click delete on a session, confirm the JSONL file is removed
@@ -1769,7 +1769,7 @@ Expected: All tests pass.
 
 ## Verification Checklist (maps to acceptance criteria)
 
-- [ ] SessionTracker reads JSONL files from `~/.claude/projects/` -- verified by console log of parsed session count
+- [ ] SessionTracker reads JSONL files from `~/.gakrcli/workspace/projects/` -- verified by console log of parsed session count
 - [ ] SessionList shows past sessions searchable by keyword -- type in search, see filtered results
 - [ ] Sessions grouped by: Today, Yesterday, This Week, This Month, Older -- check group headers
 - [ ] SessionCard shows: title, model/provider, timestamp, message count -- visual inspection
