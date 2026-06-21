@@ -10,7 +10,7 @@
 
 **Spec:** [2026-04-02-gakrcli-vscode-extension-design.md](../specs/2026-04-02-gakrcli-vscode-extension-design.md) — Story 19, Sections 3.6, 5.2
 
-**Claude Code extension (reference):** `~/.vscode/extensions/anthropic.claude-code-2.1.85-darwin-arm64/extension.js` lines 340-690 (plan review HTML)
+**Claude Code extension (reference):** `~/.vscode/extensions/anthropic.gakrcli-code-2.1.85-darwin-arm64/extension.js` lines 340-690 (plan review HTML)
 
 **Depends on:** Story 7 (Permission System & Dialogs — PlanViewer.tsx)
 

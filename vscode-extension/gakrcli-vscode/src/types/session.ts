@@ -1,5 +1,5 @@
 // src/types/session.ts
-// TypeScript types mirroring coreSchemas.ts from the GakrCLI.
+// TypeScript types mirroring coreSchemas.ts from the GakrCLI CLI.
 // These represent the serializable data structures used across the SDK.
 
 // ============================================================================

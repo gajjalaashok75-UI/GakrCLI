@@ -1,6 +1,6 @@
 # Real Claude Code Protocol Reference
 
-Extracted from: `~/.vscode/extensions/anthropic.claude-code-2.1.90-darwin-arm64/`
+Extracted from: `~/.vscode/extensions/anthropic.gakrcli-code-2.1.90-darwin-arm64/`
 
 ## Architecture: Channel-Based (NOT simple postMessage)
 
@@ -135,7 +135,7 @@ Claude Code uses a **channel-based** architecture, NOT a simple send_prompt/cli_
 ## Worktree Implementation (exact)
 
 ```typescript
-// Path: <repoRoot>/.claude/worktrees/<name>
+// Path: <repoRoot>/.gakrcli/worktrees/<name>
 // Branch: worktree-<name>
 // Git commands:
 git fetch origin <mainBranch>
@@ -147,7 +147,7 @@ git worktree add -b worktree-<name> <path> origin/<mainBranch>
 ## Session JSONL Location
 
 ```
-~/.claude/projects/<project-dir>/<uuid>.jsonl
+~/.gakrcli/workspace/projects/<project-dir>/<uuid>.jsonl
 ```
 Where `<project-dir>` is derived from the workspace path.
 

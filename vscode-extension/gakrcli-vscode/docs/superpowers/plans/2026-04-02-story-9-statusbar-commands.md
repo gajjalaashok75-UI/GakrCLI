@@ -12,7 +12,7 @@
 
 **Dependencies:** Story 2 (ProcessManager for spawn/kill), Story 1 (package.json with all commands, keybindings, settings declared)
 
-**Claude Code extension reference:** `~/.vscode/extensions/anthropic.claude-code-2.1.85-darwin-arm64/extension.js` — the status bar setup and command registration patterns are deminifiable from this file.
+**Claude Code extension reference:** `~/.vscode/extensions/anthropic.gakrcli-code-2.1.85-darwin-arm64/extension.js` — the status bar setup and command registration patterns are deminifiable from this file.
 
 ---
 

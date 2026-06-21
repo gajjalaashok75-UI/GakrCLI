@@ -1,8 +1,10 @@
-import type * as VSCode from 'vscode';
+import * as vscode from 'vscode';
 import * as crypto from 'crypto';
-import { vscode } from '../vscodeCompat';
 
-/** Generate a cryptographic nonce for Content Security Policy. */
+/**
+ * Generate a cryptographic nonce for Content Security Policy.
+ * Extracted from Claude Code extension.js: `function N3() { return tQ.randomBytes(16).toString("hex"); }`
+ */
 export function generateNonce(): string {
   return crypto.randomBytes(16).toString('hex');
 }
@@ -38,7 +40,12 @@ export function getThemeKind(): 'dark' | 'light' | 'high-contrast' {
   }
 }
 
-/** Read font configuration from VS Code settings. */
+/**
+ * Read font configuration from VS Code settings.
+ * Extracted from Claude Code extension.js DQ.getHtmlForWebview():
+ *   let M = S4.workspace.getConfiguration("chat.editor");
+ *   let A = M.get("fontFamily") || "default"; ...
+ */
 export function getFontConfig(): {
   editorFontFamily: string;
   editorFontSize: number;
@@ -65,8 +72,8 @@ export function getFontConfig(): {
 }
 
 export interface HtmlGeneratorOptions {
-  webview: VSCode.Webview;
-  extensionUri: VSCode.Uri;
+  webview: vscode.Webview;
+  extensionUri: vscode.Uri;
   isSidebar: boolean;
   isFullEditor?: boolean;
   isSessionListOnly?: boolean;
@@ -77,6 +84,7 @@ export interface HtmlGeneratorOptions {
 /**
  * Generate the full HTML for a webview panel.
  *
+ * Extracted from Claude Code extension.js DQ.getHtmlForWebview() (line 803+).
  * Key patterns preserved:
  * - Nonce-based CSP (no 'unsafe-eval', no external URLs)
  * - CSS custom properties for font config
@@ -95,6 +103,7 @@ export function generateWebviewHtml(options: HtmlGeneratorOptions): string {
   const fonts = getFontConfig();
   const theme = getThemeKind();
 
+  // Build CSP directives — matches Claude Code's pattern exactly
   const styleSrc = `style-src ${webview.cspSource} 'unsafe-inline'`;
   const fontSrc = `font-src ${webview.cspSource}`;
   const imgSrc = `img-src ${webview.cspSource} data:`;

@@ -94,14 +94,14 @@ export class PermissionHandler implements vscode.Disposable {
   setMode(mode: PermissionMode): void {
     // Bypass mode is gated behind the allowDangerouslySkipPermissions setting
     if (mode === 'bypassPermissions') {
-      const config = vscode.workspace.getConfiguration('gakrcliCode');
+      const config = vscode.workspace.getConfiguration('gakrcli');
       const allowed = config.get<boolean>('allowDangerouslySkipPermissions', false);
       if (!allowed) {
         this.output.appendLine(
           '[PermissionHandler] Bypass mode blocked — allowDangerouslySkipPermissions is false',
         );
         vscode.window.showWarningMessage(
-          'GakrCLI: Bypass permissions mode is disabled. Enable "gakrcliCode.allowDangerouslySkipPermissions" in settings first.',
+          'GakrCLI: Bypass permissions mode is disabled. Enable "gakrcli.allowDangerouslySkipPermissions" in settings first.',
         );
         return;
       }

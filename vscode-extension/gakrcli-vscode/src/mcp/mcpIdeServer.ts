@@ -52,7 +52,7 @@ export async function routeRequest(
         result: {
           protocolVersion: '2024-11-05',
           capabilities: { tools: {} },
-          serverInfo: { name: 'gakrcli-ide', version: '0.1.0' },
+          serverInfo: { name: 'gakrcli-ide', version: '0.2.5' },
         },
       };
 

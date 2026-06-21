@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Complete the onboarding experience with a 4-step walkthrough in package.json, an in-webview OnboardingChecklist on first open, a URI handler for deep links (`vscode://gajjalaashok75-UI.gakrcli-vscode/open?prompt=...&session=...`), and JSON schema validation for `.claude/settings.json`.
+**Goal:** Complete the onboarding experience with a 4-step walkthrough in package.json, an in-webview OnboardingChecklist on first open, a URI handler for deep links (`vscode://gajjalaashok75-UI.gakrcli-vscode/open?prompt=...&session=...`), and JSON schema validation for `.gakrcli/settings.json`.
 
 **Architecture:** The walkthrough is declarative (package.json `contributes.walkthroughs`). The OnboardingChecklist is a React component shown on first open when `gakrcliCode.hideOnboarding` is false. The URI handler is a VS Code `UriHandler` registered during activation that parses query params and routes to session open/prompt flows. The settings schema is a JSON file contributed via `contributes.jsonValidation`.
 
@@ -25,7 +25,7 @@
 | `webview/src/components/onboarding/OnboardingChecklist.tsx` | In-webview first-run checklist |
 | `src/uri/uriHandler.ts` | URI handler: parse and route deep links |
 | `test/unit/uriHandler.test.ts` | Unit tests for URI parsing |
-| `gakrcli-settings.schema.json` | JSON schema for .claude/settings.json validation |
+| `gakrcli-settings.schema.json` | JSON schema for .gakrcli/settings.json validation |
 | `src/extension.ts` | Register URI handler, manage onboarding visibility |
 | `package.json` | Walkthrough contribution, jsonValidation contribution |
 
@@ -567,14 +567,14 @@ git commit -m "feat(uri): add URI handler for deep links with prompt and session
 
 - [ ] **Step 1: Create the settings JSON schema**
 
-This is a comprehensive schema covering the 70+ CLI settings properties. It provides autocomplete and validation in VS Code for `.claude/settings.json` files.
+This is a comprehensive schema covering the 70+ CLI settings properties. It provides autocomplete and validation in VS Code for `.gakrcli/settings.json` files.
 
 ```json
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://gakrcli.dev/schemas/settings.json",
   "title": "gakrcli Settings",
-  "description": "Configuration for the gakrcli CLI. Used in .claude/settings.json, .claude/settings.local.json, and managed settings.",
+  "description": "Configuration for the gakrcli CLI. Used in .gakrcli/settings.json, .gakrcli/settings.local.json, and managed settings.",
   "type": "object",
   "properties": {
     "permissions": {
@@ -841,7 +841,7 @@ This is a comprehensive schema covering the 70+ CLI settings properties. It prov
     "claudeMdExcludes": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Glob patterns to exclude from CLAUDE.md search"
+      "description": "Glob patterns to exclude from GAKR.md search"
     },
     "outputStyle": {
       "type": "string",
@@ -1020,11 +1020,11 @@ Verify or add to `package.json`:
   "contributes": {
     "jsonValidation": [
       {
-        "fileMatch": "**/.claude/settings.json",
+        "fileMatch": "**/.gakrcli/settings.json",
         "url": "./gakrcli-settings.schema.json"
       },
       {
-        "fileMatch": "**/.claude/settings.local.json",
+        "fileMatch": "**/.gakrcli/settings.local.json",
         "url": "./gakrcli-settings.schema.json"
       },
       {
@@ -1046,7 +1046,7 @@ Expected: `Valid JSON schema`
 
 ```bash
 git add gakrcli-settings.schema.json package.json
-git commit -m "feat(schema): add JSON schema for .claude/settings.json validation"
+git commit -m "feat(schema): add JSON schema for .gakrcli/settings.json validation"
 ```
 
 ---
@@ -1175,5 +1175,5 @@ git commit -m "feat(onboarding): wire URI handler, onboarding visibility, and wa
 - [ ] Manual: click dismiss → verify `gakrcliCode.hideOnboarding` is set to true
 - [ ] Manual: test URI: open terminal, run `code --open-url "vscode://gajjalaashok75-UI.gakrcli-vscode/open?prompt=hello"` → verify gakrcli opens with "hello" prefilled
 - [ ] Manual: test URI with session: `code --open-url "vscode://gajjalaashok75-UI.gakrcli-vscode/open?session=abc-123"` → verify resume attempt
-- [ ] Manual: open any `.claude/settings.json` file → verify autocomplete and validation from the schema
-- [ ] Manual: verify invalid properties show warnings in `.claude/settings.json`
+- [ ] Manual: open any `.gakrcli/settings.json` file → verify autocomplete and validation from the schema
+- [ ] Manual: verify invalid properties show warnings in `.gakrcli/settings.json`

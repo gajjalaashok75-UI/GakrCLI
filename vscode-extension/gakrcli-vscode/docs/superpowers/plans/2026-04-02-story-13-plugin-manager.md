@@ -495,7 +495,7 @@ export function PluginManager({ isOpen, onClose }: PluginManagerProps) {
               filteredMarketplace.length === 0 ? (
                 <div className="px-4 py-8 text-center text-xs text-[var(--vscode-descriptionForeground)]">
                   {marketplace.length === 0
-                    ? 'No marketplace sources configured. Add one in .claude/settings.json (extraKnownMarketplaces).'
+                    ? 'No marketplace sources configured. Add one in .gakrcli/settings.json (extraKnownMarketplaces).'
                     : 'No plugins match your search.'}
                 </div>
               ) : (

@@ -8,4 +8,4 @@ Type your message in the input field and press Enter. GakrCLI can help you:
 - Refactor existing code
 - Run terminal commands
 
-Use **@** to mention specific files or folders for context. You can also highlight text in your editor first, then open GakrCLI to ask about the selection.
+Use **@** to mention specific files or folders for context. You can also highlight text in your editor first, then open GakrCLI to ask about your selection.

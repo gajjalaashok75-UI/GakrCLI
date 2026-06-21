@@ -177,7 +177,7 @@ export const PROVIDER_REGISTRY: ProviderDefinition[] = [
     description: 'GPT-4o, GPT-4.1, and other OpenAI models',
     apiKeyUrl: 'https://platform.openai.com/api-keys',
     env: {
-      toggleVar: 'CLAUDE_CODE_USE_OPENAI',
+      toggleVar: 'GAKR_CODE_USE_OPENAI',
       apiKeyVar: 'OPENAI_API_KEY',
       modelVar: 'OPENAI_MODEL',
       baseUrlVar: 'OPENAI_BASE_URL',
@@ -208,7 +208,7 @@ export const PROVIDER_REGISTRY: ProviderDefinition[] = [
     description: 'Gemini 2.5 Pro, Flash, and other Google models',
     apiKeyUrl: 'https://aistudio.google.com/apikey',
     env: {
-      toggleVar: 'CLAUDE_CODE_USE_GEMINI',
+      toggleVar: 'GAKR_CODE_USE_GEMINI',
       apiKeyVar: 'GEMINI_API_KEY',
       modelVar: 'GEMINI_MODEL',
     },
@@ -237,7 +237,7 @@ export const PROVIDER_REGISTRY: ProviderDefinition[] = [
     name: 'AWS Bedrock',
     description: 'Claude via AWS Bedrock (uses AWS credentials)',
     env: {
-      toggleVar: 'CLAUDE_CODE_USE_BEDROCK',
+      toggleVar: 'GAKR_CODE_USE_BEDROCK',
       extraVars: {
         ANTHROPIC_BEDROCK_HOSTNAME: '',
       },
@@ -255,11 +255,11 @@ export const PROVIDER_REGISTRY: ProviderDefinition[] = [
         key: 'model',
         label: 'Model',
         type: 'text',
-        placeholder: 'anthropic.claude-sonnet-4-20250514-v1:0',
+        placeholder: 'anthropic.gakrcli-sonnet-4-20250514-v1:0',
         required: false,
       },
     ],
-    defaultModel: 'anthropic.claude-sonnet-4-20250514-v1:0',
+    defaultModel: 'anthropic.gakrcli-sonnet-4-20250514-v1:0',
     icon: 'cloud',
   },
   {
@@ -267,7 +267,7 @@ export const PROVIDER_REGISTRY: ProviderDefinition[] = [
     name: 'Google Vertex AI',
     description: 'Claude via Google Cloud Vertex AI',
     env: {
-      toggleVar: 'CLAUDE_CODE_USE_VERTEX',
+      toggleVar: 'GAKR_CODE_USE_VERTEX',
       extraVars: {
         CLOUD_ML_REGION: '',
         ANTHROPIC_VERTEX_PROJECT_ID: '',
@@ -305,7 +305,7 @@ export const PROVIDER_REGISTRY: ProviderDefinition[] = [
     name: 'Ollama',
     description: 'Local models via Ollama (auto-detected)',
     env: {
-      toggleVar: 'CLAUDE_CODE_USE_OPENAI',
+      toggleVar: 'GAKR_CODE_USE_OPENAI',
       apiKeyVar: 'OPENAI_API_KEY',
       modelVar: 'OPENAI_MODEL',
       baseUrlVar: 'OPENAI_BASE_URL',
@@ -338,7 +338,7 @@ export const PROVIDER_REGISTRY: ProviderDefinition[] = [
     description: 'Access 200+ models via OpenRouter',
     apiKeyUrl: 'https://openrouter.ai/keys',
     env: {
-      toggleVar: 'CLAUDE_CODE_USE_OPENAI',
+      toggleVar: 'GAKR_CODE_USE_OPENAI',
       apiKeyVar: 'OPENAI_API_KEY',
       modelVar: 'OPENAI_MODEL',
       baseUrlVar: 'OPENAI_BASE_URL',
@@ -368,7 +368,7 @@ export const PROVIDER_REGISTRY: ProviderDefinition[] = [
     name: 'Custom (OpenAI-compatible)',
     description: 'Any OpenAI-compatible API endpoint',
     env: {
-      toggleVar: 'CLAUDE_CODE_USE_OPENAI',
+      toggleVar: 'GAKR_CODE_USE_OPENAI',
       apiKeyVar: 'OPENAI_API_KEY',
       modelVar: 'OPENAI_MODEL',
       baseUrlVar: 'OPENAI_BASE_URL',
@@ -1048,7 +1048,7 @@ describe('SettingsSync', () => {
   // =========================================================================
 
   describe('buildEnv — OpenAI', () => {
-    it('sets CLAUDE_CODE_USE_OPENAI and OPENAI_API_KEY', async () => {
+    it('sets GAKR_CODE_USE_OPENAI and OPENAI_API_KEY', async () => {
       const authManager = createMockAuthManager('openai', {
         openai: { providerId: 'openai', apiKey: 'sk-test', model: 'gpt-4o' },
       });
@@ -1056,7 +1056,7 @@ describe('SettingsSync', () => {
       const sync = new SettingsSync(authManager as any, config as any);
 
       const env = await sync.buildEnv();
-      expect(env.CLAUDE_CODE_USE_OPENAI).toBe('1');
+      expect(env.GAKR_CODE_USE_OPENAI).toBe('1');
       expect(env.OPENAI_API_KEY).toBe('sk-test');
       expect(env.OPENAI_MODEL).toBe('gpt-4o');
     });
@@ -1092,8 +1092,8 @@ describe('SettingsSync', () => {
 
       const env = await sync.buildEnv();
       expect(env.ANTHROPIC_API_KEY).toBe('sk-ant-test');
-      expect(env.CLAUDE_CODE_USE_OPENAI).toBeUndefined();
-      expect(env.CLAUDE_CODE_USE_GEMINI).toBeUndefined();
+      expect(env.GAKR_CODE_USE_OPENAI).toBeUndefined();
+      expect(env.GAKR_CODE_USE_GEMINI).toBeUndefined();
     });
   });
 
@@ -1102,7 +1102,7 @@ describe('SettingsSync', () => {
   // =========================================================================
 
   describe('buildEnv — Gemini', () => {
-    it('sets CLAUDE_CODE_USE_GEMINI and GEMINI_API_KEY', async () => {
+    it('sets GAKR_CODE_USE_GEMINI and GEMINI_API_KEY', async () => {
       const authManager = createMockAuthManager('gemini', {
         gemini: { providerId: 'gemini', apiKey: 'AIza-test', model: 'gemini-2.5-pro' },
       });
@@ -1110,7 +1110,7 @@ describe('SettingsSync', () => {
       const sync = new SettingsSync(authManager as any, config as any);
 
       const env = await sync.buildEnv();
-      expect(env.CLAUDE_CODE_USE_GEMINI).toBe('1');
+      expect(env.GAKR_CODE_USE_GEMINI).toBe('1');
       expect(env.GEMINI_API_KEY).toBe('AIza-test');
       expect(env.GEMINI_MODEL).toBe('gemini-2.5-pro');
     });
@@ -1133,7 +1133,7 @@ describe('SettingsSync', () => {
       const sync = new SettingsSync(authManager as any, config as any);
 
       const env = await sync.buildEnv();
-      expect(env.CLAUDE_CODE_USE_OPENAI).toBe('1');
+      expect(env.GAKR_CODE_USE_OPENAI).toBe('1');
       expect(env.OPENAI_BASE_URL).toBe('http://localhost:11434/v1');
       expect(env.OPENAI_MODEL).toBe('qwen2.5-coder:32b');
       // Ollama needs a dummy API key (OpenAI client requires one)
@@ -1174,7 +1174,7 @@ describe('SettingsSync', () => {
   // =========================================================================
 
   describe('buildEnv — Bedrock', () => {
-    it('sets CLAUDE_CODE_USE_BEDROCK', async () => {
+    it('sets GAKR_CODE_USE_BEDROCK', async () => {
       const authManager = createMockAuthManager('bedrock', {
         bedrock: { providerId: 'bedrock' },
       });
@@ -1182,12 +1182,12 @@ describe('SettingsSync', () => {
       const sync = new SettingsSync(authManager as any, config as any);
 
       const env = await sync.buildEnv();
-      expect(env.CLAUDE_CODE_USE_BEDROCK).toBe('1');
+      expect(env.GAKR_CODE_USE_BEDROCK).toBe('1');
     });
   });
 
   describe('buildEnv — Vertex', () => {
-    it('sets CLAUDE_CODE_USE_VERTEX and extra vars', async () => {
+    it('sets GAKR_CODE_USE_VERTEX and extra vars', async () => {
       const authManager = createMockAuthManager('vertex', {
         vertex: {
           providerId: 'vertex',
@@ -1201,7 +1201,7 @@ describe('SettingsSync', () => {
       const sync = new SettingsSync(authManager as any, config as any);
 
       const env = await sync.buildEnv();
-      expect(env.CLAUDE_CODE_USE_VERTEX).toBe('1');
+      expect(env.GAKR_CODE_USE_VERTEX).toBe('1');
       expect(env.CLOUD_ML_REGION).toBe('us-east5');
       expect(env.ANTHROPIC_VERTEX_PROJECT_ID).toBe('proj-123');
     });
@@ -1219,7 +1219,7 @@ describe('SettingsSync', () => {
 
       const env = await sync.buildEnv();
       // Toggle var should still be set so CLI knows the provider
-      expect(env.CLAUDE_CODE_USE_OPENAI).toBe('1');
+      expect(env.GAKR_CODE_USE_OPENAI).toBe('1');
       // But no API key
       expect(env.OPENAI_API_KEY).toBeUndefined();
     });
@@ -1302,7 +1302,7 @@ export class SettingsSync {
     const providerDef = getProviderDefinition(providerId);
 
     if (providerDef) {
-      // Set the toggle var (e.g., CLAUDE_CODE_USE_OPENAI=1)
+      // Set the toggle var (e.g., GAKR_CODE_USE_OPENAI=1)
       if (providerDef.env.toggleVar) {
         env[providerDef.env.toggleVar] = providerDef.env.toggleValue ?? '1';
       }

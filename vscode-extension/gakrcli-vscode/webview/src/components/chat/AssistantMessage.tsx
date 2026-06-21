@@ -35,9 +35,28 @@ export function AssistantMessage({
       ? formatTurnCompletion(message.cost.durationMs, message.id)
       : null;
 
+  // Extract plain text content for copy
+  const plainTextContent = blocks
+    .filter((b) => b.block.type === 'text')
+    .map((b) => (b.block as TextBlock).text)
+    .join('\n');
+
   return (
     <div className="group relative" style={{ width: '100%' }}>
       {/* Message actions (hover) */}
+      <div className="absolute top-2 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+        <MessageActions
+          messageRole="assistant"
+          content={plainTextContent}
+          uuid={message.id}
+          isFailed={false}
+          isStreaming={isStreaming || message.isStreaming}
+          isLatest={isLatest}
+          onRetry={onRetry}
+          onStop={onStop}
+        />
+      </div>
+
       {/* Content blocks — no header/label, just content */}
       <div>
         {blocks.map((renderableBlock, blockIndex) => (
@@ -137,6 +156,8 @@ function BlockRenderer({ blocks, blockIndex, renderableBlock, isMessageStreaming
         />
       );
 
+    case 'thinking':
+    case 'redacted_thinking':
     case 'image':
     case 'document':
     case 'search_result':
@@ -144,6 +165,7 @@ function BlockRenderer({ blocks, blockIndex, renderableBlock, isMessageStreaming
       return (
         <ContentBlockRouter
           block={block as ContentBlock}
+          showThinkingSummaries={false}
         />
       );
 

@@ -12,7 +12,7 @@
 
 **CLI Protocol Source:** `gakrcli/src/entrypoints/sdk/controlSchemas.ts` and `coreSchemas.ts`
 
-**Claude Code extension (deminify reference):** `~/.vscode/extensions/anthropic.claude-code-2.1.85-darwin-arm64/extension.js` — `Qm` class (ProcessTransport), `fm` class (Query/message router)
+**Claude Code extension (deminify reference):** `~/.vscode/extensions/anthropic.gakrcli-code-2.1.85-darwin-arm64/extension.js` — `Qm` class (ProcessTransport), `fm` class (Query/message router)
 
 ---
 
@@ -2866,8 +2866,8 @@ export class ProcessManager {
     }
 
     // Set entrypoint marker
-    if (!env.CLAUDE_CODE_ENTRYPOINT) {
-      env.CLAUDE_CODE_ENTRYPOINT = 'gakrcli-vscode';
+    if (!env.GAKR_CODE_ENTRYPOINT) {
+      env.GAKR_CODE_ENTRYPOINT = 'gakrcli-vscode';
     }
 
     // Remove NODE_OPTIONS to avoid conflicts (pattern from Claude Code extension)

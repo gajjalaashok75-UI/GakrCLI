@@ -1,35 +1,35 @@
 // Comprehensive VS Code API mock for unit testing outside Extension Development Host
 
-export const ColorThemeKind = {
-  Light: 1,
-  Dark: 2,
-  HighContrast: 3,
-  HighContrastLight: 4,
-} as const;
+export enum ColorThemeKind {
+  Light = 1,
+  Dark = 2,
+  HighContrast = 3,
+  HighContrastLight = 4,
+}
 
-export const ViewColumn = {
-  Active: -1,
-  Beside: -2,
-  One: 1,
-  Two: 2,
-  Three: 3,
-  Four: 4,
-  Five: 5,
-  Six: 6,
-  Seven: 7,
-  Eight: 8,
-  Nine: 9,
-} as const;
+export enum ViewColumn {
+  Active = -1,
+  Beside = -2,
+  One = 1,
+  Two = 2,
+  Three = 3,
+  Four = 4,
+  Five = 5,
+  Six = 6,
+  Seven = 7,
+  Eight = 8,
+  Nine = 9,
+}
 
-export const StatusBarAlignment = {
-  Left: 1,
-  Right: 2,
-} as const;
+export enum StatusBarAlignment {
+  Left = 1,
+  Right = 2,
+}
 
-export const UIKind = {
-  Desktop: 1,
-  Web: 2,
-} as const;
+export enum UIKind {
+  Desktop = 1,
+  Web = 2,
+}
 
 export class Uri {
   static joinPath(base: Uri, ...paths: string[]): Uri {
@@ -41,7 +41,7 @@ export class Uri {
   }
 
   static parse(value: string): Uri {
-    // Parse scheme:path format (e.g., "openclaude-diff-original:/test/file.ts")
+    // Parse scheme:path format (e.g., "gakrcli-diff-original:/test/file.ts")
     const colonIndex = value.indexOf(':');
     if (colonIndex > 0) {
       const scheme = value.substring(0, colonIndex);
@@ -90,21 +90,13 @@ export class EventEmitter<T> {
 }
 
 export class ThemeColor {
-  readonly id: string;
-
-  constructor(id: string) {
-    this.id = id;
-  }
+  constructor(public readonly id: string) {}
 }
 
 export class ThemeIcon {
   static readonly File = new ThemeIcon('file');
   static readonly Folder = new ThemeIcon('folder');
-  readonly id: string;
-
-  constructor(id: string) {
-    this.id = id;
-  }
+  constructor(public readonly id: string) {}
 }
 
 export class Disposable {
@@ -114,11 +106,7 @@ export class Disposable {
     });
   }
 
-  private callOnDispose: () => void;
-
-  constructor(callOnDispose: () => void) {
-    this.callOnDispose = callOnDispose;
-  }
+  constructor(private callOnDispose: () => void) {}
 
   dispose(): void {
     this.callOnDispose();
@@ -165,11 +153,7 @@ export function createMockWebview(): MockWebview {
 }
 
 export class TabInputWebview {
-  readonly viewType: string;
-
-  constructor(viewType: string) {
-    this.viewType = viewType;
-  }
+  constructor(public readonly viewType: string) {}
 }
 
 const onDidCloseTerminalEmitter = new EventEmitter<unknown>();
@@ -183,7 +167,7 @@ export const window = {
     show: () => {},
     dispose: () => {},
   }),
-  createWebviewPanel: (_viewType: string, _title: string, _column: number, _options: unknown) => {
+  createWebviewPanel: (_viewType: string, _title: string, _column: ViewColumn, _options: unknown) => {
     const webview = createMockWebview();
     return {
       webview,
@@ -209,6 +193,8 @@ export const window = {
     text: '',
     command: '',
     tooltip: '',
+    color: undefined,
+    backgroundColor: undefined,
     show: () => {},
     hide: () => {},
     dispose: () => {},
@@ -220,7 +206,7 @@ export const window = {
   showErrorMessage: () => {},
   onDidChangeActiveColorTheme: new EventEmitter<unknown>().event,
   tabGroups: {
-    all: [] as { viewColumn?: number; tabs: { input: unknown }[] }[],
+    all: [] as { viewColumn?: ViewColumn; tabs: { input: unknown }[] }[],
     activeTabGroup: { activeTab: undefined as unknown },
     onDidChangeTabs: new EventEmitter<unknown>().event,
     close: async () => {},
