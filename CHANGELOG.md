@@ -11,9 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **VS Code Extension SDK→CLI Wrapper Refactoring**: Replaced direct `@gakr-gakr/gakrcli/sdk` imports with CLI child-process wrapper pattern across all extension modules. Simplified `authManager.ts` to align with reference provider structure. Removed `@gakr-gakr/gakrcli` npm dependency.
 
 ### Fixed
-- **Bun Test Compatibility**: Converted `enum` declarations to `const` objects and constructor parameter properties to explicit field declarations across VS Code mock and source files (24 total sites) to resolve Bun strip-only mode errors.
-- **AskUserQuestion Routing Restored**: Added back AskUserQuestion special handling in `permissionHandler.ts` — routes to `show_elicitation` dialog instead of permission prompt, with `handleAskUserQuestionResponse` method for collecting answers back through the control response flow.
-- **All 34 test suites passing**: 264 tests pass, 0 failures.
+- **Format KB/MB rollover**: `formatFileSize` now compares the rounded value (`Number(kb.toFixed(1))`) against 1024 instead of raw KB, fixing the edge case where ~1023.5 KB displayed as "1024KB" instead of rolling over to "1MB".
+- **Missing `relativizeContentLine` export**: Added function to `path.ts` to properly relativize content lines from ripgrep-style output across Windows and POSIX paths.
+- **Provider model query `thinking` param**: Added `parseThinkingType`, `ThinkingType` type, and wired `thinking` field through `ModelDescriptor` → `parseModelDescriptor()` → `resolveProviderRequest()` so `?thinking=disabled` query params are properly parsed and forwarded.
+- **Tool lifecycle tracking**: Added `trackLifecycleToolUse()` call in `toolExecution.ts` to register tool use start with `QueryLifecycleOperationTracker`, enabling `snapshot().toolUses` to reflect in-flight tools. Fixed `StreamingToolExecutor.discard()` to properly abort, end tool lifecycle entries, and mark tools as yielded.
+- **Lifecycle test env var mismatch**: Fixed `gakrcli.lifecycle.test.ts` env var `OPENGAKR_MAX_RETRIES` → `GAKR_MAX_RETRIES` to match the source code's `getDefaultMaxRetries()` lookup.
+
+### Added
+- **New test files for lifecycle, provider config, tools, and utilities**: Wired 11 test files covering `queryLifecycle`, `format`, `providerConfig`, `StreamingToolExecutor`, `GrepTool`, `codeIndexing`, `frontmatterParser`, `status.routes`, `REPL.queryLifecycle`, `gakrcli.lifecycle`, and `parseUserSpecifiedModel.codexTag`. Source fixes applied to pass all new tests.
 
 ### Removed
 - **Locally-Added SDK Runtime File**: Deleted `src/entrypoints/sdk/runtime.ts` — a locally-added file with no equivalent in `references/openclaude-main/`. Stripped all runtime-dependent Query interface methods and test files to align SDK with reference.

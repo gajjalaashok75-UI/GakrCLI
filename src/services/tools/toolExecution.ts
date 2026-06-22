@@ -756,6 +756,34 @@ async function checkPermissionsAndCallTool(
     ]
   }
 
+  const lifecycleStartTime = Date.now()
+  function getLifecycleBashTimeoutMs(input: unknown): number | undefined {
+    if (
+      tool.name !== BASH_TOOL_NAME ||
+      !input ||
+      typeof input !== 'object' ||
+      !('timeout' in input)
+    ) {
+      return undefined
+    }
+    return (input as BashToolInput).timeout
+  }
+
+  function trackLifecycleToolUse(input: unknown): void {
+    const lifecycleBashTimeoutMs = getLifecycleBashTimeoutMs(input)
+    toolUseContext.queryLifecycle?.startToolUse({
+      toolUseId: toolUseID,
+      toolName: tool.name,
+      startedAt: lifecycleStartTime,
+      ...(tool.name === BASH_TOOL_NAME && { isBash: true }),
+      ...(lifecycleBashTimeoutMs !== undefined && {
+        timeoutMs: lifecycleBashTimeoutMs,
+      }),
+    })
+  }
+
+  trackLifecycleToolUse(parsedInput.data)
+
   // Validate input values. Each tool has its own validation logic
   const isValidCall = await tool.validateInput?.(
     parsedInput.data,

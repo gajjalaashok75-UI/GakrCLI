@@ -120,6 +120,7 @@ const CODEX_ALIAS_MODELS: Record<
 
 type CodexAlias = keyof typeof CODEX_ALIAS_MODELS
 type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh'
+type ThinkingType = 'enabled' | 'disabled'
 
 const OPENAI_CODEX_SHORTCUT_ALIASES = new Set(['codexplan', 'codexspark'])
 
@@ -133,6 +134,9 @@ export type ResolvedProviderRequest = {
   baseUrl: string
   reasoning?: {
     effort: ReasoningEffort
+  }
+  thinking?: {
+    type: ThinkingType
   }
 }
 
@@ -148,6 +152,9 @@ type ModelDescriptor = {
   baseModel: string
   reasoning?: {
     effort: ReasoningEffort
+  }
+  thinking?: {
+    type: ThinkingType
   }
 }
 
@@ -253,6 +260,14 @@ function parseReasoningEffort(value: string | undefined): ReasoningEffort | unde
   return undefined
 }
 
+function parseThinkingType(value: string | undefined): ThinkingType | undefined {
+  if (!value) return undefined
+  const normalized = value.trim().toLowerCase()
+  return normalized === 'enabled' || normalized === 'disabled'
+    ? normalized
+    : undefined
+}
+
 function normalizeNvidiaModel(value: string | undefined): string | undefined {
   return value
 }
@@ -315,11 +330,13 @@ function parseModelDescriptor(model: string): ModelDescriptor {
     (aliasConfig?.reasoningEffort
       ? { effort: aliasConfig.reasoningEffort }
       : undefined)
+  const thinking = parseThinkingType(params.get('thinking') ?? undefined)
 
   return {
     raw: trimmed,
     baseModel: resolvedBaseModel,
     reasoning: typeof reasoning === 'string' ? { effort: reasoning } : reasoning,
+    thinking: thinking ? { type: thinking } : undefined,
   }
 }
 
@@ -908,6 +925,7 @@ export function resolveProviderRequest(options?: {
               : DEFAULT_OPENAI_BASE_URL))))
       ).replace(/\/+$/, ''),
     reasoning,
+    thinking: descriptor.thinking,
   }
 }
 
