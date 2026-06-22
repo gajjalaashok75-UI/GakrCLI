@@ -76,16 +76,31 @@ describe('AuthManager', () => {
   });
 
   describe('buildProcessEnv — gemini', () => {
-    it('sets OPENAI_API_KEY, OPENAI_BASE_URL, and GAKR_CODE_USE_OPENAI', () => {
+    it('sets GEMINI_API_KEY, GAKR_CODE_USE_GEMINI, and optional base URL', () => {
       const manager = new AuthManager(makeSettings({
         selectedProvider: 'gemini',
         apiKey: 'gemini-key',
-        baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
       }));
       const env = manager.buildProcessEnv();
-      expect(env['OPENAI_API_KEY']).toBe('gemini-key');
-      expect(env['OPENAI_BASE_URL']).toBe('https://generativelanguage.googleapis.com/v1beta/openai');
-      expect(env['GAKR_CODE_USE_OPENAI']).toBe('1');
+      expect(env['GEMINI_API_KEY']).toBe('gemini-key');
+      expect(env['GEMINI_BASE_URL']).toBe('https://generativelanguage.googleapis.com/v1beta');
+      expect(env['GAKR_CODE_USE_GEMINI']).toBe('1');
+      expect(env['GAKR_CODE_USE_OPENAI']).toBeUndefined();
+    });
+  });
+
+  describe('buildProcessEnv — mistral', () => {
+    it('sets MISTRAL_API_KEY, GAKR_CODE_USE_MISTRAL, and optional base URL', () => {
+      const manager = new AuthManager(makeSettings({
+        selectedProvider: 'mistral',
+        apiKey: 'mistral-key',
+        baseUrl: 'https://api.mistral.ai/v1',
+      }));
+      const env = manager.buildProcessEnv();
+      expect(env['MISTRAL_API_KEY']).toBe('mistral-key');
+      expect(env['MISTRAL_BASE_URL']).toBe('https://api.mistral.ai/v1');
+      expect(env['GAKR_CODE_USE_MISTRAL']).toBe('1');
     });
   });
 

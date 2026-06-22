@@ -56,7 +56,6 @@ export function AssistantMessage({
           onStop={onStop}
         />
       </div>
-
       {/* Content blocks — no header/label, just content */}
       <div>
         {blocks.map((renderableBlock, blockIndex) => (
@@ -156,8 +155,6 @@ function BlockRenderer({ blocks, blockIndex, renderableBlock, isMessageStreaming
         />
       );
 
-    case 'thinking':
-    case 'redacted_thinking':
     case 'image':
     case 'document':
     case 'search_result':
@@ -165,7 +162,6 @@ function BlockRenderer({ blocks, blockIndex, renderableBlock, isMessageStreaming
       return (
         <ContentBlockRouter
           block={block as ContentBlock}
-          showThinkingSummaries={false}
         />
       );
 

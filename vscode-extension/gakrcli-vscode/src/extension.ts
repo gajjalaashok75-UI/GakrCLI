@@ -22,6 +22,9 @@ import { WorktreeManager } from './worktree/worktreeManager';
 import { parseGakrCLIUri } from './uriHandler';
 import { AtMentionProvider } from './mentions/atMentionProvider';
 
+/** Timeout for waiting on an in-flight spawn poll cycle. */
+const SPAWN_POLL_TIMEOUT_MS = 120_000;
+
 let webviewManager: WebviewManager | undefined;
 let diffManagerInstance: DiffManager | undefined;
 let permissionHandlerInstance: PermissionHandler | undefined;
@@ -204,7 +207,7 @@ export function activate(context: vscode.ExtensionContext) {
           clearInterval(check);
           output.error('[GakrCLI] Spawn timed out after 120s while waiting for in-flight spawn');
           resolve(undefined);
-        }, 120_000);
+        }, SPAWN_POLL_TIMEOUT_MS);
         const check = setInterval(() => {
           if (!isSpawning) {
             clearInterval(check);
@@ -393,7 +396,14 @@ export function activate(context: vscode.ExtensionContext) {
     processManager.onStateChange((state) => {
       output.info(`[GakrCLI] State: ${state}`);
       if (state === ProcessState.Ready) {
+        statusBarManager.setModelName(settingsSync.selectedModel || null);
+        statusBarManager.setReady(true);
         webviewManager!.broadcast({ type: 'process_state', state: 'running' });
+      } else {
+        statusBarManager.setReady(false);
+        if (state === ProcessState.Idle) {
+          statusBarManager.setModelName(null);
+        }
       }
     });
 
@@ -444,7 +454,7 @@ export function activate(context: vscode.ExtensionContext) {
             account: account ?? {},
           },
           } as never);
-        output.info(`[GakrCLI] Broadcast init with ${models.length} models, permissionMode=${permMode}`);
+        output.info(`[GakrCLI] Broadcast init with ${models.length} models, permissionMode=${permMode}, account.provider=${(account as Record<string, unknown>)?.apiProvider ?? 'unknown'}`);
       }
       return processManager;
     } catch (err) {
@@ -692,7 +702,10 @@ export function activate(context: vscode.ExtensionContext) {
     processManager.onStateChange((state) => {
       output.info(`[GakrCLI] State: ${state}`);
       if (state === ProcessState.Ready) {
+        statusBarManager.setReady(true);
         webviewManager!.broadcast({ type: 'process_state', state: 'running' });
+      } else {
+        statusBarManager.setReady(false);
       }
     });
     processManager.onStderr((line) => {

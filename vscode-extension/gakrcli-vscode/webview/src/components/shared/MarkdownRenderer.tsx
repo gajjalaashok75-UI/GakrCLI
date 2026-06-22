@@ -151,3 +151,4 @@ function extractTextContent(children: React.ReactNode): string {
   }
   return String(children ?? '');
 }
+

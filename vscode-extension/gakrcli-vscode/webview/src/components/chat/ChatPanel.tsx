@@ -49,6 +49,7 @@ export function ChatPanel() {
     todos,
     retryInfo,
     contextUsage,
+    availableModels,
     sendMessage,
     editMessage,
     interrupt,
@@ -79,8 +80,10 @@ export function ChatPanel() {
   const [showMcpManager, setShowMcpManager] = useState(false);
   const [showPluginManager, setShowPluginManager] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [providerModel, setProviderModel] = useState<string | null>(null);
-  const [providerModels, setProviderModels] = useState<Array<{ value: string; displayName: string }>>([]);
+  const [onboardingDismissed] = useState(() => {
+    return !!localStorage.getItem('gakrcli.onboarding.dismissed');
+  });
+
   const [showOnboarding, setShowOnboarding] = useState(() => {
     return !localStorage.getItem('gakrcli.onboarding.dismissed');
   });
@@ -111,22 +114,6 @@ export function ChatPanel() {
       if (typeof message.mode === 'string') {
         setPermissionMode(message.mode as PermissionModeValue);
       }
-    });
-  }, []);
-
-  useEffect(() => {
-    vscode.postMessage({ type: 'get_provider_state' });
-    return vscode.onMessage('provider_state', (message) => {
-      setProviderModel(typeof message.currentModel === 'string' ? message.currentModel : null);
-      const models = Array.isArray(message.models)
-        ? (message.models as Array<Record<string, unknown>>)
-          .map((m) => ({
-            value: (m.value as string) || '',
-            displayName: (m.displayName as string) || (m.value as string) || '',
-          }))
-          .filter((m) => m.value)
-        : [];
-      setProviderModels(models);
     });
   }, []);
 
@@ -286,8 +273,8 @@ export function ChatPanel() {
               statusControl={<ProcessStatusBadge status={processStatus} isStreaming={isStreaming} />}
               footerControls={(
                 <ModelSelector
-                  currentModel={providerModel ?? model}
-                  availableModels={providerModels}
+                  currentModel={model}
+                  availableModels={availableModels}
                 />
               )}
             />
@@ -312,7 +299,7 @@ export function ChatPanel() {
               }}
             />
           </div>
-          </div>
+        </div>
       </div>
 
       {/* Dialogs */}
@@ -475,7 +462,7 @@ function InputArea({
   const doSend = useCallback(() => {
     const text = inputValue.trim();
     if (!text && attachments.length === 0) return;
-    if (isStreaming || isStarting) return;
+    if (isStarting) return;
     onSend(buildMessageText(text, attachments));
     setInputValue('');
     setAttachments([]);
@@ -485,11 +472,11 @@ function InputArea({
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [inputValue, attachments, isStreaming, isStarting, onSend, clearAtMentions]);
+  }, [inputValue, attachments, isStarting, onSend, clearAtMentions]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // If a picker is open, let it handle arrow keys / enter
-    if (atPickerVisible || hasVisibleSlashMenu || slashMenuVisible) {
+    if (atPickerVisible || hasVisibleSlashMenu) {
       if (['ArrowUp', 'ArrowDown', 'Enter', 'Tab'].includes(e.key)) {
         return; // pickers handle these via capture listener
       }

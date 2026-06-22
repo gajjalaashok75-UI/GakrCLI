@@ -4,6 +4,10 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ## [Unreleased]
 
+### Fixed (2026-06-22)
+
+- **`--provider` flag removed from CLI spawn args**: The extension was passing `--provider anthropic` to the spawned CLI, overriding the user's configured provider in `~/.gakrcli/settings.json` and causing "Not logged in" auth errors. Removed `--provider` from `ProcessManager.buildArgs()` so the CLI uses its own provider config and credentials. Aligned with reference `openclaude-vscode` implementation.
+
 ### Fixed (2026-06-01)
 
 - Restored visible unordered, ordered, and nested list markers in assistant markdown output after Tailwind's base reset removed default bullets.
