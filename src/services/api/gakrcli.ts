@@ -67,6 +67,7 @@ import {
   CAPPED_DEFAULT_MAX_TOKENS,
   getModelMaxOutputTokens,
   getSonnet1mExpTreatmentEnabled,
+  shouldUseIntegrationRuntimeLimits,
 } from '../../utils/context.js'
 import { resolveAppliedEffort } from '../../utils/effort.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
@@ -169,6 +170,7 @@ import { COMPACT_MAX_OUTPUT_TOKENS, getContextWindowForModel, getMaxThinkingToke
 import { logForDebugging } from 'src/utils/debug.js'
 import { logForDiagnosticsNoPII } from 'src/utils/diagLogs.js'
 import { type EffortValue, modelSupportsEffort } from 'src/utils/effort.js'
+import type { QueryLifecycleOperationTracker } from 'src/utils/queryLifecycle.js'
 import {
   isFastModeAvailable,
   isFastModeCooldown,
@@ -715,6 +717,7 @@ export type Options = {
   // (query.ts decrements across the agentic loop).
   taskBudget?: { total: number; remaining?: number }
   providerOverride?: { model: string; baseURL: string; apiKey: string }
+  queryLifecycle?: QueryLifecycleOperationTracker
 }
 
 export async function queryModelWithoutStreaming({
@@ -851,6 +854,7 @@ export async function* executeNonStreamingRequest(
    * from. Emitted in tengu_nonstreaming_fallback_error for funnel correlation.
    */
   originatingRequestId?: string | null,
+  queryLifecycle?: QueryLifecycleOperationTracker,
 ): AsyncGenerator<SystemAPIErrorMessage, BetaMessage> {
   const fallbackTimeoutMs = getNonstreamingFallbackTimeoutMs()
   const generator = withRetry(
@@ -873,6 +877,12 @@ export async function* executeNonStreamingRequest(
         retryParams,
         MAX_NON_STREAMING_TOKENS,
       )
+      const activeApiCallKey =
+        queryLifecycle?.startApiCall({
+          model: context.model,
+          querySource: retryOptions.querySource,
+          startedAt: start,
+        }) ?? null
 
       try {
         // biome-ignore lint/plugin: non-streaming API call
@@ -907,6 +917,10 @@ export async function* executeNonStreamingRequest(
             'unknown') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
         })
         throw err
+      } finally {
+        if (activeApiCallKey) {
+          queryLifecycle?.endApiCall(activeApiCallKey)
+        }
       }
     },
     {
@@ -1536,8 +1550,23 @@ async function* queryModel(
   let stream: Stream<BetaRawMessageStreamEvent> | undefined = undefined
   let streamRequestId: string | null | undefined = undefined
   let clientRequestId: string | undefined = undefined
-  // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins -- Response is available in Node 18+ and is used by the SDK
+  let activeApiCallKey: string | null = null
+  // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins -- Response is available in supported Node runtimes and is used by the SDK
   let streamResponse: Response | undefined = undefined
+
+  function endActiveApiCall(key = activeApiCallKey): void {
+    if (!key) return
+    options.queryLifecycle?.endApiCall(key)
+    if (activeApiCallKey === key) {
+      activeApiCallKey = null
+    }
+  }
+
+  function startActiveApiCall(call: Parameters<QueryLifecycleOperationTracker['startApiCall']>[0]): string | null {
+    endActiveApiCall()
+    activeApiCallKey = options.queryLifecycle?.startApiCall(call) ?? null
+    return activeApiCallKey
+  }
 
   // Release all stream resources to prevent native memory leaks.
   // The Response object holds native TLS/socket buffers that live outside the
@@ -1848,26 +1877,42 @@ async function* queryModel(
           getAPIProvider() === 'firstParty' && isFirstPartyAnthropicBaseUrl()
             ? randomUUID()
             : undefined
+        const attemptApiCallKey = startActiveApiCall({
+          clientRequestId,
+          model: options.model,
+          querySource: options.querySource,
+          startedAt: start,
+        })
 
         // Use raw stream instead of BetaMessageStream to avoid O(n²) partial JSON parsing
         // BetaMessageStream calls partialParse() on every input_json_delta, which we don't need
         // since we handle tool input accumulation ourselves
         // biome-ignore lint/plugin: main conversation loop handles attribution separately
-        const result = await anthropic.beta.messages
-          .create(
-            { ...params, stream: true },
-            {
-              signal,
-              ...(clientRequestId && {
-                headers: { [CLIENT_REQUEST_ID_HEADER]: clientRequestId },
-              }),
-            },
-          )
-          .withResponse()
-        queryCheckpoint('query_response_headers_received')
-        streamRequestId = result.request_id
-        streamResponse = result.response
-        return result.data
+        try {
+          const result = await anthropic.beta.messages
+            .create(
+              { ...params, stream: true },
+              {
+                signal,
+                ...(clientRequestId && {
+                  headers: { [CLIENT_REQUEST_ID_HEADER]: clientRequestId },
+                }),
+              },
+            )
+            .withResponse()
+          queryCheckpoint('query_response_headers_received')
+          streamRequestId = result.request_id
+          if (attemptApiCallKey) {
+            options.queryLifecycle?.updateApiCall(attemptApiCallKey, {
+              requestId: streamRequestId,
+            })
+          }
+          streamResponse = result.response
+          return result.data
+        } catch (err) {
+          endActiveApiCall(attemptApiCallKey)
+          throw err
+        }
       },
       {
         model: options.model,
@@ -2301,8 +2346,10 @@ async function* queryModel(
               logEvent('tengu_max_tokens_reached', {
                 max_tokens: maxOutputTokens,
               })
+              const is3pProvider = shouldUseIntegrationRuntimeLimits()
+              const providerNoun = is3pProvider ? "Model's" : "GakrCLI's"
               yield createAssistantAPIErrorMessage({
-                content: `${API_ERROR_MESSAGE_PREFIX}: GakrCLI's response exceeded the ${
+                content: `${API_ERROR_MESSAGE_PREFIX}: ${providerNoun} response exceeded the ${
                   maxOutputTokens
                 } output token maximum. To configure this behavior, set the GAKR_CODE_MAX_OUTPUT_TOKENS environment variable.`,
                 apiError: 'max_output_tokens',
@@ -2569,7 +2616,7 @@ async function* queryModel(
       // If the streaming failure was itself a 529, count it toward the
       // consecutive-529 budget so total 529s-before-model-fallback is the
       // same whether the overload was hit in streaming or non-streaming mode.
-      // This is a speculative fix for https://github.com/anthropics/gakrcli-code/issues/1513
+      // This is a speculative fix for https://github.com/gajjalaashok75-UI/gakrcli/issues/1513
       // Instrumentation: proves executeNonStreamingRequest was entered (vs. the
       // fallback event firing but the call itself hanging at dispatch).
       logForDiagnosticsNoPII('info', 'cli_nonstreaming_fallback_started')
@@ -2582,6 +2629,7 @@ async function* queryModel(
           ? 'watchdog'
           : 'other') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       })
+      endActiveApiCall()
       const result = yield* executeNonStreamingRequest(
         { model: options.model, source: options.querySource, providerOverride: options.providerOverride, effortValue: effort },
         {
@@ -2600,6 +2648,7 @@ async function* queryModel(
         },
         params => captureAPIRequest(params, options.querySource),
         streamRequestId,
+        options.queryLifecycle,
       )
 
       const m: AssistantMessage = {
@@ -2681,14 +2730,21 @@ async function* queryModel(
 
       try {
         // Fall back to non-streaming mode
+        endActiveApiCall()
         const result = yield* executeNonStreamingRequest(
-          { model: options.model, source: options.querySource, effortValue: effort },
+          {
+            model: options.model,
+            source: options.querySource,
+            providerOverride: options.providerOverride,
+            effortValue: effort,
+          },
           {
             model: options.model,
             fallbackModel: options.fallbackModel,
             thinkingConfig,
             ...(isFastModeEnabled() && { fastMode: isFastMode }),
             signal,
+            querySource: options.querySource,
           },
           paramsFromContext,
           (attempt, _startTime, tokens) => {
@@ -2697,6 +2753,7 @@ async function* queryModel(
           },
           params => captureAPIRequest(params, options.querySource),
           failedRequestId,
+          options.queryLifecycle,
         )
 
         const m: AssistantMessage = {
@@ -2838,6 +2895,7 @@ async function* queryModel(
       return
     }
   } finally {
+    endActiveApiCall()
     stopSessionActivity('api_call')
     // Must be in the finally block: if the generator is terminated early
     // via .return() (e.g. consumer breaks out of for-await-of, or query.ts
@@ -3323,7 +3381,7 @@ export async function queryHaiku({
 type QueryWithModelOptions = Omit<Options, 'getToolPermissionContext'>
 
 /**
- * Query a specific model through the GakrCLI Code infrastructure.
+ * Query a specific model through the gakrcli infrastructure.
  * This goes through the full query pipeline including proper authentication,
  * betas, and headers - unlike direct API calls.
  */
@@ -3378,7 +3436,7 @@ export async function queryWithModel({
 }
 
 // Non-streaming requests have a 10min max per the docs:
-// https://platform.gakrcli.com/docs/en/api/errors#long-requests
+// https://platform.claude.com/docs/en/api/errors#long-requests
 // The SDK's 21333-token cap is derived from 10min × 128k tokens/hour, but we
 // bypass it by setting a client-level timeout, so we can cap higher.
 export const MAX_NON_STREAMING_TOKENS = 64_000
@@ -3433,7 +3491,7 @@ export function getMaxOutputTokensForModel(model: string): number {
   // = 4,911 tokens; 32k/64k defaults over-reserve 8-16× slot capacity.
   // Requests hitting the cap get one clean retry at 64k (query.ts
   // max_output_tokens_escalate). Math.min keeps models with lower native
-  // defaults (e.g. gakrcli-3-opus at 4k) at their native value. Applied
+  // defaults (e.g. claude-3-opus at 4k) at their native value. Applied
   // before the env-var override so GAKR_CODE_MAX_OUTPUT_TOKENS still wins.
   const defaultTokens = isMaxTokensCapEnabled()
     ? Math.min(maxOutputTokens.default, CAPPED_DEFAULT_MAX_TOKENS)
