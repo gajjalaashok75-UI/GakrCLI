@@ -23,8 +23,8 @@ import type { PermissionMode } from '../types/session';
 // Constants
 // ============================================================================
 
-/** Maximum time to wait for the CLI initialize handshake (2 minutes for provider discovery). */
-export const INIT_TIMEOUT_MS = 120_000;
+/** Maximum time to wait for the CLI initialize handshake (5 minutes for provider/model discovery). */
+export const INIT_TIMEOUT_MS = 300_000;
 
 // ============================================================================
 // Types
@@ -475,8 +475,19 @@ export class ProcessManager {
 
       this.transport?.write(initRequest);
 
+      // Periodic progress while waiting (every 30s, so the user sees something is happening)
+      const progressInterval = setInterval(() => {
+        const elapsed = Date.now() - this.initStartTime;
+        if (this.pendingInitResolve && this.pendingInitReject) {
+          console.log(`[ProcessManager] Still waiting for init... ${(elapsed / 1000).toFixed(0)}s elapsed`);
+        } else {
+          clearInterval(progressInterval);
+        }
+      }, 30_000);
+
       // Timeout: reject if CLI doesn't respond within INIT_TIMEOUT_MS
       this.initTimeout = setTimeout(() => {
+        clearInterval(progressInterval);
         this.initTimeout = undefined;
         this.kill(); // Kill the hung process
         this.cleanup();

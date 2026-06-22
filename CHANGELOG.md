@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **VS Code Extension — `--provider` flag overrides user's configured provider**: Removed `--provider` from `ProcessManager.buildArgs()`. The extension was passing `--provider anthropic` by default, which overrode whatever provider the user had configured in the CLI's own `~/.gakrcli/settings.json`, causing "Not logged in · Please run /login" auth errors on every API call. The CLI now uses its own config to determine the active provider, matching the reference `openclaude-vscode` implementation.
+- **VS Code Extension — increased init timeout to 300s for provider/model discovery**: Increased `INIT_TIMEOUT_MS` and `SPAWN_POLL_TIMEOUT_MS` from 120s to 300s to accommodate CLI provider/model discovery on cold starts or environments with heavy plugin/disk I/O. Added periodic `"Still waiting for init..."` diagnostic logging every 30s. The init timeout previously killed the CLI process before it finished collecting providers/models, causing an infinite "Starting → timeout → crashed → refresh → Starting" loop.
 
 ## [0.5.8] - 2026-06-20
 
