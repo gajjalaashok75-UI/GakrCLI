@@ -7,6 +7,7 @@ All notable changes to GakrCLI VS Code are documented here.
 ### Fixed (2026-06-22)
 
 - **`--provider` flag removed from CLI spawn args**: The extension was passing `--provider anthropic` to the spawned CLI, overriding the user's configured provider in `~/.gakrcli/settings.json` and causing "Not logged in" auth errors. Removed `--provider` from `ProcessManager.buildArgs()` so the CLI uses its own provider config and credentials. Aligned with reference `openclaude-vscode` implementation.
+- **Increased init timeout to 300s for provider/model discovery**: Increased `INIT_TIMEOUT_MS` and `SPAWN_POLL_TIMEOUT_MS` from 120s to 300s to accommodate slow provider/model discovery on cold starts. Added periodic "Still waiting for init..." diagnostic logging every 30s. Fixes the infinite "Starting → timeout → crashed → refresh → Starting" loop.
 
 ### Fixed (2026-06-01)
 

@@ -23,7 +23,8 @@ import { parseGakrCLIUri } from './uriHandler';
 import { AtMentionProvider } from './mentions/atMentionProvider';
 
 /** Timeout for waiting on an in-flight spawn poll cycle. */
-const SPAWN_POLL_TIMEOUT_MS = 120_000;
+// Timeout for the isSpawning polling loop — matches INIT_TIMEOUT_MS in ProcessManager
+const SPAWN_POLL_TIMEOUT_MS = 300_000;
 
 let webviewManager: WebviewManager | undefined;
 let diffManagerInstance: DiffManager | undefined;
