@@ -64,10 +64,14 @@ export function modelSupports1M(model: string): boolean {
     return false
   }
   const canonical = getCanonicalName(model)
-  return canonical.includes('claude-sonnet-4') || canonical.includes('opus-4-6')
+  return (
+    canonical.includes('claude-sonnet-4') ||
+    canonical.includes('opus-4-6') ||
+    canonical.includes('opus-4-7')
+  )
 }
 
-function shouldUseIntegrationRuntimeLimits(
+export function shouldUseIntegrationRuntimeLimits(
   processEnv: NodeJS.ProcessEnv = process.env,
 ): boolean {
   const routeId = resolveActiveRouteIdFromEnv(processEnv)
@@ -238,6 +242,16 @@ export function getModelMaxOutputTokens(model: string): {
         upperLimit: runtimeLimits.maxOutputTokens,
       }
     }
+    // 3P provider with no runtime maxOutputTokens (e.g. ad-hoc Ollama models
+    // like `gemma4:e4b` not in the route catalog) — fall through to a
+    // permissive upper limit so GAKR_CODE_MAX_OUTPUT_TOKENS isn't silently
+    // capped to the Anthropic 64k fallback below (issue #1604). Bound by the
+    // runtime context window when known; otherwise use the same fallback as
+    // context budgeting so output reservation cannot exceed the window.
+    return {
+      default: MAX_OUTPUT_TOKENS_DEFAULT,
+      upperLimit: runtimeLimits.contextWindow ?? OPENAI_FALLBACK_CONTEXT_WINDOW,
+    }
   }
 
   const m = getCanonicalName(model)
@@ -258,13 +272,13 @@ export function getModelMaxOutputTokens(model: string): {
   } else if (m.includes('opus-4-1') || m.includes('opus-4')) {
     defaultTokens = 32_000
     upperLimit = 32_000
-  } else if (m.includes('gakrcli-3-opus')) {
+  } else if (m.includes('claude-3-opus')) {
     defaultTokens = 4_096
     upperLimit = 4_096
-  } else if (m.includes('gakrcli-3-sonnet')) {
+  } else if (m.includes('claude-3-sonnet')) {
     defaultTokens = 8_192
     upperLimit = 8_192
-  } else if (m.includes('gakrcli-3-haiku')) {
+  } else if (m.includes('claude-3-haiku')) {
     defaultTokens = 4_096
     upperLimit = 4_096
   } else if (m.includes('3-5-sonnet') || m.includes('3-5-haiku')) {
