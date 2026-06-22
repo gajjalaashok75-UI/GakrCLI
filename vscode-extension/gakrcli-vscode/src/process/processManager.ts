@@ -55,6 +55,12 @@ export interface ProcessManagerOptions {
   forkSession?: boolean;
   /** Worktree name to pass as --worktree flag */
   worktree?: string;
+  /**
+   * Provider ID — kept for backwards compat in tests.
+   * NOTE: NOT passed as --provider to CLI. The CLI reads its own settings.json
+   * to determine the active provider. See extension.ts for usage.
+   */
+  provider?: string;
   /** Additional environment variables */
   env?: Record<string, string>;
   /** Initialize request options */
@@ -71,6 +77,8 @@ export interface ProcessManagerOptions {
     url: string;
     headers?: Record<string, string>;
   }>;
+  /** Timeout for the initialize handshake in ms (default: INIT_TIMEOUT_MS = 120_000). */
+  initTimeoutMs?: number;
 }
 
 type MessageCallback = (message: StdoutMessage) => void;
@@ -475,14 +483,14 @@ export class ProcessManager {
         this.setState(ProcessState.Idle);
         this.pendingInitReject?.(
           new Error(
-            `Initialize handshake timed out after ${INIT_TIMEOUT_MS / 1000}s. ` +
+            `Initialize handshake timed out after ${(this.options.initTimeoutMs ?? INIT_TIMEOUT_MS) / 1000}s. ` +
             `Provider/model discovery may be hanging. Check CLI output for details.`,
           ),
         );
         this.pendingInitResolve = undefined;
         this.pendingInitReject = undefined;
         this.initRequestId = undefined;
-      }, INIT_TIMEOUT_MS);
+      }, this.options.initTimeoutMs ?? INIT_TIMEOUT_MS);
     });
   }
 

@@ -5,6 +5,11 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.9] - 2026-06-22
+
+### Fixed
+- **VS Code Extension — `--provider` flag overrides user's configured provider**: Removed `--provider` from `ProcessManager.buildArgs()`. The extension was passing `--provider anthropic` by default, which overrode whatever provider the user had configured in the CLI's own `~/.gakrcli/settings.json`, causing "Not logged in · Please run /login" auth errors on every API call. The CLI now uses its own config to determine the active provider, matching the reference `openclaude-vscode` implementation.
+
 ## [0.5.8] - 2026-06-20
 
 ### Changed

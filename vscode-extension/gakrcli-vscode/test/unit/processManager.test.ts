@@ -171,6 +171,33 @@ describe('ProcessManager', () => {
       );
     });
 
+    it('should not pass --provider flag even when provider is specified (CLI uses own config)', () => {
+      manager = new ProcessManager({
+        cwd: '/tmp/test-project',
+        executable: 'gakrcli',
+        provider: 'anthropic',
+      });
+
+      manager.spawn();
+
+      const callArgs = mockSpawn.mock.calls[0][1] as string[];
+      expect(callArgs).not.toContain('--provider');
+    });
+
+    it('should pass --model flag when model is specified', () => {
+      manager = new ProcessManager({
+        cwd: '/tmp/test-project',
+        executable: 'gakrcli',
+        model: 'gemini-2.0-flash',
+      });
+
+      manager.spawn();
+
+      const callArgs = mockSpawn.mock.calls[0][1] as string[];
+      expect(callArgs).toContain('--model');
+      expect(callArgs).toContain('gemini-2.0-flash');
+    });
+
     it('should pass --permission-mode flag when permissionMode is specified', () => {
       manager = new ProcessManager({
         cwd: '/tmp/test-project',

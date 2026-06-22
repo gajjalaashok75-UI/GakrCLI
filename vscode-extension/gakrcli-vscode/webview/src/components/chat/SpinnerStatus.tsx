@@ -49,7 +49,7 @@ export const SpinnerStatus: React.FC<SpinnerStatusProps> = ({
   const tips = customTips.length > 0 ? customTips : DEFAULT_TIPS;
 
   const [verbIndex, setVerbIndex] = useState(0);
-  const [tipIndex, setTipIndex] = useState(0);  
+  const [tipIndex, setTipIndex] = useState(0);
   const [frameIndex, setFrameIndex] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [nowMs, setNowMs] = useState(Date.now());
@@ -134,4 +134,3 @@ function formatTimer(totalSeconds: number): string {
   const remaining = seconds % 60;
   return `${minutes}:${String(remaining).padStart(2, '0')}`;
 }
-
