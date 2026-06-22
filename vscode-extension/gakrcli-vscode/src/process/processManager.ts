@@ -6,6 +6,7 @@
 // Reference: Claude Code extension.js class `Qm` (ProcessTransport) and `fm` (Query)
 
 import { spawn, type ChildProcess } from 'node:child_process';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as readline from 'node:readline';
 import { NdjsonTransport } from './ndjsonTransport';
@@ -18,6 +19,51 @@ import type {
   StdoutMessage,
 } from '../types/messages';
 import type { PermissionMode } from '../types/session';
+
+/**
+ * Resolve the gakrcli script path on Windows for direct node spawning.
+ * This bypasses cmd.exe shell layers that can break stdin piping.
+ * Returns null on non-Windows or if resolution fails.
+ */
+function resolveWindowsCliPath(executable: string): { exe: string; args: string[] } | null {
+  if (process.platform !== 'win32') return null;
+
+  // Common npm global installation paths for gakrcli.js
+  const candidates: string[] = [];
+  const appData = process.env.APPDATA;
+  if (appData) {
+    candidates.push(
+      path.join(appData, 'npm', 'node_modules', '@gakr-gakr', 'gakrcli', 'bin', 'gakrcli'),
+    );
+  }
+  const localAppData = process.env.LOCALAPPDATA;
+  if (localAppData) {
+    candidates.push(
+      path.join(localAppData, 'npm', 'node_modules', '@gakr-gakr', 'gakrcli', 'bin', 'gakrcli'),
+    );
+  }
+  // Check if the executable itself is a full path to a JS file
+  if (/\.js$/i.test(executable) && fs.existsSync(executable)) {
+    return { exe: process.execPath, args: [executable] };
+  }
+
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) {
+        return { exe: process.execPath, args: [candidate] };
+      }
+      // Try with .js extension
+      const jsCandidate = candidate + '.js';
+      if (fs.existsSync(jsCandidate)) {
+        return { exe: process.execPath, args: [jsCandidate] };
+      }
+    } catch {
+      // ignore - try next candidate
+    }
+  }
+
+  return null;
+}
 
 // ============================================================================
 // Constants
@@ -86,53 +132,6 @@ type ErrorCallback = (error: Error) => void;
 type ExitCallback = (code: number | null, signal: string | null) => void;
 type StderrCallback = (line: string) => void;
 type StateCallback = (state: ProcessState) => void;
-
-interface SpawnCommand {
-  executable: string;
-  args: string[];
-}
-
-function isBareWindowsCommand(executable: string): boolean {
-  return !/[\\/]/.test(executable) && path.win32.extname(executable) === '';
-}
-
-function isWindowsBatchWrapper(executable: string): boolean {
-  const ext = path.win32.extname(executable).toLowerCase();
-  return ext === '.cmd' || ext === '.bat';
-}
-
-function quoteForWindowsCmd(arg: string): string {
-  if (arg.length === 0) {
-    return '""';
-  }
-
-  if (!/[\s"&()<>^|]/.test(arg)) {
-    return arg;
-  }
-
-  return `"${arg.replace(/"/g, '""')}"`;
-}
-
-function resolveSpawnCommand(executable: string, args: string[]): SpawnCommand {
-  if (
-    process.platform === 'win32' &&
-    (isBareWindowsCommand(executable) || isWindowsBatchWrapper(executable))
-  ) {
-    // npm installs `gakrcli` on Windows as a `.cmd` shim, which must be
-    // launched through `cmd.exe` for PATH/PATHEXT resolution to work reliably.
-    return {
-      executable: process.env.ComSpec?.trim() || 'cmd.exe',
-      args: [
-        '/d',
-        '/s',
-        '/c',
-        [executable, ...args].map(quoteForWindowsCmd).join(' '),
-      ],
-    };
-  }
-
-  return { executable, args };
-}
 
 // ============================================================================
 // ProcessManager
@@ -213,15 +212,24 @@ export class ProcessManager {
     const executable = (this.options.executable ?? 'gakrcli').trim() || 'gakrcli';
     const args = this.buildArgs();
     const env = this.buildEnv();
-    const spawnCommand = resolveSpawnCommand(executable, args);
+
+    // On Windows, resolve the gakrcli script path and spawn node directly
+    // to avoid cmd.exe shell layers that break stdin piping. The npm-installed
+    // gakrcli.cmd wraps a node script, and the script itself may relaunch with
+    // heap flags via spawnSync. Direct node spawning bypasses all shell layers.
+    const windowsPath = resolveWindowsCliPath(executable);
+    const spawnExe = windowsPath?.exe ?? executable;
+    const spawnArgs = windowsPath ? [...windowsPath.args, ...args] : args;
 
     try {
-      this.process = spawn(spawnCommand.executable, spawnCommand.args, {
+      // shell: true is only needed on non-Windows where the executable lacks
+      // a known script path. On Windows we spawn node directly.
+      this.process = spawn(spawnExe, spawnArgs, {
         cwd: this.options.cwd,
         stdio: ['pipe', 'pipe', 'pipe'],
         env,
         windowsHide: true,
-        shell: true,
+        shell: !windowsPath && process.platform === 'win32',
       });
     } catch (err) {
       this.setState(ProcessState.Idle);
@@ -446,6 +454,13 @@ export class ProcessManager {
     // Set entrypoint marker
     if (!env.GAKR_CODE_ENTRYPOINT) {
       env.GAKR_CODE_ENTRYPOINT = 'gakrcli-vscode';
+    }
+
+    // Disable heap relaunch — the extension manages its own process lifecycle.
+    // The bin/gakrcli script normally spawnSyncs itself with --max-old-space-size
+    // and --expose-gc, which breaks stdin piping through the extra process layer.
+    if (!env.GAKR_DISABLE_HEAP_RELAUNCH) {
+      env.GAKR_DISABLE_HEAP_RELAUNCH = '1';
     }
 
     // Remove NODE_OPTIONS to avoid conflicts (pattern from Claude Code extension)
