@@ -5,64 +5,51 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.9] - 2026-06-22
+## [0.5.7] - 2026-06-22
 
 ### Fixed
 - **VS Code Extension — `--provider` flag overrides user's configured provider**: Removed `--provider` from `ProcessManager.buildArgs()`. The extension was passing `--provider anthropic` by default, which overrode whatever provider the user had configured in the CLI's own `~/.gakrcli/settings.json`, causing "Not logged in · Please run /login" auth errors on every API call. The CLI now uses its own config to determine the active provider, matching the reference `openclaude-vscode` implementation.
-- **VS Code Extension — increased init timeout to 300s for provider/model discovery**: Increased `INIT_TIMEOUT_MS` and `SPAWN_POLL_TIMEOUT_MS` from 120s to 300s to accommodate CLI provider/model discovery on cold starts or environments with heavy plugin/disk I/O. Added periodic `"Still waiting for init..."` diagnostic logging every 30s. The init timeout previously killed the CLI process before it finished collecting providers/models, causing an infinite "Starting → timeout → crashed → refresh → Starting" loop.
-
-## [0.5.8] - 2026-06-20
+- **VS Code Extension — increased init timeout to 300s for provider/model discovery**: Increased `INIT_TIMEOUT_MS` and `SPAWN_POLL_TIMEOUT_MS` from 120s to 300s to accommodate CLI provider/model discovery on cold starts or environments with heavy plugin/disk I/O. Added periodic `"Still waiting for init..."` diagnostic logging every 30s.
+- **Format KB/MB rollover**: `formatFileSize` now compares the rounded value against 1024 instead of raw KB, fixing ~1023.5 KB displaying as "1024KB".
+- **Missing `relativizeContentLine` export**: Added function to `path.ts` for relativizing ripgrep-style output across Windows and POSIX paths.
+- **Provider model query `thinking` param**: Added `parseThinkingType` and wired `thinking` field through `ModelDescriptor` → `parseModelDescriptor()` → `resolveProviderRequest()`.
+- **Tool lifecycle tracking**: Added `trackLifecycleToolUse()` call in `toolExecution.ts`. Fixed `StreamingToolExecutor.discard()` to properly abort and end lifecycle entries.
+- **Lifecycle test env var mismatch**: Fixed `OPENGAKR_MAX_RETRIES` → `GAKR_MAX_RETRIES` in test assertions.
+- **External List Validation**: Restored `bun` and `byn` externals in `scripts/externals.ts`.
+- **Env-File ReferenceError**: Fixed `reapplyProviderEnvFileValues` with proper `let` declaration.
+- **main.tsx feature() Build Error**: Fixed `feature('WEB_BROWSER_TOOL')` calls in object literals.
+- **Automatic Interruption Bug**: Fixed 6 `abortController.abort()` calls missing `'interrupt'` reason.
+- **New File Wiring**: Wired 78+ newly added source files across bridge, CLI, commands, services, tools, utils.
+- **LSP Diagnostic Registry Storm Control**: Restored ~700 lines of storm detection and deduplication.
+- **Sandbox-Toggle Null Guard**: Fixed null crash in `SandboxManager.checkDependencies()`.
+- **Tool Query Activity Lease**: Wired `queryActivityLease` acquire/release/registerActivity into `toolExecution.ts`.
+- **BashTool & PowerShellTool Timeout Wiring**: Replaced `getDefaultTimeoutMs()` with `getEffectiveTimeoutMs(timeout)`.
+- **AgentDetail Route Picker**: Integrated `AgentRouteSelector` with 'm' key handling and route display.
+- **Prompt Cache Break Detection**: Full reference implementation with `PromptCacheBreakKind` taxonomy.
+- **Cache Metrics Reliability**: Added `CacheMetricsReliability` type and `getCacheMetricsReliability()` function.
+- **GitHub URL Renames**: Updated stale `anthropics/*` and `gakr-gakr/gakrcli-code` references to `gajjalaashok75-UI/*`.
 
 ### Changed
-- **VS Code Extension SDK→CLI Wrapper Refactoring**: Replaced direct `@gakr-gakr/gakrcli/sdk` imports with CLI child-process wrapper pattern across all extension modules. Simplified `authManager.ts` to align with reference provider structure. Removed `@gakr-gakr/gakrcli` npm dependency.
-
-### Fixed
-- **Format KB/MB rollover**: `formatFileSize` now compares the rounded value (`Number(kb.toFixed(1))`) against 1024 instead of raw KB, fixing the edge case where ~1023.5 KB displayed as "1024KB" instead of rolling over to "1MB".
-- **Missing `relativizeContentLine` export**: Added function to `path.ts` to properly relativize content lines from ripgrep-style output across Windows and POSIX paths.
-- **Provider model query `thinking` param**: Added `parseThinkingType`, `ThinkingType` type, and wired `thinking` field through `ModelDescriptor` → `parseModelDescriptor()` → `resolveProviderRequest()` so `?thinking=disabled` query params are properly parsed and forwarded.
-- **Tool lifecycle tracking**: Added `trackLifecycleToolUse()` call in `toolExecution.ts` to register tool use start with `QueryLifecycleOperationTracker`, enabling `snapshot().toolUses` to reflect in-flight tools. Fixed `StreamingToolExecutor.discard()` to properly abort, end tool lifecycle entries, and mark tools as yielded.
-- **Lifecycle test env var mismatch**: Fixed `gakrcli.lifecycle.test.ts` env var `OPENGAKR_MAX_RETRIES` → `GAKR_MAX_RETRIES` to match the source code's `getDefaultMaxRetries()` lookup.
+- **VS Code Extension SDK→CLI Wrapper Refactoring**: Replaced direct `@gakr-gakr/gakrcli/sdk` imports with CLI child-process wrapper pattern. Removed `@gakr-gakr/gakrcli` npm dependency.
+- **SDK Reference Alignment**: All SDK entrypoint and test files now match `references/openclaude-main/` structure.
+- **Feature Flags**: Enabled `CONTEXT_COLLAPSE` and `BG_SESSIONS` feature flags in `scripts/build.ts`.
+- **Brand & Docs Rename**: Completed rename across 12 files — `.gitignore` (`.claude` → `.gakrcli`), `bin/gakrcli.js` re-stubbed, all docs updated.
 
 ### Added
-- **New test files for lifecycle, provider config, tools, and utilities**: Wired 11 test files covering `queryLifecycle`, `format`, `providerConfig`, `StreamingToolExecutor`, `GrepTool`, `codeIndexing`, `frontmatterParser`, `status.routes`, `REPL.queryLifecycle`, `gakrcli.lifecycle`, and `parseUserSpecifiedModel.codexTag`. Source fixes applied to pass all new tests.
+- **Provider Env-File Loading**: Wired `--provider-env-file` CLI flag with `reapplyRememberedEnvFileValues()`. Ported 3 envFile integration tests and 6 background routing tests from reference.
+- **Importers Pattern**: Restructured `cli.tsx` to export `main()` with `CliEntrypointImporters` for dependency injection.
+- **GitHub Enterprise Restore & Full Wiring**: Restored GHE device flow, endpoint type detection, compatibility mode, and onboarding propagation.
+- **New test files**: Wired 11 test files covering lifecycle, provider config, tools, and utilities.
+- **Provider System Verification**: 14 vendors, 25 gateways, 2 Python providers configured. 344+ provider tests pass.
+- **Context Building Verification**: All 6 context layers verified in correct priority order.
 
 ### Removed
-- **Locally-Added SDK Runtime File**: Deleted `src/entrypoints/sdk/runtime.ts` — a locally-added file with no equivalent in `references/openclaude-main/`. Stripped all runtime-dependent Query interface methods and test files to align SDK with reference.
-
-### Changed
-- **SDK Reference Alignment**: All SDK entrypoint and test files now match `references/openclaude-main/` structure exactly.
-- **Feature Flags**: Enabled `CONTEXT_COLLAPSE` and `BG_SESSIONS` feature flags in `scripts/build.ts`.
-- **Brand & Docs Rename**: Completed rename across 12 files — `.gitignore` (`.claude` → `.gakrcli`), `bin/gakrcli.js` re-stubbed, all docs updated from legacy names to GakrCLI branding.
-
-### Added
-- **Provider Env-File Loading**: Wired `--provider-env-file` CLI flag with `reapplyRememberedEnvFileValues()` in `managedEnv.ts` so saved config doesn't clobber provider routing inputs. Registered in Commander. Ported 3 envFile integration tests and 6 background routing tests from reference.
-- **Importers Pattern**: Restructured `cli.tsx` to export `main()` with `CliEntrypointImporters` for dependency injection. Exported with `GAKR_CODE_DISABLE_CLI_ENTRYPOINT_AUTO_RUN` guard.
-- **GitHub Enterprise Restore & Full Wiring**: Restored GHE device flow functions (`normalizeGithubEnterpriseAuthBaseUrl`, `getGithubEnterpriseDeviceCodeUrl`, etc.) in `deviceFlow.ts`. Added `gheUrl` params to device flow functions and `GITHUB_COPILOT_KEY` support in `githubModelsCredentials.ts`. Added `'ghe'` endpoint type detection to `getGithubEndpointType()`, `getGithubEnterpriseUrl()`, `buildGithubEnterpriseCopilotBaseUrl()` helpers, and `isGithubGhe`/`gheCopilotBaseUrl` routing in `resolveProviderRequest()`. Added `'github-enterprise'` compatibility mode with `deriveGithubEnterpriseUrl()` and `buildGithubCompatibleProfileEnv()` in `providerProfiles.ts`. Extended onboard functions to accept and propagate `gheUrl` parameters through merge/apply callbacks.
-- **Provider System Verification**: 14 vendors, 25 gateways, 2 Python providers configured. 344+ provider tests pass.
-- **Context Building Verification**: All 6 context layers verified in correct order, workspace files render in `<GAKRCLI_WORKSPACE>` block.
-- **Knowledge Graph Verification**: 29/30 tests pass with `getKnowledgeStorageStatus()` runtime diagnostics.
-- **Plugin System Verification**: Official marketplace points to `gajjalaashok75-UI/gakrcli-plugins-official`.
-- **Batch Test Verification**: 36+ new test files across 14 batches pass after wiring fixes.
-
-### Fixed
-- **External List Validation**: Restored `bun` and `byn` externals in `scripts/externals.ts`.
-- **Env-File ReferenceError**: Fixed `reapplyProviderEnvFileValues` by adding `let` declaration before the `--provider-env-file` block.
-- **main.tsx feature() Build Error**: Fixed `feature('WEB_BROWSER_TOOL')` calls in object literals at `src/main.tsx:1525`/`1547`.
-- **Automatic Interruption Bug**: Fixed 6 `abortController.abort()` calls missing `'interrupt'` reason across `PermissionContext.ts`, `permissions.ts`, `PermissionPromptToolResultSchema.ts`, `print.ts`, and `openaiShim.ts`.
-- **New File Wiring**: Wired 78+ newly added source files across bridge, CLI, commands, components, services, tools, and utils into the module graph. Resolved import gaps and missing exports.
-- **LSP Diagnostic Registry Storm Control**: Restored ~700 lines of storm detection, deduplication, and delivery planning in `LSPDiagnosticRegistry.ts`.
-- **Sandbox-Toggle Null Guard**: Fixed null crash when `SandboxManager.checkDependencies()` returns null.
-- **Tool Query Activity Lease**: Wired `queryActivityLease` acquire/release/registerActivity into `toolExecution.ts`.
-- **BashTool & PowerShellTool Timeout Wiring**: Replaced `getDefaultTimeoutMs()` with `getEffectiveTimeoutMs(timeout)` for lease-aware timeout propagation.
-- **AgentDetail Route Picker**: Integrated `AgentRouteSelector` with 'm' key handling and route display.
-- **Prompt Cache Break Detection**: Full reference implementation with `PromptCacheBreakKind` taxonomy, per-tool hashing, and TTL expiry detection.
-- **Cache Metrics Reliability**: Added `CacheMetricsReliability` type and `getCacheMetricsReliability()` function.
-- **GitHub URL Renames**: Updated stale `anthropics/*` and `gakr-gakr/gakrcli-code` references to `gajjalaashok75-UI/*` across 6 files. Fixed `OFFICIAL_GITHUB_ORG` in plugin schema validation.
+- **Locally-Added SDK Runtime File**: Deleted `src/entrypoints/sdk/runtime.ts` — no equivalent in `references/openclaude-main/`.
 
 ### Refactored
-- **Context Building Pipeline**: Workspace context rendering, memory file ordering with `WORKSPACE_CONTEXT_FILE_ORDER`, system context improvements, `prependUserContext()` in api.ts.
-- **Knowledge Graph**: `getKnowledgeStorageStatus()` diagnostics, proactive SQLite `saveGraph()` sync during Orama init, JSON/SQLite storage refactor.
-- **Plugin System**: Marketplace source reconciliation, env var rename (`CLAUDE_CODE_REMOTE` → `GAKR_CODE_REMOTE`), MCP plugin integration.
+- **Context Building Pipeline**: Workspace context rendering, memory file ordering, system context improvements.
+- **Knowledge Graph**: `getKnowledgeStorageStatus()` diagnostics, JSON/SQLite storage refactor.
+- **Plugin System**: Marketplace source reconciliation, env var rename, MCP plugin integration.
 - **Provider System**: Expanded to 14 vendors, 25 gateways with provider profiles and auto-detection priority chain.
 
 ## [0.5.6] - 2026-06-12
