@@ -5,10 +5,26 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.8] - 2026-06-23
+
+### Changed
+- **Workflow file migration**: Moved all workflow code from `src/workflow/` to its proper locations by function — engine to `src/services/workflow/engine/`, service layer to `src/services/workflow/`, tool/descriptor to `src/tools/WorkflowTool/`, and panel/command to `src/commands/workflows/`. Replaced 5 stub files with thin re-exports pointing to the real implementations. Created no-op `bundled/index.ts` for closed-source build path. Deleted `src/workflow/` directory (46+ files redistributed).
+- **Workflow test fixes**: Fixed 3 pre-existing syntax errors (missing closing `)`) in `WorkflowTool.test.ts` and `runWorkflow.test.ts`. Fixed 2 test expectation mismatches (`.claude/` → `.gakrcli/`) in `index.test.ts` and `persistInline.test.ts`.
+
+### Added
+- **WORKFLOW_SCRIPTS feature flag**: Enabled in `scripts/build.ts:78` — the workflow scripts feature was already in `scripts/defines.ts` but missing from the production build flags.
+
+### Fixed
+- **Engine barrel missing `paths.ts`**: Added `export * from './paths.js'` to engine barrel.
+- **Stale import paths**: Fixed broken imports in 3 engine test files and 4 service test files that still referenced the deleted `src/workflow/` directory.
+- **Tool wiring imported through wrong path**: `WorkflowTool.ts` wiring now imports `createWorkflowTool`, `schema`, and `WORKFLOW_TOOL_NAME` from local sibling files instead of through the engine barrel.
+
+---
+
 ## [0.5.7] - 2026-06-22
 
 ### Fixed
-- **VS Code Extension — `--provider` flag overrides user's configured provider**: Removed `--provider` from `ProcessManager.buildArgs()`. The extension was passing `--provider anthropic` by default, which overrode whatever provider the user had configured in the CLI's own `~/.gakrcli/settings.json`, causing "Not logged in · Please run /login" auth errors on every API call. The CLI now uses its own config to determine the active provider, matching the reference `openclaude-vscode` implementation.
+- **VS Code Extension — `--provider` flag overrides user's configured provider**: Removed `--provider` from `ProcessManager.buildArgs()`. The extension was passing `--provider anthropic` by default, which overrode whatever provider the user had configured in the CLI's own `~/.gakrcli/settings.json`, causing "Not logged in · Please run /login" auth errors on every API call. The CLI now uses its own config to determine the active provider, matching the reference `opengakrcli-vscode` implementation.
 - **VS Code Extension — increased init timeout to 300s for provider/model discovery**: Increased `INIT_TIMEOUT_MS` and `SPAWN_POLL_TIMEOUT_MS` from 120s to 300s to accommodate CLI provider/model discovery on cold starts or environments with heavy plugin/disk I/O. Added periodic `"Still waiting for init..."` diagnostic logging every 30s.
 - **Format KB/MB rollover**: `formatFileSize` now compares the rounded value against 1024 instead of raw KB, fixing ~1023.5 KB displaying as "1024KB".
 - **Missing `relativizeContentLine` export**: Added function to `path.ts` for relativizing ripgrep-style output across Windows and POSIX paths.
@@ -31,9 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **VS Code Extension SDK→CLI Wrapper Refactoring**: Replaced direct `@gakr-gakr/gakrcli/sdk` imports with CLI child-process wrapper pattern. Removed `@gakr-gakr/gakrcli` npm dependency.
-- **SDK Reference Alignment**: All SDK entrypoint and test files now match `references/openclaude-main/` structure.
+- **SDK Reference Alignment**: All SDK entrypoint and test files now match `references/opengakrcli-main/` structure.
 - **Feature Flags**: Enabled `CONTEXT_COLLAPSE` and `BG_SESSIONS` feature flags in `scripts/build.ts`.
-- **Brand & Docs Rename**: Completed rename across 12 files — `.gitignore` (`.claude` → `.gakrcli`), `bin/gakrcli.js` re-stubbed, all docs updated.
+- **Brand & Docs Rename**: Completed rename across 12 files — `.gitignore` (`.gakrcli` → `.gakrcli`), `bin/gakrcli.js` re-stubbed, all docs updated.
 
 ### Added
 - **Provider Env-File Loading**: Wired `--provider-env-file` CLI flag with `reapplyRememberedEnvFileValues()`. Ported 3 envFile integration tests and 6 background routing tests from reference.
@@ -44,7 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Context Building Verification**: All 6 context layers verified in correct priority order.
 
 ### Removed
-- **Locally-Added SDK Runtime File**: Deleted `src/entrypoints/sdk/runtime.ts` — no equivalent in `references/openclaude-main/`.
+- **Locally-Added SDK Runtime File**: Deleted `src/entrypoints/sdk/runtime.ts` — no equivalent in `references/opengakrcli-main/`.
 
 ### Refactored
 - **Context Building Pipeline**: Workspace context rendering, memory file ordering, system context improvements.
@@ -66,12 +82,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Test Coverage**: Added 14 new tests (6 ImageSearchTool, 8 VideoSearchTool), bringing total search-tool test count to 33 passing tests
 
 ### Fixed (2026-06-09)
-- **Agent Routing And gRPC Startup Wiring**: Aligned teammate model routing, fallback model provider overrides, AgentTool metadata, CLI startup env application, and gRPC provider-profile startup handling with the OpenClaude reference while preserving GakrCLI env names.
+- **Agent Routing And gRPC Startup Wiring**: Aligned teammate model routing, fallback model provider overrides, AgentTool metadata, CLI startup env application, and gRPC provider-profile startup handling with the OpenGakrCLI reference while preserving GakrCLI env names.
 - **Full-Suite Test Isolation**: Isolated GitHub Actions setup, wiki, onboarding, and user identity tests from shared cwd/config/module state so the full Bun test suite passes with constrained concurrency.
 
 ### Added (2026-06-08)
 - **Design Skills Pack**: Added packaged design guidance under `assets/skills/design-skills/`, covering cinematic scroll, 3D interaction, micro-interactions, depth/glassmorphism, editorial typography, ambient effects, WebGPU shaders, visual systems, motion choreography, interaction patterns, and generative design.
-- **Claude Design Skill**: Added `assets/skills/design-skills/gakrcli-design/SKILL.md` with Claude-style visual system guidance for warm editorial AI-product interfaces.
+- **GakrCLI Design Skill**: Added `assets/skills/design-skills/gakrcli-design/SKILL.md` with GakrCLI-style visual system guidance for warm editorial AI-product interfaces.
 - **Storage Architecture Reference**: Added `docs/storage-sessions-memory-knowledge-graph.md` documenting current storage, sessions, memory, knowledge graph, DB, Orama, JSON, subagent, tool-result, plugin, MCP, telemetry, and UI state paths.
 - **Soulcraft Skill**: Added `assets/skills/soulcraft/SKILL.md` for reflective product, identity, and experience-shaping work.
 
@@ -83,7 +99,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Knowledge Graph SQLite Runtime Support**: Enabled conversation arc and multi-turn context in the open build, made the knowledge graph SQLite provider work under both Bun (`bun:sqlite`) and Node (`node:sqlite`), added storage backend status reporting, hydrated SQLite on the first learned fact, and tightened passive arc extraction to reduce noisy summaries and malformed rules.
 
 ### Added (2026-06-07)
-- **Wiki Command MVP**: Restored `/wiki init`, `/wiki status`, and `/wiki ingest <path>` for a local `.gakrcli/wiki` markdown knowledge scaffold, adapted from the OpenClaude reference implementation.
+- **Wiki Command MVP**: Restored `/wiki init`, `/wiki status`, and `/wiki ingest <path>` for a local `.gakrcli/wiki` markdown knowledge scaffold, adapted from the OpenGakrCLI reference implementation.
 
 ### Changed (2026-06-06)
 - **Open-Build Feature Flag Inventory**: Declared every `feature(...)` gate used in `src/` in `scripts/build.ts`, defaulting newly documented unavailable or unvalidated functionality to `false` so missing flags are explicit without changing runtime behavior.
@@ -293,7 +309,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Local Provider Fast Path**: Wired `GAKR_LOCAL_FAST_PATH` into OpenAI-compatible requests so local endpoints can skip cloud-only stable serialization, strict tool rewrites, and tool-history compression.
 - **Gemini Tool Signatures**: Replayed real Gemini `thought_signature` metadata by model or base URL and preserved signatures from streaming and non-streaming OpenAI-compatible responses.
 - **OpenAI Shim Stream Resilience**: Converted Gemini raw tool-call text into tool-use blocks, surfaced structured in-stream errors, and annotated length-truncated streams.
-- **GitHub Native Claude Mode**: Routed GitHub Claude-family models through Anthropic-native requests so prompt caching and `cache_control` blocks remain available.
+- **GitHub Native GakrCLI Mode**: Routed GitHub GakrCLI-family models through Anthropic-native requests so prompt caching and `cache_control` blocks remain available.
 - **OpenAI Shim Compatibility**: Redacted credentials from transport-error URLs and stripped unsupported `store` fields for Cerebras chat-completion requests.
 - **API Context Overflow Handling**: Removed a duplicate 500-context-overflow error branch while keeping regression coverage for the friendly new-session guidance.
 - **VS Code Extension Packaging**: Added explicit activation events, packaged-file allowlists, and isolated extension module mocks during tests.
@@ -625,7 +641,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Configuration management
   - Error handling and logging
 - **Provider Integration**: Initial LLM provider support
-  - Anthropic Claude integration
+  - Anthropic GakrCLI integration
   - OpenAI compatibility layer
   - Basic authentication handling
 

@@ -1,0 +1,20 @@
+// workflow-engine
+// Deterministic JS script orchestration engine. Zero core-layer runtime dependencies; talks to the world via port adapters.
+
+export * from './types.js'
+export * from './constants.js'
+export * from './ports.js'
+export * from './agentAdapter.js'
+export * from './concurrency.js'
+export * from './script.js'
+export * from './journal.js'
+export * from './budget.js'
+export * from './structuredOutput.js'
+export * from './namedWorkflows.js'
+export * from './errors.js'
+export * from './context.js'
+export * from './hooks.js'
+export * from './runWorkflow.js'
+export * from './paths.js'
+export * from './events.js'
+export { WORKFLOW_TOOL_NAME } from './constants.js'

@@ -75,6 +75,7 @@ const featureFlags: Record<string, boolean> = {
   PROMPT_CACHE_BREAK_DETECTION: true, // Detect & log unexpected prompt cache invalidations
   HOOK_PROMPTS: true,                 // Allow tools to request interactive user prompts
   KAIROS_CHANNELS: true,               // Local MCP channel delivery without assistant-mode cloud pieces
+  WORKFLOW_SCRIPTS: true,              // Workflow scripts (.gakrcli/workflows/ YAML/MD)
 }
 
 // ── Pre-process: replace feature() calls with boolean literals ──────
