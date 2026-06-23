@@ -1,40 +1,65 @@
-// Stub — WorkflowTool not included in source snapshot.
-// isEnabled() → false keeps it out of the tool list, matching the previous
-// behavior where the missing module resolved to a null tool object.
-import { z } from 'zod/v4'
-import { buildTool, type ToolDef } from '../../Tool.js'
-import { lazySchema } from '../../utils/lazySchema.js'
+import {
+  createWorkflowTool,
+  type WorkflowToolDescriptor,
+} from './descriptor.js'
+import { workflowInputSchema } from './schema.js'
 import { WORKFLOW_TOOL_NAME } from './constants.js'
+import { buildTool, type Tool } from '../../Tool.js'
+import { getWorkflowService } from '../../services/workflow/service.js'
 
-const inputSchema = lazySchema(() => z.strictObject({}))
-type InputSchema = ReturnType<typeof inputSchema>
-
-export const WorkflowTool = buildTool({
-  name: WORKFLOW_TOOL_NAME,
-  maxResultSizeChars: 100_000,
-  get inputSchema(): InputSchema {
-    return inputSchema()
-  },
-  isEnabled() {
-    return false
-  },
-  async description() {
-    return ''
-  },
-  async prompt() {
-    return ''
-  },
-  renderToolUseMessage() {
-    return null
-  },
-  mapToolResultToToolResultBlockParam(_output, toolUseID) {
-    return {
-      tool_use_id: toolUseID,
-      type: 'tool_result',
-      content: `${WORKFLOW_TOOL_NAME} is not available in this build`,
+/**
+ * Adapts the engine's self-contained descriptor into a buildTool-compatible Tool.
+ * The descriptor routes through the service singleton (sharing ports/registry/store).
+ *
+ * ports resolution is deferred to the first real method call (lazy): tools.ts calls
+ * createWorkflowToolCore() during module-load (feature-gated), and resolving ports
+ * immediately would trigger service instantiation, which in turn calls module-level
+ * side effects like getProjectRoot — yielding wrong paths before bootstrap completes.
+ * The Tool object itself is a singleton via createWorkflowToolCore's cached (PermissionRequest
+ * matches by reference), and the ports singleton is guaranteed by getWorkflowService.
+ */
+function buildWorkflowTool(): Tool {
+  let cachedDescriptor: WorkflowToolDescriptor | null = null
+  const descriptor = (): WorkflowToolDescriptor => {
+    if (!cachedDescriptor) {
+      const { ports } = getWorkflowService()
+      cachedDescriptor = createWorkflowTool(ports)
     }
-  },
-  async call(): Promise<never> {
-    throw new Error(`${WORKFLOW_TOOL_NAME} is not available in this build`)
-  },
-} satisfies ToolDef<InputSchema, never>)
+    return cachedDescriptor
+  }
+  return buildTool({
+    name: WORKFLOW_TOOL_NAME,
+    maxResultSizeChars: 50_000,
+    inputSchema: workflowInputSchema,
+    isEnabled: () => descriptor().isEnabled(),
+    isReadOnly: input => descriptor().isReadOnly(input),
+    isConcurrencySafe: () => true,
+    async description() {
+      return descriptor().description()
+    },
+    async prompt() {
+      return descriptor().prompt()
+    },
+    async call(input, context, canUseTool, parentMessage, onProgress) {
+      const result = await descriptor().call(
+        input,
+        context,
+        canUseTool,
+        parentMessage,
+        onProgress,
+      )
+      return { data: result.data }
+    },
+    renderToolUseMessage: input => descriptor().renderToolUseMessage(input),
+    mapToolResultToToolResultBlockParam: (data, toolUseId) =>
+      descriptor().mapToolResultToToolResultBlockParam(data, toolUseId),
+  })
+}
+
+// Singleton: tools.ts registration and PermissionRequest must reference the same instance (switch matches by reference).
+let cached: Tool | null = null
+
+export function createWorkflowToolCore(): Tool {
+  if (!cached) cached = buildWorkflowTool()
+  return cached
+}
