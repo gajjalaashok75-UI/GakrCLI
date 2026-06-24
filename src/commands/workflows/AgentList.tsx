@@ -1,6 +1,6 @@
 import React from 'react';
-import { Box, Text, useAnimationFrame } from '@anthropic/ink';
-import type { Theme } from '@anthropic/ink';
+import { Box, Text, useAnimationFrame } from '../../ink.js';
+import type { Theme } from '../../ink.js';
 import type { AgentProgress } from '../../services/workflow/progress/store.js';
 import { agentMetaText, agentVisual } from './status.js';
 

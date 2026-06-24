@@ -3,7 +3,7 @@ import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs
 import { z } from 'zod/v4'
 import { buildTool, type ToolDef } from '../../Tool.js'
 import { lazySchema } from '../../utils/lazySchema.js'
-import { getPrompt, SNIP_TOOL_NAME } from './prompt.js'
+import { SNIP_TOOL_NAME } from './prompt.js'
 
 const inputSchema = lazySchema(() =>
   z.object({
@@ -30,10 +30,20 @@ export const SnipTool = buildTool({
     return true
   },
   async description() {
-    return getPrompt()
+    return `Snip messages from your conversation history to free up context window space. Snipped messages are replaced with a compact summary so you retain awareness of what happened without the full content.`
   },
   async prompt() {
-    return getPrompt()
+    return `Snip messages from your conversation history to free up context window space. Snipped messages are replaced with a compact summary so you retain awareness of what happened without the full content.
+
+Use this when:
+- Your context is getting full and you need to make room
+- Earlier messages contain large tool outputs you no longer need in full
+- You want to compact a long exploration sequence into a summary
+
+Guidelines:
+- Only snip messages you're confident you won't need verbatim again
+- The summary replacement preserves key facts (file paths, decisions, errors found)
+- You cannot un-snip — the original content is gone from context`
   },
   get inputSchema(): InputSchema {
     return inputSchema()

@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
-import { Box, Text, useTheme } from '@anthropic/ink';
+import { Box, Text, useTheme } from '../../ink.js';
 import { getTheme, type Theme } from 'src/utils/theme.js';
 import { env } from 'src/utils/env.js';
 import { shouldShowAlwaysAllowOptions } from 'src/utils/permissions/permissionsLoader.js';

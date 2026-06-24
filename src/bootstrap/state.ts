@@ -1683,3 +1683,12 @@ export function getReplBridgeHandle(): null {
   return null
 }
 
+// Stub counters for git operation metrics (OTel counters wired in closed-source build)
+export function getCommitCounter(): { add(value: number): void } | null {
+  return null
+}
+
+export function getPrCounter(): { add(value: number): void } | null {
+  return null
+}
+

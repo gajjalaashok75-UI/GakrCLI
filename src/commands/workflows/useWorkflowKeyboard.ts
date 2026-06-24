@@ -1,4 +1,4 @@
-import { useInput } from '@anthropic/ink'
+import { useInput } from '../../ink.js'
 
 /** The column that currently has focus. */
 export type FocusColumn = 'phases' | 'agents'
@@ -47,7 +47,7 @@ export function routeWorkflowKey(
     }
     return null
   }
-  // @anthropic/ink sets key.tab to true for the Tab key; some environments fall back to '\t'
+  // Ink sets key.tab to true for the Tab key; some environments fall back to '\t'
   if (key.tab || input === '\t') return key.shift ? 'prevTab' : 'nextTab'
   if (key.escape || input === 'q') return 'quit'
   // Capital K = kill the entire workflow; lowercase x = kill the currently selected agent (agents column only).
