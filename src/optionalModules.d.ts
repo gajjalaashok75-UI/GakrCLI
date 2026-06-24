@@ -197,7 +197,7 @@ declare module '@anthropic-ai/mcpb' {
   }): Promise<unknown>
 }
 
-declare module '@ant/gakrcli-for-chrome-mcp' {
+declare module '@gakr-gakr/gakrcli-for-chrome-mcp' {
   export type Logger = {
     silly(message: string, ...args: unknown[]): void
     debug(message: string, ...args: unknown[]): void

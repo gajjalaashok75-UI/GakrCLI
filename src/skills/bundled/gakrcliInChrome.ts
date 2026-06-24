@@ -1,7 +1,8 @@
-import { BROWSER_TOOLS } from '@ant/gakrcli-for-chrome-mcp'
+import { BROWSER_TOOLS } from '@gakr-gakr/gakrcli-for-chrome-mcp'
 import { BASE_CHROME_PROMPT } from '../../utils/gakrcliInChrome/prompt.js'
 import { registerBundledSkill } from '../bundledSkills.js'
 import { shouldEnableGakrCLIInChromeSkill } from './gakrcliInChromeAccess.js'
+
 
 const GAKR_IN_CHROME_MCP_TOOLS = BROWSER_TOOLS.map(
   tool => `mcp__gakrcli-in-chrome__${tool.name}`,
