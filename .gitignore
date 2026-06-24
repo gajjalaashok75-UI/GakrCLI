@@ -2,6 +2,7 @@
 node_modules/
 package-lock.json
 bun.lockb
+package/
 cook/
 COOK.md
 compiled/

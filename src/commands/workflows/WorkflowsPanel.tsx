@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { Box, Dialog, Text, useAnimationFrame } from '@anthropic/ink';
-import type { Theme } from '@anthropic/ink';
+import { Box, Dialog, Text, useAnimationFrame } from '../../ink.js';
+import type { Theme } from '../../ink.js';
 import type { LocalJSXCommandContext, LocalJSXCommandOnDone } from '../../types/command.js';
 import { getWorkflowService } from '../../services/workflow/service.js';
 import type { RunProgress } from '../../services/workflow/progress/store.js';

@@ -55,6 +55,10 @@ describe('builtInCommandNames', () => {
   test('includes the /dream command', () => {
     expect(builtInCommandNames()).toContain('dream')
   })
+
+  test.skip('includes the artifacts command', () => {
+    expect(builtInCommandNames()).toContain('artifacts')
+  })
 })
 
 describe('isCommand', () => {

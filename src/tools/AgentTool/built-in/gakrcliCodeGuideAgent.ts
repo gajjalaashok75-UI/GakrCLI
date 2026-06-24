@@ -87,7 +87,12 @@ Complete the user's request by providing accurate, documentation-based guidance.
 }
 
 function getFeedbackGuideline(): string {
-  return `- When you cannot find an answer or the feature doesn't exist, direct the user to ${MACRO.ISSUES_EXPLAINER}`
+  // For 3P services (Bedrock/Vertex/Foundry), /feedback command is disabled
+  // Direct users to the appropriate feedback channel instead
+  if (isUsing3PServices()) {
+    return `- When you cannot find an answer or the feature doesn't exist, direct the user to ${MACRO.ISSUES_EXPLAINER}`
+  }
+  return "- When you cannot find an answer or the feature doesn't exist, direct the user to use /feedback to report a feature request or bug"
 }
 
 export const GAKR_CODE_GUIDE_AGENT: BuiltInAgentDefinition = {

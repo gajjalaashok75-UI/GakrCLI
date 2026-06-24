@@ -61,7 +61,7 @@
 						]
 					},
 					"default": [],
-					"description": "Environment variables to set when launching GakrCLI.\n\nPrefer setting environment variables in Claude's settings.json.\nSee documentation: https://code.gakrcli.com/docs/en/settings"
+					"description": "Environment variables to set when launching GakrCLI.\n\nPrefer setting environment variables in GakrCLI's settings.json.\nSee documentation: https://code.gakrcli.com/docs/en/settings"
 				},
 				"gakrcli.useTerminal": {
 					"type": "boolean",
@@ -74,7 +74,7 @@
 				},
 				"gakrcli.gakrcliProcessWrapper": {
 					"type": "string",
-					"description": "Executable path used to launch the Claude process."
+					"description": "Executable path used to launch the GakrCLI process."
 				},
 				"gakrcli.respectGitIgnore": {
 					"type": "boolean",

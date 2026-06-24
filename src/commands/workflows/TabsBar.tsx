@@ -1,6 +1,6 @@
 import React from 'react';
-import { Box, Text } from '@anthropic/ink';
-import type { Theme } from '@anthropic/ink';
+import { Box, Text } from '../../ink.js';
+import type { Theme } from '../../ink.js';
 import type { RunProgress } from '../../services/workflow/progress/store.js';
 import { RUN_STATUS_COLOR, STATUS_DOT } from './status.js';
 import { capTabsForDisplay, tabLabel } from './selectors.js';

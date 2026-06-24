@@ -83,3 +83,17 @@ export { useTerminalViewport } from './ink/hooks/use-terminal-viewport.js'
 export { default as measureElement } from './ink/measure-element.js'
 export { supportsTabStatus } from './ink/termio/osc.js'
 export { default as wrapText } from './ink/wrap-text.js'
+// Additional exports previously re-exported through the custom ink barrel
+export { Dialog } from './components/design-system/Dialog.js'
+export {
+  Tabs,
+  Tab,
+  useTabsWidth,
+  useTabHeaderFocus,
+} from './components/design-system/Tabs.js'
+export { Pane } from './components/design-system/Pane.js'
+export { setClipboard } from './ink/termio/osc.js'
+export { useTerminalSize } from './hooks/useTerminalSize.js'
+export { resolveKey } from './keybindings/resolver.js'
+export { default as wrappedRender } from './ink/root.js'
+export type { Theme } from './utils/theme.js'

@@ -68,3 +68,40 @@ export function retryWorkflowAgent(
   _agentId: string,
   _setAppState: SetAppState,
 ): void {}
+
+/**
+ * Register a new local workflow task with AppState and return its taskId.
+ * No-op in this build (WORKFLOW_SCRIPTS is disabled).
+ */
+export function registerLocalWorkflowTask(
+  _setAppState: SetAppState,
+  _opts: {
+    description: string
+    workflowName: string
+    workflowFile: string
+    summary?: string
+    toolUseId?: string
+    abortController: AbortController
+  },
+): string {
+  return ''
+}
+
+/**
+ * Mark a running workflow task as completed.
+ * No-op in this build (no workflow engine).
+ */
+export function completeWorkflowTask(
+  _taskId: string,
+  _setAppState: SetAppState,
+): void {}
+
+/**
+ * Mark a running workflow task as failed.
+ * No-op in this build (no workflow engine).
+ */
+export function failWorkflowTask(
+  _taskId: string,
+  _setAppState: SetAppState,
+  _error: string,
+): void {}
