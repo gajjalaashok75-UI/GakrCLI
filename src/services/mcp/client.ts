@@ -944,7 +944,7 @@ export const connectToServer = memoize(
           '../../utils/gakrcliInChrome/mcpServer.js'
         )
         const { createGakrCLIForChromeMcpServer } = await import(
-          '@ant/gakrcli-for-chrome-mcp'
+          '@gakr-gakr/gakrcli-for-chrome-mcp'
         )
         const { createLinkedTransportPair } = await import(
           './InProcessTransport.js'

@@ -229,7 +229,6 @@ result = await Bun.build({
           'url-handler-napi',
           'color-diff-napi',
           '@anthropic-ai/mcpb',
-          '@ant/gakrcli-for-chrome-mcp',
           'asciichart',
           'plist',
           'cacache',
@@ -500,7 +499,6 @@ sdkResult = await Bun.build({
       setup(build) {
         const missingModules = [
           '@anthropic-ai/mcpb',
-          '@ant/gakrcli-for-chrome-mcp',
           '@ant/computer-use-mcp',
           '@ant/computer-use-swift',
           '@ant/computer-use-input',

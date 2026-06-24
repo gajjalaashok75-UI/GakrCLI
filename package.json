@@ -3,6 +3,9 @@
   "version": "0.5.7",
   "description": "GakrCLI opens coding-agent workflows to any LLM — OpenAI, Gemini, DeepSeek, Ollama, and 200+ models",
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "bin": {
     "gakrcli": "./bin/gakrcli"
   },
@@ -86,6 +89,7 @@
     "@commander-js/extra-typings": "12.1.0",
     "@grpc/grpc-js": "^1.14.3",
     "@grpc/proto-loader": "^0.8.0",
+    "@gakr-gakr/gakrcli-for-chrome-mcp": "^0.1.0",
     "@modelcontextprotocol/sdk": "1.29.0",
     "@orama/orama": "^3.1.18",
     "@orama/plugin-data-persistence": "^3.1.18",

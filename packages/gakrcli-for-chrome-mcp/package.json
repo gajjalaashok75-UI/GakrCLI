@@ -1,0 +1,52 @@
+{
+  "name": "@gakr-gakr/gakrcli-for-chrome-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Chrome browser automation — used by GakrCLI for browser interaction, page debugging, console/network reading, screenshots, JavaScript execution, and form automation",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "ws": "^8.0.0"
+  },
+  "peerDependencies": {
+    "@modelcontextprotocol/sdk": ">=1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.0",
+    "typescript": "^5.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gajjalaashok75-UI/GakrCLI.git"
+  },
+  "keywords": [
+    "chrome",
+    "mcp",
+    "model-context-protocol",
+    "browser-automation",
+    "browser",
+    "automation",
+    "testing",
+    "gakrcli"
+  ]
+}
