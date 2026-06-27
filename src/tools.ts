@@ -121,6 +121,9 @@ const SnipTool = feature('HISTORY_SNIP')
 const DiscoverSkillsTool = feature('EXPERIMENTAL_SKILL_SEARCH')
   ? require('./tools/DiscoverSkillsTool/DiscoverSkillsTool.js').DiscoverSkillsTool
   : null
+const GoalTool = feature('GOAL')
+  ? require('./tools/GoalTool/GoalTool.js').GoalTool
+  : null
 const ListPeersTool = feature('UDS_INBOX')
   ? require('./tools/ListPeersTool/ListPeersTool.js').ListPeersTool
   : null
@@ -246,6 +249,7 @@ export function getAllBaseTools(): Tools {
     ...(getPowerShellTool() ? [getPowerShellTool()] : []),
     ...(SnipTool ? [SnipTool] : []),
     ...(DiscoverSkillsTool ? [DiscoverSkillsTool] : []),
+    ...(GoalTool ? [GoalTool] : []),
     ...(process.env.NODE_ENV === 'test' ? [TestingPermissionTool] : []),
     ListMcpResourcesTool,
     ReadMcpResourceTool,
