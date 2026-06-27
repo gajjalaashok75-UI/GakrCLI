@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **PowerShellTool tests**: Added 4 test files (`commandSemantics.test.ts`, `destructiveCommandWarning.test.ts`, `gitSafety.test.ts`, `powershellSecurity.test.ts`) — 344 tests pass, 0 fail. All wiring verified: lazy getter in `src/tools.ts`, runtime gate in `shellToolUtils.ts`, 22 consumer files across permission engine, `!` command routing, skill execution, and UI components.
+- **RemoteTriggerTool + remoteTriggerAudit**: Enhanced `RemoteTriggerTool.ts` with audit record tracking (`appendRemoteTriggerAuditRecord`), added `audit_id` to output schema. Added `src/utils/remoteTriggerAudit.ts` with append/list/format functions and 2 passing tests. Fixed test import paths (`../../../../../../` → `../../../../`). All wiring verified in `src/tools.ts:249`.
 - **PushNotificationTool**: Added tool implementation gated behind `feature('KAIROS') || feature('KAIROS_PUSH_NOTIFICATION')`. Registered in `src/tools.ts:37-41`, matches reference pattern. Inactive in production builds (`KAIROS: false`). Sends push notifications via Remote Control bridge.
 - **AgentTool prompt tests**: Updated to match fork-enabled prompt.ts with correct terminology checks.
 - **AgentTool test mocks**: Fixed mock.module path resolution and missing export stubs for transitive dependencies.
