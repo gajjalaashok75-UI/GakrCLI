@@ -56,6 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **WebBrowserTool**: Added full implementation (navigate/screenshot actions, Zod schema, prompt, isReadOnly). Gated behind `feature('WEB_BROWSER_TOOL')` (disabled by default). 21 tests pass.
 - **Bridge**: Added `bridgeResultScheduling.ts`, `rcDebugLog.ts`, `remoteInterruptHandling.ts` + `__tests__/`. Wired `rcLog` into `bridgeMain.ts` and `replBridge.ts` (file-based RC debug logging matching reference pattern).
 - **Assistant**: Full implementation for all 7 files: `index.ts` (initializeAssistantTeam, getAssistantSystemPromptAddendum, isAssistantMode), `gate.ts` (two-layer KAIROS + GrowthBook gate), `sessionDiscovery.ts` (CCR session discovery via teleport API), `sessionHistory.ts` (API-based history with cache removed), `AssistantSessionChooser.tsx` (interactive Dialog chooser with keyboard nav). Added `__tests__/index.test.ts` (9 expect calls, passes). Added deps: `@opentelemetry/sdk-trace-base`, `@langfuse/otel`, `@langfuse/tracing`.
+- **Commands `_shared`**: Added `launchCommand.ts` (generic factory for LocalJSXCommandCall boilerplate — parse/dispatch/View/errorView) + `__tests__/launchCommand.test.ts` (20 tests, all pass). Used by 5 command implementations.
 
 ### Removed
 
