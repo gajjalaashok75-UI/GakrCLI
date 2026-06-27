@@ -50,6 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **MCPTool tests**: Added `classifyForCollapse.test.ts` (19 tests) — MCP tool context collapse classification.
 - **MonitorTool**: Added `MonitorTool.tsx` UI component for streaming background process output.
 - **MonitorTool**: Merged duplicate `.ts` / `.tsx` implementations — kept `.tsx` as base (validateInput, isReadOnly, analytics, better prompt) and ported `preparePermissionMatcher` from `.ts`. Deleted orphaned `MonitorTool.ts`.
+- **VerifyPlanExecutionTool**: Replaced stub with full implementation (Zod schema, buildTool, prompt, renderers, `isConcurrencySafe()`, `isReadOnly()`). Gated behind `process.env.GAKR_CODE_VERIFY_PLAN === 'true'` dead code elimination pattern at `src/tools.ts:87-91`.
 
 ### Removed
 - **Dead AgentTool decompiler artifacts**: Deleted unused `src/tools/AgentTool/src/` and `src/tools/AgentTool/built-in/src/` (shadow copies confirmed unused in reference).
