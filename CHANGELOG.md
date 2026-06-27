@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **DiscoverSkillsTool build wiring**: Added `EXPERIMENTAL_SKILL_SEARCH: true` to `scripts/build.ts` feature flags so the tool is live in production builds, not just dev mode.
 
 ### Fixed
+- **PowerShellTool tests**: Added 4 test files (`commandSemantics.test.ts`, `destructiveCommandWarning.test.ts`, `gitSafety.test.ts`, `powershellSecurity.test.ts`) — 344 tests pass, 0 fail. All wiring verified: lazy getter in `src/tools.ts`, runtime gate in `shellToolUtils.ts`, 22 consumer files across permission engine, `!` command routing, skill execution, and UI components.
 - **AgentTool prompt tests**: Updated to match fork-enabled prompt.ts with correct terminology checks.
 - **AgentTool test mocks**: Fixed mock.module path resolution and missing export stubs for transitive dependencies.
 - **ConfigTool UI.tsx**: Fixed JSX formatting and added trailing newline (formatting-only).
