@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **FileEditTool tests**: Added `utils.test.ts` (20 tests covering stripTrailingWhitespace, findActualString, applyEditToFile). Fixed mock import path.
 - **GoalTool + goal system**: Registered GoalTool behind `feature('GOAL')` in `src/tools.ts`, added `GOAL: true` to `scripts/build.ts`. Added `CORE_TOOLS` to `src/constants/tools.ts`. Ported full `localSearch.ts` implementation from reference (TF-IDF search). Added `GoalReplaceConfirmDialog.tsx`, `goal.tsx` (React command), `goalState.ts`, `goalStorage.ts`, `prompts.ts`, and `__tests__/goalState.test.ts`. All 142 tests pass.
 - **ListPeersTool**: Added tool implementation (gated behind `UDS_INBOX` — intentionally disabled, flagged-off).
+- **LocalMemoryRecallTool**: Registered in `src/tools.ts` (unconditional), added 52 tests with fixed mock import path. `stripUntrusted` 8/8 tests pass across all 3 locations.
 
 ### Removed
 - **Dead AgentTool decompiler artifacts**: Deleted unused `src/tools/AgentTool/src/` and `src/tools/AgentTool/built-in/src/` (shadow copies confirmed unused in reference).
