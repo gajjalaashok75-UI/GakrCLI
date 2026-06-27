@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **DiscoverSkillsTool**: Implemented TF-IDF skill search tool gated behind `EXPERIMENTAL_SKILL_SEARCH` feature flag. Registered in `src/tools.ts` with full Zod input schema, prompt, and 6 passing tests.
 
 ### Fixed
+- **DiscoverSkillsTool build wiring**: Added `EXPERIMENTAL_SKILL_SEARCH: true` to `scripts/build.ts` feature flags so the tool is live in production builds, not just dev mode.
+
+### Fixed
 - **AgentTool prompt tests**: Updated to match fork-enabled prompt.ts with correct terminology checks.
 - **AgentTool test mocks**: Fixed mock.module path resolution and missing export stubs for transitive dependencies.
 - **ConfigTool UI.tsx**: Fixed JSX formatting and added trailing newline (formatting-only).
