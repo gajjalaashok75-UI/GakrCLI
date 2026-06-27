@@ -77,6 +77,7 @@ const featureFlags: Record<string, boolean> = {
   KAIROS_CHANNELS: true,               // Local MCP channel delivery without assistant-mode cloud pieces
   WORKFLOW_SCRIPTS: true,              // Workflow scripts (.gakrcli/workflows/ YAML/MD)
   EXPERIMENTAL_SKILL_SEARCH: true,     // TF-IDF skill search (DiscoverSkillsTool)
+  GOAL: true,                          // Goal tracking tool & command
 }
 
 // ── Pre-process: replace feature() calls with boolean literals ──────
