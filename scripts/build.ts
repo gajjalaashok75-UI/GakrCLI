@@ -76,6 +76,7 @@ const featureFlags: Record<string, boolean> = {
   HOOK_PROMPTS: true,                 // Allow tools to request interactive user prompts
   KAIROS_CHANNELS: true,               // Local MCP channel delivery without assistant-mode cloud pieces
   WORKFLOW_SCRIPTS: true,              // Workflow scripts (.gakrcli/workflows/ YAML/MD)
+  EXPERIMENTAL_SKILL_SEARCH: true,     // TF-IDF skill search (DiscoverSkillsTool)
 }
 
 // ── Pre-process: replace feature() calls with boolean literals ──────
@@ -233,6 +234,7 @@ result = await Bun.build({
           'plist',
           'cacache',
           'fuse',
+          'vscode-jsonrpc/node.js',
         ]) {
           build.onResolve({ filter: new RegExp(`^${mod}$`) }, () => ({
             path: mod,
@@ -268,6 +270,10 @@ export const ColorFile = null;
 export const getSyntaxTheme = noop;
 export const plot = noop;
 export const createGakrCLIForChromeMcpServer = noop;
+export const createMessageConnection = noop;
+export const StreamMessageReader = noop;
+export const StreamMessageWriter = noop;
+export const Trace = noop;
 `,
             loader: 'js',
           }),
@@ -308,6 +314,10 @@ export const createGakrCLIForChromeMcpServer = noop;
           '@ant/computer-use-mcp/types',
           '@ant/computer-use-swift',
           '@ant/computer-use-input',
+          '@smithy/node-http-handler',
+          '@smithy/core',
+          '@aws-sdk/credential-provider-node',
+          '@mendable/firecrawl-js',
         ]) {
           missingModules.add(pkg)
         }
@@ -506,6 +516,11 @@ sdkResult = await Bun.build({
           'audio-capture-napi', 'audio-capture.node',
           'image-processor-napi', 'modifiers-napi', 'url-handler-napi', 'color-diff-napi',
           'asciichart', 'plist', 'cacache', 'fuse',
+          'vscode-jsonrpc/node.js',
+          '@smithy/node-http-handler',
+          '@smithy/core',
+          '@aws-sdk/credential-provider-node',
+          '@mendable/firecrawl-js',
         ]
         for (const mod of missingModules) {
           const escaped = mod.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -965,7 +980,14 @@ if (result?.success) {
   // known item to revisit, not a blessing that the stub is safe.
   // Entries are repo-relative paths from `src/` onward, without extension — the
   // same shape canonicalStub() produces, so the allowlist reads as the key.
-  const ACCEPTABLE_RUNTIME_STUBS = new Set<string>([])
+  const ACCEPTABLE_RUNTIME_STUBS = new Set<string>([
+    // Dynamically-imported cloud SDKs behind feature gates (never live in OSS build)
+    '@aws-sdk/credential-provider-node',
+    '@smithy/core',
+    '@smithy/node-http-handler',
+    // Dynamically-imported web search tools behind feature gates
+    '@mendable/firecrawl-js',
+  ])
 
   // Stub markers are not byte-stable across build hosts: the per-importer
   // scanner records each stub as the resolved absolute source path, which
