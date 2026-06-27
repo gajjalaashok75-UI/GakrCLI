@@ -54,6 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **WebFetchTool**: Added `__tests__/` (3 test files, 120 tests). Fixed import paths in `headers.test.ts`. Added `getResponseHeader()`/`responseHeaderToString()` helpers to `utils.ts` for AxiosHeaders-style header access and array header normalization.
 - **WebSearchTool**: Added `__tests__/` (5 test files) and `adapters/` (7 adapter files). Fixed import paths in 3 test files. Added `he` dependency for bingAdapter. Wired `createAdapter()` into `WebSearchTool.ts` `call()` method — if `WEB_SEARCH_ADAPTER` env var is set, uses the adapters/ system directly (matching reference pattern).
 - **WebBrowserTool**: Added full implementation (navigate/screenshot actions, Zod schema, prompt, isReadOnly). Gated behind `feature('WEB_BROWSER_TOOL')` (disabled by default). 21 tests pass.
+- **Bridge**: Added `bridgeResultScheduling.ts`, `rcDebugLog.ts`, `remoteInterruptHandling.ts` + `__tests__/`. Wired `rcLog` into `bridgeMain.ts` and `replBridge.ts` (file-based RC debug logging matching reference pattern).
 
 ### Removed
 - **Dead AgentTool decompiler artifacts**: Deleted unused `src/tools/AgentTool/src/` and `src/tools/AgentTool/built-in/src/` (shadow copies confirmed unused in reference).
