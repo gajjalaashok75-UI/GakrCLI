@@ -53,6 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **VerifyPlanExecutionTool**: Replaced stub with full implementation (Zod schema, buildTool, prompt, renderers, `isConcurrencySafe()`, `isReadOnly()`). Gated behind `process.env.GAKR_CODE_VERIFY_PLAN === 'true'` dead code elimination pattern at `src/tools.ts:87-91`.
 - **WebFetchTool**: Added `__tests__/` (3 test files, 120 tests). Fixed import paths in `headers.test.ts`. Added `getResponseHeader()`/`responseHeaderToString()` helpers to `utils.ts` for AxiosHeaders-style header access and array header normalization.
 - **WebSearchTool**: Added `__tests__/` (5 test files) and `adapters/` (7 adapter files). Fixed import paths in 3 test files. Added `he` dependency for bingAdapter. Wired `createAdapter()` into `WebSearchTool.ts` `call()` method — if `WEB_SEARCH_ADAPTER` env var is set, uses the adapters/ system directly (matching reference pattern).
+- **WebBrowserTool**: Added full implementation (navigate/screenshot actions, Zod schema, prompt, isReadOnly). Gated behind `feature('WEB_BROWSER_TOOL')` (disabled by default). 21 tests pass.
 
 ### Removed
 - **Dead AgentTool decompiler artifacts**: Deleted unused `src/tools/AgentTool/src/` and `src/tools/AgentTool/built-in/src/` (shadow copies confirmed unused in reference).
