@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **AgentTool tests**: 37 tests (35 pass, 2 skip) across agentDisplay, agentToolUtils, filterIncompleteToolCalls, and prompt modules.
 - **`filterIncompleteToolCalls.ts`**: Extracted from `runAgent.ts` into its own module, wired to `summaryContext.ts`.
 - **BashTool tests**: 63 tests across 5 files covering backslash escaping, command semantics, compound command security, destructive command warnings, and network device redirect detection.
+- **DiscoverSkillsTool**: Implemented TF-IDF skill search tool gated behind `EXPERIMENTAL_SKILL_SEARCH` feature flag. Registered in `src/tools.ts` with full Zod input schema, prompt, and 6 passing tests.
 
 ### Fixed
 - **AgentTool prompt tests**: Updated to match fork-enabled prompt.ts with correct terminology checks.
