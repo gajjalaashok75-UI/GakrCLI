@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.5.8] - 2026-06-27
 
 ### Added
+- **`prepareWorkspaceApiRequest()` + `isWorkspaceKeyCleared()`**: Added to `src/utils/teleport/api.ts` — validates workspace API keys (sk-ant-api03-*) for agents/vaults/memory_stores/skills endpoints. A cleared-vs-never-set distinction surfaces actionable error messages.
+- **agents-platform command**: Full implementation replacing stub. `index.ts` lazy-loads `launchAgentsPlatform.tsx` which uses `launchCommand` factory + `agentsApi.ts` (HTTP client via `prepareWorkspaceApiRequest`) + `AgentsPlatformView.tsx` (Ink UI) + `parseArgs.ts`. Tests: 70 local passes across launch, API, command metadata, and parseArgs. Gated behind `USER_TYPE=ant`.
 - **Buddy `/buddy help` and `/buddy status` subcommands**: `help` shows usage info, `status` displays companion name/rarity/species/personality. Removed orphaned `buddy.tsx` (old implementation superseded by `buddy.ts`).
 - **Buddy command tests**: 14 tests covering metadata, help, status, pet, on/off mute, and hatching flow.
 - **`inferLegacyCompanionBones()`**: Extracts species/rarity from pre-seed companion personality text for backward compatibility.
