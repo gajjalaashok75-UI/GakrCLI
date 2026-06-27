@@ -15,3 +15,10 @@
 - - **Root cause**: `src/tools.ts:17` hardcodes `const REPLTool = null`. Even if un-nulled, registration at `src/tools.ts:240` requires `process.env.USER_TYPE === 'ant'`. The `call()` method returns an error: "REPL execution engine requires the ant-native runtime."
 - - **Files**: `src/tools/REPLTool/REPLTool.ts` (full implementation matching reference, but `call()` returns error); `src/tools.ts:17` (hardcoded null); `src/tools.ts:240` (USER_TYPE gate)
 - - **Reference**: `references/claude-code-main/packages/builtin-tools/src/tools/REPLTool/REPLTool.ts` — identical implementation, same USER_TYPE gate pattern
+
+- ### `SUGGEST_BACKGROUND_PR_TOOL` — requires KAIROS runtime
+- **Tool affected**: `SuggestBackgroundPRTool`
+- **Status**: Intentionally inaccessible in public builds
+- **Root cause**: `src/tools.ts:18` hardcodes `const SuggestBackgroundPRTool = null`. Registration at line 223 uses null guard. Reference gates behind `USER_TYPE === 'ant'`. `call()` returns error: "SuggestBackgroundPR requires the KAIROS runtime."
+- **Files**: `src/tools/SuggestBackgroundPRTool/SuggestBackgroundPRTool.ts` (full implementation matching reference, but `call()` returns error); `src/tools.ts:18` (hardcoded null)
+- **Reference**: `references/claude-code-main/packages/builtin-tools/.../SuggestBackgroundPRTool.ts` — identical implementation; `src/tools.ts:21-25` gates behind `USER_TYPE === 'ant'`
