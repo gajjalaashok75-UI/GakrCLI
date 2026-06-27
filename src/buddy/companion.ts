@@ -116,6 +116,30 @@ export function rollWithSeed(seed: string): Roll {
   return rollFrom(mulberry32(hashString(seed)))
 }
 
+export function generateSeed(): string {
+  const buf = new Uint32Array(4)
+  crypto.getRandomValues(buf)
+  return Array.from(buf).map(n => n.toString(36)).join('')
+}
+
+/**
+ * Infer species and rarity from a legacy pre-seed companion's personality text.
+ * Old companions stored "A {rarity} {species} of ..." as their personality string.
+ * Returns empty object if companion already has a seed (no inference needed).
+ */
+export function inferLegacyCompanionBones(
+  stored: { seed?: string; personality?: string },
+): Partial<Pick<CompanionBones, 'species' | 'rarity'>> {
+  if (stored.seed) return {}
+  if (!stored.personality) return {}
+
+  const lower = stored.personality.toLowerCase()
+  const species = SPECIES.find(s => lower.includes(s.toLowerCase()))
+  const rarity = RARITIES.find(r => lower.includes(r.toLowerCase()))
+  if (!species || !rarity) return {}
+  return { species, rarity }
+}
+
 export function companionUserId(): string {
   const config = getGlobalConfig()
   return config.oauthAccount?.accountUuid ?? config.userID ?? 'anon'
