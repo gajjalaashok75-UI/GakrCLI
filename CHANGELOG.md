@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **AgentTool prompt tests**: Updated to match fork-enabled prompt.ts with correct terminology checks.
 - **AgentTool test mocks**: Fixed mock.module path resolution and missing export stubs for transitive dependencies.
+- **ConfigTool UI.tsx**: Fixed JSX formatting and added trailing newline (formatting-only).
 
 ### Removed
 - **Dead AgentTool decompiler artifacts**: Deleted unused `src/tools/AgentTool/src/` and `src/tools/AgentTool/built-in/src/` (shadow copies confirmed unused in reference).
