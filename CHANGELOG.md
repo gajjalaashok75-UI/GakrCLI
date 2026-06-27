@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CtxInspectTool tests**: Fixed import path in `__tests__/` test; skipped 4 tests ported from reference (don't match local tool internals).
 - **EnterWorktreeTool UI.tsx**: Fixed JSX formatting and added trailing newline (formatting-only).
 - **ExecuteTool + SearchExtraToolsTool**: Wired both tools in `src/tools.ts` — `SearchExtraToolsTool` gated behind `isSearchExtraToolsEnabledOptimistic()`, `ExecuteTool` always available (matching reference). Fixed test import paths (`../../../../../../` → `../../../../`).
+- **FileEditTool tests**: Added `utils.test.ts` (20 tests covering stripTrailingWhitespace, findActualString, applyEditToFile). Fixed mock import path.
 
 ### Removed
 - **Dead AgentTool decompiler artifacts**: Deleted unused `src/tools/AgentTool/src/` and `src/tools/AgentTool/built-in/src/` (shadow copies confirmed unused in reference).
