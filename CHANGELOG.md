@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **LSPTool tests**: Added `formatters.test.ts` (18 tests) and `schemas.test.ts` (13 tests). Fixed mock import path in formatters test.
 - **MCPTool tests**: Added `classifyForCollapse.test.ts` (19 tests) — MCP tool context collapse classification.
 - **MonitorTool**: Added `MonitorTool.tsx` UI component for streaming background process output.
+- **MonitorTool**: Merged duplicate `.ts` / `.tsx` implementations — kept `.tsx` as base (validateInput, isReadOnly, analytics, better prompt) and ported `preparePermissionMatcher` from `.ts`. Deleted orphaned `MonitorTool.ts`.
 
 ### Removed
 - **Dead AgentTool decompiler artifacts**: Deleted unused `src/tools/AgentTool/src/` and `src/tools/AgentTool/built-in/src/` (shadow copies confirmed unused in reference).

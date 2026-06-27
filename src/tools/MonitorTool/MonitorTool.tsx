@@ -5,7 +5,8 @@ import { TOOL_SUMMARY_MAX_LENGTH } from 'src/constants/toolLimits.js';
 import type { ToolResultBlockParam, ToolUseContext, ValidationResult } from 'src/Tool.js';
 import { buildTool } from 'src/Tool.js';
 import { spawnShellTask } from 'src/tasks/LocalShellTask/LocalShellTask.js';
-import { bashToolHasPermission } from '../BashTool/bashPermissions.js';
+import { bashToolHasPermission, matchWildcardPattern, permissionRuleExtractPrefix } from '../BashTool/bashPermissions.js';
+import { parseForSecurity } from 'src/utils/bash/ast.js';
 import type { PermissionResult } from 'src/utils/permissions/PermissionResult.js';
 import { lazySchema } from 'src/utils/lazySchema.js';
 import { truncate } from 'src/utils/format.js';
@@ -85,6 +86,23 @@ Examples:
 
   toAutoClassifierInput(input: MonitorInput) {
     return `Monitor: ${input.command}`;
+  },
+
+  async preparePermissionMatcher({ command }: { command: string }) {
+    const parsed = await parseForSecurity(command);
+    if (parsed.kind !== 'simple') {
+      return () => true;
+    }
+    const subcommands = parsed.commands.map(c => c.argv.join(' '));
+    return (pattern: string) => {
+      const prefix = permissionRuleExtractPrefix(pattern);
+      return subcommands.some(cmd => {
+        if (prefix !== null) {
+          return cmd === prefix || cmd.startsWith(`${prefix} `);
+        }
+        return matchWildcardPattern(pattern, cmd);
+      });
+    };
   },
 
   async checkPermissions(input: MonitorInput, context: ToolUseContext): Promise<PermissionResult> {
