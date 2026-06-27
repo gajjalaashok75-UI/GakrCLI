@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`inferLegacyCompanionBones()`**: Extracts species/rarity from pre-seed companion personality text for backward compatibility.
 - **AgentTool tests**: 37 tests (35 pass, 2 skip) across agentDisplay, agentToolUtils, filterIncompleteToolCalls, and prompt modules.
 - **`filterIncompleteToolCalls.ts`**: Extracted from `runAgent.ts` into its own module, wired to `summaryContext.ts`.
+- **BashTool tests**: 63 tests across 5 files covering backslash escaping, command semantics, compound command security, destructive command warnings, and network device redirect detection.
 
 ### Fixed
 - **AgentTool prompt tests**: Updated to match fork-enabled prompt.ts with correct terminology checks.
