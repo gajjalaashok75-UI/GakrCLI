@@ -28,7 +28,7 @@ export const SUBAGENT_SKILL_LISTING_CHAR_BUDGET = 4_000
 // full content on invoke, so verbose whenToUse strings waste turn-1 cache_creation
 // tokens without improving match rate. Applies to all entries, including bundled,
 // since the cap is generous enough to preserve the core use case.
-export const MAX_LISTING_DESC_CHARS = 250
+export const MAX_LISTING_DESC_CHARS = 1536
 
 export type SkillListingBudgetOptions = {
   maxCharBudget?: number
