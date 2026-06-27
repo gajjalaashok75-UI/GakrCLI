@@ -29,6 +29,7 @@ import {
   renderToolUseMessage,
   renderToolUseProgressMessage,
 } from './UI.js'
+import { createAdapter } from './adapters/index.js'
 
 import {
   runSearch,
@@ -694,6 +695,47 @@ export const WebSearchTool = buildTool({
     return { result: true }
   },
   async call(input, context, _canUseTool, _parentMessage, onProgress) {
+    // --- Direct adapter path (WEB_SEARCH_ADAPTER env var) ---
+    // Uses the cleaner adapters/ system matching the reference implementation.
+    // Supports: api, bing, brave, exa, tavily — selected via WEB_SEARCH_ADAPTER.
+    if (process.env.WEB_SEARCH_ADAPTER) {
+      const startTime = performance.now()
+      try {
+        const adapter = createAdapter()
+        const adapterResults = await adapter.search(input.query, {
+          allowedDomains: input.allowed_domains,
+          blockedDomains: input.blocked_domains,
+          numResults: input.num_results,
+          signal: context.abortController.signal,
+          searchType: input.search_type,
+          contextMaxCharacters: input.context_max_characters,
+        })
+        const endTime = performance.now()
+        const results: (SearchResult | string)[] = []
+        if (adapterResults.length > 0) {
+          results.push({
+            tool_use_id: 'adapter-search-1',
+            content: adapterResults.map(r => ({
+              title: r.title,
+              url: r.url,
+              snippet: r.snippet,
+            })),
+          })
+        } else {
+          results.push('No search results found.')
+        }
+        return { data: { query: input.query, results, durationSeconds: (endTime - startTime) / 1000 } }
+      } catch (err) {
+        return {
+          data: {
+            query: input.query,
+            results: [`Search adapter error: ${err instanceof Error ? err.message : String(err)}`],
+            durationSeconds: (performance.now() - startTime) / 1000,
+          },
+        }
+      }
+    }
+
     // --- Adapter-based providers (custom, firecrawl, ddg) ---
     // runSearch handles fallback semantics based on WEB_SEARCH_PROVIDER mode:
     //   - "auto": tries each provider, falls through on failure
