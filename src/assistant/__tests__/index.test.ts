@@ -37,9 +37,23 @@ afterEach(async () => {
 })
 
 describe('initializeAssistantTeam', () => {
-  test('returns undefined in open build (KAIROS-gated no-op)', async () => {
+  test('creates a session-scoped in-process team context and task list', async () => {
     const context = await initializeAssistantTeam()
-    // Open-source build ships inert no-ops — KAIROS feature flag disabled.
-    expect(context).toBeUndefined()
+    expect(context).toBeDefined()
+    const teamContext = context!
+
+    expect(teamContext.teamName).toStartWith('assistant-')
+    expect(teamContext.isLeader).toBe(true)
+    expect(teamContext.selfAgentName).toBe('team-lead')
+    expect(
+      teamContext.teammates[teamContext.leadAgentId]?.tmuxSessionName,
+    ).toBe('in-process')
+    expect(getTaskListId()).toBe(teamContext.teamName)
+
+    const raw = await readFile(getTeamFilePath(teamContext.teamName), 'utf-8')
+    const teamFile = JSON.parse(raw)
+    expect(teamFile.leadAgentId).toBe(teamContext.leadAgentId)
+    expect(teamFile.members[0].backendType).toBe('in-process')
+    expect(teamFile.members[0].agentType).toBe('assistant')
   })
 })
