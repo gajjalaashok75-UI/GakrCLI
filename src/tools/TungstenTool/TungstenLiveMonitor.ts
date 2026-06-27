@@ -1,2 +1,3 @@
-// Stub — TungstenTool not included in source snapshot (internal tool)
-export const TungstenLiveMonitor = null
+// Auto-generated stub — replace with real implementation
+export const TungstenLiveMonitor: (props: Record<string, unknown>) => null =
+  () => null
