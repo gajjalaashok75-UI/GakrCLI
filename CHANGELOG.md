@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **shared/gitOperationTracking**: Added `getCommitCounter()`/`getPrCounter()` from `src/bootstrap/state.js`, migrated relative imports to `src/` alias. Added `__tests__/` with 2 test files (`gitOperationTracking.test.ts`, `spawnMultiAgent.test.ts`) — 69/72 pass (3 pre-existing failures in `agentTeamsLifecycle`).
+- **SuggestBackgroundPRTool**: Replaced stub with full implementation matching reference. Supports suggesting background PRs via KAIROS runtime. Hardcoded `null` at `src/tools.ts:18` (ant-only tool). Added ISSUES.md entry #3.
 - **SubscribePRTool**: Added tool (GitHub PR webhook subscription) gated behind `feature('KAIROS_GITHUB_WEBHOOKS')` at `src/tools.ts:42-44`. Inactive in prod (flag not in build.ts). `call()` returns error — requires KAIROS runtime. Identical to reference.
 - **SleepTool**: Added tool implementation gated behind `feature('PROACTIVE') || feature('KAIROS')` at `src/tools.ts:19-22`. Sleeps for a duration with wake-on-queue interrupt support. Added `__tests__/SleepTool.test.ts` — 2 tests, 6 total across all copies pass. Also ported `notifyAutomationStateChanged` + `AutomationStatePhase`/`AutomationStateMetadata` types + helper functions to `src/utils/sessionState.ts` (missing export that SleepTool depends on).
 - **SkillTool**: Fixed `MAX_LISTING_DESC_CHARS` from 250 → 1536 to match reference (v2.1.117 regression). Test caught the mismatch — 24 local tests pass. Added `__tests__/prompt.test.ts` with 3 cap-verification tests.
