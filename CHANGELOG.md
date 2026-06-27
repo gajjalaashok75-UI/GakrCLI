@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Buddy `/buddy help` and `/buddy status` subcommands**: `help` shows usage info, `status` displays companion name/rarity/species/personality. Removed orphaned `buddy.tsx` (old implementation superseded by `buddy.ts`).
 - **Buddy command tests**: 14 tests covering metadata, help, status, pet, on/off mute, and hatching flow.
 - **`inferLegacyCompanionBones()`**: Extracts species/rarity from pre-seed companion personality text for backward compatibility.
+- **AgentTool tests**: 37 tests (35 pass, 2 skip) across agentDisplay, agentToolUtils, filterIncompleteToolCalls, and prompt modules.
+- **`filterIncompleteToolCalls.ts`**: Extracted from `runAgent.ts` into its own module, wired to `summaryContext.ts`.
+
+### Fixed
+- **AgentTool prompt tests**: Updated to match fork-enabled prompt.ts with correct terminology checks.
+- **AgentTool test mocks**: Fixed mock.module path resolution and missing export stubs for transitive dependencies.
+
+### Removed
+- **Dead AgentTool decompiler artifacts**: Deleted unused `src/tools/AgentTool/src/` and `src/tools/AgentTool/built-in/src/` (shadow copies confirmed unused in reference).
 
 ---
 
