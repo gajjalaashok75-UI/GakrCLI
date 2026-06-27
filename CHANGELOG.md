@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **LocalMemoryRecallTool**: Registered in `src/tools.ts` (unconditional), added 52 tests with fixed mock import path. `stripUntrusted` 8/8 tests pass across all 3 locations.
 - **LSPTool tests**: Added `formatters.test.ts` (18 tests) and `schemas.test.ts` (13 tests). Fixed mock import path in formatters test.
 - **MCPTool tests**: Added `classifyForCollapse.test.ts` (19 tests) — MCP tool context collapse classification.
+- **MonitorTool**: Added `MonitorTool.tsx` UI component for streaming background process output.
 
 ### Removed
 - **Dead AgentTool decompiler artifacts**: Deleted unused `src/tools/AgentTool/src/` and `src/tools/AgentTool/built-in/src/` (shadow copies confirmed unused in reference).
