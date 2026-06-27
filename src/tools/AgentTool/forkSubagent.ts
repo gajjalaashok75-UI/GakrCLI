@@ -24,10 +24,7 @@ import type { BuiltInAgentDefinition } from './loadAgentsDir.js'
  *   the parent's full conversation context and system prompt
  * - All agent spawns run in the background (async) for a unified
  *   `<task-notification>` interaction model
- *
- * (The `/fork <directive>` slash command is not part of this build — its source
- * is unmirrored. Forking here is implicit, via omitting `subagent_type`; the
- * `/fork` alias instead routes to `/branch`.)
+ * - `/fork <directive>` slash command is available
  *
  * Mutually exclusive with coordinator mode — coordinator already owns the
  * orchestration role and has its own delegation model.
@@ -81,7 +78,7 @@ export const FORK_AGENT = {
 export function isInForkChild(messages: MessageType[]): boolean {
   return messages.some(m => {
     if (m.type !== 'user') return false
-    const content = m.message.content
+    const content = m.message!.content
     if (!Array.isArray(content)) return false
     return content.some(
       block =>
@@ -118,14 +115,20 @@ export function buildForkedMessages(
     uuid: randomUUID(),
     message: {
       ...assistantMessage.message,
-      content: [...assistantMessage.message.content],
+      content: [
+        ...(Array.isArray(assistantMessage.message.content)
+          ? assistantMessage.message.content
+          : []),
+      ],
     },
   }
 
   // Collect all tool_use blocks from the assistant message
-  const toolUseBlocks = assistantMessage.message.content.filter(
-    (block): block is BetaToolUseBlock => block.type === 'tool_use',
-  )
+  const toolUseBlocks = (
+    Array.isArray(assistantMessage.message.content)
+      ? assistantMessage.message.content
+      : []
+  ).filter((block): block is BetaToolUseBlock => block.type === 'tool_use')
 
   if (toolUseBlocks.length === 0) {
     logForDebugging(
