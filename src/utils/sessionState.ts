@@ -23,6 +23,15 @@ export type RequiresActionDetails = {
   input?: Record<string, unknown>
 }
 
+export type AutomationStatePhase = 'standby' | 'sleeping'
+
+export type AutomationStateMetadata = {
+  enabled: boolean
+  phase: AutomationStatePhase | null
+  next_tick_at: number | null
+  sleep_until: number | null
+}
+
 import { isEnvTruthy } from './envUtils.js'
 import type { PermissionMode } from './permissions/PermissionMode.js'
 import { enqueueSdkEvent } from './sdkEventQueue.js'
@@ -34,6 +43,7 @@ export type SessionExternalMetadata = {
   is_ultraplan_mode?: boolean | null
   model?: string | null
   pending_action?: RequiresActionDetails | null
+  automation_state?: AutomationStateMetadata | null
   // Opaque — typed at the emit site. Importing PostTurnSummaryOutput here
   // would leak the import path string into sdk.d.ts via agentSdkBridge's
   // re-export of SessionState.
@@ -52,6 +62,9 @@ type SessionMetadataChangedListener = (
   metadata: SessionExternalMetadata,
 ) => void
 type PermissionModeChangedListener = (mode: PermissionMode) => void
+type SessionMetadataListenerOptions = {
+  replayCurrent?: boolean
+}
 
 let stateListener: SessionStateChangedListener | null = null
 let metadataListener: SessionMetadataChangedListener | null = null
@@ -65,8 +78,19 @@ export function setSessionStateChangedListener(
 
 export function setSessionMetadataChangedListener(
   cb: SessionMetadataChangedListener | null,
+  options?: SessionMetadataListenerOptions,
 ): void {
   metadataListener = cb
+  if (!cb || !options?.replayCurrent) {
+    return
+  }
+
+  const snapshot = getSessionMetadataSnapshot()
+  if (Object.keys(snapshot).length === 0) {
+    return
+  }
+
+  cb(snapshot)
 }
 
 /**
@@ -84,6 +108,8 @@ export function setPermissionModeChangedListener(
 
 let hasPendingAction = false
 let currentState: SessionState = 'idle'
+let currentAutomationState: AutomationStateMetadata | null = null
+let currentMetadata: SessionExternalMetadata = {}
 
 export function getSessionState(): SessionState {
   return currentState
@@ -131,6 +157,56 @@ export function notifySessionStateChanged(
       state,
     })
   }
+}
+
+function normalizeAutomationState(
+  state: AutomationStateMetadata | null | undefined,
+): AutomationStateMetadata | null {
+  if (!state || state.enabled !== true) {
+    return null
+  }
+
+  return {
+    enabled: true,
+    phase: state.phase ?? null,
+    next_tick_at: state.next_tick_at ?? null,
+    sleep_until: state.sleep_until ?? null,
+  }
+}
+
+function automationStateKey(
+  state: AutomationStateMetadata | null,
+): string {
+  if (!state) return 'null'
+  return `${state.enabled}:${state.phase}:${state.next_tick_at}:${state.sleep_until}`
+}
+
+function applyMetadataUpdate(metadata: SessionExternalMetadata): void {
+  currentMetadata = { ...currentMetadata, ...metadata }
+  metadataListener?.(metadata)
+}
+
+export function getSessionMetadataSnapshot(): SessionExternalMetadata {
+  const snapshot: SessionExternalMetadata = { ...currentMetadata }
+  if (currentAutomationState) {
+    snapshot.automation_state = { ...currentAutomationState }
+  }
+  return snapshot
+}
+
+export function notifyAutomationStateChanged(
+  state: AutomationStateMetadata | null | undefined,
+): void {
+  const nextState = normalizeAutomationState(state)
+  if (
+    automationStateKey(nextState) === automationStateKey(currentAutomationState)
+  ) {
+    return
+  }
+
+  currentAutomationState = nextState
+  applyMetadataUpdate({ automation_state: nextState })
+  metadataListener?.({ automation_state: nextState })
 }
 
 export function notifySessionMetadataChanged(
