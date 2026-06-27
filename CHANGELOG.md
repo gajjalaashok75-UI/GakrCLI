@@ -55,9 +55,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **WebSearchTool**: Added `__tests__/` (5 test files) and `adapters/` (7 adapter files). Fixed import paths in 3 test files. Added `he` dependency for bingAdapter. Wired `createAdapter()` into `WebSearchTool.ts` `call()` method — if `WEB_SEARCH_ADAPTER` env var is set, uses the adapters/ system directly (matching reference pattern).
 - **WebBrowserTool**: Added full implementation (navigate/screenshot actions, Zod schema, prompt, isReadOnly). Gated behind `feature('WEB_BROWSER_TOOL')` (disabled by default). 21 tests pass.
 - **Bridge**: Added `bridgeResultScheduling.ts`, `rcDebugLog.ts`, `remoteInterruptHandling.ts` + `__tests__/`. Wired `rcLog` into `bridgeMain.ts` and `replBridge.ts` (file-based RC debug logging matching reference pattern).
-- **Assistant**: Added `__tests__/index.test.ts`. Fixed test to match intentional stub behavior (open build — KAIROS-gated no-op).
+- **Assistant**: Full implementation for all 7 files: `index.ts` (initializeAssistantTeam, getAssistantSystemPromptAddendum, isAssistantMode), `gate.ts` (two-layer KAIROS + GrowthBook gate), `sessionDiscovery.ts` (CCR session discovery via teleport API), `sessionHistory.ts` (API-based history with cache removed), `AssistantSessionChooser.tsx` (interactive Dialog chooser with keyboard nav). Added `__tests__/index.test.ts` (9 expect calls, passes). Added deps: `@opentelemetry/sdk-trace-base`, `@langfuse/otel`, `@langfuse/tracing`.
 
 ### Removed
+
+## [2026-06-27]
 - **Dead AgentTool decompiler artifacts**: Deleted unused `src/tools/AgentTool/src/` and `src/tools/AgentTool/built-in/src/` (shadow copies confirmed unused in reference).
 
 ---

@@ -1,30 +1,51 @@
-/**
- * Assistant session discovery (KAIROS-gated).
- *
- * The closed-source implementation lists bridge environments and filters
- * for assistant-mode sessions (`worker_type === 'gakrcli_code_assistant'`)
- * so `gakrcli assistant` can attach to a running daemon. This open-source
- * build ships an inert version that discovers nothing.
- */
+import { logForDebugging } from '../utils/debug.js'
 
-/** A discoverable remote assistant session. */
+/**
+ * Minimal session type for assistant discovery.
+ * Only `id` is consumed by main.tsx (L4757); other fields are for chooser display.
+ * ID format is `session_*` (compat prefix) — viewer endpoints use /v1/sessions/*.
+ */
 export type AssistantSession = {
-  /** Bridge session id used to attach. */
   id: string
-  /** Human-readable session title, when set. */
-  title?: string
-  /** Working directory of the remote session. */
-  dir?: string
-  /** Hostname of the machine running the daemon. */
-  machineName?: string
-  /** ISO timestamp of the most recent activity. */
-  updatedAt?: string
+  title: string
+  status: string
+  created_at: string
 }
 
 /**
- * List remote assistant sessions for the current account.
- * Always throws in this open build — remote sessions require a cloud backend.
+ * Discover assistant sessions on Anthropic CCR.
+ *
+ * Reuses the existing fetchCodeSessionsFromSessionsAPI() which calls
+ * GET /v1/sessions with proper OAuth + anthropic-beta headers.
+ *
+ * Throws on failure — main.tsx L4720-4725 catch displays the error.
+ * Does NOT return [] on error (that would silently redirect to install wizard).
  */
 export async function discoverAssistantSessions(): Promise<AssistantSession[]> {
-  throw new Error('Assistant session discovery is not available in this open build')
+  const { fetchCodeSessionsFromSessionsAPI } = await import(
+    '../utils/teleport/api.js'
+  )
+
+  let allSessions
+  try {
+    allSessions = await fetchCodeSessionsFromSessionsAPI()
+  } catch (err) {
+    logForDebugging(
+      `[assistant:discovery] fetchCodeSessionsFromSessionsAPI failed: ${err}`,
+    )
+    throw err
+  }
+
+  // Filter to active/working sessions only — completed/archived are not attachable
+  return allSessions
+    .filter(
+      s =>
+        s.status === 'idle' || s.status === 'working' || s.status === 'waiting',
+    )
+    .map(s => ({
+      id: s.id,
+      title: s.title || 'Untitled',
+      status: s.status,
+      created_at: s.created_at ?? '',
+    }))
 }
