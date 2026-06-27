@@ -68,6 +68,8 @@ import { LSPTool } from './tools/LSPTool/LSPTool.js'
 import { ListMcpResourcesTool } from './tools/ListMcpResourcesTool/ListMcpResourcesTool.js'
 import { ReadMcpResourceTool } from './tools/ReadMcpResourceTool/ReadMcpResourceTool.js'
 import { ToolSearchTool } from './tools/ToolSearchTool/ToolSearchTool.js'
+import { SearchExtraToolsTool } from './tools/SearchExtraToolsTool/SearchExtraToolsTool.js'
+import { ExecuteTool } from './tools/ExecuteTool/ExecuteTool.js'
 import { EnterPlanModeTool } from './tools/EnterPlanModeTool/EnterPlanModeTool.js'
 import { EnterWorktreeTool } from './tools/EnterWorktreeTool/EnterWorktreeTool.js'
 import { ExitWorktreeTool } from './tools/ExitWorktreeTool/ExitWorktreeTool.js'
@@ -77,6 +79,7 @@ import { TaskUpdateTool } from './tools/TaskUpdateTool/TaskUpdateTool.js'
 import { TaskListTool } from './tools/TaskListTool/TaskListTool.js'
 import uniqBy from 'lodash-es/uniqBy.js'
 import { isToolSearchEnabledOptimistic } from './utils/toolSearch.js'
+import { isSearchExtraToolsEnabledOptimistic } from './utils/searchExtraTools.js'
 import { isTodoV2Enabled } from './utils/tasks.js'
 // Dead code elimination: conditional import for GAKR_CODE_VERIFY_PLAN
 /* eslint-disable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
@@ -249,6 +252,11 @@ export function getAllBaseTools(): Tools {
     // Include ToolSearchTool when tool search might be enabled (optimistic check)
     // The actual decision to defer tools happens at request time in gakrcli.ts
     ...(isToolSearchEnabledOptimistic() ? [ToolSearchTool] : []),
+    // Include SearchExtraToolsTool when tool search might be enabled (optimistic check)
+    ...(isSearchExtraToolsEnabledOptimistic() ? [SearchExtraToolsTool] : []),
+    // ExecuteExtraTool (ExecuteTool) is a first-class tool — always available, not deferred.
+    // Models use it to invoke deferred tools discovered via SearchExtraTools.
+    ExecuteTool,
     // Filter out any null/undefined tools that might have been added by getters
   ].filter(Boolean)
 }
