@@ -64,3 +64,30 @@
 - **Root cause**: Requires Anthropic pro/team/max subscription for the vaults API endpoint. The command allows browsing, searching, and managing knowledge vaults. Vault data is fetched from the Anthropic vaults API. Without a valid subscription the API key is unavailable.
 - **Files**: `src/commands/vault/` (6 source files, 76 tests)
 - **Reference**: `references/claude-code-main/src/commands/vault/` — same implementation
+
+### `ant` CLI handlers — ANT-only CLI subcommands (task, log, error, export, completion)
+- **Command affected**: CLI subcommands: `gakrcli task <create|list|get|update|dir>`, `gakrcli log`, `gakrcli error`, `gakrcli export`, `gakrcli completion`
+- **Status**: Source files present, NOT wired in `main.tsx`
+- **Root cause**: All handlers in `src/cli/handlers/ant.ts` are gated behind `USER_TYPE === 'ant'` in the reference (`references/claude-code-main/src/main.tsx:5329-5441`). These are Anthropic-internal tooling (task management, log/error retrieval, shell export, shell completion). Public builds don't have `USER_TYPE === 'ant'`.
+- **Files**: `src/cli/handlers/ant.ts`
+- **Reference**: `references/claude-code-main/src/cli/handlers/ant.ts` — identical implementation; `main.tsx:5329-5441` gates behind `USER_TYPE === 'ant'`
+
+### `rollback` — ANT-only CLI subcommand
+- **Command affected**: CLI subcommand: `gakrcli rollback [target]`
+- **Status**: Source file present, NOT wired in `main.tsx`
+- **Root cause**: Gated behind `USER_TYPE === 'ant'` in reference (`references/claude-code-main/src/main.tsx:5265-5289`). Rolls back to previous releases using internal release registry. Public builds don't have `USER_TYPE === 'ant'`.
+- **Files**: `src/cli/rollback.ts`
+- **Reference**: `references/claude-code-main/src/cli/rollback.ts` — same implementation
+
+### `up` — ANT-only CLI subcommand
+- **Command affected**: CLI subcommand: `gakrcli up`
+- **Status**: Source file present, NOT wired in `main.tsx`
+- **Root cause**: Gated behind `USER_TYPE === 'ant'` in reference (`references/claude-code-main/src/main.tsx:5255-5263`). Initializes or upgrades the local dev environment using the "# claude up" section of CLAUDE.md. Public builds don't have `USER_TYPE === 'ant'`.
+- **Files**: `src/cli/up.ts`
+- **Reference**: `references/claude-code-main/src/cli/up.ts` — same implementation
+
+### `updategakrcli` — Unwired update utility
+- **Command affected**: None (not a command)
+- **Status**: Source file present, NOT imported anywhere
+- **Root cause**: Alternative update implementation that was never wired. The existing `src/cli/update.ts` (wired in `main.tsx:4231`) handles GakrCLI updates. `updategakrcli.ts` is a duplicate/scrap implementation.
+- **Files**: `src/cli/updategakrcli.ts`
