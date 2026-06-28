@@ -125,6 +125,15 @@ const peersCmd = feature('UDS_INBOX')
 const attachCmd = feature('UDS_INBOX')
   ? require('./commands/attach/index.js').default
   : null
+const pipesCmd = feature('UDS_INBOX')
+  ? require('./commands/pipes/index.js').default
+  : null
+const pipeStatusCmd = feature('UDS_INBOX')
+  ? require('./commands/pipe-status/index.js').default
+  : null
+const claimMainCmd = feature('UDS_INBOX')
+  ? require('./commands/claim-main/index.js').default
+  : null
 const buddy = isBuddyEnabled()
   ? (
       require('./commands/buddy/index.js') as typeof import('./commands/buddy/index.js')
@@ -134,9 +143,6 @@ const buddy = isBuddyEnabled()
 import thinkback from './commands/thinkback/index.js'
 import thinkbackPlay from './commands/thinkback-play/index.js'
 import permissions from './commands/permissions/index.js'
-import pipes from './commands/pipes/index.js'
-import pipeStatus from './commands/pipe-status/index.js'
-import claimMain from './commands/claim-main/index.js'
 import plan from './commands/plan/index.js'
 import fast from './commands/fast/index.js'
 import passes from './commands/passes/index.js'
@@ -373,9 +379,9 @@ const COMMANDS = memoize((): Command[] => [
   passes,
   ...(peersCmd ? [peersCmd] : []),
   ...(attachCmd ? [attachCmd] : []),
-  pipes,
-  pipeStatus,
-  claimMain,
+  ...(pipesCmd ? [pipesCmd] : []),
+  ...(pipeStatusCmd ? [pipeStatusCmd] : []),
+  ...(claimMainCmd ? [claimMainCmd] : []),
   tasks,
   ...(workflowsCmd ? [workflowsCmd] : []),
   ...(torch ? [torch] : []),
