@@ -125,6 +125,9 @@ const peersCmd = feature('UDS_INBOX')
 const attachCmd = feature('UDS_INBOX')
   ? require('./commands/attach/index.js').default
   : null
+const detachCmd = feature('UDS_INBOX')
+  ? require('./commands/detach/index.js').default
+  : null
 const pipesCmd = feature('UDS_INBOX')
   ? require('./commands/pipes/index.js').default
   : null
@@ -379,6 +382,7 @@ const COMMANDS = memoize((): Command[] => [
   passes,
   ...(peersCmd ? [peersCmd] : []),
   ...(attachCmd ? [attachCmd] : []),
+  ...(detachCmd ? [detachCmd] : []),
   ...(pipesCmd ? [pipesCmd] : []),
   ...(pipeStatusCmd ? [pipeStatusCmd] : []),
   ...(claimMainCmd ? [claimMainCmd] : []),
