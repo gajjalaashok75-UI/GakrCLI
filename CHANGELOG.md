@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`detach` command**: Full implementation (`index.ts` + `detach.ts`). Detach from sub CLI sessions (specific slave or all). Pipe management command, gated behind `feature('UDS_INBOX')`.
 - **`env` command**: Full implementation replacing stub (`index.ts`, `index.d.ts`, 18 tests). Shows runtime info, allowlisted env vars (GAKR_*, FEATURE_*, etc.) with secret masking. 36 tests pass.
 - **`fork` command**: Full implementation (`index.ts` + `fork.tsx`). Forks session into sub-agent via AgentTool fork path with recursive guard and directive. `local-jsx` type, gated behind `feature('FORK_SUBAGENT')`. Already defined in `defines.ts` (dev-disabled) and `build.ts` (production-enabled). Registered in `src/commands.ts`.
+- **`history` command**: Full implementation (`index.ts` + `history.ts`). Views session history of a connected sub CLI with --last N. Pipe management command, gated behind `feature('UDS_INBOX')`. Registered in `src/commands.ts`.
 
 ## [0.5.8] - 2026-06-27
 

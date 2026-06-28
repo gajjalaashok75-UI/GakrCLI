@@ -134,6 +134,9 @@ const pipesCmd = feature('UDS_INBOX')
 const pipeStatusCmd = feature('UDS_INBOX')
   ? require('./commands/pipe-status/index.js').default
   : null
+const historyCmd = feature('UDS_INBOX')
+  ? require('./commands/history/index.js').default
+  : null
 const claimMainCmd = feature('UDS_INBOX')
   ? require('./commands/claim-main/index.js').default
   : null
@@ -391,6 +394,7 @@ const COMMANDS = memoize((): Command[] => [
   ...(detachCmd ? [detachCmd] : []),
   ...(pipesCmd ? [pipesCmd] : []),
   ...(pipeStatusCmd ? [pipeStatusCmd] : []),
+  ...(historyCmd ? [historyCmd] : []),
   ...(claimMainCmd ? [claimMainCmd] : []),
   tasks,
   ...(workflowsCmd ? [workflowsCmd] : []),
