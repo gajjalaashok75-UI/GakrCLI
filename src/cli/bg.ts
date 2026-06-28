@@ -17,6 +17,7 @@ import {
   refreshBackgroundSessionStatuses,
   resolveBackgroundSession,
 } from './bgRegistry.js'
+import type { BackgroundSession } from './bgRegistry.js'
 
 export type ParsedBackgroundInvocation = {
   name?: string
@@ -720,4 +721,8 @@ export async function handleBgFlag(args: string[]): Promise<void> {
   console.log(
     `Command: ${formatCommand([basename(childConfig.command), ...childConfig.args])}`,
   )
+}
+
+export async function listLiveSessions(): Promise<BackgroundSession[]> {
+  return refreshBackgroundSessionStatuses()
 }

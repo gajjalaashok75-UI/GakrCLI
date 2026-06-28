@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.5.9] - 2026-06-28
 
 ### Added
+- **cli subcommands**: Wired `gakrcli up`, `gakrcli rollback`, `gakrcli log`, `gakrcli error`, `gakrcli export`, `gakrcli task <create|list|get|update|dir>`, `gakrcli completion <shell>` in `main.tsx` behind `USER_TYPE === 'ant'`. Added `listLiveSessions()` export in `bg.ts`. Tracked `bg/` engine infrastructure (engine, detached, tmux, tail). 24+ local tests pass.
 - **proactive command**: Source file tracked — already registered behind `feature('PROACTIVE')` (or `KAIROS`). `/proactive` toggles proactive mode. 4 baseline tests pass.
 - **subscribe-pr command**: Source file tracked — already registered behind `feature('KAIROS_GITHUB_WEBHOOKS')` in INTERNAL_ONLY.
 - **torch command**: Source file tracked — already registered behind `feature('TORCH')`.
