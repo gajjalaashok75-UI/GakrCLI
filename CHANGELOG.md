@@ -5,6 +5,12 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.9] - 2026-06-28
+
+### Added
+- **autofix-pr command**: Full implementation with 10 source files. `index.ts` lazy-loads via `launchAutofixPr.ts` which uses `launchCommand` factory + `inProcessAgent.ts` + `monitorState.ts` + `extractAutofixResult.ts` + `parseArgs.ts` + `prFetch.ts` + `prOutcomeCheck.ts` + `skillDetect.ts` + `AutofixProgress.tsx` Ink UI. Gated behind `feature('AUTOFIX_PR')`. Registered in `src/commands.ts`. 161 local tests pass (2 reference path failures `@anthropic/ink` pre-existing).
+- **`RemoteAgentTask.tsx` completion hook + content extractor support**: Added `RemoteTaskCompletionHook` type, `completionHooks` map, proper `registerCompletionHook()`, `runCompletionHook()`, `RemoteTaskContentExtractor` type, `tryExtractRichContent()`, and `enqueueRichRemoteNotification()`. Completion hook and rich content are wired into all 3 terminal polling branches (archived, completion-checker, result-driven). Replaced incorrect `registerCompletionHook` alias that was overwriting `registerCompletionChecker`.
+
 ## [0.5.8] - 2026-06-27
 
 ### Added

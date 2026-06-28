@@ -93,6 +93,39 @@ export function registerCompletionChecker(remoteTaskType: RemoteTaskType, checke
   completionCheckers.set(remoteTaskType, checker);
 }
 
+export type RemoteTaskCompletionHook = (taskId: string, remoteTaskMetadata: RemoteTaskMetadata | undefined) => void;
+
+const completionHooks = new Map<RemoteTaskType, RemoteTaskCompletionHook>();
+
+export function registerCompletionHook(remoteTaskType: RemoteTaskType, hook: RemoteTaskCompletionHook): void {
+  completionHooks.set(remoteTaskType, hook);
+}
+
+function runCompletionHook(taskId: string, task: RemoteAgentTaskState): void {
+  const hook = completionHooks.get(task.remoteTaskType);
+  if (hook) {
+    try {
+      hook(taskId, task.remoteTaskMetadata);
+    } catch (e) {
+      logForDebugging(`completionHook failed for ${task.remoteTaskType}: ${String(e)}`);
+    }
+  }
+}
+
+export type RemoteTaskContentExtractor = (log: SDKMessage[]) => string | null;
+
+const contentExtractors = new Map<RemoteTaskType, RemoteTaskContentExtractor>();
+
+export function registerContentExtractor(remoteTaskType: RemoteTaskType, extractor: RemoteTaskContentExtractor): void {
+  contentExtractors.set(remoteTaskType, extractor);
+}
+
+function tryExtractRichContent(task: RemoteAgentTaskState, log: SDKMessage[]): string | null {
+  const extractor = contentExtractors.get(task.remoteTaskType);
+  if (!extractor) return null;
+  return extractor(log);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object';
 }
@@ -200,6 +233,34 @@ function enqueueRemoteNotification(taskId: string, title: string, status: 'compl
 <${STATUS_TAG}>${status}</${STATUS_TAG}>
 <${SUMMARY_TAG}>Remote task "${title}" ${statusText}</${SUMMARY_TAG}>
 </${TASK_NOTIFICATION_TAG}>`;
+  enqueuePendingNotification({
+    value: message,
+    mode: 'task-notification'
+  });
+}
+
+function enqueueRichRemoteNotification(
+  taskId: string,
+  title: string,
+  status: 'completed' | 'failed' | 'killed',
+  richContent: string,
+  setAppState: SetAppState,
+  toolUseId?: string,
+): void {
+  if (!markTaskNotified(taskId, setAppState)) return;
+  const statusText = status === 'completed' ? 'completed successfully' : status === 'failed' ? 'failed' : 'was stopped';
+  const toolUseIdLine = toolUseId ? `\n<${TOOL_USE_ID_TAG}>${toolUseId}</${TOOL_USE_ID_TAG}>` : '';
+  const outputPath = getTaskOutputPath(taskId);
+  const message = `<${TASK_NOTIFICATION_TAG}>
+<${TASK_ID_TAG}>${taskId}</${TASK_ID_TAG}>${toolUseIdLine}
+<${TASK_TYPE_TAG}>remote_agent</${TASK_TYPE_TAG}>
+<${OUTPUT_FILE_TAG}>${outputPath}</${OUTPUT_FILE_TAG}>
+<${STATUS_TAG}>${status}</${STATUS_TAG}>
+<${SUMMARY_TAG}>Remote task "${title}" ${statusText}</${SUMMARY_TAG}>
+</${TASK_NOTIFICATION_TAG}>
+The remote agent produced the following structured outcome. Summarize the key changes for the user:
+
+${richContent}`;
   enqueuePendingNotification({
     value: message,
     mode: 'task-notification'
@@ -606,9 +667,15 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
           status: 'completed',
           endTime: Date.now()
         } : t);
-        enqueueRemoteNotification(taskId, task.title, 'completed', context.setAppState, task.toolUseId);
+        const richContent = tryExtractRichContent(task, accumulatedLog);
+        if (richContent) {
+          enqueueRichRemoteNotification(taskId, task.title, 'completed', richContent, context.setAppState, task.toolUseId);
+        } else {
+          enqueueRemoteNotification(taskId, task.title, 'completed', context.setAppState, task.toolUseId);
+        }
         void evictTaskOutput(taskId);
         void removeRemoteAgentMetadata(taskId);
+        runCompletionHook(taskId, task);
         return;
       }
       const checker = completionCheckers.get(task.remoteTaskType);
@@ -620,9 +687,15 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
             status: 'completed',
             endTime: Date.now()
           } : t);
-          enqueueRemoteNotification(taskId, completionResult, 'completed', context.setAppState, task.toolUseId);
+          const richContent = tryExtractRichContent(task, accumulatedLog);
+          if (richContent) {
+            enqueueRichRemoteNotification(taskId, completionResult, 'completed', richContent, context.setAppState, task.toolUseId);
+          } else {
+            enqueueRemoteNotification(taskId, completionResult, 'completed', context.setAppState, task.toolUseId);
+          }
           void evictTaskOutput(taskId);
           void removeRemoteAgentMetadata(taskId);
+          runCompletionHook(taskId, task);
           return;
         }
       }
@@ -776,9 +849,15 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
           void removeRemoteAgentMetadata(taskId);
           return; // Stop polling
         }
-        enqueueRemoteNotification(taskId, task.title, finalStatus, context.setAppState, task.toolUseId);
+        const richContent = tryExtractRichContent(task, accumulatedLog);
+        if (richContent) {
+          enqueueRichRemoteNotification(taskId, task.title, finalStatus, richContent, context.setAppState, task.toolUseId);
+        } else {
+          enqueueRemoteNotification(taskId, task.title, finalStatus, context.setAppState, task.toolUseId);
+        }
         void evictTaskOutput(taskId);
         void removeRemoteAgentMetadata(taskId);
+        runCompletionHook(taskId, task);
         return; // Stop polling
       }
     } catch (error) {
