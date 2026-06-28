@@ -57,6 +57,9 @@ import review, { ultrareview } from './commands/review.js'
 import session from './commands/session/index.js'
 import share from './commands/share/index.js'
 import skills from './commands/skills/index.js'
+import skillLearning from './commands/skill-learning/index.js'
+import skillSearch from './commands/skill-search/index.js'
+import skillStoreCommand from './commands/skill-store/index.js'
 import status from './commands/status/index.js'
 import tasks from './commands/tasks/index.js'
 import teleport from './commands/teleport/index.js'
@@ -372,6 +375,9 @@ const COMMANDS = memoize((): Command[] => [
   resume,
   session,
   skills,
+  skillLearning,
+  skillSearch,
+  skillStoreCommand,
   stats,
   status,
   statusline,
