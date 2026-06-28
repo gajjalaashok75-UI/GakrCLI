@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`claim-main` command**: Full implementation (`index.ts` + `claim-main.ts`). Claims main role for this machine, updates local state, shows details. Registered in `src/commands.ts`.
 - **`debug-tool-call` command**: Full implementation (`index.ts`, `index.d.ts`, 21 tests). Reads session JSONL log, extracts tool call/result pairs, renders debug view with truncation and N argument support. Registered in `src/commands.ts`. EnvUtils mock fixed with all missing exports.
 - **`detach` command**: Full implementation (`index.ts` + `detach.ts`). Detach from sub CLI sessions (specific slave or all). Pipe management command, gated behind `feature('UDS_INBOX')`.
+- **`env` command**: Full implementation replacing stub (`index.ts`, `index.d.ts`, 18 tests). Shows runtime info, allowlisted env vars (GAKR_*, FEATURE_*, etc.) with secret masking. 36 tests pass.
 
 ## [0.5.8] - 2026-06-27
 
