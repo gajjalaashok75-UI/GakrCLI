@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`issue` command**: Full implementation replacing stub (`index.ts` + `index.d.ts`). Creates GitHub issues via `gh` CLI with --label/--assignee flags, fallback URL generation, issue template detection, session transcript summary, and analytics.
 - **`job` command**: Full implementation (`index.ts` + `job.tsx` + 3 tests). Manages template jobs (list/new/reply/status). local-jsx type, gated behind `feature('TEMPLATES')` in both commands.ts and index.ts isEnabled (matching reference). Added `TEMPLATES: false` to build.ts. 6 tests pass.
 - **`commands.ts` Command type re-export**: Added missing `Command` type to the re-export from `./types/command.js` at line 265. Multiple command `index.ts` files import `Command` from `../../commands.js` but the type was not re-exported there (type-only issue, erased at runtime).
+- **`lang` command**: Full implementation replacing stub (`index.ts` + `lang.ts`). Sets display language (en/zh/auto) with validation, reads/saves global config, shows resolved system language on auto. `local-jsx` type. Was missing from commands.ts — added import at line 34 and array entry at line 335, no feature gate (matches reference).
 
 ## [0.5.8] - 2026-06-27
 
