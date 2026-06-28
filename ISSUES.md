@@ -43,3 +43,24 @@
 - **Root cause**: Requires a cloud-artifacts domain/upload endpoint. The command displays artifacts uploaded via `artifact` tool_use blocks in the session, but artifacts are uploaded to an external cloud endpoint. Without a configured domain the command would show only locally-extracted tool_use metadata without functional cloud artifact browsing.
 - **Files**: `src/commands/artifacts/` (5 source files, 6 tests)
 - **Reference**: `references/claude-code-main/src/commands/artifacts/` — same implementation, no feature gate
+
+### `remote-control-server` — Not wired (requires pro/team/max subscription)
+- **Command affected**: `remote-control-server` / `rcs` (Start a persistent Remote Control server)
+- **Status**: Source files present (`index.ts`, `remoteControlServer.tsx`), NOT registered in `commands.ts`
+- **Root cause**: Requires Anthropic pro/team/max subscription for bridge authentication. The command starts a daemon-backed persistent bridge server that accepts multiple concurrent remote sessions. Gated behind `feature('BRIDGE_MODE')` and requires `getBridgeAccessToken()`. Without a valid subscription the bridge token is unavailable.
+- **Files**: `src/commands/remoteControlServer/` (2 source files)
+- **Reference**: `references/claude-code-main/src/commands/remoteControlServer/` — same implementation
+
+### `schedule` (triggers/cron) — Not wired (requires pro/team/max subscription)
+- **Command affected**: `schedule` / `triggers` / `cron` (Schedule periodic tasks via triggers API)
+- **Status**: Source files present (`index.ts`, `launchSchedule.tsx`, `parseArgs.ts`, `ScheduleView.tsx`, `triggersApi.ts`, `__tests__/`), NOT registered in `commands.ts`
+- **Root cause**: Requires Anthropic pro/team/max subscription for the triggers API endpoint. The command allows scheduling periodic tasks (like `/summary` every 4h) via the Anthropic triggers API. Without a valid subscription the API key is unavailable.
+- **Files**: `src/commands/schedule/` (6 source files, 86 tests)
+- **Reference**: `references/claude-code-main/src/commands/schedule/` — same implementation
+
+### `vault` — Not wired (requires pro/team/max subscription)
+- **Command affected**: `vault` / `vaults` (Manage knowledge vaults via Anthropic API)
+- **Status**: Source files present (`index.tsx`, `launchVault.tsx`, `parseArgs.ts`, `vaultsApi.ts`, `VaultView.tsx`, `__tests__/`), NOT registered in `commands.ts`
+- **Root cause**: Requires Anthropic pro/team/max subscription for the vaults API endpoint. The command allows browsing, searching, and managing knowledge vaults. Vault data is fetched from the Anthropic vaults API. Without a valid subscription the API key is unavailable.
+- **Files**: `src/commands/vault/` (6 source files, 76 tests)
+- **Reference**: `references/claude-code-main/src/commands/vault/` — same implementation
