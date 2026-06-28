@@ -33,6 +33,7 @@ import initVerifiers from './commands/init-verifiers.js'
 import keybindings from './commands/keybindings/index.js'
 import lang from './commands/lang/index.js'
 import localMemoryCommand from './commands/local-memory/index.js'
+import localVaultCommand from './commands/local-vault/index.js'
 import lsp from './commands/lsp/index.js'
 import login from './commands/login/index.js'
 import logout from './commands/logout/index.js'
@@ -336,6 +337,7 @@ const COMMANDS = memoize((): Command[] => [
   keybindings,
   lang,
   localMemoryCommand,
+  localVaultCommand,
   knowledge,
   lsp,
   installGitHubApp,
