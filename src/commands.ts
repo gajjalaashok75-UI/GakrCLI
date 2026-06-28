@@ -32,6 +32,7 @@ import init from './commands/init.js'
 import initVerifiers from './commands/init-verifiers.js'
 import keybindings from './commands/keybindings/index.js'
 import lang from './commands/lang/index.js'
+import localMemoryCommand from './commands/local-memory/index.js'
 import lsp from './commands/lsp/index.js'
 import login from './commands/login/index.js'
 import logout from './commands/logout/index.js'
@@ -263,7 +264,8 @@ export type {
   PromptCommand,
   ResumeEntrypoint,
 } from './types/command.js'
-export { getCommandName, isCommandEnabled, Command } from './types/command.js'
+export { getCommandName, isCommandEnabled } from './types/command.js'
+export type { Command } from './types/command.js'
 
 // Commands that get eliminated from the external build
 export const INTERNAL_ONLY_COMMANDS = [
@@ -333,6 +335,7 @@ const COMMANDS = memoize((): Command[] => [
   init,
   keybindings,
   lang,
+  localMemoryCommand,
   knowledge,
   lsp,
   installGitHubApp,
