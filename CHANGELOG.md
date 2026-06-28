@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.5.9] - 2026-06-28
 
 ### Added
+- **proactive command**: Source file tracked — already registered behind `feature('PROACTIVE')` (or `KAIROS`). `/proactive` toggles proactive mode. 4 baseline tests pass.
+- **subscribe-pr command**: Source file tracked — already registered behind `feature('KAIROS_GITHUB_WEBHOOKS')` in INTERNAL_ONLY.
+- **torch command**: Source file tracked — already registered behind `feature('TORCH')`.
+- **autonomy tests**: 10 test files in `src/commands/__tests__/autonomy.test.ts` (8/10 pass).
+- **init-verifiers tests**: 40 tests in `src/commands/__tests__/init-verifiers.test.ts` (all pass).
+- **bridge-kick tests**: 56 tests in `src/commands/__tests__/bridge-kick.test.ts`.
+- **proactive baseline tests**: 4 tests in `src/commands/__tests__/proactive.baseline.test.ts` (all pass).
+- **ultrareview tests**: Test directory `src/commands/review/__tests__/` (6 pass).
+- **usage tests**: Test directory `src/commands/usage/__tests__/`.
 - **update command**: Registered in `src/commands.ts` (unconditional). `/update [latest|stable|<version>] [--force]` updates GakrCLI via Ink UI progress panel.
 - **autonomy command**: Registered in `src/commands.ts` (unconditional, matches reference). `/autonomy` for inspecting automatic autonomy runs from proactive ticks and scheduled tasks. `local-jsx` type, loads `autonomyPanel.tsx` Ink UI.
 - **monitor command**: Registered in `src/commands.ts` behind `feature('MONITOR_TOOL')`. `/monitor <command>` starts a background shell monitor task visible via Shift+Down footer pill. Includes Windows `watch`→PowerShell loop compatibility.
