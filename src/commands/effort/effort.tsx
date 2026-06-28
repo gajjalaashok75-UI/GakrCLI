@@ -5,7 +5,7 @@ import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEve
 import { useAppState, useSetAppState } from '../../state/AppState.js';
 import type { LocalJSXCommandOnDone } from '../../types/command.js';
 import { type EffortValue, getDisplayedEffortLevel, getEffortEnvOverride, getEffortValueDescription, isEffortLevel, isOpenAIEffortLevel, modelUsesOpenAIEffort, openAIEffortToStandard, toPersistableEffort } from '../../utils/effort.js';
-import { EffortPicker } from '../../components/EffortPicker.js';
+import { EffortPanel } from '../../components/EffortPanel/EffortPanel.js';
 import { updateSettingsForSource } from '../../utils/settings/settings.js';
 const COMMON_HELP_ARGS = ['help', '-h', '--help'];
 type EffortCommandResult = {
@@ -183,39 +183,13 @@ export async function call(onDone: LocalJSXCommandOnDone, _context: unknown, arg
     return <ShowCurrentEffort onDone={onDone} />;
   }
   if (!args) {
-    return <EffortPickerWrapper onDone={onDone} />;
+    return <EffortPanelWrapper onDone={onDone} />;
   }
   const result = executeEffort(args);
   return <ApplyEffortAndClose result={result} onDone={onDone} />;
 }
 
-function EffortPickerWrapper({ onDone }: { onDone: LocalJSXCommandOnDone }) {
-  const setAppState = useSetAppState();
-  const model = useMainLoopModel();
-  const usesOpenAIEffort = modelUsesOpenAIEffort(model);
-
-  function handleSelect(effort: EffortValue | undefined) {
-    const persistable = toPersistableEffort(effort);
-    if (persistable !== undefined) {
-      updateSettingsForSource('userSettings', {
-        effortLevel: persistable
-      });
-    }
-    logEvent('tengu_effort_command', {
-      effort: (effort ?? 'auto') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-    });
-    setAppState(prev => ({
-      ...prev,
-      effortValue: effort
-    }));
-    const description = effort ? getEffortValueDescription(effort) : 'Use default effort level for your model';
-    const suffix = persistable !== undefined ? '' : ' (this session only)';
-    onDone(`Set effort level to ${effort ?? 'auto'}${suffix}: ${description}`);
-  }
-
-  function handleCancel() {
-    onDone('Cancelled');
-  }
-
-  return <EffortPicker onSelect={handleSelect} onCancel={handleCancel} />;
+function EffortPanelWrapper({ onDone }: { onDone: LocalJSXCommandOnDone }) {
+  const effortValue = useAppState(s => s.effortValue);
+  return <EffortPanel appStateEffort={effortValue} onDone={onDone} />;
 }
