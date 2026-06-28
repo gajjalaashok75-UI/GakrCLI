@@ -315,6 +315,22 @@ export const DEFAULT_BINDINGS: KeybindingBlock[] = [
       r: 'modelPicker:refresh',
     },
   },
+  // Effort panel (slash /effort without args)
+  {
+    context: 'EffortPanel',
+    bindings: {
+      left: 'effortPanel:decrease',
+      right: 'effortPanel:increase',
+      h: 'effortPanel:decrease',
+      l: 'effortPanel:increase',
+      home: 'effortPanel:home',
+      end: 'effortPanel:end',
+      enter: 'effortPanel:confirm',
+      escape: 'effortPanel:cancel',
+      q: 'effortPanel:cancel',
+      'ctrl+c': 'effortPanel:cancel',
+    },
+  },
   // Select component navigation (used by /model, /resume, permission prompts, etc.)
   {
     context: 'Select',
