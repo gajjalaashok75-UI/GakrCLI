@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`memory-stores` command**: Source files added (6 files: `index.ts`, `launchMemoryStores.tsx`, `memoryStoresApi.ts`, `MemoryStoresView.tsx`, `parseArgs.ts`, `__tests__/`). NOT wired in commands.ts — registration blocked by Bun `mock.module` state leakage in tests. See `ISSUES.md` for details.
 - **`mode` command**: `index.ts` + `mode.tsx` (Ink UI picker for interaction modes). `local-jsx` type, no feature gate (matches reference). Was missing from commands.ts — added import at line 221 and array entry at line 350. Dependencies: `src/modes/store.ts`, `src/components/CustomSelect/select.tsx`. No tests.
 - **`onboarding` command**: Replaced old `index.js` with `index.ts` + `launchOnboarding.tsx` + `__tests__/onboarding.test.tsx`. Already registered in commands.ts (lines 47/289). No feature gate, `bridgeSafe: false`. Test has pre-existing `perf-issue/index.js` ENOENT error (unrelated).
+- **`perf-issue` command**: Replaced old `index.js` with `index.ts` + `index.d.ts` + `__tests__/perf-issue.test.ts`. Full performance snapshot generator (token usage, cost estimates, tool timing). Already registered in commands.ts (lines 189/294). `local` type, `bridgeSafe: true`, `supportsNonInteractive: true`. All 32 tests pass.
 
 ## [0.5.8] - 2026-06-27
 
