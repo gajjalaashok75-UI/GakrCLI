@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`pipes` command**: Full implementation (`index.ts` + `pipes.ts`). Inspects pipe registry state, toggles pipe selector, select/deselect pipes, shows registry with LAN peers. Registered in `src/commands.ts`.
 - **`pipe-status` command**: Full implementation (`index.ts` + `pipe-status.ts`). Shows current pipe connection status for main/controlled/slave modes. Registered in `src/commands.ts`.
 - **`claim-main` command**: Full implementation (`index.ts` + `claim-main.ts`). Claims main role for this machine, updates local state, shows details. Registered in `src/commands.ts`.
+- **`debug-tool-call` command**: Full implementation (`index.ts`, `index.d.ts`, 21 tests). Reads session JSONL log, extracts tool call/result pairs, renders debug view with truncation and N argument support. Registered in `src/commands.ts`. EnvUtils mock fixed with all missing exports.
 
 ## [0.5.8] - 2026-06-27
 
