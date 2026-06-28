@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.5.9] - 2026-06-28
 
 ### Added
+- **FeedbackSurvey**: Tracked `useFrustrationDetection.ts` and `__tests__/` — completes FeedbackSurvey directory. 4 local tests pass. Frustration detection is ant-only (matches reference pattern).
 - **EffortPanel**: Wired `src/components/EffortPanel/` into interactive `/effort` command, replacing `EffortPicker` wrapper. Added EffortPanel keybinding context (left/right/h/l/home/end/enter/escape/q/ctrl+c). Deleted dead `EffortPicker.tsx`. 156 EffortPanel tests pass.
 - **SnapshotUpdateDialog**: Tracked real `.ts` implementation replacing `.tsx` stub. Wired via `dialogLaunchers.tsx` → `main.tsx`. Takes precedence via Bun's `.ts`→`.tsx` resolution order.
 - **cli subcommands**: Wired `gakrcli up`, `gakrcli rollback`, `gakrcli log`, `gakrcli error`, `gakrcli export`, `gakrcli task <create|list|get|update|dir>`, `gakrcli completion <shell>` in `main.tsx` behind `USER_TYPE === 'ant'`. Added `listLiveSessions()` export in `bg.ts`. Tracked `bg/` engine infrastructure (engine, detached, tmux, tail). 24+ local tests pass.
