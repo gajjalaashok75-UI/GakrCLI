@@ -721,7 +721,3 @@ export async function handleBgFlag(args: string[]): Promise<void> {
     `Command: ${formatCommand([basename(childConfig.command), ...childConfig.args])}`,
   )
 }
-
-export async function listLiveSessions(): Promise<BackgroundSession[]> {
-  return refreshBackgroundSessionStatuses()
-}
