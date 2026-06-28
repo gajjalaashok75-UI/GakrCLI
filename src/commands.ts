@@ -171,6 +171,11 @@ const poor = feature('POOR')
       require('./commands/poor/index.js') as typeof import('./commands/poor/index.js')
     ).default
   : null
+const daemonCmd = feature('DAEMON') || feature('BG_SESSIONS')
+  ? (
+      require('./commands/daemon/index.js') as typeof import('./commands/daemon/index.js')
+    ).default
+  : null
 /* eslint-enable @typescript-eslint/no-require-imports */
 import thinkback from './commands/thinkback/index.js'
 import thinkbackPlay from './commands/thinkback-play/index.js'
@@ -410,6 +415,7 @@ const COMMANDS = memoize((): Command[] => [
   ...(jobCmd ? [jobCmd] : []),
   ...(buddy ? [buddy] : []),
   ...(poor ? [poor] : []),
+  ...(daemonCmd ? [daemonCmd] : []),
   ...(proactive ? [proactive] : []),
   ...(briefCommand ? [briefCommand] : []),
   ...(assistantCommand ? [assistantCommand] : []),
