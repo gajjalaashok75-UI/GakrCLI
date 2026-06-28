@@ -145,6 +145,11 @@ const forkCmd = feature('FORK_SUBAGENT')
       require('./commands/fork/index.js') as typeof import('./commands/fork/index.js')
     ).default
   : null
+const jobCmd = feature('TEMPLATES')
+  ? (
+      require('./commands/job/index.js') as typeof import('./commands/job/index.js')
+    ).default
+  : null
 const buddy = isBuddyEnabled()
   ? (
       require('./commands/buddy/index.js') as typeof import('./commands/buddy/index.js')
@@ -372,6 +377,7 @@ const COMMANDS = memoize((): Command[] => [
   wiki,
   ...(webCmd ? [webCmd] : []),
   ...(forkCmd ? [forkCmd] : []),
+  ...(jobCmd ? [jobCmd] : []),
   ...(buddy ? [buddy] : []),
   ...(proactive ? [proactive] : []),
   ...(briefCommand ? [briefCommand] : []),
