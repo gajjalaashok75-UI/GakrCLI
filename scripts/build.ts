@@ -45,6 +45,7 @@ const featureFlags: Record<string, boolean> = {
   HISTORY_SNIP: true,             // Model-callable snip tool for context management
   UDS_INBOX: false,               // Unix Domain Socket inter-session messaging
   AUTOFIX_PR: false,              // /autofix-pr command
+  TEMPLATES: false,               // Template jobs (new/list/reply subcommands)
   BG_SESSIONS: true,              // Local detached background sessions
   WEB_BROWSER_TOOL: false,        // Built-in browser automation (source not mirrored)
   CHICAGO_MCP: false,             // Computer-use MCP (native Swift modules stubbed)
