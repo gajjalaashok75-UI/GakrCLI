@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`peers` command**: Replaced stub `index.ts` with full implementation (`index.ts` + new `peers.ts`). Lists connected GakrCLI peers via UDS, including per-peer status, PID, CWD, socket path, and session ID. Gated behind `feature('UDS_INBOX')` (matches reference). No tests.
 - **`plan` command**: Added `bridgeSafe: true` + `getBridgeInvocationError` to match reference (blocks `/plan open` over Remote Control). New `index.test.ts` (2 bridge safety tests). Already registered at line 165. All 4 tests pass.
 - **`plugin` command**: New `__tests__/parseArgs.test.ts` (23 parse arg tests). Already registered at lines 175/531/544. No feature gate. All 46 tests pass (23 local + 23 reference).
+- **`poor` command**: Full implementation (index.ts + poor.ts + poorMode.ts + __tests__). Toggles poor mode (disables extract_memories/prompt_suggestion to save tokens). Persists to settings.json. `local` type, `supportsNonInteractive: false`. Gated behind `feature('POOR')` (matches reference). Added to commands.ts at lines 162-166 (require) and 392 (array). All 6 tests pass.
 
 ## [0.5.8] - 2026-06-27
 
