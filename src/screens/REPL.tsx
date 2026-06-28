@@ -23,6 +23,9 @@ import { CostThresholdDialog } from '../components/CostThresholdDialog.js';
 import { IdleReturnDialog } from '../components/IdleReturnDialog.js';
 import { ResumeCompactPrompt } from '../components/ResumeCompactPrompt.js';
 import { CompactProgressBar } from '../components/CompactProgressBar.js';
+import { UltraplanChoiceDialog } from '../components/ultraplan/UltraplanChoiceDialog.js';
+import { UltraplanLaunchDialog } from '../components/ultraplan/UltraplanLaunchDialog.js';
+import { launchUltraplan } from '../commands/ultraplan.js';
 import * as React from 'react';
 import { useEffect, useMemo, useRef, useState, useCallback, useDeferredValue, useLayoutEffect, type RefObject } from 'react';
 import { useNotifications } from '../context/notifications.js';
@@ -304,37 +307,6 @@ const RECENT_SCROLL_REPIN_WINDOW_MS = 3000;
 // 100 files should be sufficient for most coding sessions while preventing
 // memory issues when working across many files in large projects
 
-// Stubs: Ultraplan (remote planning sessions) is not included in this open
-// snapshot. Every use below is gated behind feature('ULTRAPLAN'), so these
-// render nothing / reject if ever reached.
-function UltraplanChoiceDialog(_props: {
-  plan: string;
-  sessionId: string;
-  taskId: string;
-  setMessages: (action: React.SetStateAction<MessageType[]>) => void;
-  readFileState: FileStateCache;
-  getAppState: () => AppState;
-  setConversationId: React.Dispatch<React.SetStateAction<UUID>>;
-}): React.ReactElement | null {
-  return null;
-}
-function UltraplanLaunchDialog(_props: {
-  onChoice: (choice: 'launch' | 'cancel', opts?: {
-    disconnectedBridge?: boolean;
-  }) => void;
-}): React.ReactElement | null {
-  return null;
-}
-async function launchUltraplan(_opts: {
-  blurb: string;
-  getAppState: () => AppState;
-  setAppState: SetAppState;
-  signal: AbortSignal;
-  disconnectedBridge?: boolean;
-  onSessionReady: (msg: string) => void;
-}): Promise<string> {
-  throw new Error('Ultraplan is not available in this build');
-}
 
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
