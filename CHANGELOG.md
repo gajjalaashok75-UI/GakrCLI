@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.5.9] - 2026-06-28
 
 ### Added
+- **cli/handlers/autonomy.ts**: Tracked — CLI autonomy handlers (status, deep, runs, flows). Already wired via `autonomyPanel.tsx`. 4 tests pass.
+- **cli/handlers/ant.ts**: Tracked — ANT-only CLI subcommand handlers (task, log, error, export, completion). Not wired in `main.tsx` (requires `USER_TYPE === 'ant'`).
+- **cli/bg/**: Tracked — Background session engine infrastructure (`engine.ts`, `engines/detached.ts`, `engines/tmux.ts`, `engines/index.ts`, `tail.ts`). 12 tests pass.
+- **cli/rollback.ts**: Tracked — ANT-only rollback CLI subcommand. Not wired (requires `USER_TYPE === 'ant'`).
+- **cli/up.ts**: Tracked — ANT-only up CLI subcommand. Not wired (requires `USER_TYPE === 'ant'`).
+- **cli/updategakrcli.ts**: Tracked — Alternative update utility (unwired, `update.ts` is the active implementation).
+- **cli/__tests__/**: Tracked — CLI user-facing error message tests. 12/12 pass.
+- **cli/transports/__tests__/**: Tracked — SSE transport tests. 4/6 pass (2 pre-existing timing-assertion fails).
+- **ISSUES.md**: Added entries for ANT-only CLI subcommands and updategakrcli orphan.
 - **proactive command**: Source file tracked — already registered behind `feature('PROACTIVE')` (or `KAIROS`). `/proactive` toggles proactive mode. 4 baseline tests pass.
 - **subscribe-pr command**: Source file tracked — already registered behind `feature('KAIROS_GITHUB_WEBHOOKS')` in INTERNAL_ONLY.
 - **torch command**: Source file tracked — already registered behind `feature('TORCH')`.
