@@ -136,6 +136,7 @@ import thinkbackPlay from './commands/thinkback-play/index.js'
 import permissions from './commands/permissions/index.js'
 import pipes from './commands/pipes/index.js'
 import pipeStatus from './commands/pipe-status/index.js'
+import claimMain from './commands/claim-main/index.js'
 import plan from './commands/plan/index.js'
 import fast from './commands/fast/index.js'
 import passes from './commands/passes/index.js'
@@ -374,6 +375,7 @@ const COMMANDS = memoize((): Command[] => [
   ...(attachCmd ? [attachCmd] : []),
   pipes,
   pipeStatus,
+  claimMain,
   tasks,
   ...(workflowsCmd ? [workflowsCmd] : []),
   ...(torch ? [torch] : []),

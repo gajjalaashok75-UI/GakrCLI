@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **break-cache command**: Full implementation (`index.ts`, `panel.tsx`, `index.d.ts`, `__tests__/break-cache.test.ts`). Interactive Ink panel with status/once/always/off/clear actions. Non-interactive mode for CLI usage. Marker file `.next-request-no-cache`, always-on flag `.break-cache-always`, JSONL event log `break-cache-events.jsonl`. 17 local tests pass (2 reference path failures `@anthropic/ink` pre-existing). EnvUtils mock fixed with all missing exports (`getProjectsDir`, `isRunningOnHomespace`, `getGakrCLIWorkspaceDir`, plus 5 others).
 - **`pipes` command**: Full implementation (`index.ts` + `pipes.ts`). Inspects pipe registry state, toggles pipe selector, select/deselect pipes, shows registry with LAN peers. Registered in `src/commands.ts`.
 - **`pipe-status` command**: Full implementation (`index.ts` + `pipe-status.ts`). Shows current pipe connection status for main/controlled/slave modes. Registered in `src/commands.ts`.
+- **`claim-main` command**: Full implementation (`index.ts` + `claim-main.ts`). Claims main role for this machine, updates local state, shows details. Registered in `src/commands.ts`.
 
 ## [0.5.8] - 2026-06-27
 
