@@ -64,3 +64,11 @@
 - **Root cause**: Requires Anthropic pro/team/max subscription for the vaults API endpoint. The command allows browsing, searching, and managing knowledge vaults. Vault data is fetched from the Anthropic vaults API. Without a valid subscription the API key is unavailable.
 - **Files**: `src/commands/vault/` (6 source files, 76 tests)
 - **Reference**: `references/claude-code-main/src/commands/vault/` — same implementation
+
+## Component Wiring Gaps
+
+### `components/tasks/BackgroundAgentSelector.tsx` — Present but not wired
+- **Status**: File exists in `src/components/tasks/`, never imported anywhere
+- **Root cause**: Requires multi-system wiring (REPL.tsx, AppState, promptInput)
+- **Files**: `src/components/tasks/BackgroundAgentSelector.tsx`
+- **Reference**: `references/claude-code-main/src/components/tasks/BackgroundAgentSelector.tsx`
