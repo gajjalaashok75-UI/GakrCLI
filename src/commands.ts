@@ -63,6 +63,7 @@ import skillStoreCommand from './commands/skill-store/index.js'
 import status from './commands/status/index.js'
 import tasks from './commands/tasks/index.js'
 import teleport from './commands/teleport/index.js'
+import tui, { tuiNonInteractive } from './commands/tui/index.js'
 /* eslint-disable @typescript-eslint/no-require-imports */
 const agentsPlatform =
   process.env.USER_TYPE === 'ant'
@@ -303,6 +304,8 @@ export const INTERNAL_ONLY_COMMANDS = [
   summary,
   recap,
   teleport,
+  tui,
+  tuiNonInteractive,
   antTrace,
   perfIssue,
   env,
