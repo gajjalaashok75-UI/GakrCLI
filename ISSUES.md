@@ -36,3 +36,10 @@
 - **Root cause**: Registering triggers test failures in `index.test.ts` and `launchMemoryStores.test.ts` due to Bun `mock.module` state leakage. `api.test.ts` (runs first alphabetically) mocks `oauth.js` and `teleport/api.js` with only a subset of exports, leaking to `index.test.ts` which needs `getOAuthHeaders` and `fileSuffixForOauthConfig` from the real modules.
 - **Files**: `src/commands/memory-stores/` (6 source files, 4 test files)
 - **Reference**: `references/claude-code-main/src/commands/memory-stores/` — same implementation, no feature gate
+
+### `artifacts` — Not wired (no cloud-artifacts domain)
+- **Command affected**: `artifacts` (List HTML artifacts uploaded to cloud-artifacts)
+- **Status**: Source files present (`index.ts`, `artifacts.tsx`, `ArtifactsMenu.tsx`, `scanner.ts`, `__tests__/`), NOT registered in `commands.ts`
+- **Root cause**: Requires a cloud-artifacts domain/upload endpoint. The command displays artifacts uploaded via `artifact` tool_use blocks in the session, but artifacts are uploaded to an external cloud endpoint. Without a configured domain the command would show only locally-extracted tool_use metadata without functional cloud artifact browsing.
+- **Files**: `src/commands/artifacts/` (5 source files, 6 tests)
+- **Reference**: `references/claude-code-main/src/commands/artifacts/` — same implementation, no feature gate
