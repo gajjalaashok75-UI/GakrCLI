@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.5.9] - 2026-06-28
 
 ### Added
+- **update command**: Registered in `src/commands.ts` (unconditional). `/update [latest|stable|<version>] [--force]` updates GakrCLI via Ink UI progress panel.
 - **autonomy command**: Registered in `src/commands.ts` (unconditional, matches reference). `/autonomy` for inspecting automatic autonomy runs from proactive ticks and scheduled tasks. `local-jsx` type, loads `autonomyPanel.tsx` Ink UI.
 - **monitor command**: Registered in `src/commands.ts` behind `feature('MONITOR_TOOL')`. `/monitor <command>` starts a background shell monitor task visible via Shift+Down footer pill. Includes Windows `watch`→PowerShell loop compatibility.
 - **coordinator command**: Registered in `src/commands.ts` behind `feature('COORDINATOR_MODE')`. `/coordinator` toggles multi-worker orchestration mode (sets `GAKR_CODE_COORDINATOR_MODE` env var).
