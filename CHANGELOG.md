@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **REPL.tsx wiring**: Integrated `useSearchExtraToolsHint` hook and `SearchExtraToolsHint` dialog into the focused dialog priority system (between plugin-hint and desktop-upsell). Hook call + JSX rendering wired in.
 - **Test fixes**: Added `mock.module('src/tools/SearchExtraToolsTool/prompt.js')` in `SearchExtraToolsHint.test.ts` and `toolIndex.test.ts` to break circular dependency chain through `constants/tools.ts` → `REPLTool/constants.ts`. 33 tests pass (12 searchExtraTools, 3 SearchExtraToolsHint, 18 SearchExtraToolsTool).
 - **src/services/SessionMemory/**: Tracked `multiStore.ts` (local-memory multi-store backend) and `__tests__/` (multiStore, prompts). Updated `prompts.ts` to add dynamic variable substitution (`{{GAKR_MODEL}}`, `{{GAKR_EFFORT}}`, `{{GAKR_CWD}}`). Fixed `multiStore.test.ts` env var (`CLAUDE_CONFIG_DIR` → `GAKR_CONFIG_DIR`). 36 tests pass.
+- **src/services/skillLearning/**: Tracked all 21 source files and 16 test files (90 tests). Self-learning skill acquisition subsystem with runtime observation, instinct learning, skill gap detection, and LLM observer backend. Wired via `commands/skill-learning/` command gated on `SKILL_LEARNING` feature flag (dev-disabled, commented out in defines.ts).
 
 ## [0.5.8] - 2026-06-28
 
