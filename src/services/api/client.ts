@@ -482,7 +482,7 @@ export async function getAnthropicClient({
     }) as unknown as Anthropic
   }
   if (isEnvTruthy(process.env.GAKR_CODE_USE_BEDROCK)) {
-    const { AnthropicBedrock } = await import('@anthropic-ai/bedrock-sdk')
+    const { BedrockClient } = await import('./bedrockClient.js')
     // Use region override for small fast model if specified
     const awsRegion =
       model === getSmallFastModel() &&
@@ -521,8 +521,8 @@ export async function getAnthropicClient({
     }
     // we have always been lying about the return type - this doesn't support batching or models
     // Cast: the overloads demand a statically-known credential shape; ours is runtime-conditional.
-    return new AnthropicBedrock(
-      bedrockArgs as ConstructorParameters<typeof AnthropicBedrock>[0],
+    return new BedrockClient(
+      bedrockArgs as ConstructorParameters<typeof BedrockClient>[0],
     ) as unknown as Anthropic
   }
   if (isEnvTruthy(process.env.GAKR_CODE_USE_FOUNDRY)) {
