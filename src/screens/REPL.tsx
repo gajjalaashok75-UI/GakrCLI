@@ -203,6 +203,8 @@ const useScheduledTasks = require('../hooks/useScheduledTasks.js').useScheduledT
 const useGoalContinuation: typeof import('../hooks/useGoalContinuation.js').useGoalContinuation | null = feature('GOAL')
   ? require('../hooks/useGoalContinuation.js').useGoalContinuation
   : null;
+const useProactive =
+  feature('PROACTIVE') || feature('KAIROS') ? require('../proactive/useProactive.js').useProactive : null;
 const useMasterMonitor = feature('UDS_INBOX')
   ? require('../hooks/useMasterMonitor.js').useMasterMonitor
   : () => undefined;
@@ -4175,6 +4177,15 @@ export function REPL({
   usePipeIpc({ store, handleIncomingPrompt });
   const { routeToSelectedPipes } = usePipeRouter({ store, setAppState, addNotification });
   useMasterMonitor();
+
+  // Proactive mode: auto-tick when enabled (via /proactive command)
+  useProactive?.({
+    isLoading: isLoading || initialMessage !== null,
+    queuedCommandsLength: queuedCommands.length,
+    hasActiveLocalJsxUI: isShowingLocalJSXCommand,
+    isInPlanMode: toolPermissionContext.mode === 'plan',
+    onQueueTick: (command: QueuedCommand) => enqueue(command),
+  });
 
   // Goal auto-continuation: enqueue a steering prompt when idle + active goal
   useGoalContinuation?.({
