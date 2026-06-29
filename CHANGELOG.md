@@ -21,6 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **src/services/api/**: Removed redundant `gemini/`, `grok/`, `openai/` provider directories. All non-Anthropic provider functionality unified via `openaiShim.ts`.
 - **src/services/analytics/**: Removed `firstPartyEventLogger.ts` and `firstPartyEventLoggingExporter.ts`.
 
+### Added
+- **src/services/searchExtraTools/**: Tracked `prefetch.ts`, `toolIndex.ts`, and `__tests__/` (prefetch, toolIndex, runner). `prefetch.ts` manages periodic polling of deferred tools; `toolIndex.ts` provides TF-IDF search over deferred tool names/descriptions.
+- **src/utils/searchExtraTools.ts**: Tracked utility — tool search mode detection, optimistic enablement check, `isSearchExtraToolsToolAvailable` guard, and tool name extraction from `SearchExtraToolsTool` output.
+- **REPL.tsx wiring**: Integrated `useSearchExtraToolsHint` hook and `SearchExtraToolsHint` dialog into the focused dialog priority system (between plugin-hint and desktop-upsell). Hook call + JSX rendering wired in.
+- **Test fixes**: Added `mock.module('src/tools/SearchExtraToolsTool/prompt.js')` in `SearchExtraToolsHint.test.ts` and `toolIndex.test.ts` to break circular dependency chain through `constants/tools.ts` → `REPLTool/constants.ts`. 33 tests pass (12 searchExtraTools, 3 SearchExtraToolsHint, 18 SearchExtraToolsTool).
+
 ## [0.5.8] - 2026-06-28
 
 ### Added
