@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.5.8] - 2026-06-29
 
 ### Added
+- **src/skills/ (bundled skill system)**: Tracked `ultracode.ts`, `useArtifacts.ts/+test`, `__tests__/ultracode.test.ts`, `dream.ts`, `verify/` directory. Wired 8 previously-orphaned skills (ultracode, use-artifacts, verify, lorem-ipsum, remember, skillify, stuck, cron-list/delete) into `initBundledSkills()`. Added `MACRO.VERSION` mock for test. 54 local tests pass.
 - **src/proactive/**: Tracked `useProactive.ts` (tick-driven hook for proactive mode) and `__tests__/state.baseline.test.ts` (4 baseline tests). Updated `index.ts` to match reference with 3 new exports (`setNextTickAt`, `getActivationSource`, `shouldTick`). Wired `useProactive` into REPL.tsx behind `feature('PROACTIVE') || feature('KAIROS')` gate. 12/12 local tests pass.
 - **src/modes/ (mode system)**: Tracked `types.ts` (GakrCLIMode interface), `defaults.ts` (6 built-in modes), `store.ts` (load/save/cycle), and `personas/gakrcli.ts` (reference template). Wired via `store.ts` → `/mode` command (no feature gate).
 - **src/jobs/ (jobs system)**: Tracked `state.ts`, `templates.ts`, `__tests__/state.test.ts`, `__tests__/templates.test.ts`. Replaced classifier stub with full implementation in `classifier.ts`. Wired via `templateJobs.ts` → `job.tsx` command + `cli.tsx` entrypoint; `classifier.ts` via `query.ts`/`stopHooks.ts` gated on `GAKR_JOB_DIR`. 15/15 local tests pass.
