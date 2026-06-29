@@ -5,7 +5,7 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.10] - 2026-06-29
+## [0.5.8] - 2026-06-29
 
 ### Added
 - **src/proactive/**: Tracked `useProactive.ts` (tick-driven hook for proactive mode) and `__tests__/state.baseline.test.ts` (4 baseline tests). Updated `index.ts` to match reference with 3 new exports (`setNextTickAt`, `getActivationSource`, `shouldTick`). Wired `useProactive` into REPL.tsx behind `feature('PROACTIVE') || feature('KAIROS')` gate. 12/12 local tests pass.
@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **src/jobs/ (jobs system)**: Tracked `state.ts`, `templates.ts`, `__tests__/state.test.ts`, `__tests__/templates.test.ts`. Replaced classifier stub with full implementation in `classifier.ts`. Wired via `templateJobs.ts` → `job.tsx` command + `cli.tsx` entrypoint; `classifier.ts` via `query.ts`/`stopHooks.ts` gated on `GAKR_JOB_DIR`. 15/15 local tests pass.
 - **src/hooks/ pipe & goal hooks**: Tracked and wired 10 hook files (useBackgroundAgentTasks, useGoalContinuation, useMasterMonitor, usePipeIpc, usePipeMuteSync, usePipePermissionForward, usePipeRelay, usePipeRouter, useSlaveNotifications, useScheduledTasks) and 4 test files. Wired into REPL.tsx behind `feature('GOAL')` and `feature('UDS_INBOX')` gates. Added `createScheduledTaskQueuedCommand` export. Added `wasAborted` state. 21/21 local tests pass.
 
-## [0.5.9] - 2026-06-28
+## [0.5.8] - 2026-06-28
 
 ### Added
 - **FeedbackSurvey**: Tracked `useFrustrationDetection.ts` and `__tests__/` — completes FeedbackSurvey directory. 4 local tests pass. Frustration detection is ant-only (matches reference pattern).
