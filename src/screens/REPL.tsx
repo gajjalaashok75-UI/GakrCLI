@@ -841,6 +841,7 @@ export function REPL({
     recommendation: hintRecommendation,
     handleResponse: handleHintResponse
   } = useGakrCLICodeHintRecommendation();
+  const searchExtraToolsHint = useSearchExtraToolsHint();
 
   // Memoize the combined initial tools array to prevent reference changes
   const combinedInitialTools = useMemo(() => {
@@ -2131,7 +2132,7 @@ export function REPL({
   // Permission and interactive dialogs can show even when toolJSX is set,
   // as long as shouldContinueAnimation is true. This prevents deadlocks when
   // agents set background hints while waiting for user interaction.
-  function getFocusedInputDialog(): 'message-selector' | 'sandbox-permission' | 'tool-permission' | 'prompt' | 'worker-sandbox-permission' | 'elicitation' | 'cost' | 'idle-return' | 'init-onboarding' | 'ide-onboarding' | 'effort-callout' | 'remote-callout' | 'lsp-recommendation' | 'plugin-hint' | 'desktop-upsell' | 'ultraplan-choice' | 'ultraplan-launch' | 'resume-compact' | undefined {
+  function getFocusedInputDialog(): 'message-selector' | 'sandbox-permission' | 'tool-permission' | 'prompt' | 'worker-sandbox-permission' | 'elicitation' | 'cost' | 'idle-return' | 'init-onboarding' | 'ide-onboarding' | 'effort-callout' | 'remote-callout' | 'lsp-recommendation' | 'plugin-hint' | 'search-extra-tools-hint' | 'desktop-upsell' | 'ultraplan-choice' | 'ultraplan-launch' | 'resume-compact' | undefined {
     // Exit states always take precedence
     if (isExiting || exitFlow) return undefined;
 
@@ -2174,6 +2175,9 @@ export function REPL({
 
     // Plugin hint from CLI/SDK stderr (same priority band as LSP rec)
     if (allowDialogsWithAnimation && hintRecommendation && startupChecksStartedRef.current) return 'plugin-hint';
+
+    // Tool search hint (discovered deferred tools relevant to current query)
+    if (allowDialogsWithAnimation && searchExtraToolsHint.visible && startupChecksStartedRef.current) return 'search-extra-tools-hint';
 
     // Desktop app upsell (max 3 launches, lowest priority)
     if (allowDialogsWithAnimation && showDesktopUpsellStartup && startupChecksStartedRef.current) return 'desktop-upsell';
@@ -4970,6 +4974,14 @@ export function REPL({
           {exitFlow}
 
           {focusedInputDialog === 'plugin-hint' && hintRecommendation && <PluginHintMenu pluginName={hintRecommendation.pluginName} pluginDescription={hintRecommendation.pluginDescription} marketplaceName={hintRecommendation.marketplaceName} sourceCommand={hintRecommendation.sourceCommand} onResponse={handleHintResponse} />}
+
+          {focusedInputDialog === 'search-extra-tools-hint' && searchExtraToolsHint.visible && (
+            <SearchExtraToolsHint
+              tools={searchExtraToolsHint.tools}
+              onSelect={searchExtraToolsHint.handleSelect}
+              onDismiss={searchExtraToolsHint.handleDismiss}
+            />
+          )}
 
           {focusedInputDialog === 'lsp-recommendation' && lspRecommendation && <LspRecommendationMenu pluginName={lspRecommendation.pluginName} pluginDescription={lspRecommendation.pluginDescription} fileExtension={lspRecommendation.fileExtension} onResponse={handleLspResponse} />}
 
