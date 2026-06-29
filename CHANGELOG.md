@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `platforms/`: Platform dispatcher (`index.ts`) + backends for darwin/linux/win32
   - `win32/`: Windows-specific implementation (window messaging, UIA, Python bridge, COM, virtual cursor, capture, etc.)
   - Not wired — matches reference behavior; current computer use only supports macOS via `@ant` native packages
+- **hostAdapter.ts**: Wired cross-platform executor — macOS uses macOS-native `createCliExecutor`, other platforms use `createCrossPlatformExecutor` (platforms abstraction)
 
 ## [0.5.8] - 2026-06-28
 
