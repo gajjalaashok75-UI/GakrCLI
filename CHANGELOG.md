@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **src/jobs/ (jobs system)**: Tracked `state.ts`, `templates.ts`, `__tests__/state.test.ts`, `__tests__/templates.test.ts`. Replaced classifier stub with full implementation in `classifier.ts`. Wired via `templateJobs.ts` → `job.tsx` command + `cli.tsx` entrypoint; `classifier.ts` via `query.ts`/`stopHooks.ts` gated on `GAKR_JOB_DIR`. 15/15 local tests pass.
 - **src/hooks/ pipe & goal hooks**: Tracked and wired 10 hook files (useBackgroundAgentTasks, useGoalContinuation, useMasterMonitor, usePipeIpc, usePipeMuteSync, usePipePermissionForward, usePipeRelay, usePipeRouter, useSlaveNotifications, useScheduledTasks) and 4 test files. Wired into REPL.tsx behind `feature('GOAL')` and `feature('UDS_INBOX')` gates. Added `createScheduledTaskQueuedCommand` export. Added `wasAborted` state. 21/21 local tests pass.
 
+### Removed
+- **src/services/api/**: Removed redundant `gemini/`, `grok/`, `openai/` provider directories. All non-Anthropic provider functionality unified via `openaiShim.ts`.
+- **src/services/analytics/**: Removed `firstPartyEventLogger.ts` and `firstPartyEventLoggingExporter.ts`.
+
 ## [0.5.8] - 2026-06-28
 
 ### Added
