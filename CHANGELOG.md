@@ -31,6 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **src/services/goal/goalStorage.ts**: Fixed stale imports (`saveGoal`/`clearGoalEntryOnDisk` → `recordGoalState`) — those functions were removed from `sessionStorage.ts` in a prior refactor. 56 goal tests pass.
 - **src/services/lsp/LSPDiagnosticRegistry.ts**: Renamed `_claude_fs_right:`/`_claude_fs_left:` → `_gakrcli_fs_right:`/`_gakrcli_fs_left:` and `openclaude-lsp` → `opengakrcli-lsp` for reference alignment. 16 LSP tests pass (1 pre-existing reference test failure).
 - **src/services/doubaoSTT.ts**: Tracked Doubao ASR speech-to-text adapter. Exists in reference (`references/claude-code-main`) as a standalone lazy-loaded module — not wired in either codebase; activated dynamically when `VOICE_PROVIDER=doubao` is set.
+- **src/utils/computerUse/**: Tracked cross-platform computer use backend (20 files):
+  - `executorCrossPlatform.ts`: Cross-platform ComputerExecutor (Windows/Linux alternative to macOS `executor.ts`)
+  - `platforms/`: Platform dispatcher (`index.ts`) + backends for darwin/linux/win32
+  - `win32/`: Windows-specific implementation (window messaging, UIA, Python bridge, COM, virtual cursor, capture, etc.)
+  - Not wired — matches reference behavior; current computer use only supports macOS via `@ant` native packages
 
 ## [0.5.8] - 2026-06-28
 
