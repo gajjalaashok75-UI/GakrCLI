@@ -8,11 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.5.9] - 2026-06-28
 
 ### Added
+- **src/hooks/ pipe & goal hooks**: Tracked and wired 10 hook files (useBackgroundAgentTasks, useGoalContinuation, useMasterMonitor, usePipeIpc, usePipeMuteSync, usePipePermissionForward, usePipeRelay, usePipeRouter, useSlaveNotifications, useScheduledTasks) and 4 test files (replBridgePermissionHandlers, swarmPermissionPoller, useMasterMonitor, useScheduledTasks). Wired all hooks into REPL.tsx behind feature('GOAL') and feature('UDS_INBOX') gates. Added `createScheduledTaskQueuedCommand` export to useScheduledTasks. Added `wasAborted` state for goal continuation. 21/21 local tests pass.
 - **FeedbackSurvey**: Tracked `useFrustrationDetection.ts` and `__tests__/` — completes FeedbackSurvey directory. 4 local tests pass. Frustration detection is ant-only (matches reference pattern).
 - **EffortPanel**: Wired `src/components/EffortPanel/` into interactive `/effort` command, replacing `EffortPicker` wrapper. Added EffortPanel keybinding context (left/right/h/l/home/end/enter/escape/q/ctrl+c). Deleted dead `EffortPicker.tsx`. 156 EffortPanel tests pass.
 - **SnapshotUpdateDialog**: Tracked real `.ts` implementation replacing `.tsx` stub. Wired via `dialogLaunchers.tsx` → `main.tsx`. Takes precedence via Bun's `.ts`→`.tsx` resolution order.
 - **cli subcommands**: Wired `gakrcli up`, `gakrcli rollback`, `gakrcli log`, `gakrcli error`, `gakrcli export`, `gakrcli task <create|list|get|update|dir>`, `gakrcli completion <shell>` in `main.tsx` behind `USER_TYPE === 'ant'`. Added `listLiveSessions()` export in `bg.ts`. Tracked `bg/` engine infrastructure (engine, detached, tmux, tail). 24+ local tests pass.
 - **proactive command**: Source file tracked — already registered behind `feature('PROACTIVE')` (or `KAIROS`). `/proactive` toggles proactive mode. 4 baseline tests pass.
+- **ultraplan**: Wired `src/components/ultraplan/` (UltraplanChoiceDialog, UltraplanLaunchDialog) into `REPL.tsx` under `feature('ULTRAPLAN')`. Replaced inline stubs with real imports from `src/commands/ultraplan.js`. Feature flag enabled in defines.ts.
+- **SentryErrorBoundary**: Tracked `.tsx` implementation alongside existing `.ts` stub. Component is wired from `panelCall.tsx`, `PromptInput/Notifications.tsx`, and test files. Synced stubs via `git add -u`.
+- **SearchExtraToolsHint**: Tracked `SearchExtraToolsHint.tsx` and `useSearchExtraToolsHint.ts` hook. Wired into `REPL.tsx` via imports. Test exists in `__tests__/` (58 pass).
+- **BackgroundAgentSelector**: Tracked as untracked-untracked file. Added to `ISSUES.md` — present but not wired (requires REPL/AppState/promptInput wiring).
 - **subscribe-pr command**: Source file tracked — already registered behind `feature('KAIROS_GITHUB_WEBHOOKS')` in INTERNAL_ONLY.
 - **torch command**: Source file tracked — already registered behind `feature('TORCH')`.
 - **autonomy tests**: 10 test files in `src/commands/__tests__/autonomy.test.ts` (8/10 pass).

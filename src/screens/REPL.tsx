@@ -23,6 +23,8 @@ import { CostThresholdDialog } from '../components/CostThresholdDialog.js';
 import { IdleReturnDialog } from '../components/IdleReturnDialog.js';
 import { ResumeCompactPrompt } from '../components/ResumeCompactPrompt.js';
 import { CompactProgressBar } from '../components/CompactProgressBar.js';
+import { SearchExtraToolsHint } from '../components/SearchExtraToolsHint.js';
+import { useSearchExtraToolsHint } from '../hooks/useSearchExtraToolsHint.js';
 import { UltraplanChoiceDialog } from '../components/ultraplan/UltraplanChoiceDialog.js';
 import { UltraplanLaunchDialog } from '../components/ultraplan/UltraplanLaunchDialog.js';
 import { launchUltraplan } from '../commands/ultraplan.js';
@@ -198,6 +200,26 @@ const PROACTIVE_NO_OP_SUBSCRIBE = (_cb: () => void) => () => { };
 const PROACTIVE_FALSE = () => false;
 const SUGGEST_BG_PR_NOOP = (_p: string, _n: string): boolean => false;
 const useScheduledTasks = require('../hooks/useScheduledTasks.js').useScheduledTasks;
+const useGoalContinuation: typeof import('../hooks/useGoalContinuation.js').useGoalContinuation | null = feature('GOAL')
+  ? require('../hooks/useGoalContinuation.js').useGoalContinuation
+  : null;
+const useMasterMonitor = feature('UDS_INBOX')
+  ? require('../hooks/useMasterMonitor.js').useMasterMonitor
+  : () => undefined;
+const useSlaveNotifications = feature('UDS_INBOX')
+  ? require('../hooks/useSlaveNotifications.js').useSlaveNotifications
+  : () => undefined;
+const usePipeIpc = feature('UDS_INBOX') ? require('../hooks/usePipeIpc.js').usePipeIpc : () => undefined;
+const usePipeRelay = feature('UDS_INBOX')
+  ? require('../hooks/usePipeRelay.js').usePipeRelay
+  : () => ({ relayPipeMessage: () => false, pipeReturnHadErrorRef: { current: false } });
+const usePipePermissionForward = feature('UDS_INBOX')
+  ? require('../hooks/usePipePermissionForward.js').usePipePermissionForward
+  : () => undefined;
+const usePipeMuteSync = feature('UDS_INBOX') ? require('../hooks/usePipeMuteSync.js').usePipeMuteSync : () => undefined;
+const usePipeRouter = feature('UDS_INBOX')
+  ? require('../hooks/usePipeRouter.js').usePipeRouter
+  : () => ({ routeToSelectedPipes: () => false });
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { isAgentSwarmsEnabled } from '../utils/agentSwarmsEnabled.js';
 import type { SandboxAskCallback, NetworkHostPattern } from '../utils/sandbox/sandbox-adapter.js';
@@ -961,6 +983,10 @@ export function REPL({
   // loading is driven by queryGuard (reserve/tryStart/end/cancelReservation),
   // external loading by setIsExternalLoading.
   const isLoading = isQueryActive || isExternalLoading;
+
+  // Track whether the last query was aborted (Ctrl+C / Escape).
+  // useGoalContinuation reads this to avoid auto-continuing after a user abort.
+  const [wasAborted, setWasAborted] = useState(false);
 
   // Elapsed time is computed by SpinnerWithVerb from these refs on each
   // animation frame, avoiding a useInterval that re-renders the entire REPL.
@@ -2244,6 +2270,9 @@ export function REPL({
     // activating conditions hold — leaving the Escape keybinding inactive.
     setAbortController(null);
 
+    // Mark aborted for useGoalContinuation to skip auto-continue
+    setWasAborted(true);
+
     // forceEnd() skips the finally path — fire directly (aborted=true).
     void mrOnTurnComplete(messagesRef.current, true);
   }
@@ -2961,6 +2990,9 @@ export function REPL({
       return;
     }
     try {
+      // Reset abort and pipe-error flags before starting a new query
+      pipeReturnHadErrorRef.current = false;
+      setWasAborted(false);
       // isLoading is derived from queryGuard — tryStart() above already
       // transitioned dispatching→running, so no setter call needed here.
       resetTimingRefs();
@@ -3003,6 +3035,7 @@ export function REPL({
       // running→idle. Returns false if a newer query owns the guard
       // (cancel+resubmit race where the stale finally fires as a microtask).
       if (queryGuard.end(thisGeneration)) {
+        setWasAborted(abortController.signal.aborted);
         setLastQueryCompletionTime(Date.now());
         skipIdleCheckRef.current = false;
         // Always reset loading state in finally - this ensures cleanup even
@@ -4132,6 +4165,42 @@ export function REPL({
     isLoading,
     assistantMode,
     setMessages
+  });
+
+  // UDS_INBOX hooks — pipe/slave messaging infrastructure
+  const { relayPipeMessage, pipeReturnHadErrorRef } = usePipeRelay();
+  useSlaveNotifications();
+  usePipePermissionForward({ store, tools, setMessages, setToolUseConfirmQueue, getToolUseContext, mainLoopModel });
+  usePipeMuteSync({ setToolUseConfirmQueue });
+  usePipeIpc({ store, handleIncomingPrompt });
+  const { routeToSelectedPipes } = usePipeRouter({ store, setAppState, addNotification });
+  useMasterMonitor();
+
+  // Goal auto-continuation: enqueue a steering prompt when idle + active goal
+  useGoalContinuation?.({
+    isLoading: isLoading || initialMessage !== null,
+    wasAborted,
+    queuedCommandsLength: queuedCommands.length,
+    hasActiveLocalJsxUI: isShowingLocalJSXCommand,
+    isInPlanMode: toolPermissionContext.mode === 'plan',
+    isQueryActiveNow: queryGuard.getSnapshot,
+    onContinuationEnqueued: ({ turn, objective }) => {
+      const visibleGoalTurnInput = `Goal auto-continue (${turn}/1): continue advancing "${objective}".`;
+      setMessages(oldMessages => [
+        ...oldMessages,
+        createUserMessage({
+          content: visibleGoalTurnInput,
+          isVisibleInTranscriptOnly: true,
+        }),
+      ]);
+    },
+    onMaxTurnsReached: () => {
+      addNotification({
+        key: 'goal-max-turns-reached',
+        text: 'Goal reached max continuation turns (1). Run /goal continue to reset turn counter and continue.',
+        priority: 'immediate',
+      });
+    },
   });
 
   // Note: Permission polling is now handled by useInboxPoller
