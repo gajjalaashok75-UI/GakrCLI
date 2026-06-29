@@ -41,14 +41,15 @@ const featureFlags: Record<string, boolean> = {
   AGENT_TRIGGERS: false,          // Scheduled remote agent triggers
   ABLATION_BASELINE: false,       // A/B testing harness for eval experiments
   CONTEXT_COLLAPSE: true,        // Context collapsing optimization
-  COMMIT_ATTRIBUTION: false,      // Co-Authored-By metadata in git commits
+  COMMIT_ATTRIBUTION: true,      // Co-Authored-By metadata in git commits
   HISTORY_SNIP: true,             // Model-callable snip tool for context management
   UDS_INBOX: false,               // Unix Domain Socket inter-session messaging
-  AUTOFIX_PR: false,              // /autofix-pr command
+  AUTOFIX_PR: true,              // /autofix-pr command
   TEMPLATES: false,               // Template jobs (new/list/reply subcommands)
   BG_SESSIONS: true,              // Local detached background sessions
   WEB_BROWSER_TOOL: false,        // Built-in browser automation (source not mirrored)
   CHICAGO_MCP: false,             // Computer-use MCP (native Swift modules stubbed)
+  ACP: false,                     // ACP agent protocol (requires @agentclientprotocol/sdk)
   COWORKER_TYPE_TELEMETRY: false, // Telemetry for agent/coworker type classification
   MCP_SKILLS: true,               // Dynamic MCP skill discovery via skill:// resources
 
@@ -80,6 +81,7 @@ const featureFlags: Record<string, boolean> = {
   WORKFLOW_SCRIPTS: true,              // Workflow scripts (.gakrcli/workflows/ YAML/MD)
   EXPERIMENTAL_SKILL_SEARCH: true,     // TF-IDF skill search (DiscoverSkillsTool)
   GOAL: true,                          // Goal tracking tool & command
+  POOR: true,                          // 穷鬼模式，跳过 extract_memories/prompt_suggestion 减少消耗
 }
 
 // ── Pre-process: replace feature() calls with boolean literals ──────
