@@ -1,11 +1,19 @@
 import { feature } from 'bun:bundle'
 import { registerBatchSkill } from './batch.js'
-import { shouldEnableGakrCLIInChromeSkill } from './gakrcliInChromeAccess.js'
+import { registerCronDeleteSkill, registerCronListSkill } from './cronManage.js'
 import { registerDebugSkill } from './debug.js'
+import { shouldEnableGakrCLIInChromeSkill } from './gakrcliInChromeAccess.js'
 import { registerKeybindingsSkill } from './keybindings.js'
+import { registerLoremIpsumSkill } from './loremIpsum.js'
 import { registerLoopSkill } from './loop.js'
+import { registerRememberSkill } from './remember.js'
 import { registerSimplifySkill } from './simplify.js'
+import { registerSkillifySkill } from './skillify.js'
+import { registerStuckSkill } from './stuck.js'
+import { registerUltracodeSkill } from './ultracode.js'
 import { registerUpdateConfigSkill } from './updateConfig.js'
+import { registerUseArtifactsSkill } from './useArtifacts.js'
+import { registerVerifySkill } from './verify.js'
 
 /**
  * Initialize all bundled skills.
@@ -19,9 +27,19 @@ import { registerUpdateConfigSkill } from './updateConfig.js'
 export function initBundledSkills(): void {
   registerUpdateConfigSkill()
   registerKeybindingsSkill()
+  registerVerifySkill()
   registerDebugSkill()
+  registerLoremIpsumSkill()
+  registerSkillifySkill()
+  registerRememberSkill()
   registerSimplifySkill()
+  registerUseArtifactsSkill()
   registerBatchSkill()
+  registerStuckSkill()
+  registerUltracodeSkill()
+  registerLoopSkill()
+  registerCronListSkill()
+  registerCronDeleteSkill()
   if (feature('KAIROS') || feature('KAIROS_DREAM')) {
     /* eslint-disable @typescript-eslint/no-require-imports */
     const { registerDreamSkill } = require('./dream.js')

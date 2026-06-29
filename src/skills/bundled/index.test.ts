@@ -9,6 +9,7 @@ import { initBundledSkills } from './index.js'
 const originalUserType = process.env.USER_TYPE
 
 beforeEach(async () => {
+  (globalThis as any).MACRO = { VERSION: '0.0.0-test' }
   await acquireSharedMutationLock('skills/bundled/index.test.ts')
   clearBundledSkills()
   process.env.USER_TYPE = 'ant'
@@ -16,6 +17,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   try {
+    delete (globalThis as any).MACRO
     clearBundledSkills()
     if (originalUserType === undefined) {
       delete process.env.USER_TYPE
