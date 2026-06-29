@@ -111,7 +111,7 @@ const recentDiagnosticFileActivity = new LRUCache<string, number>({
 const diagnosticWindows = new Map<string, DiagnosticWindowState>()
 
 function normalizeDiagnosticUri(uri: string): string {
-  for (const prefix of ['file://', '_claude_fs_right:', '_claude_fs_left:']) {
+  for (const prefix of ['file://', '_gakrcli_fs_right:', '_gakrcli_fs_left:']) {
     if (uri.startsWith(prefix)) {
       return uri.slice(prefix.length)
     }
@@ -302,7 +302,7 @@ function buildStormSummaryFile(
           start: { line: 0, character: 0 },
           end: { line: 0, character: 0 },
         },
-        source: 'openclaude-lsp',
+        source: 'opengakrcli-lsp',
         code: 'diagnostic-storm',
       },
     ],
