@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **src/components/Settings/ClinePassUsage.tsx**: ClinePass usage display component, wired into Usage.tsx.
 - **src/components/EffortCallout.modelGate.test.ts**, **src/components/StatusLine.test.ts**, **src/components/permissions/ExitPlanModePermissionRequest/ExitPlanModePermissionRequest.render.test.tsx**: Test coverage for EffortCallout model gate, StatusLine, and ExitPlanModePermissionRequest.
 - **src/constants/product.test.ts**: Test coverage for remote session environment detection (isRemoteSessionLocal, isRemoteSessionStaging, getGakrCLIAiBaseUrl).
+- **src/entrypoints/sdk/agentDefinitions.ts**, **agentDefinitions.test.ts**: SDK agent definition types and validation with build/merge utilities; test coverage for maxSteps validation, agent precedence, and policy overrides.
 
 ### Fixed
 - **src/components/EffortCallout.tsx**: Added missing `effortCalloutCoversModel` export for deterministic model gate testing.
@@ -19,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **src/utils/tokens.ts**: Ported missing `SessionUsage` type, `getUnreportedSessionUsage`, `isAllZeroUsage`, `getAssistantResponseStartIndex`, `getAssistantResponseEndIndex`, `estimateAssistantResponseOutputTokens` from reference. Added `CurrentUsage` type with `is_estimated` field; updated `getCurrentUsage` to return estimated values when usage is all zeros.
 - **src/types/statusLine.ts**: Added missing `total_tokens_are_estimated` field to `context_window` type.
 - **src/constants/product.ts**: Ported reference hostname-based ingress matching for `isRemoteSessionLocal` and `isRemoteSessionStaging`; replaced crude `includes()` checks with proper `URL.hostname` parsing to avoid misrouting production URLs.
+- **src/entrypoints/sdk/coreSchemas.ts**: Added missing `maxSteps` field to `AgentDefinitionSchema` with `.number().int().positive()` validation to reject invalid agent step limits.
 
 ### Added
 - **src/commands/clear-context-window/**: New `/clear-context-window` command for resetting session-scoped context window overrides. Wired in `commands.ts`.
