@@ -37,6 +37,7 @@ import {
   CRON_DELETE_TOOL_NAME,
   CRON_LIST_TOOL_NAME,
 } from '../tools/ScheduleCronTool/prompt.js'
+import { LOCAL_MEMORY_RECALL_TOOL_NAME } from '../tools/LocalMemoryRecallTool/constants.js'
 
 export const ALL_AGENT_DISALLOWED_TOOLS = new Set([
   TASK_OUTPUT_TOOL_NAME,
@@ -44,6 +45,7 @@ export const ALL_AGENT_DISALLOWED_TOOLS = new Set([
   ENTER_PLAN_MODE_TOOL_NAME,
   ASK_USER_QUESTION_TOOL_NAME,
   TASK_STOP_TOOL_NAME,
+  LOCAL_MEMORY_RECALL_TOOL_NAME,
   // Prevent recursive workflow execution inside subagents.
   ...(feature('WORKFLOW_SCRIPTS') ? [WORKFLOW_TOOL_NAME] : []),
 ])

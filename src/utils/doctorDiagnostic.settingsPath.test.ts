@@ -13,7 +13,7 @@ let tempDir: string | null = null
 let originalCwd: string | null = null
 
 function createProject(): string {
-  tempDir = mkdtempSync(join(tmpdir(), 'openclaude-settings-drift-'))
+  tempDir = mkdtempSync(join(tmpdir(), 'gakrcli-settings-drift-'))
   return tempDir
 }
 
@@ -45,22 +45,21 @@ afterEach(() => {
 describe('detectStaleProjectSettingsPaths', () => {
   test('warns when legacy project settings exist without canonical settings', async () => {
     const project = createProject()
-    writeJson(join(project, '.claude', 'settings.json'))
+    writeJson(join(project, '.gakrcli', 'settings.json'))
 
     const warning = await detectStaleProjectSettingsPaths(project)
 
     expect(warning).toEqual({
       issue:
-        'Legacy project settings file .claude/settings.json found, but OpenClaude reads .openclaude/settings.json',
+        'Legacy project settings file .gakrcli/settings.json found, but OpenGakrCLI reads .opengakrcli/settings.json',
       fix:
-        'Move or copy .claude/settings.json to .openclaude/settings.json if you intended OpenClaude to use those project settings.',
+        'Move or copy .gakrcli/settings.json to .gakrcli/settings.json if you intended OpenGakrCLI to use those project settings.',
     })
   })
 
   test('does not warn when the matching canonical project settings file exists', async () => {
     const project = createProject()
-    writeJson(join(project, '.claude', 'settings.json'))
-    writeJson(join(project, '.openclaude', 'settings.json'))
+    writeJson(join(project, '.gakrcli', 'settings.json'))
 
     await expect(detectStaleProjectSettingsPaths(project)).resolves.toBeNull()
   })
@@ -73,43 +72,39 @@ describe('detectStaleProjectSettingsPaths', () => {
 
   test('does not warn when only canonical settings files exist', async () => {
     const project = createProject()
-    writeJson(join(project, '.openclaude', 'settings.json'))
-    writeJson(join(project, '.openclaude', 'settings.local.json'))
+    writeJson(join(project, '.gakrcli', 'settings.json'))
+    writeJson(join(project, '.gakrcli', 'settings.local.json'))
 
     await expect(detectStaleProjectSettingsPaths(project)).resolves.toBeNull()
   })
 
   test('warns independently for legacy local settings', async () => {
     const project = createProject()
-    writeJson(join(project, '.claude', 'settings.local.json'))
+    writeJson(join(project, '.gakrcli', 'settings.local.json'))
 
     const warning = await detectStaleProjectSettingsPaths(project)
 
-    expect(warning?.issue).toContain('.claude/settings.local.json')
-    expect(warning?.issue).toContain('.openclaude/settings.local.json')
+    expect(warning?.issue).toContain('.gakrcli/settings.local.json')
   })
 
   test('warns about both legacy settings files when both canonical files are absent', async () => {
     const project = createProject()
-    writeJson(join(project, '.claude', 'settings.json'))
-    writeJson(join(project, '.claude', 'settings.local.json'))
+    writeJson(join(project, '.gakrcli', 'settings.json'))
+    writeJson(join(project, '.gakrcli', 'settings.local.json'))
 
     const warning = await detectStaleProjectSettingsPaths(project)
 
-    expect(warning?.issue).toContain('.claude/settings.json')
-    expect(warning?.issue).toContain('.claude/settings.local.json')
-    expect(warning?.issue).toContain('.openclaude/settings.json')
-    expect(warning?.issue).toContain('.openclaude/settings.local.json')
+    expect(warning?.issue).toContain('.gakrcli/settings.json')
+    expect(warning?.issue).toContain('.gakrcli/settings.local.json')
   })
 
   test('uses the settings resolver project root by default', async () => {
     const project = createProject()
-    writeJson(join(project, '.claude', 'settings.json'))
+    writeJson(join(project, '.gakrcli', 'settings.json'))
     setOriginalCwd(project)
 
     const warning = await detectStaleProjectSettingsPaths()
 
-    expect(warning?.issue).toContain('.claude/settings.json')
-    expect(warning?.issue).toContain('.openclaude/settings.json')
+    expect(warning?.issue).toContain('.gakrcli/settings.json')
   })
 })

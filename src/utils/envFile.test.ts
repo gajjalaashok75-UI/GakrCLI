@@ -44,7 +44,7 @@ const originalEnv = new Map<string, string | undefined>()
 let tempDir: string
 
 beforeEach(() => {
-  tempDir = mkdtempSync(join(tmpdir(), 'openclaude-env-file-test-'))
+  tempDir = mkdtempSync(join(tmpdir(), 'gakrcli-env-file-test-'))
   for (const key of TEST_ENV_KEYS) {
     originalEnv.set(key, process.env[key])
     delete process.env[key]

@@ -3,7 +3,7 @@ import { splitPathInFrontmatter } from './frontmatterParser.ts'
 
 // splitPathInFrontmatter is the public entry that flatMaps each comma-separated
 // part through the (private) expandBraces helper, so it exercises the brace
-// expansion that loadSkillsDir.ts and claudemd.ts depend on for path-scoped
+// expansion that loadSkillsDir.ts and gakrclimd.ts depend on for path-scoped
 // activation. These cover the regression where the old `[^}]+` regex stopped at
 // the first '}' and corrupted nested groups (leaving stray '}' in globs).
 
@@ -43,7 +43,7 @@ test('returns unbalanced braces unchanged rather than throwing', () => {
 
 test('keeps an empty brace group literal instead of yielding an empty path', () => {
   // `{}` is not an alternation. Expanding it to '' would make parseSkillPaths
-  // and the CLAUDE.md path parser drop the empty string and treat the file as
+  // and the GAKRCLI.md path parser drop the empty string and treat the file as
   // having NO path restriction (activating everywhere). Keep it literal so the
   // pattern matches a literal `{}` (i.e. effectively nothing) instead.
   expect(splitPathInFrontmatter('{}')).toEqual(['{}'])

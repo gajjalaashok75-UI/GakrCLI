@@ -5,7 +5,26 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.9] - 2026-06-30
+
+### Fixed
+- **src/utils/attributionModel.ts**: Replaced broken `@ant/model-provider` import with inlined model mapping functions (resolveOpenAIModel, resolveGrokModel, resolveGeminiModel).
+- **src/tools/REPLTool/constants.ts**: Fixed circular dependency — imported `FILE_READ_TOOL_NAME`/`FILE_WRITE_TOOL_NAME` from `constants.js` instead of `prompt.js`.
+- **src/tools/AgentTool/AgentTool.tsx, resumeAgent.ts**: Wired `filterParentToolsForFork` for fork-path tool filtering (was missing from local codebase).
+- **src/constants/tools.ts**: Added `LOCAL_MEMORY_RECALL_TOOL_NAME` to `ALL_AGENT_DISALLOWED_TOOLS`.
+- **src/utils/computerUse/setup.ts, gakrcliInChrome/setup.ts**: Replaced inline path resolution with `distRoot` import (reference-aligned).
+- **src/utils/__tests__/agentToolFilter.test.ts**: Fixed file paths to match local AgentTool layout.
+
+### Added
+- **src/utils/**: Tracked 35 source files (agentToolFilter, attributionEmail, attributionModel, autonomy*, cacheStats*, chinaLlmProviders, cliLaunch, distRoot, eventLoopStallDetector, lanBeacon, language, localValidate, ndjsonFramer, performanceShim, pipe*, remoteControlStatus, sanitizeId, sdkHeapDumpMonitor, sentry, sessionDataUploader, taskStateMessage, udsResponseReader, workflowRuns). All verified against reference — zero feature flag gaps, all imports resolve, no duplicates.
+- **src/utils/__tests__/**: Tracked ~100 corresponding test files. All passing.
+
 ## [0.5.8] - 2026-06-29
+
+### Added
+- **src/utils/task/framework.test.ts**: Tracked test file for task/framework.ts (13/13 pass).
+- **src/utils/teleport/__tests__/api.test.ts**: Tracked test file for teleport/api.ts (8/8 pass).
+- **src/utils/ultraplan/**: Tracked `prompt.ts` (getPromptIdentifier/getDialogConfig) and `prompts/` directory (simple_plan, three_subagents_with_critique, visual_plan prompt templates). Emptied stale `prompt.txt` stub (content migrated to `prompts/`). Wired via `UltraplanLaunchDialog.tsx` and `ultraplan.tsx`.
 
 ### Added
 - **src/services/api/ (provider modules)**: Tracked `bedrockClient.ts` (BedrockClient wrapper fixing anthropic_beta body bug), `gemini/` (queryModelGemini streaming provider), `grok/` (queryModelGrok streaming provider), `openai/` (queryModelOpenAI streaming + responses adapter + shared utilities), and `__tests__/` (bedrockClient, betaHeaders). Wired `BedrockClient` into `client.ts` replacing direct `AnthropicBedrock` import. No feature flags — providers loaded dynamically by environment var. 134 local API tests pass (2 grok reference failures are pre-existing openai package resolution). Updated `agentSummary.ts` to match reference — imports extracted functions from context/prompt files, adds `AgentSummaryDependencies` DI pattern, poor mode check, fingerprint-based transcript change detection. 28 local tests pass.
