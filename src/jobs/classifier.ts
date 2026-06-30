@@ -5,10 +5,10 @@ import type { AssistantMessage } from '../types/message.js'
 /**
  * Classify the job status from the turn's assistant messages and update state.json.
  *
- * Called by stopHooks.ts after each repl_main_thread turn when CLAUDE_JOB_DIR is set.
+ * Called by stopHooks.ts after each repl_main_thread turn when GAKR_JOB_DIR is set.
  * Only the main thread calls this (not subagents).
  *
- * @param jobDir - Path to the job directory (from CLAUDE_JOB_DIR env)
+ * @param jobDir - Path to the job directory (from GAKR_JOB_DIR env)
  * @param assistantMessages - Assistant messages from this turn
  */
 export async function classifyAndWriteState(

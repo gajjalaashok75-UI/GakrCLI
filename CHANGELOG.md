@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **src/components/EffortCallout.tsx**: Added missing `effortCalloutCoversModel` export for deterministic model gate testing.
 - **src/components/StatusLine.tsx**: Added `resolveStatusLineTokenTotals` export, made `buildStatusLineCommandInput` exported, integrated `getUnreportedSessionUsage` for estimated unreported provider usage totals.
-- **src/utils/tokens.ts**: Ported missing `SessionUsage` type, `getUnreportedSessionUsage`, `isAllZeroUsage`, `getAssistantResponseStartIndex`, `getAssistantResponseEndIndex`, `estimateAssistantResponseOutputTokens` from reference.
+- **src/utils/tokens.ts**: Ported missing `SessionUsage` type, `getUnreportedSessionUsage`, `isAllZeroUsage`, `getAssistantResponseStartIndex`, `getAssistantResponseEndIndex`, `estimateAssistantResponseOutputTokens` from reference. Added `CurrentUsage` type with `is_estimated` field; updated `getCurrentUsage` to return estimated values when usage is all zeros.
 - **src/types/statusLine.ts**: Added missing `total_tokens_are_estimated` field to `context_window` type.
 
 ### Added
