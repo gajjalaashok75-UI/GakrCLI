@@ -457,14 +457,21 @@ export async function* runAgent({
 
     // Set flag to auto-deny prompts for agents that can't show UI
     // Use explicit canShowPermissionPrompts if provided, otherwise:
-    //   - bubble mode: always show prompts (bubbles to parent terminal)
-    //   - default: !isAsync (sync agents show prompts, async agents don't)
+    //   - dontAsk mode: avoid prompts when async (agent declares no prompts needed)
+    //   - bubble mode: never avoid (prompts bubble to parent terminal)
+    //   - default (no explicit mode): never avoid — async agents inherit the
+    //     parent's acceptEdits/permission mode, and prompts bubble via the
+    //     task-notification UI. Previously this auto-denied all prompts for
+    //     async agents, which broke Bash for verification agents and any
+    //     agent (built-in or custom) without an explicit permissionMode.
     const shouldAvoidPrompts =
       canShowPermissionPrompts !== undefined
         ? !canShowPermissionPrompts
         : agentPermissionMode === 'bubble'
           ? false
-          : isAsync
+          : agentPermissionMode === 'dontAsk'
+            ? isAsync
+            : false
     if (shouldAvoidPrompts) {
       toolPermissionContext = {
         ...toolPermissionContext,
