@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **src/utils/**: Tracked 35 source files (agentToolFilter, attributionEmail, attributionModel, autonomy*, cacheStats*, chinaLlmProviders, cliLaunch, distRoot, eventLoopStallDetector, lanBeacon, language, localValidate, ndjsonFramer, performanceShim, pipe*, remoteControlStatus, sanitizeId, sdkHeapDumpMonitor, sentry, sessionDataUploader, taskStateMessage, udsResponseReader, workflowRuns). All verified against reference — zero feature flag gaps, all imports resolve, no duplicates.
 - **src/utils/__tests__/**: Tracked ~100 corresponding test files. All passing.
+- **src/tasks/LocalWorkflowTask/**: Ported full implementation from reference (was no-op stubs). Added registerLocalWorkflowTask, completeWorkflowTask, failWorkflowTask, killWorkflowTask, skipWorkflowAgent, retryWorkflowAgent, killWorkflowTasksForAgent + isLocalWorkflowTask type guard. Un-skipped failWorkflowTask tests.
 
 ## [0.5.8] - 2026-06-29
 
