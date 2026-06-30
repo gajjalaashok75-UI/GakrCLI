@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **src/utils/**: Tracked 35 source files (agentToolFilter, attributionEmail, attributionModel, autonomy*, cacheStats*, chinaLlmProviders, cliLaunch, distRoot, eventLoopStallDetector, lanBeacon, language, localValidate, ndjsonFramer, performanceShim, pipe*, remoteControlStatus, sanitizeId, sdkHeapDumpMonitor, sentry, sessionDataUploader, taskStateMessage, udsResponseReader, workflowRuns). All verified against reference — zero feature flag gaps, all imports resolve, no duplicates.
 - **src/utils/__tests__/**: Tracked ~100 corresponding test files. All passing.
 - **src/tasks/LocalWorkflowTask/**: Ported full implementation from reference (was no-op stubs). Added registerLocalWorkflowTask, completeWorkflowTask, failWorkflowTask, killWorkflowTask, skipWorkflowAgent, retryWorkflowAgent, killWorkflowTasksForAgent + isLocalWorkflowTask type guard. Un-skipped failWorkflowTask tests.
+- **tests/integration/**: Fixed context-build.test.ts (case mismatch, Windows path sep) and tool-chain.test.ts (case-insensitive findToolByName).
+- **Dependencies**: Installed @anthropic-ai/mcpb, @azure/identity, @opentelemetry/exporter-trace-otlp-grpc, @agentclientprotocol/sdk, streamdown. Added all to scripts/externals.ts.
+- **ISSUES.md**: Documented 3 pre-existing integration test failures (hostGuard.ts stub, gaxios v6 API change, missing remote-control-server package).
 
 ## [0.5.8] - 2026-06-29
 

@@ -10,6 +10,10 @@
 export const COMMON_EXTERNALS: string[] = [
   // Native image processing
   'sharp',
+  // Agent Client Protocol SDK
+  '@agentclientprotocol/sdk',
+  // MCP bridge
+  '@anthropic-ai/mcpb',
   // Cloud provider SDKs
   '@aws-sdk/client-bedrock',
   '@aws-sdk/client-bedrock-runtime',
@@ -22,12 +26,32 @@ export const COMMON_EXTERNALS: string[] = [
   // would freeze the build host's absolute path into dist/cli.mjs, so we
   // keep it external and rely on the npm package being installed.
   '@vscode/ripgrep',
+  // highlight.js registers 190+ language grammars at require time (~50MB).
+  // Keeping it external avoids bloating the CLI bundle.
+  'highlight.js',
   // Orama search engine
   '@orama/orama',
   '@orama/plugin-data-persistence',
   // Bun runtime and package manager
   'bun',
   'byn',
+  // Chrome extension MCP — dynamically imported at runtime
+  '@gakr-gakr/gakrcli-for-chrome-mcp',
+  // Observability / feature flags
+  '@growthbook/growthbook',
+  '@langfuse/otel',
+  '@langfuse/tracing',
+  '@opentelemetry/api',
+  '@opentelemetry/api-logs',
+  '@opentelemetry/instrumentation',
+  '@opentelemetry/resources',
+  '@opentelemetry/sdk-logs',
+  '@opentelemetry/sdk-trace-base',
+  '@opentelemetry/semantic-conventions',
+  '@opentelemetry/exporter-trace-otlp-grpc',
+  // Markdown rendering
+  'streamdown',
+  'he',
 ]
 
 // Additional packages external only in the SDK bundle (TUI + heavy deps)
