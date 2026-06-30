@@ -1,107 +1,216 @@
-// LocalWorkflowTask — task registry entry for the 'local_workflow' type
-// (WORKFLOW_SCRIPTS-gated, internal-only).
-//
-// The closed-source implementation runs workflow scripts as background
-// tasks that orchestrate multiple agents. This open-source build ships
-// the state type plus inert task plumbing: the feature flag is disabled,
-// so no workflow task is ever spawned; kill/skip/retry are honest no-ops
-// against AppState.
+// Background task entry for local workflow execution.
+// Makes workflow scripts visible in the footer pill and Shift+Down
+// dialog. Follows the DreamTask pattern: lifecycle + UI surfacing via
+// the existing task registry.
 
+import type { AppState } from '../../state/AppState.js'
 import type { SetAppState, Task, TaskStateBase } from '../../Task.js'
-import { evictTaskOutput } from '../../utils/task/diskOutput.js'
-import { updateTaskState } from '../../utils/task/framework.js'
+import { createTaskStateBase, generateTaskId } from '../../Task.js'
+import type { AgentId } from '../../types/ids.js'
+import { logForDebugging } from '../../utils/debug.js'
+import { registerTask, updateTaskState } from '../../utils/task/framework.js'
 
 export type LocalWorkflowTaskState = TaskStateBase & {
   type: 'local_workflow'
   /** meta.name from the workflow script (e.g. 'spec'). */
-  workflowName?: string
-  /** One-line progress summary shown in task lists. */
+  workflowName: string
+  /** Absolute path to the workflow file on disk. */
+  workflowFile: string
+  /** Human-readable one-line summary for the task list. */
   summary?: string
-  /** Number of agents orchestrated by this workflow. */
-  agentCount: number
+  /** Number of sub-agents spawned by this workflow. */
+  agentCount?: number
+  /** Captured output from workflow execution. */
+  output?: string
+  /** Failure reason surfaced to BackgroundTasksDialog (parallels RunProgress.error). */
+  error?: string
+  /** Agent that spawned this task. Used for orphan cleanup. */
+  agentId?: AgentId
+  /** Abort controller for cancellation. */
+  abortController?: AbortController
+  /**
+   * Pending action for a sub-agent within this workflow.
+   * The workflow execution loop polls this field and acts on it.
+   */
+  pendingAgentAction?: {
+    kind: 'skip' | 'retry'
+    agentId: AgentId
+    requestedAt: number
+  }
 }
 
-export const LocalWorkflowTask: Task = {
-  name: 'LocalWorkflowTask',
-  type: 'local_workflow',
-  async kill(taskId, setAppState) {
-    updateTaskState<LocalWorkflowTaskState>(taskId, setAppState, task => {
-      if (task.status !== 'running') {
-        return task
-      }
-
-      return {
-        ...task,
-        status: 'killed',
-        notified: true,
-        endTime: Date.now(),
-      }
-    })
-    void evictTaskOutput(taskId)
-  },
+export function isLocalWorkflowTask(
+  value: unknown,
+): value is LocalWorkflowTaskState {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'type' in value &&
+    (value as { type: string }).type === 'local_workflow'
+  )
 }
 
-/** Stop a running workflow task. */
-export function killWorkflowTask(
-  taskId: string,
-  setAppState: SetAppState,
-): void {
-  void LocalWorkflowTask.kill(taskId, setAppState)
-}
-
-/**
- * Skip the named agent in a running workflow.
- * No-op in this build (no workflow engine).
- */
-export function skipWorkflowAgent(
-  _taskId: string,
-  _agentId: string,
-  _setAppState: SetAppState,
-): void {}
-
-/**
- * Retry the named agent in a running workflow.
- * No-op in this build (no workflow engine).
- */
-export function retryWorkflowAgent(
-  _taskId: string,
-  _agentId: string,
-  _setAppState: SetAppState,
-): void {}
-
-/**
- * Register a new local workflow task with AppState and return its taskId.
- * No-op in this build (WORKFLOW_SCRIPTS is disabled).
- */
 export function registerLocalWorkflowTask(
-  _setAppState: SetAppState,
-  _opts: {
+  setAppState: SetAppState,
+  opts: {
     description: string
     workflowName: string
     workflowFile: string
     summary?: string
     toolUseId?: string
-    abortController: AbortController
+    agentId?: AgentId
+    abortController?: AbortController
   },
 ): string {
-  return ''
+  const id = generateTaskId('local_workflow')
+  const task: LocalWorkflowTaskState = {
+    ...createTaskStateBase(
+      id,
+      'local_workflow',
+      opts.description,
+      opts.toolUseId,
+    ),
+    type: 'local_workflow',
+    status: 'running',
+    workflowName: opts.workflowName,
+    workflowFile: opts.workflowFile,
+    summary: opts.summary,
+    agentId: opts.agentId,
+    abortController: opts.abortController,
+  }
+  registerTask(task, setAppState)
+  return id
+}
+
+export function completeWorkflowTask(
+  taskId: string,
+  setAppState: SetAppState,
+): void {
+  updateTaskState<LocalWorkflowTaskState>(taskId, setAppState, task => ({
+    ...task,
+    status: 'completed',
+    endTime: Date.now(),
+    notified: true,
+    abortController: undefined,
+  }))
+}
+
+export function failWorkflowTask(
+  taskId: string,
+  setAppState: SetAppState,
+  error?: string,
+): void {
+  updateTaskState<LocalWorkflowTaskState>(taskId, setAppState, task => ({
+    ...task,
+    status: 'failed',
+    endTime: Date.now(),
+    notified: true,
+    abortController: undefined,
+    ...(error !== undefined ? { error } : {}),
+  }))
 }
 
 /**
- * Mark a running workflow task as completed.
- * No-op in this build (no workflow engine).
+ * Kill a running workflow task. Called from BackgroundTasksDialog
+ * via the feature-gated `killWorkflowTask` binding.
  */
-export function completeWorkflowTask(
-  _taskId: string,
-  _setAppState: SetAppState,
-): void {}
+export function killWorkflowTask(
+  taskId: string,
+  setAppState: SetAppState,
+): void {
+  updateTaskState<LocalWorkflowTaskState>(taskId, setAppState, task => {
+    if (task.status !== 'running') return task
+    task.abortController?.abort()
+    return {
+      ...task,
+      status: 'killed',
+      endTime: Date.now(),
+      notified: true,
+      abortController: undefined,
+    }
+  })
+}
 
 /**
- * Mark a running workflow task as failed.
- * No-op in this build (no workflow engine).
+ * Skip the current agent step within a running workflow.
+ * Called from BackgroundTasksDialog via the feature-gated
+ * `skipWorkflowAgent` binding.
  */
-export function failWorkflowTask(
-  _taskId: string,
-  _setAppState: SetAppState,
-  _error: string,
-): void {}
+export function skipWorkflowAgent(
+  taskId: string,
+  agentId: AgentId,
+  setAppState: SetAppState,
+): void {
+  logForDebugging(
+    `skipWorkflowAgent: skipping agent ${agentId} in workflow task ${taskId}`,
+  )
+  updateTaskState<LocalWorkflowTaskState>(taskId, setAppState, task => {
+    if (task.status !== 'running') return task
+    return {
+      ...task,
+      pendingAgentAction: {
+        kind: 'skip',
+        agentId,
+        requestedAt: Date.now(),
+      },
+    }
+  })
+}
+
+/**
+ * Retry the current agent step within a running workflow.
+ * Called from BackgroundTasksDialog via the feature-gated
+ * `retryWorkflowAgent` binding.
+ */
+export function retryWorkflowAgent(
+  taskId: string,
+  agentId: AgentId,
+  setAppState: SetAppState,
+): void {
+  logForDebugging(
+    `retryWorkflowAgent: retrying agent ${agentId} in workflow task ${taskId}`,
+  )
+  updateTaskState<LocalWorkflowTaskState>(taskId, setAppState, task => {
+    if (task.status !== 'running') return task
+    return {
+      ...task,
+      pendingAgentAction: {
+        kind: 'retry',
+        agentId,
+        requestedAt: Date.now(),
+      },
+    }
+  })
+}
+
+/**
+ * Kill all running workflow tasks spawned by a given agent.
+ * Called from runAgent.ts finally block.
+ */
+export function killWorkflowTasksForAgent(
+  agentId: AgentId,
+  getAppState: () => AppState,
+  setAppState: SetAppState,
+): void {
+  const tasks = getAppState().tasks ?? {}
+  for (const [taskId, task] of Object.entries(tasks)) {
+    if (
+      isLocalWorkflowTask(task) &&
+      task.agentId === agentId &&
+      task.status === 'running'
+    ) {
+      logForDebugging(
+        `killWorkflowTasksForAgent: killing orphaned workflow task ${taskId} (agent ${agentId} exiting)`,
+      )
+      killWorkflowTask(taskId, setAppState)
+    }
+  }
+}
+
+export const LocalWorkflowTask: Task = {
+  name: 'LocalWorkflowTask',
+  type: 'local_workflow',
+  async kill(taskId: string, setAppState: SetAppState) {
+    killWorkflowTask(taskId, setAppState)
+  },
+}

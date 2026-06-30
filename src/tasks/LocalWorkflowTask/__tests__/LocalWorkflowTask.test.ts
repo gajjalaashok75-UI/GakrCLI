@@ -63,7 +63,7 @@ function createSetState(): {
 
 // Both failWorkflowTask tests are skipped because registerLocalWorkflowTask
 // is intentionally a no-op in this build (WORKFLOW_SCRIPTS feature flag is disabled).
-describe.skip('failWorkflowTask', () => {
+describe('failWorkflowTask', () => {
   test('保存 error 字符串到 state（供 BackgroundTasksDialog 显示失败原因）', () => {
     const { setAppState, getState } = createSetState()
     const taskId = registerLocalWorkflowTask(setAppState as any, {
