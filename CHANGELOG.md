@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **src/components/EffortCallout.modelGate.test.ts**, **src/components/StatusLine.test.ts**, **src/components/permissions/ExitPlanModePermissionRequest/ExitPlanModePermissionRequest.render.test.tsx**: Test coverage for EffortCallout model gate, StatusLine, and ExitPlanModePermissionRequest.
 - **src/constants/product.test.ts**: Test coverage for remote session environment detection (isRemoteSessionLocal, isRemoteSessionStaging, getGakrCLIAiBaseUrl).
 - **src/entrypoints/sdk/agentDefinitions.ts**, **agentDefinitions.test.ts**: SDK agent definition types and validation with build/merge utilities; test coverage for maxSteps validation, agent precedence, and policy overrides.
+- **src/integrations/gateways/atlas-cloud.ts**, **clinepass.ts**, **xiaomi-mimo-token.ts**: New OpenAI-compatible gateway definitions.
+- **src/integrations/gateways/xiaomi-mimo-token.test.ts**: Test coverage for token-plan gateway.
+- **src/integrations/nearai.test.ts**: Test coverage for NearAI Claude Opus 4.8 route.
+- **src/integrations/generated/integrationManifest.generated.ts**: Split provider preset manifest into separate auto-generated file.
 
 ### Fixed
 - **src/components/EffortCallout.tsx**: Added missing `effortCalloutCoversModel` export for deterministic model gate testing.
@@ -21,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **src/types/statusLine.ts**: Added missing `total_tokens_are_estimated` field to `context_window` type.
 - **src/constants/product.ts**: Ported reference hostname-based ingress matching for `isRemoteSessionLocal` and `isRemoteSessionStaging`; replaced crude `includes()` checks with proper `URL.hostname` parsing to avoid misrouting production URLs.
 - **src/entrypoints/sdk/coreSchemas.ts**: Added missing `maxSteps` field to `AgentDefinitionSchema` with `.number().int().positive()` validation to reject invalid agent step limits.
+- **src/integrations/artifactGenerator.ts**: Updated to produce separate integrationManifest.generated.ts; added `renderIntegrationManifest` function; wire new gateway files via auto-generation.
+- **src/integrations/vendors/nearai.ts**, **models/nearai.ts**: Added `anthropic/claude-opus-4-8` catalog entry and model descriptor to resolve NearAI route test.
+- **src/integrations/vendors/atlas-cloud.ts**: Removed duplicate `preset` block conflicting with gateway definition.
 
 ### Added
 - **src/commands/clear-context-window/**: New `/clear-context-window` command for resetting session-scoped context window overrides. Wired in `commands.ts`.

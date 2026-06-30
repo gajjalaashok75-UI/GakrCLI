@@ -16,12 +16,6 @@ export default defineVendor({
   transportConfig: {
     kind: 'openai-compatible',
   },
-  preset: {
-    id: 'atlas-cloud',
-    description: 'Atlas Cloud AI (OpenAI-compatible)',
-    apiKeyEnvVars: ['ATLAS_CLOUD_API_KEY'],
-    modelEnvVars: ['ATLAS_CLOUD_MODEL', 'OPENAI_MODEL'],
-  },
   validation: {
     kind: 'credential-env',
     routing: {
