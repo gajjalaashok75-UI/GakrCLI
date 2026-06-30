@@ -24,6 +24,9 @@ let isInsideTmuxCached: boolean | null = null
 /** Cached result for isInITerm2 */
 let isInITerm2Cached: boolean | null = null
 
+/** Cached result for isInWindowsTerminal */
+let isInWindowsTerminalCached: boolean | null = null
+
 /**
  * Checks if we're currently running inside a tmux session (synchronous version).
  * Uses the original TMUX value captured at module load, not process.env.TMUX,
@@ -109,6 +112,20 @@ export function isInITerm2(): boolean {
 export const IT2_COMMAND = 'it2'
 
 /**
+ * Checks if wt.exe is available without executing it.
+ * Do NOT run `wt.exe --version` — wt.exe is a UWP app bridge that opens
+ * the Windows Terminal GUI to render version info, producing a phantom
+ * "Windows 终端 1.24.x" window every time availability is checked.
+ */
+export async function isWindowsTerminalAvailable(): Promise<boolean> {
+  if (process.env.WT_SESSION) {
+    return true
+  }
+  const result = await execFileNoThrow('where.exe', ['wt.exe'])
+  return result.code === 0
+}
+
+/**
  * Checks if the it2 CLI tool is available AND can reach the iTerm2 Python API.
  * Uses 'session list' (not '--version') because --version succeeds even when
  * the Python API is disabled in iTerm2 preferences — which would cause
@@ -122,7 +139,23 @@ export async function isIt2CliAvailable(): Promise<boolean> {
 /**
  * Resets all cached detection results. Used for testing.
  */
+/**
+ * Checks if we're currently running inside Windows Terminal.
+ * Windows Terminal sets WT_SESSION for child processes.
+ */
+export function isInWindowsTerminal(): boolean {
+  if (isInWindowsTerminalCached !== null) {
+    return isInWindowsTerminalCached
+  }
+  isInWindowsTerminalCached = !!process.env.WT_SESSION
+  return isInWindowsTerminalCached
+}
+
+/**
+ * Resets all cached detection results. Used for testing.
+ */
 export function resetDetectionCache(): void {
   isInsideTmuxCached = null
   isInITerm2Cached = null
+  isInWindowsTerminalCached = null
 }

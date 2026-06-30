@@ -95,12 +95,35 @@ export class PaneBackendExecutor implements TeammateExecutor {
       // Assign a unique color to this teammate
       const teammateColor = config.color ?? assignTeammateColor(agentId)
 
-      // Create a pane in the swarm view
-      const { paneId, isFirstTeammate } =
-        await this.backend.createTeammatePaneInSwarmView(
-          config.name,
-          teammateColor,
-        )
+      // Decide whether to create a split pane or a separate window
+      const useSplitPane = config.useSplitPane !== false
+      let paneId: string
+      let isFirstTeammate: boolean
+      let windowName: string | undefined
+
+      if (
+        !useSplitPane &&
+        this.backend.createTeammateWindowInSwarmView
+      ) {
+        // Legacy behavior: spawn in a separate window/tab
+        const result =
+          await this.backend.createTeammateWindowInSwarmView(
+            config.name,
+            teammateColor,
+          )
+        paneId = result.paneId
+        isFirstTeammate = result.isFirstTeammate
+        windowName = result.windowName
+      } else {
+        // Default: split pane in swarm view
+        const result =
+          await this.backend.createTeammatePaneInSwarmView(
+            config.name,
+            teammateColor,
+          )
+        paneId = result.paneId
+        isFirstTeammate = result.isFirstTeammate
+      }
 
       // Check if we're inside tmux to determine how to send commands
       const insideTmux = await isInsideTmux()
@@ -112,6 +135,7 @@ export class PaneBackendExecutor implements TeammateExecutor {
 
       // Build the command to spawn GakrCLI Code with teammate identity
       const binaryPath = getTeammateCommand()
+      const appState = this.context.getAppState()
 
       // Build teammate identity CLI args
       const teammateArgs = [
@@ -120,13 +144,16 @@ export class PaneBackendExecutor implements TeammateExecutor {
         `--team-name ${quote([config.teamName])}`,
         `--agent-color ${quote([teammateColor])}`,
         `--parent-session-id ${quote([config.parentSessionId || getSessionId()])}`,
+        config.agentType
+          ? `--agent-type ${quote([config.agentType])}`
+          : '',
+        `--permission-mode ${appState.toolPermissionContext.mode}`,
         config.planModeRequired ? '--plan-mode-required' : '',
       ]
         .filter(Boolean)
         .join(' ')
 
       // Build CLI flags to propagate to teammate
-      const appState = this.context.getAppState()
       let inheritedFlags = buildInheritedCliFlags({
         planModeRequired: config.planModeRequired,
         permissionMode: appState.toolPermissionContext.mode,
@@ -193,6 +220,11 @@ export class PaneBackendExecutor implements TeammateExecutor {
         success: true,
         agentId,
         paneId,
+        backendType: this.type,
+        color: teammateColor,
+        insideTmux,
+        windowName,
+        isSplitPane: useSplitPane,
       }
     } catch (error) {
       const errorMessage =

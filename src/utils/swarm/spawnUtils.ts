@@ -55,6 +55,8 @@ export function buildInheritedCliFlags(options?: {
     flags.push('--dangerously-skip-permissions')
   } else if (permissionMode === 'acceptEdits') {
     flags.push('--permission-mode acceptEdits')
+  } else if (permissionMode === 'auto') {
+    flags.push('--permission-mode auto')
   }
 
   // Propagate --model if explicitly set via CLI

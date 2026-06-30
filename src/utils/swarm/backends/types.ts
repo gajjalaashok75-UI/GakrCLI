@@ -6,13 +6,13 @@ import type { AgentColorName } from '../../../tools/AgentTool/agentColorManager.
  * - 'iterm2': Uses iTerm2 native split panes via the it2 CLI
  * - 'in-process': Runs teammate in the same Node.js process with isolated context
  */
-export type BackendType = 'tmux' | 'iterm2' | 'in-process'
+export type BackendType = 'tmux' | 'iterm2' | 'windows-terminal' | 'in-process'
 
 /**
  * Subset of BackendType for pane-based backends only.
  * Used in messages and types that specifically deal with terminal panes.
  */
-export type PaneBackendType = 'tmux' | 'iterm2'
+export type PaneBackendType = 'tmux' | 'iterm2' | 'windows-terminal'
 
 /**
  * Opaque identifier for a pane managed by a backend.
@@ -72,6 +72,15 @@ export type PaneBackend = {
     name: string,
     color: AgentColorName,
   ): Promise<CreatePaneResult>
+
+  /**
+   * Creates a separate terminal window/tab for a teammate when supported.
+   * This preserves the legacy `use_splitpane: false` behavior.
+   */
+  createTeammateWindowInSwarmView?(
+    name: string,
+    color: AgentColorName,
+  ): Promise<CreatePaneResult & { windowName: string }>
 
   /**
    * Sends a command to execute in a specific pane.
@@ -197,6 +206,8 @@ export type TeammateIdentity = {
   color?: AgentColorName
   /** Whether plan mode approval is required before implementation */
   planModeRequired?: boolean
+  /** Agent type (e.g., "code-reviewer") for specialized spawn behavior. */
+  agentType?: string
 }
 
 /**
@@ -217,6 +228,8 @@ export type TeammateSpawnConfig = TeammateIdentity & {
   systemPromptMode?: 'default' | 'replace' | 'append'
   /** Optional git worktree path */
   worktreePath?: string
+  /** false preserves legacy separate-window spawning for pane-capable backends. */
+  useSplitPane?: boolean
   /** Parent session ID (for context linking) */
   parentSessionId: string
   /** Tool permissions to grant this teammate */
@@ -253,6 +266,16 @@ export type TeammateSpawnResult = {
 
   /** Pane ID (pane-based only) */
   paneId?: PaneId
+  /** Backend used for the spawned teammate. */
+  backendType?: BackendType
+  /** Assigned color for display. */
+  color?: AgentColorName
+  /** Whether the pane was spawned inside the user's current tmux session. */
+  insideTmux?: boolean
+  /** Window/tab name when the backend created a separate window. */
+  windowName?: string
+  /** Whether the backend used split panes. */
+  isSplitPane?: boolean
 }
 
 /**
@@ -308,6 +331,6 @@ export type TeammateExecutor = {
 /**
  * Type guard to check if a backend type uses terminal panes.
  */
-export function isPaneBackend(type: BackendType): type is 'tmux' | 'iterm2' {
-  return type === 'tmux' || type === 'iterm2'
+export function isPaneBackend(type: BackendType): type is 'tmux' | 'iterm2' | 'windows-terminal' {
+  return type === 'tmux' || type === 'iterm2' || type === 'windows-terminal'
 }
