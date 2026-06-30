@@ -28,6 +28,7 @@ import {
 } from '../../utils/copilotOptimization.js';
 import { AbortError, errorMessage, toError } from '../../utils/errors.js';
 import type { CacheSafeParams } from '../../utils/forkedAgent.js';
+import { filterParentToolsForFork } from '../../utils/agentToolFilter.js';
 import { lazySchema } from '../../utils/lazySchema.js';
 import { createUserMessage, extractTextContent, isSyntheticMessage, normalizeMessages } from '../../utils/messages.js';
 import { getAgentModel } from '../../utils/model/agent.js';
@@ -692,7 +693,7 @@ export const AgentTool = buildTool({
       } : enhancedSystemPrompt && !worktreeInfo && !cwd ? {
         systemPrompt: asSystemPrompt(enhancedSystemPrompt)
       } : undefined,
-      availableTools: isForkPath ? toolUseContext.options.tools : workerTools,
+      availableTools: isForkPath ? filterParentToolsForFork(toolUseContext.options.tools) : workerTools,
       // Pass parent conversation when the fork-subagent path needs full
       // context. useExactTools inherits thinkingConfig (runAgent.ts:624).
       forkContextMessages: isForkPath ? toolUseContext.messages : undefined,

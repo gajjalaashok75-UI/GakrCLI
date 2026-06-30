@@ -4,8 +4,9 @@ import { homedir } from 'os'
 import { join } from 'path'
 import { isFsInaccessible } from '../errors.js'
 
-export const CHROME_EXTENSION_URL = 'https://gakrcli.ai/chrome'
+export const CHROME_EXTENSION_URL = 'https://claude.ai/chrome'
 
+const LOCAL_EXTENSION_ID = 'galhhbpfeohnjpakdahodhcpnohddjob'
 // Production extension ID
 const PROD_EXTENSION_ID = 'fcoeoabgfenejglbffodgkkbkcdhcgfn'
 // Dev extension IDs (for internal use)
@@ -14,8 +15,8 @@ const ANT_EXTENSION_ID = 'dngcpimnedloihjnnfngkgjoidhnaolf'
 
 function getExtensionIds(): string[] {
   return process.env.USER_TYPE === 'ant'
-    ? [PROD_EXTENSION_ID, DEV_EXTENSION_ID, ANT_EXTENSION_ID]
-    : [PROD_EXTENSION_ID]
+    ? [PROD_EXTENSION_ID, DEV_EXTENSION_ID, ANT_EXTENSION_ID,LOCAL_EXTENSION_ID]
+    : [PROD_EXTENSION_ID,LOCAL_EXTENSION_ID]
 }
 
 // Must match ChromiumBrowser from common.ts

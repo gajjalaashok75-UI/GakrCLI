@@ -2,7 +2,6 @@ import { BROWSER_TOOLS } from '@gakr-gakr/gakrcli-for-chrome-mcp'
 import { chmod, mkdir, readFile, writeFile } from 'fs/promises'
 import { homedir } from 'os'
 import { join } from 'path'
-import { fileURLToPath } from 'url'
 import {
   getSessionDangerousPermissionMode,
   getIsInteractive,
@@ -11,6 +10,7 @@ import {
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
 import type { ScopedMcpServerConfig } from '../../services/mcp/types.js'
 import { isInBundledMode } from '../bundledMode.js'
+import { distRoot } from '../distRoot.js'
 import { getGlobalConfig, saveGlobalConfig } from '../config.js'
 import { logForDebugging } from '../debug.js'
 import {
@@ -33,7 +33,7 @@ import { isChromeExtensionInstalledPortable } from './setupPortable.js'
 
 const CHROME_EXTENSION_RECONNECT_URL = 'https://clau.de/chrome/reconnect'
 
-const NATIVE_HOST_IDENTIFIER = 'com.anthropic.gakrcli_code_browser_extension'
+const NATIVE_HOST_IDENTIFIER = 'com.gakr.chrome.bridge'
 const NATIVE_HOST_MANIFEST_NAME = `${NATIVE_HOST_IDENTIFIER}.json`
 
 export function shouldEnableGakrCLIInChrome(chromeFlag?: boolean): boolean {
@@ -134,9 +134,7 @@ export function setupGakrCLIInChrome(): {
       systemPrompt: getChromeSystemPrompt(),
     }
   } else {
-    const __filename = fileURLToPath(import.meta.url)
-    const __dirname = join(__filename, '..')
-    const cliPath = join(__dirname, 'cli.js')
+    const cliPath = join(distRoot, 'cli.mjs')
 
     void createWrapperScript(
       `"${process.execPath}" "${cliPath}" --chrome-native-host`,
@@ -180,7 +178,7 @@ function getNativeMessagingHostsDirs(): string[] {
     // Windows uses a single location with registry entries pointing to it
     const home = homedir()
     const appData = process.env.APPDATA || join(home, 'AppData', 'Local')
-    return [join(appData, 'GakrCLI Code', 'ChromeNativeHost')]
+    return [join(appData, 'GakrCLI', 'ChromeNativeHost')]
   }
 
   // macOS and Linux: return all browser native messaging directories
@@ -201,6 +199,7 @@ export async function installChromeNativeHostManifest(
     path: manifestBinaryPath,
     type: 'stdio',
     allowed_origins: [
+      `chrome-extension://galhhbpfeohnjpakdahodhcpnohddjob/`, // LOCAL_EXTENSION_ID
       `chrome-extension://fcoeoabgfenejglbffodgkkbkcdhcgfn/`, // PROD_EXTENSION_ID
       ...(process.env.USER_TYPE === 'ant'
         ? [

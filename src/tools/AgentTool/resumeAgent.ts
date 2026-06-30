@@ -5,6 +5,7 @@ import { isCoordinatorMode } from '../../coordinator/coordinatorMode.js'
 import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
 import type { ToolUseContext } from '../../Tool.js'
 import { registerAsyncAgent } from '../../tasks/LocalAgentTask/LocalAgentTask.js'
+import { filterParentToolsForFork } from '../../utils/agentToolFilter.js'
 import { assembleToolPool } from '../../tools.js'
 import { asAgentId } from '../../types/ids.js'
 import { runWithAgentContext } from '../../utils/agentContext.js'
@@ -160,7 +161,7 @@ export async function resumeAgentBackground({
     mode: selectedAgent.permissionMode ?? 'acceptEdits',
   }
   const workerTools = isResumedFork
-    ? toolUseContext.options.tools
+    ? filterParentToolsForFork(toolUseContext.options.tools)
     : assembleToolPool(workerPermissionContext, appState.mcp.tools)
 
   const runAgentParams: Parameters<typeof runAgent>[0] = {

@@ -1586,7 +1586,7 @@ async function checkAndRefreshOAuthTokenIfNeededImpl(
 
 export function isGakrCLIAISubscriber(): boolean {
   if (!isAnthropicAuthEnabled()) {
-    return false
+    return true
   }
 
   return shouldUseGakrCLIAIAuth(getGakrCLIAIOAuthTokens()?.scopes)
