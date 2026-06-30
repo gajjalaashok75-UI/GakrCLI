@@ -5,6 +5,11 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.11] - 2026-06-30
+
+### Fixed
+- **src/tools/AgentTool/runAgent.ts**: Fixed `shouldAvoidPrompts` logic that auto-denied Bash (and all permission-requiring tools) for ALL async agents without explicit `permissionMode: 'bubble'`. Root cause: `FORK_SUBAGENT: true` forces all subagents async, and `shouldAvoidPrompts = isAsync` denied every prompt. Changed to only avoid prompts when agent explicitly has `permissionMode: 'dontAsk'` — for the default case (no explicit mode), prompts now flow through normal permission channels and bubble via the task-notification UI. Fixes verification agent (and all built-in + custom agents) running Bash, Edit, Write, and other tools that require user permission.
+
 ## [0.5.10] - 2026-06-30
 
 ### Changed
