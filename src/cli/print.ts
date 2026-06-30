@@ -350,6 +350,12 @@ import { initializeGrowthBook } from '../services/analytics/growthbook.js'
 import { errorMessage, toError } from '../utils/errors.js'
 import { sleep } from '../utils/sleep.js'
 import { isExtractModeActive } from '../memdir/paths.js'
+import {
+  createHeadlessHeartbeat,
+  type HeadlessHeartbeat,
+  type HeadlessHeartbeatEvent,
+  type HeadlessHeartbeatState,
+} from './headlessHeartbeat.js'
 
 // Dead code elimination: conditional imports
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -5247,6 +5253,81 @@ function getStructuredIO(
   return options.sdkUrl
     ? new RemoteIO(options.sdkUrl, inputStream, options.replayUserMessages)
     : new StructuredIO(inputStream, options.replayUserMessages)
+}
+
+type HeadlessHeartbeatStructuredTarget = {
+  write: (message: HeadlessHeartbeatEvent) => void | Promise<void>
+  outbound: {
+    enqueue: (message: HeadlessHeartbeatEvent) => void
+  }
+}
+
+type RunHeadlessHeartbeatOptions = {
+  intervalMs: number | undefined
+  outputFormat: string | undefined
+  verbose: boolean | undefined
+  getSessionId: () => string | undefined
+  getState: () => HeadlessHeartbeatState
+  getPendingPermissionRequests: () => number | readonly unknown[]
+  getBackgroundTaskCounts: () => Record<string, number>
+  emitStructured: (message: HeadlessHeartbeatEvent) => void | Promise<void>
+  now?: () => number
+  setInterval?: (callback: () => void, intervalMs: number) => unknown
+  clearInterval?: (timer: unknown) => void
+  createUuid?: () => string
+}
+
+/** @internal */
+export async function runWithHeartbeatErrorCleanup<T>(
+  heartbeat: Pick<HeadlessHeartbeat, 'stop'> | undefined,
+  operation: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await operation()
+  } catch (error) {
+    heartbeat?.stop()
+    throw error
+  }
+}
+
+/** @internal */
+export function createHeadlessHeartbeatStructuredEmitter(
+  structuredIO: HeadlessHeartbeatStructuredTarget,
+  hasDrainStarted: () => boolean,
+): (message: HeadlessHeartbeatEvent) => void | Promise<void> {
+  return message => {
+    if (!hasDrainStarted()) {
+      return
+    }
+    structuredIO.outbound.enqueue(message)
+  }
+}
+
+/** @internal */
+export function createRunHeadlessHeartbeat(
+  options: RunHeadlessHeartbeatOptions,
+): HeadlessHeartbeat | undefined {
+  if (options.intervalMs === undefined) {
+    return undefined
+  }
+
+  return createHeadlessHeartbeat({
+    intervalMs: options.intervalMs,
+    outputFormat:
+      options.outputFormat === 'stream-json' && !options.verbose
+        ? 'text'
+        : options.outputFormat,
+    getSessionId: options.getSessionId,
+    getState: options.getState,
+    initialPhase: 'startup',
+    getPendingPermissionRequests: options.getPendingPermissionRequests,
+    getBackgroundTaskCounts: options.getBackgroundTaskCounts,
+    emitStructured: options.emitStructured,
+    now: options.now,
+    setInterval: options.setInterval,
+    clearInterval: options.clearInterval,
+    createUuid: options.createUuid,
+  })
 }
 
 /**
