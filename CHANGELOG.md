@@ -37,6 +37,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `win32/`: Windows-specific implementation (window messaging, UIA, Python bridge, COM, virtual cursor, capture, etc.)
   - Not wired — matches reference behavior; current computer use only supports macOS via `@ant` native packages
 - **hostAdapter.ts**: Wired cross-platform executor — macOS uses macOS-native `createCliExecutor`, other platforms use `createCrossPlatformExecutor` (platforms abstraction)
+- **src/utils/swarm/**: Wired WindowsTerminalBackend + fixed all pre-existing test failures (23/23 pass):
+  - Full WindowsTerminalBackend registration/detection/fallback chain in `registry.ts`
+  - `detection.ts`: Added `isWindowsTerminalAvailable()`, `isInWindowsTerminal()` with caching
+  - `types.ts`: Added `'windows-terminal'` to `PaneBackendType`/`BackendType`/`TeammateMode`
+  - `PaneBackendExecutor.ts`: Added `useSplitPane: false` window-spawning support + `backendType` in spawn result
+  - `spawnUtils.ts`: `buildInheritedCliFlags` now handles `'auto'` permission mode
+  - `spawnInProcess.ts`: Added `killInProcessTeammateByAgentId()`
+  - `agentTeamsLifecycle.test.ts`: Fixed import paths and env var setup
+  - `PaneBackendExecutor.test.ts` + `spawnUtils.test.ts`: Fixed expectations
 
 ## [0.5.8] - 2026-06-28
 
