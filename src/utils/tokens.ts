@@ -153,16 +153,29 @@ export function messageTokenCountFromLastAPIResponse(
   return 0
 }
 
-export function getCurrentUsage(messages: Message[]): {
-  input_tokens: number
-  output_tokens: number
-  cache_creation_input_tokens: number
-  cache_read_input_tokens: number
-} | null {
+export function getCurrentUsage(messages: Message[]): CurrentUsage | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i]
     const usage = message ? getTokenUsage(message) : undefined
     if (usage) {
+      if (isAllZeroUsage(usage)) {
+        const startIndex = getAssistantResponseStartIndex(messages, i)
+        const estimatedInputTokens = Math.max(
+          1,
+          roughTokenCountEstimationForMessages(messages.slice(0, startIndex)),
+        )
+        const estimatedOutputTokens = Math.max(
+          1,
+          estimateAssistantResponseOutputTokens(messages, i),
+        )
+        return {
+          input_tokens: estimatedInputTokens,
+          output_tokens: estimatedOutputTokens,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+          is_estimated: true,
+        }
+      }
       return {
         input_tokens: usage.input_tokens,
         output_tokens: usage.output_tokens,
@@ -239,6 +252,14 @@ export function extractThinkingTokens(
   }
 
   return { thinking, output, total: thinking + output }
+}
+
+export type CurrentUsage = {
+  input_tokens: number
+  output_tokens: number
+  cache_creation_input_tokens: number
+  cache_read_input_tokens: number
+  is_estimated?: boolean
 }
 
 export type SessionUsage = {
