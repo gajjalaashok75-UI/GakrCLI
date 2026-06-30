@@ -1,6 +1,7 @@
 import type { ToolUseBlock } from '@anthropic-ai/sdk/resources/index.mjs'
 
 import type { AttachmentMessage, UserMessage } from '../types/message.js'
+import { AGENT_STEP_LIMIT_TOOL_RESULT_PREFIX } from './agentStepLimit.js'
 
 const DEFAULT_TOOL_FAILURE_LOOP_THRESHOLD = 3
 const MAX_FALLBACK_CATEGORY_LENGTH = 120
@@ -319,7 +320,10 @@ function isIgnoredSyntheticToolResult(content: string): boolean {
       "the user doesn't want to take this action right now",
     ) ||
     withoutErrorPrefix === 'streaming fallback - tool execution discarded' ||
-    withoutErrorPrefix.startsWith('cancelled: parallel tool call')
+    withoutErrorPrefix.startsWith('cancelled: parallel tool call') ||
+    withoutErrorPrefix.startsWith(
+      AGENT_STEP_LIMIT_TOOL_RESULT_PREFIX.toLowerCase(),
+    )
   )
 }
 
