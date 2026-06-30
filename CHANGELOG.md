@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **src/integrations/gateways/xiaomi-mimo-token.test.ts**: Test coverage for token-plan gateway.
 - **src/integrations/nearai.test.ts**: Test coverage for NearAI Claude Opus 4.8 route.
 - **src/integrations/generated/integrationManifest.generated.ts**: Split provider preset manifest into separate auto-generated file.
+- **src/query/agentStepLimit.ts**, **agentStepLimit.test.ts**: Agent step limit feature for subagents — stops further tool calls when step limit is reached, requests a no-tools summary, and returns `agent_step_limit` reason.
 
 ### Fixed
 - **src/components/EffortCallout.tsx**: Added missing `effortCalloutCoversModel` export for deterministic model gate testing.
@@ -28,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **src/integrations/artifactGenerator.ts**: Updated to produce separate integrationManifest.generated.ts; added `renderIntegrationManifest` function; wire new gateway files via auto-generation.
 - **src/integrations/vendors/nearai.ts**, **models/nearai.ts**: Added `anthropic/claude-opus-4-8` catalog entry and model descriptor to resolve NearAI route test.
 - **src/integrations/vendors/atlas-cloud.ts**: Removed duplicate `preset` block conflicting with gateway definition.
+- **src/query.ts**: Ported agent step limit logic from reference — added `AgentStepLimitConfig`, `AgentStepLimitState`, step counting, tool filtering, summary request/forced summary handling.
+- **src/query/toolFailureLoopGuard.ts**: Added `AGENT_STEP_LIMIT_TOOL_RESULT_PREFIX` to ignored synthetic tool results.
+- **src/utils/messages.ts**: Added missing `isAgentStepLimitToolResult` field to `createUserMessage` function.
 
 ### Added
 - **src/commands/clear-context-window/**: New `/clear-context-window` command for resetting session-scoped context window overrides. Wired in `commands.ts`.

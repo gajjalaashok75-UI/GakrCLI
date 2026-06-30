@@ -477,6 +477,7 @@ export function createUserMessage({
   sourceToolAssistantUUID,
   permissionMode,
   origin,
+  isAgentStepLimitToolResult,
 }: {
   content: string | ContentBlockParam[]
   isMeta?: boolean
@@ -504,6 +505,7 @@ export function createUserMessage({
   }
   // Provenance of this message. undefined = human (keyboard).
   origin?: MessageOrigin
+  isAgentStepLimitToolResult?: boolean
 }): UserMessage {
   const rewindRestorablePermissionMode = isDangerousPermissionMode(
     permissionMode,
@@ -530,6 +532,7 @@ export function createUserMessage({
     sourceToolAssistantUUID,
     permissionMode: rewindRestorablePermissionMode,
     origin,
+    isAgentStepLimitToolResult,
   }
   return m
 }
