@@ -39,3 +39,8 @@ export function getBridgeAccessToken(): string | undefined {
 export function getBridgeBaseUrl(): string {
   return getBridgeBaseUrlOverride() ?? getOauthConfig().BASE_API_URL
 }
+
+/** True when the user has explicitly configured a custom bridge server. */
+export function isSelfHostedBridge(): boolean {
+  return !!getBridgeBaseUrlOverride()
+}
