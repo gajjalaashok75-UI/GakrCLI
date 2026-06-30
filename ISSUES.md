@@ -75,11 +75,12 @@
 
 ## Pre-existing Integration Test Failures
 
-### `autonomy-lifecycle-user-flow.test.ts` — Build guard: hostGuard.ts stub
-- **Status**: Fails during build (build guard exit code 1)
-- **Root cause**: `src/services/auth/hostGuard.ts` has an unresolved relative import that gets stubbed to a noop default export during bundling. The build guard catches this and exits with code 1. Requires either adding the real source module or adding the path to `ACCEPTABLE_RUNTIME_STUBS` in `scripts/build.ts`.
-- **Files**: `src/services/auth/hostGuard.ts`, `scripts/build.ts`
-- **Reference**: `references/claude-code-main/src/services/auth/hostGuard.ts` — check if reference has the same issue
+### `autonomy-lifecycle-user-flow.test.ts` — Build guard: hostGuard.ts stub — FIXED
+- **Status**: FIXED — `src/services/auth/hostGuard.ts` now has full implementation ported from reference. Build exits code 0, `dist/cli.mjs` produced.
+- **Remaining failures** (pre-existing, not caused by hostGuard):
+  - `status --deep` fails: CLI's autonomy subcommand doesn't recognize `--deep` flag (not ported yet)
+  - `EBUSY: resource busy or locked`: Windows temp dir cleanup issue
+  - Test timeout after 5000ms
 
 ### `dependency-overrides.test.ts` — gaxios v6 API change
 - **Status**: 1 test fails: `options.headers.get is not a function`
