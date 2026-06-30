@@ -74,3 +74,10 @@ src/utils/graphify-out/
 # Local test checker agent and skill
 assets/agents/test-checker.md
 assets/skills/test-checker/
+
+
+
+#ignore for some days 
+packages/chrome-extension
+packages/mcp-chrome-bridge
+packages/mcp-chrome-shared
