@@ -221,54 +221,9 @@ result = await Bun.build({
     {
       name: 'bun-bundle-shim',
       setup(build) {
-        const internalFeatureStubModules = new Map([
-          [
-            '../daemon/workerRegistry.js',
-            'export async function runDaemonWorker() { throw new Error("Daemon worker is unavailable in the open build."); }',
-          ],
-          [
-            '../daemon/main.js',
-            'export async function daemonMain() { throw new Error("Daemon mode is unavailable in the open build."); }',
-          ],
-          [
-            '../cli/handlers/templateJobs.js',
-            'export async function templatesMain() { throw new Error("Template jobs are unavailable in the open build."); }',
-          ],
-          [
-            '../environment-runner/main.js',
-            'export async function environmentRunnerMain() { throw new Error("Environment runner is unavailable in the open build."); }',
-          ],
-          [
-            '../self-hosted-runner/main.js',
-            'export async function selfHostedRunnerMain() { throw new Error("Self-hosted runner is unavailable in the open build."); }',
-          ],
-        ] as const)
-
-        // bun:bundle feature() replacement is handled by featureFlagPreprocessPlugin.
-        // The previous onResolve/onLoad shim was ineffective in Bun
-        // v1.3.9+ because the bun: namespace is resolved natively
-        // before the JS plugin phase runs.
-
-        build.onResolve(
-          { filter: /^\.\.\/(daemon\/workerRegistry|daemon\/main|cli\/handlers\/templateJobs|environment-runner\/main|self-hosted-runner\/main)\.js$/ },
-          args => {
-            if (!internalFeatureStubModules.has(args.path)) return null
-            return {
-              path: args.path,
-              namespace: 'internal-feature-stub',
-            }
-          },
-        )
-        build.onLoad(
-          { filter: /.*/, namespace: 'internal-feature-stub' },
-          args => ({
-            contents:
-              internalFeatureStubModules.get(args.path) ??
-              'export {}',
-            loader: 'js',
-          }),
-        )
-
+        // All internal feature stub modules (daemon, template jobs, environment
+        // runner, self-hosted runner) now exist locally with full implementations
+        // or reference-matching no-op stubs. No build-time stubs needed.
         // Resolve react/compiler-runtime to the standalone package
         build.onResolve({ filter: /^react\/compiler-runtime$/ }, () => ({
           path: 'react/compiler-runtime',

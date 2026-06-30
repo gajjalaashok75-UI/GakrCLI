@@ -5,6 +5,11 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.10] - 2026-06-30
+
+### Changed
+- **scripts/build.ts**: Removed all 5 `internalFeatureStubModules` entries (daemon/workerRegistry, daemon/main, templateJobs, environment-runner/main, self-hosted-runner/main). All 5 modules exist locally — 3 with full implementations, 2 with reference-matching no-op stubs. Removed associated onResolve/onLoad stub hooks. Build passes cleanly with zero missing-module stubs.
+
 ## [0.5.9] - 2026-06-30
 
 ### Fixed
