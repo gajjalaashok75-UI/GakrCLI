@@ -72,3 +72,23 @@
 - **Root cause**: Requires multi-system wiring (REPL.tsx, AppState, promptInput)
 - **Files**: `src/components/tasks/BackgroundAgentSelector.tsx`
 - **Reference**: `references/claude-code-main/src/components/tasks/BackgroundAgentSelector.tsx`
+
+## Pre-existing Integration Test Failures
+
+### `autonomy-lifecycle-user-flow.test.ts` — Build guard: hostGuard.ts stub
+- **Status**: Fails during build (build guard exit code 1)
+- **Root cause**: `src/services/auth/hostGuard.ts` has an unresolved relative import that gets stubbed to a noop default export during bundling. The build guard catches this and exits with code 1. Requires either adding the real source module or adding the path to `ACCEPTABLE_RUNTIME_STUBS` in `scripts/build.ts`.
+- **Files**: `src/services/auth/hostGuard.ts`, `scripts/build.ts`
+- **Reference**: `references/claude-code-main/src/services/auth/hostGuard.ts` — check if reference has the same issue
+
+### `dependency-overrides.test.ts` — gaxios v6 API change
+- **Status**: 1 test fails: `options.headers.get is not a function`
+- **Root cause**: gaxios v6+ passes headers as a plain object, but the test adapter calls `options.headers.get('content-type')`. gaxios v5 used a Headers-like object with `.get()`. The installed version (`gaxios@6.7.1`) changed the header API. Test needs updating to use `options.headers['content-type']` instead of `.get()`.
+- **Files**: `tests/integration/dependency-overrides.test.ts:80`
+- **Reference**: `references/claude-code-main/tests/integration/dependency-overrides.test.ts` — check if same gaxios version
+
+### `dependency-overrides.test.ts` — streamdown not found (missing remote-control-server package)
+- **Status**: 1 test fails: `Cannot find package 'streamdown' from packages/remote-control-server/package.json`
+- **Root cause**: `packages/remote-control-server/` directory does not exist locally. The test uses `createRequire` pointing to this package's `package.json` to resolve `streamdown`. Present in reference (`references/claude-code-main/packages/remote-control-server/`) but not ported locally.
+- **Files**: `packages/remote-control-server/` (missing), `tests/integration/dependency-overrides.test.ts:110-113`
+- **Reference**: `references/claude-code-main/packages/remote-control-server/` — has full package with its own package.json
