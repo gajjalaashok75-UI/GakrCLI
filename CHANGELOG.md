@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Dependencies**: Installed @anthropic-ai/mcpb, @azure/identity, @opentelemetry/exporter-trace-otlp-grpc, @agentclientprotocol/sdk, streamdown. Added all to scripts/externals.ts.
 - **ISSUES.md**: Documented 3 pre-existing integration test failures (hostGuard.ts stub — since FIXED, gaxios v6 API change, missing remote-control-server package).
 - **src/services/auth/hostGuard.ts**: Ported full implementation from reference (was missing — build created a stub). Fixes build guard failure in autonomy-lifecycle-user-flow.test.ts (build now exits code 0).
+- **scripts/build.ts**: Added 46 missing feature flags to build.ts — every `feature()` call in src/ now has an explicit entry. Enabled PROACTIVE (12/12 tests pass).
 - **scripts/build.ts**: Added 10 missing feature flag entries. Enabled PROACTIVE (12/12 tests pass). WEB_BROWSER_TOOL investigated — tool impl full, panel stubbed (matches reference), left disabled.
 
 ## [0.5.8] - 2026-06-29
