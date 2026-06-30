@@ -59,6 +59,8 @@ export type StatusLineCommandInput = {
     } | null
     used_percentage: number | null
     remaining_percentage: number | null
+    /** Present when cumulative totals include estimated unreported usage. */
+    total_tokens_are_estimated?: boolean
   }
   exceeds_200k_tokens: boolean
   rate_limits?: {

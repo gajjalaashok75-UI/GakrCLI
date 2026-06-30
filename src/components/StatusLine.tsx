@@ -24,7 +24,7 @@ import { createBaseHookInput, executeStatusLineCommand } from '../utils/hooks.js
 import { getLastAssistantMessage } from '../utils/messages.js';
 import { getRuntimeMainLoopModel, type ModelName, renderModelName } from '../utils/model/model.js';
 import { getCurrentSessionTitle } from '../utils/sessionStorage.js';
-import { doesMostRecentAssistantMessageExceed200k, getCurrentUsage } from '../utils/tokens.js';
+import { doesMostRecentAssistantMessageExceed200k, getCurrentUsage, getUnreportedSessionUsage, type SessionUsage } from '../utils/tokens.js';
 import { getCurrentWorktreeSession } from '../utils/worktree.js';
 import { isVimModeEnabled } from './PromptInput/utils.js';
 export function statusLineShouldDisplay(settings: ReadonlySettings): boolean {
@@ -33,7 +33,32 @@ export function statusLineShouldDisplay(settings: ReadonlySettings): boolean {
   if (feature('KAIROS') && getKairosActive()) return false;
   return settings?.statusLine !== undefined;
 }
-function buildStatusLineCommandInput(permissionMode: PermissionMode, exceeds200kTokens: boolean, settings: ReadonlySettings, messages: Message[], addedDirs: string[], mainLoopModel: ModelName, vimMode?: VimMode): StatusLineCommandInput {
+
+export function resolveStatusLineTokenTotals(
+  totalInputTokens: number,
+  totalOutputTokens: number,
+  unreportedSessionUsage: SessionUsage | null,
+): {
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalTokensAreEstimated: boolean | undefined;
+} {
+  if (!unreportedSessionUsage) {
+    return {
+      totalInputTokens,
+      totalOutputTokens,
+      totalTokensAreEstimated: undefined,
+    };
+  }
+
+  return {
+    totalInputTokens: totalInputTokens + unreportedSessionUsage.input_tokens,
+    totalOutputTokens: totalOutputTokens + unreportedSessionUsage.output_tokens,
+    totalTokensAreEstimated: true,
+  };
+}
+
+export function buildStatusLineCommandInput(permissionMode: PermissionMode, exceeds200kTokens: boolean, settings: ReadonlySettings, messages: Message[], addedDirs: string[], mainLoopModel: ModelName, vimMode?: VimMode): StatusLineCommandInput {
   const agentType = getMainThreadAgentType();
   const worktreeSession = getCurrentWorktreeSession();
   const runtimeModel = getRuntimeMainLoopModel({
@@ -87,14 +112,22 @@ function buildStatusLineCommandInput(permissionMode: PermissionMode, exceeds200k
       total_lines_added: getTotalLinesAdded(),
       total_lines_removed: getTotalLinesRemoved()
     },
-    context_window: {
-      total_input_tokens: getTotalInputTokens(),
-      total_output_tokens: getTotalOutputTokens(),
-      context_window_size: contextWindowSize,
-      current_usage: currentUsage,
-      used_percentage: contextPercentages.used,
-      remaining_percentage: contextPercentages.remaining
-    },
+    context_window: (() => {
+      const resolvedTokenTotals = resolveStatusLineTokenTotals(
+        getTotalInputTokens(),
+        getTotalOutputTokens(),
+        getUnreportedSessionUsage(messages),
+      );
+      return {
+        total_input_tokens: resolvedTokenTotals.totalInputTokens,
+        total_output_tokens: resolvedTokenTotals.totalOutputTokens,
+        total_tokens_are_estimated: resolvedTokenTotals.totalTokensAreEstimated,
+        context_window_size: contextWindowSize,
+        current_usage: currentUsage,
+        used_percentage: contextPercentages.used,
+        remaining_percentage: contextPercentages.remaining,
+      };
+    })(),
     exceeds_200k_tokens: exceeds200kTokens,
     ...((rateLimits.five_hour || rateLimits.seven_day) && {
       rate_limits: rateLimits

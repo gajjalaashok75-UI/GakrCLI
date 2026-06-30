@@ -1,5 +1,9 @@
 import type { BetaUsage as Usage } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
-import { roughTokenCountEstimation, roughTokenCountEstimationForMessages } from '../services/tokenEstimation.js'
+import {
+  roughTokenCountEstimation,
+  roughTokenCountEstimationForMessage,
+  roughTokenCountEstimationForMessages,
+} from '../services/tokenEstimation.js'
 import type { AssistantMessage, Message } from '../types/message.js'
 import { SYNTHETIC_MESSAGES, SYNTHETIC_MODEL } from './messages.js'
 import { jsonStringify } from './slowOperations.js'
@@ -235,6 +239,120 @@ export function extractThinkingTokens(
   }
 
   return { thinking, output, total: thinking + output }
+}
+
+export type SessionUsage = {
+  input_tokens: number
+  output_tokens: number
+}
+
+function isAllZeroUsage(usage: Usage): boolean {
+  return getTokenCountFromUsage(usage) === 0
+}
+
+function getAssistantResponseStartIndex(
+  messages: readonly Message[],
+  index: number,
+): number {
+  const message = messages[index]
+  const responseId = message ? getAssistantMessageId(message) : undefined
+  if (!responseId) return index
+
+  let startIndex = index
+  let j = index - 1
+  while (j >= 0) {
+    const prior = messages[j]
+    const priorId = prior ? getAssistantMessageId(prior) : undefined
+    if (priorId === responseId) {
+      startIndex = j
+    } else if (priorId !== undefined) {
+      break
+    }
+    j--
+  }
+  return startIndex
+}
+
+function getAssistantResponseEndIndex(
+  messages: readonly Message[],
+  index: number,
+): number {
+  const message = messages[index]
+  const responseId = message ? getAssistantMessageId(message) : undefined
+  if (!responseId) return index
+
+  let endIndex = index
+  for (let i = index + 1; i < messages.length; i++) {
+    const current = messages[i]
+    if (current && getAssistantMessageId(current) === responseId) {
+      endIndex = i
+    }
+  }
+  return endIndex
+}
+
+function estimateAssistantResponseOutputTokens(
+  messages: readonly Message[],
+  index: number,
+): number {
+  const message = messages[index]
+  const responseId = message ? getAssistantMessageId(message) : undefined
+  if (!responseId) {
+    return message ? roughTokenCountEstimationForMessage(message) : 0
+  }
+
+  const startIndex = getAssistantResponseStartIndex(messages, index)
+  let estimatedOutputTokens = 0
+  for (let i = startIndex; i <= index; i++) {
+    const current = messages[i]
+    if (current && getAssistantMessageId(current) === responseId) {
+      estimatedOutputTokens += roughTokenCountEstimationForMessage(current)
+    }
+  }
+  return estimatedOutputTokens
+}
+
+export function getUnreportedSessionUsage(
+  messages: readonly Message[],
+): SessionUsage | null {
+  let inputTokens = 0
+  let outputTokens = 0
+  const prefixTokenCounts: number[] = [0]
+  const seenResponseIds = new Set<string>()
+
+  for (const message of messages) {
+    prefixTokenCounts.push(
+      prefixTokenCounts[prefixTokenCounts.length - 1]! +
+        roughTokenCountEstimationForMessage(message),
+    )
+  }
+
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i]
+    const usage = message ? getTokenUsage(message) : undefined
+    if (!message || !usage || !isAllZeroUsage(usage)) continue
+
+    const responseId = getAssistantMessageId(message)
+    if (responseId) {
+      if (seenResponseIds.has(responseId)) continue
+      seenResponseIds.add(responseId)
+    }
+
+    const startIndex = getAssistantResponseStartIndex(messages, i)
+    const endIndex = getAssistantResponseEndIndex(messages, i)
+    inputTokens += Math.max(1, prefixTokenCounts[startIndex] ?? 0)
+    outputTokens += Math.max(
+      1,
+      estimateAssistantResponseOutputTokens(messages, endIndex),
+    )
+  }
+
+  if (inputTokens === 0 && outputTokens === 0) return null
+
+  return {
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+  }
 }
 
 /**

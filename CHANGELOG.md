@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.5.8] - 2026-06-30
 
 ### Added
+- **src/components/SessionSummary.tsx**: Replay session summary component, wired into ReplayTimeline.
+- **src/components/Settings/ClinePassUsage.tsx**: ClinePass usage display component, wired into Usage.tsx.
+- **src/components/EffortCallout.modelGate.test.ts**, **src/components/StatusLine.test.ts**, **ExitPlanModePermissionRequest.render.test.tsx**: Test coverage for EffortCallout model gate, StatusLine, and ExitPlanModePermissionRequest.
+
+### Fixed
+- **src/components/EffortCallout.tsx**: Added missing `effortCalloutCoversModel` export for deterministic model gate testing.
+- **src/components/StatusLine.tsx**: Added `resolveStatusLineTokenTotals` export, made `buildStatusLineCommandInput` exported, integrated `getUnreportedSessionUsage` for estimated unreported provider usage totals.
+- **src/utils/tokens.ts**: Ported missing `SessionUsage` type, `getUnreportedSessionUsage`, `isAllZeroUsage`, `getAssistantResponseStartIndex`, `getAssistantResponseEndIndex`, `estimateAssistantResponseOutputTokens` from reference.
+- **src/types/statusLine.ts**: Added missing `total_tokens_are_estimated` field to `context_window` type.
+
+### Added
 - **src/commands/clear-context-window/**: New `/clear-context-window` command for resetting session-scoped context window overrides. Wired in `commands.ts`.
 - **src/commands/set-context-window/**: New `/set-context-window` command for setting session-scoped context window overrides. Wired in `commands.ts`.
 - **src/commands/replay/**: New `/replay` command with `ReplayTimeline` component for interactive session replay navigation. Wired in `commands.ts`.
