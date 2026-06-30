@@ -34,7 +34,7 @@ cleanDistDirectory()
 const featureFlags: Record<string, boolean> = {
   // ── Disabled: require Anthropic infrastructure or missing source ─────
   VOICE_MODE: false,              // Push-to-talk STT via gakrcli.ai OAuth endpoint
-  PROACTIVE: false,               // Autonomous agent mode (missing proactive/ module)
+  PROACTIVE: true,                // Autonomous agent mode (tick-driven agent, 12/12 tests pass)
   KAIROS: false,                  // Persistent assistant/session mode (cloud backend)
   BRIDGE_MODE: false,             // Remote desktop bridge via CCR infrastructure
   DAEMON: false,                  // Background daemon process (stubbed in open build)
@@ -47,10 +47,18 @@ const featureFlags: Record<string, boolean> = {
   AUTOFIX_PR: true,              // /autofix-pr command
   TEMPLATES: false,               // Template jobs (new/list/reply subcommands)
   BG_SESSIONS: true,              // Local detached background sessions
-  WEB_BROWSER_TOOL: false,        // Built-in browser automation (source not mirrored)
+  WEB_BROWSER_TOOL: false,        // Built-in browser navigation/screenshot (panel UI stubbed)
   CHICAGO_MCP: false,             // Computer-use MCP (native Swift modules stubbed)
   ACP: false,                     // ACP agent protocol (requires @agentclientprotocol/sdk)
   COWORKER_TYPE_TELEMETRY: false, // Telemetry for agent/coworker type classification
+  AGENT_TRIGGERS_REMOTE: false,   // Remote agent trigger delivery (requires cloud infra)
+  KAIROS_BRIEF: false,            // Brief mode toggle (KAIROS sub-feature)
+  KAIROS_GITHUB_WEBHOOKS: false,  // GitHub webhook PR subscription (KAIROS sub-feature)
+  KAIROS_PUSH_NOTIFICATION: false,// Push notification support (KAIROS sub-feature)
+  OVERFLOW_TEST_TOOL: false,      // Overflow testing tool (test-only, not for production)
+  TERMINAL_PANEL: false,          // Terminal panel capture tool (IDE integration)
+  CCR_REMOTE_SETUP: false,        // CCR remote setup command (requires bridge mode)
+  TORCH: false,                   // Torch command (requires external infra)
   MCP_SKILLS: true,               // Dynamic MCP skill discovery via skill:// resources
 
   // ── Enabled: upstream defaults ──────────────────────────────────────
@@ -82,6 +90,7 @@ const featureFlags: Record<string, boolean> = {
   EXPERIMENTAL_SKILL_SEARCH: true,     // TF-IDF skill search (DiscoverSkillsTool)
   GOAL: true,                          // Goal tracking tool & command
   POOR: true,                          // 穷鬼模式，跳过 extract_memories/prompt_suggestion 减少消耗
+  ULTRAPLAN: true,                     // Ultraplan multi-phase planning system
 }
 
 // ── Pre-process: replace feature() calls with boolean literals ──────
