@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.5.8] - 2026-06-30
 
 ### Added
+- **src/commands/clear-context-window/**: New `/clear-context-window` command for resetting session-scoped context window overrides. Wired in `commands.ts`.
+- **src/commands/set-context-window/**: New `/set-context-window` command for setting session-scoped context window overrides. Wired in `commands.ts`.
+- **src/commands/replay/**: New `/replay` command with `ReplayTimeline` component for interactive session replay navigation. Wired in `commands.ts`.
+- **src/commands/branch/branch.test.ts**, **src/commands/cache-probe/cache-probe.test.ts**: Added test coverage for branch and cache-probe commands (17 tests local, all pass).
+- **src/utils/context.ts**: Added session-scoped context window override system — 4 new exports (`setSessionContextWindowOverride`, `clearSessionContextWindowOverride`, `getSessionContextWindowOverride`, `getSessionContextWindowOverrides`) with model-normalized Map storage, integrated into `getContextWindowForModel`.
+
+### Added
 - **src/cli/handlers/taskReport.ts**: Added `report` command to CLI (`gakrcli report --json --session <id>`) for generating deterministic JSON task reports from session transcripts. Dynamic import wired in `main.tsx`.
 - **src/cli/headlessHeartbeat.ts**: Added headless heartbeat module with clock-aware heartbeat emission. Imported and re-exported via `print.ts` with 3 utility functions: `createHeadlessHeartbeatStructuredEmitter`, `createRunHeadlessHeartbeat`, `runWithHeartbeatErrorCleanup`.
 - **src/cli/headlessHeartbeat.test.ts**, **src/cli/printHeartbeat.test.ts**: Added test coverage for headless heartbeat module (82 tests across 4 files, all pass).

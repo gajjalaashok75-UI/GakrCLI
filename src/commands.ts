@@ -42,6 +42,9 @@ import installSlackApp from './commands/install-slack-app/index.js'
 import breakCache from './commands/break-cache/index.js'
 import cacheProbe from './commands/cache-probe/index.js'
 import cacheStats from './commands/cacheStats/index.js'
+import clearContextWindow from './commands/clear-context-window/index.js'
+import replay from './commands/replay/index.js'
+import setContextWindow from './commands/set-context-window/index.js'
 import mcp from './commands/mcp/index.js'
 import mobile from './commands/mobile/index.js'
 import onboarding from './commands/onboarding/index.js'
@@ -347,6 +350,7 @@ const COMMANDS = memoize((): Command[] => [
   cacheStats,
   chrome,
   clear,
+  clearContextWindow,
   color,
   compact,
   commitMessage,
@@ -389,12 +393,14 @@ const COMMANDS = memoize((): Command[] => [
   provider,
   pr_comments,
   releaseNotes,
+  replay,
   reloadPlugins,
   rename,
   requestSize,
   requestSizeNonInteractive,
   resume,
   session,
+  setContextWindow,
   skills,
   skillLearning,
   skillSearch,
