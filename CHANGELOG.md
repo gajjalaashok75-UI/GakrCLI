@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **src/commands/branch/branch.test.ts**, **src/commands/cache-probe/cache-probe.test.ts**: Added test coverage for branch and cache-probe commands (17 tests local, all pass).
 - **src/utils/context.ts**: Added session-scoped context window override system — 4 new exports (`setSessionContextWindowOverride`, `clearSessionContextWindowOverride`, `getSessionContextWindowOverride`, `getSessionContextWindowOverrides`) with model-normalized Map storage, integrated into `getContextWindowForModel`.
 
+### Fixed
+- **src/tools/AgentTool/built-in/exploreAgent.ts**, **verificationAgent.ts**: Fixed backtick characters inside template literals that caused Bun parse errors across multiple test files.
+- **src/commands/cache-probe/cache-probe.ts**: Added missing `resolveCacheProbeRequestApiKey`, `resolveCacheProbeApiKey`, `resolveGithubCacheProbeApiKey` exports.
+- **src/utils/envUtils.ts**: Added missing `getGakrCLIConfigHomeDirOverrideForTesting` export.
+
 ### Added
 - **src/cli/handlers/taskReport.ts**: Added `report` command to CLI (`gakrcli report --json --session <id>`) for generating deterministic JSON task reports from session transcripts. Dynamic import wired in `main.tsx`.
 - **src/cli/headlessHeartbeat.ts**: Added headless heartbeat module with clock-aware heartbeat emission. Imported and re-exported via `print.ts` with 3 utility functions: `createHeadlessHeartbeatStructuredEmitter`, `createRunHeadlessHeartbeat`, `runWithHeartbeatErrorCleanup`.
