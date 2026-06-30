@@ -1,4 +1,6 @@
 import { getSessionId } from '../../bootstrap/state.js'
+import { firstUsableCredential } from '../../services/api/credentialPool.js'
+import { resolveOpenAICredentialEnvState } from '../../utils/providerProfile.js'
 import { resolveProviderRequest } from '../../services/api/providerConfig.js'
 import type { LocalCommandCall } from '../../types/command.js'
 import { logForDebugging } from '../../utils/debug.js'
@@ -26,6 +28,40 @@ const SYSTEM_PROMPT = [
 
 const USER_MESSAGE = 'Say "hello" and nothing else.'
 const DELAY_MS = 3000
+
+export function resolveCacheProbeApiKey(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const credentialState = resolveOpenAICredentialEnvState(env)
+  if (!credentialState.configured || !credentialState.envVar) {
+    return ''
+  }
+
+  return firstUsableCredential(env[credentialState.envVar]) ?? ''
+}
+
+function resolveGithubCacheProbeApiKey(env: NodeJS.ProcessEnv): string {
+  return (
+    env.GITHUB_COPILOT_KEY?.trim() ||
+    env.GITHUB_TOKEN?.trim() ||
+    env.GH_TOKEN?.trim() ||
+    ''
+  )
+}
+
+export function resolveCacheProbeRequestApiKey(
+  env: NodeJS.ProcessEnv = process.env,
+  options?: { isGithub?: boolean },
+): string {
+  if (options?.isGithub) {
+    const githubKey = resolveGithubCacheProbeApiKey(env)
+    if (githubKey) {
+      return githubKey
+    }
+  }
+
+  return resolveCacheProbeApiKey(env)
+}
 
 /**
  * Extract model family from a versioned model string.

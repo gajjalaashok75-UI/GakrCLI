@@ -30,6 +30,10 @@ export function setGakrCLIConfigHomeDirForTesting(
   gakrcliConfigHomeDirOverride = configDir?.normalize('NFC')
 }
 
+export function getGakrCLIConfigHomeDirOverrideForTesting(): string | undefined {
+  return gakrcliConfigHomeDirOverride
+}
+
 export function migrateLegacyGakrCLIConfigHome(options?: {
   configDirEnv?: string
   homeDir?: string
