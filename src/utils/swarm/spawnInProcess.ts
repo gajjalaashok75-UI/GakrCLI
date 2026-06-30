@@ -326,3 +326,35 @@ export function killInProcessTeammate(
 
   return killed
 }
+
+/**
+ * Kills an in-process teammate by agentId (format: "name@team").
+ * Looks up the taskId from AppState tasks, then delegates to
+ * killInProcessTeammate. Returns false if no matching teammate is found.
+ */
+export function killInProcessTeammateByAgentId(
+  agentIdToKill: string,
+  setAppState: SetAppStateFn,
+): boolean {
+  let taskIdToKill: string | undefined
+
+  setAppState((prev: AppState) => {
+    for (const [taskId, task] of Object.entries(prev.tasks)) {
+      if (
+        task.type === 'in_process_teammate' &&
+        task.identity.agentId === agentIdToKill &&
+        task.status === 'running'
+      ) {
+        taskIdToKill = taskId
+        break
+      }
+    }
+    return prev
+  })
+
+  if (!taskIdToKill) {
+    return false
+  }
+
+  return killInProcessTeammate(taskIdToKill, setAppState)
+}
