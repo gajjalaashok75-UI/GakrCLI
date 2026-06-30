@@ -5,29 +5,21 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.13] - 2026-06-30
+## [0.5.8] - 2026-06-30
 
 ### Added
 - **src/cli/handlers/taskReport.ts**: Added `report` command to CLI (`gakrcli report --json --session <id>`) for generating deterministic JSON task reports from session transcripts. Dynamic import wired in `main.tsx`.
 - **src/cli/headlessHeartbeat.ts**: Added headless heartbeat module with clock-aware heartbeat emission. Imported and re-exported via `print.ts` with 3 utility functions: `createHeadlessHeartbeatStructuredEmitter`, `createRunHeadlessHeartbeat`, `runWithHeartbeatErrorCleanup`.
 - **src/cli/headlessHeartbeat.test.ts**, **src/cli/printHeartbeat.test.ts**: Added test coverage for headless heartbeat module (82 tests across 4 files, all pass).
 
-## [0.5.12] - 2026-06-30
-
 ### Fixed
 - **src/tools/AgentTool/built-in/exploreAgent.ts**, **verificationAgent.ts**: Added `toolFailureLoopGuard` safety caution to agent system prompts. Agents now know they'll be stopped after 3 same-tool+same-error failures (threshold configurable via `GAKR_CODE_TOOL_FAILURE_LOOP_THRESHOLD`). Added guidance to switch tools or fix quoting after the first failure instead of retrying.
-
-## [0.5.11] - 2026-06-30
 
 ### Fixed
 - **src/tools/AgentTool/runAgent.ts**: Fixed `shouldAvoidPrompts` logic that auto-denied Bash (and all permission-requiring tools) for ALL async agents without explicit `permissionMode: 'bubble'`. Root cause: `FORK_SUBAGENT: true` forces all subagents async, and `shouldAvoidPrompts = isAsync` denied every prompt. Changed to only avoid prompts when agent explicitly has `permissionMode: 'dontAsk'` — for the default case (no explicit mode), prompts now flow through normal permission channels and bubble via the task-notification UI. Fixes verification agent (and all built-in + custom agents) running Bash, Edit, Write, and other tools that require user permission.
 
-## [0.5.10] - 2026-06-30
-
 ### Changed
 - **scripts/build.ts**: Removed all 5 `internalFeatureStubModules` entries (daemon/workerRegistry, daemon/main, templateJobs, environment-runner/main, self-hosted-runner/main). All 5 modules exist locally — 3 with full implementations, 2 with reference-matching no-op stubs. Removed associated onResolve/onLoad stub hooks. Build passes cleanly with zero missing-module stubs.
-
-## [0.5.9] - 2026-06-30
 
 ### Fixed
 - **src/utils/attributionModel.ts**: Replaced broken `@ant/model-provider` import with inlined model mapping functions (resolveOpenAIModel, resolveGrokModel, resolveGeminiModel).
