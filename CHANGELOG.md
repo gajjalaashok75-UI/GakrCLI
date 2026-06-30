@@ -5,6 +5,11 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.12] - 2026-06-30
+
+### Fixed
+- **src/tools/AgentTool/built-in/exploreAgent.ts**, **verificationAgent.ts**: Added `toolFailureLoopGuard` safety caution to agent system prompts. Agents now know they'll be stopped after 3 same-tool+same-error failures (threshold configurable via `GAKR_CODE_TOOL_FAILURE_LOOP_THRESHOLD`). Added guidance to switch tools or fix quoting after the first failure instead of retrying.
+
 ## [0.5.11] - 2026-06-30
 
 ### Fixed
