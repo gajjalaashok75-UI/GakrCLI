@@ -472,6 +472,11 @@ export function startDeferredPrefetches(): void {
   );
 
   // Analytics and feature flag initialization
+  if (getIsNonInteractiveSession() || checkHasTrustDialogAccepted()) {
+    void import('./services/wiki/conventions.js')
+      .then(({ scanAndSaveConventions }) => scanAndSaveConventions(getCwd()))
+      .catch(logError);
+  }
   void initializeAnalyticsGates();
   void prefetchOfficialMcpUrls();
   void refreshModelCapabilities();

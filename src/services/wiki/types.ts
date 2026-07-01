@@ -5,6 +5,8 @@ export type WikiPaths = {
   schemaFile: string
   indexFile: string
   logFile: string
+  conventionsFile: string
+  conventionsCacheFile: string
 }
 
 export type WikiInitResult = {
@@ -22,6 +24,8 @@ export type WikiStatus = {
   hasSchema: boolean
   hasIndex: boolean
   hasLog: boolean
+  hasConventions: boolean
+  conventionsScannedAt: string | null
   lastUpdatedAt: string | null
 }
 
