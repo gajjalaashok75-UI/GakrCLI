@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **src/services/api/bootstrap.ts**: Added `normalizeDiscoveredModelLookupKey`, `buildLocalOpenAIModelOptions`, `getDiscoveredModelApiNames` helpers; `FetchLocalOpenAIModelOptionsDeps` type for dependency injection; catalog dedup with seen-set.
 - **src/tools/ExitPlanModeTool/ExitPlanModeV2Tool.ts**: Fixed writeFile error handler swallowing ENOENT. Changed from `.catch(e => logError(e))` to try-catch with rethrow, matching reference behavior.
 - **src/tools/BashTool/readOnlyValidation.ts**: Ported missing npm/bun/tsc version query detection from reference (3 regex patterns for package-manager version commands with exact anchoring).
+- **assets/skills/design-skills/claude-design/SKILL.md**: Fixed YAML description — was incorrectly set to scroll-animation library description; corrected to accurately describe the Claude.com brand design system reference (colors, typography, components, layout tokens).
 
 ### Changed
 - **src/services/wiki/paths.ts**, **status.ts**, **types.ts**: Added conventions file paths (`conventionsFile`, `conventionsCacheFile`), `hasConventions` and `conventionsScannedAt` status fields.
