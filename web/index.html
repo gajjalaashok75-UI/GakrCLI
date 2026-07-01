@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <script>
+      // Theme bootstrap — runs before paint to prevent flash. Light (:root) is default.
+      (function () {
+        try {
+          var t = localStorage.getItem('gakrcli-theme') || 'light'
+          document.documentElement.dataset.theme = t
+          document.documentElement.style.colorScheme = t
+        } catch (e) {
+          /* storage unavailable — stay light */
+        }
+      })()
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#faf9f5" />
+    <meta name="color-scheme" content="dark light" />
+    <link rel="icon" type="image/svg+xml" href="/gakrcli-logo.svg" />
+    <link rel="icon" type="image/png" href="/gakrcli.png" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    <title>gakrcli — open-source coding agent CLI for any model</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
