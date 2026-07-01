@@ -64,7 +64,7 @@ references/
 temp/
 tmp/
 *.tmp
-
+COOK.md
 # Graphify cache (generated)
 src/utils/graphify-out/cache/
 
