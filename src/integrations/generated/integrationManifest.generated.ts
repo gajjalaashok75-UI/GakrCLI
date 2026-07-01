@@ -9,14 +9,14 @@ import type { ProviderPresetManifestEntry } from '../descriptors.js'
 
 export const PROVIDER_PRESET_MANIFEST = [
   {
-    "preset": "gakr-gakr-opengateway",
+    "preset": "gitlawb-opengateway",
     "routeKind": "gateway",
-    "routeId": "gakr-gakr-opengateway",
+    "routeId": "gitlawb-opengateway",
     "vendorId": "openai",
-    "gatewayId": "gakr-gakr-opengateway",
-    "description": "gakr-gakr Opengateway - (API key required, signup at https://gakr-gakr.com/opengateway/keys)",
-    "label": "gakr-gakr Opengateway",
-    "name": "gakr-gakr Opengateway",
+    "gatewayId": "gitlawb-opengateway",
+    "description": "Gitlawb Opengateway - (API key required, signup at https://gitlawb.com/opengateway/keys)",
+    "label": "Gitlawb Opengateway",
+    "name": "Gitlawb Opengateway",
     "apiKeyEnvVars": [
       "OPENGATEWAY_API_KEY"
     ],
@@ -27,7 +27,7 @@ export const PROVIDER_PRESET_MANIFEST = [
     "modelEnvVars": [
       "OPENAI_MODEL"
     ],
-    "fallbackBaseUrl": "https://opengateway.gakr-gakr.com/v1",
+    "fallbackBaseUrl": "https://opengateway.gitlawb.com/v1",
     "fallbackModel": "mimo-v2.5-pro",
     "badge": {
       "text": "Recommended",
@@ -39,7 +39,7 @@ export const PROVIDER_PRESET_MANIFEST = [
     "routeKind": "vendor",
     "routeId": "anthropic",
     "vendorId": "anthropic",
-    "description": "Native GakrCLI API (x-api-key auth)",
+    "description": "Native Claude API (x-api-key auth)",
     "apiKeyEnvVars": [
       "ANTHROPIC_API_KEY"
     ],
@@ -267,7 +267,7 @@ export const PROVIDER_PRESET_MANIFEST = [
     "routeKind": "vendor",
     "routeId": "nearai",
     "vendorId": "nearai",
-    "description": "NEAR AI unified gateway (GakrCLI, GPT, Gemini + TEE models)",
+    "description": "NEAR AI unified gateway (Claude, GPT, Gemini + TEE models)",
     "apiKeyEnvVars": [
       "NEARAI_API_KEY"
     ],
@@ -293,6 +293,7 @@ export const PROVIDER_PRESET_MANIFEST = [
     "vendorId": "openai",
     "description": "OpenAI API with API key",
     "apiKeyEnvVars": [
+      "OPENAI_API_KEYS",
       "OPENAI_API_KEY"
     ]
   },
@@ -302,7 +303,7 @@ export const PROVIDER_PRESET_MANIFEST = [
     "routeId": "opencode-go",
     "vendorId": "openai",
     "gatewayId": "opencode-go",
-    "description": "OpenCode Go — $10/mo subscription for open models (13 models)",
+    "description": "OpenCode Go - $10/mo subscription for open models (13 models)",
     "apiKeyEnvVars": [
       "OPENCODE_API_KEY"
     ],
@@ -316,7 +317,7 @@ export const PROVIDER_PRESET_MANIFEST = [
     "routeId": "opencode",
     "vendorId": "openai",
     "gatewayId": "opencode",
-    "description": "OpenCode Zen — pay-as-you-go AI gateway (43 models)",
+    "description": "OpenCode Zen - pay-as-you-go AI gateway (48 models)",
     "apiKeyEnvVars": [
       "OPENCODE_API_KEY"
     ],
@@ -436,6 +437,7 @@ export const PROVIDER_PRESET_MANIFEST = [
     "label": "Custom",
     "name": "Custom OpenAI-compatible",
     "apiKeyEnvVars": [
+      "OPENAI_API_KEYS",
       "OPENAI_API_KEY"
     ],
     "baseUrlEnvVars": [
@@ -450,7 +452,7 @@ export const PROVIDER_PRESET_MANIFEST = [
 ] as const satisfies readonly ProviderPresetManifestEntry[]
 export type ProviderPreset = (typeof PROVIDER_PRESET_MANIFEST)[number]['preset']
 export const ORDERED_PROVIDER_PRESETS = [
-  "gakr-gakr-opengateway",
+  "gitlawb-opengateway",
   "anthropic",
   "dashscope-cn",
   "dashscope-intl",

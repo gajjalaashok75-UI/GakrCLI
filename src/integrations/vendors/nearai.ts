@@ -17,7 +17,7 @@ export default defineVendor({
   },
   preset: {
     id: 'nearai',
-    description: 'NEAR AI unified gateway (GakrCLI, GPT, Gemini + TEE models)',
+    description: 'NEAR AI unified gateway (Claude, GPT, Gemini + TEE models)',
     apiKeyEnvVars: ['NEARAI_API_KEY'],
     modelEnvVars: ['OPENAI_MODEL'],
   },
@@ -37,37 +37,37 @@ export default defineVendor({
       {
         id: 'anthropic/claude-opus-4-8',
         apiName: 'anthropic/claude-opus-4-8',
-        label: 'claude opus 4.8',
+        label: 'Claude Opus 4.8',
         modelDescriptorId: 'anthropic/claude-opus-4-8',
       },
       {
         id: 'anthropic/claude-opus-4-7',
         apiName: 'anthropic/claude-opus-4-7',
-        label: 'claude opus 4.7',
+        label: 'Claude Opus 4.7',
         modelDescriptorId: 'anthropic/claude-opus-4-7',
       },
       {
         id: 'anthropic/claude-opus-4-6',
         apiName: 'anthropic/claude-opus-4-6',
-        label: 'claude opus 4.6',
+        label: 'Claude Opus 4.6',
         modelDescriptorId: 'anthropic/claude-opus-4-6',
       },
       {
         id: 'anthropic/claude-sonnet-4-6',
         apiName: 'anthropic/claude-sonnet-4-6',
-        label: 'claude sonnet 4.6',
+        label: 'Claude Sonnet 4.6',
         modelDescriptorId: 'anthropic/claude-sonnet-4-6',
       },
       {
         id: 'anthropic/claude-sonnet-4-5',
         apiName: 'anthropic/claude-sonnet-4-5',
-        label: 'claude sonnet 4.5',
+        label: 'Claude Sonnet 4.5',
         modelDescriptorId: 'anthropic/claude-sonnet-4-5',
       },
       {
         id: 'anthropic/claude-haiku-4-5',
         apiName: 'anthropic/claude-haiku-4-5',
-        label: 'claude haiku 4.5',
+        label: 'Claude Haiku 4.5',
         modelDescriptorId: 'anthropic/claude-haiku-4-5',
       },
       // ── OpenAI (proxied) ──

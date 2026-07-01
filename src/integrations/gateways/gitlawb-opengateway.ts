@@ -1,29 +1,29 @@
 import { defineGateway } from '../define.js'
 
 export default defineGateway({
-  id: 'gakr-gakr-opengateway',
-  label: 'gakr-gakr Opengateway',
+  id: 'gitlawb-opengateway',
+  label: 'Gitlawb Opengateway',
   category: 'aggregating',
-  defaultBaseUrl: 'https://opengateway.gakr-gakr.com/v1',
+  defaultBaseUrl: 'https://opengateway.gitlawb.com/v1',
   defaultModel: 'mimo-v2.5-pro',
   supportsModelRouting: true,
   vendorId: 'openai',
   setup: {
     requiresAuth: true,
     authMode: 'api-key',
-    credentialEnvVars: ['OPENGATEWAY_API_KEY', 'OPENAI_API_KEY'],
+    credentialEnvVars: ['OPENGATEWAY_API_KEY', 'OPENAI_API_KEYS', 'OPENAI_API_KEY'],
   },
   validation: {
     kind: 'credential-env',
     // OPENGATEWAY_API_KEY first so users who set both don't get their generic
-    // OpenAI key sent to opengateway by accident. OPENAI_API_KEY kept as a
-    // fallback because that's where existing gakrcli configs already hold it.
-    credentialEnvVars: ['OPENGATEWAY_API_KEY', 'OPENAI_API_KEY'],
+    // OpenAI key sent to opengateway by accident. OPENAI_API_KEYS / OPENAI_API_KEY kept as
+    // fallbacks because existing GakrCLI configs may already hold generic credentials there.
+    credentialEnvVars: ['OPENGATEWAY_API_KEY', 'OPENAI_API_KEYS', 'OPENAI_API_KEY'],
     missingCredentialMessage:
-      'OPENGATEWAY_API_KEY is required to use gakr-gakr Opengateway.\n' +
-      'Mint a free API key at https://gakr-gakr.com/opengateway/keys and set it as OPENGATEWAY_API_KEY (or OPENAI_API_KEY when OPENAI_BASE_URL points at opengateway).',
+      'OPENGATEWAY_API_KEY is required to use Gitlawb Opengateway.\n' +
+      'Mint a free API key at https://gitlawb.com/opengateway/keys and set it as OPENGATEWAY_API_KEY (or OPENAI_API_KEYS / OPENAI_API_KEY when OPENAI_BASE_URL points at opengateway).',
     routing: {
-      matchBaseUrlHosts: ['opengateway.gakr-gakr.com', 'opengateway.fly.dev'],
+      matchBaseUrlHosts: ['opengateway.gitlawb.com', 'opengateway.fly.dev'],
     },
   },
   transportConfig: {
@@ -45,15 +45,15 @@ export default defineGateway({
     },
   },
   preset: {
-    id: 'gakr-gakr-opengateway',
-    description: 'gakr-gakr Opengateway - (API key required, signup at https://gakr-gakr.com/opengateway/keys)',
+    id: 'gitlawb-opengateway',
+    description: 'Gitlawb Opengateway - (API key required, signup at https://gitlawb.com/opengateway/keys)',
     apiKeyEnvVars: ['OPENGATEWAY_API_KEY'],
-    label: 'gakr-gakr Opengateway',
-    name: 'gakr-gakr Opengateway',
+    label: 'Gitlawb Opengateway',
+    name: 'Gitlawb Opengateway',
     vendorId: 'openai',
     modelEnvVars: ['OPENAI_MODEL'],
     baseUrlEnvVars: ['OPENGATEWAY_BASE_URL', 'OPENAI_BASE_URL'],
-    fallbackBaseUrl: 'https://opengateway.gakr-gakr.com/v1',
+    fallbackBaseUrl: 'https://opengateway.gitlawb.com/v1',
     fallbackModel: 'mimo-v2.5-pro',
     badge: { text: 'Recommended', color: 'success' },
   },
@@ -109,6 +109,12 @@ export default defineGateway({
         apiName: 'qwen/qwen3.7-max',
         label: 'Qwen 3.7 Max (via Opengateway)',
         modelDescriptorId: 'qwen3.7-max',
+      },
+      {
+        id: 'opengateway-glm-5.2',
+        apiName: 'z-ai/glm-5.2',
+        label: 'GLM 5.2 (via Opengateway)',
+        modelDescriptorId: 'glm-5.2',
       },
       // OpenRouter :free endpoint — bills $0 and bypasses the gateway credit
       // gate, so it works even with an empty credit balance.

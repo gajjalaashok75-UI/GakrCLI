@@ -17,7 +17,7 @@ export default defineVendor({
   },
   preset: {
     id: 'anthropic',
-    description: 'Native GakrCLI API (x-api-key auth)',
+    description: 'Native Claude API (x-api-key auth)',
     apiKeyEnvVars: ['ANTHROPIC_API_KEY'],
     baseUrlEnvVars: ['ANTHROPIC_BASE_URL'],
     modelEnvVars: ['ANTHROPIC_MODEL'],
