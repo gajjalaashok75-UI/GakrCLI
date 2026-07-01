@@ -5,6 +5,31 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.8] - 2026-07-01
+
+### Added
+- **src/services/api/credentialPool.ts**: Credential rotation pool with round-robin, cooldown, and auth-failure exclusion. Wired into cache-probe command.
+- **src/services/api/vertexClient.ts**: Vertex AI Anthropic-compatible client with rawPredict/streamRawPredict routing. Wired into client.ts.
+- **src/services/api/clinepassUsage.ts**, **clinepassUsage/**: ClinePass usage limit tracking with fetch/parse/normalize. Wired into ClinePassUsage.tsx.
+- **src/services/api/bootstrap.test.ts**: Test coverage for local OpenAI bootstrap with deps injection pattern and catalog dedup.
+- **src/services/api/credentialPool.test.ts**: Test coverage for credential rotation, cooldown, auth-failure handling (12 tests).
+- **src/services/api/vertexClient.test.ts**: Test coverage for Vertex AI message/streaming/count-tokens routing (14 tests).
+- **src/services/api/clinepassUsage.test.ts**: Test coverage for ClinePass usage fetch/parse/normalize (24 tests).
+- **src/services/api/openaiShim.xmlToolCalls.test.ts**: Test coverage for XML tool call parse+streaming (38 tests across GLM/hermes dialects, holdback recovery, interleaved prose).
+- **src/services/teamMemorySync/watcher.test.ts**: Test coverage for push debounce, reschedule cap, suppression, and promise identity safety (14 tests).
+- **src/services/wiki/conventions.ts**: Project conventions scanner — detects build system, test framework, linting config, identity from project files. Wired into wiki.tsx (/wiki scan command) and main.tsx (auto-scan on startup).
+- **src/services/wiki/identity.ts**: Project identity detection utility. Wired into conventions.ts.
+
+### Fixed
+- **src/services/api/openaiShim.ts**: Fixed XML tool call finalization dropping interleaved prose between multiple `<tool_call>` blocks. Extract prose using `toolCallRanges` from `parseXmlToolCalls` and emit it as text delta before closing the content block and emitting tool_use blocks. Fixes "multiple tool calls with interleaved prose: prose flattened before calls" test.
+- **src/services/api/openaiShim.ts** (previous): Added XML tool call streaming support with holdback mechanism — detects `<tool_call>` openers in delta content, buffers XML tool call text while suppressing raw XML from output, handles opener-split-across-SSE-deltas, and finalizes on finish_reason.
+- **src/services/teamMemorySync/watcher.ts**: Added `MAX_RESCHEDULE_ATTEMPTS` (5) cap for push debounce, follow-up queuing after in-flight push completes, permanent failure suppression, and `_test` export with live bindings for mutable module state.
+- **src/services/api/bootstrap.ts**: Added `normalizeDiscoveredModelLookupKey`, `buildLocalOpenAIModelOptions`, `getDiscoveredModelApiNames` helpers; `FetchLocalOpenAIModelOptionsDeps` type for dependency injection; catalog dedup with seen-set.
+
+### Changed
+- **src/services/wiki/paths.ts**, **status.ts**, **types.ts**: Added conventions file paths (`conventionsFile`, `conventionsCacheFile`), `hasConventions` and `conventionsScannedAt` status fields.
+- **src/integrations/gateways/hicap.ts**: Updated catalog from 1 model to 7 full reference models, updated credentialEnvVars and responsesApiModelPrefixes.
+
 ## [0.5.8] - 2026-06-30
 
 ### Added

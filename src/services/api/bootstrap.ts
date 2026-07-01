@@ -4,7 +4,7 @@ import {
   discoverModelsForRoute,
   resolveDiscoveryRouteIdFromBaseUrl,
 } from '../../integrations/discoveryService.js'
-import { getGateway, getVendor } from '../../integrations/index.js'
+import { getGateway, getVendor, getCatalogEntriesForRoute } from '../../integrations/index.js'
 import { resolveRouteCredentialValue } from '../../integrations/routeMetadata.js'
 import {
   getAnthropicApiKey,
@@ -142,18 +142,77 @@ async function fetchBootstrapAPI(): Promise<BootstrapResponse | null> {
   }
 }
 
-async function fetchLocalOpenAIModelOptions(): Promise<BootstrapCachePayload | null> {
+function normalizeDiscoveredModelLookupKey(model: string): string {
+  return model.trim().split('?', 1)[0]?.trim().toLowerCase() ?? ''
+}
+
+function buildLocalOpenAIModelOptions(options: {
+  models: string[]
+  routeId: string | null
+  routeLabel: string
+}): ModelOption[] {
+  const seen = new Set<string>()
+  const catalogEntries = options.routeId
+    ? getCatalogEntriesForRoute(options.routeId)
+    : []
+
+  return options.models.flatMap(model => {
+    const normalizedModel = normalizeDiscoveredModelLookupKey(model)
+    const catalogEntry = catalogEntries.find(
+      entry =>
+        normalizeDiscoveredModelLookupKey(entry.apiName) === normalizedModel ||
+        normalizeDiscoveredModelLookupKey(entry.id) === normalizedModel ||
+        (entry.aliases ?? []).some(
+          alias => normalizeDiscoveredModelLookupKey(alias) === normalizedModel,
+        ),
+    )
+    const value = catalogEntry?.apiName ?? model
+    const key = normalizeDiscoveredModelLookupKey(value)
+    if (!key || seen.has(key)) {
+      return []
+    }
+
+    seen.add(key)
+    return [{
+      value,
+      label: catalogEntry?.label ?? model,
+      description: `Detected from ${options.routeLabel}`,
+    }]
+  })
+}
+
+export function getDiscoveredModelApiNames(
+  discovered: import('../../integrations/discoveryService.js').RouteDiscoveryResult | null,
+): string[] | null {
+  const discoveredModels = discovered?.models
+    .map((model: { apiName: string }) => model.apiName)
+    .filter((model: string) => model.trim())
+  return discoveredModels?.length ? discoveredModels : null
+}
+
+type FetchLocalOpenAIModelOptionsDeps = {
+  discoverModelsForRoute?: typeof discoverModelsForRoute
+  getAdditionalModelOptionsCacheScope?: typeof getAdditionalModelOptionsCacheScope
+  listOpenAICompatibleModels?: typeof listOpenAICompatibleModels
+  resolveProviderRequest?: typeof resolveProviderRequest
+}
+
+export async function fetchLocalOpenAIModelOptions(
+  deps: FetchLocalOpenAIModelOptionsDeps = {},
+): Promise<BootstrapCachePayload | null> {
   if (isEssentialTrafficOnly()) {
     logForDebugging('[Bootstrap] Skipped local model discovery: Nonessential traffic disabled')
     return null
   }
 
-  const scope = getAdditionalModelOptionsCacheScope()
+  const getScope = deps.getAdditionalModelOptionsCacheScope ?? getAdditionalModelOptionsCacheScope
+  const resolveRequest = deps.resolveProviderRequest ?? resolveProviderRequest
+  const scope = getScope()
   if (!scope?.startsWith('openai:')) {
     return null
   }
 
-  const { baseUrl } = resolveProviderRequest()
+  const { baseUrl } = resolveRequest()
   const routeId = resolveDiscoveryRouteIdFromBaseUrl(baseUrl)
   const routeLabel =
     (routeId
@@ -165,18 +224,18 @@ async function fetchLocalOpenAIModelOptions(): Promise<BootstrapCachePayload | n
     processEnv: process.env,
   })
 
+  const discoverModels = deps.discoverModelsForRoute ?? discoverModelsForRoute
+  const listModels = deps.listOpenAICompatibleModels ?? listOpenAICompatibleModels
   const discovered = routeId
-    ? await discoverModelsForRoute(routeId, {
+    ? await discoverModels(routeId, {
         baseUrl,
         apiKey,
         headers: parseCustomHeadersEnv(process.env.ANTHROPIC_CUSTOM_HEADERS),
       })
     : null
   const models =
-    (discovered && discovered.source !== 'error'
-      ? discovered.models.map(model => model.apiName)
-      : null) ??
-    (await listOpenAICompatibleModels({
+    getDiscoveredModelApiNames(discovered) ??
+    (await listModels({
       baseUrl,
       apiKey,
       headers: parseCustomHeadersEnv(process.env.ANTHROPIC_CUSTOM_HEADERS),
@@ -190,11 +249,11 @@ async function fetchLocalOpenAIModelOptions(): Promise<BootstrapCachePayload | n
   return {
     clientData: getGlobalConfig().clientDataCache ?? null,
     additionalModelOptionsScope: scope,
-    additionalModelOptions: models.map(model => ({
-      value: model,
-      label: model,
-      description: `Detected from ${routeLabel}`,
-    })),
+    additionalModelOptions: buildLocalOpenAIModelOptions({
+      models,
+      routeId,
+      routeLabel,
+    }),
   }
 }
 

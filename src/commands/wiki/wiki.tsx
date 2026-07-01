@@ -3,6 +3,7 @@ import { COMMON_HELP_ARGS, COMMON_INFO_ARGS } from '../../constants/xml.js'
 import { ingestLocalWikiSource } from '../../services/wiki/ingest.js'
 import { initializeWiki } from '../../services/wiki/init.js'
 import { getWikiStatus } from '../../services/wiki/status.js'
+import { forceScanConventions } from '../../services/wiki/conventions.js'
 import type {
   LocalJSXCommandCall,
   LocalJSXCommandOnDone,
@@ -10,18 +11,20 @@ import type {
 import { getCwd } from '../../utils/cwd.js'
 
 function renderHelp(): string {
-  return `Usage: /wiki [init|status|ingest <path>]
+  return `Usage: /wiki [init|status|scan|ingest <path>]
 
 Manage the GakrCLI project wiki stored in .gakrcli/wiki.
 
 Commands:
   /wiki init    Initialize the wiki structure in the current project
   /wiki status  Show wiki status and page/source counts
+  /wiki scan    Re-scan project conventions (build system, test framework, linting, etc.)
   /wiki ingest  Ingest a local file into wiki sources
 
 Examples:
   /wiki init
   /wiki status
+  /wiki scan
   /wiki ingest README.md`
 }
 
@@ -58,6 +61,7 @@ function formatStatus(status: Awaited<ReturnType<typeof getWikiStatus>>): string
     `Index: ${status.hasIndex ? 'present' : 'missing'}`,
     `Log: ${status.hasLog ? 'present' : 'missing'}`,
     `Last updated: ${status.lastUpdatedAt ?? 'unknown'}`,
+    `Conventions last scanned: ${status.conventionsScannedAt ?? 'never'}`,
   ].join('\n')
 }
 
@@ -93,6 +97,28 @@ async function runWikiCommand(
 
   if (normalized === 'init') {
     onDone(formatInitResult(await initializeWiki(cwd)), { display: 'system' })
+    return
+  }
+
+  if (normalized === 'scan') {
+    const result = await forceScanConventions(cwd)
+    if (!result.saved) {
+      onDone(
+        'The wiki is not initialized yet. Run `/wiki init` first, then `/wiki scan`.',
+        { display: 'system' },
+      )
+      return
+    }
+    onDone(
+      [
+        'Project conventions scanned and saved.',
+        '',
+        result.markdown,
+        '',
+        '_Run `/wiki status` to verify._',
+      ].join('\n'),
+      { display: 'system' },
+    )
     return
   }
 
