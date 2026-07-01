@@ -2,10 +2,12 @@
 <html lang="en">
   <head>
     <script>
-      // Theme bootstrap — runs before paint to prevent flash. Light (:root) is default.
+      // Theme bootstrap — runs before paint to prevent flash.
+      // Falls back to OS preference when the user hasn't chosen explicitly.
       (function () {
         try {
-          var t = localStorage.getItem('gakrcli-theme') || 'light'
+          var stored = localStorage.getItem('gakrcli-theme')
+          var t = stored || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
           document.documentElement.dataset.theme = t
           document.documentElement.style.colorScheme = t
         } catch (e) {
@@ -19,7 +21,7 @@
     <meta name="color-scheme" content="dark light" />
     <link rel="icon" type="image/svg+xml" href="/gakrcli-logo.svg" />
     <link rel="icon" type="image/png" href="/gakrcli.png" />
-    <link rel="sitemap" href="/sitemap-index.xml" />
+    <link rel="sitemap" href="/sitemap.xml" />
     <title>gakrcli — open-source coding agent CLI for any model</title>
   </head>
   <body>

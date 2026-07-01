@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "animejs": "^4.5.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-helmet-async": "^3.0.0",

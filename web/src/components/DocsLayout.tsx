@@ -1,11 +1,12 @@
-import { type ReactNode } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { useRef, type ReactNode } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import SEO from './SEO'
 import Breadcrumbs from './Breadcrumbs'
 import DocsSidebar from './DocsSidebar'
 import DocsToc, { type TocEntry } from './DocsToc'
-import { docsPages, pagerFor } from '../data/docsNav'
+import { docsNav, docsPages, pagerFor } from '../data/docsNav'
 import { SITE } from '../data/site'
+import { useScrollReveal } from '../lib/useScrollReveal'
 
 interface Props {
   title: string
@@ -19,8 +20,11 @@ interface Props {
 
 export default function DocsLayout({ title, description, heading, lede, toc = [], ogImage = SITE.ogDocs, children }: Props) {
   const path = useLocation().pathname
+  const navigate = useNavigate()
   const { prev, next } = pagerFor(path)
   const navTitle = docsPages.find(p => p.href === path)?.title ?? heading
+  const articleRef = useRef<HTMLElement>(null)
+  useScrollReveal(articleRef, 'h2, h3, .table-wrap, .cmd-entry, pre')
 
   const crumbs = [
     { label: 'home', href: '/' },
@@ -47,8 +51,20 @@ export default function DocsLayout({ title, description, heading, lede, toc = []
       <div className="container">
         <div className="docs-shell">
           <DocsSidebar />
-          <article className="docs-article">
+          <article className="docs-article" ref={articleRef}>
             <Breadcrumbs crumbs={crumbs} />
+            <div className="docs-mobile-nav">
+              <label className="sr-only" htmlFor="docs-jump">jump to page</label>
+              <select id="docs-jump" value={path} onChange={e => navigate(e.target.value)} aria-label="jump to docs page">
+                {docsNav.map(group => (
+                  <optgroup label={group.group} key={group.group}>
+                    {group.items.map(item => (
+                      <option value={item.href} key={item.href}>{item.title}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
             <h1>{heading}</h1>
             {lede && <p className="lede">{lede}</p>}
             {children}
