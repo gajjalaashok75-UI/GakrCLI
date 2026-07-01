@@ -44,7 +44,7 @@ const path = Astro.url.pathname
   const KEY = 'gakrcli-theme'
 
   function currentTheme(): 'dark' | 'light' {
-    return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark'
+    return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
   }
 
   function renderToggles() {
@@ -56,11 +56,7 @@ const path = Astro.url.pathname
   }
 
   function applyTheme(theme: 'dark' | 'light') {
-    if (theme === 'dark') {
-      delete document.documentElement.dataset.theme
-    } else {
-      document.documentElement.dataset.theme = 'light'
-    }
+    document.documentElement.dataset.theme = theme
     document.documentElement.style.colorScheme = theme
     try {
       localStorage.setItem(KEY, theme)

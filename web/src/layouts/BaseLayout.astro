@@ -17,16 +17,14 @@ interface Props {
 <html lang="en">
   <head>
     <script is:inline>
-      // Theme bootstrap — runs before paint to prevent flash. Dark is default.
+      // Theme bootstrap — runs before paint to prevent flash. Light (:root) is default.
       ;(function () {
         try {
-          var t = localStorage.getItem('gakrcli-theme')
-          if (t === 'light') {
-            document.documentElement.dataset.theme = 'light'
-            document.documentElement.style.colorScheme = 'light'
-          }
+          var t = localStorage.getItem('gakrcli-theme') || 'light'
+          document.documentElement.dataset.theme = t
+          document.documentElement.style.colorScheme = t
         } catch (e) {
-          /* storage unavailable — stay dark */
+          /* storage unavailable — stay light */
         }
       })()
     </script>
