@@ -433,9 +433,13 @@ export function getDefaultEffortForModel(
   // the model launch DRI and research. Default effort is a sensitive setting
   // that can greatly affect model quality and bashing.
 
-  // Default effort on Opus 4.6 to medium for Pro.
+  // Default effort on Opus 4.6+ to medium for Pro.
   // Max/Team also get medium when the tengu_grey_step2 config is enabled.
-  if (model.toLowerCase().includes('opus-4-6')) {
+  if (
+    model.toLowerCase().includes('opus-4-8') ||
+    model.toLowerCase().includes('opus-4-7') ||
+    model.toLowerCase().includes('opus-4-6')
+  ) {
     if (isProSubscriber()) {
       return 'medium'
     }
