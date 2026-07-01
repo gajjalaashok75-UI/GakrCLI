@@ -220,6 +220,10 @@ import {
 } from '../services/compact/autoCompact.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
 import {
+  getAutoCompactThreshold,
+  getEffectiveContextWindowSize,
+} from '../services/compact/autoCompact.js'
+import {
   hasInstructionsLoadedHook,
   executeInstructionsLoadedHooks,
   type HookBlockingError,
@@ -4006,8 +4010,43 @@ export function getCompactionReminderAttachment(
  * interval resets on prior nudges, snip markers, snip boundaries, and
  * compact boundaries.
  */
+const MIN_SNIP_NUDGE_TOKENS = 10_000
+const MAX_SNIP_NUDGE_REPEAT_TOKENS = 100_000
+const SNIP_NUDGE_START_FRACTION = 0.60
+const SNIP_NUDGE_REPEAT_FRACTION = 0.10
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
+}
+
+export function getSnipNudgeRepeatInterval(model: string): number {
+  const effectiveWindow = getEffectiveContextWindowSize(model)
+  return clamp(
+    Math.floor(effectiveWindow * SNIP_NUDGE_REPEAT_FRACTION),
+    MIN_SNIP_NUDGE_TOKENS,
+    MAX_SNIP_NUDGE_REPEAT_TOKENS,
+  )
+}
+
+export function getSnipNudgeStartThreshold(model: string): number {
+  const effectiveWindow = getEffectiveContextWindowSize(model)
+  const autoCompactThreshold = getAutoCompactThreshold(model)
+  const leadTokens = getSnipNudgeRepeatInterval(model)
+  const fractionalStart = Math.floor(effectiveWindow * SNIP_NUDGE_START_FRACTION)
+  const preAutoCompactStart = Math.max(
+    MIN_SNIP_NUDGE_TOKENS,
+    autoCompactThreshold - leadTokens,
+  )
+
+  return Math.max(
+    MIN_SNIP_NUDGE_TOKENS,
+    Math.min(fractionalStart, preAutoCompactStart),
+  )
+}
+
 export function getContextEfficiencyAttachment(
   messages: Message[],
+  model: string,
 ): Attachment[] {
   if (!feature('HISTORY_SNIP')) {
     return []
@@ -4021,7 +4060,14 @@ export function getContextEfficiencyAttachment(
     return []
   }
 
-  if (!shouldNudgeForSnips(messages)) {
+  const usedTokens = tokenCountWithEstimation(messages)
+  const startThreshold = getSnipNudgeStartThreshold(model)
+  if (usedTokens < startThreshold) {
+    return []
+  }
+
+  const repeatInterval = getSnipNudgeRepeatInterval(model)
+  if (!shouldNudgeForSnips(messages, repeatInterval)) {
     return []
   }
 
