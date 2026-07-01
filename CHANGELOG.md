@@ -25,10 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **src/services/api/openaiShim.ts** (previous): Added XML tool call streaming support with holdback mechanism — detects `<tool_call>` openers in delta content, buffers XML tool call text while suppressing raw XML from output, handles opener-split-across-SSE-deltas, and finalizes on finish_reason.
 - **src/services/teamMemorySync/watcher.ts**: Added `MAX_RESCHEDULE_ATTEMPTS` (5) cap for push debounce, follow-up queuing after in-flight push completes, permanent failure suppression, and `_test` export with live bindings for mutable module state.
 - **src/services/api/bootstrap.ts**: Added `normalizeDiscoveredModelLookupKey`, `buildLocalOpenAIModelOptions`, `getDiscoveredModelApiNames` helpers; `FetchLocalOpenAIModelOptionsDeps` type for dependency injection; catalog dedup with seen-set.
+- **src/tools/ExitPlanModeTool/ExitPlanModeV2Tool.ts**: Fixed writeFile error handler swallowing ENOENT. Changed from `.catch(e => logError(e))` to try-catch with rethrow, matching reference behavior.
+- **src/tools/BashTool/readOnlyValidation.ts**: Ported missing npm/bun/tsc version query detection from reference (3 regex patterns for package-manager version commands with exact anchoring).
 
 ### Changed
 - **src/services/wiki/paths.ts**, **status.ts**, **types.ts**: Added conventions file paths (`conventionsFile`, `conventionsCacheFile`), `hasConventions` and `conventionsScannedAt` status fields.
 - **src/integrations/gateways/hicap.ts**: Updated catalog from 1 model to 7 full reference models, updated credentialEnvVars and responsesApiModelPrefixes.
+- **src/tools/AgentTool/agentToolUtils.ts**: `countToolUses` now excludes tool uses blocked by agent step limit filter (detects `isAgentStepLimitToolResult` user messages).
 
 ## [0.5.8] - 2026-06-30
 
