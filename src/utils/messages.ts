@@ -742,6 +742,88 @@ export function deriveUUID(parentUUID: UUID, index: number): UUID {
   return `${parentUUID.slice(0, 24)}${hex}` as UUID
 }
 
+// Per-element cache for normalizeMessages. The only cross-message state in
+// normalizeMessages is the monotonic isNewChain flag, so each message's
+// normalized output is fully determined by (message identity, entry flag).
+// Caching on the message object keeps output identity stable across calls,
+// which preserves downstream WeakMap caches and React.memo bailouts, and
+// reduces each unchanged message to an O(1) cache hit (reused blocks, no
+// re-splitting or re-allocation) instead of a full renormalization.
+type NormalizedCacheEntry = {
+  entryFlag: boolean
+  exitFlag: boolean
+  out: NormalizedMessage[]
+}
+const normalizedMessageCache = new WeakMap<Message, NormalizedCacheEntry>()
+
+// Drop-in replacement for normalizeMessages on render hot paths. Reuses each
+// message's previously normalized blocks (preserving object identity) when the
+// incoming isNewChain flag matches the cached run; recomputes only changed or
+// new messages.
+export function normalizeMessagesCached(
+  messages: Message[],
+): NormalizedMessage[] {
+  const out: NormalizedMessage[] = []
+  let flag = false
+  for (const message of messages) {
+    const cached = normalizedMessageCache.get(message)
+    if (cached && cached.entryFlag === flag) {
+      for (const m of cached.out) {
+        out.push(m)
+      }
+      flag = cached.exitFlag
+      continue
+    }
+    const entryFlag = flag
+    const normalized = normalizeSingleMessageWithFlag(message, entryFlag)
+    normalizedMessageCache.set(message, {
+      entryFlag,
+      exitFlag: normalized.exitFlag,
+      out: normalized.out,
+    })
+    for (const m of normalized.out) {
+      out.push(m)
+    }
+    flag = normalized.exitFlag
+  }
+  return out
+}
+
+function normalizeSingleMessageWithFlag(
+  message: Message,
+  entryFlag: boolean,
+): { out: NormalizedMessage[]; exitFlag: boolean } {
+  const exitFlag =
+    entryFlag ||
+    ((message.type === 'assistant' ||
+      (message.type === 'user' && typeof message.message.content !== 'string')) &&
+      message.message.content.length > 1)
+
+  if (!entryFlag) {
+    return { out: normalizeMessages([message]), exitFlag }
+  }
+
+  switch (message.type) {
+    case 'attachment':
+    case 'progress':
+    case 'system':
+      return { out: [message], exitFlag }
+    default: {
+      const normalized = normalizeMessages([message])
+      return {
+        out: normalized.map(
+          (m, index) =>
+            ({
+              ...m,
+              uuid: deriveUUID(message.uuid, index),
+            }) as NormalizedMessage,
+        ),
+        exitFlag,
+      }
+    }
+  }
+}
+
 // Split messages, so each content block gets its own message
 export function normalizeMessages(
   messages: AssistantMessage[],
@@ -3224,17 +3306,15 @@ export function handleMessageFromStream(
           const index = message.event.index
           onUpdateLength(delta)
           onStreamingToolUses(_ => {
-            const element = _.find(_ => _.index === index)
-            if (!element) {
-              return _
-            }
-            return [
-              ..._.filter(_ => _ !== element),
-              {
-                ...element,
-                unparsedToolInput: element.unparsedToolInput + delta,
-              },
-            ]
+            let found = false
+            const updated = _.map(e => {
+              if (e.index === index) {
+                found = true
+                return { ...e, unparsedToolInput: e.unparsedToolInput + delta }
+              }
+              return e
+            })
+            return found ? updated : _
           })
           return
         }

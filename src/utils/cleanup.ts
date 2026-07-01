@@ -154,9 +154,18 @@ async function tryRmdir(dirPath: string, fsImpl: FsOperations): Promise<void> {
 
 export async function cleanupOldSessionFiles(): Promise<CleanupResult> {
   const cutoffDate = getCutoffDate()
-  const result: CleanupResult = { messages: 0, errors: 0 }
   const projectsDir = getProjectsDir()
   const fsImpl = getFsImplementation()
+
+  return cleanupOldSessionFilesInProjectsDir(projectsDir, cutoffDate, fsImpl)
+}
+
+export async function cleanupOldSessionFilesInProjectsDir(
+  projectsDir: string,
+  cutoffDate: Date,
+  fsImpl: FsOperations,
+): Promise<CleanupResult> {
+  const result: CleanupResult = { messages: 0, errors: 0 }
 
   let projectDirents
   try {
@@ -169,7 +178,6 @@ export async function cleanupOldSessionFiles(): Promise<CleanupResult> {
     if (!projectDirent.isDirectory()) continue
     const projectDir = join(projectsDir, projectDirent.name)
 
-    // Single readdir per project directory — partition into files and session dirs
     let entries
     try {
       entries = await fsImpl.readdir(projectDir)
@@ -180,7 +188,11 @@ export async function cleanupOldSessionFiles(): Promise<CleanupResult> {
 
     for (const entry of entries) {
       if (entry.isFile()) {
-        if (!entry.name.endsWith('.jsonl') && !entry.name.endsWith('.cast')) {
+        if (
+          !entry.name.endsWith('.jsonl') &&
+          !entry.name.endsWith('.cast') &&
+          !entry.name.endsWith('.replay.json')
+        ) {
           continue
         }
         try {
@@ -193,14 +205,12 @@ export async function cleanupOldSessionFiles(): Promise<CleanupResult> {
           result.errors++
         }
       } else if (entry.isDirectory()) {
-        // Session directory — clean up tool-results/<toolDir>/* beneath it
         const sessionDir = join(projectDir, entry.name)
         const toolResultsDir = join(sessionDir, TOOL_RESULTS_SUBDIR)
         let toolDirs
         try {
           toolDirs = await fsImpl.readdir(toolResultsDir)
         } catch {
-          // No tool-results dir — still try to remove an empty session dir
           await tryRmdir(sessionDir, fsImpl)
           continue
         }

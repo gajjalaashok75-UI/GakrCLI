@@ -22,6 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **src/utils/statusNoticeLocalModel.ts**: Added ollama context contributor, loopback endpoint detection, and parallel context/ollama check.
 - **src/services/api/openaiShim.ts**: Import MIN_RECOMMENDED_OLLAMA_CONTEXT_TOKENS.
 - **src/bootstrap/state.ts**: Added replayIndexBuilders map and get/reset/release functions.
+- **src/utils/advisor.ts**: Extended modelSupportsAdvisor/isValidAdvisorModel for opus-4-7 and opus-4-8.
+- **src/utils/effort.ts**: Extended getDefaultEffortForModel for opus-4-7 and opus-4-8.
+- **src/utils/extraUsage.ts**: Extended isBilledAsExtraUsage for opus-4-7 and opus-4-8.
+- **src/utils/modelCost.ts**: Added GAKR_OPUS_4_8_CONFIG import and fast-mode pricing tier.
+- **src/utils/model/configs.ts**: Added GAKR_OPUS_4_8_CONFIG legacy provider model config.
+- **src/utils/messages.ts**: Added normalizeMessagesCached and normalizeSingleMessageWithFlag for render hot-path optimization.
+- **src/utils/cleanup.ts**: Extracted cleanupOldSessionFilesInProjectsDir for testable project-dir-scoped cleanup.
 
 ## [0.5.8] - 2026-07-01
 

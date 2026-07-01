@@ -12,6 +12,7 @@ import {
   GAKR_OPUS_4_5_CONFIG,
   GAKR_OPUS_4_6_CONFIG,
   GAKR_OPUS_4_7_CONFIG,
+  GAKR_OPUS_4_8_CONFIG,
   GAKR_OPUS_4_CONFIG,
   GAKR_SONNET_4_5_CONFIG,
   GAKR_SONNET_4_6_CONFIG,
@@ -147,9 +148,11 @@ function tokensToUSDCost(modelCosts: ModelCosts, usage: Usage): number {
 export function getModelCosts(model: string, usage: Usage): ModelCosts {
   const shortName = getCanonicalName(model)
 
-  // Check if this is an Opus 4.6 model with fast mode active.
+  // Check if this is an Opus 4.6+ model with fast mode active.
   if (
-    shortName === firstPartyNameToCanonical(GAKR_OPUS_4_6_CONFIG.firstParty)
+    shortName === firstPartyNameToCanonical(GAKR_OPUS_4_6_CONFIG.firstParty) ||
+    shortName === firstPartyNameToCanonical(GAKR_OPUS_4_7_CONFIG.firstParty) ||
+    shortName === firstPartyNameToCanonical(GAKR_OPUS_4_8_CONFIG.firstParty)
   ) {
     const isFastMode = usage.speed === 'fast'
     return getOpus46CostTier(isFastMode)
