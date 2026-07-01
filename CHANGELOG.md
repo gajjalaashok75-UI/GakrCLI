@@ -5,6 +5,23 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.10] - 2026-07-01
+
+### Added
+- **web/src/components/Preloader.tsx**: Boot-line loader component with sequential reveal animation, wired into main.tsx.
+- **web/src/lib/motion.ts**: `prefersReducedMotion` utility — respects OS accessibility setting.
+- **web/src/lib/useScrollReveal.ts**: Scroll-triggered reveal hook using anime.js `onScroll` observer with staggered entry.
+- **web/src/lib/useMagnetic.ts**: Magnetic hover hook with spring-back on leave; skips touch-only devices.
+- **web/src/lib/useCardGlow.ts**: Pointer-tracking glow overlay for `.card` elements via CSS custom properties (`--mx`, `--my`).
+- **web/package.json**: Added `animejs ^4.5.0` dependency.
+
+### Changed
+- **web/index.html**: Theme bootstrap now falls back to OS `prefers-color-scheme` when no stored preference exists; sitemap path corrected from `sitemap-index.xml` to `sitemap.xml`.
+- **web/src/main.tsx**: Wired `Preloader` and `grain-overlay` into app root.
+- **web/src/pages/NotFound.tsx**: Added `grid-bg` background, `mesh-blobs` decorative layer, and `fade-up` animation class.
+- **web/src/styles/global.css**: Expanded design token system — coral primary palette (`--primary`, `--primary-glow`, `--primary-text`), dark-surface token aliases (`--on-dark`, `--on-dark-soft`), semantic radii (`--radius-sm` through `--radius-pill`), layered shadows (`--shadow-card`, `--shadow-lift`), and hairline borders.
+- **web/src/components/Nav.tsx**, **Layout.tsx**, **DocsLayout.tsx**, **Terminal.tsx**, **Home.tsx**: Updated to consume new design tokens and animation hooks.
+
 ## [0.5.9] - 2026-07-01
 
 ### Added
