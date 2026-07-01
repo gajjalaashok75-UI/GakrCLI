@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.5.8] - 2026-06-30
 
 ### Added
+- **src/screens/streamingTextPublish.ts**, **streamingTextPublish.test.ts**, **replStreamingTextClear.test.ts**: Extracted streaming text publish decision logic from REPL into testable utility (`decideStreamingTextUpdate`, `visibleStreamingPreview`). Added source-scan regression test for turn-boundary streaming text ref clearing. Wired into REPL.tsx with ref-based optimization (accumulates in ref always, publishes to state only on newline).
 - **src/components/SessionSummary.tsx**: Replay session summary component, wired into ReplayTimeline.
 - **src/components/Settings/ClinePassUsage.tsx**: ClinePass usage display component, wired into Usage.tsx.
 - **src/components/EffortCallout.modelGate.test.ts**, **src/components/StatusLine.test.ts**, **src/components/permissions/ExitPlanModePermissionRequest/ExitPlanModePermissionRequest.render.test.tsx**: Test coverage for EffortCallout model gate, StatusLine, and ExitPlanModePermissionRequest.
