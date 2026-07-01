@@ -234,12 +234,12 @@ function compareProviderPresetEntries(
     return 0
   }
 
-  // Pin gakr-gakr Opengateway first so the startup-default provider is also
+  // Pin Gitlawb Opengateway first so the startup-default provider is also
   // the first guided setup option when users need to add an API key.
-  if (leftPreset === 'gakr-gakr-opengateway') {
+  if (leftPreset === 'gitlawb-opengateway') {
     return -1
   }
-  if (rightPreset === 'gakr-gakr-opengateway') {
+  if (rightPreset === 'gitlawb-opengateway') {
     return 1
   }
 

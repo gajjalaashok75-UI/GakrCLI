@@ -35,10 +35,6 @@ export default defineGateway({
     kind: 'openai-compatible',
     openaiShim: {
       supportsAuthHeaders: true,
-      ui: {
-        showAuthHeader: false,
-        showAuthHeaderValue: false,
-      },
     },
   },
   preset: {
@@ -95,6 +91,12 @@ export default defineGateway({
         apiName: 'nvidia/llama-3.1-nemotron-70b-instruct',
         label: 'Llama 3.1 Nemotron 70B',
         modelDescriptorId: 'nvidia/llama-3.1-nemotron-70b-instruct',
+      },
+      {
+        id: 'nvidia-deepseek-v4-pro',
+        apiName: 'deepseek-ai/deepseek-v4-pro',
+        label: 'DeepSeek V4 Pro',
+        modelDescriptorId: 'deepseek-v4-pro',
       },
     ],
   },

@@ -1,8 +1,8 @@
 import { defineGateway } from '../define.js'
 
 /**
- * GitHub Copilot has a special native-GakrCLI path for GakrCLI models.
- * When the model string contains "gakrcli-", the runtime routes through
+ * GitHub Copilot has a special native-Claude path for Claude models.
+ * When the model string contains "claude-", the runtime routes through
  * the native Anthropic path instead of the OpenAI shim to enable prompt
  * caching. This exception is handled in openaiShim.ts and providers.ts
  * and must be preserved during migration.

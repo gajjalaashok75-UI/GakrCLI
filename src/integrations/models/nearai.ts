@@ -16,7 +16,7 @@ export default [
   defineModel({
     id: 'anthropic/claude-opus-4-7',
     defaultModel: 'anthropic/claude-opus-4-7',
-    label: 'claude opus 4.7',
+    label: 'Claude Opus 4.7',
     brandId: 'nearai',
     vendorId: 'nearai',
     classification: ['chat', 'coding'],
@@ -27,7 +27,7 @@ export default [
   defineModel({
     id: 'anthropic/claude-opus-4-6',
     defaultModel: 'anthropic/claude-opus-4-6',
-    label: 'claude opus 4.6',
+    label: 'Claude Opus 4.6',
     brandId: 'nearai',
     vendorId: 'nearai',
     classification: ['chat', 'coding'],
@@ -38,7 +38,7 @@ export default [
   defineModel({
     id: 'anthropic/claude-sonnet-4-6',
     defaultModel: 'anthropic/claude-sonnet-4-6',
-    label: 'claude sonnet 4.6',
+    label: 'Claude Sonnet 4.6',
     brandId: 'nearai',
     vendorId: 'nearai',
     classification: ['chat', 'coding'],
@@ -49,7 +49,7 @@ export default [
   defineModel({
     id: 'anthropic/claude-sonnet-4-5',
     defaultModel: 'anthropic/claude-sonnet-4-5',
-    label: 'claude sonnet 4.5',
+    label: 'Claude Sonnet 4.5',
     brandId: 'nearai',
     vendorId: 'nearai',
     classification: ['chat', 'coding'],
@@ -60,7 +60,7 @@ export default [
   defineModel({
     id: 'anthropic/claude-haiku-4-5',
     defaultModel: 'anthropic/claude-haiku-4-5',
-    label: 'claude haiku 4.5',
+    label: 'Claude Haiku 4.5',
     brandId: 'nearai',
     vendorId: 'nearai',
     classification: ['chat', 'coding'],
