@@ -20,6 +20,14 @@ import {
   DEFAULT_GEMINI_MODEL,
 } from 'src/utils/providerProfile.js'
 import {
+  DEFAULT_CLINEPASS_BASE_URL,
+} from './clinepassUsage/types.js'
+import { getCatalogEntriesForRoute } from '../../integrations/registry.js'
+import {
+  getRouteDefaultModel,
+  isClinePassBaseUrl,
+} from '../../integrations/routeMetadata.js'
+import {
   openAIShimSupportsApiFormatForModel,
   resolveOpenAIShimRuntimeContext,
 } from '../../integrations/runtimeMetadata.js'
@@ -30,6 +38,7 @@ export const DEFAULT_NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1'
 export const DEFAULT_MISTRAL_BASE_URL = 'https://api.mistral.ai/v1'
 export const DEFAULT_OPENCODE_BASE_URL = 'https://opencode.ai/zen/v1'
 export const DEFAULT_OPENCODE_GO_BASE_URL = 'https://opencode.ai/zen/go/v1'
+export const DEFAULT_CLINEPASS_API_BASE_URL = `${DEFAULT_CLINEPASS_BASE_URL}/api/v1`
 /** Default GitHub Copilot API model when user selects copilot / github:copilot */
 export const DEFAULT_GITHUB_MODELS_API_MODEL = 'gpt-4o'
 export const DEFAULT_NVIDIA_MODEL = 'stepfun-ai/step-3.5-flash'
@@ -249,6 +258,39 @@ function readNestedString(
     if (stringValue) return stringValue
   }
   return undefined
+}
+
+function normalizeModelLookupKey(model: string): string {
+  return model.trim().split('?', 1)[0]?.trim().toLowerCase() ?? ''
+}
+
+function resolveRouteCatalogAliasApiName(options: {
+  model: string
+  baseUrl: string | undefined
+  processEnv: NodeJS.ProcessEnv
+}): string {
+  const normalizedModel = normalizeModelLookupKey(options.model)
+  if (!normalizedModel) return options.model
+
+  const runtimeShimContext = resolveOpenAIShimRuntimeContext({
+    processEnv: options.processEnv,
+    baseUrl: options.baseUrl,
+    model: options.model,
+    treatAsLocal: options.baseUrl ? isLocalProviderUrl(options.baseUrl) : false,
+  })
+  const routeId = runtimeShimContext.routeId
+  if (!routeId || routeId === 'anthropic' || routeId === 'openai') {
+    return options.model
+  }
+
+  const entry = getCatalogEntriesForRoute(routeId).find(catalogEntry =>
+    normalizeModelLookupKey(catalogEntry.apiName) === normalizedModel ||
+    normalizeModelLookupKey(catalogEntry.id) === normalizedModel ||
+    (catalogEntry.aliases ?? []).some(
+      alias => normalizeModelLookupKey(alias) === normalizedModel,
+    ),
+  )
+  return entry?.apiName ?? options.model
 }
 
 function parseReasoningEffort(value: string | undefined): ReasoningEffort | undefined {
@@ -515,6 +557,33 @@ export function isLikelyOllamaEndpoint(baseUrl: string | undefined): boolean {
   }
 }
 
+export function isDirectLocalOllamaEndpoint(baseUrl: string | undefined): boolean {
+  if (!baseUrl) return false
+  try {
+    const parsed = new URL(baseUrl)
+    let hostname = parsed.hostname.toLowerCase()
+    if (hostname.startsWith('[') && hostname.endsWith(']')) {
+      hostname = hostname.slice(1, -1)
+    }
+    const ipv4Octets = hostname.split('.')
+    const isLoopbackIpv4 =
+      ipv4Octets.length === 4 &&
+      ipv4Octets.every(octet => /^\d{1,3}$/.test(octet) && Number(octet) <= 255) &&
+      ipv4Octets[0] === '127'
+    return (
+      parsed.protocol === 'http:' &&
+      parsed.port === '11434' &&
+      (
+        hostname === 'localhost' ||
+        hostname === '::1' ||
+        isLoopbackIpv4
+      )
+    )
+  } catch {
+    return false
+  }
+}
+
 export function getLocalProviderRetryBaseUrls(baseUrl: string): string[] {
   if (!isLocalProviderUrl(baseUrl)) {
     return []
@@ -587,6 +656,22 @@ export function isCodexBaseUrl(baseUrl: string | undefined): boolean {
   }
 }
 
+function normalizeGithubModelSegment(requestedModel: string): string {
+  const noQuery = requestedModel.split('?', 1)[0] ?? requestedModel
+  const trimmed = noQuery.trim()
+  const lower = trimmed.toLowerCase()
+  if (lower.startsWith('github:copilot:')) {
+    return trimmed.slice('github:copilot:'.length).trim()
+  }
+  if (lower.startsWith('github:')) {
+    return trimmed.slice('github:'.length).trim()
+  }
+  if (lower.startsWith('copilot:')) {
+    return trimmed.slice('copilot:'.length).trim()
+  }
+  return trimmed
+}
+
 /**
  * Normalize user model string for GitHub Copilot API inference.
  * Mirrors how Copilot resolves model IDs internally.
@@ -625,6 +710,14 @@ export function normalizeGithubModelsApiModel(requestedModel: string): string {
 export const GITHUB_COPILOT_BASE_URL = 'https://api.githubcopilot.com'
 export const GITHUB_MODELS_BASE_URL = 'https://models.github.ai/inference'
 
+/**
+ * Returns the GitHub endpoint type for a given base URL.
+ *
+ * - 'copilot': standard GitHub Copilot API (api.githubcopilot.com)
+ * - 'models': GitHub Models API (models.github.ai)
+ * - 'ghe': GitHub Enterprise Server instance (*.ghe.com or custom GHE URL)
+ * - 'custom': any other custom URL
+ */
 export function getGithubEndpointType(
   baseUrl: string | undefined,
   options?: { githubEnterpriseUrl?: string },
@@ -716,17 +809,20 @@ export function resolveProviderRequest(options?: {
   fallbackModel?: string
   reasoningEffortOverride?: ReasoningEffort
   apiFormat?: OpenAICompatibleApiFormat | string
+  processEnv?: NodeJS.ProcessEnv
 }): ResolvedProviderRequest {
+  const processEnv = options?.processEnv ?? process.env
   const rawExplicitModel = options?.model?.trim()
   const isOpenAIMode = isEnvTruthy(process.env.GAKR_CODE_USE_OPENAI)
-  const isGithubMode = isEnvTruthy(process.env.GAKR_CODE_USE_GITHUB)
-  const isMistralMode = isEnvTruthy(process.env.GAKR_CODE_USE_MISTRAL)
-  const isGeminiMode = isEnvTruthy(process.env.GAKR_CODE_USE_GEMINI)
-  const openAIEnvModel = process.env.OPENAI_MODEL?.trim()
-  const nvidiaEnvModel = normalizeNvidiaModel(process.env.NVIDIA_MODEL?.trim())
+  const isGithubMode = isEnvTruthy(processEnv.GAKR_CODE_USE_GITHUB)
+  const isMistralMode = isEnvTruthy(processEnv.GAKR_CODE_USE_MISTRAL)
+  const isGeminiMode = isEnvTruthy(processEnv.GAKR_CODE_USE_GEMINI)
+  const isClinePassMode = Boolean(processEnv.CLINE_API_KEY?.trim())
+  const openAIEnvModel = processEnv.OPENAI_MODEL?.trim()
+  const nvidiaEnvModel = normalizeNvidiaModel(processEnv.NVIDIA_MODEL?.trim())
   const nvidiaCompatibleOpenAIEnvModel = normalizeNvidiaModel(openAIEnvModel)
   const nvidiaCompatibleExplicitModel = normalizeNvidiaModel(rawExplicitModel)
-  const openAIEnvBaseUrl = asEnvUrl(process.env.OPENAI_BASE_URL)
+  const openAIEnvBaseUrl = asEnvUrl(processEnv.OPENAI_BASE_URL)
   const openAIEnvModelLooksNvidia =
     !nvidiaCompatibleOpenAIEnvModel ||
     nvidiaCompatibleOpenAIEnvModel === nvidiaEnvModel ||
@@ -735,7 +831,7 @@ export function resolveProviderRequest(options?: {
     !openAIEnvBaseUrl ||
     openAIEnvBaseUrl.toLowerCase().includes('nvidia')
   const isNvidiaMode =
-    isEnvTruthy(process.env.GAKR_CODE_USE_NVIDIA) &&
+    isEnvTruthy(processEnv.GAKR_CODE_USE_NVIDIA) &&
     !isOpenAIMode &&
     !isGithubMode &&
     !isMistralMode &&
@@ -745,38 +841,20 @@ export function resolveProviderRequest(options?: {
     (!nvidiaCompatibleExplicitModel ||
       nvidiaCompatibleExplicitModel === nvidiaEnvModel ||
       nvidiaCompatibleExplicitModel.startsWith('nvidia/'))
-  const explicitModel = isNvidiaMode
-    ? nvidiaCompatibleExplicitModel
-    : rawExplicitModel
-  const envRequestedModel = isMistralMode
-    ? process.env.MISTRAL_MODEL?.trim()
-    : isGeminiMode
-    ? process.env.GEMINI_MODEL?.trim()
-    : isNvidiaMode
-    ? nvidiaEnvModel ?? nvidiaCompatibleOpenAIEnvModel
-    : openAIEnvModel
-  const requestedModel =
-    explicitModel ||
-    envRequestedModel ||
-    options?.fallbackModel?.trim() ||
-    (isGeminiMode ? DEFAULT_GEMINI_MODEL : undefined) ||
-    (isNvidiaMode ? DEFAULT_NVIDIA_MODEL : undefined) ||
-    (isGithubMode ? 'github:copilot' : 'codexplan')
-  const descriptor = parseModelDescriptor(requestedModel)
   const explicitBaseUrl = asEnvUrl(options?.baseUrl)
 
   const normalizedMistralEnvBaseUrl = asNamedEnvUrl(
-    process.env.MISTRAL_BASE_URL,
+    processEnv.MISTRAL_BASE_URL,
     'MISTRAL_BASE_URL',
   )
 
   const normalizedGeminiEnvBaseUrl = asNamedEnvUrl(
-    process.env.GEMINI_BASE_URL,
+    processEnv.GEMINI_BASE_URL,
     'GEMINI_BASE_URL',
   )
 
   const normalizedNvidiaEnvBaseUrl = asNamedEnvUrl(
-    process.env.NVIDIA_BASE_URL,
+    processEnv.NVIDIA_BASE_URL,
     'NVIDIA_BASE_URL',
   )
   const primaryEnvBaseUrl = isMistralMode
@@ -785,34 +863,65 @@ export function resolveProviderRequest(options?: {
     ? normalizedGeminiEnvBaseUrl
     : isNvidiaMode
     ? normalizedNvidiaEnvBaseUrl
-    : asNamedEnvUrl(process.env.OPENAI_BASE_URL, 'OPENAI_BASE_URL')
+    : asNamedEnvUrl(processEnv.OPENAI_BASE_URL, 'OPENAI_BASE_URL')
 
   // In Mistral mode, a literal "undefined" MISTRAL_BASE_URL is treated as
   // misconfiguration and falls back to OPENAI_API_BASE, then
   // DEFAULT_MISTRAL_BASE_URL for a safe default endpoint.
   const fallbackEnvBaseUrl = isMistralMode
     ? (primaryEnvBaseUrl === undefined
-      ? asNamedEnvUrl(process.env.OPENAI_API_BASE, 'OPENAI_API_BASE') ?? DEFAULT_MISTRAL_BASE_URL
+      ? asNamedEnvUrl(processEnv.OPENAI_API_BASE, 'OPENAI_API_BASE') ?? DEFAULT_MISTRAL_BASE_URL
       : undefined)
     : isGeminiMode
     ? (primaryEnvBaseUrl === undefined
-      ? asNamedEnvUrl(process.env.OPENAI_API_BASE, 'OPENAI_API_BASE') ?? DEFAULT_GEMINI_BASE_URL
+      ? asNamedEnvUrl(processEnv.OPENAI_API_BASE, 'OPENAI_API_BASE') ?? DEFAULT_GEMINI_BASE_URL
       : undefined)
       : isNvidiaMode
     ? (primaryEnvBaseUrl === undefined
-      ? asNamedEnvUrl(process.env.OPENAI_API_BASE, 'OPENAI_API_BASE') ?? DEFAULT_NVIDIA_BASE_URL
+      ? asNamedEnvUrl(processEnv.OPENAI_API_BASE, 'OPENAI_API_BASE') ?? DEFAULT_NVIDIA_BASE_URL
       : undefined)
     : (primaryEnvBaseUrl === undefined
-      ? asNamedEnvUrl(process.env.OPENAI_API_BASE, 'OPENAI_API_BASE')
+      ? asNamedEnvUrl(processEnv.OPENAI_API_BASE, 'OPENAI_API_BASE')
       : undefined)
+
+  // ClinePass model selection is only valid when no concrete non-ClinePass
+  // base URL is explicitly provided via options or env. This prevents stale
+  // CLINE_API_KEY/CLINE_API_MODEL from overriding an explicit OPENAI_BASE_URL
+  // pointing at a different provider.
+  const concreteBaseUrlBeforeDefault =
+    explicitBaseUrl ?? primaryEnvBaseUrl ?? fallbackEnvBaseUrl
+  const hasConcreteNonClinePassBaseUrl =
+    Boolean(concreteBaseUrlBeforeDefault) && !isClinePassBaseUrl(concreteBaseUrlBeforeDefault)
+  const effectiveClinePassMode =
+    isClinePassMode && !isGithubMode && !hasConcreteNonClinePassBaseUrl
+  const clinePassDefaultModel = effectiveClinePassMode
+    ? getRouteDefaultModel('clinepass')
+    : undefined
+
+  const requestedModel =
+    options?.model?.trim() ||
+    (isMistralMode
+      ? processEnv.MISTRAL_MODEL?.trim()
+      : isGeminiMode
+        ? processEnv.GEMINI_MODEL?.trim()
+        : effectiveClinePassMode
+          ? processEnv.CLINE_API_MODEL?.trim() ||
+            processEnv.OPENAI_MODEL?.trim()
+          : processEnv.OPENAI_MODEL?.trim()) ||
+    options?.fallbackModel?.trim() ||
+    (isGeminiMode ? DEFAULT_GEMINI_MODEL : undefined) ||
+    clinePassDefaultModel ||
+    (isGithubMode ? 'github:copilot' : 'codexplan')
+  const descriptor = parseModelDescriptor(requestedModel)
 
   const envBaseUrlRaw =
     explicitBaseUrl ??
     primaryEnvBaseUrl ??
-    fallbackEnvBaseUrl
+    fallbackEnvBaseUrl ??
+    (effectiveClinePassMode ? DEFAULT_CLINEPASS_API_BASE_URL : undefined)
 
   const githubEnterpriseEnvUrl = asGithubEnterpriseEnvUrl(
-    process.env.GITHUB_ENTERPRISE_URL,
+    processEnv.GITHUB_ENTERPRISE_URL,
   )
   const isCodexModelForGithub = isGithubMode && isCodexAlias(requestedModel)
   const envBaseUrl =
@@ -826,7 +935,7 @@ export function resolveProviderRequest(options?: {
 
   const rawBaseUrl = explicitBaseUrl ?? envBaseUrl
 
-  const shellModel = process.env.OPENAI_MODEL?.trim() ?? ''
+  const shellModel = processEnv.OPENAI_MODEL?.trim() ?? ''
   const envIsCodexShortcut = isOpenAICodexShortcutAlias(shellModel)
   const envResolvedCodexModel = envIsCodexShortcut
     ? parseModelDescriptor(shellModel).baseModel
@@ -860,32 +969,58 @@ export function resolveProviderRequest(options?: {
     ? normalizeGithubModelsApiModel(requestedModel)
     : requestedModel
 
-  // For GHE instances, build the Copilot API base URL from GITHUB_ENTERPRISE_URL
-  const gheCopilotBaseUrl = gheUrl
-    ? buildGithubEnterpriseCopilotBaseUrl(gheUrl)
+  // For GitHub Copilot API, normalize to real model ID (e.g., "github:copilot" -> "gpt-4o")
+  // For GitHub Models/custom endpoints:
+  //   - Normalize default alias (github:copilot -> gpt-4o)
+  //   - Preserve provider-qualified models (openai/gpt-4.1 stays as-is)
+  const resolvedModel = isGithubCopilotLike
+    ? normalizeGithubCopilotModel(descriptor.baseModel)
+    : (isGithubModels || isGithubCustom || isGithubGhe
+      ? normalizeGithubModelsApiModel(descriptor.baseModel)
+      : resolveRouteCatalogAliasApiName({
+          model: descriptor.baseModel,
+          baseUrl: finalBaseUrl,
+          processEnv,
+        }))
+
+  // For GHE instances, build the Copilot API base URL from either
+  // GITHUB_ENTERPRISE_URL or an already-classified GHE OPENAI_BASE_URL.
+  const gheBaseUrl = isGithubGhe ? (gheUrl ?? rawBaseUrl) : undefined
+  const gheCopilotBaseUrl = gheBaseUrl
+    ? buildGithubEnterpriseCopilotBaseUrl(gheBaseUrl)
     : undefined
 
-  const requestedApiFormat =
+  const runtimeShimContext =
+    isGithubMode
+      ? null
+      : resolveOpenAIShimRuntimeContext({
+          processEnv,
+          baseUrl: finalBaseUrl,
+          model: resolvedModel,
+          treatAsLocal: finalBaseUrl ? isLocalProviderUrl(finalBaseUrl) : false,
+        })
+  const explicitApiFormat =
     isGithubMode
       ? undefined
       : parseOpenAICompatibleApiFormat(options?.apiFormat) ??
-        parseOpenAICompatibleApiFormat(process.env.OPENAI_API_FORMAT)
+        parseOpenAICompatibleApiFormat(processEnv.OPENAI_API_FORMAT)
+  const requiredApiFormat =
+    isGithubMode
+      ? undefined
+      : parseOpenAICompatibleApiFormat(runtimeShimContext?.openaiShimConfig.requiredApiFormat)
+  const requestedApiFormat =
+    requiredApiFormat &&
+    (explicitApiFormat === undefined || explicitApiFormat === 'chat_completions')
+      ? requiredApiFormat
+      : explicitApiFormat ??
+        parseOpenAICompatibleApiFormat(runtimeShimContext?.openaiShimConfig.defaultApiFormat)
   const supportsRequestedApiFormat =
     (requestedApiFormat !== 'responses' && requestedApiFormat !== 'responses_compat') ||
-    (() => {
-      const runtimeShimContext = resolveOpenAIShimRuntimeContext({
-        processEnv: process.env,
-        baseUrl: finalBaseUrl,
-        model: descriptor.baseModel,
-        treatAsLocal: finalBaseUrl ? isLocalProviderUrl(finalBaseUrl) : false,
-      })
-
-      return openAIShimSupportsApiFormatForModel(
-        runtimeShimContext.openaiShimConfig,
-        'responses',
-        descriptor.baseModel,
-      )
-    })()
+    openAIShimSupportsApiFormatForModel(
+      runtimeShimContext?.openaiShimConfig,
+      'responses',
+      resolvedModel,
+    )
   const transport: ProviderTransport =
     shouldUseCodexTransport(requestedModel, finalBaseUrl) ||
       (isGithubCopilotLike && shouldUseGithubResponsesApi(githubResolvedModel))
@@ -893,16 +1028,6 @@ export function resolveProviderRequest(options?: {
       : (requestedApiFormat === 'responses' || requestedApiFormat === 'responses_compat') && supportsRequestedApiFormat
         ? requestedApiFormat
         : 'chat_completions'
-
-  // For GitHub Copilot API, normalize to real model ID (e.g., "github:copilot" -> "gpt-4o")
-  // For GitHub Models/custom endpoints:
-  //   - Normalize default alias (github:copilot -> gpt-4o)
-  //   - Preserve provider-qualified models (openai/gpt-4.1 stays as-is)
-  const resolvedModel = isGithubCopilotLike
-    ? normalizeGithubCopilotModel(descriptor.baseModel)
-    : (isGithubModels || isGithubCustom
-      ? normalizeGithubModelsApiModel(descriptor.baseModel)
-      : descriptor.baseModel)
 
   const reasoning = options?.reasoningEffortOverride
     ? { effort: options.reasoningEffortOverride }
@@ -952,6 +1077,7 @@ export function getAdditionalModelOptionsCacheScope(): string | null {
   }
 
   const partition = hashCacheScopePartition({
+    apiKeys: normalizeCacheScopeHeaderValue(process.env.OPENAI_API_KEYS),
     apiKey: normalizeCacheScopeHeaderValue(process.env.OPENAI_API_KEY),
     authHeader: normalizeCacheScopeHeaderValue(process.env.OPENAI_AUTH_HEADER).toLowerCase(),
     authScheme: normalizeCacheScopeHeaderValue(process.env.OPENAI_AUTH_SCHEME).toLowerCase(),
@@ -1160,7 +1286,6 @@ export function resolveRuntimeCodexCredentials(options?: {
 
 export function resolveCodexApiCredentials(
   env: NodeJS.ProcessEnv = process.env,
-  options?: { includeDefaultAuthJson?: boolean },
 ): ResolvedCodexCredentials {
   const envAccountId =
     asTrimmedString(env.CODEX_ACCOUNT_ID) ??
@@ -1215,10 +1340,7 @@ export function resolveCodexApiCredentials(
     return resolvedStoredCredentials
   }
 
-  return resolveEnvOrAuthJsonCodexCredentials(
-    env,
-    options?.includeDefaultAuthJson === false ? { explicitAuthPathOnly: true } : undefined,
-  )
+  return resolveEnvOrAuthJsonCodexCredentials(env)
 }
 
 export function getReasoningEffortForModel(model: string): ReasoningEffort | undefined {
