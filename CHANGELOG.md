@@ -5,6 +5,24 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.9] - 2026-07-01
+
+### Added
+- **src/utils/deferredConfigWrites.ts**: Generic debounced config write engine with coalesced batch writes. Wired into config.ts (saveGlobalConfigDeferred, flushGlobalConfigWrites).
+- **src/utils/ollamaContext.ts**: Ollama context length detection via `ollama ps` parsing. Wired into statusNoticeLocalModel.ts (checkOllamaContextLength) and openaiShim.ts (MIN_RECOMMENDED_OLLAMA_CONTEXT_TOKENS).
+- **src/utils/sessionPersistencePolicy.ts**: Unified session persistence policy check combining env-var, test-mode, and bootstrap state. Wired into sessionStorage.ts.
+- **src/utils/replayIndexBuilder.ts**: Replay index builder for tracking tool executions during a session. Wired into bootstrap/state.ts (getReplayIndexBuilder, resetReplayIndexBuilder, resetAllReplayIndexBuilders).
+- **src/utils/replayFormat.ts**: Replay duration formatting utility. Wired into session components.
+- **src/utils/taskReport.ts**: Comprehensive task report builder from session transcripts. Wired into cli/handlers/taskReport.ts.
+- Test files: 20 new test files across these utilities (all passing).
+
+### Changed
+- **src/utils/config.ts**: Wire deferred config writer — saveGlobalConfig now drains pending deferred writes before direct save.
+- **src/utils/sessionStorage.ts**: Refactored shouldSkipPersistence to delegate to sessionPersistencePolicy.ts.
+- **src/utils/statusNoticeLocalModel.ts**: Added ollama context contributor, loopback endpoint detection, and parallel context/ollama check.
+- **src/services/api/openaiShim.ts**: Import MIN_RECOMMENDED_OLLAMA_CONTEXT_TOKENS.
+- **src/bootstrap/state.ts**: Added replayIndexBuilders map and get/reset/release functions.
+
 ## [0.5.8] - 2026-07-01
 
 ### Added
