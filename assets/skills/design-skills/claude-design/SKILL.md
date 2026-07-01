@@ -1,4 +1,10 @@
-## Overview
+---
+name: claude-design
+description: Complete Claude.com brand design system reference — warm cream canvas (#faf9f5), coral accent (#cc785c), Copernicus slab-serif display headlines, StyreneB/Inter body, dark navy product surfaces, and hierarchical border-radius/typography/spacing tokens. Use when building Anthropic-style marketing pages, brand-aligned landing pages, or any UI needing a warm editorial SaaS design language.
+license: Complete terms in LICENSE.txt
+---
+
+# Cinematic Scroll (Performance-Enhanced)
 
 Claude.com is the warmest, most editorial interface in the AI-product category. The base atmosphere is a **tinted cream canvas** (`{colors.canvas}` — #faf9f5) — distinctly warm, deliberately not the cool gray-white that every other AI brand uses. Headlines run a **slab-serif display** ("Copernicus" / Tiempos Headline) at weight 400 with negative letter-spacing, paired with **StyreneB / Inter** body sans. The combination feels like a literary publication, not a SaaS marketing page.
 
