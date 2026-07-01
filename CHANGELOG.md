@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **src/services/wiki/paths.ts**, **status.ts**, **types.ts**: Added conventions file paths (`conventionsFile`, `conventionsCacheFile`), `hasConventions` and `conventionsScannedAt` status fields.
 - **src/integrations/gateways/hicap.ts**: Updated catalog from 1 model to 7 full reference models, updated credentialEnvVars and responsesApiModelPrefixes.
 - **src/tools/AgentTool/agentToolUtils.ts**: `countToolUses` now excludes tool uses blocked by agent step limit filter (detects `isAgentStepLimitToolResult` user messages).
+- **vendor/node-domexception-shim/**: Added DOMException shim (re-exports globalThis.DOMException). Wired via package.json exports and overrides, matching reference.
 
 ## [0.5.8] - 2026-06-30
 
