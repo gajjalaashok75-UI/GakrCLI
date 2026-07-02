@@ -121,7 +121,7 @@ function extractTextFromContent(content: unknown): string {
     return content
       .filter((block: any) => block.type === 'text' && typeof block.text === 'string')
       .map((block: any) => block.text)
-      .join('\\n')
+      .join('\n')
   }
   return ''
 }

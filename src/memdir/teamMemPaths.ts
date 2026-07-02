@@ -78,7 +78,7 @@ export function isTeamMemoryEnabled(): boolean {
 }
 
 /**
- * Returns the team memory path: <memoryBase>/projects/<sanitized-project-root>/memory/team/
+ * Returns the team memory path: <workspace>/projects/<sanitized-project-root>/memory/team/
  * Lives as a subdirectory of the auto-memory directory, scoped per-project.
  */
 export function getTeamMemPath(): string {
@@ -86,7 +86,7 @@ export function getTeamMemPath(): string {
 }
 
 /**
- * Returns the team memory entrypoint: <memoryBase>/projects/<sanitized-project-root>/memory/team/MEMORY.md
+ * Returns the team memory entrypoint: <workspace>/projects/<sanitized-project-root>/memory/team/MEMORY.md
  * Lives as a subdirectory of the auto-memory directory, scoped per-project.
  */
 export function getTeamMemEntrypoint(): string {

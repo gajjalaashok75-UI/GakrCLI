@@ -9,13 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **scripts/build.ts**: Added `LOCAL_MEMORY` and `LOCAL_VAULT` feature flags (both set to `false`).
+- **scripts/build.ts**: Added `KNOWLEDGE` feature flag (`true`) for the `/knowledge` slash command.
 - **src/tools.ts**: Wired `VaultHttpFetchTool` behind `LOCAL_VAULT` flag (was on disk but never registered).
 
 ### Changed
-- **scripts/build.ts**: Set `BUDDY` feature flag from `true` to `false`.
-- **src/buddy/feature.ts**: Fixed `isBuddyEnabled()` — replaced hardcoded `return true` with `feature('BUDDY')` call, so the build-time flag actually controls the feature.
-- **src/tools.ts**: `LocalMemoryRecallTool` gated behind `LOCAL_MEMORY` flag (conditional require + spread).
-- **src/commands.ts**: `local-memory` and `local-vault` commands gated behind `LOCAL_MEMORY` and `LOCAL_VAULT` flags respectively.
+- **scripts/build.ts**: Set `BUDDY` from `true` to `false`; set `CONVERSATION_ARC` and `MULTI_TURN_CONTEXT` from `false` to `true`.
+- **src/buddy/feature.ts**: Fixed `isBuddyEnabled()` — replaced hardcoded `return true` with `feature('BUDDY')` call.
+- **src/tools.ts**: `LocalMemoryRecallTool` gated behind `LOCAL_MEMORY` flag.
+- **src/commands.ts**: `local-memory`, `local-vault`, and `knowledge` commands gated behind their respective feature flags.
+- **src/utils/conversationArc.ts**: Fixed `'\\\\n'` → `'\n'` in `extractTextFromContent()` (was emitting literal backslash-n instead of line breaks).
+- **src/memdir/paths.ts**: Unified auto-memory path to use `getProjectsDir()` (`~/.gakrcli/workspace/projects/`) instead of old `join(getMemoryBaseDir(), 'projects')` (`~/.gakrcli/projects/`). Updated JSDoc.
+- **src/memdir/teamMemPaths.ts**: Updated JSDoc references from old `<memoryBase>/projects/` to `<workspace>/projects/`.
 
 ### Web
 - **web/src/components/CopyPageMenu.tsx**: New dropdown copy menu for docs articles — copy page as Markdown (LLM-friendly), open as plain text, or copy a ready `gakrcli -p` prompt to clipboard.
