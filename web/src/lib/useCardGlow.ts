@@ -1,6 +1,6 @@
 import { useEffect, type RefObject } from 'react'
 
-/** Delegated pointer tracking so .card children light up a coral glow under the cursor. */
+/** Delegated pointer tracking so .card children light up a sky-blue glow under the cursor. */
 export function useCardGlow(rootRef: RefObject<HTMLElement | null>) {
   useEffect(() => {
     const root = rootRef.current
