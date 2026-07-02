@@ -20,18 +20,18 @@ export default function Quickstart() {
     >
       <h2 id="start">1. start the agent</h2>
       <p>Run it inside any repository (or empty directory):</p>
-      <pre><code>cd your-repo
-gakrcli</code></pre>
+      <pre><code>{`cd your-repo
+gakrcli`}</code></pre>
       <p>If you haven't <a href="/docs/installation/">installed it</a> yet: <code>{SITE.installCommand}</code></p>
 
       <h2 id="pick-a-provider">2. pick a provider</h2>
       <p>Inside the session, type <code>/provider</code> for guided setup with saved profiles. It can wire up OpenAI, OpenRouter, Gemini, local Ollama, and a dozen other backends — see the <a href="/docs/providers/">provider guide</a> for the full list.</p>
       <p>Prefer environment variables? The fastest OpenAI-compatible setup:</p>
-      <pre><code>export GAKR_CODE_USE_OPENAI=1
+      <pre><code>{`export GAKR_CODE_USE_OPENAI=1
 export OPENAI_API_KEY=sk-your-key-here
 export OPENAI_MODEL=gpt-4o
 
-gakrcli</code></pre>
+gakrcli`}</code></pre>
       <p>For GitHub Models, run <code>/onboard-github</code> for interactive OAuth onboarding.</p>
 
       <h2 id="first-task">3. give it a task</h2>

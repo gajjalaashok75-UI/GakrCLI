@@ -11,6 +11,7 @@ const BOOT_LINES: { text: string; cls: 'line' | 'out' }[] = [
 export default function Preloader() {
   const [hidden, setHidden] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
+  const barRef = useRef<HTMLDivElement>(null)
   const skippedRef = useRef(false)
 
   useEffect(() => {
@@ -32,6 +33,11 @@ export default function Preloader() {
         onComplete: () => setHidden(true),
       })
     }
+
+    // progress bar fills across the whole boot sequence
+    requestAnimationFrame(() => {
+      if (barRef.current) barRef.current.style.width = '100%'
+    })
 
     const tl = createTimeline({ onComplete: finish })
     const lines = root.querySelectorAll<HTMLElement>('.line-item')
@@ -60,13 +66,21 @@ export default function Preloader() {
 
   return (
     <div className="preloader" ref={rootRef} role="status" aria-label="loading gakrcli">
-      <div className="preloader-term">
-        {BOOT_LINES.map((l, i) => (
-          <div key={l.text} className={`line-item ${l.cls}`} style={{ opacity: 0 }}>
-            {l.text}
-            {i === BOOT_LINES.length - 1 && <span className="preloader-cursor" />}
-          </div>
-        ))}
+      <div className="preloader-inner">
+        <div className="preloader-mark" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+        <div className="preloader-term">
+          {BOOT_LINES.map((l, i) => (
+            <div key={l.text} className={`line-item ${l.cls}`} style={{ opacity: 0 }}>
+              {l.text}
+              {i === BOOT_LINES.length - 1 && <span className="preloader-cursor" />}
+            </div>
+          ))}
+          <div className="preloader-progress"><div className="preloader-progress-bar" ref={barRef} /></div>
+        </div>
       </div>
     </div>
   )

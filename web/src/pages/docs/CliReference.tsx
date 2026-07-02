@@ -17,13 +17,13 @@ export default function CliReference() {
       toc={toc}
     >
       <h2 id="usage">usage</h2>
-      <pre><code>gakrcli [options] [prompt]
+      <pre><code>{`gakrcli [options] [prompt]
 
 # interactive session in the current repo
 gakrcli
 
 # non-interactive: print the result and exit
-gakrcli -p "explain the build pipeline" --output-format json</code></pre>
+gakrcli -p "explain the build pipeline" --output-format json`}</code></pre>
       <p>Looking for <code>/commands</code> you type inside the session? See the <a href="/docs/slash-commands/">slash commands reference</a>.</p>
 
       {flagGroups.map(group => (

@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 import { animate } from 'animejs'
 import Nav from './Nav'
 import Footer from './Footer'
+import ScrollProgress from './ScrollProgress'
 import { prefersReducedMotion } from '../lib/motion'
 
 export default function Layout() {
@@ -28,6 +29,7 @@ export default function Layout() {
   return (
     <>
       <a className="skip-link" href="#main">skip to content</a>
+      <ScrollProgress />
       <Nav />
       <main id="main" ref={mainRef}>
         <Outlet />
