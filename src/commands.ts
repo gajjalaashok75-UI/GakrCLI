@@ -32,8 +32,6 @@ import init from './commands/init.js'
 import initVerifiers from './commands/init-verifiers.js'
 import keybindings from './commands/keybindings/index.js'
 import lang from './commands/lang/index.js'
-import localMemoryCommand from './commands/local-memory/index.js'
-import localVaultCommand from './commands/local-vault/index.js'
 import lsp from './commands/lsp/index.js'
 import login from './commands/login/index.js'
 import logout from './commands/logout/index.js'
@@ -188,6 +186,12 @@ const coordinatorCmd = feature('COORDINATOR_MODE')
   : null
 const forceSnip = feature('HISTORY_SNIP')
   ? require('./commands/force-snip.js').default
+  : null
+const localMemoryCommand = feature('LOCAL_MEMORY')
+  ? require('./commands/local-memory/index.js').default
+  : null
+const localVaultCommand = feature('LOCAL_VAULT')
+  ? require('./commands/local-vault/index.js').default
   : null
 /* eslint-enable @typescript-eslint/no-require-imports */
 import thinkback from './commands/thinkback/index.js'
@@ -375,8 +379,8 @@ const COMMANDS = memoize((): Command[] => [
   init,
   keybindings,
   lang,
-  localMemoryCommand,
-  localVaultCommand,
+  ...(localMemoryCommand ? [localMemoryCommand] : []),
+  ...(localVaultCommand ? [localVaultCommand] : []),
   knowledge,
   lsp,
   installGitHubApp,

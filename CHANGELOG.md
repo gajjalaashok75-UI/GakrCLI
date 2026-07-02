@@ -8,10 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.5.8] - 2026-07-02
 
 ### Added
+- **scripts/build.ts**: Added `LOCAL_MEMORY` and `LOCAL_VAULT` feature flags (both set to `false`).
+- **src/tools.ts**: Wired `VaultHttpFetchTool` behind `LOCAL_VAULT` flag (was on disk but never registered).
+
+### Changed
+- **scripts/build.ts**: Set `BUDDY` feature flag from `true` to `false`.
+- **src/buddy/feature.ts**: Fixed `isBuddyEnabled()` — replaced hardcoded `return true` with `feature('BUDDY')` call, so the build-time flag actually controls the feature.
+- **src/tools.ts**: `LocalMemoryRecallTool` gated behind `LOCAL_MEMORY` flag (conditional require + spread).
+- **src/commands.ts**: `local-memory` and `local-vault` commands gated behind `LOCAL_MEMORY` and `LOCAL_VAULT` flags respectively.
+
+### Web
 - **web/src/components/CopyPageMenu.tsx**: New dropdown copy menu for docs articles — copy page as Markdown (LLM-friendly), open as plain text, or copy a ready `gakrcli -p` prompt to clipboard.
 - **web/src/lib/domToMarkdown.ts**: DOM-to-Markdown converter supporting headings, paragraphs, code fences, lists, tables, inline formatting (bold, italic, links), and `CopyCommand` shell extraction.
 
-### Changed
+### Changed (web)
 - **web/src/components/CopyCommand.tsx**: Replaced text hint with SVG icons (CopyIcon / CheckIcon) for copy and copied states; updated aria-labels for screen reader clarity.
 - **web/src/lib/useCardGlow.ts**: Updated JSDoc comment from "coral glow" to "sky-blue glow" to match actual token color.
 - **web/src/components/DocsLayout.tsx**: Wired `CopyPageMenu` into docs article toolbar.

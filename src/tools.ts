@@ -70,7 +70,6 @@ import { ReadMcpResourceTool } from './tools/ReadMcpResourceTool/ReadMcpResource
 import { ToolSearchTool } from './tools/ToolSearchTool/ToolSearchTool.js'
 import { SearchExtraToolsTool } from './tools/SearchExtraToolsTool/SearchExtraToolsTool.js'
 import { ExecuteTool } from './tools/ExecuteTool/ExecuteTool.js'
-import { LocalMemoryRecallTool } from './tools/LocalMemoryRecallTool/LocalMemoryRecallTool.js'
 import { EnterPlanModeTool } from './tools/EnterPlanModeTool/EnterPlanModeTool.js'
 import { EnterWorktreeTool } from './tools/EnterWorktreeTool/EnterWorktreeTool.js'
 import { ExitWorktreeTool } from './tools/ExitWorktreeTool/ExitWorktreeTool.js'
@@ -124,6 +123,12 @@ const DiscoverSkillsTool = feature('EXPERIMENTAL_SKILL_SEARCH')
   : null
 const GoalTool = feature('GOAL')
   ? require('./tools/GoalTool/GoalTool.js').GoalTool
+  : null
+const LocalMemoryRecallTool = feature('LOCAL_MEMORY')
+  ? require('./tools/LocalMemoryRecallTool/LocalMemoryRecallTool.js').LocalMemoryRecallTool
+  : null
+const VaultHttpFetchTool = feature('LOCAL_VAULT')
+  ? require('./tools/VaultHttpFetchTool/VaultHttpFetchTool.js').VaultHttpFetchTool
   : null
 const ListPeersTool = feature('UDS_INBOX')
   ? require('./tools/ListPeersTool/ListPeersTool.js').ListPeersTool
@@ -219,7 +224,8 @@ export function getAllBaseTools(): Tools {
     AskUserQuestionTool,
     SkillTool,
     EnterPlanModeTool,
-    LocalMemoryRecallTool,
+    ...(LocalMemoryRecallTool ? [LocalMemoryRecallTool] : []),
+    ...(VaultHttpFetchTool ? [VaultHttpFetchTool] : []),
     ...(SuggestBackgroundPRTool ? [SuggestBackgroundPRTool] : []),
     ...(WebBrowserTool ? [WebBrowserTool] : []),
     ...(isTodoV2Enabled()
