@@ -111,7 +111,7 @@ const featureFlags: Record<string, boolean> = {
   // ── Enabled: upstream defaults ──────────────────────────────────────
   COORDINATOR_MODE: true,             // Multi-agent coordinator with worker delegation
   BUILTIN_EXPLORE_PLAN_AGENTS: true,  // Built-in Explore/Plan specialized subagents
-  BUDDY: true,                        // Buddy mode for paired programming
+  BUDDY: false,                       // Buddy mode for paired programming
   MONITOR_TOOL: true,                 // MCP server monitoring/streaming tool
   TEAMMEM: true,                      // Team memory management
   MESSAGE_ACTIONS: true,              // Message action buttons in the UI
@@ -138,6 +138,8 @@ const featureFlags: Record<string, boolean> = {
   GOAL: true,                          // Goal tracking tool & command
   POOR: true,                          // 穷鬼模式，跳过 extract_memories/prompt_suggestion 减少消耗
   ULTRAPLAN: true,                     // Ultraplan multi-phase planning system
+  LOCAL_MEMORY: false,                 // Local memory recall tool & command
+  LOCAL_VAULT: false,                  // Local vault HTTP fetch tool & command
 }
 
 // ── Pre-process: replace feature() calls with boolean literals ──────
