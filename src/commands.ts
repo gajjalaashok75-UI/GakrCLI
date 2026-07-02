@@ -24,7 +24,6 @@ import dream from './commands/dream/index.js'
 import ctx_viz from './commands/ctx_viz/index.js'
 import doctor from './commands/doctor/index.js'
 import onboardGithub from './commands/onboard-github/index.js'
-import knowledge from './commands/knowledge/index.js'
 import memory from './commands/memory/index.js'
 import help from './commands/help/index.js'
 import ide from './commands/ide/index.js'
@@ -192,6 +191,9 @@ const localMemoryCommand = feature('LOCAL_MEMORY')
   : null
 const localVaultCommand = feature('LOCAL_VAULT')
   ? require('./commands/local-vault/index.js').default
+  : null
+const knowledge = feature('KNOWLEDGE')
+  ? require('./commands/knowledge/index.js').default
   : null
 /* eslint-enable @typescript-eslint/no-require-imports */
 import thinkback from './commands/thinkback/index.js'
@@ -381,7 +383,7 @@ const COMMANDS = memoize((): Command[] => [
   lang,
   ...(localMemoryCommand ? [localMemoryCommand] : []),
   ...(localVaultCommand ? [localVaultCommand] : []),
-  knowledge,
+  ...(knowledge ? [knowledge] : []),
   lsp,
   installGitHubApp,
   installSlackApp,

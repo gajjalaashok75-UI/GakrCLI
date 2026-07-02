@@ -74,7 +74,8 @@ const featureFlags: Record<string, boolean> = {
   CCR_MIRROR: false,                  // CCR mirror mode (requires bridge mode)
   COMPACTION_REMINDERS: false,        // Compaction reminder notifications
   CONNECTOR_TEXT: false,              // Connector text processing
-  CONVERSATION_ARC: false,            // Conversation arc analysis (experimental)
+  KNOWLEDGE: true,                    // Knowledge graph slash command
+  CONVERSATION_ARC: true,             // Conversation arc analysis (experimental)
   DIRECT_CONNECT: false,              // Direct connect mode
   DOWNLOAD_USER_SETTINGS: false,      // Download settings from cloud
   FILE_PERSISTENCE: false,            // File persistence (experimental)
@@ -88,7 +89,7 @@ const featureFlags: Record<string, boolean> = {
   LODESTONE: false,                   // Lodestone integration (Anthropic internal)
   MCP_RICH_OUTPUT: false,             // MCP rich output formatting
   MEMORY_SHAPE_TELEMETRY: false,      // Memory shape telemetry
-  MULTI_TURN_CONTEXT: false,          // Multi-turn context window (experimental)
+  MULTI_TURN_CONTEXT: true,           // Multi-turn context window (experimental)
   NATIVE_CLIENT_ATTESTATION: false,   // Client attestation (native)
   NATIVE_CLIPBOARD_IMAGE: false,      // Native clipboard image support
   NEW_INIT: false,                    // New init flow (experimental)
