@@ -4,6 +4,7 @@ import SEO from './SEO'
 import Breadcrumbs from './Breadcrumbs'
 import DocsSidebar from './DocsSidebar'
 import DocsToc, { type TocEntry } from './DocsToc'
+import CopyPageMenu from './CopyPageMenu'
 import { docsNav, docsPages, pagerFor } from '../data/docsNav'
 import { SITE } from '../data/site'
 import { useScrollReveal } from '../lib/useScrollReveal'
@@ -66,7 +67,10 @@ export default function DocsLayout({ title, description, heading, lede, toc = []
                   ))}
                 </select>
               </div>
-              <h1>{heading}</h1>
+              <div className="docs-title-row">
+                <h1>{heading}</h1>
+                <CopyPageMenu articleRef={articleRef} path={path} />
+              </div>
               {lede && <p className="lede">{lede}</p>}
               {children}
               <nav className="docs-pager" aria-label="docs pagination">
