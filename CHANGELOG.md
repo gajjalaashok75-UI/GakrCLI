@@ -5,7 +5,19 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.10] - 2026-07-01
+## [0.5.8] - 2026-07-02
+
+### Added
+- **web/src/components/CopyPageMenu.tsx**: New dropdown copy menu for docs articles — copy page as Markdown (LLM-friendly), open as plain text, or copy a ready `gakrcli -p` prompt to clipboard.
+- **web/src/lib/domToMarkdown.ts**: DOM-to-Markdown converter supporting headings, paragraphs, code fences, lists, tables, inline formatting (bold, italic, links), and `CopyCommand` shell extraction.
+
+### Changed
+- **web/src/components/CopyCommand.tsx**: Replaced text hint with SVG icons (CopyIcon / CheckIcon) for copy and copied states; updated aria-labels for screen reader clarity.
+- **web/src/lib/useCardGlow.ts**: Updated JSDoc comment from "coral glow" to "sky-blue glow" to match actual token color.
+- **web/src/components/DocsLayout.tsx**: Wired `CopyPageMenu` into docs article toolbar.
+- **web/src/styles/global.css**: Additional style refinements for copy-page menu, dropdown, and docs chrome.
+
+## [0.5.8] - 2026-07-01
 
 ### Added
 - **web/src/components/Preloader.tsx**: Boot-line loader component with sequential reveal animation, wired into main.tsx.
@@ -22,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **web/src/styles/global.css**: Expanded design token system — coral primary palette (`--primary`, `--primary-glow`, `--primary-text`), dark-surface token aliases (`--on-dark`, `--on-dark-soft`), semantic radii (`--radius-sm` through `--radius-pill`), layered shadows (`--shadow-card`, `--shadow-lift`), and hairline borders.
 - **web/src/components/Nav.tsx**, **Layout.tsx**, **DocsLayout.tsx**, **Terminal.tsx**, **Home.tsx**: Updated to consume new design tokens and animation hooks.
 
-## [0.5.9] - 2026-07-01
+## [0.5.8] - 2026-07-01
 
 ### Added
 - **src/utils/deferredConfigWrites.ts**: Generic debounced config write engine with coalesced batch writes. Wired into config.ts (saveGlobalConfigDeferred, flushGlobalConfigWrites).
