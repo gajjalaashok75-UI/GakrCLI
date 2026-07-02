@@ -39,13 +39,13 @@ export default function Skills() {
 
       <h2 id="create">create your own</h2>
       <p>Skills live in <code>~/.gakrcli/skills/</code>. Each skill is a markdown file with frontmatter that tells gakrcli how to invoke it:</p>
-      <pre><code>---
+      <pre><code>{`---
 name: my-skill
 description: A short description shown in /skills
 ---
 
 Write your prompt here. The agent will execute this
-when the skill is invoked.</code></pre>
+when the skill is invoked.`}</code></pre>
       <p>Create a new skill with a single command:</p>
       <CopyCommand command="gakrcli --execute 'create a skill at ~/.gakrcli/skills/review-pr.md that reviews pull requests for common mistakes'" />
       <p style={{ marginTop: 16 }}>Skills support <a href={SITE.github} rel="noopener">MCP tools</a> and can use the full agent toolchain — Bash, Read, Edit, Grep, Glob, and any connected MCP servers.</p>

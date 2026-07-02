@@ -48,46 +48,48 @@ export default function DocsLayout({ title, description, heading, lede, toc = []
   return (
     <>
       <SEO title={title} description={description} ogImage={ogImage} type="article" jsonLd={jsonLd} />
-      <div className="container">
-        <div className="docs-shell">
-          <DocsSidebar />
-          <article className="docs-article" ref={articleRef}>
-            <Breadcrumbs crumbs={crumbs} />
-            <div className="docs-mobile-nav">
-              <label className="sr-only" htmlFor="docs-jump">jump to page</label>
-              <select id="docs-jump" value={path} onChange={e => navigate(e.target.value)} aria-label="jump to docs page">
-                {docsNav.map(group => (
-                  <optgroup label={group.group} key={group.group}>
-                    {group.items.map(item => (
-                      <option value={item.href} key={item.href}>{item.title}</option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-            </div>
-            <h1>{heading}</h1>
-            {lede && <p className="lede">{lede}</p>}
-            {children}
-            <nav className="docs-pager" aria-label="docs pagination">
-              <span>
-                {prev && (
-                  <Link to={prev.href}>
-                    <span className="dir">previous</span>
-                    <span className="title">{prev.title}</span>
-                  </Link>
-                )}
-              </span>
-              <span>
-                {next && (
-                  <Link to={next.href} className="next">
-                    <span className="dir">next</span>
-                    <span className="title">{next.title}</span>
-                  </Link>
-                )}
-              </span>
-            </nav>
-          </article>
-          <DocsToc toc={toc} />
+      <div className="docs-page">
+        <div className="container">
+          <div className="docs-shell">
+            <DocsSidebar />
+            <article className="docs-article" ref={articleRef}>
+              <Breadcrumbs crumbs={crumbs} />
+              <div className="docs-mobile-nav">
+                <label className="sr-only" htmlFor="docs-jump">jump to page</label>
+                <select id="docs-jump" value={path} onChange={e => navigate(e.target.value)} aria-label="jump to docs page">
+                  {docsNav.map(group => (
+                    <optgroup label={group.group} key={group.group}>
+                      {group.items.map(item => (
+                        <option value={item.href} key={item.href}>{item.title}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+              <h1>{heading}</h1>
+              {lede && <p className="lede">{lede}</p>}
+              {children}
+              <nav className="docs-pager" aria-label="docs pagination">
+                <span>
+                  {prev && (
+                    <Link to={prev.href}>
+                      <span className="dir">previous</span>
+                      <span className="title">{prev.title}</span>
+                    </Link>
+                  )}
+                </span>
+                <span>
+                  {next && (
+                    <Link to={next.href} className="next">
+                      <span className="dir">next</span>
+                      <span className="title">{next.title}</span>
+                    </Link>
+                  )}
+                </span>
+              </nav>
+            </article>
+            <DocsToc toc={toc} />
+          </div>
         </div>
       </div>
     </>

@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { animate } from 'animejs'
 import { SITE } from '../data/site'
+import LiveClock from './LiveClock'
+import { prefersReducedMotion } from '../lib/motion'
 
 const links = [
   { href: '/docs/', label: 'docs' },
@@ -35,12 +38,22 @@ export default function Nav() {
   const [menuOpen, setMenuOpen] = useState(false)
   const navLinksRef = useRef<HTMLDivElement>(null)
   const indicatorRef = useRef<HTMLSpanElement>(null)
+  const iconRef = useRef<HTMLSpanElement>(null)
 
   const applyTheme = (next: Theme) => {
     document.documentElement.dataset.theme = next
     document.documentElement.style.colorScheme = next
     try { localStorage.setItem(KEY, next) } catch { /* storage unavailable */ }
     setTheme(next)
+
+    if (iconRef.current && !prefersReducedMotion()) {
+      animate(iconRef.current, {
+        rotate: next === 'dark' ? [0, -160] : [0, 160],
+        scale: [1, 0.4, 1],
+        duration: 420,
+        ease: 'out(3)',
+      })
+    }
   }
 
   // close mobile menu on route change
@@ -79,12 +92,17 @@ export default function Nav() {
 
   return (
     <header className={`site-nav${menuOpen ? ' menu-open' : ''}`} id="site-nav">
-      <div className="container">
+      <div className="container nav-container">
         <Link className="brand" to="/" aria-label="gakrcli home">
           <img src="/gakrcli.png" alt="" width="22" height="22" />
           <span>gakrcli</span>
           <span className="ver">v{SITE.version}</span>
         </Link>
+
+        <div className="nav-center">
+          <LiveClock />
+        </div>
+
         <nav className="nav-links" aria-label="primary" ref={navLinksRef} onMouseLeave={resetIndicator}>
           <span className="nav-indicator" ref={indicatorRef} aria-hidden="true" />
           {links.map(l => (
@@ -105,7 +123,7 @@ export default function Nav() {
             onClick={() => applyTheme(theme === 'dark' ? 'light' : 'dark')}
             aria-label={`switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
           >
-            <span className="icon" aria-hidden="true">{theme === 'dark' ? <SunIcon /> : <MoonIcon />}</span>
+            <span className="icon" aria-hidden="true" ref={iconRef}>{theme === 'dark' ? <SunIcon /> : <MoonIcon />}</span>
             {theme === 'dark' ? 'light' : 'dark'}
           </button>
         </nav>
@@ -130,6 +148,7 @@ export default function Nav() {
         <button type="button" onClick={() => applyTheme(theme === 'dark' ? 'light' : 'dark')}>
           switch to {theme === 'dark' ? 'light' : 'dark'} theme
         </button>
+        <div className="mobile-clock"><LiveClock /></div>
       </div>
     </header>
   )
