@@ -21,6 +21,11 @@ export type PendingLSPDiagnostic = {
   attachmentSent: boolean
 }
 
+export type LSPDiagnosticSet = {
+  serverName: string
+  files: DiagnosticFile[]
+}
+
 /**
  * LSP Diagnostic Registry
  *
@@ -571,6 +576,89 @@ function trackDeliveredDiagnostics(files: DiagnosticFile[]): void {
       }
     }
   }
+}
+
+function collectUndeliveredDiagnosticFiles(): {
+  filesByServer: Map<string, DiagnosticFile[]>
+  diagnosticsToMark: PendingLSPDiagnostic[]
+} {
+  const filesByServer = new Map<string, DiagnosticFile[]>()
+  const diagnosticsToMark: PendingLSPDiagnostic[] = []
+
+  for (const diagnostic of pendingDiagnostics.values()) {
+    if (!diagnostic.attachmentSent) {
+      if (!filesByServer.has(diagnostic.serverName)) {
+        filesByServer.set(diagnostic.serverName, [])
+      }
+      filesByServer.get(diagnostic.serverName)!.push(...diagnostic.files)
+      diagnosticsToMark.push(diagnostic)
+    }
+  }
+
+  return { filesByServer, diagnosticsToMark }
+}
+
+function cloneDiagnosticFile(file: DiagnosticFile): DiagnosticFile {
+  return {
+    uri: file.uri,
+    diagnostics: file.diagnostics.map(diagnostic => ({
+      ...diagnostic,
+      range: {
+        start: { ...diagnostic.range.start },
+        end: { ...diagnostic.range.end },
+      },
+    })),
+  }
+}
+
+/**
+ * Read pending LSP diagnostics without marking them delivered.
+ * Used by user-facing inspection surfaces that must not drain passive
+ * diagnostic feedback attachments.
+ */
+export function getPendingLSPDiagnosticsSnapshot(): LSPDiagnosticSet[] {
+  const now = Date.now()
+  logForDebugging(
+    `LSP Diagnostics: Snapshotting registry - ${pendingDiagnostics.size} pending`,
+  )
+
+  const { filesByServer } = collectUndeliveredDiagnosticFiles()
+  if (filesByServer.size === 0) {
+    return []
+  }
+
+  const snapshotSets: LSPDiagnosticSet[] = []
+  let remainingCapacity = MAX_TOTAL_DIAGNOSTICS
+
+  for (const [serverName, files] of filesByServer) {
+    let deduplicationResult: DeduplicationResult
+    try {
+      deduplicationResult = deduplicateDiagnosticFiles(files, {
+        filterPreviouslyDelivered: false,
+      })
+    } catch (error: unknown) {
+      const err = toError(error)
+      logError(
+        new Error(`Failed to deduplicate LSP diagnostics: ${err.message}`),
+      )
+      deduplicationResult = { files, duplicateCount: 0 }
+    }
+
+    const prioritizedFiles = prioritizeDiagnosticFiles(
+      deduplicationResult.files,
+      now,
+    )
+    const limitResult = limitDiagnosticFiles(prioritizedFiles, remainingCapacity)
+    if (limitResult.files.length > 0) {
+      snapshotSets.push({
+        serverName,
+        files: limitResult.files.map(cloneDiagnosticFile),
+      })
+    }
+    remainingCapacity -= limitResult.deliveredCount
+  }
+
+  return snapshotSets
 }
 
 /**
