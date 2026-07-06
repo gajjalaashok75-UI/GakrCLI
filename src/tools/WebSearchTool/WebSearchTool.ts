@@ -29,6 +29,7 @@ import {
   renderToolUseMessage,
   renderToolUseProgressMessage,
 } from './UI.js'
+import { createAdapter } from './adapters/index.js'
 
 import {
   runSearch,
@@ -120,8 +121,8 @@ function formatProviderOutput(po: ProviderOutput, query: string): Output {
 function buildEmptyAdapterResultHint(provider: string, providerName: string): string {
   return (
     `No results from "${providerName}" search backend for provider "${provider}". ` +
-    `DuckDuckGo is the default no-key web search backend. ` +
-    `For a dedicated search API backend, set one of: ` +
+    `The default DuckDuckGo backend is rate-limited from many networks (datacenter IPs, VPNs, repeated requests) and returns 0 results when blocked. ` +
+    `For reliable web search on this provider, set one of: ` +
     `FIRECRAWL_API_KEY, TAVILY_API_KEY, EXA_API_KEY, JINA_API_KEY, BING_API_KEY, MOJEEK_API_KEY, LINKUP_API_KEY, YOU_API_KEY — ` +
     `or switch to an Anthropic / Vertex / Foundry provider that supports the native web_search tool.`
   )
@@ -157,8 +158,8 @@ function makeToolSchema(input: Input): BetaWebSearchTool20250305 {
   }
 }
 
-function isGakrModel(model: string): boolean {
-  return /gakr/i.test(model)
+function isGakrCLIModel(model: string): boolean {
+  return /gakrcli/i.test(model)
 }
 
 function isCodexResponsesWebSearchEnabled(): boolean {
@@ -245,13 +246,12 @@ function addCodexSource(
   sourceMap: Map<string, { title: string; url: string }>,
   source: unknown,
 ): void {
-  if (typeof source?.url !== 'string' || !source.url) return
-  sourceMap.set(source.url, {
-    title:
-      typeof source.title === 'string' && source.title
-        ? source.title
-        : source.url,
-    url: source.url,
+  if (typeof source !== 'object' || source === null) return
+  const { url, title } = source as { url?: unknown; title?: unknown }
+  if (typeof url !== 'string' || !url) return
+  sourceMap.set(url, {
+    title: typeof title === 'string' && title ? title : url,
+    url,
   })
 }
 
@@ -352,18 +352,24 @@ function makeOutputFromCodexWebSearchResponse(
 }
 
 /**
- * Build the user-facing error thrown when the adapter path fails in auto mode
- * and the current provider has no native web-search fallback. The embedded
- * error carries the underlying adapter failure so the user can act on it.
+ * Build the user-facing error thrown when the adapter path (DDG / Firecrawl /
+ * Tavily / etc.) fails in auto mode and the current provider has NO native
+ * web-search fallback (openai-shim providers like moonshot/minimax/nvidia-nim/
+ * github copilot). Without this, the only signal would be a `console.error`
+ * the user never sees, and the eventual native call silently returns
+ * "Did 0 searches" — issue #994.
+ *
+ * The embedded `errMsg` carries the underlying adapter failure (rate-limit,
+ * timeout, 5xx, etc.) so the user can act on it instead of guessing.
  */
 function buildAdapterUnavailableError(
   provider: string,
   errMsg: string,
 ): string {
   return (
-    `Web search failed while using the default adapter path for provider "${provider}". ` +
-    `The search adapter reported: ${errMsg}. ` +
-    `Try again with a broader query or configure a dedicated search API key.`
+    `Web search is unavailable for provider "${provider}". ` +
+    `The search adapter failed (${errMsg}). ` +
+    `Try switching to a provider with built-in web search (e.g. Anthropic, Codex) or try again later.`
   )
 }
 
@@ -531,8 +537,7 @@ function isTransientError(err: unknown): boolean {
 /**
  * Returns true when we should use the adapter-based provider system.
  *
- * In auto mode: adapter providers take precedence so DuckDuckGo is the
- * default no-key backend across model providers.
+ * In auto mode: native/first-party/Codex paths take precedence.
  *   → Only falls back to adapter if no native path is available.
  * In explicit adapter modes (tavily, ddg, custom, etc.): always true.
  * In native mode: never true.
@@ -542,7 +547,13 @@ function shouldUseAdapterProvider(): boolean {
   if (mode === 'native') return false
   if (mode !== 'auto') return true // explicit adapter mode (tavily, ddg, custom, etc.)
 
-  // Auto mode uses configured API-key providers first, then DuckDuckGo.
+  // Auto mode: native/first-party/Codex take precedence over adapter
+  if (isCodexResponsesWebSearchEnabled()) return false
+  const provider = getAPIProvider()
+  if (provider === 'firstParty' || provider === 'vertex' || provider === 'foundry') {
+    return false
+  }
+  // No native path available — fall back to adapter
   return getAvailableProviders().length > 0
 }
 
@@ -599,7 +610,7 @@ export const WebSearchTool = buildTool({
       return true
     }
 
-    // Enable for Vertex AI with supported models (Claude 4.0+)
+    // Enable for Vertex AI with supported models (GakrCLI 4.0+)
     if (provider === 'vertex') {
       const supportsWebSearch =
         model.includes('claude-opus-4') ||
@@ -684,6 +695,47 @@ export const WebSearchTool = buildTool({
     return { result: true }
   },
   async call(input, context, _canUseTool, _parentMessage, onProgress) {
+    // --- Direct adapter path (WEB_SEARCH_ADAPTER env var) ---
+    // Uses the cleaner adapters/ system matching the reference implementation.
+    // Supports: api, bing, brave, exa, tavily — selected via WEB_SEARCH_ADAPTER.
+    if (process.env.WEB_SEARCH_ADAPTER) {
+      const startTime = performance.now()
+      try {
+        const adapter = createAdapter()
+        const adapterResults = await adapter.search(input.query, {
+          allowedDomains: input.allowed_domains,
+          blockedDomains: input.blocked_domains,
+          numResults: input.num_results,
+          signal: context.abortController.signal,
+          searchType: input.search_type,
+          contextMaxCharacters: input.context_max_characters,
+        })
+        const endTime = performance.now()
+        const results: (SearchResult | string)[] = []
+        if (adapterResults.length > 0) {
+          results.push({
+            tool_use_id: 'adapter-search-1',
+            content: adapterResults.map(r => ({
+              title: r.title,
+              url: r.url,
+              snippet: r.snippet,
+            })),
+          })
+        } else {
+          results.push('No search results found.')
+        }
+        return { data: { query: input.query, results, durationSeconds: (endTime - startTime) / 1000 } }
+      } catch (err) {
+        return {
+          data: {
+            query: input.query,
+            results: [`Search adapter error: ${err instanceof Error ? err.message : String(err)}`],
+            durationSeconds: (performance.now() - startTime) / 1000,
+          },
+        }
+      }
+    }
+
     // --- Adapter-based providers (custom, firecrawl, ddg) ---
     // runSearch handles fallback semantics based on WEB_SEARCH_PROVIDER mode:
     //   - "auto": tries each provider, falls through on failure
@@ -736,9 +788,11 @@ export const WebSearchTool = buildTool({
           throw new Error(buildAdapterUnavailableError(provider, errMsg))
         }
         // This branch is only reachable if a future provider-selection change
-        // both invokes the adapter and has a native fallback ready. Today auto
-        // mode prefers native providers before adapters, so this intentionally
-        // logs and falls through to native below.
+        // both invokes the adapter AND has a native fallback ready. Today,
+        // `shouldUseAdapterProvider()` returns false whenever
+        // `hasNativeSearchFallback()` returns true (auto mode prefers native
+        // for firstParty/vertex/foundry/Codex), so this path is intentionally
+        // a no-op pass-through: silent log + fall through to native below.
         console.error(
           `[web-search] Adapter failed, falling through to native: ${err}`,
         )
@@ -747,9 +801,11 @@ export const WebSearchTool = buildTool({
 
     // --- Codex / OpenAI Responses path ---
     if (isCodexResponsesWebSearchEnabled()) {
-      return {
-        data: await runCodexWebSearch(input, context.abortController.signal),
-      }
+      const codexData = await runCodexWebSearch(
+        input,
+        context.abortController.signal,
+      )
+      return { data: codexData }
     }
 
     // --- Native Anthropic path (firstParty / vertex / foundry) ---
@@ -792,7 +848,7 @@ export const WebSearchTool = buildTool({
     })
 
     const allContentBlocks: BetaContentBlock[] = []
-    let currentToolUseId = null
+    let currentToolUseId: string | null = null
     let currentToolUseJson = ''
     let progressCounter = 0
     const toolUseQueries = new Map() // Map of tool_use_id to query

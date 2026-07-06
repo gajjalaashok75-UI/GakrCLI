@@ -12,7 +12,7 @@ import { getRemoteManagedSettingsSyncFromCache } from '../../services/remoteMana
 import { uniq } from '../array.js'
 import { logForDebugging } from '../debug.js'
 import { logForDiagnosticsNoPII } from '../diagLogs.js'
-import { getGakrcliConfigHomeDir, isEnvTruthy } from '../envUtils.js'
+import { getGakrCLIConfigHomeDir, isEnvTruthy } from '../envUtils.js'
 import { getErrnoCode, isENOENT } from '../errors.js'
 import { writeFileSyncAndFlush_DEPRECATED } from '../file.js'
 import { readFileSync } from '../fileRead.js'
@@ -239,7 +239,7 @@ function parseSettingsFileUncached(path: string): {
 export function getSettingsRootPathForSource(source: SettingSource): string {
   switch (source) {
     case 'userSettings':
-      return resolve(getGakrcliConfigHomeDir())
+      return resolve(getGakrCLIConfigHomeDir())
     case 'policySettings':
     case 'projectSettings':
     case 'localSettings': {
@@ -865,7 +865,7 @@ export function getSettingsWithSources(): SettingsWithSources {
 /**
  * Get merged settings and validation errors from all sources
  * This function now uses session-level caching to avoid repeated file I/O.
- * Settings changes require GakrCLI restart, so cache is valid for entire session.
+ * Settings changes require GakrCLI Code restart, so cache is valid for entire session.
  * @returns Merged settings and all validation errors encountered
  */
 export function getSettingsWithErrors(): SettingsWithErrors {
@@ -905,22 +905,26 @@ export function hasSkipDangerousModePermissionPrompt(): boolean {
 
 /**
  * Returns true if any trusted settings source has accepted the full access
- * mode dialog. projectSettings is intentionally excluded â€” a malicious
- * project could otherwise auto-bypass the dialog (RCE risk).
+ * mode dialog. This is intentionally separate from bypass permissions because
+ * fullAccess skips an additional hard safety-check layer.
  */
 export function hasSkipFullAccessModePermissionPrompt(): boolean {
   return !!(
-    getSettingsForSource('userSettings')?.skipFullAccessModePermissionPrompt ||
-    getSettingsForSource('localSettings')?.skipFullAccessModePermissionPrompt ||
-    getSettingsForSource('flagSettings')?.skipFullAccessModePermissionPrompt ||
-    getSettingsForSource('policySettings')?.skipFullAccessModePermissionPrompt
+    getSettingsForSource('userSettings')
+      ?.skipFullAccessModePermissionPrompt ||
+    getSettingsForSource('localSettings')
+      ?.skipFullAccessModePermissionPrompt ||
+    getSettingsForSource('flagSettings')
+      ?.skipFullAccessModePermissionPrompt ||
+    getSettingsForSource('policySettings')
+      ?.skipFullAccessModePermissionPrompt
   )
 }
 
 /**
  * Returns true if any trusted settings source has enabled bypass permissions
- * mode availability. projectSettings is intentionally excluded because a
- * project could otherwise enable bypass mode.
+ * mode availability. projectSettings is intentionally excluded — a malicious
+ * project could otherwise enable bypass mode (security risk).
  */
 export function hasAllowBypassPermissionsMode(): boolean {
   return !!(

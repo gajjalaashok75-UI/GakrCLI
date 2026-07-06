@@ -1,9 +1,4 @@
 import type { BetaMessageStreamParams } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
-import type { Attributes, Meter, MetricOptions } from '@opentelemetry/api'
-import type { logs } from '@opentelemetry/api-logs'
-import type { LoggerProvider } from '@opentelemetry/sdk-logs'
-import type { MeterProvider } from '@opentelemetry/sdk-metrics'
-import type { BasicTracerProvider } from '@opentelemetry/sdk-trace-base'
 import { realpathSync } from 'fs'
 import sumBy from 'lodash-es/sumBy.js'
 import { cwd } from 'process'
@@ -27,6 +22,12 @@ import { createSignal } from 'src/utils/signal.js'
 type RegisteredHookMatcher = HookCallbackMatcher | PluginHookMatcher
 
 import type { SessionId } from 'src/types/ids.js'
+import type { ReplayIndexBuilder } from 'src/utils/replayIndexBuilder.js'
+
+type ReplayIndexBuilderEntry = {
+  builder: ReplayIndexBuilder
+  projectDir: string | null
+}
 
 // DO NOT ADD MORE STATE HERE - BE JUDICIOUS WITH GLOBAL STATE
 
@@ -37,10 +38,6 @@ import type { SessionId } from 'src/types/ids.js'
 export type ChannelEntry =
   | { kind: 'plugin'; name: string; marketplace: string; dev?: boolean }
   | { kind: 'server'; name: string; dev?: boolean }
-
-export type AttributedCounter = {
-  add(value: number, additionalAttributes?: Attributes): void
-}
 
 type State = {
   originalCwd: string
@@ -86,27 +83,10 @@ type State = {
   sessionIngressToken: string | null | undefined
   oauthTokenFromFd: string | null | undefined
   apiKeyFromFd: string | null | undefined
-  // Telemetry state
-  meter: Meter | null
-  sessionCounter: AttributedCounter | null
-  locCounter: AttributedCounter | null
-  prCounter: AttributedCounter | null
-  commitCounter: AttributedCounter | null
-  costCounter: AttributedCounter | null
-  tokenCounter: AttributedCounter | null
-  codeEditToolDecisionCounter: AttributedCounter | null
-  activeTimeCounter: AttributedCounter | null
   statsStore: { observe(name: string, value: number): void } | null
   sessionId: SessionId
   // Parent session ID for tracking session lineage (e.g., plan mode -> implementation)
   parentSessionId: SessionId | undefined
-  // Logger state
-  loggerProvider: LoggerProvider | null
-  eventLogger: ReturnType<typeof logs.getLogger> | null
-  // Meter provider state
-  meterProvider: MeterProvider | null
-  // Tracer provider state
-  tracerProvider: BasicTracerProvider | null
   // Agent color state
   agentColorMap: Map<string, AgentColorName>
   agentColorIndex: number
@@ -120,7 +100,7 @@ type State = {
   lastClassifierRequests: unknown[] | null
   // GAKRCLI.md content cached by context.ts for the auto-mode classifier.
   // Breaks the yoloClassifier → gakrclimd → filesystem → permissions cycle.
-  cachedGakrcliMdContent: string | null
+  cachedGakrCLIMdContent: string | null
   // In-memory error log for recent errors
   inMemoryErrorLog: Array<{ error: string; timestamp: string }>
   // Session-only plugins from --plugin-dir flag
@@ -131,6 +111,10 @@ type State = {
   useCoworkPlugins: boolean
   // Session-only bypass permissions mode flag (not persisted)
   sessionBypassPermissionsMode: boolean
+  // Session startup dangerous permission mode for integrations that need to
+  // preserve the distinction between bypassPermissions and fullAccess before
+  // the app is fully mounted.
+  sessionDangerousPermissionMode: 'bypassPermissions' | 'fullAccess' | null
   // Session-only flag gating the .gakrcli/scheduled_tasks.json watcher
   // (useScheduledTasks). Set by cronScheduler.start() when the JSON has
   // entries, or by CronCreateTool. Not persisted.
@@ -141,6 +125,8 @@ type State = {
   // SessionCronTask below (not importing from cronTasks.ts keeps
   // bootstrap a leaf of the import DAG).
   sessionCronTasks: SessionCronTask[]
+  // Replay index builders for tracking tool executions by session
+  replayIndexBuilders: Map<SessionId, ReplayIndexBuilderEntry>
   // Teams created this session via TeamCreate. cleanupSessionTeams()
   // removes these on gracefulShutdown so subagent-created teams don't
   // persist on disk forever (gh-32730). TeamDelete removes entries to
@@ -204,7 +190,7 @@ type State = {
   // Last date emitted to the model (for detecting midnight date changes)
   lastEmittedDate: string | null
   // Additional directories from --add-dir flag (for GAKRCLI.md loading)
-  additionalDirectoriesForGakrcliMd: string[]
+  additionalDirectoriesForGakrCLIMd: string[]
   // Channel server allowlist from --channels flag (servers whose channel
   // notifications should register this session). Parsed once in main.tsx —
   // the tag decides trust model: 'plugin' → marketplace verification +
@@ -317,25 +303,9 @@ function getInitialState(): State {
       'flagSettings',
       'policySettings',
     ],
-    // Telemetry state
-    meter: null,
-    sessionCounter: null,
-    locCounter: null,
-    prCounter: null,
-    commitCounter: null,
-    costCounter: null,
-    tokenCounter: null,
-    codeEditToolDecisionCounter: null,
-    activeTimeCounter: null,
     statsStore: null,
     sessionId: randomUUID() as SessionId,
     parentSessionId: undefined,
-    // Logger state
-    loggerProvider: null,
-    eventLogger: null,
-    // Meter provider state
-    meterProvider: null,
-    tracerProvider: null,
     // Agent color state
     agentColorMap: new Map(),
     agentColorIndex: 0,
@@ -344,7 +314,7 @@ function getInitialState(): State {
     lastAPIRequestMessages: null,
     // Last auto-mode classifier request(s) for /share transcript
     lastClassifierRequests: null,
-    cachedGakrcliMdContent: null,
+    cachedGakrCLIMdContent: null,
     // In-memory error log for recent errors
     inMemoryErrorLog: [],
     // Session-only plugins from --plugin-dir flag
@@ -355,9 +325,11 @@ function getInitialState(): State {
     useCoworkPlugins: false,
     // Session-only bypass permissions mode flag (not persisted)
     sessionBypassPermissionsMode: false,
+    sessionDangerousPermissionMode: null,
     // Scheduled tasks disabled until flag or dialog enables them
     scheduledTasksEnabled: false,
     sessionCronTasks: [],
+    replayIndexBuilders: new Map(),
     sessionCreatedTeams: new Set(),
     // Session-only trust flag (not persisted to disk)
     sessionTrustAccepted: false,
@@ -400,7 +372,7 @@ function getInitialState(): State {
     // Last date emitted to the model
     lastEmittedDate: null,
     // Additional directories from --add-dir flag (for GAKRCLI.md loading)
-    additionalDirectoriesForGakrcliMd: [],
+    additionalDirectoriesForGakrCLIMd: [],
     // Channel server allowlist from --channels flag
     allowedChannels: [],
     hasDevChannels: false,
@@ -467,6 +439,10 @@ function getSdkContext(): SdkContext | undefined {
 
 export function isSdkContextActive(): boolean {
   return getSdkContext() !== undefined
+}
+
+export function getSdkCwd(): string | undefined {
+  return getSdkContext()?.cwd
 }
 
 export function getSessionId(): SessionId {
@@ -560,7 +536,7 @@ export const onSessionSwitch = sessionSwitched.subscribe
  */
 export function getSessionProjectDir(): string | null {
   const ctx = getSdkContext()
-  return ctx?.sessionProjectDir ?? STATE.sessionProjectDir
+  return ctx ? ctx.sessionProjectDir : STATE.sessionProjectDir
 }
 
 export function getOriginalCwd(): string {
@@ -607,6 +583,11 @@ export function setCwdState(cwd: string): void {
     ctx.cwd = cwd.normalize('NFC')
     return
   }
+  STATE.cwd = cwd.normalize('NFC')
+}
+
+/** Directly set STATE.cwd, bypassing SDK context. */
+export function setGlobalCwdState(cwd: string): void {
   STATE.cwd = cwd.normalize('NFC')
 }
 
@@ -1023,115 +1004,6 @@ export function resetModelStringsForTestingOnly() {
   STATE.modelStrings = null
 }
 
-export function setMeter(
-  meter: Meter,
-  createCounter: (name: string, options: MetricOptions) => AttributedCounter,
-): void {
-  STATE.meter = meter
-
-  // Initialize all counters using the provided factory
-  STATE.sessionCounter = createCounter('gakr_code.session.count', {
-    description: 'Count of CLI sessions started',
-  })
-  STATE.locCounter = createCounter('gakr_code.lines_of_code.count', {
-    description:
-      "Count of lines of code modified, with the 'type' attribute indicating whether lines were added or removed",
-  })
-  STATE.prCounter = createCounter('gakr_code.pull_request.count', {
-    description: 'Number of pull requests created',
-  })
-  STATE.commitCounter = createCounter('gakr_code.commit.count', {
-    description: 'Number of git commits created',
-  })
-  STATE.costCounter = createCounter('gakr_code.cost.usage', {
-    description: 'Cost of the GakrCLI session',
-    unit: 'USD',
-  })
-  STATE.tokenCounter = createCounter('gakr_code.token.usage', {
-    description: 'Number of tokens used',
-    unit: 'tokens',
-  })
-  STATE.codeEditToolDecisionCounter = createCounter(
-    'gakr_code.code_edit_tool.decision',
-    {
-      description:
-        'Count of code editing tool permission decisions (accept/reject) for Edit, Write, and NotebookEdit tools',
-    },
-  )
-  STATE.activeTimeCounter = createCounter('gakr_code.active_time.total', {
-    description: 'Total active time in seconds',
-    unit: 's',
-  })
-}
-
-export function getMeter(): Meter | null {
-  return STATE.meter
-}
-
-export function getSessionCounter(): AttributedCounter | null {
-  return STATE.sessionCounter
-}
-
-export function getLocCounter(): AttributedCounter | null {
-  return STATE.locCounter
-}
-
-export function getPrCounter(): AttributedCounter | null {
-  return STATE.prCounter
-}
-
-export function getCommitCounter(): AttributedCounter | null {
-  return STATE.commitCounter
-}
-
-export function getCostCounter(): AttributedCounter | null {
-  return STATE.costCounter
-}
-
-export function getTokenCounter(): AttributedCounter | null {
-  return STATE.tokenCounter
-}
-
-export function getCodeEditToolDecisionCounter(): AttributedCounter | null {
-  return STATE.codeEditToolDecisionCounter
-}
-
-export function getActiveTimeCounter(): AttributedCounter | null {
-  return STATE.activeTimeCounter
-}
-
-export function getLoggerProvider(): LoggerProvider | null {
-  return STATE.loggerProvider
-}
-
-export function setLoggerProvider(provider: LoggerProvider | null): void {
-  STATE.loggerProvider = provider
-}
-
-export function getEventLogger(): ReturnType<typeof logs.getLogger> | null {
-  return STATE.eventLogger
-}
-
-export function setEventLogger(
-  logger: ReturnType<typeof logs.getLogger> | null,
-): void {
-  STATE.eventLogger = logger
-}
-
-export function getMeterProvider(): MeterProvider | null {
-  return STATE.meterProvider
-}
-
-export function setMeterProvider(provider: MeterProvider | null): void {
-  STATE.meterProvider = provider
-}
-export function getTracerProvider(): BasicTracerProvider | null {
-  return STATE.tracerProvider
-}
-export function setTracerProvider(provider: BasicTracerProvider | null): void {
-  STATE.tracerProvider = provider
-}
-
 export function getIsNonInteractiveSession(): boolean {
   return !STATE.isInteractive
 }
@@ -1282,12 +1154,12 @@ export function getLastClassifierRequests(): unknown[] | null {
   return STATE.lastClassifierRequests
 }
 
-export function setCachedgakrcliMdContent(content: string | null): void {
-  STATE.cachedGakrcliMdContent = content
+export function setCachedGakrCLIMdContent(content: string | null): void {
+  STATE.cachedGakrCLIMdContent = content
 }
 
-export function getCachedgakrcliMdContent(): string | null {
-  return STATE.cachedGakrcliMdContent
+export function getCachedGakrCLIMdContent(): string | null {
+  return STATE.cachedGakrCLIMdContent
 }
 
 export function addToInMemoryErrorLog(errorInfo: {
@@ -1345,6 +1217,19 @@ export function setSessionBypassPermissionsMode(enabled: boolean): void {
 
 export function getSessionBypassPermissionsMode(): boolean {
   return STATE.sessionBypassPermissionsMode
+}
+
+export function setSessionDangerousPermissionMode(
+  mode: 'bypassPermissions' | 'fullAccess' | null,
+): void {
+  STATE.sessionDangerousPermissionMode = mode
+}
+
+export function getSessionDangerousPermissionMode():
+  | 'bypassPermissions'
+  | 'fullAccess'
+  | null {
+  return STATE.sessionDangerousPermissionMode
 }
 
 export function setScheduledTasksEnabled(enabled: boolean): void {
@@ -1705,14 +1590,14 @@ export function setLastEmittedDate(date: string | null): void {
   STATE.lastEmittedDate = date
 }
 
-export function getAdditionalDirectoriesForgakrcliMd(): string[] {
-  return STATE.additionalDirectoriesForGakrcliMd
+export function getAdditionalDirectoriesForGakrCLIMd(): string[] {
+  return STATE.additionalDirectoriesForGakrCLIMd
 }
 
-export function setAdditionalDirectoriesForgakrcliMd(
+export function setAdditionalDirectoriesForGakrCLIMd(
   directories: string[],
 ): void {
-  STATE.additionalDirectoriesForGakrcliMd = directories
+  STATE.additionalDirectoriesForGakrCLIMd = directories
 }
 
 export function getAllowedChannels(): ChannelEntry[] {
@@ -1805,5 +1690,71 @@ export function isReplBridgeActive(): boolean {
 
 export function getReplBridgeHandle(): null {
   return null
+}
+
+// Stub counters for git operation metrics (OTel counters wired in closed-source build)
+export function getCommitCounter(): { add(value: number): void } | null {
+  return null
+}
+
+export function getPrCounter(): { add(value: number): void } | null {
+  return null
+}
+
+// ---------------------------------------------------------------------------
+// Replay index builder
+// ---------------------------------------------------------------------------
+
+/**
+ * Get the replay index builder for the current session.
+ * Creates a new one if none exists.
+ */
+export function getReplayIndexBuilder(): ReplayIndexBuilder {
+  const sessionId = getSessionId()
+  let entry = STATE.replayIndexBuilders.get(sessionId)
+  if (!entry) {
+    // Lazy import to avoid circular dependencies
+    const { ReplayIndexBuilder } =
+      require('src/utils/replayIndexBuilder.js') as typeof import('src/utils/replayIndexBuilder.js')
+    entry = {
+      builder: new ReplayIndexBuilder(),
+      projectDir: getSessionProjectDir(),
+    }
+    STATE.replayIndexBuilders.set(sessionId, entry)
+  }
+  return entry.builder
+}
+
+/**
+ * Reset and return the replay index builder.
+ * Used during session cleanup to get the final index.
+ */
+export function resetReplayIndexBuilder(
+  sessionId: SessionId = getSessionId(),
+): ReplayIndexBuilderEntry | null {
+  const entry = STATE.replayIndexBuilders.get(sessionId) ?? null
+  STATE.replayIndexBuilders.delete(sessionId)
+  return entry
+}
+
+/**
+ * Reset and return all replay index builders.
+ * Used during process cleanup so sessions switched in-process do not mix.
+ */
+export function resetAllReplayIndexBuilders(): Array<{
+  sessionId: SessionId
+  builder: ReplayIndexBuilder
+  projectDir: string | null
+}> {
+  const entries = Array.from(
+    STATE.replayIndexBuilders,
+    ([sessionId, entry]) => ({
+      sessionId,
+      builder: entry.builder,
+      projectDir: entry.projectDir,
+    }),
+  )
+  STATE.replayIndexBuilders.clear()
+  return entries
 }
 

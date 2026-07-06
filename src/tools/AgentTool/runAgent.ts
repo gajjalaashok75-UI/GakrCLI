@@ -58,9 +58,8 @@ import { executeSubagentStartHooks } from '../../utils/hooks.js'
 import { createUserMessage } from '../../utils/messages.js'
 import { getAgentModel } from '../../utils/model/agent.js'
 import { isModelAllowed } from '../../utils/model/modelAllowlist.js'
-import { resolveAgentRunModelRouting } from '../../services/api/agentRouting.js'
+import { resolveAgentRunModelRouting, shouldEnforceModelAllowlist } from '../../services/api/agentRouting.js'
 import { getInitialSettings } from '../../utils/settings/settings.js'
-import type { ModelAlias } from '../../utils/model/aliases.js'
 import {
   clearAgentTranscriptSubdir,
   recordSidechainTranscript,
@@ -75,11 +74,6 @@ import {
   asSystemPrompt,
   type SystemPrompt,
 } from '../../utils/systemPromptType.js'
-import {
-  isPerfettoTracingEnabled,
-  registerAgent as registerPerfettoAgent,
-  unregisterAgent as unregisterPerfettoAgent,
-} from '../../utils/telemetry/perfettoTracing.js'
 import type { ContentReplacementState } from '../../utils/toolResultStorage.js'
 import { createAgentId } from '../../utils/uuid.js'
 import { resolveAgentTools } from './agentToolUtils.js'
@@ -289,7 +283,7 @@ export async function* runAgent({
     abortController?: AbortController
     agentId?: AgentId
   }
-  model?: ModelAlias
+  model?: string
   maxTurns?: number
   /** Preserve toolUseResult on messages for subagents with viewable transcripts */
   preserveToolUseResults?: boolean
@@ -352,6 +346,7 @@ export async function* runAgent({
 
   // Resolve per-agent provider routing from settings
   const settings = getInitialSettings()
+
   const { mainLoopModel: effectiveModel, providerOverride } =
     resolveAgentRunModelRouting({
       resolvedAgentModel,
@@ -362,7 +357,14 @@ export async function* runAgent({
       settings,
     })
 
-  if (providerOverride && !isModelAllowed(effectiveModel)) {
+  if (
+    shouldEnforceModelAllowlist(
+      resolvedAgentModel,
+      effectiveModel,
+      providerOverride !== undefined,
+    ) &&
+    !isModelAllowed(effectiveModel)
+  ) {
     throw new Error(
       `Model '${effectiveModel}' is not available. Your organization restricts model selection.`,
     )
@@ -376,13 +378,8 @@ export async function* runAgent({
     setAgentTranscriptSubdir(agentId, transcriptSubdir)
   }
 
-  // Register agent in Perfetto trace for hierarchy visualization
-  if (isPerfettoTracingEnabled()) {
-    const parentId = toolUseContext.agentId ?? getSessionId()
-    registerPerfettoAgent(agentId, agentDefinition.agentType, parentId)
-  }
 
-  // Log API calls path for subagents (ant-only)
+  // Log API calls path for subagents (internal-only)
   if (process.env.USER_TYPE === 'ant') {
     logForDebugging(
       `[Subagent ${agentDefinition.agentType}] API calls: ${getDisplayPath(getDumpPromptsPath(agentId))}`,
@@ -411,14 +408,14 @@ export async function* runAgent({
   // Dropping gakrcliMd here saves ~5-15 Gtok/week across 34M+ Explore spawns.
   // Explicit override.userContext from callers is preserved untouched.
   // Kill-switch defaults true; flip tengu_slim_subagent_gakrclimd=false to revert.
-  const shouldOmitgakrcliMd =
-    agentDefinition.omitgakrcliMd &&
+  const shouldOmitGakrCLIMd =
+    agentDefinition.omitGakrCLIMd &&
     !override?.userContext &&
     getFeatureValue_CACHED_MAY_BE_STALE('tengu_slim_subagent_gakrclimd', true)
-  const { gakrcliMd: _omittedgakrcliMd, ...userContextNogakrcliMd } =
+  const { gakrcliMd: _omittedGakrCLIMd, ...userContextNoGakrCLIMd } =
     baseUserContext
-  const resolvedUserContext = shouldOmitgakrcliMd
-    ? userContextNogakrcliMd
+  const resolvedUserContext = shouldOmitGakrCLIMd
+    ? userContextNoGakrCLIMd
     : baseUserContext
 
   // Explore/Plan are read-only search agents — the parent-session-start
@@ -445,6 +442,7 @@ export async function* runAgent({
     if (
       agentPermissionMode &&
       state.toolPermissionContext.mode !== 'bypassPermissions' &&
+      state.toolPermissionContext.mode !== 'fullAccess' &&
       state.toolPermissionContext.mode !== 'acceptEdits' &&
       !(
         feature('TRANSCRIPT_CLASSIFIER') &&
@@ -459,14 +457,21 @@ export async function* runAgent({
 
     // Set flag to auto-deny prompts for agents that can't show UI
     // Use explicit canShowPermissionPrompts if provided, otherwise:
-    //   - bubble mode: always show prompts (bubbles to parent terminal)
-    //   - default: !isAsync (sync agents show prompts, async agents don't)
+    //   - dontAsk mode: avoid prompts when async (agent declares no prompts needed)
+    //   - bubble mode: never avoid (prompts bubble to parent terminal)
+    //   - default (no explicit mode): never avoid — async agents inherit the
+    //     parent's acceptEdits/permission mode, and prompts bubble via the
+    //     task-notification UI. Previously this auto-denied all prompts for
+    //     async agents, which broke Bash for verification agents and any
+    //     agent (built-in or custom) without an explicit permissionMode.
     const shouldAvoidPrompts =
       canShowPermissionPrompts !== undefined
         ? !canShowPermissionPrompts
         : agentPermissionMode === 'bubble'
           ? false
-          : isAsync
+          : agentPermissionMode === 'dontAsk'
+            ? isAsync
+            : false
     if (shouldAvoidPrompts) {
       toolPermissionContext = {
         ...toolPermissionContext,
@@ -860,8 +865,6 @@ export async function* runAgent({
     agentToolUseContext.readFileState.clear()
     // Release the cloned fork context messages
     initialMessages.length = 0
-    // Release perfetto agent registry entry
-    unregisterPerfettoAgent(agentId)
     // Release transcript subdir mapping
     clearAgentTranscriptSubdir(agentId)
     // Release this agent's todos entry. Without this, every subagent that
@@ -938,7 +941,7 @@ export function filterIncompleteToolCalls(messages: Message[]): Message[] {
 async function getAgentSystemPrompt(
   agentDefinition: AgentDefinition,
   toolUseContext: Pick<ToolUseContext, 'options'>,
-  resolvedAgentModel: string,
+  effectiveModel: string,
   additionalWorkingDirectories: string[],
   resolvedTools: readonly Tool[],
 ): Promise<string[]> {
@@ -949,14 +952,14 @@ async function getAgentSystemPrompt(
 
     return await enhanceSystemPromptWithEnvDetails(
       prompts,
-      resolvedAgentModel,
+      effectiveModel,
       additionalWorkingDirectories,
       enabledToolNames,
     )
   } catch (_error) {
     return enhanceSystemPromptWithEnvDetails(
       [DEFAULT_AGENT_PROMPT],
-      resolvedAgentModel,
+      effectiveModel,
       additionalWorkingDirectories,
       enabledToolNames,
     )

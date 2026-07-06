@@ -2,12 +2,12 @@ import figures from 'figures'
 import { logError } from 'src/utils/log.js'
 import { callIdeRpc } from '../services/mcp/client.js'
 import type { MCPServerConnection } from '../services/mcp/types.js'
-import { GakrcliError } from '../utils/errors.js'
+import { GakrCLIError } from '../utils/errors.js'
 import { normalizePathForComparison, pathsEqual } from '../utils/file.js'
 import { getConnectedIdeClient } from '../utils/ide.js'
 import { jsonParse } from '../utils/slowOperations.js'
 
-class DiagnosticsTrackingError extends GakrcliError {}
+class DiagnosticsTrackingError extends GakrCLIError {}
 
 const MAX_DIAGNOSTICS_SUMMARY_CHARS = 4000
 
@@ -38,7 +38,7 @@ export class DiagnosticTrackingService {
   private lastProcessedTimestamps: Map<string, number> = new Map()
 
   // Track which files have received right file diagnostics and if they've changed
-  // Map<normalizedPath, lastGakrcliFsRightDiagnostics>
+  // Map<normalizedPath, lastGakrCLIFsRightDiagnostics>
   private rightFileDiagnosticsState: Map<string, Diagnostic[]> = new Map()
 
   static getInstance(): DiagnosticTrackingService {
@@ -250,7 +250,7 @@ export class DiagnosticTrackingService {
       .filter(file => this.baseline.has(this.normalizeFileUri(file.uri)))
       .filter(file => file.uri.startsWith('file://'))
 
-    const diagnosticsForgakrcliFsRightUrisWithBaselinesMap = new Map<
+    const diagnosticsForGakrCLIFsRightUrisWithBaselinesMap = new Map<
       string,
       DiagnosticFile
     >()
@@ -258,7 +258,7 @@ export class DiagnosticTrackingService {
       .filter(file => this.baseline.has(this.normalizeFileUri(file.uri)))
       .filter(file => file.uri.startsWith('_gakrcli_fs_right:'))
       .forEach(file => {
-        diagnosticsForgakrcliFsRightUrisWithBaselinesMap.set(
+        diagnosticsForGakrCLIFsRightUrisWithBaselinesMap.set(
           this.normalizeFileUri(file.uri),
           file,
         )
@@ -273,7 +273,7 @@ export class DiagnosticTrackingService {
 
       // Get the _gakrcli_fs_right file if it exists
       const gakrcliFsRightFile =
-        diagnosticsForgakrcliFsRightUrisWithBaselinesMap.get(normalizedPath)
+        diagnosticsForGakrCLIFsRightUrisWithBaselinesMap.get(normalizedPath)
 
       // Determine which file to use based on the state of right file diagnostics
       let fileToUse = file

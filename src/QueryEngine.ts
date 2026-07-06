@@ -17,7 +17,7 @@ import type {
 import { accumulateUsage, updateUsage } from 'src/services/api/gakrcli.js'
 import type { NonNullableUsage } from 'src/services/api/logging.js'
 import { EMPTY_USAGE } from 'src/services/api/logging.js'
-import stripAnsi from 'strip-ansi'
+import { stripVTControlCharacters as stripAnsi } from 'node:util'
 import type { Command } from './commands.js'
 import { getSlashCommandToolSkills } from './commands.js'
 import {
@@ -32,8 +32,10 @@ import {
 import type { CanUseToolFn } from './hooks/useCanUseTool.js'
 import { loadMemoryPrompt } from './memdir/memdir.js'
 import { hasAutoMemPathOverride } from './memdir/paths.js'
-import { query } from './query.js'
+import { query as defaultQuery } from './query.js'
 import { categorizeRetryableAPIError } from './services/api/errors.js'
+import type { AutoCompactTrackingState } from './services/compact/autoCompact.js'
+import { toSDKGoalStatusMessage } from './services/goal/sdk.js'
 import type { MCPServerConnection } from './services/mcp/types.js'
 import type { AppState } from './state/AppState.js'
 import { type Tools, type ToolUseContext, toolMatchesName } from './Tool.js'
@@ -121,9 +123,6 @@ const getCoordinatorUserContext: (
 
 // Dead code elimination: conditional import for snip compaction
 /* eslint-disable @typescript-eslint/no-require-imports */
-const snipModule = feature('HISTORY_SNIP')
-  ? (require('./services/compact/snipCompact.js') as typeof import('./services/compact/snipCompact.js'))
-  : null
 const snipProjection = feature('HISTORY_SNIP')
   ? (require('./services/compact/snipProjection.js') as typeof import('./services/compact/snipProjection.js'))
   : null
@@ -172,6 +171,7 @@ export type QueryEngineConfig = {
     yieldedSystemMsg: Message,
     store: Message[],
   ) => { messages: Message[]; executed: boolean } | undefined
+  query?: typeof defaultQuery
 }
 
 /**
@@ -191,6 +191,7 @@ export class QueryEngine {
   private totalUsage: NonNullableUsage
   private hasHandledOrphanedPermission = false
   private readFileState: FileStateCache
+  private autoCompactTracking: AutoCompactTrackingState | undefined
   // Turn-scoped skill discovery tracking (feeds was_discovered on
   // tengu_skill_tool_invocation). Must persist across the two
   // processUserInputContext rebuilds inside submitMessage, but is cleared
@@ -336,7 +337,7 @@ export class QueryEngine {
 
     let processUserInputContext: ProcessUserInputContext = {
       messages: this.mutableMessages,
-      // Slash commands that mutate the message array (e.g. /force-snip)
+      // Slash commands that mutate the message array (e.g. /clear)
       // call setMessages(fn).  In interactive mode this writes back to
       // AppState; in print mode we write back to mutableMessages so the
       // rest of the query loop (push at :389, snapshot at :392) sees
@@ -434,6 +435,10 @@ export class QueryEngine {
     if (messagesFromUserInput.some(isCompactBoundaryMessage)) {
       this.autoCompactTracking = undefined
     }
+
+    // NOTE: Message-count and memory-pressure forceReason checks now live in
+    // src/query.ts (the shared query path used by both REPL and SDK), so they
+    // no longer need to be duplicated here in QueryEngine.
 
     // Update params to reflect updates from processing /slash commands
     const messages = [...this.mutableMessages]
@@ -677,7 +682,8 @@ export class QueryEngine {
       ? countToolCalls(this.mutableMessages, SYNTHETIC_OUTPUT_TOOL_NAME)
       : 0
 
-    for await (const message of query({
+    const runQuery = this.config.query ?? defaultQuery
+    for await (const message of runQuery({
       messages,
       systemPrompt,
       userContext,
@@ -688,6 +694,10 @@ export class QueryEngine {
       querySource: 'sdk',
       maxTurns,
       taskBudget,
+      autoCompactTracking: this.autoCompactTracking,
+      onAutoCompactTrackingChange: tracking => {
+        this.autoCompactTracking = tracking
+      },
     })) {
       // Record assistant, user, and compact boundary messages
       if (
@@ -836,7 +846,10 @@ export class QueryEngine {
           if (includePartialMessages) {
             yield {
               type: 'stream_event' as const,
-              event: message.event,
+              // The generated SDK type erases the event union to
+              // Record<string, unknown>; BetaRawMessageStreamEvent interfaces
+              // lack an index signature, so a direct assignment is rejected.
+              event: message.event as unknown as Record<string, unknown>,
               session_id: getSessionId(),
               parent_tool_use_id: null,
               uuid: randomUUID(),
@@ -928,6 +941,19 @@ export class QueryEngine {
             if (snipResult.executed) {
               this.mutableMessages.length = 0
               this.mutableMessages.push(...snipResult.messages)
+              // Persist the snip boundary so a resumed session replays the same
+              // removal. recordTranscript is append-only by UUID, so the
+              // pre-snip messages already on disk remain; appending this
+              // boundary (which carries snipMetadata.removedUuids) lets
+              // applySnipRemovals prune them in loadTranscriptFile(). Without
+              // this, --resume/restart rebuilds the un-snipped history and the
+              // context reduction is lost. Mirror the boundary into the local
+              // `messages` recording copy — like the compact_boundary path —
+              // so later writes and the parent chain stay consistent.
+              messages.push(message)
+              if (persistSession) {
+                await recordTranscript(messages)
+              }
             }
             break
           }
@@ -971,6 +997,8 @@ export class QueryEngine {
               uuid: message.uuid,
             }
           }
+          const goalStatusMessage = toSDKGoalStatusMessage(message)
+          if (goalStatusMessage) yield goalStatusMessage
           // Don't yield other system messages in headless mode
           break
         }
@@ -1200,7 +1228,9 @@ export class QueryEngine {
           throw new TypeError("'message.content' must be a string or array")
         }
       }
-      return msg
+      // `messages` is declared Message[]; the runtime checks above only guard
+      // untyped SDK callers. The validator param is `unknown` by design.
+      return msg as Message
     }, 'injectMessages')
     this.mutableMessages.push(...validated)
   }
@@ -1232,7 +1262,9 @@ export class QueryEngine {
           }
         }
       }
-      return agent
+      // `agents` is declared AgentDefinition[]; the runtime checks above only
+      // guard untyped SDK callers. The validator param is `unknown` by design.
+      return agent as AgentDefinition
     }, 'injectAgents')
     this.config.agents = validated
   }
@@ -1329,7 +1361,7 @@ export class QueryEngine {
 
 /**
  * Sends a single prompt to the GakrCLI API and returns the response.
- * Assumes that GakrCLI is being used non-interactively -- will not
+ * Assumes that gakrcli is being used non-interactively -- will not
  * ask the user for permissions or further input.
  *
  * Convenience wrapper around QueryEngine for one-shot usage.
@@ -1429,7 +1461,17 @@ export async function* ask({
           snipReplay: (yielded: Message, store: Message[]) => {
             if (!snipProjection!.isSnipBoundaryMessage(yielded))
               return undefined
-            return snipModule!.snipCompactIfNeeded(store, { force: true })
+            // The pending set was already consumed in query.ts when the
+            // boundary was produced, so prune the store by the boundary's own
+            // removedUuids. Keep the boundary as the marker for later replays.
+            const projected = snipProjection!.projectSnippedView([
+              ...store,
+              yielded,
+            ])
+            return {
+              messages: projected,
+              executed: projected.length !== store.length + 1,
+            }
           },
         }
       : {}),

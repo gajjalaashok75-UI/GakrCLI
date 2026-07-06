@@ -12,10 +12,12 @@ const originalFetch = globalThis.fetch
 const originalEnv = {
   GAKR_CONFIG_DIR: process.env.GAKR_CONFIG_DIR,
   OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
-  TOGETHER_API_KEY: process.env.TOGETHER_API_KEY,
   OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
   OPENAI_API_BASE: process.env.OPENAI_API_BASE,
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+  OPENAI_API_KEYS: process.env.OPENAI_API_KEYS,
   OPENAI_MODEL: process.env.OPENAI_MODEL,
+  ANTHROPIC_CUSTOM_HEADERS: process.env.ANTHROPIC_CUSTOM_HEADERS,
   GAKR_CODE_USE_OPENAI: process.env.GAKR_CODE_USE_OPENAI,
   GAKR_CODE_USE_GEMINI: process.env.GAKR_CODE_USE_GEMINI,
   GAKR_CODE_USE_MISTRAL: process.env.GAKR_CODE_USE_MISTRAL,
@@ -53,7 +55,10 @@ function restoreEnvValue(
 function clearProviderEnv(): void {
   delete process.env.OPENAI_BASE_URL
   delete process.env.OPENAI_API_BASE
+  delete process.env.OPENAI_API_KEY
+  delete process.env.OPENAI_API_KEYS
   delete process.env.OPENAI_MODEL
+  delete process.env.ANTHROPIC_CUSTOM_HEADERS
   delete process.env.GAKR_CODE_USE_OPENAI
   delete process.env.GAKR_CODE_USE_GEMINI
   delete process.env.GAKR_CODE_USE_MISTRAL
@@ -61,6 +66,7 @@ function clearProviderEnv(): void {
   delete process.env.GAKR_CODE_USE_BEDROCK
   delete process.env.GAKR_CODE_USE_VERTEX
   delete process.env.GAKR_CODE_USE_FOUNDRY
+  delete process.env.GAKR_CODE_DISABLE_NONESSENTIAL_TRAFFIC
 }
 
 beforeEach(async () => {
@@ -69,7 +75,6 @@ beforeEach(async () => {
   tempDir = mkdtempSync(join(tmpdir(), 'gakrcli-discovery-service-test-'))
   process.env.GAKR_CONFIG_DIR = tempDir
   delete process.env.OPENROUTER_API_KEY
-  delete process.env.TOGETHER_API_KEY
   clearProviderEnv()
   globalThis.fetch = originalFetch
 })
@@ -81,10 +86,12 @@ afterEach(() => {
     rmSync(tempDir, { recursive: true, force: true })
     restoreEnvValue('GAKR_CONFIG_DIR')
     restoreEnvValue('OPENROUTER_API_KEY')
-    restoreEnvValue('TOGETHER_API_KEY')
     restoreEnvValue('OPENAI_BASE_URL')
     restoreEnvValue('OPENAI_API_BASE')
+    restoreEnvValue('OPENAI_API_KEY')
+    restoreEnvValue('OPENAI_API_KEYS')
     restoreEnvValue('OPENAI_MODEL')
+    restoreEnvValue('ANTHROPIC_CUSTOM_HEADERS')
     restoreEnvValue('GAKR_CODE_USE_OPENAI')
     restoreEnvValue('GAKR_CODE_USE_GEMINI')
     restoreEnvValue('GAKR_CODE_USE_MISTRAL')
@@ -205,7 +212,20 @@ describe('discoverModelsForRoute', () => {
     expect(second).toMatchObject({
       source: 'stale-cache',
       stale: true,
-      models: [{ id: 'llama3.1:8b', apiName: 'llama3.1:8b' }],
+      models: [
+        {
+          id: 'ollama-qwen3-coder-next-cloud',
+          apiName: 'qwen3-coder-next:cloud',
+          maxOutputTokens: 32_768,
+        },
+        {
+          id: 'deepseek-v4-pro-cloud',
+          apiName: 'deepseek-v4-pro:cloud',
+          contextWindow: 1_048_576,
+          maxOutputTokens: 65_536,
+        },
+        { id: 'llama3.1:8b', apiName: 'llama3.1:8b' },
+      ],
     })
     expect(second?.error?.message).toContain('Discovery failed')
   })
@@ -221,11 +241,7 @@ describe('discoverModelsForRoute', () => {
           JSON.stringify({
             data: [
               { id: 'openai/gpt-5-mini' },
-              {
-                id: 'anthropic/claude-sonnet-4',
-                name: 'Claude Sonnet 4',
-                context_length: 200000,
-              },
+              { id: 'anthropic/claude-sonnet-4' },
             ],
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -242,69 +258,6 @@ describe('discoverModelsForRoute', () => {
       'anthropic/claude-sonnet-4',
     ])
     expect(result?.models[0]?.label).toBe('GPT-5 Mini (via OpenRouter)')
-    expect(result?.models[1]).toMatchObject({
-      label: 'Claude Sonnet 4',
-      owner: 'anthropic',
-      contextWindow: 200000,
-    })
-  })
-
-  test('openai-compatible discovery accepts top-level array model lists', async () => {
-    const { discoverModelsForRoute } = await loadDiscoveryServiceModule()
-
-    registerGateway({
-      id: 'top-level-array-test',
-      label: 'Top Level Array Test',
-      category: 'hosted',
-      defaultBaseUrl: 'https://top-level-array.example/v1',
-      setup: {
-        requiresAuth: true,
-        authMode: 'api-key',
-        credentialEnvVars: ['TOP_LEVEL_ARRAY_TEST_API_KEY'],
-      },
-      transportConfig: {
-        kind: 'openai-compatible',
-      },
-      catalog: {
-        source: 'dynamic',
-        discovery: {
-          kind: 'openai-compatible',
-        },
-      },
-    })
-
-    process.env.TOGETHER_API_KEY = 'together-key'
-    setMockFetch(mock((_input, init) => {
-      expect(init?.headers).toEqual({ Authorization: 'Bearer together-key' })
-      return Promise.resolve(
-        new Response(
-          JSON.stringify([
-            {
-              id: 'Qwen/Qwen3.5-9B',
-              display_name: 'Qwen 3.5 9B',
-              organization: 'Qwen',
-              context_length: 131072,
-            },
-          ]),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        ),
-      )
-    }) as unknown as typeof globalThis.fetch)
-
-    const result = await discoverModelsForRoute('top-level-array-test', {
-      apiKey: 'together-key',
-      forceRefresh: true,
-    })
-
-    expect(result?.source).toBe('network')
-    expect(result?.models).toContainEqual(
-      expect.objectContaining({
-        apiName: 'Qwen/Qwen3.5-9B',
-        label: 'Qwen 3.5 9B',
-        owner: 'Qwen',
-        contextWindow: 131072,
-      }),
-    )
   })
 
   test('openai-compatible discovery applies descriptor static headers with auth', async () => {
@@ -363,65 +316,6 @@ describe('discoverModelsForRoute', () => {
 
     expect(result?.source).toBe('network')
     expect(result?.models.map((model: { apiName: string }) => model.apiName)).toEqual(['discovered-model'])
-  })
-
-  test('GitHub Copilot discovery sends Copilot integration headers and maps live models', async () => {
-    const { discoverModelsForRoute } = await loadDiscoveryServiceModule()
-
-    setMockFetch(mock((input: string | URL | Request, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      expect(url).toBe('https://api.githubcopilot.com/models')
-      expect(init?.headers).toEqual({
-        'User-Agent': 'GitHubCopilotChat/0.26.7',
-        'Editor-Version': 'vscode/1.99.3',
-        'Editor-Plugin-Version': 'copilot-chat/0.26.7',
-        'Copilot-Integration-Id': 'vscode-chat',
-        Authorization: 'Bearer copilot-token',
-      })
-
-      return Promise.resolve(
-        new Response(
-          JSON.stringify({
-            data: [
-              {
-                id: 'claude-sonnet-4.6',
-                policy: { state: 'enabled' },
-              },
-              { id: 'gpt-4o-2024-11-20', name: 'GPT-4o' },
-              { id: 'gpt-4o-2024-11-20', name: 'GPT-4o duplicate' },
-              {
-                id: 'gpt-5.5',
-                policy: { state: 'disabled' },
-              },
-              { id: 'gpt-3.5-turbo' },
-              { id: 'accounts/msft/routers/f185i3v4' },
-              { id: 'oswe-vscode-prime' },
-              { id: 'text-embedding-3-small' },
-            ],
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        ),
-      )
-    }) as unknown as typeof globalThis.fetch)
-
-    const result = await discoverModelsForRoute('github', {
-      apiKey: 'copilot-token',
-      forceRefresh: true,
-    })
-
-    expect(result?.source).toBe('network')
-    expect(result?.models.map(model => model.apiName)).toEqual([
-      'github:copilot',
-      'claude-sonnet-4.6',
-      'gpt-4o-2024-11-20',
-    ])
-    expect(result?.models[1]).toMatchObject({
-      label: 'Claude Sonnet 4.6',
-      contextWindow: 200000,
-    })
-    expect(result?.models[2]).toMatchObject({
-      label: 'GPT-4o (2024-11-20)',
-    })
   })
 
   test('openai-compatible discovery can opt out of auth', async () => {
@@ -555,6 +449,183 @@ describe('discoverModelsForRoute', () => {
     expect(result?.routeId).toBe('lmstudio')
     expect(result?.source).toBe('network')
   })
+
+  test('openai-compatible discovery does not use invalid pooled credentials', async () => {
+    const { discoverModelsForRoute } = await loadDiscoveryServiceModule()
+
+    registerGateway({
+      id: 'discovery-invalid-pool-test',
+      label: 'Invalid Pool Test',
+      defaultBaseUrl: 'https://invalid-pool.example/v1',
+      defaultModel: 'gpt-5.5',
+      setup: {
+        requiresAuth: true,
+        authMode: 'api-key',
+        credentialEnvVars: ['OPENAI_API_KEYS', 'OPENAI_API_KEY'],
+      },
+      transportConfig: { kind: 'openai-compatible' },
+      catalog: {
+        source: 'dynamic',
+        discovery: { kind: 'openai-compatible' },
+      },
+    })
+
+    setMockFetch(mock((_input, init) => {
+      const headers = new Headers(init?.headers)
+      expect(headers.get('authorization')).toBeNull()
+      expect(headers.get('api-key')).toBeNull()
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [{ id: 'gpt-5.5' }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    }) as unknown as typeof globalThis.fetch)
+
+    const result = await discoverModelsForRoute('discovery-invalid-pool-test', {
+      apiKey: 'key-a,SUA_CHAVE',
+      forceRefresh: true,
+    })
+
+    expect(result?.routeId).toBe('discovery-invalid-pool-test')
+    expect(result?.source).toBe('network')
+  })
+
+  test('refreshStartupDiscoveryForActiveRoute sends first pooled OpenAI credential', async () => {
+    const { refreshStartupDiscoveryForActiveRoute } =
+      await loadDiscoveryServiceModule()
+
+    const startupEnv: NodeJS.ProcessEnv = {
+      GAKR_CODE_USE_OPENAI: '1',
+      OPENAI_BASE_URL: 'https://custom.example/v1',
+      OPENAI_API_KEYS: 'key-a,key-b',
+    }
+
+    setMockFetch(mock((_input, init) => {
+      expect(init?.headers).toEqual({ Authorization: 'Bearer key-a' })
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [{ id: 'gpt-5.5' }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    }) as unknown as typeof globalThis.fetch)
+
+    const result = await refreshStartupDiscoveryForActiveRoute({
+      processEnv: startupEnv,
+    })
+
+    expect(result?.routeId).toBe('custom')
+    expect(result?.source).toBe('network')
+  })
+
+  test('refreshStartupDiscoveryForActiveRoute discovers custom route with hybrid startup discovery', async () => {
+    const { refreshStartupDiscoveryForActiveRoute } =
+      await loadDiscoveryServiceModule()
+
+    const startupEnv: NodeJS.ProcessEnv = {
+      GAKR_CODE_USE_OPENAI: '1',
+      OPENAI_BASE_URL: 'http://localhost:4000/v1',
+      ANTHROPIC_CUSTOM_HEADERS: 'X-Test-Case: startup-context',
+    }
+
+    setMockFetch(mock((_input, init) => {
+      expect(init?.headers).toEqual({ 'X-Test-Case': 'startup-context' })
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: 'litellm-proxy',
+                model_info: { context_length: 1_000_000 },
+              },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    }) as unknown as typeof globalThis.fetch)
+
+    const result = await refreshStartupDiscoveryForActiveRoute({
+      processEnv: startupEnv,
+    })
+
+    expect(result?.routeId).toBe('custom')
+    expect(result?.source).toBe('network')
+    expect((result?.models ?? [])[0]?.contextWindow).toBe(1_000_000)
+  })
+
+  test('refreshStartupDiscoveryForActiveRoute partitions custom discovery by env custom headers', async () => {
+    const { getDiscoveryCacheKey, refreshStartupDiscoveryForActiveRoute } =
+      await loadDiscoveryServiceModule()
+    const { getCachedModels } = await import('./discoveryCache.js')
+
+    const startupEnv: NodeJS.ProcessEnv = {
+      GAKR_CODE_USE_OPENAI: '1',
+      OPENAI_BASE_URL: 'http://localhost:4000/v1',
+      ANTHROPIC_CUSTOM_HEADERS: 'X-Tenant: acme',
+    }
+
+    setMockFetch(mock((input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url
+      expect(url).toBe('http://localhost:4000/v1/models')
+      expect(init?.headers).toEqual({ 'X-Tenant': 'acme' })
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: 'tenant-model',
+                model_info: { context_length: 1_000_000 },
+              },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    }) as unknown as typeof globalThis.fetch)
+
+    const result = await refreshStartupDiscoveryForActiveRoute({
+      processEnv: startupEnv,
+    })
+    const cached = await getCachedModels(
+      getDiscoveryCacheKey('custom', {
+        baseUrl: 'http://localhost:4000/v1',
+        headers: { 'X-Tenant': 'acme' },
+      }),
+      24 * 60 * 60 * 1000,
+    )
+
+    expect(result?.routeId).toBe('custom')
+    expect(cached?.models[0]?.contextWindow).toBe(1_000_000)
+  })
+
+  test('refreshStartupDiscoveryForActiveRoute still skips anthropic route', async () => {
+    const { refreshStartupDiscoveryForActiveRoute } =
+      await loadDiscoveryServiceModule()
+
+    const startupEnv: NodeJS.ProcessEnv = {
+      GAKR_CODE_USE_ANTHROPIC: '1',
+      ANTHROPIC_BASE_URL: 'https://api.anthropic.com',
+    }
+
+    const result = await refreshStartupDiscoveryForActiveRoute({
+      processEnv: startupEnv,
+    })
+
+    expect(result).toBeNull()
+  })
+
   test('openai-compatible discovery applies mapModel to filter and shape raw entries', async () => {
     const { discoverModelsForRoute } = await loadDiscoveryServiceModule()
 

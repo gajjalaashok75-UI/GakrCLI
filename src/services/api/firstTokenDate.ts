@@ -3,13 +3,13 @@ import { getOauthConfig } from '../../constants/oauth.js'
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js'
 import { getAuthHeaders } from '../../utils/http.js'
 import { logError } from '../../utils/log.js'
-import { getgakrcliCodeUserAgent } from '../../utils/userAgent.js'
+import { getGakrCLICodeUserAgent } from '../../utils/userAgent.js'
 
 /**
- * Fetch the user's first GakrCLI token date and store in config.
- * This is called after successful login to cache when they started using Gakr.
+ * Fetch the user's first GakrCLI Code token date and store in config.
+ * This is called after successful login to cache when they started using GakrCLI Code.
  */
-export async function fetchAndStoregakrcliCodeFirstTokenDate(): Promise<void> {
+export async function fetchAndStoreGakrCLICodeFirstTokenDate(): Promise<void> {
   try {
     const config = getGlobalConfig()
 
@@ -29,7 +29,7 @@ export async function fetchAndStoregakrcliCodeFirstTokenDate(): Promise<void> {
     const response = await axios.get(url, {
       headers: {
         ...authHeaders.headers,
-        'User-Agent': getgakrcliCodeUserAgent(),
+        'User-Agent': getGakrCLICodeUserAgent(),
       },
       timeout: 10000,
     })

@@ -5,7 +5,6 @@ import {
   LOGO_PALETTES,
   isLogoPaletteName,
   resolveLogoPalette,
-  resolveLogoSpinnerColors,
 } from './StartupScreen.palettes.js'
 
 describe('startup logo palettes', () => {
@@ -25,17 +24,8 @@ describe('startup logo palettes', () => {
   })
 
   test('palette names stay in sync with defined palettes', () => {
-    expect(LOGO_PALETTE_NAMES).toEqual(Object.keys(LOGO_PALETTES))
-  })
-
-  test('spinner colors resolve from the selected logo palette', () => {
-    expect(resolveLogoSpinnerColors('sunset')).toEqual({
-      accent: 'rgb(240,148,100)',
-      shimmer: 'rgb(255,180,100)',
-    })
-    expect(resolveLogoSpinnerColors('not-a-palette')).toEqual({
-      accent: 'rgb(114,198,237)',
-      shimmer: 'rgb(170,210,235)',
-    })
+    // Widen to string[] so the literal-union array compares against
+    // Object.keys()'s string[] without an overload mismatch.
+    expect<string[]>(LOGO_PALETTE_NAMES).toEqual(Object.keys(LOGO_PALETTES))
   })
 })

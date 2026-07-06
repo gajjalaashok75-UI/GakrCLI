@@ -16,10 +16,7 @@ import {
   logEvent,
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS as SafeString,
 } from '../../services/analytics/index.js'
-import {
-  OFFICIAL_MARKETPLACE_NAME,
-  OFFICIAL_MARKETPLACE_SOURCE,
-} from './officialMarketplace.js'
+import { OFFICIAL_MARKETPLACE_NAME } from './officialMarketplace.js'
 
 export type PluginFetchSource =
   | 'install_counts'
@@ -71,42 +68,12 @@ function extractHost(urlOrSpec: string): string {
 }
 
 /**
- * True if the URL/spec points at the configured official marketplace repository.
- * Lets the dashboard separate "official" traffic from user-configured marketplaces.
- *
- * The official marketplace source is defined by OFFICIAL_MARKETPLACE_SOURCE.
- * Supports both GitHub org/repo format and full URL/git SSH variations.
+ * True if the URL/spec points at gajjalaashok75-UI/gakrcli-plugins-official — the
+ * repo GitHub complained about. Lets the dashboard separate "our problem"
+ * traffic from user-configured marketplaces.
  */
 function isOfficialRepo(urlOrSpec: string): boolean {
-  const officialRepo = OFFICIAL_MARKETPLACE_SOURCE.repo.toLowerCase()
-
-  // 1. Shorthand: "owner/repo"
-  if (urlOrSpec.toLowerCase() === officialRepo) return true
-
-  // 2. HTTPS URLs: https://github.com/owner/repo(.git)?
-  try {
-    const u = new URL(urlOrSpec)
-    if (u.hostname === 'github.com') {
-      const path = u.pathname.replace(/^\/+/, '').replace(/\.git$/, '')
-      if (path.toLowerCase() === officialRepo) return true
-    }
-  } catch {
-    // Not a valid URL, continue to other checks
-  }
-
-  // 3. SSH URLs: git@github.com:owner/repo(.git)?
-  if (urlOrSpec.startsWith('git@github.com:')) {
-    const pathPart = urlOrSpec.slice('git@github.com:'.length).replace(/\.git$/, '')
-    if (pathPart.toLowerCase() === officialRepo) return true
-  }
-
-  // Backward compatibility: also accept the old default pattern for
-  // installations that may still be using the anthropics repo.
-  if (urlOrSpec.includes(`anthropics/${OFFICIAL_MARKETPLACE_NAME}`)) {
-    return true
-  }
-
-  return false
+  return urlOrSpec.includes(`gajjalaashok75-UI/${OFFICIAL_MARKETPLACE_NAME}`)
 }
 
 export function logPluginFetch(

@@ -36,13 +36,13 @@ const ID_TOKEN_TYPE = 'urn:ietf:params:oauth:token-type:id_token'
 
 /**
  * Creates a fetch wrapper that enforces the XAA request timeout and optionally
- * composes a caller-provided abort signal. Using AbortSignal.any ensures the
+ * composes a caller-provided abort signal. Combining both signals ensures the
  * user's cancel (e.g. Esc in the auth menu) actually aborts in-flight requests
  * rather than being clobbered by the timeout signal.
  */
 function makeXaaFetch(abortSignal?: AbortSignal): FetchLike {
   return (url, init) => {
-    const { signal, cleanup } = createCombinedAbortSignal(init?.signal, {
+    const { signal, cleanup } = createCombinedAbortSignal(init?.signal ?? undefined, {
       signalB: abortSignal,
       timeoutMs: XAA_REQUEST_TIMEOUT_MS,
     })
@@ -417,7 +417,7 @@ export type XaaConfig = {
 /**
  * Full XAA flow: PRM → AS metadata → token-exchange → jwt-bearer → access_token.
  * Thin composition of the four Layer-2 ops. Used by performMCPXaaAuth,
- * gakrcliAuthProvider.xaaRefresh, and the try-xaa*.ts debug scripts.
+ * GakrCLIAuthProvider.xaaRefresh, and the try-xaa*.ts debug scripts.
  *
  * @param serverUrl The MCP server URL (e.g. `https://mcp.example.com/mcp`)
  * @param config IdP + AS credentials

@@ -1,5 +1,5 @@
 import { c as _c } from "react-compiler-runtime";
-// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
+// biome-ignore-all assist/source/organizeImports: internal-only import markers must not be reordered
 import { Box, Text, type TextProps } from '../../ink.js';
 import { feature } from 'bun:bundle';
 import * as React from 'react';
@@ -27,6 +27,9 @@ import { useAppStateStore } from '../../state/AppState.js';
 import { isBackgroundTask, type TaskState } from '../../tasks/types.js';
 import { getPillLabel } from '../../tasks/pillLabel.js';
 import { useSelectedMessageBg } from '../messageActions.js';
+// Hooks faster than this render no timing line (display gate only — currently
+// short-circuited by the `true ||` below, matching upstream).
+const HOOK_TIMING_DISPLAY_THRESHOLD_MS = 1000;
 type Props = {
   message: SystemMessage;
   addMargin: boolean;
@@ -295,7 +298,7 @@ function StopHookSummaryMessage(t0) {
     const t3 = hookCount === 1 ? "hook" : "hooks";
     let t4;
     if ($[5] !== hookCount || $[6] !== message.hookLabel || $[7] !== t3 || $[8] !== totalStr) {
-      t4 = <Text dimColor={true}>{"  \u23BF  "}Ran {hookCount} {message.hookLabel}{" "}{t3}{totalStr}</Text>;
+      t4 = <Text dimColor={true}>{"  \u2514  "}Ran {hookCount} {message.hookLabel}{" "}{t3}{totalStr}</Text>;
       $[5] = hookCount;
       $[6] = message.hookLabel;
       $[7] = t3;
@@ -375,7 +378,7 @@ function StopHookSummaryMessage(t0) {
   }
   let t12;
   if ($[31] !== preventedContinuation || $[32] !== stopReason) {
-    t12 = preventedContinuation && stopReason && <Text><Text dimColor={true}>⎿  </Text>{stopReason}</Text>;
+    t12 = preventedContinuation && stopReason && <Text><Text dimColor={true}>└  </Text>{stopReason}</Text>;
     $[31] = preventedContinuation;
     $[32] = stopReason;
     $[33] = t12;
@@ -384,7 +387,7 @@ function StopHookSummaryMessage(t0) {
   }
   let t13;
   if ($[34] !== hookErrors || $[35] !== message.hookLabel) {
-    t13 = hookErrors.length > 0 && hookErrors.map((err, idx_1) => <Text key={idx_1}><Text dimColor={true}>⎿  </Text>{message.hookLabel ?? "Stop"} hook error: {err}</Text>);
+    t13 = hookErrors.length > 0 && hookErrors.map((err, idx_1) => <Text key={idx_1}><Text dimColor={true}>└  </Text>{message.hookLabel ?? "Stop"} hook error: {err}</Text>);
     $[34] = hookErrors;
     $[35] = message.hookLabel;
     $[36] = t13;
@@ -417,11 +420,11 @@ function StopHookSummaryMessage(t0) {
 }
 function _temp3(info_0, idx_0) {
   const durationStr_0 = false && info_0.durationMs !== undefined ? ` (${formatSecondsShort(info_0.durationMs)})` : "";
-  return <Text key={`cmd-${idx_0}`} dimColor={true}>⎿  {info_0.command === "prompt" ? `prompt: ${info_0.promptText || ""}` : info_0.command}{durationStr_0}</Text>;
+  return <Text key={`cmd-${idx_0}`} dimColor={true}>└  {info_0.command === "prompt" ? `prompt: ${info_0.promptText || ""}` : info_0.command}{durationStr_0}</Text>;
 }
 function _temp2(info, idx) {
   const durationStr = false && info.durationMs !== undefined ? ` (${formatSecondsShort(info.durationMs)})` : "";
-  return <Text key={`cmd-${idx}`} dimColor={true}>{"     \u23BF "}{info.command === "prompt" ? `prompt: ${info.promptText || ""}` : info.command}{durationStr}</Text>;
+  return <Text key={`cmd-${idx}`} dimColor={true}>{"     \u2514 "}{info.command === "prompt" ? `prompt: ${info.promptText || ""}` : info.command}{durationStr}</Text>;
 }
 function _temp(sum, h) {
   return sum + (h.durationMs ?? 0);
@@ -603,7 +606,7 @@ function MemorySavedMessage(t0) {
   } = message;
   let t1;
   if ($[0] !== message) {
-    t1 = feature("TEAMMEM") ? teamMemSaved.teamMemSavedPart(message) : null;
+    t1 = feature("TEAMMEM") && teamMemSaved != null ? teamMemSaved.teamMemSavedPart(message) : null;
     $[0] = message;
     $[1] = t1;
   } else {
@@ -797,7 +800,7 @@ function BridgeStatusMessage(t0) {
   }
   let t5;
   if ($[4] !== message.upgradeNudge) {
-    t5 = message.upgradeNudge && <Text dimColor={true}>⎿ {message.upgradeNudge}</Text>;
+    t5 = message.upgradeNudge && <Text dimColor={true}>└ {message.upgradeNudge}</Text>;
     $[4] = message.upgradeNudge;
     $[5] = t5;
   } else {

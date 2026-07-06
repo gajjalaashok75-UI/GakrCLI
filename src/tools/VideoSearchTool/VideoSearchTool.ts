@@ -75,6 +75,19 @@ type NormalizedHit = {
   snippet?: string
 }
 
+function normalizeDomainRule(rule: string): string {
+  return rule.trim().toLowerCase().replace(/^\.+/, '')
+}
+
+function hostMatchesDomain(hostname: string, domain: string): boolean {
+  const normalizedHost = hostname.toLowerCase()
+  const normalizedDomain = normalizeDomainRule(domain)
+  return (
+    normalizedHost === normalizedDomain ||
+    normalizedHost.endsWith(`.${normalizedDomain}`)
+  )
+}
+
 function isFirecrawlEnabled(): boolean {
   return Boolean(process.env.FIRECRAWL_API_KEY)
 }
@@ -86,7 +99,9 @@ function filterByDomains(hits: NormalizedHit[], input: Input): NormalizedHit[] {
     filtered = filtered.filter(hit => {
       try {
         const host = new URL(hit.url).hostname
-        return !input.blocked_domains!.some(domain => host.endsWith(domain))
+        return !input.blocked_domains!.some(domain =>
+          hostMatchesDomain(host, domain),
+        )
       } catch {
         return false
       }
@@ -97,7 +112,9 @@ function filterByDomains(hits: NormalizedHit[], input: Input): NormalizedHit[] {
     filtered = filtered.filter(hit => {
       try {
         const host = new URL(hit.url).hostname
-        return input.allowed_domains!.some(domain => host.endsWith(domain))
+        return input.allowed_domains!.some(domain =>
+          hostMatchesDomain(host, domain),
+        )
       } catch {
         return false
       }

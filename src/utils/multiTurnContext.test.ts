@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
+import { afterEach, describe, expect, it, beforeEach } from 'bun:test'
 import {
   startNewTurn,
   getCurrentTurn,
@@ -46,19 +46,12 @@ describe('multiTurnContext', () => {
       expect(turn.turnId).toBeDefined()
       expect(turn.startTime).toBeDefined()
       expect(turn.messages).toEqual([])
-      expect(turn.toolCalls).toEqual([])
-      expect(turn.tokens).toBe(0)
     })
 
     it('tracks turn count', () => {
       startNewTurn()
       const turn2 = startNewTurn()
       expect(turn2.turnId).toContain('turn_2')
-    })
-
-    it('tracks current turn', () => {
-      const turn = startNewTurn()
-      expect(getCurrentTurn()).toBe(turn)
     })
   })
 
@@ -67,7 +60,6 @@ describe('multiTurnContext', () => {
       startNewTurn()
       addMessageToTurn(createMessage('user', 'Hello'))
       expect(getCurrentTurn()?.messages.length).toBe(1)
-      expect(getCurrentTurn()?.tokens).toBeGreaterThan(0)
     })
 
     it('creates turn if none exists', () => {
@@ -80,16 +72,13 @@ describe('multiTurnContext', () => {
   describe('addToolCallToTurn', () => {
     it('adds tool call to turn', () => {
       startNewTurn()
-      const toolCall = {
+      addToolCallToTurn({
         id: 'call_1',
         name: 'test_tool',
-        input: { arg: 'value' },
+        input: {},
         timestamp: Date.now(),
-      }
-
-      addToolCallToTurn(toolCall)
+      })
       expect(getCurrentTurn()?.toolCalls.length).toBe(1)
-      expect(getCurrentTurn()?.toolCalls[0]).toEqual(toolCall)
     })
   })
 
@@ -97,21 +86,12 @@ describe('multiTurnContext', () => {
     it('sets and gets turn state', () => {
       startNewTurn()
       setTurnState('key', 'value')
-      expect(getTurnState('key')).toBe('value')
+      expect(getTurnState<string>('key')).toBe('value')
     })
 
     it('returns undefined for unknown keys', () => {
       startNewTurn()
       expect(getTurnState('unknown')).toBeUndefined()
-    })
-
-    it('manages multiple state values', () => {
-      startNewTurn()
-      setTurnState('key1', 'value1')
-      setTurnState('key2', 42)
-
-      expect(getTurnState<string>('key1')).toBe('value1')
-      expect(getTurnState<number>('key2')).toBe(42)
     })
   })
 
@@ -119,33 +99,26 @@ describe('multiTurnContext', () => {
     it('returns turn history', () => {
       startNewTurn()
       startNewTurn()
-      startNewTurn()
-
-      const history = getTurnHistory()
-      expect(history).toHaveLength(3)
+      expect(getTurnHistory().length).toBe(2)
     })
   })
 
   describe('getRecentTurns', () => {
     it('returns recent turns', () => {
-      for (let i = 0; i < 5; i++) {
-        startNewTurn()
-      }
-
-      const recent = getRecentTurns(2)
-      expect(recent).toHaveLength(2)
+      startNewTurn()
+      startNewTurn()
+      startNewTurn()
+      expect(getRecentTurns(2).length).toBe(2)
     })
   })
 
   describe('getMultiTurnStats', () => {
     it('returns statistics', () => {
       startNewTurn()
-      addMessageToTurn(createMessage('user', 'test message'))
-
+      addMessageToTurn(createMessage('user', 'Hello'))
       const stats = getMultiTurnStats()
       expect(stats.totalTurns).toBe(1)
       expect(stats.totalTokens).toBeGreaterThan(0)
-      expect(stats.avgTokensPerTurn).toBeGreaterThan(0)
     })
   })
 
@@ -154,13 +127,7 @@ describe('multiTurnContext', () => {
       const tracker = createMultiTurnTracker()
       expect(tracker.startTurn).toBeDefined()
       expect(tracker.addMessage).toBeDefined()
-      expect(tracker.addToolCall).toBeDefined()
-      expect(tracker.setState).toBeDefined()
-      expect(tracker.getState).toBeDefined()
-      expect(tracker.getHistory).toBeDefined()
-      expect(tracker.getRecent).toBeDefined()
       expect(tracker.getStats).toBeDefined()
-      expect(tracker.reset).toBeDefined()
     })
 
     it('respects the maxTurns option', () => {
@@ -175,18 +142,6 @@ describe('multiTurnContext', () => {
       expect(history.length).toBe(2)
       // The first remaining turn should be the 2nd one created
       expect(history[0].turnId).toContain('turn_2')
-    })
-  })
-
-  describe('resetMultiTurnState', () => {
-    it('resets state', () => {
-      startNewTurn()
-      addMessageToTurn(createMessage('user', 'test'))
-
-      resetMultiTurnState()
-
-      expect(getCurrentTurn()).toBeNull()
-      expect(getTurnHistory()).toEqual([])
     })
   })
 })

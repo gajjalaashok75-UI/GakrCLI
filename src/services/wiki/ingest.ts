@@ -1,4 +1,4 @@
-import { appendFile, lstat, readFile, realpath, stat, writeFile } from 'fs/promises'
+import { appendFile, readFile, stat, writeFile } from 'fs/promises'
 import { basename, extname, isAbsolute, relative, resolve } from 'path'
 import { initializeWiki } from './init.js'
 import { rebuildWikiIndex } from './indexBuilder.js'
@@ -43,31 +43,7 @@ ${excerpt}
 }
 
 function buildLogEntry(sourcePath: string, title: string, ingestedAt: string): string {
-  return `## [${ingestedAt}] ingest | ${title}
-
-- Source: \`${sourcePath}\`
-- Action: Created generated source note.
-`
-}
-
-async function resolveContainedSourcePath(cwd: string, rawPath: string): Promise<string> {
-  const candidatePath = isAbsolute(rawPath) ? rawPath : resolve(cwd, rawPath)
-  const [canonicalCwd, canonicalSource] = await Promise.all([
-    realpath(cwd),
-    realpath(candidatePath),
-  ])
-  const relativePath = relative(canonicalCwd, canonicalSource)
-
-  if (relativePath.startsWith('..') || isAbsolute(relativePath)) {
-    throw new Error('Wiki ingest only supports files inside the current project.')
-  }
-
-  const sourceInfo = await lstat(canonicalSource)
-  if (sourceInfo.isSymbolicLink()) {
-    throw new Error('Wiki ingest does not support symbolic links.')
-  }
-
-  return canonicalSource
+  return `- ${ingestedAt}: Ingested \`${sourcePath}\` into source note "${title}"`
 }
 
 export async function ingestLocalWikiSource(
@@ -76,8 +52,7 @@ export async function ingestLocalWikiSource(
 ): Promise<WikiIngestResult> {
   await initializeWiki(cwd)
 
-  const resolvedPath = await resolveContainedSourcePath(cwd, rawPath)
-
+  const resolvedPath = isAbsolute(rawPath) ? rawPath : resolve(cwd, rawPath)
   const fileInfo = await stat(resolvedPath)
   if (!fileInfo.isFile()) {
     throw new Error(`Not a file: ${resolvedPath}`)
@@ -106,7 +81,7 @@ export async function ingestLocalWikiSource(
     }),
     'utf8',
   )
-  await appendFile(paths.logFile, `\n${buildLogEntry(relSourcePath, title, ingestedAt)}`, 'utf8')
+  await appendFile(paths.logFile, `${buildLogEntry(relSourcePath, title, ingestedAt)}\n`, 'utf8')
   await rebuildWikiIndex(cwd)
 
   return {

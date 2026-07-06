@@ -1,6 +1,6 @@
 import chokidar, { type FSWatcher } from 'chokidar'
 import * as platformPath from 'path'
-import { getAdditionalDirectoriesForgakrcliMd } from '../../bootstrap/state.js'
+import { getAdditionalDirectoriesForGakrCLIMd } from '../../bootstrap/state.js'
 import {
   clearCommandMemoizationCaches,
   clearCommandsCache,
@@ -33,12 +33,10 @@ const FILE_STABILITY_POLL_INTERVAL_MS = 500
 /**
  * Time in milliseconds to debounce rapid skill change events into a single
  * reload. Prevents cascading reloads when many skill files change at once
- * (e.g. during auto-update or when another session modifies skill directories).
- * Without this, each file change triggers a full clearSkillCaches() +
- * clearCommandsCache() + listener notification cycle, which can deadlock the
- * event loop when dozens of events fire in rapid succession.
+ * (e.g. during auto-update, folder moves/renames, or when another session
+ * modifies skill directories).
  */
-const RELOAD_DEBOUNCE_MS = 300
+const RELOAD_DEBOUNCE_MS = 3000
 
 /**
  * Minimum spacing between completed skill reloads. Some filesystem operations
@@ -165,7 +163,6 @@ export async function initialize(): Promise<void> {
   watcher.on('add', handleChange)
   watcher.on('change', handleChange)
   watcher.on('unlink', handleChange)
-
 }
 
 /**
@@ -265,7 +262,7 @@ async function getWatchablePaths(): Promise<string[]> {
   }
 
   // Additional directories (--add-dir) skills
-  for (const dir of getAdditionalDirectoriesForgakrcliMd()) {
+  for (const dir of getAdditionalDirectoriesForGakrCLIMd()) {
     const additionalSkillsPath = platformPath.join(dir, '.gakrcli', 'skills')
     try {
       await fs.stat(additionalSkillsPath)
@@ -293,9 +290,9 @@ function handleChange(path: string): void {
  * Debounce rapid skill changes into a single reload. When many skill files
  * change at once (e.g. auto-update installs a new binary and a new session
  * touches skill directories), each file fires its own chokidar event. Without
- * debouncing, each event triggers clearSkillCaches() + clearCommandsCache() +
- * listener notification — 30 events means 30 full reload cycles, which can
- * deadlock the Bun event loop via rapid FSWatcher watch/unwatch churn.
+ * debouncing, each event triggers clearCommandsCache() + listener notification
+ * — 30 events means 30 full reload cycles, which can deadlock the Bun event
+ * loop via rapid FSWatcher watch/unwatch churn.
  */
 function scheduleReload(changedPath: string): void {
   if (disposed) return
@@ -319,11 +316,11 @@ function scheduleReloadTimer(): void {
 
     reloadInProgress = true
     try {
-    // Fire ConfigChange hook once for the batch — the hook query is always
-    // 'skills' so firing per-path (which can be hundreds during a git
-    // operation) just spams the hook matcher with identical queries. Pass the
-    // first path as a representative; hooks can inspect all paths via the
-    // skills directory if they need the full set.
+      // Fire ConfigChange hook once for the batch — the hook query is always
+      // 'skills' so firing per-path (which can be hundreds during a git
+      // operation) just spams the hook matcher with identical queries. Pass the
+      // first path as a representative; hooks can inspect all paths via the
+      // skills directory if they need the full set.
       const results = await dependencies.executeConfigChangeHooks(
         'skills',
         paths[0]!,

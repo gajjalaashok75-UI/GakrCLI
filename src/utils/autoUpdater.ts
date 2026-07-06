@@ -13,8 +13,8 @@ import { createCombinedAbortSignal } from './combinedAbortSignal.js'
 import { getAPIProvider } from './model/providers.js'
 import { logForDebugging } from './debug.js'
 import { env } from './env.js'
-import { getGakrcliConfigHomeDir } from './envUtils.js'
-import { GakrcliError, getErrnoCode, isENOENT } from './errors.js'
+import { getGakrCLIConfigHomeDir } from './envUtils.js'
+import { GakrCLIError, getErrnoCode, isENOENT } from './errors.js'
 import { execFileNoThrowWithCwd } from './execFileNoThrow.js'
 import { getFsImplementation } from './fsOperations.js'
 import { gracefulShutdownSync } from './gracefulShutdown.js'
@@ -22,7 +22,7 @@ import { logError } from './log.js'
 import { gte, lt } from './semver.js'
 import { getInitialSettings } from './settings/settings.js'
 import {
-  filtergakrcliAliases,
+  filterGakrCLIAliases,
   getShellConfigPaths,
   readFileLines,
   writeFileLines,
@@ -32,7 +32,7 @@ import { jsonParse } from './slowOperations.js'
 const GCS_BUCKET_URL =
   'https://storage.googleapis.com/gakrcli-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/gakrcli-code-releases'
 
-class AutoUpdaterError extends GakrcliError {}
+class AutoUpdaterError extends GakrCLIError {}
 
 async function withTimeoutSignal<T>(
   timeoutMs: number,
@@ -88,9 +88,13 @@ export async function assertMinVersion(): Promise<void> {
     return
   }
 
-  // Skip version check for third-party providers — the min version
-  // kill-switch is Anthropic-specific and should not block 3P users
-  if (getAPIProvider() !== 'firstParty') {
+  // Skip version check for third-party providers using upstream Anthropic
+  // builds — the min version kill-switch is first-party-specific. Builds
+  // with a custom PACKAGE_URL (like GakrCLI) should still be checked.
+  if (
+    getAPIProvider() !== 'firstParty' &&
+    MACRO.PACKAGE_URL === '@anthropic-ai/gakrcli-code'
+  ) {
     return
   }
 
@@ -105,7 +109,7 @@ export async function assertMinVersion(): Promise<void> {
     ) {
       // biome-ignore lint/suspicious/noConsole:: intentional console output
       console.error(`
-It looks like your version of GakrCLI (${MACRO.VERSION}) needs an update.
+It looks like your version of GakrCLI Code (${MACRO.VERSION}) needs an update.
 A newer version (${versionConfig.minVersion} or higher) is required to continue.
 
 To update, please run:
@@ -188,7 +192,7 @@ const LOCK_TIMEOUT_MS = 5 * 60 * 1000 // 5 minute timeout for locks
  * This is a function to ensure it's evaluated at runtime after test setup
  */
 export function getLockFilePath(): string {
-  return join(getGakrcliConfigHomeDir(), '.update.lock')
+  return join(getGakrCLIConfigHomeDir(), '.update.lock')
 }
 
 /**
@@ -251,7 +255,7 @@ async function acquireLock(): Promise<boolean> {
         // fs.mkdir from getFsImplementation() is always recursive:true and
         // swallows EEXIST internally, so a dir-creation race cannot reach the
         // catch below — only writeFile's EEXIST (true lock contention) can.
-        await fs.mkdir(getGakrcliConfigHomeDir())
+        await fs.mkdir(getGakrCLIConfigHomeDir())
         await writeFile(lockPath, `${process.pid}`, {
           encoding: 'utf8',
           flag: 'wx',
@@ -292,7 +296,8 @@ async function releaseLock(): Promise<void> {
 async function getInstallationPrefix(): Promise<string | null> {
   // Run from home directory to avoid reading project-level .npmrc/.bunfig.toml
   const isBun = env.isRunningWithBun()
-  let prefixResult = null
+  let prefixResult: Awaited<ReturnType<typeof execFileNoThrowWithCwd>> | null =
+    null
   if (isBun) {
     prefixResult = await execFileNoThrowWithCwd('bun', ['pm', 'bin', '-g'], {
       cwd: homedir(),
@@ -436,7 +441,7 @@ export async function getGcsDistTags(): Promise<NpmDistTags> {
 }
 
 /**
- * Get version history from npm registry (ant-only feature)
+ * Get version history from npm registry (internal-only feature)
  * Returns versions sorted newest-first, limited to the specified count
  *
  * Uses NATIVE_PACKAGE_URL when available because:
@@ -498,7 +503,7 @@ export async function installGlobalPackage(
   }
 
   try {
-    await removegakrcliAliasesFromShellConfigs()
+    await removeGakrCLIAliasesFromShellConfigs()
     // Check if we're using npm from Windows path in WSL
     if (!env.isRunningWithBun() && env.isNpmFromWindowsPath()) {
       logError(new Error('Windows NPM detected in WSL environment'))
@@ -510,7 +515,7 @@ export async function installGlobalPackage(
       console.error(`
 Error: Windows NPM detected in WSL
 
-You're running GakrCLI in WSL but using the Windows NPM installation from /mnt/c/.
+You're running GakrCLI Code in WSL but using the Windows NPM installation from /mnt/c/.
 This configuration is not supported for updates.
 
 To fix this issue:
@@ -529,7 +534,7 @@ To fix this issue:
     // Use specific version if provided, otherwise use latest
     const packageSpec = specificVersion
       ? `${MACRO.PACKAGE_URL}@${specificVersion}`
-      : MACRO.PACKAGE_URL
+      : `${MACRO.PACKAGE_URL}@latest`
 
     // Run from home directory to avoid reading project-level .npmrc/.bunfig.toml
     // which could be maliciously crafted to redirect to an attacker's registry
@@ -564,7 +569,7 @@ To fix this issue:
  * Remove gakrcli aliases from shell configuration files
  * This helps clean up old installation methods when switching to native or npm global
  */
-async function removegakrcliAliasesFromShellConfigs(): Promise<void> {
+async function removeGakrCLIAliasesFromShellConfigs(): Promise<void> {
   const configMap = getShellConfigPaths()
 
   // Process each shell config file
@@ -573,7 +578,7 @@ async function removegakrcliAliasesFromShellConfigs(): Promise<void> {
       const lines = await readFileLines(configFile)
       if (!lines) continue
 
-      const { filtered, hadAlias } = filtergakrcliAliases(lines)
+      const { filtered, hadAlias } = filterGakrCLIAliases(lines)
 
       if (hadAlias) {
         await writeFileLines(configFile, filtered)

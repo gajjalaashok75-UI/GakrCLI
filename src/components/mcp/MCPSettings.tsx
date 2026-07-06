@@ -1,8 +1,8 @@
 import { c as _c } from "react-compiler-runtime";
 import React, { useEffect, useMemo } from 'react';
 import type { CommandResultDisplay } from '../../commands.js';
-import { gakrcliAuthProvider } from '../../services/mcp/auth.js';
-import type { McpgakrcliAIProxyServerConfig, McpHTTPServerConfig, McpSSEServerConfig, McpStdioServerConfig } from '../../services/mcp/types.js';
+import { GakrCLIAuthProvider } from '../../services/mcp/auth.js';
+import type { McpGakrCLIAIProxyServerConfig, McpHTTPServerConfig, McpSSEServerConfig, McpStdioServerConfig } from '../../services/mcp/types.js';
 import { extractAgentMcpServers, filterToolsByServer } from '../../services/mcp/utils.js';
 import { useAppState } from '../../state/AppState.js';
 import { getSessionIngressAuthToken } from '../../utils/sessionIngressAuth.js';
@@ -18,7 +18,7 @@ type Props = {
     display?: CommandResultDisplay;
   }) => void;
 };
-export function MCPSettings(t0) {
+export function MCPSettings(t0: Props): React.ReactNode {
   const $ = _c(66);
   const {
     onComplete
@@ -35,7 +35,7 @@ export function MCPSettings(t0) {
   } else {
     t1 = $[0];
   }
-  const [viewState, setViewState] = React.useState(t1);
+  const [viewState, setViewState] = React.useState<MCPViewState>(t1);
   let t2;
   if ($[1] === Symbol.for("react.memo_cache_sentinel")) {
     t2 = [];
@@ -43,7 +43,7 @@ export function MCPSettings(t0) {
   } else {
     t2 = $[1];
   }
-  const [servers, setServers] = React.useState(t2);
+  const [servers, setServers] = React.useState<ServerInfo[]>(t2);
   let t3;
   if ($[2] !== agentDefinitions.allAgents) {
     t3 = extractAgentMcpServers(agentDefinitions.allAgents);
@@ -68,14 +68,14 @@ export function MCPSettings(t0) {
     t5 = () => {
       let cancelled = false;
       const prepareServers = async function prepareServers() {
-        const serverInfos = await Promise.all(filteredClients.map(async client_0 => {
+        const serverInfos: ServerInfo[] = await Promise.all(filteredClients.map(async client_0 => {
           const scope = client_0.config.scope;
           const isSSE = client_0.config.type === "sse";
           const isHTTP = client_0.config.type === "http";
-          const isgakrcliAIProxy = client_0.config.type === "gakrcliai-proxy";
-          let isAuthenticated = undefined;
+          const isGakrCLIAIProxy = client_0.config.type === "gakrcliai-proxy";
+          let isAuthenticated: boolean | undefined = undefined;
           if (isSSE || isHTTP) {
-            const authProvider = new gakrcliAuthProvider(client_0.name, client_0.config as McpSSEServerConfig | McpHTTPServerConfig);
+            const authProvider = new GakrCLIAuthProvider(client_0.name, client_0.config as McpSSEServerConfig | McpHTTPServerConfig);
             const tokens = await authProvider.tokens();
             const hasSessionAuth = getSessionIngressAuthToken() !== null && client_0.type === "connected";
             const hasToolsAndConnected = client_0.type === "connected" && filterToolsByServer(mcp.tools, client_0.name).length > 0;
@@ -86,19 +86,19 @@ export function MCPSettings(t0) {
             client: client_0,
             scope
           };
-          if (isgakrcliAIProxy) {
+          if (isGakrCLIAIProxy) {
             return {
               ...baseInfo,
               transport: "gakrcliai-proxy" as const,
               isAuthenticated: false,
-              config: client_0.config as McpgakrcliAIProxyServerConfig
+              config: client_0.config as McpGakrCLIAIProxyServerConfig
             };
           } else {
             if (isSSE) {
               return {
                 ...baseInfo,
                 transport: "sse" as const,
-                isAuthenticated,
+                isAuthenticated: isAuthenticated ?? false,
                 config: client_0.config as McpSSEServerConfig
               };
             } else {
@@ -106,7 +106,7 @@ export function MCPSettings(t0) {
                 return {
                   ...baseInfo,
                   transport: "http" as const,
-                  isAuthenticated,
+                  isAuthenticated: isAuthenticated ?? false,
                   config: client_0.config as McpHTTPServerConfig
                 };
               } else {
@@ -147,7 +147,7 @@ export function MCPSettings(t0) {
         return;
       }
       if (servers.length === 0 && agentMcpServers.length === 0) {
-        onComplete("No MCP servers configured. Please run /doctor if this is unexpected. Otherwise, run `gakrcli mcp --help` or visit https://github.com/gakr-gakr/gakr/docs/en/mcp to learn more.");
+        onComplete("No MCP servers configured. Please run /doctor if this is unexpected. Otherwise, run `gakrcli mcp --help` or visit https://github.com/gajjalaashok75-UI/gakrcli to learn more.");
       }
     };
     t8 = [servers.length, filteredClients.length, agentMcpServers.length, onComplete];
@@ -207,7 +207,7 @@ export function MCPSettings(t0) {
           t9 = $[25];
         }
         const serverTools_0 = t9;
-        const defaultTab = viewState.server.transport === "gakrcliai-proxy" ? "gakr.ai" : "Gakr";
+        const defaultTab = viewState.server.transport === "gakrcliai-proxy" ? "gakrcli.ai" : "GakrCLI Code";
         if (viewState.server.transport === "stdio") {
           let t10;
           if ($[26] !== viewState.server) {

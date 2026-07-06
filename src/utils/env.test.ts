@@ -50,33 +50,35 @@ async function importFreshEnvModule() {
   return import(`./env.js?ts=${Date.now()}-${Math.random()}`)
 }
 
-// getGlobalGakrcliFile — three migration branches
+// getGlobalGakrCLIFile — default path plus explicit override compatibility
 
-test('getGlobalGakrcliFile: new install returns .gakrcli.json when neither file exists', async () => {
-  const { getGlobalGakrcliFile } = await importFreshEnvModule()
-  expect(getGlobalGakrcliFile()).toBe(join(tempDir, '.gakrcli.json'))
+test('getGlobalGakrCLIFile: new install returns .gakrcli.json when neither file exists', async () => {
+  const { getGlobalGakrCLIFile } = await importFreshEnvModule()
+  expect(getGlobalGakrCLIFile()).toBe(join(tempDir, '.gakrcli.json'))
 })
 
-test('getGlobalGakrcliFile: explicit config dir ignores legacy .claude.json files', async () => {
-  writeFileSync(join(tempDir, '.claude.json'), '{}')
-  const { getGlobalGakrcliFile } = await importFreshEnvModule()
-  expect(getGlobalGakrcliFile()).toBe(join(tempDir, '.gakrcli.json'))
-})
-
-test('getGlobalGakrcliFile: uses .gakrcli.json when both files exist', async () => {
-  writeFileSync(join(tempDir, '.claude.json'), '{}')
+test('getGlobalGakrCLIFile: explicit config dir keeps .gakrcli.json fallback when only legacy file exists', async () => {
   writeFileSync(join(tempDir, '.gakrcli.json'), '{}')
-  const { getGlobalGakrcliFile } = await importFreshEnvModule()
-  expect(getGlobalGakrcliFile()).toBe(join(tempDir, '.gakrcli.json'))
+  const { getGlobalGakrCLIFile } = await importFreshEnvModule()
+  expect(getGlobalGakrCLIFile()).toBe(join(tempDir, '.gakrcli.json'))
 })
 
-test('resolveGlobalGakrcliFile: ignores legacy file when new file is missing', async () => {
-  writeFileSync(join(tempDir, '.claude.json'), '{}')
-  const { resolveGlobalGakrcliFile } = await importFreshEnvModule()
+test('getGlobalGakrCLIFile: migrated user uses .gakrcli.json when both files exist', async () => {
+  writeFileSync(join(tempDir, '.gakrcli.json'), '{}')
+  writeFileSync(join(tempDir, '.gakrcli.json'), '{}')
+  const { getGlobalGakrCLIFile } = await importFreshEnvModule()
+  expect(getGlobalGakrCLIFile()).toBe(join(tempDir, '.gakrcli.json'))
+})
+
+test('resolveGlobalGakrCLIFile: failed default migration keeps legacy file when new file is missing', async () => {
+  writeFileSync(join(tempDir, '.gakrcli.json'), '{}')
+  const { resolveGlobalGakrCLIFile } = await importFreshEnvModule()
 
   expect(
-    resolveGlobalGakrcliFile({
+    resolveGlobalGakrCLIFile({
       homeDir: tempDir,
+      migrationSucceeded: false,
+      existsSync: path => path === join(tempDir, '.gakrcli.json'),
     }),
   ).toBe(join(tempDir, '.gakrcli.json'))
 })

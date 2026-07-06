@@ -83,7 +83,17 @@ mock.module('./installedPluginsManager.js', () => ({
   updateInstallationPathOnDisk: mock(() => {}),
 }))
 
+// Spread the real config module to preserve all exports. The marketplace
+// module body transitively imports many of these; missing entries
+// (e.g. `normalizeMaxMessagesCompactionThreshold` added in PR #1605) break
+// any downstream test that re-imports the mocked path in the same Bun
+// process. The `?real=...` cache-bust ensures the import bypasses this
+// file's own mock.module() registration for the same path.
+const realConfig = await import(
+  `../config.js?real=${Date.now()}-${Math.random()}`
+)
 mock.module('../config.js', () => ({
+  ...realConfig,
   checkHasTrustDialogAccepted: () => true,
   enableConfigs: mock(() => {}),
   getCurrentProjectConfig: () => ({}),
@@ -91,12 +101,12 @@ mock.module('../config.js', () => ({
   getGlobalConfigWriteCount: () => 0,
   getAutoUpdaterDisabledReason: () => null,
   formatAutoUpdaterDisabledReason: () => 'enabled',
-  getManagedClaudeRulesDir: () => '/tmp/gakrcli-managed-rules',
+  getManagedGakrCLIRulesDir: () => '/tmp/gakrcli-managed-rules',
   getMemoryPath: () => '/tmp/gakrcli-memory.md',
   getOrCreateUserID: () => 'test-user-id',
   getProjectPathForConfig: () => '/tmp/gakrcli-project-config.json',
   getRemoteControlAtStartup: () => false,
-  getUserClaudeRulesDir: () => '/tmp/gakrcli-user-rules',
+  getUserGakrCLIRulesDir: () => '/tmp/gakrcli-user-rules',
   isAutoUpdaterDisabled: () => false,
   recordFirstStartTime: mock(() => {}),
   getCustomApiKeyStatus: () => ({ hasCustomApiKey: false }),
@@ -111,10 +121,35 @@ mock.module('../config.js', () => ({
   saveCurrentProjectConfig: mock(() => {}),
 }))
 
-const {
-  getMatchingLspPlugins,
-  listLspPluginCandidates,
-} = await import('./lspRecommendation.js')
+let getMatchingLspPlugins: typeof import('./lspRecommendation.js').getMatchingLspPlugins
+let listLspPluginCandidates: typeof import('./lspRecommendation.js').listLspPluginCandidates
+
+function resetTestState(): void {
+  marketplaces = {
+    'gakrcli-plugins-official': [
+      lspPlugin('typescript-lsp', 'typescript-language-server', [
+        '.ts',
+        '.tsx',
+        '.js',
+      ]),
+      lspPlugin('pyright-lsp', 'pyright-langserver', ['.py', '.pyi']),
+    ],
+    community: [lspPlugin('rust-analyzer-lsp', 'rust-analyzer', ['.rs'])],
+  }
+  installedPlugins = new Set()
+  installedBinaries = new Set(['typescript-language-server'])
+  config = {
+    lspRecommendationDisabled: false,
+    lspRecommendationNeverPlugins: [],
+    lspRecommendationIgnoredCount: 0,
+  }
+  addMarketplaceSourceFn.mockClear()
+}
+
+resetTestState()
+const mod = await import('./lspRecommendation.js')
+getMatchingLspPlugins = mod.getMatchingLspPlugins
+listLspPluginCandidates = mod.listLspPluginCandidates
 
 afterAll(() => {
   try {
@@ -145,25 +180,7 @@ function lspPlugin(
 }
 
 beforeEach(() => {
-  marketplaces = {
-    'gakrcli-plugins-official': [
-      lspPlugin('typescript-lsp', 'typescript-language-server', [
-        '.ts',
-        '.tsx',
-        '.js',
-      ]),
-      lspPlugin('pyright-lsp', 'pyright-langserver', ['.py', '.pyi']),
-    ],
-    community: [lspPlugin('rust-analyzer-lsp', 'rust-analyzer', ['.rs'])],
-  }
-  installedPlugins = new Set()
-  installedBinaries = new Set(['typescript-language-server'])
-  config = {
-    lspRecommendationDisabled: false,
-    lspRecommendationNeverPlugins: [],
-    lspRecommendationIgnoredCount: 0,
-  }
-  addMarketplaceSourceFn.mockClear()
+  resetTestState()
 })
 
 describe('listLspPluginCandidates', () => {

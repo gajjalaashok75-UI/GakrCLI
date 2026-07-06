@@ -1,7 +1,7 @@
-// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
+// biome-ignore-all assist/source/organizeImports: internal-only import markers must not be reordered
 /**
  * Hooks are user-defined shell commands that can be executed at various points
- * in GakrCLI's lifecycle.
+ * in GakrCLI Code's lifecycle.
  */
 import { basename } from 'path'
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
@@ -134,8 +134,8 @@ import type { PermissionResult } from './permissions/PermissionResult.js'
 import { registerPendingAsyncHook } from './hooks/AsyncHookRegistry.js'
 import { enqueuePendingNotification } from './messageQueueManager.js'
 import {
-  createAssistantMessage,
   extractTextContent,
+  createAssistantMessage,
   getLastAssistantMessage,
   wrapInSystemReminder,
 } from './messages.js'
@@ -183,8 +183,8 @@ function dedupeRegisteredPluginHooks(
   const deduped: Array<HookCallbackMatcher | PluginHookMatcher> = []
 
   for (const matcher of registeredHooks) {
-    // SDK callback hooks are runtime values, so only plugin hook matchers are
-    // safe to compare structurally.
+    // SDK callback hooks are intentionally not deduped. Their callbacks are
+    // runtime values, so structural comparison would be lossy and unsafe.
     if (!('pluginRoot' in matcher)) {
       deduped.push(matcher)
       continue
@@ -218,6 +218,25 @@ function normalizeFallbackAgentModel(
   return undefined
 }
 
+const fallbackAgentLaunchSuccessStatuses = [
+  'async_launched',
+  'completed',
+  'teammate_spawned',
+] as const
+type FallbackAgentLaunchSuccessStatus =
+  (typeof fallbackAgentLaunchSuccessStatuses)[number]
+const fallbackAgentLaunchSuccessStatusSet = new Set<string>(
+  fallbackAgentLaunchSuccessStatuses,
+)
+
+export function isFallbackAgentLaunchSuccessStatus(
+  status: unknown,
+): status is FallbackAgentLaunchSuccessStatus {
+  return (
+    typeof status === 'string' && fallbackAgentLaunchSuccessStatusSet.has(status)
+  )
+}
+
 async function launchFallbackAgentFromHookChains(
   request: SpawnFallbackAgentRequest,
   toolUseContext: ToolUseContext,
@@ -248,12 +267,7 @@ async function launchFallbackAgentFromHookChains(
       | undefined
     const status = data?.status
 
-    if (
-      status === 'async_launched' ||
-      status === 'completed' ||
-      status === 'remote_launched' ||
-      status === 'teammate_spawned'
-    ) {
+    if (isFallbackAgentLaunchSuccessStatus(status)) {
       return {
         launched: true,
         agentId: data?.agentId ?? data?.agent_id,
@@ -1392,7 +1406,7 @@ async function execCommandHook(
         // Explicitly specify UTF-8 encoding to ensure proper handling of Unicode characters
         child.stdin.write(jsonInput + '\n', 'utf8')
         // Always close stdin after writing the initial JSON payload. The Anthropic
-        // hook input contract (https://docs.claude.com/en/docs/claude-code/hooks#hook-input)
+        // hook input contract (https://docs.gakrcli.com/en/docs/gakrcli-code/hooks#hook-input)
         // states stdin is closed after the payload is sent, and every plugin written
         // against that spec reads stdin until EOF. Leaving stdin open to support
         // future prompt-response on the same channel caused every UserPromptSubmit
@@ -4535,12 +4549,7 @@ export type InstructionsLoadReason =
   | 'include'
   | 'compact'
 
-export type InstructionsMemoryType =
-  | 'User'
-  | 'Project'
-  | 'Local'
-  | 'Managed'
-  | 'Workspace'
+export type InstructionsMemoryType = 'User' | 'Project' | 'Local' | 'Managed'
 
 /**
  * Check if InstructionsLoaded hooks are configured (without executing them).

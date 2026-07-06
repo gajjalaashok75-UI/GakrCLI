@@ -22,8 +22,8 @@ import {
 } from '../../tasks/LocalAgentTask/LocalAgentTask.js'
 import { isLocalShellTask } from '../../tasks/LocalShellTask/guards.js'
 import { asAgentId } from '../../types/ids.js'
-import type { Message } from '../../types/message.js'
 import { createCombinedAbortSignal } from '../../utils/combinedAbortSignal.js'
+import type { Message } from '../../types/message.js'
 import { createEmptyAttributionState } from '../../utils/commitAttribution.js'
 import type { FileStateCache } from '../../utils/fileStateCache.js'
 import {
@@ -37,6 +37,7 @@ import { processSessionStartHooks } from '../../utils/sessionStart.js'
 import {
   clearSessionMetadata,
   getAgentTranscriptPath,
+  recordGoalState,
   resetSessionFilePointer,
   saveWorktreeState,
 } from '../../utils/sessionStorage.js'
@@ -195,9 +196,12 @@ export async function clearConversation({
           resources: {},
           pluginReconnectKey: prev.mcp.pluginReconnectKey,
         },
+        goal: null,
       }
     })
   }
+
+  await recordGoalState(null)
 
   // Clear plan slug cache so a new plan file is used after /clear
   clearAllPlanSlugs()

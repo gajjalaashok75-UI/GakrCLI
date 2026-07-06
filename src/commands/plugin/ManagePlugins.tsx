@@ -10,7 +10,7 @@ import { MCPRemoteServerMenu } from '../../components/mcp/MCPRemoteServerMenu.js
 import { MCPStdioServerMenu } from '../../components/mcp/MCPStdioServerMenu.js';
 import { MCPToolDetailView } from '../../components/mcp/MCPToolDetailView.js';
 import { MCPToolListView } from '../../components/mcp/MCPToolListView.js';
-import type { gakrcliAIServerInfo, HTTPServerInfo, SSEServerInfo, StdioServerInfo } from '../../components/mcp/types.js';
+import type { GakrCLIAIServerInfo, HTTPServerInfo, SSEServerInfo, StdioServerInfo } from '../../components/mcp/types.js';
 import { SearchBox } from '../../components/SearchBox.js';
 import { useSearchInput } from '../../hooks/useSearchInput.js';
 import { useTerminalSize } from '../../hooks/useTerminalSize.js';
@@ -19,7 +19,7 @@ import { Box, Text, useInput, useTerminalFocus } from '../../ink.js';
 import { useKeybinding, useKeybindings } from '../../keybindings/useKeybinding.js';
 import { getBuiltinPluginDefinition } from '../../plugins/builtinPlugins.js';
 import { useMcpToggleEnabled } from '../../services/mcp/MCPConnectionManager.js';
-import type { MCPServerConnection, McpgakrcliAIProxyServerConfig, McpHTTPServerConfig, McpSSEServerConfig, McpStdioServerConfig } from '../../services/mcp/types.js';
+import type { MCPServerConnection, McpGakrCLIAIProxyServerConfig, McpHTTPServerConfig, McpSSEServerConfig, McpStdioServerConfig } from '../../services/mcp/types.js';
 import { filterToolsByServer } from '../../services/mcp/utils.js';
 import { disablePluginOp, enablePluginOp, getPluginInstallationFromV2, isInstallableScope, isPluginEnabledAtProjectScope, uninstallPluginOp, updatePluginOp } from '../../services/plugins/pluginOperations.js';
 import { useAppState } from '../../state/AppState.js';
@@ -236,7 +236,7 @@ function PluginComponentsDisplay({
         const pluginEntry = marketplaceData.plugins.find(p => p.name === plugin.name);
         if (pluginEntry) {
           // Combine commands from both sources
-          const commandPathList = [];
+          const commandPathList: string[] = [];
           if (plugin.commandsPath) {
             commandPathList.push(plugin.commandsPath);
           }
@@ -255,7 +255,7 @@ function PluginComponentsDisplay({
           }
 
           // Combine agents from both sources
-          const agentPathList = [];
+          const agentPathList: string[] = [];
           if (plugin.agentsPath) {
             agentPathList.push(plugin.agentsPath);
           }
@@ -274,7 +274,7 @@ function PluginComponentsDisplay({
           }
 
           // Combine skills from both sources
-          const skillPathList = [];
+          const skillPathList: string[] = [];
           if (plugin.skillsPath) {
             skillPathList.push(plugin.skillsPath);
           }
@@ -294,7 +294,7 @@ function PluginComponentsDisplay({
           }
 
           // Combine hooks from both sources
-          const hooksList = [];
+          const hooksList: unknown[] = [];
           if (plugin.hooksConfig) {
             hooksList.push(Object.keys(plugin.hooksConfig));
           }
@@ -303,7 +303,7 @@ function PluginComponentsDisplay({
           }
 
           // Combine MCP servers from both sources
-          const mcpServersList = [];
+          const mcpServersList: unknown[] = [];
           if (plugin.mcpServers) {
             mcpServersList.push(Object.keys(plugin.mcpServers));
           }
@@ -2002,13 +2002,13 @@ export function ManagePlugins({
       };
       return <MCPRemoteServerMenu server={server_1} serverToolsCount={serverToolsCount} onViewTools={handleMcpViewTools} onCancel={handleMcpCancel} onComplete={handleMcpComplete} borderless />;
     } else if (configType === 'gakrcliai-proxy') {
-      const server_2: gakrcliAIServerInfo = {
+      const server_2: GakrCLIAIServerInfo = {
         name: client_3.name,
         client: client_3,
         scope: scope_5,
         transport: 'gakrcliai-proxy',
         isAuthenticated: undefined,
-        config: client_3.config as McpgakrcliAIProxyServerConfig
+        config: client_3.config as McpGakrCLIAIProxyServerConfig
       };
       return <MCPRemoteServerMenu server={server_2} serverToolsCount={serverToolsCount} onViewTools={handleMcpViewTools} onCancel={handleMcpCancel} onComplete={handleMcpComplete} borderless />;
     }
@@ -2025,7 +2025,7 @@ export function ManagePlugins({
     const configType_0 = client_4.config.type;
 
     // Build ServerInfo for MCPToolListView
-    let server_3: StdioServerInfo | SSEServerInfo | HTTPServerInfo | gakrcliAIServerInfo;
+    let server_3: StdioServerInfo | SSEServerInfo | HTTPServerInfo | GakrCLIAIServerInfo;
     if (configType_0 === 'stdio') {
       server_3 = {
         name: client_4.name,
@@ -2059,7 +2059,7 @@ export function ManagePlugins({
         scope: scope_6,
         transport: 'gakrcliai-proxy',
         isAuthenticated: undefined,
-        config: client_4.config as McpgakrcliAIProxyServerConfig
+        config: client_4.config as McpGakrCLIAIProxyServerConfig
       };
     }
     return <MCPToolListView server={server_3} onSelectTool={(tool: Tool) => {
@@ -2084,7 +2084,7 @@ export function ManagePlugins({
     const configType_1 = client_5.config.type;
 
     // Build ServerInfo for MCPToolDetailView
-    let server_4: StdioServerInfo | SSEServerInfo | HTTPServerInfo | gakrcliAIServerInfo;
+    let server_4: StdioServerInfo | SSEServerInfo | HTTPServerInfo | GakrCLIAIServerInfo;
     if (configType_1 === 'stdio') {
       server_4 = {
         name: client_5.name,
@@ -2118,7 +2118,7 @@ export function ManagePlugins({
         scope: scope_7,
         transport: 'gakrcliai-proxy',
         isAuthenticated: undefined,
-        config: client_5.config as McpgakrcliAIProxyServerConfig
+        config: client_5.config as McpGakrCLIAIProxyServerConfig
       };
     }
     return <MCPToolDetailView tool={tool_0} server={server_4} onBack={() => setViewState({

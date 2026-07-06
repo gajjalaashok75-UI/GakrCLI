@@ -42,10 +42,10 @@ import {
   logEvent,
 } from 'src/services/analytics/index.js'
 import {
-  dedupgakrcliAiMcpServers,
+  dedupGakrCLIAiMcpServers,
   doesEnterpriseMcpConfigExist,
   filterMcpServersByPolicy,
-  getgakrcliCodeMcpConfigs,
+  getGakrCLICodeMcpConfigs,
   isMcpServerDisabled,
   setMcpServerEnabled,
 } from 'src/services/mcp/config.js'
@@ -77,8 +77,8 @@ import {
   isChannelPermissionRelayEnabled,
 } from './channelPermissions.js'
 import {
-  cleargakrcliAIMcpConfigsCache,
-  fetchgakrcliAIMcpConfigsIfEligible,
+  clearGakrCLIAIMcpConfigsCache,
+  fetchGakrCLIAIMcpConfigsIfEligible,
 } from './gakrcliai.js'
 import { registerElicitationHandler } from './elicitationHandler.js'
 import { getMcpPrefix } from './mcpStringUtils.js'
@@ -147,7 +147,7 @@ export function useManageMCPConnections(
   const store = useAppStateStore()
   const _authVersion = useAppState(s => s.authVersion)
   // Incremented by /reload-plugins (refreshActivePlugins) to pick up newly
-  // enabled plugin MCP servers. getgakrcliCodeMcpConfigs() reads loadAllPlugins()
+  // enabled plugin MCP servers. getGakrCLICodeMcpConfigs() reads loadAllPlugins()
   // which has been cleared by refreshActivePlugins, so the effects below see
   // fresh plugin data on re-run.
   const _pluginReconnectKey = useAppState(s => s.mcp.pluginReconnectKey)
@@ -204,7 +204,7 @@ export function useManageMCPConnections(
   // in a single setAppState call via setTimeout. Using a time-based window
   // (instead of queueMicrotask) ensures updates are batched even when
   // connection callbacks arrive at different times due to network I/O.
-  const MCP_BATCH_FLUSH_MS = 16
+  const MCP_BATCH_FLUSH_MS = 100
   type PendingUpdate = MCPServerConnection & {
     tools?: Tool[]
     commands?: Command[]
@@ -597,7 +597,7 @@ export function useManageMCPConnections(
                     gate.kind === 'disabled'
                       ? 'Channels are not currently available'
                       : gate.kind === 'auth'
-                        ? 'Channels require gakr.ai authentication · run /login'
+                        ? 'Channels require gakrcli.ai authentication · run /login'
                         : gate.kind === 'policy'
                           ? 'Channels are not enabled for your org · have an administrator set channelsEnabled: true in managed settings'
                           : gate.reason
@@ -766,14 +766,14 @@ export function useManageMCPConnections(
   // Re-runs on session change (/clear) and on /reload-plugins (pluginReconnectKey).
   // On plugin reload, also disconnects stale plugin MCP servers (scope 'dynamic')
   // that no longer appear in configs — prevents ghost tools from disabled plugins.
-  // Skip gakr.ai dedup here to avoid blocking on the network fetch; the connect
+  // Skip gakrcli.ai dedup here to avoid blocking on the network fetch; the connect
   // useEffect below runs immediately after and dedups before connecting.
   const sessionId = getSessionId()
   useEffect(() => {
     async function initializeServersAsPending() {
       const { servers: existingConfigs, errors: mcpErrors } = isStrictMcpConfig
         ? { servers: {}, errors: [] }
-        : await getgakrcliCodeMcpConfigs(dynamicMcpConfig)
+        : await getGakrCLICodeMcpConfigs(dynamicMcpConfig)
       const configs = { ...existingConfigs, ...dynamicMcpConfig }
 
       // Add MCP errors to plugin errors for UI visibility (deduplicated)
@@ -854,31 +854,31 @@ export function useManageMCPConnections(
   ])
 
   // Load MCP configs and connect to servers
-  // Two-phase loading: GakrCLI configs first (fast), then gakr.ai configs (may be slow)
+  // Two-phase loading: GakrCLI Code configs first (fast), then gakrcli.ai configs (may be slow)
   useEffect(() => {
     let cancelled = false
 
     async function loadAndConnectMcpConfigs() {
-      // Clear gakr.ai MCP cache so we fetch fresh configs with current auth
+      // Clear gakrcli.ai MCP cache so we fetch fresh configs with current auth
       // state. This is important when authVersion changes (e.g., after login/
       // logout). Kick off the fetch now so it overlaps with loadAllPlugins()
-      // inside getgakrcliCodeMcpConfigs; it's awaited only at the dedup step.
+      // inside getGakrCLICodeMcpConfigs; it's awaited only at the dedup step.
       // Phase 2 below awaits the same promise — no second network call.
       let gakrcliaiPromise: Promise<Record<string, ScopedMcpServerConfig>>
       if (isStrictMcpConfig || doesEnterpriseMcpConfigExist()) {
         gakrcliaiPromise = Promise.resolve({})
       } else {
-        cleargakrcliAIMcpConfigsCache()
-        gakrcliaiPromise = fetchgakrcliAIMcpConfigsIfEligible()
+        clearGakrCLIAIMcpConfigsCache()
+        gakrcliaiPromise = fetchGakrCLIAIMcpConfigsIfEligible()
       }
 
-      // Phase 1: Load GakrCLI configs. Plugin MCP servers that duplicate a
-      // --mcp-config entry or a gakr.ai connector are suppressed here so they
+      // Phase 1: Load GakrCLI Code configs. Plugin MCP servers that duplicate a
+      // --mcp-config entry or a gakrcli.ai connector are suppressed here so they
       // don't connect alongside the connector in Phase 2.
       const { servers: gakrcliCodeConfigs, errors: mcpErrors } =
         isStrictMcpConfig
           ? { servers: {}, errors: [] }
-          : await getgakrcliCodeMcpConfigs(dynamicMcpConfig, gakrcliaiPromise)
+          : await getGakrCLICodeMcpConfigs(dynamicMcpConfig, gakrcliaiPromise)
       if (cancelled) return
 
       // Add MCP errors to plugin errors for UI visibility (deduplicated)
@@ -886,7 +886,7 @@ export function useManageMCPConnections(
 
       const configs = { ...gakrcliCodeConfigs, ...dynamicMcpConfig }
 
-      // Start connecting to GakrCLI servers (don't wait - runs concurrently with Phase 2)
+      // Start connecting to GakrCLI Code servers (don't wait - runs concurrently with Phase 2)
       // Filter out disabled servers to avoid unnecessary connection attempts
       const enabledConfigs = Object.fromEntries(
         Object.entries(configs).filter(([name]) => !isMcpServerDisabled(name)),
@@ -901,7 +901,7 @@ export function useManageMCPConnections(
         )
       })
 
-      // Phase 2: Await gakr.ai configs (started above; memoized — no second fetch)
+      // Phase 2: Await gakrcli.ai configs (started above; memoized — no second fetch)
       let gakrcliaiConfigs: Record<string, ScopedMcpServerConfig> = {}
       if (!isStrictMcpConfig) {
         gakrcliaiConfigs = filterMcpServersByPolicy(
@@ -909,19 +909,19 @@ export function useManageMCPConnections(
         ).allowed
         if (cancelled) return
 
-        // Suppress gakr.ai connectors that duplicate an enabled manual server.
-        // Keys never collide (`slack` vs `gakr.ai Slack`) so the merge below
+        // Suppress gakrcli.ai connectors that duplicate an enabled manual server.
+        // Keys never collide (`slack` vs `gakrcli.ai Slack`) so the merge below
         // won't catch this — need content-based dedup by URL signature.
         if (Object.keys(gakrcliaiConfigs).length > 0) {
-          const { servers: dedupedgakrcliAi } = dedupgakrcliAiMcpServers(
+          const { servers: dedupedGakrCLIAi } = dedupGakrCLIAiMcpServers(
             gakrcliaiConfigs,
             configs,
           )
-          gakrcliaiConfigs = dedupedgakrcliAi
+          gakrcliaiConfigs = dedupedGakrCLIAi
         }
 
         if (Object.keys(gakrcliaiConfigs).length > 0) {
-          // Add gakr.ai servers as pending immediately so they show up in UI
+          // Add gakrcli.ai servers as pending immediately so they show up in UI
           setAppState(prevState => {
             const existingServerNames = new Set(
               prevState.mcp.clients.map(c => c.name),
@@ -946,18 +946,18 @@ export function useManageMCPConnections(
           })
 
           // Now start connecting (only enabled servers)
-          const enabledgakrcliaiConfigs = Object.fromEntries(
+          const enabledGakrCLIaiConfigs = Object.fromEntries(
             Object.entries(gakrcliaiConfigs).filter(
               ([name]) => !isMcpServerDisabled(name),
             ),
           )
           getMcpToolsCommandsAndResources(
             onConnectionAttempt,
-            enabledgakrcliaiConfigs,
+            enabledGakrCLIaiConfigs,
           ).catch(error => {
             logMCPError(
               'useManageMcpConnections',
-              `Failed to get gakr.ai MCP resources: ${errorMessage(error)}`,
+              `Failed to get gakrcli.ai MCP resources: ${errorMessage(error)}`,
             )
           })
         }
@@ -1008,7 +1008,17 @@ export function useManageMCPConnections(
       })
     }
 
-    void loadAndConnectMcpConfigs()
+    // Defer MCP connections by one event-loop tick to ensure Ink's stdin
+    // raw-mode setup (handleSetRawMode in App.tsx) has fully committed
+    // before any async MCP callback can trigger a re-render. Mitigates the
+    // race described in issue #603 where rapid mount/unmount during early
+    // MCP state updates could corrupt rawModeEnabledCount or deregister
+    // stdin listeners before they were fully attached.
+    setTimeout(() => {
+      if (!cancelled) {
+        void loadAndConnectMcpConfigs()
+      }
+    }, 0)
 
     return () => {
       cancelled = true

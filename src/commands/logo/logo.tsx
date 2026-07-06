@@ -24,7 +24,7 @@ function LogoPickerCommand({ onDone }: Props): React.ReactElement {
 
   const handleSelect = React.useCallback(
     (chosen: LogoPaletteName) => {
-      saveGlobalConfig(config => ({ ...config, logoColor: chosen }))
+      saveGlobalConfig(c => ({ ...c, logoColor: chosen }))
       onDone(
         `Startup logo set to ${LOGO_PALETTE_LABELS[chosen]}. Visible on next launch.`,
       )

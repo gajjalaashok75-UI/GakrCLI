@@ -3,12 +3,21 @@
 // Mirrors controlSchemas.ts StdoutMessageSchema and StdinMessageSchema unions.
 
 import type {
+  AccountInfo,
+  AgentDefinition,
+  AgentInfo,
   ApiKeySource,
   AssistantMessageError,
   FastModeState,
+  HookCallbackMatcher,
+  HookEvent,
+  McpServerConfigForProcessTransport,
+  McpServerStatus,
+  ModelInfo,
   ModelUsage,
   PermissionMode,
   PermissionUpdate,
+  SlashCommand,
 } from './session';
 
 // ============================================================================

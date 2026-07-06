@@ -6,7 +6,7 @@ import { dirname, join, parse } from 'path'
 import { getPlatform } from 'src/utils/platform.js'
 import type { PluginError } from '../../types/plugin.js'
 import { getPluginErrorMessage } from '../../types/plugin.js'
-import { isgakrcliInChromeMCPServer } from '../../utils/gakrcliInChrome/common.js'
+import { isGakrCLIInChromeMCPServer } from '../../utils/gakrcliInChrome/common.js'
 import {
   getCurrentProjectConfig,
   getGlobalConfig,
@@ -40,7 +40,7 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../analytics/index.js'
-import { fetchgakrcliAIMcpConfigsIfEligible } from './gakrcliai.js'
+import { fetchGakrCLIAIMcpConfigsIfEligible } from './gakrcliai.js'
 import { expandEnvVarsInString } from './envExpansion.js'
 import {
   type ConfigScope,
@@ -143,15 +143,6 @@ function getServerCommandArray(config: McpServerConfig): string[] | null {
   return [stdioConfig.command, ...(stdioConfig.args ?? [])]
 }
 
-function getServerCommandSignature(config: McpServerConfig): string[] | null {
-  const command = getServerCommandArray(config)
-  if (!command) {
-    return null
-  }
-  const stdioConfig = config as McpStdioServerConfig
-  return [stdioConfig.cwd ?? '', ...command]
-}
-
 /**
  * Check if two command arrays match exactly
  */
@@ -171,7 +162,7 @@ function getServerUrl(config: McpServerConfig): string | null {
 }
 
 /**
- * CCR proxy URL path markers. In remote sessions, gakr.ai connectors arrive
+ * CCR proxy URL path markers. In remote sessions, gakrcli.ai connectors arrive
  * via --mcp-config with URLs rewritten to route through the CCR/session-ingress
  * SHTTP proxy. The original vendor URL is preserved in the mcp_url query param
  * so the proxy knows where to forward. See api-go/ccr/internal/ccrshared/
@@ -209,7 +200,7 @@ export function unwrapCcrProxyUrl(url: string): string {
  * Returns null only for configs with neither command nor url (sdk type).
  */
 export function getMcpServerSignature(config: McpServerConfig): string | null {
-  const cmd = getServerCommandSignature(config)
+  const cmd = getServerCommandArray(config)
   if (cmd) {
     return `stdio:${jsonStringify(cmd)}`
   }
@@ -275,11 +266,11 @@ export function dedupPluginMcpServers(
 }
 
 /**
- * Filter gakr.ai connectors, dropping any whose signature matches an enabled
+ * Filter gakrcli.ai connectors, dropping any whose signature matches an enabled
  * manually-configured server. Manual wins: a user who wrote .mcp.json or ran
  * `gakrcli mcp add` expressed higher intent than a connector toggled in the web UI.
  *
- * Connector keys are `gakr.ai <DisplayName>` so they never key-collide with
+ * Connector keys are `gakrcli.ai <DisplayName>` so they never key-collide with
  * manual servers in the merge — this content-based check catches the case where
  * both point at the same underlying URL (e.g. `mcp__slack__*` and
  * `mcp__gakrcli_ai_Slack__*` both hitting mcp.slack.com, ~600 chars/turn wasted).
@@ -287,7 +278,7 @@ export function dedupPluginMcpServers(
  * Only enabled manual servers count as dedup targets — a disabled manual server
  * mustn't suppress its connector twin, or neither runs.
  */
-export function dedupgakrcliAiMcpServers(
+export function dedupGakrCLIAiMcpServers(
   gakrcliAiServers: Record<string, ScopedMcpServerConfig>,
   manualServers: Record<string, ScopedMcpServerConfig>,
 ): {
@@ -308,7 +299,7 @@ export function dedupgakrcliAiMcpServers(
     const manualDup = sig !== null ? manualSigs.get(sig) : undefined
     if (manualDup !== undefined) {
       logForDebugging(
-        `Suppressing gakr.ai connector "${name}": duplicates manually-configured "${manualDup}"`,
+        `Suppressing gakrcli.ai connector "${name}": duplicates manually-configured "${manualDup}"`,
       )
       suppressed.push({ name, duplicateOf: manualDup })
       continue
@@ -522,7 +513,7 @@ function isMcpServerAllowedByPolicy(
  * returned so callers can warn the user.
  *
  * Intended for user-controlled config entry points that bypass the policy filter
- * in getgakrcliCodeMcpConfigs(): --mcp-config (main.tsx) and the mcp_set_servers
+ * in getGakrCLICodeMcpConfigs(): --mcp-config (main.tsx) and the mcp_set_servers
  * control message (print.ts, SDK V2 Query.setMcpServers()).
  *
  * SDK-type servers are exempt — they are SDK-managed transport placeholders,
@@ -643,7 +634,7 @@ export async function addMcpConfig(
   }
 
   // Block reserved server name "gakrcli-in-chrome"
-  if (isgakrcliInChromeMCPServer(name)) {
+  if (isGakrCLIInChromeMCPServer(name)) {
     throw new Error(`Cannot add MCP server "${name}": this name is reserved.`)
   }
 
@@ -1043,7 +1034,7 @@ export function getMcpConfigByName(name: string): ScopedMcpServerConfig | null {
   const { servers: enterpriseServers } = getMcpConfigsByScope('enterprise')
 
   // When MCP is locked to plugin-only, only enterprise servers are reachable
-  // by name. User/project/local servers are blocked — same as getgakrcliCodeMcpConfigs().
+  // by name. User/project/local servers are blocked — same as getGakrCLICodeMcpConfigs().
   if (isRestrictedToPluginOnly('mcp')) {
     return enterpriseServers[name] ?? null
   }
@@ -1069,15 +1060,15 @@ export function getMcpConfigByName(name: string): ScopedMcpServerConfig | null {
 }
 
 /**
- * Get GakrCLI MCP configurations (excludes gakr.ai servers from the
+ * Get GakrCLI Code MCP configurations (excludes gakrcli.ai servers from the
  * returned set — they're fetched separately and merged by callers).
  * This is fast: only local file reads; no awaited network calls on the
  * critical path. The optional extraDedupTargets promise (e.g. the in-flight
- * gakr.ai connector fetch) is awaited only after loadAllPluginsCacheOnly() completes,
+ * gakrcli.ai connector fetch) is awaited only after loadAllPluginsCacheOnly() completes,
  * so the two overlap rather than serialize.
- * @returns GakrCLI server configurations with appropriate scopes
+ * @returns GakrCLI Code server configurations with appropriate scopes
  */
-export async function getgakrcliCodeMcpConfigs(
+export async function getGakrCLICodeMcpConfigs(
   dynamicServers: Record<string, ScopedMcpServerConfig> = {},
   extraDedupTargets: Promise<
     Record<string, ScopedMcpServerConfig>
@@ -1260,23 +1251,23 @@ export async function getgakrcliCodeMcpConfigs(
 }
 
 /**
- * Get all MCP configurations across all scopes, including gakr.ai servers.
- * This may be slow due to network calls - use getgakrcliCodeMcpConfigs() for fast startup.
+ * Get all MCP configurations across all scopes, including gakrcli.ai servers.
+ * This may be slow due to network calls - use getGakrCLICodeMcpConfigs() for fast startup.
  * @returns All server configurations with appropriate scopes
  */
 export async function getAllMcpConfigs(): Promise<{
   servers: Record<string, ScopedMcpServerConfig>
   errors: PluginError[]
 }> {
-  // In enterprise mode, don't load gakr.ai servers (enterprise has exclusive control)
+  // In enterprise mode, don't load gakrcli.ai servers (enterprise has exclusive control)
   if (doesEnterpriseMcpConfigExist()) {
-    return getgakrcliCodeMcpConfigs()
+    return getGakrCLICodeMcpConfigs()
   }
 
-  // Kick off the gakr.ai fetch before getgakrcliCodeMcpConfigs so it overlaps
+  // Kick off the gakrcli.ai fetch before getGakrCLICodeMcpConfigs so it overlaps
   // with loadAllPluginsCacheOnly() inside. Memoized — the awaited call below is a cache hit.
-  const gakrcliaiPromise = fetchgakrcliAIMcpConfigsIfEligible()
-  const { servers: gakrcliCodeServers, errors } = await getgakrcliCodeMcpConfigs(
+  const gakrcliaiPromise = fetchGakrCLIAIMcpConfigsIfEligible()
+  const { servers: gakrcliCodeServers, errors } = await getGakrCLICodeMcpConfigs(
     {},
     gakrcliaiPromise,
   )
@@ -1284,16 +1275,16 @@ export async function getAllMcpConfigs(): Promise<{
     await gakrcliaiPromise,
   )
 
-  // Suppress gakr.ai connectors that duplicate an enabled manual server.
-  // Keys never collide (`slack` vs `gakr.ai Slack`) so the merge below
+  // Suppress gakrcli.ai connectors that duplicate an enabled manual server.
+  // Keys never collide (`slack` vs `gakrcli.ai Slack`) so the merge below
   // won't catch this — need content-based dedup by URL signature.
-  const { servers: dedupedgakrcliAi } = dedupgakrcliAiMcpServers(
+  const { servers: dedupedGakrCLIAi } = dedupGakrCLIAiMcpServers(
     gakrcliaiMcpServers,
     gakrcliCodeServers,
   )
 
-  // Merge with gakr.ai having lowest precedence
-  const servers = Object.assign({}, dedupedgakrcliAi, gakrcliCodeServers)
+  // Merge with gakrcli.ai having lowest precedence
+  const servers = Object.assign({}, dedupedGakrCLIAi, gakrcliCodeServers)
 
   return { servers, errors }
 }
@@ -1368,7 +1359,7 @@ export function parseMcpConfig(params: {
         ...(filePath && { file: filePath }),
         path: `mcpServers.${name}`,
         message: `Windows requires 'cmd /c' wrapper to execute npx`,
-        suggestion: `Change command to "cmd" with args ["/c", "npx", ...]. See: https://github.com/gajjalaashok75-UI/GakrCLI/docs/en/mcp#configure-mcp-servers`,
+        suggestion: `Change command to "cmd" with args ["/c", "npx", ...]. See: https://code.gakrcli.com/docs/en/mcp#configure-mcp-servers`,
         mcpErrorMetadata: {
           scope,
           serverName: name,

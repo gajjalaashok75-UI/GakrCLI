@@ -34,7 +34,7 @@ type Props = {
   onSubmit: () => void;
   onTabPrev?: () => void;
   onTabNext?: () => void;
-  onRespondTogakrcli: () => void;
+  onRespondToGakrCLI: () => void;
   onFinishPlanInterview: () => void;
   onImagePaste?: (base64Image: string, mediaType?: string, filename?: string, dimensions?: ImageDimensions, sourcePath?: string) => void;
   onRemoveImage?: (id: number) => void;
@@ -58,7 +58,7 @@ export function QuestionView(t0) {
     onSubmit,
     onTabPrev,
     onTabNext,
-    onRespondTogakrcli,
+    onRespondToGakrCLI,
     onFinishPlanInterview,
     onImagePaste,
     pastedContents,
@@ -140,7 +140,7 @@ export function QuestionView(t0) {
       if (key.return) {
         event.stopImmediatePropagation();
         if (footerIndex === 0) {
-          onRespondTogakrcli();
+          onRespondToGakrCLI();
         } else {
           onFinishPlanInterview();
         }
@@ -231,8 +231,8 @@ export function QuestionView(t0) {
   const hasAnyPreview = !question.multiSelect && question.options.some(_temp3);
   if (hasAnyPreview) {
     let t8;
-    if ($[30] !== answers || $[31] !== currentQuestionIndex || $[32] !== hideSubmitTab || $[33] !== minContentHeight || $[34] !== minContentWidth || $[35] !== onAnswer || $[36] !== onCancel || $[37] !== onFinishPlanInterview || $[38] !== onRespondTogakrcli || $[39] !== onTabNext || $[40] !== onTabPrev || $[41] !== onTextInputFocus || $[42] !== onUpdateQuestionState || $[43] !== question || $[44] !== questionStates || $[45] !== questions) {
-      t8 = <PreviewQuestionView question={question} questions={questions} currentQuestionIndex={currentQuestionIndex} answers={answers} questionStates={questionStates} hideSubmitTab={hideSubmitTab} minContentHeight={minContentHeight} minContentWidth={minContentWidth} onUpdateQuestionState={onUpdateQuestionState} onAnswer={onAnswer} onTextInputFocus={onTextInputFocus} onCancel={onCancel} onTabPrev={onTabPrev} onTabNext={onTabNext} onRespondTogakrcli={onRespondTogakrcli} onFinishPlanInterview={onFinishPlanInterview} />;
+    if ($[30] !== answers || $[31] !== currentQuestionIndex || $[32] !== hideSubmitTab || $[33] !== minContentHeight || $[34] !== minContentWidth || $[35] !== onAnswer || $[36] !== onCancel || $[37] !== onFinishPlanInterview || $[38] !== onRespondToGakrCLI || $[39] !== onTabNext || $[40] !== onTabPrev || $[41] !== onTextInputFocus || $[42] !== onUpdateQuestionState || $[43] !== question || $[44] !== questionStates || $[45] !== questions) {
+      t8 = <PreviewQuestionView question={question} questions={questions} currentQuestionIndex={currentQuestionIndex} answers={answers} questionStates={questionStates} hideSubmitTab={hideSubmitTab} minContentHeight={minContentHeight} minContentWidth={minContentWidth} onUpdateQuestionState={onUpdateQuestionState} onAnswer={onAnswer} onTextInputFocus={onTextInputFocus} onCancel={onCancel} onTabPrev={onTabPrev} onTabNext={onTabNext} onRespondToGakrCLI={onRespondToGakrCLI} onFinishPlanInterview={onFinishPlanInterview} />;
       $[30] = answers;
       $[31] = currentQuestionIndex;
       $[32] = hideSubmitTab;
@@ -241,7 +241,7 @@ export function QuestionView(t0) {
       $[35] = onAnswer;
       $[36] = onCancel;
       $[37] = onFinishPlanInterview;
-      $[38] = onRespondTogakrcli;
+      $[38] = onRespondToGakrCLI;
       $[39] = onTabNext;
       $[40] = onTabPrev;
       $[41] = onTextInputFocus;

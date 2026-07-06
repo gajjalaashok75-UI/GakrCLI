@@ -1,4 +1,4 @@
-import { readdir, stat } from 'fs/promises'
+import { readFile, readdir, stat } from 'fs/promises'
 import { getWikiPaths } from './paths.js'
 import type { WikiStatus } from './types.js'
 
@@ -31,26 +31,6 @@ async function listMarkdownFiles(dir: string): Promise<string[]> {
   return files
 }
 
-async function countFiles(dir: string): Promise<number> {
-  if (!(await pathExists(dir))) {
-    return 0
-  }
-
-  const entries = await readdir(dir, { withFileTypes: true })
-  let count = 0
-
-  for (const entry of entries) {
-    const fullPath = `${dir}/${entry.name}`
-    if (entry.isDirectory()) {
-      count += await countFiles(fullPath)
-    } else if (entry.isFile()) {
-      count += 1
-    }
-  }
-
-  return count
-}
-
 async function getLastUpdatedAt(pathsToCheck: string[]): Promise<string | null> {
   const mtimes: number[] = []
 
@@ -70,29 +50,41 @@ async function getLastUpdatedAt(pathsToCheck: string[]): Promise<string | null> 
   return new Date(Math.max(...mtimes)).toISOString()
 }
 
+async function readCacheFile(cachePath: string): Promise<{ scannedAt: string } | null> {
+  try {
+    const raw = await readFile(cachePath, { encoding: 'utf-8' })
+    const entry = JSON.parse(raw) as { scannedAt: string }
+    return entry.scannedAt ? entry : null
+  } catch {
+    return null
+  }
+}
+
 export async function getWikiStatus(cwd: string): Promise<WikiStatus> {
   const paths = getWikiPaths(cwd)
 
-  const [hasRoot, hasSchema, hasIndex, hasLog, rawSourceCount, pages, sources] =
+  const [hasRoot, hasSchema, hasIndex, hasLog, hasConventions, pages, sources, cacheEntry] =
     await Promise.all([
       pathExists(paths.root),
       pathExists(paths.schemaFile),
       pathExists(paths.indexFile),
       pathExists(paths.logFile),
-      countFiles(paths.rawDir),
+      pathExists(paths.conventionsFile),
       listMarkdownFiles(paths.pagesDir),
       listMarkdownFiles(paths.sourcesDir),
+      readCacheFile(paths.conventionsCacheFile),
     ])
 
   return {
     initialized: hasRoot && hasSchema && hasIndex && hasLog,
     root: paths.root,
-    rawSourceCount,
     pageCount: pages.length,
     sourceCount: sources.length,
     hasSchema,
     hasIndex,
     hasLog,
+    hasConventions,
+    conventionsScannedAt: cacheEntry?.scannedAt ?? null,
     lastUpdatedAt: await getLastUpdatedAt([
       paths.schemaFile,
       paths.indexFile,

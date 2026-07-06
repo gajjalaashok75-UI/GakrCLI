@@ -298,7 +298,7 @@ async function maybePersistLargeToolResult(
     return toolResultBlock
   }
 
-  // Skip persistence for image content blocks - they need to be sent as-is to Gakr
+  // Skip persistence for image content blocks - they need to be sent as-is to GakrCLI
   if (hasImageBlock(content)) {
     return toolResultBlock
   }
@@ -1013,6 +1013,28 @@ export function reconstructContentReplacementState(
     }
   }
   return state
+}
+
+export function filterContentReplacementsForMessages(
+  messages: Message[],
+  records: ContentReplacementRecord[],
+): ContentReplacementRecord[] {
+  const retainedToolResultIds = new Set<string>()
+  for (const message of messages) {
+    if (message.type !== 'user' || !Array.isArray(message.message.content)) {
+      continue
+    }
+    for (const block of message.message.content) {
+      if (block.type === 'tool_result') {
+        retainedToolResultIds.add(block.tool_use_id)
+      }
+    }
+  }
+  return records.filter(
+    record =>
+      record.kind === 'tool-result' &&
+      retainedToolResultIds.has(record.toolUseId),
+  )
 }
 
 /**

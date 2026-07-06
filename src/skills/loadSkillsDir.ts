@@ -12,7 +12,7 @@ import {
   relative,
 } from 'path'
 import {
-  getAdditionalDirectoriesForgakrcliMd,
+  getAdditionalDirectoriesForGakrCLIMd,
   getSessionId,
 } from '../bootstrap/state.js'
 import {
@@ -32,7 +32,7 @@ import {
   parseEffortValue,
 } from '../utils/effort.js'
 import {
-  getGakrcliConfigHomeDir,
+  getGakrCLIConfigHomeDir,
   isBareMode,
   isEnvTruthy,
 } from '../utils/envUtils.js'
@@ -85,7 +85,7 @@ export function getSkillsPath(
     case 'policySettings':
       return join(getManagedFilePath(), '.gakrcli', dir)
     case 'userSettings':
-      return join(getGakrcliConfigHomeDir(), dir)
+      return join(getGakrCLIConfigHomeDir(), dir)
     case 'projectSettings':
       return `.gakrcli/${dir}`
     case 'plugin':
@@ -734,7 +734,7 @@ async function loadSkillsFromCommandsDir(
  */
 export const getSkillDirCommands = memoize(
   async (cwd: string): Promise<Command[]> => {
-    const userSkillsDir = join(getGakrcliConfigHomeDir(), 'skills')
+    const userSkillsDir = join(getGakrCLIConfigHomeDir(), 'skills')
     const userGakrSkillsDir = process.env.GAKR_CONFIG_DIR
       ? null
       : join(homedir(), '.gakrcli', 'skills')
@@ -780,7 +780,7 @@ export const getSkillDirCommands = memoize(
     )
 
     // Load from additional directories (--add-dir)
-    const additionalDirs = getAdditionalDirectoriesForgakrcliMd()
+    const additionalDirs = getAdditionalDirectoriesForGakrCLIMd()
     const skillsLocked = isRestrictedToPluginOnly('skills')
     const projectSettingsEnabled =
       isSettingSourceEnabled('projectSettings') && !skillsLocked

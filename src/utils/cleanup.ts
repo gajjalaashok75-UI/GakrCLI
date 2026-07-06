@@ -4,14 +4,14 @@ import { join } from 'path'
 import { logEvent } from '../services/analytics/index.js'
 import { CACHE_PATHS } from './cachePaths.js'
 import { logForDebugging } from './debug.js'
-import { getGakrcliConfigHomeDir } from './envUtils.js'
+import { getGakrCLIConfigHomeDir, getProjectsDir } from './envUtils.js'
 import { type FsOperations, getFsImplementation } from './fsOperations.js'
 import { cleanupOldImageCaches } from './imageStore.js'
 import * as lockfile from './lockfile.js'
 import { logError } from './log.js'
 import { cleanupOldVersions } from './nativeInstaller/index.js'
 import { cleanupOldPastes } from './pasteStore.js'
-import { getProjectsDir } from './sessionStorage.js'
+import { getDefaultPlansDirectory } from './plans.js'
 import { getSettingsWithAllErrors } from './settings/allErrors.js'
 import {
   getSettings_DEPRECATED,
@@ -154,9 +154,18 @@ async function tryRmdir(dirPath: string, fsImpl: FsOperations): Promise<void> {
 
 export async function cleanupOldSessionFiles(): Promise<CleanupResult> {
   const cutoffDate = getCutoffDate()
-  const result: CleanupResult = { messages: 0, errors: 0 }
   const projectsDir = getProjectsDir()
   const fsImpl = getFsImplementation()
+
+  return cleanupOldSessionFilesInProjectsDir(projectsDir, cutoffDate, fsImpl)
+}
+
+export async function cleanupOldSessionFilesInProjectsDir(
+  projectsDir: string,
+  cutoffDate: Date,
+  fsImpl: FsOperations,
+): Promise<CleanupResult> {
+  const result: CleanupResult = { messages: 0, errors: 0 }
 
   let projectDirents
   try {
@@ -169,7 +178,6 @@ export async function cleanupOldSessionFiles(): Promise<CleanupResult> {
     if (!projectDirent.isDirectory()) continue
     const projectDir = join(projectsDir, projectDirent.name)
 
-    // Single readdir per project directory — partition into files and session dirs
     let entries
     try {
       entries = await fsImpl.readdir(projectDir)
@@ -180,7 +188,11 @@ export async function cleanupOldSessionFiles(): Promise<CleanupResult> {
 
     for (const entry of entries) {
       if (entry.isFile()) {
-        if (!entry.name.endsWith('.jsonl') && !entry.name.endsWith('.cast')) {
+        if (
+          !entry.name.endsWith('.jsonl') &&
+          !entry.name.endsWith('.cast') &&
+          !entry.name.endsWith('.replay.json')
+        ) {
           continue
         }
         try {
@@ -193,14 +205,12 @@ export async function cleanupOldSessionFiles(): Promise<CleanupResult> {
           result.errors++
         }
       } else if (entry.isDirectory()) {
-        // Session directory — clean up tool-results/<toolDir>/* beneath it
         const sessionDir = join(projectDir, entry.name)
         const toolResultsDir = join(sessionDir, TOOL_RESULTS_SUBDIR)
         let toolDirs
         try {
           toolDirs = await fsImpl.readdir(toolResultsDir)
         } catch {
-          // No tool-results dir — still try to remove an empty session dir
           await tryRmdir(sessionDir, fsImpl)
           continue
         }
@@ -298,8 +308,7 @@ async function cleanupSingleDirectory(
 }
 
 export function cleanupOldPlanFiles(): Promise<CleanupResult> {
-  const plansDir = join(getGakrcliConfigHomeDir(), 'plans')
-  return cleanupSingleDirectory(plansDir, '.md')
+  return cleanupSingleDirectory(getDefaultPlansDirectory(), '.md')
 }
 
 export async function cleanupOldFileHistoryBackups(): Promise<CleanupResult> {
@@ -308,7 +317,7 @@ export async function cleanupOldFileHistoryBackups(): Promise<CleanupResult> {
   const fsImpl = getFsImplementation()
 
   try {
-    const configDir = getGakrcliConfigHomeDir()
+    const configDir = getGakrCLIConfigHomeDir()
     const fileHistoryStorageDir = join(configDir, 'file-history')
 
     let dirents
@@ -353,7 +362,7 @@ export async function cleanupOldSessionEnvDirs(): Promise<CleanupResult> {
   const fsImpl = getFsImplementation()
 
   try {
-    const configDir = getGakrcliConfigHomeDir()
+    const configDir = getGakrCLIConfigHomeDir()
     const sessionEnvBaseDir = join(configDir, 'session-env')
 
     let dirents
@@ -397,7 +406,7 @@ export async function cleanupOldDebugLogs(): Promise<CleanupResult> {
   const cutoffDate = getCutoffDate()
   const result: CleanupResult = { messages: 0, errors: 0 }
   const fsImpl = getFsImplementation()
-  const debugDir = join(getGakrcliConfigHomeDir(), 'debug')
+  const debugDir = join(getGakrCLIConfigHomeDir(), 'debug')
 
   let dirents
   try {
@@ -436,7 +445,7 @@ const ONE_DAY_MS = 24 * 60 * 60 * 1000
  * Only runs once per day for Ant users.
  */
 export async function cleanupNpmCacheForAnthropicPackages(): Promise<void> {
-  const markerPath = join(getGakrcliConfigHomeDir(), '.npm-cache-cleanup')
+  const markerPath = join(getGakrCLIConfigHomeDir(), '.npm-cache-cleanup')
 
   try {
     const stat = await fs.stat(markerPath)
@@ -476,7 +485,7 @@ export async function cleanupNpmCacheForAnthropicPackages(): Promise<void> {
       key: string
       time: number
     }>) {
-      if (entry.key.includes('@anthropic-ai/claude-')) {
+      if (entry.key.includes('@anthropic-ai/gakrcli-')) {
         anthropicEntries.push({ key: entry.key, time: entry.time })
       }
     }
@@ -541,7 +550,7 @@ export async function cleanupNpmCacheForAnthropicPackages(): Promise<void> {
  * The regular cleanupOldVersions() should still be used for installer flows.
  */
 export async function cleanupOldVersionsThrottled(): Promise<void> {
-  const markerPath = join(getGakrcliConfigHomeDir(), '.version-cleanup')
+  const markerPath = join(getGakrCLIConfigHomeDir(), '.version-cleanup')
 
   try {
     const stat = await fs.stat(markerPath)

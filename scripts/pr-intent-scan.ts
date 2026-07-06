@@ -19,9 +19,12 @@ export type Finding = {
 
 type CliOptions = {
   baseRef: string
+  headRef: string
   json: boolean
   failOn: FindingSeverity
 }
+
+const GIT_OUTPUT_MAX_BUFFER_BYTES = 64 * 1024 * 1024
 
 const SELF_EXCLUDED_FILES = new Set([
   'scripts/pr-intent-scan.ts',
@@ -60,6 +63,7 @@ const SENSITIVE_PATH_REGEX =
 function parseOptions(argv: string[]): CliOptions {
   const options: CliOptions = {
     baseRef: 'origin/main',
+    headRef: 'HEAD',
     json: false,
     failOn: 'high',
   }
@@ -74,6 +78,14 @@ function parseOptions(argv: string[]): CliOptions {
       const next = argv[index + 1]
       if (next && !next.startsWith('--')) {
         options.baseRef = next
+        index++
+      }
+      continue
+    }
+    if (arg === '--head') {
+      const next = argv[index + 1]
+      if (next && !next.startsWith('--')) {
+        options.headRef = next
         index++
       }
       continue
@@ -367,22 +379,23 @@ export function scanAddedLines(lines: DiffLine[]): Finding[] {
   return uniqueFindings(findings)
 }
 
-export function getGitDiff(baseRef: string): string {
-  const mergeBase = spawnSync('git', ['merge-base', baseRef, 'HEAD'], {
+export function getGitDiff(baseRef: string, headRef = 'HEAD'): string {
+  const mergeBase = spawnSync('git', ['merge-base', baseRef, headRef], {
     encoding: 'utf8',
+    maxBuffer: GIT_OUTPUT_MAX_BUFFER_BYTES,
   })
 
   if (mergeBase.status !== 0) {
     throw new Error(
-      `Could not determine merge-base with ${baseRef}: ${mergeBase.stderr.trim() || mergeBase.stdout.trim()}`,
+      `Could not determine merge-base between ${baseRef} and ${headRef}: ${mergeBase.stderr.trim() || mergeBase.stdout.trim()}`,
     )
   }
 
   const base = mergeBase.stdout.trim()
   const diff = spawnSync(
     'git',
-    ['diff', '--unified=0', '--no-ext-diff', `${base}...HEAD`],
-    { encoding: 'utf8' },
+    ['diff', '--unified=0', '--no-ext-diff', `${base}...${headRef}`],
+    { encoding: 'utf8', maxBuffer: GIT_OUTPUT_MAX_BUFFER_BYTES },
   )
 
   if (diff.status !== 0) {
@@ -424,7 +437,7 @@ function renderText(findings: Finding[]): string {
 }
 
 export function run(options: CliOptions): number {
-  const diff = getGitDiff(options.baseRef)
+  const diff = getGitDiff(options.baseRef, options.headRef)
   const addedLines = parseAddedLines(diff)
   const findings = scanAddedLines(addedLines)
 
@@ -433,6 +446,7 @@ export function run(options: CliOptions): number {
       `${JSON.stringify(
         {
           baseRef: options.baseRef,
+          headRef: options.headRef,
           addedLines: addedLines.length,
           findings,
         },
@@ -448,6 +462,12 @@ export function run(options: CliOptions): number {
 }
 
 if (import.meta.main) {
-  const options = parseOptions(process.argv.slice(2))
-  process.exitCode = run(options)
+  try {
+    const options = parseOptions(process.argv.slice(2))
+    process.exitCode = run(options)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(`PR intent scan failed: ${message}`)
+    process.exitCode = 1
+  }
 }

@@ -8,28 +8,12 @@
 
 // Packages that should be kept external in ALL bundles (CLI + SDK)
 export const COMMON_EXTERNALS: string[] = [
-  // OpenTelemetry — too many named exports to stub, kept external
-  '@opentelemetry/api',
-  '@opentelemetry/api-logs',
-  '@opentelemetry/core',
-  '@opentelemetry/exporter-trace-otlp-grpc',
-  '@opentelemetry/exporter-trace-otlp-http',
-  '@opentelemetry/exporter-trace-otlp-proto',
-  '@opentelemetry/exporter-logs-otlp-http',
-  '@opentelemetry/exporter-logs-otlp-proto',
-  '@opentelemetry/exporter-logs-otlp-grpc',
-  '@opentelemetry/exporter-metrics-otlp-proto',
-  '@opentelemetry/exporter-metrics-otlp-grpc',
-  '@opentelemetry/exporter-metrics-otlp-http',
-  '@opentelemetry/exporter-prometheus',
-  '@opentelemetry/resources',
-  '@opentelemetry/sdk-trace-base',
-  '@opentelemetry/sdk-trace-node',
-  '@opentelemetry/sdk-logs',
-  '@opentelemetry/sdk-metrics',
-  '@opentelemetry/semantic-conventions',
   // Native image processing
   'sharp',
+  // Agent Client Protocol SDK
+  '@agentclientprotocol/sdk',
+  // MCP bridge
+  '@anthropic-ai/mcpb',
   // Cloud provider SDKs
   '@aws-sdk/client-bedrock',
   '@aws-sdk/client-bedrock-runtime',
@@ -42,46 +26,52 @@ export const COMMON_EXTERNALS: string[] = [
   // would freeze the build host's absolute path into dist/cli.mjs, so we
   // keep it external and rely on the npm package being installed.
   '@vscode/ripgrep',
-  // Orama search engine and persisted index support
+  // highlight.js registers 190+ language grammars at require time (~50MB).
+  // Keeping it external avoids bloating the CLI bundle.
+  'highlight.js',
+  // Orama search engine
   '@orama/orama',
   '@orama/plugin-data-persistence',
   // Bun runtime and package manager
   'bun',
   'byn',
+  // Chrome extension MCP — dynamically imported at runtime
+  '@gakr-gakr/gakrcli-for-chrome-mcp',
+  // Observability / feature flags
+  '@growthbook/growthbook',
+  '@langfuse/otel',
+  '@langfuse/tracing',
+  '@opentelemetry/api',
+  '@opentelemetry/api-logs',
+  '@opentelemetry/instrumentation',
+  '@opentelemetry/resources',
+  '@opentelemetry/sdk-logs',
+  '@opentelemetry/sdk-trace-base',
+  '@opentelemetry/semantic-conventions',
+  '@opentelemetry/exporter-trace-otlp-grpc',
+  // Markdown rendering
+  'streamdown',
+  'he',
 ]
 
 // Additional packages external only in the SDK bundle (TUI + heavy deps)
 export const SDK_ONLY_EXTERNALS: string[] = [
   'react',
   'react-reconciler',
-  'ink',
   '@anthropic-ai/sdk',
   '@modelcontextprotocol/sdk',
 ]
 
 // Packages kept external but NOT listed in package.json dependencies.
-// These are dynamically imported at runtime or intentionally supplied by
-// environments that need the provider, protocol, or SDK surface.
+// These are dynamically imported at runtime — they're optional and resolved
+// from transitive deps or installed by users who need that provider/protocol.
 export const OPTIONAL_RUNTIME_EXTERNALS: string[] = [
-  // Optional OpenTelemetry exporters.
-  '@opentelemetry/exporter-trace-otlp-grpc',
-  '@opentelemetry/exporter-trace-otlp-http',
-  '@opentelemetry/exporter-trace-otlp-proto',
-  '@opentelemetry/exporter-logs-otlp-http',
-  '@opentelemetry/exporter-logs-otlp-proto',
-  '@opentelemetry/exporter-logs-otlp-grpc',
-  '@opentelemetry/exporter-metrics-otlp-proto',
-  '@opentelemetry/exporter-metrics-otlp-grpc',
-  '@opentelemetry/exporter-metrics-otlp-http',
-  '@opentelemetry/exporter-prometheus',
-  // Cloud provider SDKs (dynamically imported per-provider).
+  // Cloud provider SDKs (dynamically imported per-provider)
   '@aws-sdk/client-bedrock',
   '@aws-sdk/client-bedrock-runtime',
   '@aws-sdk/client-sts',
   '@aws-sdk/credential-providers',
   '@azure/identity',
-  // SDK bundle TUI boundary.
-  'ink',
 ]
 
 // Computed full lists
@@ -91,6 +81,7 @@ export const SDK_EXTERNALS: string[] = [...COMMON_EXTERNALS, ...SDK_ONLY_EXTERNA
 // Packages intentionally bundled (not external, not flagged by validation)
 // These are small utilities that are fine to inline into the output bundle.
 export const INTENTIONALLY_BUNDLED: string[] = [
+  // Test utilities (bundled, not external)
   // Anthropic provider variants (bundled, not the main SDK)
   '@anthropic-ai/bedrock-sdk',
   '@anthropic-ai/foundry-sdk',
@@ -109,7 +100,6 @@ export const INTENTIONALLY_BUNDLED: string[] = [
   'figures',
   'get-east-asian-width',
   'indent-string',
-  'strip-ansi',
   'supports-hyperlinks',
   'wrap-ansi',
   // Data formats
@@ -134,8 +124,6 @@ export const INTENTIONALLY_BUNDLED: string[] = [
   'semver',
   'shell-quote',
   'signal-exit',
-  'stack-utils',
-  'code-excerpt',
   'type-fest',
   // Networking
   'axios',
@@ -157,13 +145,9 @@ export const INTENTIONALLY_BUNDLED: string[] = [
   '@modelcontextprotocol/sdk',
   // Schema validation
   'zod',
-  // Feature flags / analytics
-  '@growthbook/growthbook',
-  // gRPC (bundled into CLI, not external)
+    // gRPC (bundled into CLI, not external)
   '@grpc/grpc-js',
   '@grpc/proto-loader',
-  // Web scraping
-  '@mendable/firecrawl-js',
   // Language server protocol
   'vscode-languageserver-protocol',
   // File watching

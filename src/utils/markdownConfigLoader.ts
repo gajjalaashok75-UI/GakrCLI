@@ -11,7 +11,7 @@ import {
 import { getProjectRoot } from '../bootstrap/state.js'
 import { createCombinedAbortSignal } from './combinedAbortSignal.js'
 import { logForDebugging } from './debug.js'
-import { getGakrcliConfigHomeDir, isEnvTruthy } from './envUtils.js'
+import { getGakrCLIConfigHomeDir, isEnvTruthy } from './envUtils.js'
 import { isFsInaccessible } from './errors.js'
 import { normalizePathForComparison } from './file.js'
 import type { FrontmatterData } from './frontmatterParser.js'
@@ -36,17 +36,22 @@ export const GAKR_CONFIG_DIRECTORIES = [
   ...(feature('TEMPLATES') ? (['templates'] as const) : []),
 ] as const
 
-export type gakrcliConfigDirectory = (typeof GAKR_CONFIG_DIRECTORIES)[number]
+export type GakrCLIConfigDirectory = (typeof GAKR_CONFIG_DIRECTORIES)[number]
 
-const PROJECT_CONFIG_DIR_NAMES = ['.gakrcli'] as const
+const PROJECT_CONFIG_DIR_NAMES = ['.gakrcli', '.gakrcli'] as const
 
 // Concurrency cap for parallel readFile + parseFrontmatter when loading
-// commands/agents/skills/etc. Unbounded Promise.all over large symlinked
-// markdown trees can open thousands of fds and freeze startup.
+// commands/agents/skills/etc. With unbounded Promise.all, a directory holding
+// thousands of markdown files (e.g., an Obsidian vault symlinked into
+// ~/.gakrcli/agents — see issue #769) opens that many fds and blocks the
+// event loop on parse work, freezing the REPL at startup. Batching keeps fd
+// pressure and CPU bursts bounded.
 const MARKDOWN_LOAD_BATCH_SIZE = 32
 
-// Max file size to ingest. Legitimate commands/agents/skills are small; larger
-// files are usually unrelated docs pulled in through symlinks.
+// Max file size to ingest. Legitimate commands/agents/skills are small (a few
+// KB). Files larger than this are almost always vault notes or unrelated docs
+// that got dragged in via symlink — reading them all into memory causes the
+// same freeze (#769). Override with GAKR_CODE_MAX_MARKDOWN_FILE_SIZE_BYTES.
 const DEFAULT_MAX_MARKDOWN_FILE_SIZE_BYTES = 256 * 1024
 
 function getMaxMarkdownFileSizeBytes(): number {
@@ -64,6 +69,11 @@ export type OversizedMarkdownSkip = {
   maxBytes: number
 }
 
+// Track files skipped because they exceeded the size cap so the override is
+// discoverable without `/debug` — a silent skip would just look like "my
+// custom agent disappeared". First skip in a process also emits one stderr
+// warning naming the override env var. Keyed by filePath so subsequent loads
+// of the same file don't re-warn.
 const oversizedMarkdownSkips = new Map<string, OversizedMarkdownSkip>()
 let oversizedSkipStderrWarned = false
 
@@ -284,7 +294,7 @@ function resolveStopBoundary(cwd: string): string | null {
  * @returns Array of directory paths containing .gakrcli/subdir, from most specific (cwd) to least specific
  */
 export function getProjectDirsUpToHome(
-  subdir: gakrcliConfigDirectory,
+  subdir: GakrCLIConfigDirectory,
   cwd: string,
 ): string[] {
   const home = resolve(homedir()).normalize('NFC')
@@ -350,11 +360,11 @@ export function getProjectDirsUpToHome(
  */
 export const loadMarkdownFilesForSubdir = memoize(
   async function (
-    subdir: gakrcliConfigDirectory,
+    subdir: GakrCLIConfigDirectory,
     cwd: string,
   ): Promise<MarkdownFile[]> {
     const searchStartTime = Date.now()
-    const userDir = join(getGakrcliConfigHomeDir(), subdir)
+    const userDir = join(getGakrCLIConfigHomeDir(), subdir)
     const managedDir = join(getManagedFilePath(), '.gakrcli', subdir)
     const projectDirs = getProjectDirsUpToHome(subdir, cwd)
 
@@ -482,7 +492,7 @@ export const loadMarkdownFilesForSubdir = memoize(
     return deduplicatedFiles
   },
   // Custom resolver creates cache key from both subdir and cwd parameters
-  (subdir: gakrcliConfigDirectory, cwd: string) => `${subdir}:${cwd}`,
+  (subdir: GakrCLIConfigDirectory, cwd: string) => `${subdir}:${cwd}`,
 )
 
 /**
@@ -641,6 +651,9 @@ async function loadMarkdownFiles(dir: string): Promise<
     content: string
   } | null)[] = []
 
+  // Batch reads to cap fd usage and event-loop blocking on huge directories
+  // (issue #769). Unbounded Promise.all on a multi-thousand-file vault freezes
+  // the REPL during startup; 32 at a time keeps progress streaming.
   for (let i = 0; i < files.length; i += MARKDOWN_LOAD_BATCH_SIZE) {
     const batch = files.slice(i, i + MARKDOWN_LOAD_BATCH_SIZE)
     const batchResults = await Promise.all(
@@ -659,7 +672,6 @@ async function loadMarkdownFiles(dir: string): Promise<
             )
             return null
           }
-
           const rawContent = await readFile(filePath, { encoding: 'utf-8' })
           const { frontmatter, content } = parseFrontmatter(rawContent, filePath)
 

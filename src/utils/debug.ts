@@ -10,7 +10,7 @@ import {
   parseDebugFilter,
   shouldShowDebugMessage,
 } from './debugFilter.js'
-import { getGakrcliConfigHomeDir, isEnvTruthy } from './envUtils.js'
+import { getGakrCLIConfigHomeDir, isEnvTruthy } from './envUtils.js'
 import { getFsImplementation } from './fsOperations.js'
 import { writeToStderr } from './process.js'
 import { jsonStringify } from './slowOperations.js'
@@ -231,7 +231,7 @@ export function getDebugLogPath(): string {
   return (
     getDebugFilePath() ??
     process.env.GAKR_CODE_DEBUG_LOGS_DIR ??
-    join(getGakrcliConfigHomeDir(), 'debug', `${getSessionId()}.txt`)
+    join(getGakrCLIConfigHomeDir(), 'debug', `${getSessionId()}.txt`)
   )
 }
 
@@ -255,14 +255,6 @@ const updateLatestDebugLogSymlink = memoize(async (): Promise<void> => {
 /**
  * Logs errors for Ants only, always visible in production.
  */
-export function logAntError(context: string, error: unknown): void {
-  if (process.env.USER_TYPE !== 'ant') {
-    return
-  }
-
-  if (error instanceof Error && error.stack) {
-    logForDebugging(`[ANT-ONLY] ${context} stack trace:\n${error.stack}`, {
-      level: 'error',
-    })
-  }
+export function logAntError(_context: string, _error: unknown): void {
+  // External build: internal-only elevated error surfacing is disabled.
 }

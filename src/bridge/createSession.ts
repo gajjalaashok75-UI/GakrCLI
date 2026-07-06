@@ -52,7 +52,7 @@ export async function createBridgeSession({
   getAccessToken?: () => string | undefined
   permissionMode?: string
 }): Promise<string | null> {
-  const { getgakrcliAIOAuthTokens } = await import('../utils/auth.js')
+  const { getGakrCLIAIOAuthTokens } = await import('../utils/auth.js')
   const { getOrganizationUUID } = await import('../services/oauth/client.js')
   const { getOauthConfig } = await import('../constants/oauth.js')
   const { getOAuthHeaders } = await import('../utils/teleport/api.js')
@@ -62,7 +62,7 @@ export async function createBridgeSession({
   const { default: axios } = await import('axios')
 
   const accessToken =
-    getAccessToken?.() ?? getgakrcliAIOAuthTokens()?.accessToken
+    getAccessToken?.() ?? getGakrCLIAIOAuthTokens()?.accessToken
   if (!accessToken) {
     logForDebugging('[bridge] No access token for session creation')
     return null
@@ -94,7 +94,7 @@ export async function createBridgeSession({
         git_info: {
           type: 'github',
           repo: `${owner}/${name}`,
-          branches: [`gakr/${branch || 'task'}`],
+          branches: [`gakrcli/${branch || 'task'}`],
         },
       }
     } else {
@@ -114,7 +114,7 @@ export async function createBridgeSession({
             git_info: {
               type: 'github',
               repo: `${owner}/${name}`,
-              branches: [`gakr/${branch || 'task'}`],
+              branches: [`gakrcli/${branch || 'task'}`],
             },
           }
         }
@@ -191,14 +191,14 @@ export async function getBridgeSession(
   sessionId: string,
   opts?: { baseUrl?: string; getAccessToken?: () => string | undefined },
 ): Promise<{ environment_id?: string; title?: string } | null> {
-  const { getgakrcliAIOAuthTokens } = await import('../utils/auth.js')
+  const { getGakrCLIAIOAuthTokens } = await import('../utils/auth.js')
   const { getOrganizationUUID } = await import('../services/oauth/client.js')
   const { getOauthConfig } = await import('../constants/oauth.js')
   const { getOAuthHeaders } = await import('../utils/teleport/api.js')
   const { default: axios } = await import('axios')
 
   const accessToken =
-    opts?.getAccessToken?.() ?? getgakrcliAIOAuthTokens()?.accessToken
+    opts?.getAccessToken?.() ?? getGakrCLIAIOAuthTokens()?.accessToken
   if (!accessToken) {
     logForDebugging('[bridge] No access token for session fetch')
     return null
@@ -282,14 +282,14 @@ export async function archiveBridgeSession(
     timeoutMs?: number
   },
 ): Promise<void> {
-  const { getgakrcliAIOAuthTokens } = await import('../utils/auth.js')
+  const { getGakrCLIAIOAuthTokens } = await import('../utils/auth.js')
   const { getOrganizationUUID } = await import('../services/oauth/client.js')
   const { getOauthConfig } = await import('../constants/oauth.js')
   const { getOAuthHeaders } = await import('../utils/teleport/api.js')
   const { default: axios } = await import('axios')
 
   const accessToken =
-    opts?.getAccessToken?.() ?? getgakrcliAIOAuthTokens()?.accessToken
+    opts?.getAccessToken?.() ?? getGakrCLIAIOAuthTokens()?.accessToken
   if (!accessToken) {
     logForDebugging('[bridge] No access token for session archive')
     return
@@ -334,7 +334,7 @@ export async function archiveBridgeSession(
  * Update the title of a bridge session via PATCH /v1/sessions/{id}.
  *
  * Called when the user renames a session via /rename while a bridge
- * connection is active, so the title stays in sync on gakr.ai/code.
+ * connection is active, so the title stays in sync on gakrcli.ai/code.
  *
  * Errors are swallowed — title sync is best-effort.
  */
@@ -343,14 +343,14 @@ export async function updateBridgeSessionTitle(
   title: string,
   opts?: { baseUrl?: string; getAccessToken?: () => string | undefined },
 ): Promise<void> {
-  const { getgakrcliAIOAuthTokens } = await import('../utils/auth.js')
+  const { getGakrCLIAIOAuthTokens } = await import('../utils/auth.js')
   const { getOrganizationUUID } = await import('../services/oauth/client.js')
   const { getOauthConfig } = await import('../constants/oauth.js')
   const { getOAuthHeaders } = await import('../utils/teleport/api.js')
   const { default: axios } = await import('axios')
 
   const accessToken =
-    opts?.getAccessToken?.() ?? getgakrcliAIOAuthTokens()?.accessToken
+    opts?.getAccessToken?.() ?? getGakrCLIAIOAuthTokens()?.accessToken
   if (!accessToken) {
     logForDebugging('[bridge] No access token for session title update')
     return

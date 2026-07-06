@@ -12,14 +12,14 @@ import { useStartupNotification } from './notifs/useStartupNotification.js';
 export function useOfficialMarketplaceNotification() {
   useStartupNotification(_temp);
 }
-async function _temp(): Promise<Notification[]> {
+async function _temp() {
   const result = await checkAndInstallOfficialMarketplace();
   const notifs: Notification[] = [];
   if (result.configSaveFailed) {
     logForDebugging("Showing marketplace config save failure notification");
     notifs.push({
       key: "marketplace-config-save-failed",
-      jsx: <Text color="error">Failed to save marketplace retry info · Check ~/.gakrcli/settings.json permissions</Text>,
+      jsx: <Text color="error">Failed to save marketplace retry info · Check ~/.gakrcli.json permissions</Text>,
       priority: "immediate",
       timeoutMs: 10000
     });
@@ -28,16 +28,16 @@ async function _temp(): Promise<Notification[]> {
     logForDebugging("Showing marketplace installation success notification");
     notifs.push({
       key: "marketplace-installed",
-      jsx: <Text color="success">✓ GakrCLI marketplace installed · /plugin to see available plugins</Text>,
+      jsx: <Text color="success">✓ Anthropic marketplace installed · /plugin to see available plugins</Text>,
       priority: "immediate",
       timeoutMs: 7000
     });
   } else {
-    if (result.attemptedThisStartup && result.skipped && result.reason === "unknown") {
+    if (result.skipped && result.reason === "unknown") {
       logForDebugging("Showing marketplace installation failure notification");
       notifs.push({
         key: "marketplace-install-failed",
-        jsx: <Text color="warning">Failed to install GakrCLI marketplace · Will retry on next startup</Text>,
+        jsx: <Text color="warning">Failed to install Anthropic marketplace · Will retry on next startup</Text>,
         priority: "immediate",
         timeoutMs: 8000
       });

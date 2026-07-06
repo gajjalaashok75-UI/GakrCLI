@@ -8,6 +8,7 @@ import type {
   AgentInfo,
   FastModeState,
   HookCallbackMatcher,
+  HookEvent,
   McpServerConfigForProcessTransport,
   McpServerStatus,
   ModelInfo,

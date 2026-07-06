@@ -18,13 +18,13 @@
 import { logForDebugging } from './debug.js'
 import { createSignal } from './signal.js'
 
-export type gakrcliCodeHintType = 'plugin'
+export type GakrCLICodeHintType = 'plugin'
 
-export type gakrcliCodeHint = {
+export type GakrCLICodeHint = {
   /** Spec version declared by the emitter. Unknown versions are dropped. */
   v: number
   /** Hint discriminator. v1 defines only `plugin`. */
-  type: gakrcliCodeHintType
+  type: GakrCLICodeHintType
   /**
    * Hint payload. For `type: 'plugin'`: a `name@marketplace` slug
    * matching the form accepted by `parsePluginIdentifier`.
@@ -69,17 +69,17 @@ const ATTR_RE = /(\w+)=(?:"([^"]*)"|([^\s/>]+))/g
  * @param command - The command that produced the output; its first
  *   whitespace-separated token is recorded as `sourceCommand`.
  */
-export function extractgakrcliCodeHints(
+export function extractGakrCLICodeHints(
   output: string,
   command: string,
-): { hints: gakrcliCodeHint[]; stripped: string } {
+): { hints: GakrCLICodeHint[]; stripped: string } {
   // Fast path: no tag open sequence → no work, no allocation.
   if (!output.includes('<gakrcli-code-hint')) {
     return { hints: [], stripped: output }
   }
 
   const sourceCommand = firstCommandToken(command)
-  const hints: gakrcliCodeHint[] = []
+  const hints: GakrCLICodeHint[] = []
 
   const stripped = output.replace(HINT_TAG_RE, rawLine => {
     const attrs = parseAttrs(rawLine)
@@ -104,7 +104,7 @@ export function extractgakrcliCodeHints(
       return ''
     }
 
-    hints.push({ v, type: type as gakrcliCodeHintType, value, sourceCommand })
+    hints.push({ v, type: type as GakrCLICodeHintType, value, sourceCommand })
     return ''
   })
 
@@ -146,13 +146,13 @@ function firstCommandToken(command: string): string {
 // the same store.
 // ============================================================================
 
-let pendingHint: gakrcliCodeHint | null = null
+let pendingHint: GakrCLICodeHint | null = null
 let shownThisSession = false
 const pendingHintChanged = createSignal()
 const notify = pendingHintChanged.emit
 
 /** Raw store write. Callers should gate first (see module comment). */
-export function setPendingHint(hint: gakrcliCodeHint): void {
+export function setPendingHint(hint: GakrCLICodeHint): void {
   if (shownThisSession) return
   pendingHint = hint
   notify()
@@ -173,7 +173,7 @@ export function markShownThisSession(): void {
 
 export const subscribeToPendingHint = pendingHintChanged.subscribe
 
-export function getPendingHintSnapshot(): gakrcliCodeHint | null {
+export function getPendingHintSnapshot(): GakrCLICodeHint | null {
   return pendingHint
 }
 
@@ -182,7 +182,7 @@ export function hasShownHintThisSession(): boolean {
 }
 
 /** Test-only reset. */
-export function _resetgakrcliCodeHintStore(): void {
+export function _resetGakrCLICodeHintStore(): void {
   pendingHint = null
   shownThisSession = false
 }

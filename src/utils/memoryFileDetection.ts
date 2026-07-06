@@ -7,7 +7,7 @@ import {
   isAutoMemPath,
 } from '../memdir/paths.js'
 import { isAgentMemoryPath } from '../tools/AgentTool/agentMemory.js'
-import { getGakrcliConfigHomeDir } from './envUtils.js'
+import { getGakrCLIConfigHomeDir } from './envUtils.js'
 import {
   posixPathToWindowsPath,
   windowsPathToPosixPath,
@@ -40,7 +40,7 @@ function toComparable(p: string): string {
 export function detectSessionFileType(
   filePath: string,
 ): 'session_memory' | 'session_transcript' | null {
-  const configDir = getGakrcliConfigHomeDir()
+  const configDir = getGakrCLIConfigHomeDir()
   // Compare in forward-slash form; on Windows also case-fold. The caller
   // (isShellCommandTargetingMemory) converts MinGW /c/... → native before
   // reaching here, so we only need separator + case normalization.
@@ -124,7 +124,7 @@ function isAgentMemFile(filePath: string): boolean {
 }
 
 /**
- * Check if a file is a Gakr-managed memory file (NOT user-managed instruction files).
+ * Check if a file is a GakrCLI-managed memory file (NOT user-managed instruction files).
  * Includes: auto-memory (memdir), agent memory, session memory/transcripts.
  * Excludes: GAKRCLI.md, gakrcli.local.md, .gakrcli/rules/*.md (user-managed).
  *
@@ -186,7 +186,7 @@ export function isMemoryDirectory(dirPath: string): boolean {
     }
   }
 
-  const configDirCmp = toComparable(getGakrcliConfigHomeDir())
+  const configDirCmp = toComparable(getGakrCLIConfigHomeDir())
   const memoryBaseCmp = toComparable(getMemoryBaseDir())
   const underConfig = normalizedCmp.startsWith(configDirCmp)
   const underMemoryBase = normalizedCmp.startsWith(memoryBaseCmp)
@@ -213,7 +213,7 @@ export function isMemoryDirectory(dirPath: string): boolean {
  * collapse logic.
  */
 export function isShellCommandTargetingMemory(command: string): boolean {
-  const configDir = getGakrcliConfigHomeDir()
+  const configDir = getGakrCLIConfigHomeDir()
   const memoryBase = getMemoryBaseDir()
   const autoMemDir = isAutoMemoryEnabled()
     ? getAutoMemPath().replace(/[/\\]+$/, '')

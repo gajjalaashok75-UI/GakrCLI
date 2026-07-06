@@ -1,4 +1,4 @@
-// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
+// biome-ignore-all assist/source/organizeImports: internal-only import markers must not be reordered
 import { feature } from 'bun:bundle'
 import { TASK_OUTPUT_TOOL_NAME } from '../tools/TaskOutputTool/constants.js'
 import { EXIT_PLAN_MODE_V2_TOOL_NAME } from '../tools/ExitPlanModeTool/constants.js'
@@ -8,8 +8,6 @@ import { ASK_USER_QUESTION_TOOL_NAME } from '../tools/AskUserQuestionTool/prompt
 import { TASK_STOP_TOOL_NAME } from '../tools/TaskStopTool/prompt.js'
 import { FILE_READ_TOOL_NAME } from '../tools/FileReadTool/prompt.js'
 import { WEB_SEARCH_TOOL_NAME } from '../tools/WebSearchTool/prompt.js'
-import { IMAGE_SEARCH_TOOL_NAME } from '../tools/ImageSearchTool/prompt.js'
-import { VIDEO_SEARCH_TOOL_NAME } from '../tools/VideoSearchTool/prompt.js'
 import { TODO_WRITE_TOOL_NAME } from '../tools/TodoWriteTool/constants.js'
 import { GREP_TOOL_NAME } from '../tools/GrepTool/prompt.js'
 import { WEB_FETCH_TOOL_NAME } from '../tools/WebFetchTool/prompt.js'
@@ -29,20 +27,25 @@ import { SYNTHETIC_OUTPUT_TOOL_NAME } from '../tools/SyntheticOutputTool/Synthet
 import { ENTER_WORKTREE_TOOL_NAME } from '../tools/EnterWorktreeTool/constants.js'
 import { EXIT_WORKTREE_TOOL_NAME } from '../tools/ExitWorktreeTool/constants.js'
 import { WORKFLOW_TOOL_NAME } from '../tools/WorkflowTool/constants.js'
+import { LSP_TOOL_NAME } from '../tools/LSPTool/prompt.js'
+import { SLEEP_TOOL_NAME } from '../tools/SleepTool/prompt.js'
+import { SEARCH_EXTRA_TOOLS_TOOL_NAME } from '../tools/SearchExtraToolsTool/constants.js'
+import { EXECUTE_TOOL_NAME } from '../tools/ExecuteTool/constants.js'
+import { VERIFY_PLAN_EXECUTION_TOOL_NAME } from '../tools/VerifyPlanExecutionTool/constants.js'
 import {
   CRON_CREATE_TOOL_NAME,
   CRON_DELETE_TOOL_NAME,
   CRON_LIST_TOOL_NAME,
 } from '../tools/ScheduleCronTool/prompt.js'
+import { LOCAL_MEMORY_RECALL_TOOL_NAME } from '../tools/LocalMemoryRecallTool/constants.js'
 
 export const ALL_AGENT_DISALLOWED_TOOLS = new Set([
   TASK_OUTPUT_TOOL_NAME,
   EXIT_PLAN_MODE_V2_TOOL_NAME,
   ENTER_PLAN_MODE_TOOL_NAME,
-  // Allow Agent tool for agents when user is ant (enables nested agents)
-  ...(process.env.USER_TYPE === 'ant' ? [] : [AGENT_TOOL_NAME]),
   ASK_USER_QUESTION_TOOL_NAME,
   TASK_STOP_TOOL_NAME,
+  LOCAL_MEMORY_RECALL_TOOL_NAME,
   // Prevent recursive workflow execution inside subagents.
   ...(feature('WORKFLOW_SCRIPTS') ? [WORKFLOW_TOOL_NAME] : []),
 ])
@@ -57,8 +60,6 @@ export const CUSTOM_AGENT_DISALLOWED_TOOLS = new Set([
 export const ASYNC_AGENT_ALLOWED_TOOLS = new Set([
   FILE_READ_TOOL_NAME,
   WEB_SEARCH_TOOL_NAME,
-  IMAGE_SEARCH_TOOL_NAME,
-  VIDEO_SEARCH_TOOL_NAME,
   TODO_WRITE_TOOL_NAME,
   GREP_TOOL_NAME,
   WEB_FETCH_TOOL_NAME,
@@ -86,9 +87,9 @@ export const IN_PROCESS_TEAMMATE_ALLOWED_TOOLS = new Set([
   SEND_MESSAGE_TOOL_NAME,
   // Teammate-created crons are tagged with the creating agentId and routed to
   // that teammate's pendingUserMessages queue (see useScheduledTasks.ts).
-  ...(feature('AGENT_TRIGGERS')
-    ? [CRON_CREATE_TOOL_NAME, CRON_DELETE_TOOL_NAME, CRON_LIST_TOOL_NAME]
-    : []),
+  CRON_CREATE_TOOL_NAME,
+  CRON_DELETE_TOOL_NAME,
+  CRON_LIST_TOOL_NAME,
 ])
 
 /*
@@ -114,3 +115,50 @@ export const COORDINATOR_MODE_ALLOWED_TOOLS = new Set([
   SEND_MESSAGE_TOOL_NAME,
   SYNTHETIC_OUTPUT_TOOL_NAME,
 ])
+
+/**
+ * Core tools that are always loaded with full schema at initialization.
+ * These tools are never deferred — they appear in the initial prompt.
+ * All other tools (non-core built-in + all MCP tools) are deferred
+ * and must be discovered via SearchExtraToolsTool / ExecuteExtraTool.
+ */
+export const CORE_TOOLS = new Set([
+  // File operations
+  ...SHELL_TOOL_NAMES, // 'Bash', 'Shell'
+  FILE_READ_TOOL_NAME, // 'Read'
+  FILE_EDIT_TOOL_NAME, // 'Edit'
+  FILE_WRITE_TOOL_NAME, // 'Write'
+  GLOB_TOOL_NAME, // 'Glob'
+  GREP_TOOL_NAME, // 'Grep'
+  NOTEBOOK_EDIT_TOOL_NAME, // 'NotebookEdit'
+  // Agent & interaction
+  AGENT_TOOL_NAME, // 'Agent'
+  ASK_USER_QUESTION_TOOL_NAME, // 'AskUserQuestion'
+  // Task management
+  TASK_OUTPUT_TOOL_NAME, // 'TaskOutput'
+  TASK_STOP_TOOL_NAME, // 'TaskStop'
+  TASK_CREATE_TOOL_NAME, // 'TaskCreate'
+  TASK_GET_TOOL_NAME, // 'TaskGet'
+  TASK_LIST_TOOL_NAME, // 'TaskList'
+  TASK_UPDATE_TOOL_NAME, // 'TaskUpdate'
+  TODO_WRITE_TOOL_NAME, // 'TodoWrite'
+  // Planning
+  ENTER_PLAN_MODE_TOOL_NAME, // 'EnterPlanMode'
+  EXIT_PLAN_MODE_V2_TOOL_NAME, // 'ExitPlanMode'
+  VERIFY_PLAN_EXECUTION_TOOL_NAME, // 'VerifyPlanExecution'
+  // Web
+  WEB_FETCH_TOOL_NAME, // 'WebFetch'
+  WEB_SEARCH_TOOL_NAME, // 'WebSearch'
+  // Code intelligence
+  LSP_TOOL_NAME, // 'LSP'
+  // Skills
+  SKILL_TOOL_NAME, // 'Skill'
+  // Workflow orchestration
+  WORKFLOW_TOOL_NAME, // 'Workflow'
+  // Scheduling & monitoring
+  SLEEP_TOOL_NAME, // 'Sleep'
+  // Tool discovery (always loaded)
+  SEARCH_EXTRA_TOOLS_TOOL_NAME, // 'SearchExtraTools'
+  EXECUTE_TOOL_NAME, // 'ExecuteExtraTool'
+  SYNTHETIC_OUTPUT_TOOL_NAME, // 'SyntheticOutput'
+]) as ReadonlySet<string>

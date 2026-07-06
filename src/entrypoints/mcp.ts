@@ -44,7 +44,7 @@ type ToolOutput = Tool['outputSchema']
 const MCP_COMMANDS: Command[] = [review]
 
 export function getCombinedTools(
-  builtins: InternalTool[],
+  builtins: readonly InternalTool[],
   mcpTools: InternalTool[],
 ): InternalTool[] {
   const mcpToolNames = new Set(mcpTools.map(t => t.name))
@@ -83,7 +83,7 @@ export async function startMCPServer(
   setCwd(cwd)
   const server = new Server(
     {
-      name: 'claude/tengu',
+      name: 'gakrcli/tengu',
       version: MACRO.VERSION,
     },
     {
@@ -108,7 +108,7 @@ export async function startMCPServer(
               const convertedSchema = zodToJsonSchema(tool.outputSchema)
               // MCP SDK requires outputSchema to have type: "object" at root level
               // Skip schemas with anyOf/oneOf at root (from z.union, z.discriminatedUnion, etc.)
-              // See: https://github.com/anthropics/claude-code/issues/8014
+              // See: https://github.com/gajjalaashok75-UI/gakrcli/issues/8014
               if (
                 typeof convertedSchema === 'object' &&
                 convertedSchema !== null &&
@@ -264,3 +264,4 @@ export async function startMCPServer(
 
   return await runServer()
 }
+

@@ -2,7 +2,7 @@ import type { Command } from '../commands.js'
 import { maybeMarkProjectOnboardingComplete } from '../projectOnboardingState.js'
 import { isNewInitEnabled } from './initMode.js'
 
-const OLD_INIT_PROMPT = `Please analyze this codebase and create a GAKRCLI.md file, which will be given to future instances of GakrCLI to operate in this repository.
+const OLD_INIT_PROMPT = `Please analyze this codebase and create a GAKRCLI.md file, which will be given to future instances of GakrCLI Code to operate in this repository.
 
 What to add:
 1. Commands that will be commonly used, such as how to build, lint, and run tests. Include the necessary commands to develop in this codebase, such as how to run a single test.
@@ -21,17 +21,17 @@ Usage notes:
 \`\`\`
 # GAKRCLI.md
 
-This file provides guidance to GakrCLI (gakr.ai/code) when working with code in this repository.
+This file provides guidance to GakrCLI Code (gakrcli.ai/code) when working with code in this repository.
 \`\`\``
 
-const NEW_INIT_PROMPT = `Set up a minimal AGENTS.md (and optionally GAKRCLI.local.md, skills, and hooks) for this repo. The root project instruction file is loaded into every GakrCLI session, so it must be concise — only include what GakrCLI would get wrong without it.
+const NEW_INIT_PROMPT = `Set up a minimal AGENTS.md (and optionally gakrcli.local.md, skills, and hooks) for this repo. The root project instruction file is loaded into every GakrCLI Code session, so it must be concise — only include what GakrCLI would get wrong without it.
 
 ## Phase 1: Ask what to set up
 
 Use AskUserQuestion to find out what the user wants:
 
 - "Which instruction files should /init set up?"
-  Options: "Project AGENTS.md" | "Personal GAKRCLI.local.md" | "Both project + personal"
+  Options: "Project AGENTS.md" | "Personal gakrcli.local.md" | "Both project + personal"
   Description for project: "Team-shared instructions checked into source control — architecture, coding standards, common workflows."
   Description for personal: "Your private preferences for this project (gitignored, not shared) — your role, sandbox URLs, preferred test data, workflow quirks."
 
@@ -52,7 +52,7 @@ Detect:
 - Non-obvious gotchas, required env vars, or workflow quirks
 - Existing .gakrcli/skills/ and .gakrcli/rules/ directories
 - Formatter configuration (prettier, biome, ruff, black, gofmt, rustfmt, or a unified format script like \`npm run format\` / \`make fmt\`)
-- Git worktree usage: run \`git worktree list\` to check if this repo has multiple worktrees (only relevant if the user wants a personal GAKRCLI.local.md)
+- Git worktree usage: run \`git worktree list\` to check if this repo has multiple worktrees (only relevant if the user wants a personal gakrcli.local.md)
 
 Note what you could NOT figure out from code alone — these become interview questions.
 
@@ -62,11 +62,11 @@ Use AskUserQuestion to gather what you still need to write good instruction file
 
 If the user chose project AGENTS.md or both: ask about codebase practices — non-obvious commands, gotchas, branch/PR conventions, required env setup, testing quirks. Skip things already in README or obvious from manifest files. Do not mark any options as "recommended" — this is about how their team works, not best practices.
 
-If the user chose personal GAKRCLI.local.md or both: ask about them, not the codebase. Do not mark any options as "recommended" — this is about their personal preferences, not best practices. Examples of questions:
+If the user chose personal gakrcli.local.md or both: ask about them, not the codebase. Do not mark any options as "recommended" — this is about their personal preferences, not best practices. Examples of questions:
   - What's their role on the team? (e.g., "backend engineer", "data scientist", "new hire onboarding")
   - How familiar are they with this codebase and its languages/frameworks? (so GakrCLI can calibrate explanation depth)
   - Do they have personal sandbox URLs, test accounts, API key paths, or local setup details GakrCLI should know?
-  - Only if Phase 2 found multiple git worktrees: ask whether their worktrees are nested inside the main repo (e.g., \`.gakrcli/worktrees/<name>/\`) or siblings/external (e.g., \`../myrepo-feature/\`). If nested, the upward file walk finds the main repo's GAKRCLI.local.md automatically — no special handling needed. If sibling/external, the personal content should live in a home-directory file (e.g., \`~/.gakrcli/<project-name>-instructions.md\`) and each worktree gets a one-line GAKRCLI.local.md stub that imports it: \`@~/.gakrcli/<project-name>-instructions.md\`. Never put this import in the project AGENTS.md — that would check a personal reference into the team-shared file.
+  - Only if Phase 2 found multiple git worktrees: ask whether their worktrees are nested inside the main repo (e.g., \`.gakrcli/worktrees/<name>/\`) or siblings/external (e.g., \`../myrepo-feature/\`). If nested, the upward file walk finds the main repo's gakrcli.local.md automatically — no special handling needed. If sibling/external, the personal content should live in a home-directory file (e.g., \`~/.gakrcli/<project-name>-instructions.md\`) and each worktree gets a one-line gakrcli.local.md stub that imports it: \`@~/.gakrcli/<project-name>-instructions.md\`. Never put this import in the project AGENTS.md — that would check a personal reference into the team-shared file.
   - Any communication preferences? (e.g., "be terse", "always explain tradeoffs", "don't summarize at the end")
 
 **Synthesize a proposal from Phase 2 findings** — e.g., format-on-edit if a formatter exists, a project verification workflow if tests exist, an AGENTS.md note for anything from the gap-fill answers that's a guideline rather than a workflow. For each, pick the artifact type that fits, **constrained by the Phase 1 skills+hooks choice**:
@@ -121,12 +121,12 @@ Be specific: "Use 2-space indentation in TypeScript" is better than "Format code
 
 Do not repeat yourself and do not make up sections like "Common Development Tasks" or "Tips for Development" — only include information expressly found in files you read.
 
-Prefix AGENTS.md with:
+Prefix the file with:
 
 \`\`\`
 # AGENTS.md
 
-This file provides guidance to GakrCLI (gakr.ai/code) when working with code in this repository.
+This file provides guidance to GakrCLI Code (gakrcli.ai/code) when working with code in this repository.
 \`\`\`
 
 If AGENTS.md already exists: read it, propose specific changes as diffs, and explain why each change improves it. Do not silently overwrite.
@@ -135,11 +135,11 @@ For projects with multiple concerns, suggest organizing instructions into \`.gak
 
 For projects with distinct subdirectories (monorepos, multi-module projects, etc.): mention that subdirectory AGENTS.md files can be added for module-specific instructions (they're loaded automatically when GakrCLI works in those directories). Offer to create them if the user wants.
 
-## Phase 5: Write GAKRCLI.local.md (if user chose personal or both)
+## Phase 5: Write gakrcli.local.md (if user chose personal or both)
 
-Write a minimal GAKRCLI.local.md at the project root. This file is automatically loaded alongside the root project instruction file. After creating it, add \`GAKRCLI.local.md\` to the project's .gitignore so it stays private.
+Write a minimal gakrcli.local.md at the project root. This file is automatically loaded alongside AGENTS.md. After creating it, add \`gakrcli.local.md\` to the project's .gitignore so it stays private.
 
-**Consume \`note\` entries from the Phase 3 preference queue whose target is GAKRCLI.local.md** (personal-level notes) — add each as a concise line. If the user chose personal-only in Phase 1, this is the sole consumer of note entries.
+**Consume \`note\` entries from the Phase 3 preference queue whose target is gakrcli.local.md** (personal-level notes) — add each as a concise line. If the user chose personal-only in Phase 1, this is the sole consumer of note entries.
 
 Include:
 - The user's role and familiarity with the codebase (so GakrCLI can calibrate explanations)
@@ -148,9 +148,9 @@ Include:
 
 Keep it short — only include what would make GakrCLI's responses noticeably better for this user.
 
-If Phase 2 found multiple git worktrees and the user confirmed they use sibling/external worktrees (not nested inside the main repo): the upward file walk won't find a single GAKRCLI.local.md from all worktrees. Write the actual personal content to \`~/.gakrcli/<project-name>-instructions.md\` and make GAKRCLI.local.md a one-line stub that imports it: \`@~/.gakrcli/<project-name>-instructions.md\`. The user can copy this one-line stub to each sibling worktree. Never put this import in the project AGENTS.md. If worktrees are nested inside the main repo (e.g., \`.gakrcli/worktrees/\`), no special handling is needed — the main repo's GAKRCLI.local.md is found automatically.
+If Phase 2 found multiple git worktrees and the user confirmed they use sibling/external worktrees (not nested inside the main repo): the upward file walk won't find a single gakrcli.local.md from all worktrees. Write the actual personal content to \`~/.gakrcli/<project-name>-instructions.md\` and make gakrcli.local.md a one-line stub that imports it: \`@~/.gakrcli/<project-name>-instructions.md\`. The user can copy this one-line stub to each sibling worktree. Never put this import in the project AGENTS.md. If worktrees are nested inside the main repo (e.g., \`.gakrcli/worktrees/\`), no special handling is needed — the main repo's gakrcli.local.md is found automatically.
 
-If GAKRCLI.local.md already exists: read it, propose specific additions, and do not silently overwrite.
+If gakrcli.local.md already exists: read it, propose specific additions, and do not silently overwrite.
 
 ## Phase 6: Suggest and create skills (if user chose "Skills + hooks" or "Skills only")
 
@@ -215,13 +215,13 @@ Act on each "yes" before moving on.
 
 Recap what was set up — which files were written and the key points included in each. Remind the user these files are a starting point: they should review and tweak them, and can run \`/init\` again anytime to re-scan.
 
-Then tell the user that you'll be introducing a few more suggestions for optimizing their codebase and GakrCLI setup based on what you found. Present these as a single, well-formatted to-do list where every item is relevant to this repo. Put the most impactful items first.
+Then tell the user that you'll be introducing a few more suggestions for optimizing their codebase and GakrCLI Code setup based on what you found. Present these as a single, well-formatted to-do list where every item is relevant to this repo. Put the most impactful items first.
 
 When building the list, work through these checks and include only what applies:
 - If frontend code was detected (React, Vue, Svelte, etc.): \`/plugin install frontend-design@gakrcli-plugins-official\` gives GakrCLI design principles and component patterns so it produces polished UI; \`/plugin install playwright@gakrcli-plugins-official\` lets GakrCLI launch a real browser, screenshot what it built, and fix visual bugs itself.
 - If you found gaps in Phase 7 (missing GitHub CLI, missing linting) and the user said no: list them here with a one-line reason why each helps.
 - If tests are missing or sparse: suggest setting up a test framework so GakrCLI can verify its own changes.
-- To help you create skills and optimize existing skills using evals, GakrCLI has an official skill-creator plugin you can install. Install it with \`/plugin install skill-creator@gakrcli-plugins-official\`, then run \`/skill-creator <skill-name>\` to create new skills or refine any existing skill. (Always include this one.)
+- To help you create skills and optimize existing skills using evals, GakrCLI Code has an official skill-creator plugin you can install. Install it with \`/plugin install skill-creator@gakrcli-plugins-official\`, then run \`/skill-creator <skill-name>\` to create new skills or refine any existing skill. (Always include this one.)
 - Browse official plugins with \`/plugin\` — these bundle skills, agents, hooks, and MCP servers that you may find helpful. You can also create your own custom plugins to share them with others. (Always include this one.)`
 
 const command = {

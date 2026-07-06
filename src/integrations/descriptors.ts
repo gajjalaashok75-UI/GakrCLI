@@ -30,6 +30,8 @@ export interface OpenAIShimUiConfig {
 export interface OpenAIShimTransportConfig {
   headers?: Record<string, string>
   supportsApiFormatSelection?: boolean
+  defaultApiFormat?: 'chat_completions' | 'responses' | 'responses_compat'
+  requiredApiFormat?: 'chat_completions' | 'responses' | 'responses_compat'
   supportsAuthHeaders?: boolean
   ui?: OpenAIShimUiConfig
   defaultAuthHeader?: OpenAIShimAuthHeaderConfig
@@ -37,9 +39,12 @@ export interface OpenAIShimTransportConfig {
   preserveReasoningContent?: boolean
   requireReasoningContentOnAssistantMessages?: boolean
   reasoningContentFallback?: '' | 'omit'
-  thinkingRequestFormat?: 'none' | 'deepseek-compatible'
+  thinkingRequestFormat?: 'none' | 'deepseek-compatible' | 'zai-compatible'
+  enableToolStreaming?: boolean
   maxTokensField?: OpenAIShimTokenField
   removeBodyFields?: string[]
+  /** Override the endpoint path for this model (e.g., '/responses', '/messages'). */
+  endpointPath?: string
 }
 
 export interface CapabilityFlags {
@@ -50,6 +55,30 @@ export interface CapabilityFlags {
   supportsReasoning?: boolean
   supportsPreciseTokenCount?: boolean
   supportsEmbeddings?: boolean
+}
+
+export type ReasoningControlMode = 'levels' | 'toggle' | 'always-on'
+export type ReasoningEffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+/**
+ * reasoning_effort, deepseek_compatible, and zai_compatible are wired into
+ * request serialization today. Other values are reserved until their serializer
+ * paths are implemented.
+ */
+export type ReasoningWireFormat =
+  | 'reasoning_effort'
+  | 'reasoning_object'
+  | 'thinking_type'
+  | 'deepseek_compatible'
+  | 'zai_compatible'
+  | 'none'
+export type ReasoningDisableFormat = 'thinking_type_disabled'
+
+export interface ReasoningControlMetadata {
+  mode: ReasoningControlMode
+  levels?: ReasoningEffortLevel[]
+  defaultLevel?: ReasoningEffortLevel
+  wireFormat?: ReasoningWireFormat
+  disableFormat?: ReasoningDisableFormat
 }
 
 export interface TransportConfig {
@@ -76,12 +105,13 @@ export type ReadinessProbeKind = 'ollama-generation' | 'openai-compatible-models
 export interface ModelCatalogEntry {
   id: string
   apiName: string
+  aliases?: string[]
   label?: string
-  owner?: string
   default?: boolean
   hidden?: boolean
   modelDescriptorId?: string
   capabilities?: CapabilityFlags
+  reasoning?: ReasoningControlMetadata
   contextWindow?: number
   maxOutputTokens?: number
   transportOverrides?: CatalogTransportOverrides
@@ -111,6 +141,12 @@ export interface SetupMetadata {
   requiresAuth: boolean
   authMode: AuthMode
   credentialEnvVars?: string[]
+  /**
+   * Restrict credential resolution to credentialEnvVars. Without this,
+   * openai-compatible routes also accept OPENAI_API_KEY, which can send a
+   * generic key belonging to another provider to this route's endpoint.
+   */
+  dedicatedCredentialsOnly?: boolean
   setupPrompt?: string
 }
 
@@ -148,6 +184,11 @@ export interface ValidationRoutingMetadata {
   skipWhenUseOpenAI?: boolean
 }
 
+export interface PresetBadge {
+  text: string
+  color?: string
+}
+
 export interface ProviderPresetMetadata {
   id: string
   description: string
@@ -159,6 +200,7 @@ export interface ProviderPresetMetadata {
   modelEnvVars?: string[]
   fallbackBaseUrl?: string
   fallbackModel?: string
+  badge?: PresetBadge
 }
 
 export type ProviderPresetRouteKind =
@@ -180,6 +222,7 @@ export interface ProviderPresetManifestEntry {
   modelEnvVars?: readonly string[]
   fallbackBaseUrl?: string
   fallbackModel?: string
+  badge?: PresetBadge
 }
 
 export type ValidationMetadata =
@@ -203,6 +246,13 @@ export type ValidationMetadata =
       expiredCredentialMessage: string
       invalidCredentialMessage: string
     }
+  // xAI accepts either an API key (XAI_API_KEY) or stored OAuth
+  // credentials (browser/device-code login). Validation passes when any of
+  // the following hold:
+  //   1. one of `credentialEnvVars` is non-empty in env
+  //   2. one of `credentialSourceEnvMarkers` matches in env (e.g.
+  //      XAI_CREDENTIAL_SOURCE=oauth, set by the OAuth profile)
+  //   3. stored OAuth credentials exist (resolved async via the runtime)
   | {
       routing?: ValidationRoutingMetadata
       kind: 'xai-credential'
@@ -289,6 +339,7 @@ export interface ModelDescriptor {
   defaultModel: string
   providerModelMap?: Partial<Record<string, string>>
   capabilities: CapabilityFlags
+  reasoning?: ReasoningControlMetadata
   contextWindow?: number
   maxOutputTokens?: number
   cacheConfig?: CacheConfig

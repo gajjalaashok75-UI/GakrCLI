@@ -59,28 +59,28 @@ const PERMISSION_MODE_CONFIG: Partial<
   acceptEdits: {
     title: 'Accept edits',
     shortTitle: 'Accept',
-    symbol: '⏵⏵',
+    symbol: '▶▶',
     color: 'autoAccept',
     external: 'acceptEdits',
   },
   bypassPermissions: {
     title: 'Bypass Permissions',
     shortTitle: 'Bypass',
-    symbol: '⏵⏵',
+    symbol: '▶▶',
     color: 'error',
     external: 'bypassPermissions',
   },
   fullAccess: {
     title: 'Full Access',
     shortTitle: 'Full',
-    symbol: 'âµâµ',
+    symbol: '▶▶',
     color: 'error',
     external: 'fullAccess',
   },
   dontAsk: {
     title: "Don't Ask",
     shortTitle: 'DontAsk',
-    symbol: '⏵⏵',
+    symbol: '▶▶',
     color: 'error',
     external: 'dontAsk',
   },
@@ -89,7 +89,7 @@ const PERMISSION_MODE_CONFIG: Partial<
         auto: {
           title: 'Auto mode',
           shortTitle: 'Auto',
-          symbol: '⏵⏵',
+          symbol: '▶▶',
           color: 'warning' as ModeColorKey,
           external: 'default' as ExternalPermissionMode,
         },
@@ -99,7 +99,7 @@ const PERMISSION_MODE_CONFIG: Partial<
 
 /**
  * Type guard to check if a PermissionMode is an ExternalPermissionMode.
- * auto is ant-only and excluded from external modes.
+ * auto is internal-only and excluded from external modes.
  */
 export function isExternalPermissionMode(
   mode: PermissionMode,

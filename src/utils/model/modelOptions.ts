@@ -1,8 +1,13 @@
 // biome-ignore-all assist/source/organizeImports: internal-only import markers must not be reordered
 import { getInitialMainLoopModel } from '../../bootstrap/state.js'
-import { getAdditionalModelOptionsCacheScope } from '../../services/api/providerConfig.js'
+import { getCatalogEntriesForRoute } from '../../integrations/index.js'
+import { resolveRouteIdFromBaseUrl } from '../../integrations/routeMetadata.js'
 import {
-  isgakrcliAISubscriber,
+  getAdditionalModelOptionsCacheScope,
+  resolveProviderRequest,
+} from '../../services/api/providerConfig.js'
+import {
+  isGakrCLIAISubscriber,
   isMaxSubscriber,
   isTeamPremiumSubscriber,
 } from '../auth.js'
@@ -19,7 +24,7 @@ import { getAPIProvider } from './providers.js'
 import { isModelAllowed } from './modelAllowlist.js'
 import {
   getCanonicalName,
-  getgakrcliAiUserDefaultModelDescription,
+  getGakrCLIAiUserDefaultModelDescription,
   getDefaultSonnetModel,
   getDefaultOpusModel,
   getDefaultHaikuModel,
@@ -41,10 +46,7 @@ import {
 import { getCachedOllamaModelOptions, isOllamaProvider } from './ollamaModels.js'
 import { getCachedNvidiaNimModelOptions, isNvidiaNimProvider } from './nvidiaNimModels.js'
 import { getCachedMiniMaxModelOptions, isMiniMaxProvider } from './minimaxModels.js'
-import {
-  getCachedXiaomiMimoModelOptions,
-  isXiaomiMimoProvider,
-} from './xiaomi-mimoModels.js'
+import { getCachedXiaomiMimoModelOptions, isXiaomiMimoProvider } from './xiaomi-mimoModels.js'
 import { getAntModels } from './antModels.js'
 
 // @[MODEL LAUNCH]: Update all the available and default model option strings below.
@@ -99,11 +101,11 @@ export function getDefaultOptionForUser(fastMode = false): ModelOption {
   }
 
   // Subscribers
-  if (isgakrcliAISubscriber()) {
+  if (isGakrCLIAISubscriber()) {
     return {
       value: null,
       label: 'Default (recommended)',
-      description: getgakrcliAiUserDefaultModelDescription(fastMode),
+      description: getGakrCLIAiUserDefaultModelDescription(fastMode),
     }
   }
 
@@ -172,6 +174,16 @@ function getOpus41Option(): ModelOption {
   }
 }
 
+function getOpus48Option(fastMode = false): ModelOption {
+  const is3P = getAPIProvider() !== 'firstParty'
+  return {
+    value: is3P ? getModelStrings().opus48 : 'opus',
+    label: 'Opus',
+    description: `Opus 4.8 · Most capable for complex work${getOpus46PricingSuffix(fastMode)}`,
+    descriptionForModel: 'Opus 4.8 - most capable for complex work',
+  }
+}
+
 function getOpus47Option(fastMode = false): ModelOption {
   const is3P = getAPIProvider() !== 'firstParty'
   return {
@@ -205,12 +217,14 @@ export function getSonnet46_1MOption(): ModelOption {
 
 export function getOpus46_1MOption(fastMode = false): ModelOption {
   const is3P = getAPIProvider() !== 'firstParty'
+  // 3P pins Opus 4.6; first-party resolves the `opus` alias to the current
+  // default (Opus 4.8), so the label must follow the provider.
+  const opusName = is3P ? 'Opus 4.6' : 'Opus 4.8'
   return {
     value: is3P ? getModelStrings().opus46 + '[1m]' : 'opus[1m]',
     label: 'Opus (1M context)',
-    description: `Opus 4.6 for long sessions${getOpus46PricingSuffix(fastMode)}`,
-    descriptionForModel:
-      'Opus 4.6 with 1M context window - for long sessions with large codebases',
+    description: `${opusName} for long sessions${getOpus46PricingSuffix(fastMode)}`,
+    descriptionForModel: `${opusName} with 1M context window - for long sessions with large codebases`,
   }
 }
 
@@ -264,13 +278,13 @@ function getMaxOpusOption(fastMode = false): ModelOption {
   return {
     value: 'opus',
     label: 'Opus',
-    description: `Opus 4.7 · Most capable for complex work${fastMode ? getOpus46PricingSuffix(true) : ''}`,
+    description: `Opus 4.8 · Most capable for complex work${fastMode ? getOpus46PricingSuffix(true) : ''}`,
   }
 }
 
 export function getMaxSonnet46_1MOption(): ModelOption {
   const is3P = getAPIProvider() !== 'firstParty'
-  const billingInfo = isgakrcliAISubscriber() ? ' · Billed as extra usage' : ''
+  const billingInfo = isGakrCLIAISubscriber() ? ' · Billed as extra usage' : ''
   return {
     value: 'sonnet[1m]',
     label: 'Sonnet (1M context)',
@@ -279,11 +293,11 @@ export function getMaxSonnet46_1MOption(): ModelOption {
 }
 
 export function getMaxOpus46_1MOption(fastMode = false): ModelOption {
-  const billingInfo = isgakrcliAISubscriber() ? ' · Billed as extra usage' : ''
+  const billingInfo = isGakrCLIAISubscriber() ? ' · Billed as extra usage' : ''
   return {
     value: 'opus[1m]',
     label: 'Opus (1M context)',
-    description: `Opus 4.6 with 1M context${billingInfo}${getOpus46PricingSuffix(fastMode)}`,
+    description: `Opus 4.8 with 1M context${billingInfo}${getOpus46PricingSuffix(fastMode)}`,
   }
 }
 
@@ -292,9 +306,9 @@ function getMergedOpus1MOption(fastMode = false): ModelOption {
   return {
     value: is3P ? getModelStrings().opus46 + '[1m]' : 'opus[1m]',
     label: 'Opus (1M context)',
-    description: `${is3P ? 'Opus 4.6' : 'Opus 4.7'} with 1M context · Most capable for complex work${!is3P && fastMode ? getOpus46PricingSuffix(fastMode) : ''}`,
+    description: `${is3P ? 'Opus 4.6' : 'Opus 4.8'} with 1M context · Most capable for complex work${!is3P && fastMode ? getOpus46PricingSuffix(fastMode) : ''}`,
     descriptionForModel:
-      `${is3P ? 'Opus 4.6' : 'Opus 4.7'} with 1M context - most capable for complex work`,
+      `${is3P ? 'Opus 4.6' : 'Opus 4.8'} with 1M context - most capable for complex work`,
   }
 }
 
@@ -314,7 +328,7 @@ function getOpusPlanOption(): ModelOption {
   return {
     value: 'opusplan',
     label: 'Opus Plan Mode',
-    description: 'Use Opus 4.7 in plan mode, Sonnet 4.6 otherwise',
+    description: 'Use Opus 4.8 in plan mode, Sonnet 4.6 otherwise',
   }
 }
 
@@ -449,7 +463,7 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
     return [defaultOption]
   }
 
-  // When using Xiaomi MiMo, show models from the MiMo catalog.
+  // When using Xiaomi MiMo, show models from the MiMo catalog
   if (isXiaomiMimoProvider()) {
     const defaultOption = getDefaultOptionForUser(fastMode)
     const xiaomiMimoModels = getCachedXiaomiMimoModelOptions()
@@ -477,7 +491,7 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
     ]
   }
 
-  if (isgakrcliAISubscriber()) {
+  if (isGakrCLIAISubscriber()) {
     if (isMaxSubscriber() || isTeamPremiumSubscriber()) {
       // Max and Team Premium users: Opus is default, show Sonnet as alternative
       const premiumOptions = [getDefaultOptionForUser(fastMode)]
@@ -513,13 +527,28 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
     return standardOptions
   }
 
-  if (getAdditionalModelOptionsCacheScope()?.startsWith('openai:')) {
-    const activeOpenAIOptions = getActiveOpenAIModelOptionsCache()
+  const activeRouteCatalogOptions = getActiveOpenAIRouteCatalogOptions()
+  const openAIModelOptionsScope = getAdditionalModelOptionsCacheScope()
+  const activeProfile = getActiveProviderProfile()
+  if (
+    activeRouteCatalogOptions.length > 0 ||
+    openAIModelOptionsScope?.startsWith('openai:')
+  ) {
+    const activeOpenAIOptions = activeProfile
+      ? getActiveOpenAIModelOptionsCache()
+      : []
+    const scopedOptions = openAIModelOptionsScope?.startsWith('openai:')
+      ? getScopedAdditionalModelOptions()
+      : []
+    const sourceOptions = activeOpenAIOptions.length > 0
+      ? activeOpenAIOptions
+      : scopedOptions
     return [
       getDefaultOptionForUser(fastMode),
-      ...(activeOpenAIOptions.length > 0
-        ? activeOpenAIOptions
-        : getScopedAdditionalModelOptions()),
+      ...mergeModelOptionsByNormalizedValue(
+        sourceOptions,
+        activeRouteCatalogOptions,
+      ),
     ]
   }
 
@@ -537,7 +566,7 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
     }
   }
 
-  // PAYG 1P API: Default (Sonnet) + Sonnet 1M + Opus 4.7 + Opus 4.6 + Opus 1M + Haiku
+  // PAYG 1P API: Default (Sonnet) + Sonnet 1M + Opus 4.8 + Opus 4.7 + Opus 4.6 + Opus 1M + Haiku
   if (getAPIProvider() === 'firstParty') {
     const payg1POptions = [getDefaultOptionForUser(fastMode)]
     if (checkSonnet1mAccess()) {
@@ -546,6 +575,7 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
     if (isOpus1mMergeEnabled()) {
       payg1POptions.push(getMergedOpus1MOption(fastMode))
     } else {
+      payg1POptions.push(getOpus48Option(fastMode))
       payg1POptions.push(getOpus47Option(fastMode))
       payg1POptions.push(getOpus46Option(fastMode))
       if (checkOpus1mAccess()) {
@@ -581,6 +611,8 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
     payg3pOptions.push(customOpus)
   } else {
     // Add Opus 4.1, Opus 4.7, Opus 4.6 and Opus 4.6 1M
+    // Opus 4.8 is intentionally omitted here until 3P rollout is active;
+    // getDefaultOpusModel() keeps non-first-party usage on Opus 4.7.
     payg3pOptions.push(getOpus41Option()) // This is the default opus
     payg3pOptions.push(getOpus47Option(fastMode))
     payg3pOptions.push(getOpus46Option(fastMode))
@@ -681,6 +713,118 @@ function getKnownModelOption(model: string): ModelOption | null {
   }
 }
 
+function normalizeRouteModelOptionKey(model: string): string {
+  return model.trim().split('?', 1)[0]?.trim().toLowerCase() ?? ''
+}
+
+function getActiveOpenAIRouteId(): string | null {
+  const openAIFlag = process.env.GAKR_CODE_USE_OPENAI?.trim().toLowerCase()
+  if (!openAIFlag || ['0', 'false', 'no', 'off'].includes(openAIFlag)) {
+    return null
+  }
+
+  const scope = getAdditionalModelOptionsCacheScope()
+  if (scope?.startsWith('openai:')) {
+    const partitionIndex = scope.lastIndexOf(':')
+    if (partitionIndex > 'openai:'.length) {
+      const baseUrl = scope.slice('openai:'.length, partitionIndex)
+      return resolveRouteIdFromBaseUrl(baseUrl)
+    }
+  }
+
+  return resolveRouteIdFromBaseUrl(resolveProviderRequest().baseUrl)
+}
+
+function mergeModelOptionsByNormalizedValue(
+  primaryOptions: ModelOption[],
+  additionalOptions: ModelOption[],
+): ModelOption[] {
+  const merged: ModelOption[] = []
+  const seen = new Set<string>()
+
+  for (const option of [...primaryOptions, ...additionalOptions]) {
+    if (typeof option.value !== 'string') {
+      continue
+    }
+
+    const value = option.value.trim()
+    const key = normalizeRouteModelOptionKey(value)
+    if (!key || seen.has(key)) {
+      continue
+    }
+
+    seen.add(key)
+    merged.push({
+      ...option,
+      value,
+    })
+  }
+
+  return merged
+}
+
+function getActiveOpenAIRouteCatalogOptions(): ModelOption[] {
+  const routeId = getActiveOpenAIRouteId()
+  if (!routeId) {
+    return []
+  }
+
+  return getCatalogEntriesForRoute(routeId).flatMap(entry => {
+    const value = entry.apiName.trim()
+    if (!value) {
+      return []
+    }
+
+    return [{
+      value,
+      label: entry.label ?? value,
+      description: entry.apiName,
+    }]
+  })
+}
+
+function getRouteCatalogModelOption(value: ModelSetting): ModelOption | null {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const routeId = getActiveOpenAIRouteId()
+  if (!routeId) {
+    return null
+  }
+
+  const normalizedValue = normalizeRouteModelOptionKey(value)
+  if (!normalizedValue) {
+    return null
+  }
+
+  const catalogEntry = getCatalogEntriesForRoute(routeId).find(entry =>
+    normalizeRouteModelOptionKey(entry.apiName) === normalizedValue ||
+    normalizeRouteModelOptionKey(entry.id) === normalizedValue ||
+    (entry.aliases ?? []).some(
+      alias => normalizeRouteModelOptionKey(alias) === normalizedValue,
+    ),
+  )
+  if (!catalogEntry) {
+    return null
+  }
+
+  return {
+    value: catalogEntry.apiName,
+    label: catalogEntry.label ?? catalogEntry.apiName,
+    description: catalogEntry.apiName,
+  }
+}
+
+function optionMatchesModel(option: ModelOption, model: ModelSetting): boolean {
+  if (option.value === model) {
+    return true
+  }
+
+  const catalogOption = getRouteCatalogModelOption(model)
+  return catalogOption !== null && option.value === catalogOption.value
+}
+
 export function getModelOptions(fastMode = false): ModelOption[] {
   if (getAPIProvider() === 'github') {
     return filterModelOptionsByAllowlist(getModelOptionsBase(fastMode))
@@ -692,7 +836,7 @@ export function getModelOptions(fastMode = false): ModelOption[] {
   const envCustomModel = process.env.ANTHROPIC_CUSTOM_MODEL_OPTION
   if (
     envCustomModel &&
-    !options.some(existing => existing.value === envCustomModel)
+    !options.some(existing => optionMatchesModel(existing, envCustomModel))
   ) {
     options.push({
       value: envCustomModel,
@@ -705,8 +849,12 @@ export function getModelOptions(fastMode = false): ModelOption[] {
 
   // Append additional model options fetched during bootstrap
   for (const opt of getScopedAdditionalModelOptions()) {
-    if (!options.some(existing => existing.value === opt.value)) {
-      options.push(opt)
+    const catalogOption = getRouteCatalogModelOption(opt.value)
+    const nextOption = catalogOption ? { ...opt, ...catalogOption } : opt
+    if (
+      !options.some(existing => optionMatchesModel(existing, nextOption.value))
+    ) {
+      options.push(nextOption)
     }
   }
 
@@ -720,7 +868,10 @@ export function getModelOptions(fastMode = false): ModelOption[] {
   } else if (initialMainLoopModel !== null) {
     customModel = initialMainLoopModel
   }
-  if (customModel === null || options.some(opt => opt.value === customModel)) {
+  if (
+    customModel === null ||
+    options.some(opt => optionMatchesModel(opt, customModel))
+  ) {
     return filterModelOptionsByAllowlist(options)
   } else if (customModel === 'opusplan') {
     return filterModelOptionsByAllowlist([...options, getOpusPlanOption()])
@@ -739,6 +890,12 @@ export function getModelOptions(fastMode = false): ModelOption[] {
       getMergedOpus1MOption(fastMode),
     ])
   } else {
+    const catalogOption = getRouteCatalogModelOption(customModel)
+    if (catalogOption) {
+      options.push(catalogOption)
+      return filterModelOptionsByAllowlist(options)
+    }
+
     // Try to show a human-readable label for known Anthropic models, with an
     // upgrade hint if the alias now resolves to a newer version.
     const knownOption = getKnownModelOption(customModel)

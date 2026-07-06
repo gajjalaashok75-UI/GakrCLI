@@ -41,7 +41,7 @@ import { logForDebugging } from '../debug.js'
 import { getCurrentInstallationType } from '../doctorDiagnostic.js'
 import { env } from '../env.js'
 import { envDynamic } from '../envDynamic.js'
-import { getGakrcliConfigHomeDir, isEnvTruthy } from '../envUtils.js'
+import { getGakrCLIConfigHomeDir, isEnvTruthy } from '../envUtils.js'
 import { errorMessage, getErrnoCode, isENOENT, toError } from '../errors.js'
 import { execFileNoThrowWithCwd } from '../execFileNoThrow.js'
 import { getShellType } from '../localInstaller.js'
@@ -49,7 +49,7 @@ import * as lockfile from '../lockfile.js'
 import { logError } from '../log.js'
 import { gt, gte } from '../semver.js'
 import {
-  filtergakrcliAliases,
+  filterGakrCLIAliases,
   getShellConfigPaths,
   readFileLines,
   writeFileLines,
@@ -70,8 +70,6 @@ import {
   readLockContent,
   withLock,
 } from './pidLock.js'
-
-const LEGACY_CLAUDE_CODE_PACKAGE = '@anthropic-ai/claude-code'
 
 export const VERSION_RETENTION_COUNT = 2
 
@@ -133,7 +131,7 @@ function getBaseDirectories() {
   }
 }
 
-async function isPossiblegakrcliBinary(filePath: string): Promise<boolean> {
+async function isPossibleGakrCLIBinary(filePath: string): Promise<boolean> {
   try {
     const stats = await stat(filePath)
     // before download, the version lock file (located at the same filePath) will be size 0
@@ -472,7 +470,7 @@ async function performVersionUpdate(
   await updateSymlink(executablePath, installPath)
 
   // Verify the executable was actually created/updated
-  if (!(await isPossiblegakrcliBinary(executablePath))) {
+  if (!(await isPossibleGakrCLIBinary(executablePath))) {
     let installPathExists = false
     try {
       await stat(installPath)
@@ -491,7 +489,7 @@ async function performVersionUpdate(
 
 async function versionIsAvailable(version: string): Promise<boolean> {
   const { installPath } = await getVersionPaths(version)
-  return isPossiblegakrcliBinary(installPath)
+  return isPossibleGakrCLIBinary(installPath)
 }
 
 async function updateLatest(
@@ -541,7 +539,7 @@ async function updateLatest(
     !forceReinstall &&
     version === MACRO.VERSION &&
     (await versionIsAvailable(version)) &&
-    (await isPossiblegakrcliBinary(executablePath))
+    (await isPossibleGakrCLIBinary(executablePath))
   ) {
     logForDebugging(`Found ${version} at ${executablePath}, skipping install`)
     logEvent('tengu_native_update_complete', {
@@ -852,11 +850,11 @@ export async function checkInstall(
   // the executable is missing, EINVAL means it exists but isn't a symlink.
   // This avoids an access()→readlink() TOCTOU where deletion between the
   // two calls produces a misleading "Not a symlink" diagnostic.
-  // isPossiblegakrcliBinary stats the path internally, so we don't pre-check
+  // isPossibleGakrCLIBinary stats the path internally, so we don't pre-check
   // with access() — that would be a TOCTOU between access and the stat.
   if (isWindows) {
     // On Windows it's a copied executable, not a symlink
-    if (!(await isPossiblegakrcliBinary(dirs.executable))) {
+    if (!(await isPossibleGakrCLIBinary(dirs.executable))) {
       messages.push({
         message: `installMethod is native, but gakrcli command is missing or invalid at ${dirs.executable}`,
         userActionRequired: true,
@@ -867,7 +865,7 @@ export async function checkInstall(
     try {
       const target = await readlink(dirs.executable)
       const absoluteTarget = resolve(dirname(dirs.executable), target)
-      if (!(await isPossiblegakrcliBinary(absoluteTarget))) {
+      if (!(await isPossibleGakrCLIBinary(absoluteTarget))) {
         messages.push({
           message: `GakrCLI symlink points to missing or invalid binary: ${target}`,
           userActionRequired: true,
@@ -883,7 +881,7 @@ export async function checkInstall(
         })
       } else {
         // EINVAL (not a symlink) or other — check as regular binary
-        if (!(await isPossiblegakrcliBinary(dirs.executable))) {
+        if (!(await isPossibleGakrCLIBinary(dirs.executable))) {
           messages.push({
             message: `${dirs.executable} exists but is not a valid GakrCLI binary`,
             userActionRequired: true,
@@ -1023,7 +1021,7 @@ async function getVersionFromSymlink(
   try {
     const target = await readlink(symlinkPath)
     const absoluteTarget = resolve(dirname(symlinkPath), target)
-    if (await isPossiblegakrcliBinary(absoluteTarget)) {
+    if (await isPossibleGakrCLIBinary(absoluteTarget)) {
       return absoluteTarget
     }
   } catch {
@@ -1500,7 +1498,7 @@ export async function cleanupShellAliases(): Promise<SetupMessage[]> {
       const lines = await readFileLines(configFile)
       if (!lines) continue
 
-      const { filtered, hadAlias } = filtergakrcliAliases(lines)
+      const { filtered, hadAlias } = filterGakrCLIAliases(lines)
 
       if (hadAlias) {
         await writeFileLines(configFile, filtered)
@@ -1664,9 +1662,9 @@ export async function cleanupNpmInstallations(): Promise<{
   const warnings: string[] = []
   let removed = 0
 
-  // Always attempt to remove the legacy Claude Code npm package too.
+  // Always attempt to remove @anthropic-ai/gakrcli-code
   const codePackageResult = await attemptNpmUninstall(
-    LEGACY_CLAUDE_CODE_PACKAGE,
+    '@anthropic-ai/gakrcli-code',
   )
   if (codePackageResult.success) {
     removed++
@@ -1678,10 +1676,7 @@ export async function cleanupNpmInstallations(): Promise<{
   }
 
   // Also attempt to remove MACRO.PACKAGE_URL if it's defined and different
-  if (
-    MACRO.PACKAGE_URL &&
-    MACRO.PACKAGE_URL !== LEGACY_CLAUDE_CODE_PACKAGE
-  ) {
+  if (MACRO.PACKAGE_URL && MACRO.PACKAGE_URL !== '@anthropic-ai/gakrcli-code') {
     const macroPackageResult = await attemptNpmUninstall(MACRO.PACKAGE_URL)
     if (macroPackageResult.success) {
       removed++
@@ -1693,7 +1688,10 @@ export async function cleanupNpmInstallations(): Promise<{
     }
   }
 
-  const localInstallDirs = [join(getGakrcliConfigHomeDir(), 'local')]
+  // Preserve compatibility with pre-migration installs under ~/.gakrcli/local.
+  const localInstallDirs = Array.from(
+    new Set([join(getGakrCLIConfigHomeDir(), 'local'), join(homedir(), '.gakrcli', 'local')]),
+  )
 
   for (const localInstallDir of localInstallDirs) {
     try {

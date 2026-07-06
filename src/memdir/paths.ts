@@ -7,7 +7,8 @@ import {
 } from '../bootstrap/state.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
 import {
-  getGakrcliWorkspaceDir,
+  getGakrCLIConfigHomeDir,
+  getProjectsDir,
   isEnvDefinedFalsy,
   isEnvTruthy,
 } from '../utils/envUtils.js'
@@ -21,9 +22,9 @@ import {
 /**
  * Whether auto-memory features are enabled (memdir, agent memory, past session search).
  * Enabled by default. Priority chain (first defined wins):
- *   1. GAKR_CODE_DISABLE_AUTO_MEMORY env var (1/true -> OFF, 0/false -> ON)
- *   2. GAKR_CODE_SIMPLE (--bare) -> OFF
- *   3. CCR without persistent storage -> OFF (no GAKR_CODE_REMOTE_MEMORY_DIR)
+ *   1. GAKR_CODE_DISABLE_AUTO_MEMORY env var (1/true → OFF, 0/false → ON)
+ *   2. GAKR_CODE_SIMPLE (--bare) → OFF
+ *   3. CCR without persistent storage → OFF (no GAKR_CODE_REMOTE_MEMORY_DIR)
  *   4. autoMemoryEnabled in settings.json (supports project-level opt-out)
  *   5. Default: enabled
  */
@@ -80,13 +81,13 @@ export function isExtractModeActive(): boolean {
  * Returns the base directory for persistent memory storage.
  * Resolution order:
  *   1. GAKR_CODE_REMOTE_MEMORY_DIR env var (explicit override, set in CCR)
- *   2. ~/.gakrcli/workspace (default workspace)
+ *   2. ~/.gakrcli (default config home)
  */
 export function getMemoryBaseDir(): string {
   if (process.env.GAKR_CODE_REMOTE_MEMORY_DIR) {
     return process.env.GAKR_CODE_REMOTE_MEMORY_DIR
   }
-  return getGakrcliWorkspaceDir()
+  return getGakrCLIConfigHomeDir()
 }
 
 const AUTO_MEM_DIRNAME = 'memory'
@@ -198,7 +199,7 @@ export function hasAutoMemPathOverride(): boolean {
 /**
  * Returns the canonical git repo root if available, otherwise falls back to
  * the stable project root. Uses findCanonicalGitRoot so all worktrees of the
- * same repo share one auto-memory directory.
+ * same repo share one auto-memory directory (anthropics/gakrcli-code#24382).
  */
 function getAutoMemBase(): string {
   return findCanonicalGitRoot(getProjectRoot()) ?? getProjectRoot()
@@ -210,8 +211,8 @@ function getAutoMemBase(): string {
  * Resolution order:
  *   1. GAKR_COWORK_MEMORY_PATH_OVERRIDE env var (full-path override, used by Cowork)
  *   2. autoMemoryDirectory in settings.json (trusted sources only: policy/local/user)
- *   3. <memoryBase>/projects/<sanitized-git-root>/memory/
- *      where memoryBase is resolved by getMemoryBaseDir()
+ *   3. <workspace>/projects/<sanitized-git-root>/memory/
+ *      where workspace is resolved by getGakrCLIWorkspaceDir()
  *
  * Memoized: render-path callers (collapseReadSearchGroups → isAutoManagedMemoryFile)
  * fire per tool-use message per Messages re-render; each miss costs
@@ -226,13 +227,29 @@ export const getAutoMemPath = memoize(
     if (override) {
       return override
     }
-    const projectsDir = join(getMemoryBaseDir(), 'projects')
+    const projectsDir = getProjectsDir()
     return (
       join(projectsDir, sanitizePath(getAutoMemBase()), AUTO_MEM_DIRNAME) + sep
     ).normalize('NFC')
   },
   () => getProjectRoot(),
 )
+
+/**
+ * Returns the daily log file path for the given date (defaults to today).
+ * Shape: <autoMemPath>/logs/YYYY/MM/YYYY-MM-DD.md
+ *
+ * Used by assistant mode (feature('KAIROS')): rather than maintaining
+ * MEMORY.md as a live index, the agent appends to a date-named log file
+ * as it works. A separate nightly /dream skill distills these logs into
+ * topic files + MEMORY.md.
+ */
+export function getAutoMemDailyLogPath(date: Date = new Date()): string {
+  const yyyy = date.getFullYear().toString()
+  const mm = (date.getMonth() + 1).toString().padStart(2, '0')
+  const dd = date.getDate().toString().padStart(2, '0')
+  return join(getAutoMemPath(), 'logs', yyyy, mm, `${yyyy}-${mm}-${dd}.md`)
+}
 
 /**
  * Returns the auto-memory entrypoint (MEMORY.md inside the auto-memory dir).

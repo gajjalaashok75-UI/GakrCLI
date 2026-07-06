@@ -1,20 +1,17 @@
 /**
- * High-performance token counter with content-aware cache invalidation.
+ * High-performance token counter with cache invalidation on content change.
  */
 
-import { createHash } from 'node:crypto'
-import {
-  roughTokenCountEstimation,
-  roughTokenCountEstimationForMessages,
-} from '../services/tokenEstimation.js'
+import { createHash } from 'crypto'
+import { roughTokenCountEstimation, roughTokenCountEstimationForMessages } from '../services/tokenEstimation.js'
 import type { Message } from '../types/message.js'
 
 export interface IncrementalCounterConfig {
-  /** Token budget for context limit decisions, such as a model context window. */
+  /** Token budget for context limit decisions (e.g., model context window) */
   tokenBudget?: number
-  /** Enable append-only incremental counting when the previous prefix is unchanged. */
+  /** Enable auto-invalidation on size change */
   autoInvalidate?: boolean
-  /** Custom estimation multiplier. */
+  /** Custom estimation multiplier */
   estimationMultiplier?: number
 }
 
@@ -26,36 +23,33 @@ export interface CounterStats {
   hitRate: number
 }
 
-function contentForHash(message: Message): string {
-  const content = message.message?.content
-  if (typeof content === 'string') return content
-  if (Array.isArray(content)) return JSON.stringify(content)
-  return JSON.stringify(content ?? '')
-}
-
 /**
- * Hashes all message content so same-length edits and prefix mutations cannot
- * reuse stale cached token counts.
+ * Get a hash of full conversation history for cache validation.
+ * Hashes ALL messages with full content to prevent collisions.
  */
 function getMessageHash(messages: readonly Message[]): string {
   if (messages.length === 0) return 'empty'
 
-  const fullContent = messages
-    .map(message => contentForHash(message))
-    .join('\u001f')
+  const fullContent = messages.map(m => {
+    const c = typeof m.message?.content === 'string'
+      ? m.message.content
+      : Array.isArray(m.message?.content)
+        ? JSON.stringify(m.message.content)
+        : ''
+    return c
+  }).join('|')
 
   return createHash('sha256').update(fullContent).digest('hex').slice(0, 16)
 }
 
 /**
- * Incremental token counter optimized for repeatedly estimating growing
- * conversations. It falls back to full recalculation whenever cached prefix
- * content no longer matches.
+ * High-performance incremental token counter with content-aware invalidation.
  */
 export class IncrementalTokenCounter {
   private lastMessageCount = 0
   private lastTokenCount = 0
   private lastFullHash = ''
+  private lastPrefixHash = ''
   private config: Required<IncrementalCounterConfig>
   private stats = {
     hits: 0,
@@ -65,137 +59,151 @@ export class IncrementalTokenCounter {
 
   constructor(config: IncrementalCounterConfig = {}) {
     this.config = {
-      tokenBudget: config.tokenBudget ?? 100_000,
+      tokenBudget: config.tokenBudget ?? 100000,
       autoInvalidate: config.autoInvalidate ?? true,
       estimationMultiplier: config.estimationMultiplier ?? 1,
     }
   }
 
+  /**
+   * Get token count using cache when possible.
+   * O(1) for cached, O(n) for new messages.
+   */
   getCount(messages: readonly Message[]): number {
     if (messages.length === 0) {
       this.reset()
       return 0
     }
 
-    const fullHash = getMessageHash(messages)
+    const hash = getMessageHash(messages)
 
-    if (
-      messages.length === this.lastMessageCount &&
-      fullHash === this.lastFullHash
-    ) {
+    // Cache hit only if both count AND content match
+    if (messages.length === this.lastMessageCount && hash === this.lastFullHash) {
       this.stats.hits++
       this.stats.totalTokens += this.lastTokenCount
       return this.lastTokenCount
     }
 
+    // Cache miss - calculate
     this.stats.misses++
 
-    const canAppendIncrementally =
+    const isIncrementalSafe =
+      messages.length > this.lastMessageCount &&
       this.config.autoInvalidate &&
       this.lastMessageCount > 0 &&
-      messages.length > this.lastMessageCount &&
       this.lastFullHash.length > 0
 
-    if (canAppendIncrementally) {
-      const currentPrefixHash = getMessageHash(
-        messages.slice(0, this.lastMessageCount),
-      )
+    if (isIncrementalSafe) {
+      const currentPrefixHash = getMessageHash(messages.slice(0, this.lastMessageCount))
 
-      if (currentPrefixHash === this.lastFullHash) {
+      if (currentPrefixHash === this.lastPrefixHash) {
         const newMessages = messages.slice(this.lastMessageCount)
         const estimated = Math.round(
-          roughTokenCountEstimationForMessages(newMessages) *
-            this.config.estimationMultiplier,
+          roughTokenCountEstimationForMessages(newMessages) * this.config.estimationMultiplier
         )
         this.lastTokenCount += estimated
       } else {
-        this.lastTokenCount = this.estimate(messages)
+        this.lastTokenCount = roughTokenCountEstimationForMessages(messages)
       }
     } else {
-      this.lastTokenCount = this.estimate(messages)
+      this.lastTokenCount = roughTokenCountEstimationForMessages(messages)
     }
 
     this.lastMessageCount = messages.length
-    this.lastFullHash = fullHash
+    this.lastFullHash = hash
+    this.lastPrefixHash = getMessageHash(messages.slice(0, messages.length))
     this.stats.totalTokens += this.lastTokenCount
-
+    
     return this.lastTokenCount
   }
 
+  /**
+   * Force recalculate from full context.
+   * Use when context changed externally.
+   */
   invalidate(messages: readonly Message[]): number {
     this.lastMessageCount = messages.length
     this.lastFullHash = getMessageHash(messages)
-    this.lastTokenCount =
-      messages.length === 0 ? 0 : roughTokenCountEstimationForMessages(messages)
+    this.lastPrefixHash = messages.length > 0 ? getMessageHash(messages) : ''
 
+    if (messages.length === 0) {
+      this.lastTokenCount = 0
+    } else {
+      this.lastTokenCount = roughTokenCountEstimationForMessages(messages)
+    }
+    
     this.stats.totalTokens += this.lastTokenCount
     this.stats.misses++
-
+    
     return this.lastTokenCount
   }
 
+  /**
+   * Estimate token count without caching.
+   * Useful for read-only estimates.
+   */
   estimate(messages: readonly Message[]): number {
     return roughTokenCountEstimationForMessages(messages)
   }
 
+  /**
+   * Get token count for a single message.
+   */
   estimateMessage(message: Message): number {
-    const content = message.message?.content
-    if (typeof content === 'string') {
-      return roughTokenCountEstimation(content)
+    if (typeof message.message?.content === 'string') {
+      return roughTokenCountEstimation(message.message.content)
     }
-    if (Array.isArray(content)) {
-      return content.reduce((sum, block) => {
-        if ('text' in block) {
-          return sum + roughTokenCountEstimation(block.text || '')
-        }
-        if ('thinking' in block) {
-          return sum + roughTokenCountEstimation(block.thinking || '')
-        }
-        return sum + 100
+    if (Array.isArray(message.message?.content)) {
+      return message.message.content.reduce((sum, block) => {
+        if ('text' in block) return sum + roughTokenCountEstimation(block.text || '')
+        if ('thinking' in block) return sum + roughTokenCountEstimation(block.thinking || '')
+        return sum + 100 // Default for other block types
       }, 0)
     }
-    return 100
+    return 100 // Default estimate
   }
 
-  estimateBatch(messages: readonly Message[]): number {
-    return messages.reduce((sum, message) => sum + this.estimateMessage(message), 0)
+  /**
+   * Batch estimate for multiple messages.
+   */
+  estimateBatch(messages: Message[]): number {
+    return messages.reduce((sum, msg) => sum + this.estimateMessage(msg), 0)
   }
 
-  getRemainingBudget(
-    messages: readonly Message[],
-    contextWindow: number,
-  ): number {
-    return Math.max(0, contextWindow - this.getCount(messages))
+  /**
+   * Get remaining budget in context window.
+   */
+  getRemainingBudget(messages: readonly Message[], contextWindow: number): number {
+    const used = this.getCount(messages)
+    return Math.max(0, contextWindow - used)
   }
 
-  isApproachingLimit(
-    messages: readonly Message[],
-    threshold: number = 0.8,
-  ): boolean {
-    const count =
-      this.lastMessageCount === messages.length &&
-      this.lastFullHash === getMessageHash(messages)
-        ? this.lastTokenCount
-        : this.getCount(messages)
-
-    return count / this.config.tokenBudget > threshold
+  /**
+   * Check if approaching limit.
+   */
+  isApproachingLimit(messages: readonly Message[], threshold: number = 0.8): boolean {
+    return this.lastMessageCount > 0 && 
+           (this.lastTokenCount / this.config.tokenBudget) > threshold
   }
 
+  /** Reset all state */
   reset(): void {
     this.lastMessageCount = 0
     this.lastTokenCount = 0
-    this.lastFullHash = ''
     this.stats = { hits: 0, misses: 0, totalTokens: 0 }
   }
 
+  /** Get current cached count */
   get cachedCount(): number {
     return this.lastTokenCount
   }
 
+  /** Get message count */
   get messageCount(): number {
     return this.lastMessageCount
   }
 
+  /** Get statistics */
   getStats(): CounterStats {
     const total = this.stats.hits + this.stats.misses
     return {
@@ -207,22 +215,25 @@ export class IncrementalTokenCounter {
     }
   }
 
+  /** Update configuration dynamically */
   updateConfig(config: Partial<IncrementalCounterConfig>): void {
     this.config = {
       ...this.config,
       ...config,
       tokenBudget: config.tokenBudget ?? this.config.tokenBudget,
       autoInvalidate: config.autoInvalidate ?? this.config.autoInvalidate,
-      estimationMultiplier:
-        config.estimationMultiplier ?? this.config.estimationMultiplier,
+      estimationMultiplier: config.estimationMultiplier ?? this.config.estimationMultiplier,
     }
   }
 }
 
+/**
+ * Factory for creating pre-configured counters.
+ */
 export const CounterFactory = {
   realtime(): IncrementalTokenCounter {
     return new IncrementalTokenCounter({
-      tokenBudget: 50_000,
+      tokenBudget: 50000,
       autoInvalidate: true,
       estimationMultiplier: 1.1,
     })
@@ -230,15 +241,15 @@ export const CounterFactory = {
 
   batch(): IncrementalTokenCounter {
     return new IncrementalTokenCounter({
-      tokenBudget: 200_000,
+      tokenBudget: 200000,
       autoInvalidate: false,
-      estimationMultiplier: 1,
+      estimationMultiplier: 1.0,
     })
   },
 
   lightweight(): IncrementalTokenCounter {
     return new IncrementalTokenCounter({
-      tokenBudget: 10_000,
+      tokenBudget: 10000,
       autoInvalidate: true,
       estimationMultiplier: 1.2,
     })

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { WebviewManager } from '../../src/webview/webviewManager';
 import { Uri } from '../__mocks__/vscode';
-import * as vscode from '../__mocks__/vscode';
+import * as vscode from 'vscode';
 
 // Mock ExtensionContext
 function createMockContext(): vscode.ExtensionContext {
@@ -9,8 +9,8 @@ function createMockContext(): vscode.ExtensionContext {
     extensionUri: Uri.file('/test/extension') as never,
     subscriptions: [],
     extension: {
-      id: 'Harsh1210.gakrcli-vscode',
-      packageJSON: { version: '0.1.0' },
+      id: 'gajjalaashok75-UI.gakrcli-vscode',
+      packageJSON: { version: '0.2.5' },
     },
     globalState: {
       get: () => undefined,

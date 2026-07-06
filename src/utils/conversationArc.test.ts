@@ -18,8 +18,7 @@ import {
   getArcStats,
   finalizeArcTurn,
 } from './conversationArc.js'
-import { getGlobalGraph, resetGlobalGraph } from './knowledgeGraph.js'
-import { setGakrcliConfigHomeDirForTesting } from './envUtils.js'
+import { getGlobalGraph, resetGlobalGraph, clearMemoryOnly } from './knowledgeGraph.js'
 import {
   acquireSharedMutationLock,
   releaseSharedMutationLock,
@@ -33,62 +32,20 @@ function createMessage(role: string, content: string): any {
 }
 
 describe('conversationArc', () => {
-  const originalConfigDir = process.env.GAKR_CONFIG_DIR
-  let configDir: string | undefined
-
-  const removeDirWithRetry = (dir: string) => {
-    for (let attempt = 0; attempt < 5; attempt++) {
-      try {
-        rmSync(dir, { recursive: true, force: true })
-        return
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code
-        if (code !== 'EBUSY' && code !== 'EPERM') {
-          throw error
-        }
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25 * (attempt + 1))
-      }
-    }
-
-    try {
-      rmSync(dir, { recursive: true, force: true })
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code
-      if (code !== 'EBUSY' && code !== 'EPERM') {
-        throw error
-      }
-    }
-  }
-
   beforeEach(async () => {
-    await acquireSharedMutationLock('utils/conversationArc.test.ts')
-    configDir = mkdtempSync(join(tmpdir(), 'gakrcli-conversation-arc-'))
-    process.env.GAKR_CONFIG_DIR = configDir
-    setGakrcliConfigHomeDirForTesting(configDir)
+    await acquireSharedMutationLock('conversationArc')
     resetArc()
     resetGlobalGraph()
+    clearMemoryOnly()
   })
 
   afterEach(() => {
     try {
       resetArc()
       resetGlobalGraph()
-      if (originalConfigDir === undefined) {
-        delete process.env.GAKR_CONFIG_DIR
-      } else {
-        process.env.GAKR_CONFIG_DIR = originalConfigDir
-      }
-      setGakrcliConfigHomeDirForTesting(undefined)
+      clearMemoryOnly()
     } finally {
-      const dirToRemove = configDir
-      configDir = undefined
-      try {
-        if (dirToRemove) {
-          removeDirWithRetry(dirToRemove)
-        }
-      } finally {
-        releaseSharedMutationLock()
-      }
+      releaseSharedMutationLock()
     }
   })
 
@@ -126,15 +83,18 @@ describe('conversationArc', () => {
       await addRelation(e2.id, e1.id, 'runs_on')
 
       const summary = await getArcSummary()
-      expect(summary).toMatch(/Knowledge Graph/);
+      expect(summary).toMatch(/Knowledge Graph/)
       expect(summary).toContain('[system] RHEL-TEST')
-      expect(summary).toMatch(/os: linux/);
+      expect(summary).toMatch(/os: linux/)
     })
 
     it('automatically learns facts from message content', async () => {
       resetGlobalGraph()
       initializeArc()
-      const complexMessage = createMessage('user', 'Set JIRA_URL_TEST=https://jira.local and look in /opt/app/bin/test version v1.2.3')
+      const complexMessage = createMessage(
+        'user',
+        'Set JIRA_URL_TEST=https://jira.local and look in /opt/app/bin/test version v1.2.3',
+      )
 
       await updateArcPhase([complexMessage])
 
@@ -147,7 +107,9 @@ describe('conversationArc', () => {
 
     it('throws error when adding relation to non-existent entity', async () => {
       initializeArc()
-      await expect(addRelation('invalid1', 'invalid2', 'test')).rejects.toThrow('Source or target entity not found in graph')
+      await expect(addRelation('invalid1', 'invalid2', 'test')).rejects.toThrow(
+        'Source or target entity not found in graph',
+      )
     })
   })
 
@@ -161,11 +123,29 @@ describe('conversationArc', () => {
       await finalizeArcTurn()
 
       const summary = getGraphSummary()
-      expect(summary).toMatch(/Knowledge Graph/);
+      expect(summary).toMatch(/Knowledge Graph/)
       // searchGlobalGraph should now find it
       const ragResult = await getArcSummary('Tell me about the RAG engine')
       expect(ragResult).toContain('Build RAG engine')
       expect(ragResult).toContain('Use JSON for storage')
+    })
+
+    it('summarizes only facts learned during the active arc', async () => {
+      const firstArc = initializeArc()
+      await addEntity('tool', 'pre-existing-tool')
+      await finalizeArcTurn()
+
+      resetArc()
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5)
+      initializeArc()
+      await addEntity('tool', 'fresh-tool')
+      await finalizeArcTurn()
+
+      const graph = getGlobalGraph()
+      const latestSummary = graph.summaries[graph.summaries.length - 1]
+      expect(latestSummary.content).toContain('fresh-tool')
+      expect(latestSummary.content).not.toContain('pre-existing-tool')
+      expect(firstArc.id).toBeDefined()
     })
   })
 

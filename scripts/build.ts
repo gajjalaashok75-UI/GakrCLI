@@ -33,85 +33,86 @@ cleanDistDirectory()
 // selectively enabled here when their full source exists in the mirror.
 const featureFlags: Record<string, boolean> = {
   // ── Disabled: require Anthropic infrastructure or missing source ─────
-  VOICE_MODE: false,              // Push-to-talk STT via claude.ai OAuth endpoint
-  PROACTIVE: false,               // Autonomous agent mode (missing proactive/ module)
+  VOICE_MODE: false,              // Push-to-talk STT via gakrcli.ai OAuth endpoint
+  PROACTIVE: true,                // Autonomous agent mode (tick-driven agent, 12/12 tests pass)
   KAIROS: false,                  // Persistent assistant/session mode (cloud backend)
   BRIDGE_MODE: false,             // Remote desktop bridge via CCR infrastructure
   DAEMON: false,                  // Background daemon process (stubbed in open build)
   AGENT_TRIGGERS: false,          // Scheduled remote agent triggers
   ABLATION_BASELINE: false,       // A/B testing harness for eval experiments
-  CONTEXT_COLLAPSE: false,        // Context collapsing optimization (stubbed)
-  COMMIT_ATTRIBUTION: false,      // Co-Authored-By metadata in git commits
+  CONTEXT_COLLAPSE: true,        // Context collapsing optimization
+  COMMIT_ATTRIBUTION: true,      // Co-Authored-By metadata in git commits
+  HISTORY_SNIP: true,             // Model-callable snip tool for context management
   UDS_INBOX: false,               // Unix Domain Socket inter-session messaging
-  BG_SESSIONS: false,             // Background sessions via tmux (stubbed)
-  WEB_BROWSER_TOOL: false,        // Built-in browser automation (source not mirrored)
+  AUTOFIX_PR: true,              // /autofix-pr command
+  TEMPLATES: false,               // Template jobs (new/list/reply subcommands)
+  BG_SESSIONS: true,              // Local detached background sessions
+  WEB_BROWSER_TOOL: false,        // Built-in browser navigation/screenshot (panel UI stubbed)
   CHICAGO_MCP: false,             // Computer-use MCP (native Swift modules stubbed)
+  ACP: false,                     // ACP agent protocol (requires @agentclientprotocol/sdk)
   COWORKER_TYPE_TELEMETRY: false, // Telemetry for agent/coworker type classification
-  MCP_SKILLS: false,              // Dynamic MCP skill discovery (src/skills/mcpSkills.ts not mirrored; enabling this causes "fetchMcpSkillsForClient is not a function" when MCP servers with resources connect — see #856)
-  AGENT_MEMORY_SNAPSHOT: false,   // Agent memory snapshot persistence not enabled in open build
-  AGENT_TRIGGERS_REMOTE: false,   // Remote scheduled trigger support requires hosted infrastructure
-  ALLOW_TEST_VERSIONS: false,     // Internal version bypass for test builds only
-  ANTI_DISTILLATION_CC: false,    // First-party anti-distillation API header
-  AUTO_THEME: false,              // Automatic terminal theme detection
-  BASH_CLASSIFIER: false,         // Bash safety classifier service integration
-  BREAK_CACHE_COMMAND: false,     // Prompt-cache break debugging injection
-  BUILDING_GAKR_APPS: false,      // Internal GakrCLI app-building mode
-  BYOC_ENVIRONMENT_RUNNER: false, // Bring-your-own-cloud environment runner
-  CCR_AUTO_CONNECT: false,        // Cloud/CCR automatic bridge connection
-  CCR_MIRROR: false,              // Cloud/CCR mirror transport mode
-  CCR_REMOTE_SETUP: false,        // Remote setup web command for CCR
-  COMPACTION_REMINDERS: false,    // Extra compact/reminder prompting
-  CONNECTOR_TEXT: false,          // Connector text-block handling
-  CONVERSATION_ARC: false,        // Native knowledge graph prompt injection; disabled until validated
-  DIRECT_CONNECT: false,          // Direct remote connection flow
-  DOWNLOAD_USER_SETTINGS: false,  // Hosted user-settings download
-  ENHANCED_TELEMETRY_BETA: false, // Enhanced telemetry beta metadata
-  EXPERIMENTAL_SKILL_SEARCH: false, // Remote/experimental skill index search
-  FILE_PERSISTENCE: false,        // File persistence/checkpoint feature gate
-  HARD_FAIL: false,               // Hard-fail diagnostic mode
-  HISTORY_SNIP: false,            // History snipping command
-  HOOK_CHAINS: false,             // Chained hook execution
-  HYBRID_CONTEXT_STRATEGY: false, // Hybrid context strategy for API requests
-  IMPROVEMENT_SYSTEM: false,      // Self-improvement command system
-  IS_LIBC_GLIBC: false,           // libc-specific native build flag
-  IS_LIBC_MUSL: false,            // libc-specific native build flag
-  KAIROS_BRIEF: false,            // Assistant brief-only mode
-  KAIROS_DREAM: false,            // Assistant dream/proactive mode
-  KAIROS_GITHUB_WEBHOOKS: false,  // GitHub webhook subscription flow
-  KAIROS_PUSH_NOTIFICATION: false, // Hosted assistant push notifications
-  LODESTONE: false,               // Lodestone integration
-  MCP_RICH_OUTPUT: false,         // Rich MCP output rendering
-  MEMORY_SHAPE_TELEMETRY: false,  // Memory-shape telemetry
-  MULTI_TURN_CONTEXT: false,      // Native multi-turn context tracker; disabled until validated
-  NATIVE_CLIENT_ATTESTATION: false, // Native client attestation header
-  NATIVE_CLIPBOARD_IMAGE: false,  // Native clipboard image support
-  NEW_INIT: false,                // New init flow
-  OVERFLOW_TEST_TOOL: false,      // Internal overflow test tool
-  PERFETTO_TRACING: false,        // Perfetto tracing instrumentation
-  POWERSHELL_AUTO_MODE: false,    // PowerShell-specific auto-mode classifier path
-  REACTIVE_COMPACT: false,        // Reactive compaction UI/logic
-  REVIEW_ARTIFACT: false,         // Review artifact generation
-  RUN_SKILL_GENERATOR: false,     // Skill generator runtime
-  SELF_HOSTED_RUNNER: false,      // Self-hosted runner integration
-  SKILL_IMPROVEMENT: false,       // Skill improvement workflows
-  SKIP_DETECTION_WHEN_AUTOUPDATES_DISABLED: false, // Internal update/detection behavior
-  SLOW_OPERATION_LOGGING: false,  // Slow-operation tracing
-  SSH_REMOTE: false,              // SSH remote connection flow
-  STREAMLINED_OUTPUT: false,      // Alternate streamlined terminal output
-  TEMPLATES: false,               // Template generation workflows
-  TERMINAL_PANEL: false,          // Terminal panel UI
-  TORCH: false,                   // Torch command/tooling
-  TREE_SITTER_BASH: false,        // Tree-sitter Bash parser
-  TREE_SITTER_BASH_SHADOW: false, // Shadow comparison for tree-sitter Bash parser
-  ULTRAPLAN: false,               // Ultraplan workflow UI
-  UNATTENDED_RETRY: false,        // Unattended retry behavior
-  UPLOAD_USER_SETTINGS: false,    // Hosted user-settings upload
-  WORKFLOW_SCRIPTS: false,        // Local workflow script commands/tools
+  AGENT_TRIGGERS_REMOTE: false,   // Remote agent trigger delivery (requires cloud infra)
+  KAIROS_BRIEF: false,            // Brief mode toggle (KAIROS sub-feature)
+  KAIROS_GITHUB_WEBHOOKS: false,  // GitHub webhook PR subscription (KAIROS sub-feature)
+  KAIROS_PUSH_NOTIFICATION: false,// Push notification support (KAIROS sub-feature)
+  OVERFLOW_TEST_TOOL: false,      // Overflow testing tool (test-only, not for production)
+  TERMINAL_PANEL: false,          // Terminal panel capture tool (IDE integration)
+  CCR_REMOTE_SETUP: false,        // CCR remote setup command (requires bridge mode)
+  TORCH: false,                   // Torch command (requires external infra)
+  MCP_SKILLS: true,               // Dynamic MCP skill discovery via skill:// resources
+
+  // ── Disabled: internal/experimental/infrastructure features ────────
+  AGENT_MEMORY_SNAPSHOT: false,       // Agent memory snapshot (experimental)
+  ALLOW_TEST_VERSIONS: false,         // Allow test/alpha version checks
+  ANTI_DISTILLATION_CC: false,        // Anti-distillation content checks (Anthropic internal)
+  AUTO_THEME: false,                  // Auto theme detection
+  BASH_CLASSIFIER: false,             // Bash command safety classifier
+  BREAK_CACHE_COMMAND: false,         // /break-cache command
+  BUILDING_GAKR_APPS: false,          // GakrApps build mode (experimental)
+  BYOC_ENVIRONMENT_RUNNER: false,     // BYOC environment runner (requires external infra)
+  CCR_AUTO_CONNECT: false,            // CCR auto-connect (requires bridge mode)
+  CCR_MIRROR: false,                  // CCR mirror mode (requires bridge mode)
+  COMPACTION_REMINDERS: false,        // Compaction reminder notifications
+  CONNECTOR_TEXT: false,              // Connector text processing
+  KNOWLEDGE: true,                    // Knowledge graph slash command
+  CONVERSATION_ARC: true,             // Conversation arc analysis (experimental)
+  DIRECT_CONNECT: false,              // Direct connect mode
+  DOWNLOAD_USER_SETTINGS: false,      // Download settings from cloud
+  FILE_PERSISTENCE: false,            // File persistence (experimental)
+  HARD_FAIL: false,                   // Hard fail on tool errors (debug mode)
+  HOOK_CHAINS: false,                 // Hook chain execution
+  HYBRID_CONTEXT_STRATEGY: false,     // Hybrid context window strategy
+  IS_LIBC_GLIBC: false,               // Runtime glibc detection
+  IS_LIBC_MUSL: false,                // Runtime musl detection
+  KAIROS_DREAM: false,                // KAIROS dream mode sub-feature
+  LAN_PIPES: false,                   // LAN pipe IPC (experimental)
+  LODESTONE: false,                   // Lodestone integration (Anthropic internal)
+  MCP_RICH_OUTPUT: false,             // MCP rich output formatting
+  MEMORY_SHAPE_TELEMETRY: false,      // Memory shape telemetry
+  MULTI_TURN_CONTEXT: true,           // Multi-turn context window (experimental)
+  NATIVE_CLIENT_ATTESTATION: false,   // Client attestation (native)
+  NATIVE_CLIPBOARD_IMAGE: false,      // Native clipboard image support
+  NEW_INIT: false,                    // New init flow (experimental)
+  PIPE_IPC: false,                    // Pipe IPC mechanism
+  POWERSHELL_AUTO_MODE: false,        // PowerShell auto-detection mode
+  REACTIVE_COMPACT: false,            // Reactive compaction strategy
+  REVIEW_ARTIFACT: false,             // Review artifact feature (gated)
+  RUN_SKILL_GENERATOR: false,         // Skill generator runner
+  SELF_HOSTED_RUNNER: false,          // Self-hosted runner (requires external infra)
+  SKILL_IMPROVEMENT: false,           // Skill improvement suggestions
+  SKILL_LEARNING: false,              // Skill learning system
+  SLOW_OPERATION_LOGGING: false,      // Slow operation debug logging
+  SSH_REMOTE: false,                  // SSH remote sessions (SSH agent infra)
+  STREAMLINED_OUTPUT: false,          // Streamlined output mode
+  TREE_SITTER_BASH: false,            // Tree-sitter bash parser (native)
+  TREE_SITTER_BASH_SHADOW: false,     // Tree-sitter bash shadow parser
+  UNATTENDED_RETRY: false,            // Unattended retry on failure
+  UPLOAD_USER_SETTINGS: false,        // Upload settings to cloud
 
   // ── Enabled: upstream defaults ──────────────────────────────────────
   COORDINATOR_MODE: true,             // Multi-agent coordinator with worker delegation
   BUILTIN_EXPLORE_PLAN_AGENTS: true,  // Built-in Explore/Plan specialized subagents
-  BUDDY: true,                        // Buddy mode for paired programming
+  BUDDY: false,                       // Buddy mode for paired programming
   MONITOR_TOOL: true,                 // MCP server monitoring/streaming tool
   TEAMMEM: true,                      // Team memory management
   MESSAGE_ACTIONS: true,              // Message action buttons in the UI
@@ -128,10 +129,18 @@ const featureFlags: Record<string, boolean> = {
   SHOT_STATS: true,                   // Shot distribution stats in session summary
   EXTRACT_MEMORIES: true,             // Auto-extract durable memories from conversations
   FORK_SUBAGENT: true,                // Implicit context-forking when omitting subagent_type
+  RESUME_COMPACT_PROMPT: true,        // Prompt to compact on /resume + determinate progress bar
   VERIFICATION_AGENT: true,           // Built-in read-only agent for test/verification
   PROMPT_CACHE_BREAK_DETECTION: true, // Detect & log unexpected prompt cache invalidations
   HOOK_PROMPTS: true,                 // Allow tools to request interactive user prompts
   KAIROS_CHANNELS: true,               // Local MCP channel delivery without assistant-mode cloud pieces
+  WORKFLOW_SCRIPTS: true,              // Workflow scripts (.gakrcli/workflows/ YAML/MD)
+  EXPERIMENTAL_SKILL_SEARCH: true,     // TF-IDF skill search (DiscoverSkillsTool)
+  GOAL: true,                          // Goal tracking tool & command
+  POOR: true,                          // 穷鬼模式，跳过 extract_memories/prompt_suggestion 减少消耗
+  ULTRAPLAN: true,                     // Ultraplan multi-phase planning system
+  LOCAL_MEMORY: false,                 // Local memory recall tool & command
+  LOCAL_VAULT: false,                  // Local vault HTTP fetch tool & command
 }
 
 // ── Pre-process: replace feature() calls with boolean literals ──────
@@ -202,11 +211,12 @@ result = await Bun.build({
     'MACRO.DISPLAY_VERSION': JSON.stringify(version),
     'MACRO.BUILD_TIME': JSON.stringify(new Date().toISOString()),
     'MACRO.ISSUES_EXPLAINER':
-      JSON.stringify('report the issue at https://github.com/gajjalaashok75-UI/GakrCLI/issues'),
+      JSON.stringify('report the issue at https://github.com/gajjalaashok75-UI/gakrcli/issues'),
     'MACRO.FEEDBACK_CHANNEL':
-      JSON.stringify('https://github.com/gajjalaashok75-UI/GakrCLI/issues'),
+      JSON.stringify('https://github.com/gajjalaashok75-UI/gakrcli/issues'),
     'MACRO.PACKAGE_URL': JSON.stringify('@gakr-gakr/gakrcli'),
     'MACRO.NATIVE_PACKAGE_URL': 'undefined',
+    'MACRO.VERSION_CHANGELOG': 'undefined',
   },
   plugins: [
     noTelemetryPlugin,
@@ -214,64 +224,9 @@ result = await Bun.build({
     {
       name: 'bun-bundle-shim',
       setup(build) {
-        const internalFeatureStubModules = new Map([
-          [
-            '../daemon/workerRegistry.js',
-            'export async function runDaemonWorker() { throw new Error("Daemon worker is unavailable in the open build."); }',
-          ],
-          [
-            '../daemon/main.js',
-            'export async function daemonMain() { throw new Error("Daemon mode is unavailable in the open build."); }',
-          ],
-          [
-            '../cli/bg.js',
-            `
-export async function psHandler() { throw new Error("Background sessions are unavailable in the open build."); }
-export async function logsHandler() { throw new Error("Background sessions are unavailable in the open build."); }
-export async function attachHandler() { throw new Error("Background sessions are unavailable in the open build."); }
-export async function killHandler() { throw new Error("Background sessions are unavailable in the open build."); }
-export async function handleBgFlag() { throw new Error("Background sessions are unavailable in the open build."); }
-`,
-          ],
-          [
-            '../cli/handlers/templateJobs.js',
-            'export async function templatesMain() { throw new Error("Template jobs are unavailable in the open build."); }',
-          ],
-          [
-            '../environment-runner/main.js',
-            'export async function environmentRunnerMain() { throw new Error("Environment runner is unavailable in the open build."); }',
-          ],
-          [
-            '../self-hosted-runner/main.js',
-            'export async function selfHostedRunnerMain() { throw new Error("Self-hosted runner is unavailable in the open build."); }',
-          ],
-        ] as const)
-
-        // bun:bundle feature() replacement is handled by featureFlagPreprocessPlugin.
-        // The previous onResolve/onLoad shim was ineffective in Bun
-        // v1.3.9+ because the bun: namespace is resolved natively
-        // before the JS plugin phase runs.
-
-        build.onResolve(
-          { filter: /^\.\.\/(daemon\/workerRegistry|daemon\/main|cli\/bg|cli\/handlers\/templateJobs|environment-runner\/main|self-hosted-runner\/main)\.js$/ },
-          args => {
-            if (!internalFeatureStubModules.has(args.path)) return null
-            return {
-              path: args.path,
-              namespace: 'internal-feature-stub',
-            }
-          },
-        )
-        build.onLoad(
-          { filter: /.*/, namespace: 'internal-feature-stub' },
-          args => ({
-            contents:
-              internalFeatureStubModules.get(args.path) ??
-              'export {}',
-            loader: 'js',
-          }),
-        )
-
+        // All internal feature stub modules (daemon, template jobs, environment
+        // runner, self-hosted runner) now exist locally with full implementations
+        // or reference-matching no-op stubs. No build-time stubs needed.
         // Resolve react/compiler-runtime to the standalone package
         build.onResolve({ filter: /^react\/compiler-runtime$/ }, () => ({
           path: 'react/compiler-runtime',
@@ -285,8 +240,6 @@ export async function handleBgFlag() { throw new Error("Background sessions are 
           }),
         )
 
-        // NOTE: @opentelemetry/* kept as external deps (too many named exports to stub)
-
         // Resolve native addon and missing snapshot imports to stubs
         for (const mod of [
           'audio-capture-napi',
@@ -296,14 +249,11 @@ export async function handleBgFlag() { throw new Error("Background sessions are 
           'url-handler-napi',
           'color-diff-napi',
           '@anthropic-ai/mcpb',
-          '@ant/gakrcli-for-chrome-mcp',
-          '@anthropic-ai/sandbox-runtime',
           'asciichart',
           'plist',
           'cacache',
           'fuse',
-          'code-excerpt',
-          'stack-utils',
+          'vscode-jsonrpc/node.js',
         ]) {
           build.onResolve({ filter: new RegExp(`^${mod}$`) }, () => ({
             path: mod,
@@ -321,8 +271,6 @@ const handler = {
   get(_, prop) {
     if (prop === '__esModule') return true;
     if (prop === 'default') return new Proxy({}, handler);
-    if (prop === 'ExportResultCode') return { SUCCESS: 0, FAILED: 1 };
-    if (prop === 'resourceFromAttributes') return () => ({});
     if (prop === 'SandboxRuntimeConfigSchema') return { parse: () => ({}) };
     return noop;
   }
@@ -340,36 +288,11 @@ export const ColorDiff = null;
 export const ColorFile = null;
 export const getSyntaxTheme = noop;
 export const plot = noop;
-export const creategakrcliForChromeMcpServer = noop;
-// OpenTelemetry exports
-export const ExportResultCode = { SUCCESS: 0, FAILED: 1 };
-export const resourceFromAttributes = noop;
-export const Resource = noopClass;
-export const SimpleSpanProcessor = noopClass;
-export const BatchSpanProcessor = noopClass;
-export const NodeTracerProvider = noopClass;
-export const BasicTracerProvider = noopClass;
-export const OTLPTraceExporter = noopClass;
-export const OTLPLogExporter = noopClass;
-export const OTLPMetricExporter = noopClass;
-export const PrometheusExporter = noopClass;
-export const LoggerProvider = noopClass;
-export const SimpleLogRecordProcessor = noopClass;
-export const BatchLogRecordProcessor = noopClass;
-export const MeterProvider = noopClass;
-export const PeriodicExportingMetricReader = noopClass;
-export const trace = { getTracer: () => ({ startSpan: () => ({ end: noop, setAttribute: noop, setStatus: noop, recordException: noop }) }) };
-export const context = { active: noop, with: (_, fn) => fn() };
-export const SpanStatusCode = { OK: 0, ERROR: 1, UNSET: 2 };
-export const ATTR_SERVICE_NAME = 'service.name';
-export const ATTR_SERVICE_VERSION = 'service.version';
-export const SEMRESATTRS_SERVICE_NAME = 'service.name';
-export const SEMRESATTRS_SERVICE_VERSION = 'service.version';
-export const AggregationTemporality = { CUMULATIVE: 0, DELTA: 1 };
-export const DataPointType = { HISTOGRAM: 0, SUM: 1, GAUGE: 2 };
-export const InstrumentType = { COUNTER: 0, HISTOGRAM: 1, UP_DOWN_COUNTER: 2 };
-export const PushMetricExporter = noopClass;
-export const SeverityNumber = {};
+export const createGakrCLIForChromeMcpServer = noop;
+export const createMessageConnection = noop;
+export const StreamMessageReader = noop;
+export const StreamMessageWriter = noop;
+export const Trace = noop;
 `,
             loader: 'js',
           }),
@@ -395,8 +318,8 @@ export const SeverityNumber = {};
         const pathMod = require('path')
         const srcDir = pathMod.resolve(__dirname, '..', 'src')
         const missingModules = new Set<string>()
-        // Relative missing imports are keyed by specifier + importer so
-        // identical specifiers in different folders do not stub real modules.
+        // Relative missing imports keyed by specifier + importer so identical
+        // specifiers in different folders do not stub the wrong module.
         const missingRelativeImports = new Map<
           string,
           Array<{ importerPath: string; stubPath: string }>
@@ -410,6 +333,10 @@ export const SeverityNumber = {};
           '@ant/computer-use-mcp/types',
           '@ant/computer-use-swift',
           '@ant/computer-use-input',
+          '@smithy/node-http-handler',
+          '@smithy/core',
+          '@aws-sdk/credential-provider-node',
+          '@mendable/firecrawl-js',
         ]) {
           missingModules.add(pkg)
         }
@@ -583,11 +510,12 @@ sdkResult = await Bun.build({
     'MACRO.DISPLAY_VERSION': JSON.stringify(version),
     'MACRO.BUILD_TIME': JSON.stringify(new Date().toISOString()),
     'MACRO.ISSUES_EXPLAINER':
-      JSON.stringify('report the issue at https://github.com/gajjalaashok75-UI/GakrCLI/issues'),
+      JSON.stringify('report the issue at https://github.com/gajjalaashok75-UI/gakrcli/issues'),
     'MACRO.FEEDBACK_CHANNEL':
-      JSON.stringify('https://github.com/gajjalaashok75-UI/GakrCLI/issues'),
+      JSON.stringify('https://github.com/gajjalaashok75-UI/gakrcli/issues'),
     'MACRO.PACKAGE_URL': JSON.stringify('@gakr-gakr/gakrcli'),
     'MACRO.NATIVE_PACKAGE_URL': 'undefined',
+    'MACRO.VERSION_CHANGELOG': 'undefined',
   },
   // External: everything TUI-related + native modules
   external: SDK_EXTERNALS,
@@ -600,14 +528,18 @@ sdkResult = await Bun.build({
       setup(build) {
         const missingModules = [
           '@anthropic-ai/mcpb',
-          '@ant/gakrcli-for-chrome-mcp',
           '@ant/computer-use-mcp',
           '@ant/computer-use-swift',
           '@ant/computer-use-input',
           '@anthropic-ai/sandbox-runtime',
           'audio-capture-napi', 'audio-capture.node',
           'image-processor-napi', 'modifiers-napi', 'url-handler-napi', 'color-diff-napi',
-          'asciichart', 'plist', 'cacache', 'fuse', 'code-excerpt', 'stack-utils',
+          'asciichart', 'plist', 'cacache', 'fuse',
+          'vscode-jsonrpc/node.js',
+          '@smithy/node-http-handler',
+          '@smithy/core',
+          '@aws-sdk/credential-provider-node',
+          '@mendable/firecrawl-js',
         ]
         for (const mod of missingModules) {
           const escaped = mod.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -631,10 +563,6 @@ sdkResult = await Bun.build({
           namespace: 'sdk-missing-stub',
         }))
         build.onResolve({ filter: /^(\.\.?\/)+cli\// }, (args) => ({
-          path: args.path,
-          namespace: 'sdk-missing-stub',
-        }))
-        build.onResolve({ filter: /^(\.\.?\/)+hooks\// }, (args) => ({
           path: args.path,
           namespace: 'sdk-missing-stub',
         }))
@@ -718,10 +646,6 @@ sdkResult = await Bun.build({
           namespace: 'sdk-missing-stub',
         }))
         build.onResolve({ filter: /^src\/cli\// }, (args) => ({
-          path: args.path,
-          namespace: 'sdk-missing-stub',
-        }))
-        build.onResolve({ filter: /^src\/hooks\// }, (args) => ({
           path: args.path,
           namespace: 'sdk-missing-stub',
         }))
@@ -883,9 +807,9 @@ export const Fragment = null;
           }
           const isStubbedSpecifier = (s: string) =>
             missingModules.includes(s) ||
-            /^(\.\.?\/)+(components|ink|commands|cli|context|state|keybindings|hooks)\//.test(s) ||
+            /^(\.\.?\/)+(components|ink|commands|cli|context|state|keybindings)\//.test(s) ||
             /^(\.\.?\/)+ink\.js$/.test(s) ||
-            /^src\/(components|ink|commands|cli|state|context|keybindings|hooks)\//.test(s) ||
+            /^src\/(components|ink|commands|cli|state|context|keybindings)\//.test(s) ||
             /^src\/ink\.js$/.test(s) ||
             /(?:^|\/)UI\.js$/.test(s) ||
             s === 'react-compiler-runtime' ||
@@ -964,10 +888,10 @@ export const Fragment = null;
           'instances': 'new Map()',
           'selectableUserMessagesFilter': '() => true',
           'messagesAfterAreOnlySynthetic': '() => false',
-          'SandboxManager': 'class { static isSupportedPlatform = () => false; static create = noop; static Version = \'\'; }',
+          'SandboxManager': 'class { static isSupportedPlatform = () => false; static create = noop; static Version = \'\'; static annotateStderrWithSandboxFailures = (_command, stderr) => stderr; }',
           'SandboxRuntimeConfigSchema': '{ parse: noop }',
           'SandboxViolationStore': 'null',
-          'BaseSandboxManager': 'class { static isSupportedPlatform = () => false; }',
+          'BaseSandboxManager': 'class { static isSupportedPlatform = () => false; static annotateStderrWithSandboxFailures = (_command, stderr) => stderr; }',
           'ExportResultCode': '{ SUCCESS: 0, FAILED: 1 }',
           'linkifyUrlsInText': '(s) => s',
         }
@@ -1041,5 +965,108 @@ if (result?.success && sdkResult?.success) {
   })
   if (validation.exitCode !== 0) {
     process.exitCode = 1
+  }
+}
+
+// ── Guard: no unexpected missing-module stubs in the shipped CLI bundle ─────
+// The missing-import scanner above stubs any unresolved relative import to a
+// noop default export. That is correct for a require behind a DISABLED feature
+// flag: the gated branch is dead-code-eliminated and the stub never reaches the
+// bundle. But when a flag is ENABLED, its gated require becomes live and the
+// stub silently degrades a real module to `() => null` — a named export (e.g. a
+// React component) then resolves to `undefined` and crashes the first time that
+// path runs. SnipBoundaryMessage shipped exactly this way (PR #1407): the build
+// passed, smoke passed, unit tests passed, and the UI crashed on the first snip.
+//
+// This guard is a COARSE TRIPWIRE, not proof of reachability. A
+// `missing-module-stub:` marker in dist/cli.mjs does NOT by itself prove the
+// stub is reachable or invoked. The scanner (since #1399) keys missing modules
+// per importer, so a marker means *that* importer resolved to a stub — but the
+// marker can still sit on a path that never actually runs (e.g. a flag-gated
+// require that is enabled yet whose code path is not exercised).
+// So treat a flagged stub as "inspect this", not "confirmed runtime crash".
+// What the guard reliably catches is a NEW stub appearing where none was
+// expected — the regression class above — which is worth a human look before it
+// ships. Fail on any marker that is not explicitly grandfathered below.
+if (result?.success) {
+  // Pre-existing stubs grandfathered when this guard was introduced. Each is a
+  // marker the scanner emitted before this guard existed; each sits behind an
+  // enabled flag and is latent degrade-on-use debt whose source is not mirrored
+  // in this tree — the list is a baseline to detect new regressions, not an
+  // assertion that every entry is a live crash. Do NOT add entries here to
+  // silence the guard for new code — add the real source module, or gate the
+  // path so it is not reachable when the module is absent. An entry here is a
+  // known item to revisit, not a blessing that the stub is safe.
+  // Entries are repo-relative paths from `src/` onward, without extension — the
+  // same shape canonicalStub() produces, so the allowlist reads as the key.
+  const ACCEPTABLE_RUNTIME_STUBS = new Set<string>([
+    // Dynamically-imported cloud SDKs behind feature gates (never live in OSS build)
+    '@aws-sdk/credential-provider-node',
+    '@smithy/core',
+    '@smithy/node-http-handler',
+    // Dynamically-imported web search tools behind feature gates
+    '@mendable/firecrawl-js',
+  ])
+
+  // Stub markers are not byte-stable across build hosts: the per-importer
+  // scanner records each stub as the resolved absolute source path, which
+  // differs only by the repo-root prefix (`/home/ubuntu/.../gakrcli` locally
+  // vs `/home/runner/work/gakrcli/gakrcli` on CI). Diffing raw text made
+  // CI fail on already-allowlisted stubs and report them stale. Key on the
+  // repo-relative path from `src/` onward without extension: stable across hosts
+  // yet still path-specific, so a stub named `constants.ts` in one directory
+  // cannot mask a different `constants.ts` somewhere else (a basename-only key
+  // would).
+  const canonicalStub = (marker: string): string => {
+    const normalized = marker.split(/[\\/]/).join('/')
+    const srcIdx = normalized.lastIndexOf('/src/')
+    const fromSrc = srcIdx >= 0 ? normalized.slice(srcIdx + 1) : normalized
+    return fromSrc.replace(/\.(?:[cm]?[jt]sx?)$/, '')
+  }
+
+  const acceptableCanonical = new Set(
+    [...ACCEPTABLE_RUNTIME_STUBS].map(canonicalStub),
+  )
+
+  const bundleText = await Bun.file('dist/cli.mjs').text()
+  // canonical key -> raw marker text (kept for human-readable diagnostics)
+  const stubbed = new Map<string, string>()
+  for (const m of bundleText.matchAll(/\/\/\s*missing-module-stub:(\S+)/g)) {
+    stubbed.set(canonicalStub(m[1]), m[1])
+  }
+  const unexpected = [...stubbed]
+    .filter(([key]) => !acceptableCanonical.has(key))
+    .map(([, raw]) => raw)
+    .sort()
+  const staleAllowlist = [...ACCEPTABLE_RUNTIME_STUBS]
+    .filter(s => !stubbed.has(canonicalStub(s)))
+    .sort()
+
+  if (unexpected.length > 0) {
+    console.error(
+      '\n✗ Build guard: new missing-module stub(s) in the CLI bundle (inspect before shipping):',
+    )
+    for (const s of unexpected) console.error(`    ${s}`)
+    console.error(
+      '  An unresolved relative import was stubbed to a noop default export. If a feature flag\n' +
+        '  made this require live but its source module is absent, named exports become undefined\n' +
+        '  and crash on first use — add the real source module, or gate the path so it is\n' +
+        '  unreachable when the module is missing. If instead the stub sits on a path that\n' +
+        '  never runs, confirm that and add the repo-relative path (from src/, no extension)\n' +
+        '  to ACCEPTABLE_RUNTIME_STUBS in scripts/build.ts with justification.',
+    )
+    process.exitCode = 1
+  } else {
+    console.log(`✓ Bundle guard: no unexpected missing-module stubs`)
+  }
+
+  // Keep the allowlist honest: a grandfathered entry that no longer appears
+  // means the path was fixed or removed — drop it so the list reflects reality.
+  if (staleAllowlist.length > 0) {
+    console.warn(
+      '\n⚠ Build guard: ACCEPTABLE_RUNTIME_STUBS has stale entries no longer in the bundle ' +
+        '(remove them):',
+    )
+    for (const s of staleAllowlist) console.warn(`    ${s}`)
   }
 }

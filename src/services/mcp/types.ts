@@ -113,8 +113,8 @@ export const McpSdkServerConfigSchema = lazySchema(() =>
   }),
 )
 
-// Config type for Gakr.ai proxy servers
-export const McpgakrcliAIProxyServerConfigSchema = lazySchema(() =>
+// Config type for GakrCLI.ai proxy servers
+export const McpGakrCLIAIProxyServerConfigSchema = lazySchema(() =>
   z.object({
     type: z.literal('gakrcliai-proxy'),
     url: z.string(),
@@ -131,7 +131,7 @@ export const McpServerConfigSchema = lazySchema(() =>
     McpHTTPServerConfigSchema(),
     McpWebSocketServerConfigSchema(),
     McpSdkServerConfigSchema(),
-    McpgakrcliAIProxyServerConfigSchema(),
+    McpGakrCLIAIProxyServerConfigSchema(),
   ]),
 )
 
@@ -156,8 +156,8 @@ export type McpWebSocketServerConfig = z.infer<
 export type McpSdkServerConfig = z.infer<
   ReturnType<typeof McpSdkServerConfigSchema>
 >
-export type McpgakrcliAIProxyServerConfig = z.infer<
-  ReturnType<typeof McpgakrcliAIProxyServerConfigSchema>
+export type McpGakrCLIAIProxyServerConfig = z.infer<
+  ReturnType<typeof McpGakrCLIAIProxyServerConfigSchema>
 >
 export type McpServerConfig = z.infer<ReturnType<typeof McpServerConfigSchema>>
 

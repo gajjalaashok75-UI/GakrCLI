@@ -25,7 +25,7 @@ import { readFile } from 'fs/promises'
 import { memoize } from 'lodash-es'
 import { join, resolve, sep } from 'path'
 import {
-  getAdditionalDirectoriesForgakrcliMd,
+  getAdditionalDirectoriesForGakrCLIMd,
   getCwdState,
   getOriginalCwd,
 } from '../../bootstrap/state.js'
@@ -54,7 +54,7 @@ import { FILE_EDIT_TOOL_NAME } from 'src/tools/FileEditTool/constants.js'
 import { FILE_READ_TOOL_NAME } from 'src/tools/FileReadTool/prompt.js'
 import { WEB_FETCH_TOOL_NAME } from 'src/tools/WebFetchTool/prompt.js'
 import { errorMessage } from '../errors.js'
-import { getgakrcliTempDir } from '../permissions/filesystem.js'
+import { getGakrCLITempDir } from '../permissions/filesystem.js'
 import type { PermissionRuleValue } from '../permissions/PermissionRule.js'
 import { ripgrepCommand } from '../ripgrep.js'
 
@@ -81,9 +81,9 @@ function permissionRuleExtractPrefix(permissionRule: string): string | null {
 }
 
 /**
- * Resolve Gakr-specific path patterns for sandbox-runtime.
+ * Resolve GakrCLI Code-specific path patterns for sandbox-runtime.
  *
- * GakrCLI uses special path prefixes in permission rules:
+ * GakrCLI Code uses special path prefixes in permission rules:
  * - `//path` → absolute from filesystem root (becomes `/path`)
  * - `/path` → relative to settings file directory (becomes `$SETTINGS_DIR/path`)
  * - `~/path` → passed through (sandbox-runtime handles this)
@@ -164,7 +164,7 @@ function shouldAllowManagedReadPathsOnly(): boolean {
 }
 
 /**
- * Convert GakrCLI settings format to SandboxRuntimeConfig format
+ * Convert GakrCLI Code settings format to SandboxRuntimeConfig format
  * (Function exported for testing)
  *
  * @param settings Merged settings (used for sandbox config like network, ripgrep, etc.)
@@ -222,13 +222,13 @@ export function convertToSandboxRuntimeConfig(
   // Extract filesystem paths from Edit and Read rules
   // Always include current directory and GakrCLI temp directory as writable
   // The temp directory is needed for Shell.ts cwd tracking files
-  const allowWrite: string[] = ['.', getgakrcliTempDir()]
+  const allowWrite: string[] = ['.', getGakrCLITempDir()]
   const denyWrite: string[] = []
   const denyRead: string[] = []
   const allowRead: string[] = []
 
   // Always deny writes to settings.json files to prevent sandbox escape
-  // This blocks settings in the original working directory (where GakrCLI started)
+  // This blocks settings in the original working directory (where GakrCLI Code started)
   const settingsPaths = SETTING_SOURCES.map(source =>
     getSettingsFilePathForSource(source),
   ).filter((p): p is string => p !== undefined)
@@ -294,7 +294,7 @@ export function convertToSandboxRuntimeConfig(
   // Two sources: persisted in settings, and session-only in bootstrap state.
   const additionalDirs = new Set([
     ...(settings.permissions?.additionalDirectories || []),
-    ...getAdditionalDirectoriesForgakrcliMd(),
+    ...getAdditionalDirectoriesForGakrCLIMd(),
   ])
   allowWrite.push(...additionalDirs)
 
@@ -811,26 +811,6 @@ function refreshConfig(): void {
   BaseSandboxManager.updateConfig(newConfig)
 }
 
-function annotateStderrWithSandboxFailures(
-  command: string,
-  stderr: string,
-): string {
-  const annotate = (
-    BaseSandboxManager as unknown as {
-      annotateStderrWithSandboxFailures?: (
-        command: string,
-        stderr: string,
-      ) => string
-    }
-  ).annotateStderrWithSandboxFailures
-
-  if (typeof annotate !== 'function') {
-    return stderr
-  }
-
-  return annotate.call(BaseSandboxManager, command, stderr)
-}
-
 /**
  * Reset sandbox state and clear memoized values
  */
@@ -951,7 +931,7 @@ export interface ISandboxManager {
 }
 
 /**
- * GakrCLI CLI sandbox manager - wraps sandbox-runtime with Gakr-specific features
+ * GakrCLI CLI sandbox manager - wraps sandbox-runtime with GakrCLI-specific features
  */
 export const SandboxManager: ISandboxManager = {
   // Custom implementations
@@ -987,7 +967,9 @@ export const SandboxManager: ISandboxManager = {
   getLinuxSocksSocketPath: BaseSandboxManager.getLinuxSocksSocketPath,
   waitForNetworkInitialization: BaseSandboxManager.waitForNetworkInitialization,
   getSandboxViolationStore: BaseSandboxManager.getSandboxViolationStore,
-  annotateStderrWithSandboxFailures,
+  annotateStderrWithSandboxFailures:
+    BaseSandboxManager.annotateStderrWithSandboxFailures ??
+    ((_command: string, stderr: string): string => stderr),
   cleanupAfterCommand: (): void => {
     BaseSandboxManager.cleanupAfterCommand()
     scrubBareGitRepoFiles()

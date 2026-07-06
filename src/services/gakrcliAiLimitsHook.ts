@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react'
 import {
-  type gakrcliAILimits,
+  type GakrCLIAILimits,
   currentLimits,
   statusListeners,
 } from './gakrcliAiLimits.js'
 
-export function usegakrcliAiLimits(): gakrcliAILimits {
-  const [limits, setLimits] = useState<gakrcliAILimits>({ ...currentLimits })
+export function useGakrCLIAiLimits(): GakrCLIAILimits {
+  const [limits, setLimits] = useState<GakrCLIAILimits>({ ...currentLimits })
 
   useEffect(() => {
-    const listener = (newLimits: gakrcliAILimits) => {
+    const listener = (newLimits: GakrCLIAILimits) => {
       setLimits({ ...newLimits })
     }
     statusListeners.add(listener)

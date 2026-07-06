@@ -16,7 +16,7 @@ import { logForDebugging } from 'src/utils/debug.js'
 import { getDoctorDiagnostic } from 'src/utils/doctorDiagnostic.js'
 import { gracefulShutdown } from 'src/utils/gracefulShutdown.js'
 import {
-  installOrUpdategakrcliPackage,
+  installOrUpdateGakrCLIPackage,
   localInstallationExists,
 } from 'src/utils/localInstaller.js'
 import {
@@ -29,11 +29,15 @@ import { gte } from 'src/utils/semver.js'
 import { getInitialSettings } from 'src/utils/settings/settings.js'
 
 export async function update() {
-  // Block updates for third-party providers. The update mechanism downloads
-  // from the first-party distribution bucket, which would silently replace the
-  // GakrCLI build (with the OpenAI shim) with the upstream GakrCLI Code
-  // binary (without it).
-  if (getAPIProvider() !== 'firstParty') {
+  // Block updates for third-party providers using upstream Anthropic builds.
+  // The update mechanism downloads from the first-party distribution bucket,
+  // which would silently replace the GakrCLI build with the upstream
+  // GakrCLI Code binary. However, builds with a custom PACKAGE_URL (like
+  // GakrCLI's @gakr-gakr/gakrcli) are safe to self-update.
+  if (
+    getAPIProvider() !== 'firstParty' &&
+    MACRO.PACKAGE_URL === '@anthropic-ai/gakrcli-code'
+  ) {
     writeToStdout(
       chalk.yellow(
         `Auto-update is not available for third-party provider builds.\n`,
@@ -162,7 +166,7 @@ export async function update() {
         writeToStdout('\n')
         writeToStdout('To update, run:\n')
         writeToStdout(
-          chalk.bold('  winget upgrade Gakr.GakrCli') + '\n',
+          chalk.bold('  winget upgrade Anthropic.GakrCLICode') + '\n',
         )
       } else {
         writeToStdout('GakrCLI is up to date!\n')
@@ -316,7 +320,11 @@ export async function update() {
     process.stderr.write('Try:\n')
     process.stderr.write('  • Check your internet connection\n')
     process.stderr.write('  • Run with --debug flag for more details\n')
-    const packageName = MACRO.PACKAGE_URL || '@gakr-gakr/gakrcli'
+    const packageName =
+      MACRO.PACKAGE_URL ||
+      (process.env.USER_TYPE === 'ant'
+        ? '@anthropic-ai/gakrcli-cli'
+        : '@anthropic-ai/gakrcli-code')
     process.stderr.write(
       `  • Manually check: npm view ${packageName} version\n`,
     )
@@ -380,9 +388,9 @@ export async function update() {
 
   if (useLocalUpdate) {
     logForDebugging(
-      'update: Calling installOrUpdategakrcliPackage() for local update',
+      'update: Calling installOrUpdateGakrCLIPackage() for local update',
     )
-    status = await installOrUpdategakrcliPackage(channel)
+    status = await installOrUpdateGakrCLIPackage(channel)
   } else {
     logForDebugging('update: Calling installGlobalPackage() for global update')
     status = await installGlobalPackage()

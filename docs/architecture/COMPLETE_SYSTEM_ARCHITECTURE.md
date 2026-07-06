@@ -1,6 +1,6 @@
 # GakrCLI Complete System Architecture
 
-This document summarizes the current architecture for GakrCLI `0.5.6` and the VS Code extension `0.2.4`.
+This document summarizes the current architecture for GakrCLI `0.5.7` and the VS Code extension `0.2.4`.
 
 ## Layers
 
@@ -139,6 +139,6 @@ npx @vscode/vsce ls --tree
 
 ## Publication Versions
 
-- npm package: `@gakr-gakr/gakrcli@0.5.6`
+- npm package: `@gakr-gakr/gakrcli@0.5.7`
 - VS Code extension: `gakrcli-vscode@0.2.4`
-- VS Code extension dependency: `@gakr-gakr/gakrcli@^0.5.6`
+- VS Code extension dependency: `@gakr-gakr/gakrcli@^0.5.7`

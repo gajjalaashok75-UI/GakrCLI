@@ -20,8 +20,6 @@ import { LSP_TOOL_NAME } from 'src/tools/LSPTool/prompt.js'
 import { NOTEBOOK_EDIT_TOOL_NAME } from 'src/tools/NotebookEditTool/constants.js'
 import { TASK_STOP_TOOL_NAME } from 'src/tools/TaskStopTool/prompt.js'
 import { WEB_SEARCH_TOOL_NAME } from 'src/tools/WebSearchTool/prompt.js'
-import { IMAGE_SEARCH_TOOL_NAME } from 'src/tools/ImageSearchTool/prompt.js'
-import { VIDEO_SEARCH_TOOL_NAME } from 'src/tools/VideoSearchTool/prompt.js'
 import { extractTextContent } from 'src/utils/messages.js'
 import { SHELL_TOOL_NAMES } from 'src/utils/shell/shellToolUtils.js'
 import { capitalize } from 'src/utils/stringUtils.js'
@@ -41,8 +39,6 @@ const SEARCH_TOOLS = [
   GREP_TOOL_NAME,
   GLOB_TOOL_NAME,
   WEB_SEARCH_TOOL_NAME,
-  IMAGE_SEARCH_TOOL_NAME,
-  VIDEO_SEARCH_TOOL_NAME,
   LSP_TOOL_NAME,
 ]
 const READ_TOOLS = [FILE_READ_TOOL_NAME, LIST_MCP_RESOURCES_TOOL_NAME]
@@ -119,7 +115,8 @@ function accumulateToolUses(
     return
   }
 
-  for (const block of content) {
+  // SDK wire boundary: SDKAssistantMessage leaves content blocks untyped
+  for (const block of content as Array<{ type: string; name?: unknown }>) {
     if (block.type === 'tool_use' && 'name' in block) {
       const category = categorizeToolName(block.name as string)
       counts[category]++

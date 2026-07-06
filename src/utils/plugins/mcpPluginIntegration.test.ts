@@ -44,8 +44,8 @@ describe('resolvePluginMcpEnvironment', () => {
         command: 'bun',
         args: ['run', '--cwd', '${GAKR_PLUGIN_ROOT}', 'start'],
         env: {
-          LEGACY_ROOT: '${GAKRCLI_PLUGIN_ROOT}',
-          LEGACY_DATA: '${GAKRCLI_PLUGIN_DATA}',
+          LEGACY_ROOT: '${GAKR_PLUGIN_ROOT}',
+          LEGACY_DATA: '${GAKR_PLUGIN_DATA}',
         },
       },
       {

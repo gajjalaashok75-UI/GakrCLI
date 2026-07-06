@@ -11,7 +11,7 @@ import type {
   SDKMessage,
   SDKRateLimitInfo,
 } from 'src/entrypoints/agentSdkTypes.js'
-import type { gakrcliAILimits } from 'src/services/gakrcliAiLimits.js'
+import type { GakrCLIAILimits } from 'src/services/gakrcliAiLimits.js'
 import { EXIT_PLAN_MODE_V2_TOOL_NAME } from 'src/tools/ExitPlanModeTool/constants.js'
 import type {
   AssistantMessage,
@@ -19,7 +19,7 @@ import type {
   Message,
 } from 'src/types/message.js'
 import type { DeepImmutable } from 'src/types/utils.js'
-import stripAnsi from 'strip-ansi'
+import { stripVTControlCharacters as stripAnsi } from 'node:util'
 import { createAssistantMessage } from '../messages.js'
 import { getPlan } from '../plans.js'
 
@@ -63,7 +63,7 @@ export function toInternalMessages(
               ),
               uuid: message.uuid,
               timestamp: new Date().toISOString(),
-            },
+            } as Message,
           ]
         }
         return []
@@ -104,9 +104,10 @@ export function fromSDKCompactMetadata(
     preTokens: meta.pre_tokens,
     ...(seg && {
       preservedSegment: {
-        headUuid: seg.head_uuid,
-        anchorUuid: seg.anchor_uuid,
-        tailUuid: seg.tail_uuid,
+        // SDK wire type carries plain strings — type-level cast only.
+        headUuid: seg.head_uuid as UUID,
+        anchorUuid: seg.anchor_uuid as UUID,
+        tailUuid: seg.tail_uuid as UUID,
       },
     }),
   }
@@ -215,11 +216,11 @@ export function localCommandOutputToSDKAssistantMessage(
 }
 
 /**
- * Maps internal gakrcliAILimits to the SDK-facing SDKRateLimitInfo type,
+ * Maps internal GakrCLIAILimits to the SDK-facing SDKRateLimitInfo type,
  * stripping internal-only fields like unifiedRateLimitFallbackAvailable.
  */
 export function toSDKRateLimitInfo(
-  limits: gakrcliAILimits | undefined,
+  limits: GakrCLIAILimits | undefined,
 ): SDKRateLimitInfo | undefined {
   if (!limits) {
     return undefined

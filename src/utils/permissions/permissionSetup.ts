@@ -672,6 +672,9 @@ export function applyPermissionUpdateToLiveContext(
 
 /**
  * Applies permission updates to the live session context in order.
+ *
+ * Prefer this helper over applyPermissionUpdates anywhere updates can affect
+ * the active in-memory permission mode for the current session.
  */
 export function applyPermissionUpdatesToLiveContext(
   context: ToolPermissionContext,
@@ -690,6 +693,9 @@ export function applyPermissionUpdatesToLiveContext(
 
 /**
  * Applies a permission mode change to the live session context.
+ *
+ * Prefer this helper over calling transitionPermissionMode directly at
+ * call sites so the mode application path stays consistent.
  */
 export function applyPermissionModeChange(
   context: ToolPermissionContext,
@@ -883,18 +889,21 @@ export function initialPermissionModeFromCLI({
   let result: { mode: PermissionMode; notification?: string } | undefined
 
   for (const mode of orderedModes) {
-    if (mode === 'bypassPermissions' && disableBypassPermissionsMode) {
+    if (
+      (mode === 'bypassPermissions' || mode === 'fullAccess') &&
+      disableBypassPermissionsMode
+    ) {
       if (growthBookDisableBypassPermissionsMode) {
-        logForDebugging('bypassPermissions mode is disabled by Statsig gate', {
+        logForDebugging(`${mode} mode is disabled by Statsig gate`, {
           level: 'warn',
         })
         notification =
-          'Bypass permissions mode was disabled by your organization policy'
+          `${permissionModeTitle(mode)} mode was disabled by your organization policy`
       } else {
-        logForDebugging('bypassPermissions mode is disabled by settings', {
+        logForDebugging(`${mode} mode is disabled by settings`, {
           level: 'warn',
         })
-        notification = 'Bypass permissions mode was disabled by settings'
+        notification = `${permissionModeTitle(mode)} mode was disabled by settings`
       }
       continue // Skip this mode if it's disabled
     }
@@ -1047,6 +1056,7 @@ export async function initializeToolPermissionContext({
   const settingsAllowBypassPermissionsMode = hasAllowBypassPermissionsMode()
   const isBypassPermissionsModeAvailable =
     (permissionMode === 'bypassPermissions' ||
+      permissionMode === 'fullAccess' ||
       allowDangerouslySkipPermissions ||
       settingsAllowBypassPermissionsMode) &&
     !growthBookDisableBypassPermissionsMode &&
@@ -1169,9 +1179,7 @@ export function getAutoModeUnavailableNotification(
       base = 'auto mode unavailable for this model'
       break
   }
-  return process.env.USER_TYPE === 'ant'
-    ? `${base} · GitHub issues`
-    : base
+  return base
 }
 
 /**
@@ -1648,7 +1656,10 @@ export function createDisabledBypassPermissionsContext(
   currentContext: ToolPermissionContext,
 ): ToolPermissionContext {
   let updatedContext = currentContext
-  if (currentContext.mode === 'bypassPermissions') {
+  if (
+    currentContext.mode === 'bypassPermissions' ||
+    currentContext.mode === 'fullAccess'
+  ) {
     updatedContext = applyPermissionUpdate(currentContext, {
       type: 'setMode',
       mode: 'default',
@@ -1668,15 +1679,15 @@ export function createDisabledBypassPermissionsContext(
  */
 export async function checkAndDisableBypassPermissions(
   currentContext: ToolPermissionContext,
-): Promise<void> {
+): Promise<boolean> {
   // Only proceed if bypassPermissions mode is available
   if (!currentContext.isBypassPermissionsModeAvailable) {
-    return
+    return false
   }
 
   const shouldDisable = await shouldDisableBypassPermissions()
   if (!shouldDisable) {
-    return
+    return false
   }
 
   // Gate is enabled, need to disable bypassPermissions mode
@@ -1686,6 +1697,7 @@ export async function checkAndDisableBypassPermissions(
   )
 
   void gracefulShutdown(1, 'bypass_permissions_disabled')
+  return true
 }
 
 export function isDefaultPermissionModeAuto(): boolean {
@@ -1739,7 +1751,11 @@ export function prepareContextForPlanMode(
         prePlanMode: 'auto',
       }
     }
-    if (planAutoMode && currentMode !== 'bypassPermissions') {
+    if (
+      planAutoMode &&
+      currentMode !== 'bypassPermissions' &&
+      currentMode !== 'fullAccess'
+    ) {
       autoModeStateModule?.setAutoModeActive(true)
       return {
         ...stripDangerousPermissionsForAutoMode(context),
@@ -1768,7 +1784,10 @@ export function transitionPlanAutoMode(
   if (context.mode !== 'plan') return context
   // Mirror prepareContextForPlanMode's entry-time exclusion — never activate
   // auto mid-plan when the user entered from a dangerous mode.
-  if (context.prePlanMode === 'bypassPermissions') {
+  if (
+    context.prePlanMode === 'bypassPermissions' ||
+    context.prePlanMode === 'fullAccess'
+  ) {
     return context
   }
 

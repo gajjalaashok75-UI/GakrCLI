@@ -40,6 +40,7 @@ async function listFiles(cwd: string): Promise<string[]> {
 }
 
 async function runExport(args: string, messages: unknown[] = defaultMessages()): Promise<string> {
+  process.env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || 'test-key-for-export'
   const { call } = await importExportCommand()
   let message = ''
   const result = await call(

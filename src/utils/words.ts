@@ -1,7 +1,7 @@
 /**
  * Random word slug generator for plan IDs
  * Inspired by https://github.com/nas5w/random-word-slugs
- * with Gakr-flavored words
+ * with GakrCLI-flavored words
  */
 import { randomInt as cryptoRandomInt } from 'crypto'
 

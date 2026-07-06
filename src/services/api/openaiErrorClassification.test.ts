@@ -8,6 +8,7 @@ import {
   extractOpenAICategoryMarker,
   formatOpenAICategoryMarker,
   isLocalhostLikeHost,
+  isRetryableOpenAICompatibilityFailureCategory,
 } from './openaiErrorClassification.js'
 
 test('classifies localhost ECONNREFUSED as connection_refused', () => {
@@ -60,6 +61,18 @@ test('classifies generic 404 responses as endpoint_not_found', () => {
   expect(failure.hint).toContain('/v1')
 })
 
+test('classifies 404 with images as vision_not_supported', () => {
+  const failure = classifyOpenAIHttpFailure({
+    status: 404,
+    body: 'Not Found',
+    hasImages: true,
+  })
+
+  expect(failure.category).toBe('vision_not_supported')
+  expect(failure.retryable).toBe(false)
+  expect(failure.hint).toContain('image')
+})
+
 test('classifies context-overflow responses', () => {
   const failure = classifyOpenAIHttpFailure({
     status: 500,
@@ -70,14 +83,14 @@ test('classifies context-overflow responses', () => {
   expect(failure.retryable).toBe(false)
 })
 
-test('401 "token expired" surfaces a re-auth hint, not the generic API-key hint', () => {
+test('401 "token expired" surfaces a re-auth hint, not the generic API-key hint (issue #1042)', () => {
   const failure = classifyOpenAIHttpFailure({
     status: 401,
     body: 'IDE token expired: unauthorized: token expired',
   })
 
   expect(failure.category).toBe('auth_invalid')
-  expect(failure.hint).toContain('/provider')
+  expect(failure.hint).toContain('/onboard-github')
   expect(failure.hint).toContain('/login')
   expect(failure.hint).not.toContain('API key')
 })
@@ -90,7 +103,7 @@ test('401 without expired-token signal keeps the generic API-key hint', () => {
 
   expect(failure.category).toBe('auth_invalid')
   expect(failure.hint).toContain('API key')
-  expect(failure.hint).not.toContain('GitHub Models')
+  expect(failure.hint).not.toContain('/onboard-github')
 })
 
 test('classifies tool compatibility failures', () => {
@@ -165,6 +178,15 @@ test('marker without host stays backward-compatible', () => {
   expect(marker).toBe('[openai_category=endpoint_not_found]')
   expect(extractOpenAICategoryMarker(marker)).toBe('endpoint_not_found')
   expect(extractOpenAICategoryHost(marker)).toBeUndefined()
+})
+
+test('reports retryability for extracted category markers', () => {
+  expect(isRetryableOpenAICompatibilityFailureCategory('auth_invalid')).toBe(false)
+  expect(isRetryableOpenAICompatibilityFailureCategory('model_not_found')).toBe(false)
+  expect(isRetryableOpenAICompatibilityFailureCategory('context_overflow')).toBe(false)
+  expect(isRetryableOpenAICompatibilityFailureCategory('rate_limited')).toBe(true)
+  expect(isRetryableOpenAICompatibilityFailureCategory('provider_unavailable')).toBe(true)
+  expect(isRetryableOpenAICompatibilityFailureCategory('network_error')).toBe(true)
 })
 
 test('isLocalhostLikeHost matches loopback variants', () => {

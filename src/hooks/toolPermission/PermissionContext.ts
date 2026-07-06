@@ -32,10 +32,15 @@ import {
 } from '../../utils/messages.js'
 import type { PermissionDecision } from '../../utils/permissions/PermissionResult.js'
 import {
-  applyPermissionUpdates,
+  applyPermissionUpdate,
   persistPermissionUpdates,
   supportsPersistence,
 } from '../../utils/permissions/PermissionUpdate.js'
+import {
+  applyPermissionUpdateToLiveContext,
+  applyPermissionUpdatesToLiveContext,
+  getPermissionModeChangeRequestDecision,
+} from '../../utils/permissions/permissionSetup.js'
 import type { PermissionUpdate } from '../../utils/permissions/PermissionUpdateSchema.js'
 import {
   logPermissionDecision,
@@ -138,12 +143,43 @@ function createPermissionContext(
     },
     async persistPermissions(updates: PermissionUpdate[]) {
       if (updates.length === 0) return false
-      persistPermissionUpdates(updates)
       const appState = toolUseContext.getAppState()
-      setToolPermissionContext(
-        applyPermissionUpdates(appState.toolPermissionContext, updates),
+      const validatedUpdates: PermissionUpdate[] = []
+      let nextContextForValidation = appState.toolPermissionContext
+      for (const update of updates) {
+        if (update.type === 'setMode') {
+          const modeDecision = await getPermissionModeChangeRequestDecision({
+            mode: update.mode,
+            toolPermissionContext: nextContextForValidation,
+            requireLocalConfirmation: false,
+          })
+          if (modeDecision.status === 'blocked') {
+            logForDebugging(
+              `Skipping permission mode update for ${update.mode}: ${modeDecision.error}`,
+              { level: 'warn' },
+            )
+            continue
+          }
+        }
+        validatedUpdates.push(update)
+        // Validation/staging must stay pure: defer live transition side effects
+        // until we actually commit the updates below.
+        nextContextForValidation = applyPermissionUpdate(
+          nextContextForValidation,
+          update,
+        )
+      }
+      if (validatedUpdates.length === 0) return false
+      const latestAppState = toolUseContext.getAppState()
+      const updatedContext = applyPermissionUpdatesToLiveContext(
+        latestAppState.toolPermissionContext,
+        validatedUpdates,
       )
-      return updates.some(update => supportsPersistence(update.destination))
+      persistPermissionUpdates(validatedUpdates)
+      setToolPermissionContext(updatedContext)
+      return validatedUpdates.some(update =>
+        supportsPersistence(update.destination),
+      )
     },
     resolveIfAborted(resolve: (decision: PermissionDecision) => void) {
       if (!toolUseContext.abortController.signal.aborted) return false
@@ -167,7 +203,7 @@ function createPermissionContext(
         logForDebugging(
           `Aborting: tool=${tool.name} isAbort=${isAbort} hasFeedback=${!!feedback} isSubagent=${sub}`,
         )
-        toolUseContext.abortController.abort()
+        toolUseContext.abortController.abort('interrupt')
       }
       return { behavior: 'ask', message, contentBlocks }
     },
@@ -196,6 +232,7 @@ function createPermissionContext(
                 /^Allowed by prompt rule: "(.+)"$/,
               )?.[1]
               if (matchedRule) {
+
                 setClassifierApproval(toolUseID, matchedRule)
               }
             }
@@ -246,7 +283,7 @@ function createPermissionContext(
               logForDebugging(
                 `Hook interrupt: tool=${tool.name} hookMessage=${decision.message}`,
               )
-              toolUseContext.abortController.abort()
+              toolUseContext.abortController.abort('interrupt')
             }
             return this.buildDeny(
               decision.message || 'Permission denied by hook',

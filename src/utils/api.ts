@@ -245,7 +245,7 @@ export async function toolToAPISchema(
     // Without FGTS, the API buffers entire tool input parameters before sending
     // input_json_delta events, causing multi-minute hangs on large tool inputs.
     // Gated to direct api.anthropic.com: proxies (LiteLLM etc.) and Bedrock/Vertex
-    // with GakrCLI reject this field with 400. See GH#32742, PR #21729.
+    // with GakrCLI 4.5 reject this field with 400. See GH#32742, PR #21729.
     if (
       getAPIProvider() === 'firstParty' &&
       isFirstPartyAnthropicBaseUrl() &&
@@ -289,7 +289,7 @@ export async function toolToAPISchema(
   // standard prompt caching (Bedrock/Vertex supported); the beta sub-fields
   // (scope, ttl) are already gated upstream by shouldIncludeFirstPartyOnlyBetas
   // which independently respects this kill switch.
-  // github.com/gajjalaashok75-UI/GakrCLI/issues/20031
+  // github.com/anthropics/gakrcli-code/issues/20031
   if (isEnvTruthy(process.env.GAKR_CODE_DISABLE_EXPERIMENTAL_BETAS)) {
     const allowed = new Set([
       'name',
@@ -326,7 +326,7 @@ function logStripOnce(stripped: string[]): void {
 
 /**
  * Log stats about first block for analyzing prefix matching config
- * (see https://console.statsig.com/4aF3Ewatb6xPVpCwxb5nA3/dynamic_configs/gakr_cli_system_prompt_prefixes)
+ * (see https://console.statsig.com/4aF3Ewatb6xPVpCwxb5nA3/dynamic_configs/gakrcli_cli_system_prompt_prefixes)
  */
 export function logAPIPrefix(systemPrompt: SystemPrompt): void {
   const [firstSyspromptBlock] = splitSysPromptPrefix(systemPrompt)
@@ -345,7 +345,7 @@ export function logAPIPrefix(systemPrompt: SystemPrompt): void {
 
 /**
  * Split system prompt blocks by content type for API matching and cache control.
- * See https://console.statsig.com/4aF3Ewatb6xPVpCwxb5nA3/dynamic_configs/gakr_cli_system_prompt_prefixes
+ * See https://console.statsig.com/4aF3Ewatb6xPVpCwxb5nA3/dynamic_configs/gakrcli_cli_system_prompt_prefixes
  *
  * Behavior depends on feature flags and options:
  *
@@ -558,7 +558,7 @@ export async function logContextMetrics(
   const { signal, cleanup } = createCombinedAbortSignal(undefined, {
     timeoutMs: 1000,
   })
-  let fileCount: number
+  let fileCount: number | undefined
   try {
     fileCount = await countFilesRoundedRg(
       currentDir,
@@ -652,7 +652,7 @@ export function normalizeToolInput<T extends Tool>(
       // Replace \\; with \; (commonly needed for find -exec commands)
       normalizedCommand = normalizedCommand.replace(/\\\\;/g, '\\;')
 
-      // Logging for commands that are only echoing a string. This is to help us understand how often  gakrcli talks via bash
+      // Logging for commands that are only echoing a string. This is to help us understand how often  GakrCLI talks via bash
       if (/^echo\s+["']?[^|&;><]*["']?$/i.test(normalizedCommand.trim())) {
         logEvent('tengu_bash_tool_simple_echo', {})
       }

@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Text } from '../ink.js';
-import { isgakrcliAISubscriber } from '../utils/auth.js';
-import { isChromeExtensionInstalled, shouldEnablegakrcliInChrome } from '../utils/gakrcliInChrome/setup.js';
+import { isGakrCLIAISubscriber } from '../utils/auth.js';
+import { isChromeExtensionInstalled, shouldEnableGakrCLIInChrome } from '../utils/gakrcliInChrome/setup.js';
 import { isRunningOnHomespace } from '../utils/envUtils.js';
 import { useStartupNotification } from './notifs/useStartupNotification.js';
 function getChromeFlag(): boolean | undefined {
@@ -18,14 +18,14 @@ export function useChromeExtensionNotification() {
 }
 async function _temp() {
   const chromeFlag = getChromeFlag();
-  if (!shouldEnablegakrcliInChrome(chromeFlag)) {
+  if (!shouldEnableGakrCLIInChrome(chromeFlag)) {
     return null;
   }
-  if (true && !isgakrcliAISubscriber()) {
+  if (true && !isGakrCLIAISubscriber()) {
     return {
       key: "chrome-requires-subscription",
-      jsx: <Text color="error">GakrCLI in Chrome requires a gakr.ai subscription</Text>,
-      priority: "immediate",
+      jsx: <Text color="error">GakrCLI in Chrome requires a gakrcli.ai subscription</Text>,
+      priority: "immediate" as const,
       timeoutMs: 5000
     };
   }
@@ -33,8 +33,8 @@ async function _temp() {
   if (!installed && !isRunningOnHomespace()) {
     return {
       key: "chrome-extension-not-detected",
-      jsx: <Text color="warning">Chrome extension not detected · https://gakr.ai/chrome to install</Text>,
-      priority: "immediate",
+      jsx: <Text color="warning">Chrome extension not detected · https://gakrcli.ai/chrome to install</Text>,
+      priority: "immediate" as const,
       timeoutMs: 3000
     };
   }
@@ -42,7 +42,7 @@ async function _temp() {
     return {
       key: "gakrcli-in-chrome-default-enabled",
       text: "GakrCLI in Chrome enabled \xB7 /chrome",
-      priority: "low"
+      priority: "low" as const
     };
   }
   return null;

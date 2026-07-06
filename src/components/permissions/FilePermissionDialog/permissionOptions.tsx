@@ -13,35 +13,35 @@ import type { OptionWithDescription } from '../../CustomSelect/select.js';
  * Check if a path is within the project's .gakrcli/ folder.
  * This is used to determine whether to show the special ".gakrcli folder" permission option.
  */
-export function isIngakrcliFolder(filePath: string): boolean {
+export function isInGakrCLIFolder(filePath: string): boolean {
   const absolutePath = expandPath(filePath);
   const gakrcliFolderPath = expandPath(`${getOriginalCwd()}/.gakrcli`);
 
   // Check if the path is within the project's .gakrcli folder
   const normalizedAbsolutePath = normalizeCaseForComparison(absolutePath);
-  const normalizedgakrcliFolderPath = normalizeCaseForComparison(gakrcliFolderPath);
+  const normalizedGakrCLIFolderPath = normalizeCaseForComparison(gakrcliFolderPath);
 
   // Path must start with the .gakrcli folder path (and be inside it, not just the folder itself)
-  return normalizedAbsolutePath.startsWith(normalizedgakrcliFolderPath + sep.toLowerCase()) ||
+  return normalizedAbsolutePath.startsWith(normalizedGakrCLIFolderPath + sep.toLowerCase()) ||
   // Also match case where sep is / on posix systems
-  normalizedAbsolutePath.startsWith(normalizedgakrcliFolderPath + '/');
+  normalizedAbsolutePath.startsWith(normalizedGakrCLIFolderPath + '/');
 }
 
 /**
- * Check if a path is within the global ~/.gakrcli/ folder.
+ * Check if a path is within the global ~/.gakrcli/ folder, or the legacy
+ * ~/.gakrcli/ folder during migration.
  * This is used to determine whether to show the special ".gakrcli folder" permission option
  * for files in the user's home directory.
  */
-export function isInGlobalgakrcliFolder(filePath: string): boolean {
+export function isInGlobalGakrCLIFolder(filePath: string): boolean {
   const absolutePath = expandPath(filePath);
   const normalizedAbsolutePath = normalizeCaseForComparison(absolutePath);
-  const normalizedFolder = normalizeCaseForComparison(
-    join(homedir(), '.gakrcli'),
-  );
-  return (
-    normalizedAbsolutePath.startsWith(normalizedFolder + sep.toLowerCase()) ||
-    normalizedAbsolutePath.startsWith(normalizedFolder + '/')
-  );
+  const globalGakrCLIFolderPaths = [join(homedir(), '.gakrcli'), join(homedir(), '.gakrcli')];
+
+  return globalGakrCLIFolderPaths.some(globalGakrCLIFolderPath => {
+    const normalizedGlobalGakrCLIFolderPath = normalizeCaseForComparison(globalGakrCLIFolderPath);
+    return normalizedAbsolutePath.startsWith(normalizedGlobalGakrCLIFolderPath + sep.toLowerCase()) || normalizedAbsolutePath.startsWith(normalizedGlobalGakrCLIFolderPath + '/');
+  });
 }
 export type PermissionOption = {
   type: 'accept-once';
@@ -49,7 +49,10 @@ export type PermissionOption = {
   type: 'accept-session';
   scope?: 'gakrcli-folder' | 'global-gakrcli-folder';
 } | {
+  type: 'accept-full-access';
+} | {
   type: 'reject';
+  withReason?: boolean;
 };
 export type PermissionOptionWithLabel = OptionWithDescription<string> & {
   option: PermissionOption;
@@ -67,7 +70,7 @@ export function getFilePermissionOptions({
   filePath: string;
   toolPermissionContext: ToolPermissionContext;
   operationType?: FileOperationType;
-  onRejectFeedbackChange?: (value: string) => void;
+  onRejectFeedbackChange: (value: string) => void;
   onAcceptFeedbackChange?: (value: string) => void;
   yesInputMode?: boolean;
   noInputMode?: boolean;
@@ -98,22 +101,23 @@ export function getFilePermissionOptions({
     });
   }
   const inAllowedPath = pathInAllowedWorkingPath(filePath, toolPermissionContext);
+  const showFullAccessOption = toolPermissionContext.isBypassPermissionsModeAvailable;
 
   // Check if this is a .gakrcli/ folder path (project or global)
-  const ingakrcliFolder = isIngakrcliFolder(filePath);
-  const inGlobalgakrcliFolder = isInGlobalgakrcliFolder(filePath);
+  const inGakrCLIFolder = isInGakrCLIFolder(filePath);
+  const inGlobalGakrCLIFolder = isInGlobalGakrCLIFolder(filePath);
 
   // Option 2: For .gakrcli/ folder, show special option instead of generic session option
   // Note: Session-level options are always shown since they only affect in-memory state,
   // not persisted settings. The allowManagedPermissionRulesOnly setting only restricts
   // persisted permission rules.
-  if ((ingakrcliFolder || inGlobalgakrcliFolder) && operationType !== 'read') {
+  if ((inGakrCLIFolder || inGlobalGakrCLIFolder) && operationType !== 'read') {
     options.push({
       label: `Yes, and allow ${PRODUCT_DISPLAY_NAME} to edit its own settings for this session`,
       value: 'yes-gakrcli-folder',
       option: {
         type: 'accept-session',
-        scope: inGlobalgakrcliFolder ? 'global-gakrcli-folder' : 'gakrcli-folder'
+        scope: inGlobalGakrCLIFolder ? 'global-gakrcli-folder' : 'gakrcli-folder'
       }
     });
   } else {
@@ -153,8 +157,29 @@ export function getFilePermissionOptions({
       }
     });
   }
+  if (showFullAccessOption) {
+    options.push({
+      label: <Text color="error">Yes, and enable Full Access for this session</Text>,
+      value: 'yes-full-access',
+      option: {
+        type: 'accept-full-access'
+      }
+    });
+  }
 
-  // When in input mode, show input field for reject
+  options.push({
+    type: 'input',
+    label: 'No, provide reason',
+    value: 'no-with-reason',
+    placeholder: `tell ${PRODUCT_DISPLAY_NAME} what to do differently`,
+    onChange: onRejectFeedbackChange,
+    option: {
+      type: 'reject',
+      withReason: true
+    }
+  });
+
+  // When in input mode, keep supporting the existing Tab-to-amend flow.
   if (noInputMode && onRejectFeedbackChange) {
     options.push({
       type: 'input',
@@ -168,7 +193,6 @@ export function getFilePermissionOptions({
       }
     });
   } else {
-    // Not in input mode - simple option
     options.push({
       label: 'No',
       value: 'no',

@@ -148,7 +148,7 @@ describe('stableStringify — primitive wrapper unboxing', () => {
   })
 })
 
-describe('stableStringify spacing', () => {
+describe('stableStringify — spacing', () => {
   test('positive space uses pretty-printed sorted output', () => {
     expect(stableStringify({ z: 1, a: { y: 2, x: 3 } }, 2)).toBe(
       [

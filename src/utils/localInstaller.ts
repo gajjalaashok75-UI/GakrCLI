@@ -3,44 +3,57 @@
  */
 
 import { access, chmod, writeFile } from 'fs/promises'
+import { homedir } from 'os'
 import { join } from 'path'
 import { type ReleaseChannel, saveGlobalConfig } from './config.js'
-import { getGakrcliConfigHomeDir } from './envUtils.js'
+import { getGakrCLIConfigHomeDir } from './envUtils.js'
 import { getErrnoCode } from './errors.js'
 import { execFileNoThrowWithCwd } from './execFileNoThrow.js'
 import { getFsImplementation } from './fsOperations.js'
 import { logError } from './log.js'
 import { jsonStringify } from './slowOperations.js'
 
-// Lazy getters: getGakrcliConfigHomeDir() is memoized and reads process.env.
+// Lazy getters: getGakrCLIConfigHomeDir() is memoized and reads process.env.
 // Evaluating at module scope would capture the value before entrypoints like
 // hfi.tsx get a chance to set GAKR_CONFIG_DIR in main(), and would also
 // populate the memoize cache with that stale value for all 150+ other callers.
 function getLocalInstallDir(): string {
-  return join(getGakrcliConfigHomeDir(), 'local')
+  return join(getGakrCLIConfigHomeDir(), 'local')
+}
+
+function getLegacyLocalInstallDir(homeDir = homedir()): string {
+  return join(homeDir, '.gakrcli', 'local')
 }
 
 export function getCandidateLocalInstallDirs(options?: {
   configHomeDir?: string
+  homeDir?: string
 }): string[] {
-  const configHomeDir = options?.configHomeDir ?? getGakrcliConfigHomeDir()
-  return [join(configHomeDir, 'local')]
+  const homeDir = options?.homeDir ?? homedir()
+  const configHomeDir = options?.configHomeDir ?? getGakrCLIConfigHomeDir()
+  return Array.from(
+    new Set([join(configHomeDir, 'local'), getLegacyLocalInstallDir(homeDir)]),
+  )
 }
 
 function getCandidateLocalBinaryPaths(localInstallDir: string): string[] {
-  return [join(localInstallDir, 'node_modules', '.bin', 'gakrcli')]
+  return [
+    join(localInstallDir, 'node_modules', '.bin', 'gakrcli'),
+    join(localInstallDir, 'node_modules', '.bin', 'gakrcli'),
+  ]
 }
 
 export function isManagedLocalInstallationPath(execPath: string): boolean {
   const normalizedExecPath = execPath.replace(/\\+/g, '/')
-  return normalizedExecPath.includes('/.gakrcli/local/node_modules/')
+  return (
+    normalizedExecPath.includes('/.gakrcli/local/node_modules/') ||
+    normalizedExecPath.includes('/.gakrcli/local/node_modules/')
+  )
 }
 
-export function getLocalGakrcliPath(): string {
+export function getLocalGakrCLIPath(): string {
   return join(getLocalInstallDir(), 'gakrcli')
 }
-
-export const getLocalgakrcliPath = getLocalGakrcliPath
 
 /**
  * Check if we're running from our managed local installation
@@ -89,7 +102,7 @@ export async function ensureLocalPackageEnvironment(): Promise<boolean> {
     )
 
     // Create the wrapper script if it doesn't exist
-    const wrapperPath = getLocalGakrcliPath()
+    const wrapperPath = getLocalGakrCLIPath()
     const created = await writeIfMissing(
       wrapperPath,
       `#!/bin/sh\nexec "${localInstallDir}/node_modules/.bin/gakrcli" "$@"`,
@@ -112,7 +125,7 @@ export async function ensureLocalPackageEnvironment(): Promise<boolean> {
  * @param channel - Release channel to use (latest or stable)
  * @param specificVersion - Optional specific version to install (overrides channel)
  */
-export async function installOrUpdategakrcliPackage(
+export async function installOrUpdateGakrCLIPackage(
   channel: ReleaseChannel,
   specificVersion?: string | null,
 ): Promise<'in_progress' | 'success' | 'install_failed'> {

@@ -1,11 +1,12 @@
 export type WikiPaths = {
   root: string
-  rawDir: string
   pagesDir: string
   sourcesDir: string
   schemaFile: string
   indexFile: string
   logFile: string
+  conventionsFile: string
+  conventionsCacheFile: string
 }
 
 export type WikiInitResult = {
@@ -18,12 +19,13 @@ export type WikiInitResult = {
 export type WikiStatus = {
   initialized: boolean
   root: string
-  rawSourceCount: number
   pageCount: number
   sourceCount: number
   hasSchema: boolean
   hasIndex: boolean
   hasLog: boolean
+  hasConventions: boolean
+  conventionsScannedAt: string | null
   lastUpdatedAt: string | null
 }
 

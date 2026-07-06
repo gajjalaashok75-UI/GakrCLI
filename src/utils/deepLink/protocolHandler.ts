@@ -108,7 +108,7 @@ export async function handleUrlSchemeLaunch(): Promise<number | null> {
  * Resolve the working directory for the launched GakrCLI instance.
  * Precedence: explicit cwd > repo lookup (MRU clone) > home.
  * A repo that isn't cloned locally is not an error — fall through to home
- * so a web link referencing a repo the user doesn't have still opens Gakr.
+ * so a web link referencing a repo the user doesn't have still opens GakrCLI.
  *
  * Returns the resolved cwd, and the repo slug if (and only if) the MRU
  * lookup hit — so the launched instance can show which clone was selected

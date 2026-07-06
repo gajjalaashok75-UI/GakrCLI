@@ -1,6 +1,6 @@
 import { createCombinedAbortSignal } from '../../../utils/combinedAbortSignal.js'
 import { logForDebugging } from '../../../utils/debug.js'
-import { getgakrcliCodeUserAgent } from '../../../utils/userAgent.js'
+import { getGakrCLICodeUserAgent } from '../../../utils/userAgent.js'
 import {
   DEFAULT_MINIMAX_BASE_URL,
   DEFAULT_MINIMAX_UNAVAILABLE_MESSAGE,
@@ -98,7 +98,7 @@ export async function fetchMiniMaxUsage(): Promise<MiniMaxUsageData> {
             Accept: 'application/json',
             Authorization: `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
-            'User-Agent': getgakrcliCodeUserAgent(),
+            'User-Agent': getGakrCLICodeUserAgent(),
           },
           signal,
         })

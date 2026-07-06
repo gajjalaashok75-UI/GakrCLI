@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
+
 import {
   acquireSharedMutationLock,
   releaseSharedMutationLock,
@@ -13,6 +14,9 @@ const originalEnv = {
   GAKR_CODE_USE_FOUNDRY: process.env.GAKR_CODE_USE_FOUNDRY,
   NVIDIA_NIM: process.env.NVIDIA_NIM,
   MINIMAX_API_KEY: process.env.MINIMAX_API_KEY,
+  ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL,
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+  ANTHROPIC_MODEL: process.env.ANTHROPIC_MODEL,
   OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
   OPENAI_API_BASE: process.env.OPENAI_API_BASE,
   OPENAI_MODEL: process.env.OPENAI_MODEL,
@@ -57,6 +61,9 @@ function clearProviderEnv(): void {
   delete process.env.GAKR_CODE_USE_FOUNDRY
   delete process.env.NVIDIA_NIM
   delete process.env.MINIMAX_API_KEY
+  delete process.env.ANTHROPIC_BASE_URL
+  delete process.env.ANTHROPIC_API_KEY
+  delete process.env.ANTHROPIC_MODEL
   delete process.env.OPENAI_BASE_URL
   delete process.env.OPENAI_API_BASE
   delete process.env.OPENAI_MODEL
@@ -66,12 +73,12 @@ function clearProviderEnv(): void {
   delete process.env.OPENAI_API_KEY
 }
 
-test('first-party provider keeps hosted GakrCLI auth flow enabled', () => {
+test('first-party provider keeps Anthropic account setup flow enabled', () => {
   clearProviderEnv()
   return importFreshProvidersModule().then(
-    ({ getAPIProvider, usesGakrcliHostedAuthFlow }) => {
+    ({ getAPIProvider, usesAnthropicAccountFlow }) => {
       expect(getAPIProvider()).toBe('firstParty')
-      expect(usesGakrcliHostedAuthFlow()).toBe(true)
+      expect(usesAnthropicAccountFlow()).toBe(true)
     },
   )
 })
@@ -84,15 +91,15 @@ test.each([
   ['GAKR_CODE_USE_VERTEX', 'vertex'],
   ['GAKR_CODE_USE_FOUNDRY', 'foundry'],
 ] as const)(
-  '%s disables hosted GakrCLI auth flow',
+  '%s disables Anthropic account setup flow',
   async (envKey, provider) => {
     clearProviderEnv()
     process.env[envKey] = '1'
-    const { getAPIProvider, usesGakrcliHostedAuthFlow } =
+    const { getAPIProvider, usesAnthropicAccountFlow } =
       await importFreshProvidersModule()
 
     expect(getAPIProvider()).toBe(provider)
-    expect(usesGakrcliHostedAuthFlow()).toBe(false)
+    expect(usesAnthropicAccountFlow()).toBe(false)
   },
 )
 
@@ -216,6 +223,18 @@ test('env-only MiniMax API key resolves to the minimax provider', async () => {
 
   const { getAPIProvider } = await importFreshProvidersModule()
   expect(getAPIProvider()).toBe('minimax')
+})
+
+test('Anthropic-compatible MiniMax profile resolves to the minimax provider', async () => {
+  clearProviderEnv()
+  process.env.ANTHROPIC_BASE_URL = 'https://api.minimax.io/anthropic'
+  process.env.ANTHROPIC_API_KEY = 'minimax-key'
+  process.env.ANTHROPIC_MODEL = 'MiniMax-M2.7'
+
+  const { getAPIProvider, usesAnthropicAccountFlow } =
+    await importFreshProvidersModule()
+  expect(getAPIProvider()).toBe('minimax')
+  expect(usesAnthropicAccountFlow()).toBe(false)
 })
 
 test('conflicting OpenAI base prevents env-only MiniMax provider label', async () => {

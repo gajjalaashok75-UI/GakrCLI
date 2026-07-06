@@ -1,6 +1,6 @@
 import { basename, join } from 'path'
 
-import type { MemoryFileInfo } from '../../utils/gakrcliDesktop.ts'
+import type { MemoryFileInfo } from '../../utils/gakrclimd.js'
 import {
   findProjectInstructionFilePathInAncestors,
   isProjectInstructionFileName,

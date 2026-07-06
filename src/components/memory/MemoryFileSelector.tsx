@@ -17,7 +17,7 @@ import { useAppState } from '../../state/AppState.js';
 import { getAgentMemoryDir } from '../../tools/AgentTool/agentMemory.js';
 import { openPath } from '../../utils/browser.js';
 import { getMemoryFiles, type MemoryFileInfo } from '../../utils/gakrclimd.js';
-import { getGakrcliConfigHomeDir } from '../../utils/envUtils.js';
+import { getGakrCLIConfigHomeDir } from '../../utils/envUtils.js';
 import { getDisplayPath } from '../../utils/file.js';
 import { formatRelativeTimeAgo } from '../../utils/format.js';
 import { projectIsInGitRepo } from '../../utils/memory/versions.js';
@@ -50,7 +50,7 @@ export function MemoryFileSelector(t0) {
   } = t0;
   const existingMemoryFiles = use(getMemoryFiles());
   const originalCwd = getOriginalCwd();
-  const userMemoryPath = join(getGakrcliConfigHomeDir(), "GAKRCLI.md");
+  const userMemoryPath = join(getGakrCLIConfigHomeDir(), "GAKRCLI.md");
   const projectMemoryPath = getProjectMemoryPathForSelector(existingMemoryFiles, originalCwd);
   const projectMemoryFileName = basename(projectMemoryPath);
   const hasUserMemory = existingMemoryFiles.some(f => f.path === userMemoryPath);
@@ -112,7 +112,7 @@ export function MemoryFileSelector(t0) {
       description
     };
   });
-  const folderOptions = [];
+  const folderOptions: Array<{ label: string; value: string; description: string }> = [];
   const agentDefinitions = useAppState(_temp3);
   if (isAutoMemoryEnabled()) {
     let t1;
@@ -127,7 +127,7 @@ export function MemoryFileSelector(t0) {
       t1 = $[0];
     }
     folderOptions.push(t1);
-    if (feature("TEAMMEM") && teamMemPaths.isTeamMemoryEnabled()) {
+    if (feature("TEAMMEM") && teamMemPaths != null && teamMemPaths.isTeamMemoryEnabled()) {
       let t2;
       if ($[1] === Symbol.for("react.memo_cache_sentinel")) {
         t2 = {
@@ -166,7 +166,7 @@ export function MemoryFileSelector(t0) {
   const [autoDreamOn, setAutoDreamOn] = useState(isAutoDreamEnabled);
   const [showDreamRow] = useState(isAutoMemoryEnabled);
   const isDreamRunning = useAppState(_temp6);
-  const [lastDreamAt, setLastDreamAt] = useState(null);
+  const [lastDreamAt, setLastDreamAt] = useState<number | null>(null);
   let t2;
   if ($[4] !== showDreamRow) {
     t2 = () => {
@@ -200,7 +200,7 @@ export function MemoryFileSelector(t0) {
     t4 = $[11];
   }
   const dreamStatus = t4;
-  const [focusedToggle, setFocusedToggle] = useState(null);
+  const [focusedToggle, setFocusedToggle] = useState<number | null>(null);
   const toggleFocused = focusedToggle !== null;
   const lastToggleIndex = showDreamRow ? 1 : 0;
   let t5;

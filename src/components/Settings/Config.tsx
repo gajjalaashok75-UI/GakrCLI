@@ -1,18 +1,17 @@
 import { c as _c } from "react-compiler-runtime";
-// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
+// biome-ignore-all assist/source/organizeImports: internal-only import markers must not be reordered
 import { feature } from 'bun:bundle';
-import { PRODUCT_DISPLAY_NAME } from '../../constants/product.js';
 import { Box, Text, useTheme, useThemeSetting, useTerminalFocus } from '../../ink.js';
 import type { KeyboardEvent } from '../../ink/events/keyboard-event.js';
 import * as React from 'react';
 import { useState, useCallback } from 'react';
 import { useKeybinding, useKeybindings } from '../../keybindings/useKeybinding.js';
 import figures from 'figures';
-import { type GlobalConfig, saveGlobalConfig, getCurrentProjectConfig, type OutputStyle } from '../../utils/config.js';
+import { type GlobalConfig, saveGlobalConfig, getCurrentProjectConfig, type OutputStyle, MAX_MESSAGES_COMPACTION_THRESHOLDS, normalizeMaxMessagesCompactionThreshold } from '../../utils/config.js';
 import { normalizeApiKeyForConfig } from '../../utils/authPortable.js';
 import { getGlobalConfig, getAutoUpdaterDisabledReason, formatAutoUpdaterDisabledReason, getRemoteControlAtStartup } from '../../utils/config.js';
 import chalk from 'chalk';
-import { permissionModeTitle, permissionModeFromString, toExternalPermissionMode, isExternalPermissionMode, EXTERNAL_PERMISSION_MODES, PERMISSION_MODES, type ExternalPermissionMode, type PermissionMode } from '../../utils/permissions/PermissionMode.js';
+import { getModeColor, permissionModeTitle, permissionModeFromString, toExternalPermissionMode, isExternalPermissionMode, PERMISSION_MODES, type ExternalPermissionMode, type PermissionMode } from '../../utils/permissions/PermissionMode.js';
 import { getAutoModeEnabledState, hasAutoModeOptInAnySource, transitionPlanAutoMode } from '../../utils/permissions/permissionSetup.js';
 import { logError } from '../../utils/log.js';
 import { logEvent, type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from 'src/services/analytics/index.js';
@@ -22,13 +21,13 @@ import { useAppState, useSetAppState, useAppStateStore } from '../../state/AppSt
 import { ModelPicker } from '../ModelPicker.js';
 import { modelDisplayString, isOpus1mMergeEnabled } from '../../utils/model/model.js';
 import { isBilledAsExtraUsage } from '../../utils/extraUsage.js';
-import { gakrcliMdExternalIncludesDialog } from '../gakrcliMdExternalIncludesDialog.js';
+import { GakrCLIMdExternalIncludesDialog } from '../GakrCLIMdExternalIncludesDialog.js';
 import { ChannelDowngradeDialog, type ChannelDowngradeChoice } from '../ChannelDowngradeDialog.js';
 import { Dialog } from '../design-system/Dialog.js';
 import { Select } from '../CustomSelect/index.js';
 import { OutputStylePicker } from '../OutputStylePicker.js';
 import { LanguagePicker } from '../LanguagePicker.js';
-import { getExternalgakrcliMdIncludes, getMemoryFiles, hasExternalgakrcliMdIncludes } from 'src/utils/gakrclimd.js';
+import { getExternalGakrCLIMdIncludes, getMemoryFiles, hasExternalGakrCLIMdIncludes } from 'src/utils/gakrclimd.js';
 import { KeyboardShortcutHint } from '../design-system/KeyboardShortcutHint.js';
 import { ConfigurableShortcutHint } from '../ConfigurableShortcutHint.js';
 import { Byline } from '../design-system/Byline.js';
@@ -49,6 +48,7 @@ import { useSearchInput } from '../../hooks/useSearchInput.js';
 import { useTerminalSize } from '../../hooks/useTerminalSize.js';
 import { clearFastModeCooldown, FAST_MODE_MODEL_DISPLAY, isFastModeAvailable, isFastModeEnabled, getFastModeModel, isFastModeSupportedByModel } from '../../utils/fastMode.js';
 import { isFullscreenEnvEnabled } from '../../utils/fullscreen.js';
+import { getDefaultPermissionModeOptions } from '../../utils/permissions/defaultPermissionModeOptions.js';
 type Props = {
   onClose: (result?: string, options?: {
     display?: CommandResultDisplay;
@@ -199,7 +199,16 @@ export function Config({
   const isConnectedToIde = hasAccessToIDEExtensionDiffFeature(context.options.mcpClients);
   const isFileCheckpointingAvailable = !isEnvTruthy(process.env.GAKR_CODE_DISABLE_FILE_CHECKPOINTING);
   const memoryFiles = React.use(getMemoryFiles(true));
-  const shouldShowExternalIncludesToggle = hasExternalgakrcliMdIncludes(memoryFiles);
+  function getPendingExternalIncludesScope(): 'User' | 'Project' | null {
+    const cfg = getCurrentProjectConfig();
+    // Project/Local first (mirrors startup priority in shouldShowGakrCLIMdExternalIncludesWarning)
+    if (!cfg.hasGakrCLIMdExternalIncludesApproved && !cfg.hasGakrCLIMdExternalIncludesWarningShown && hasExternalGakrCLIMdIncludes(memoryFiles, ['Project', 'Local'])) return 'Project';
+    // User second
+    if (!cfg.hasGakrCLIMdExternalIncludesApprovedForUser && !cfg.hasGakrCLIMdExternalIncludesWarningShownForUser && hasExternalGakrCLIMdIncludes(memoryFiles, ['User'])) return 'User';
+    return null;
+  }
+  const pendingScope = getPendingExternalIncludesScope();
+  const shouldShowExternalIncludesToggle = pendingScope !== null;
   const autoUpdaterDisabledReason = getAutoUpdaterDisabledReason();
   function onChangeMainModelConfig(value: string | null): void {
     const previousModel = mainLoopModel;
@@ -283,13 +292,33 @@ export function Config({
       });
     }
   }, {
+    id: 'maxMessagesCompactionThreshold',
+    label: 'Message-count compaction',
+    value: globalConfig.maxMessagesCompactionThreshold ?? 'off',
+    options: [...MAX_MESSAGES_COMPACTION_THRESHOLDS],
+    type: 'enum' as const,
+    onChange(maxMessagesCompactionThreshold: string) {
+      const normalizedThreshold = normalizeMaxMessagesCompactionThreshold(maxMessagesCompactionThreshold);
+      saveGlobalConfig(current => ({
+        ...current,
+        maxMessagesCompactionThreshold: normalizedThreshold
+      }));
+      setGlobalConfig({
+        ...getGlobalConfig(),
+        maxMessagesCompactionThreshold: normalizedThreshold
+      });
+      logEvent('tengu_max_messages_compaction_threshold_changed', {
+        threshold: normalizedThreshold as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
+      });
+    }
+  }, {
     id: 'toolHistoryCompressionEnabled',
     label: 'Tool history compression',
     value: globalConfig.toolHistoryCompressionEnabled,
     type: 'boolean' as const,
     onChange(toolHistoryCompressionEnabled: boolean) {
-      saveGlobalConfig(currentToolHistory => ({
-        ...currentToolHistory,
+      saveGlobalConfig(current => ({
+        ...current,
         toolHistoryCompressionEnabled
       }));
       setGlobalConfig({
@@ -298,6 +327,26 @@ export function Config({
       });
       logEvent('tengu_tool_history_compression_setting_changed', {
         enabled: toolHistoryCompressionEnabled
+      });
+    }
+  }, {
+    id: 'showCacheStats',
+    label: 'Cache stats display',
+    value: globalConfig.showCacheStats,
+    options: ['off', 'compact', 'full'],
+    type: 'enum' as const,
+    onChange(mode: string) {
+      const showCacheStats = (mode === 'off' || mode === 'compact' || mode === 'full' ? mode : 'compact') as 'off' | 'compact' | 'full';
+      saveGlobalConfig(current_cs => ({
+        ...current_cs,
+        showCacheStats
+      }));
+      setGlobalConfig({
+        ...getGlobalConfig(),
+        showCacheStats
+      });
+      logEvent('tengu_show_cache_stats_setting_changed', {
+        mode: showCacheStats as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
       });
     }
   }, {
@@ -361,7 +410,7 @@ export function Config({
       });
     }
   },
-  // Fast mode toggle (ant-only, eliminated from external builds)
+  // Fast mode toggle (internal-only, eliminated from external builds)
   ...(isFastModeEnabled() && isFastModeAvailable() ? [{
     id: 'fastMode',
     label: `Fast mode (${FAST_MODE_MODEL_DISPLAY} only)`,
@@ -410,29 +459,7 @@ export function Config({
       });
     }
   }] : []),
-  // Speculation toggle (ant-only)
-  ...("external" === 'ant' ? [{
-    id: 'speculationEnabled',
-    label: 'Speculative execution',
-    value: globalConfig.speculationEnabled ?? true,
-    type: 'boolean' as const,
-    onChange(enabled_2: boolean) {
-      saveGlobalConfig(current_1 => {
-        if (current_1.speculationEnabled === enabled_2) return current_1;
-        return {
-          ...current_1,
-          speculationEnabled: enabled_2
-        };
-      });
-      setGlobalConfig({
-        ...getGlobalConfig(),
-        speculationEnabled: enabled_2
-      });
-      logEvent('tengu_speculation_setting_changed', {
-        enabled: enabled_2
-      });
-    }
-  }] : []), ...(isFileCheckpointingAvailable ? [{
+  ...(isFileCheckpointingAvailable ? [{
     id: 'fileCheckpointingEnabled',
     label: 'Rewind code (checkpoints)',
     value: globalConfig.fileCheckpointingEnabled,
@@ -474,6 +501,24 @@ export function Config({
         enabled: terminalProgressBarEnabled
       });
     }
+  }, {
+    id: 'defaultStatusLineEnabled',
+    label: 'Default status line',
+    value: globalConfig.defaultStatusLineEnabled ?? true,
+    type: 'boolean' as const,
+    onChange(defaultStatusLineEnabled: boolean) {
+      saveGlobalConfig(current => ({
+        ...current,
+        defaultStatusLineEnabled
+      }));
+      setGlobalConfig({
+        ...getGlobalConfig(),
+        defaultStatusLineEnabled
+      });
+      logEvent('tengu_default_status_line_setting_changed', {
+        enabled: defaultStatusLineEnabled
+      });
+    }
   }, ...(getFeatureValue_CACHED_MAY_BE_STALE('tengu_terminal_sidebar', false) ? [{
     id: 'showStatusInTerminalTab',
     label: 'Show status in terminal tab',
@@ -511,38 +556,10 @@ export function Config({
       });
     }
   }, {
-    id: 'showCacheStats',
-    label: 'Cache stats display',
-    value: globalConfig.showCacheStats ?? 'compact',
-    options: ['off', 'compact', 'full'],
-    type: 'enum' as const,
-    onChange(mode: string) {
-      const showCacheStats = (mode === 'off' || mode === 'compact' || mode === 'full' ? mode : 'compact') as 'off' | 'compact' | 'full';
-      saveGlobalConfig(current_cs => ({
-        ...current_cs,
-        showCacheStats
-      }));
-      setGlobalConfig({
-        ...getGlobalConfig(),
-        showCacheStats
-      });
-      logEvent('tengu_show_cache_stats_setting_changed', {
-        mode: showCacheStats as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-      });
-    }
-  }, {
     id: 'defaultPermissionMode',
     label: 'Default permission mode',
     value: settingsData?.permissions?.defaultMode || 'default',
-    options: (() => {
-      const priorityOrder: PermissionMode[] = ['default', 'plan'];
-      const allModes: readonly PermissionMode[] = feature('TRANSCRIPT_CLASSIFIER') ? PERMISSION_MODES : EXTERNAL_PERMISSION_MODES;
-      const excluded: PermissionMode[] = ['bypassPermissions'];
-      if (feature('TRANSCRIPT_CLASSIFIER') && !showAutoInDefaultModePicker) {
-        excluded.push('auto');
-      }
-      return [...priorityOrder, ...allModes.filter(m => !priorityOrder.includes(m) && !excluded.includes(m))];
-    })(),
+    options: getDefaultPermissionModeOptions(showAutoInDefaultModePicker),
     type: 'enum' as const,
     onChange(mode: string) {
       const parsedMode = permissionModeFromString(mode);
@@ -759,7 +776,7 @@ export function Config({
     }
   }, {
     id: 'agentPushNotifEnabled',
-    label: `Push when ${PRODUCT_DISPLAY_NAME} decides`,
+    label: 'Push when GakrCLI decides',
     value: globalConfig.agentPushNotifEnabled ?? false,
     type: 'boolean' as const,
     onChange(agentPushNotifEnabled: boolean) {
@@ -1031,20 +1048,16 @@ export function Config({
         };
       });
     }
-  }] : []), ...(shouldShowExternalIncludesToggle ? [{
+  }] : []),   ...(shouldShowExternalIncludesToggle ? [{
     id: 'showExternalIncludesDialog',
-    label: 'External GAKRCLI.md includes',
+    label: pendingScope === 'User' ? 'User GAKRCLI.md external includes' : 'External GAKRCLI.md includes',
     value: (() => {
-      const projectConfig = getCurrentProjectConfig();
-      if (projectConfig.hasgakrcliMdExternalIncludesApproved) {
-        return 'true';
-      } else {
-        return 'false';
-      }
+      const cfg = getCurrentProjectConfig();
+      return cfg[pendingScope === 'User' ? 'hasGakrCLIMdExternalIncludesApprovedForUser' : 'hasGakrCLIMdExternalIncludesApproved'] ? 'true' : 'false';
     })(),
     type: 'managedEnum' as const,
     onChange() {
-      // Will be handled by toggleSetting function
+      // Handled by toggleSetting -> setShowSubmenu('ExternalIncludes')
     }
   }] : []), ...(process.env.ANTHROPIC_API_KEY && !isRunningOnHomespace() ? [{
     id: 'apiKey',
@@ -1159,7 +1172,7 @@ export function Config({
     });
     // Check for API key changes
     // On homespace, ANTHROPIC_API_KEY is preserved in process.env for child
-    // processes but ignored by GakrCLI itself (see auth.ts).
+    // processes but ignored by GakrCLI Code itself (see auth.ts).
     const effectiveApiKey = isRunningOnHomespace() ? undefined : process.env.ANTHROPIC_API_KEY;
     const initialUsingCustomKey = Boolean(effectiveApiKey && initialConfig.current.customApiKeyResponses?.approved?.includes(normalizeApiKeyForConfig(effectiveApiKey)));
     const currentUsingCustomKey = Boolean(effectiveApiKey && globalConfig.customApiKeyResponses?.approved?.includes(normalizeApiKeyForConfig(effectiveApiKey)));
@@ -1197,6 +1210,10 @@ export function Config({
     if (globalConfig.autoCompactEnabled !== initialConfig.current.autoCompactEnabled) {
       formattedChanges.push(`${globalConfig.autoCompactEnabled ? 'Enabled' : 'Disabled'} auto-compact`);
     }
+    if (globalConfig.maxMessagesCompactionThreshold !== initialConfig.current.maxMessagesCompactionThreshold) {
+      const threshold = globalConfig.maxMessagesCompactionThreshold ?? 'off';
+      formattedChanges.push(threshold === 'off' ? 'Disabled message-count compaction' : `Set message-count compaction to ${threshold}`);
+    }
     if (globalConfig.toolHistoryCompressionEnabled !== initialConfig.current.toolHistoryCompressionEnabled) {
       formattedChanges.push(`${globalConfig.toolHistoryCompressionEnabled ? 'Enabled' : 'Disabled'} tool history compression`);
     }
@@ -1212,14 +1229,14 @@ export function Config({
     if (globalConfig.terminalProgressBarEnabled !== initialConfig.current.terminalProgressBarEnabled) {
       formattedChanges.push(`${globalConfig.terminalProgressBarEnabled ? 'Enabled' : 'Disabled'} terminal progress bar`);
     }
+    if (globalConfig.defaultStatusLineEnabled !== initialConfig.current.defaultStatusLineEnabled) {
+      formattedChanges.push(`${globalConfig.defaultStatusLineEnabled ?? true ? 'Enabled' : 'Disabled'} default status line`);
+    }
     if (globalConfig.showStatusInTerminalTab !== initialConfig.current.showStatusInTerminalTab) {
       formattedChanges.push(`${globalConfig.showStatusInTerminalTab ? 'Enabled' : 'Disabled'} terminal tab status`);
     }
     if (globalConfig.showTurnDuration !== initialConfig.current.showTurnDuration) {
       formattedChanges.push(`${globalConfig.showTurnDuration ? 'Enabled' : 'Disabled'} turn duration`);
-    }
-    if (globalConfig.showCacheStats !== initialConfig.current.showCacheStats) {
-      formattedChanges.push(`Set cache stats display to ${chalk.bold(globalConfig.showCacheStats)}`);
     }
     if (globalConfig.remoteControlAtStartup !== initialConfig.current.remoteControlAtStartup) {
       const remoteLabel = globalConfig.remoteControlAtStartup === undefined ? 'Reset Remote Control to default' : `${globalConfig.remoteControlAtStartup ? 'Enabled' : 'Disabled'} Remote Control for all sessions`;
@@ -1582,11 +1599,11 @@ export function Config({
               <ConfigurableShortcutHint action="confirm:no" context="Confirmation" fallback="Esc" description="cancel" />
             </Byline>
           </Text>
-        </> : showSubmenu === 'ExternalIncludes' ? <>
-          <gakrcliMdExternalIncludesDialog onDone={() => {
+        </> : showSubmenu === 'ExternalIncludes' && pendingScope ? <>
+          <GakrCLIMdExternalIncludesDialog onDone={() => {
         setShowSubmenu(null);
         setTabsHidden(false);
-      }} externalIncludes={getExternalgakrcliMdIncludes(memoryFiles)} />
+      }} externalIncludes={getExternalGakrCLIMdIncludes(memoryFiles, pendingScope === 'User' ? ['User'] : ['Project', 'Local'])} scope={pendingScope} />
           <Text dimColor>
             <Byline>
               <KeyboardShortcutHint shortcut="Enter" action="confirm" />
@@ -1750,7 +1767,7 @@ export function Config({
                                 {THEME_LABELS[setting_2.value.toString()] ?? setting_2.value.toString()}
                               </Text> : setting_2.id === 'notifChannel' ? <Text color={isSelected ? 'suggestion' : undefined}>
                                 <NotifChannelLabel value={setting_2.value.toString()} />
-                              </Text> : setting_2.id === 'defaultPermissionMode' ? <Text color={isSelected ? 'suggestion' : undefined}>
+                              </Text> : setting_2.id === 'defaultPermissionMode' ? <Text color={setting_2.value === 'fullAccess' ? getModeColor('fullAccess') : isSelected ? 'suggestion' : undefined}>
                                 {permissionModeTitle(setting_2.value as PermissionMode)}
                               </Text> : setting_2.id === 'autoUpdatesChannel' && autoUpdaterDisabledReason ? <Box flexDirection="column">
                                 <Text color={isSelected ? 'suggestion' : undefined}>

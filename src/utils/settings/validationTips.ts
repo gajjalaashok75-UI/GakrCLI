@@ -23,15 +23,13 @@ type TipMatcher = {
   tip: ValidationTip
 }
 
-const DOCUMENTATION_BASE = 'https://github.com/gajjalaashok75-UI/GakrCLI/docs/en'
-
 const TIP_MATCHERS: TipMatcher[] = [
   {
     matches: (ctx): boolean =>
       ctx.path === 'permissions.defaultMode' && ctx.code === 'invalid_value',
     tip: {
       suggestion:
-        'Valid modes: "acceptEdits" (ask before file changes), "plan" (analysis only), "bypassPermissions" (auto-accept all), or "default" (standard behavior)',
+        'Valid modes: "acceptEdits" (ask before file changes), "plan" (analysis only), "bypassPermissions" (auto-accept prompts), "fullAccess" (skip even hard safety-check prompts), or "default" (standard behavior)',
     },
   },
   {
@@ -58,7 +56,6 @@ const TIP_MATCHERS: TipMatcher[] = [
     tip: {
       suggestion:
         'Environment variables must be strings. Wrap numbers and booleans in quotes. Example: "DEBUG": "true", "PORT": "3000"',
-      docLink: `${DOCUMENTATION_BASE}/settings#environment-variables`,
     },
   },
   {
@@ -97,7 +94,6 @@ const TIP_MATCHERS: TipMatcher[] = [
     tip: {
       suggestion:
         'Check for typos or refer to the documentation for valid fields',
-      docLink: `${DOCUMENTATION_BASE}/settings`,
     },
   },
   {
@@ -125,16 +121,11 @@ const TIP_MATCHERS: TipMatcher[] = [
     tip: {
       suggestion:
         'Must be an array of directory paths. Example: ["~/projects", "/tmp/workspace"]. You can also use --add-dir flag or /add-dir command',
-      docLink: `${DOCUMENTATION_BASE}/iam#working-directories`,
     },
   },
 ]
 
-const PATH_DOC_LINKS: Record<string, string> = {
-  permissions: `${DOCUMENTATION_BASE}/iam#configuring-permissions`,
-  env: `${DOCUMENTATION_BASE}/settings#environment-variables`,
-  hooks: `${DOCUMENTATION_BASE}/hooks`,
-}
+const PATH_DOC_LINKS: Record<string, string> = {}
 
 export function getValidationTip(context: TipContext): ValidationTip | null {
   const matcher = TIP_MATCHERS.find(m => m.matches(context))
@@ -152,7 +143,7 @@ export function getValidationTip(context: TipContext): ValidationTip | null {
   }
 
   // Add documentation link based on path prefix
-  if (!tip.docLink && context.path && context.path !== 'permissions.defaultMode') {
+  if (!tip.docLink && context.path) {
     const pathPrefix = context.path.split('.')[0]
     if (pathPrefix) {
       tip.docLink = PATH_DOC_LINKS[pathPrefix]

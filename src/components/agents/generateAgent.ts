@@ -68,11 +68,11 @@ When a user describes what they want an agent to do, you will:
       assistant: "Now let me use the test-runner agent to run the tests"
     </example>
     - <example>
-      Context: User is creating an agent to respond to the word "hello" with a friendly jok.
-      user: "Hello"
-      assistant: "I'm going to use the ${AGENT_TOOL_NAME} tool to launch the greeting-responder agent to respond with a friendly joke"
+      Context: User is creating an agent for GakrCLI Code product questions.
+      user: "How do I configure GakrCLI Code hooks?"
+      assistant: "I'm going to use the ${AGENT_TOOL_NAME} tool to launch the gakrcli-code-guide agent to answer the question"
       <commentary>
-      Since the user is greeting, use the greeting-responder agent to respond with a friendly joke. 
+      Since the user is asking how to use GakrCLI Code, use the gakrcli-code-guide agent.
       </commentary>
     </example>
   - If the user mentioned or implied that the agent should be used proactively, you should include examples of this.

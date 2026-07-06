@@ -1,2 +1,1 @@
-// Stub — WorkflowTool not included in source snapshot
-export const WORKFLOW_TOOL_NAME = 'WorkflowTool'
+export { WORKFLOW_TOOL_NAME } from '../../services/workflow/engine/constants.js'

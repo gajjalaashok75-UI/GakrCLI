@@ -9,7 +9,7 @@ import {
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 
-import { getGakrcliConfigHomeDir } from './envUtils.js'
+import { getGakrCLIConfigHomeDir } from './envUtils.js'
 
 declare const MACRO: { VERSION: string; DISPLAY_VERSION?: string }
 
@@ -124,7 +124,7 @@ function syncMissingDir(src: string, dest: string): number {
 export function initUserDirs(
   options?: InitUserDirsOptions,
 ): InitUserDirsResult {
-  const configHome = options?.configHome ?? getGakrcliConfigHomeDir()
+  const configHome = options?.configHome ?? getGakrCLIConfigHomeDir()
   const packageRoot = options?.packageRoot ?? getPackageRoot()
   const result: InitUserDirsResult = {
     configHome,

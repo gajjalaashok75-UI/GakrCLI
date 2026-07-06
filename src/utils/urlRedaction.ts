@@ -16,8 +16,10 @@ const SENSITIVE_URL_QUERY_PARAM_TOKENS = [
 ]
 
 /**
- * Single source of truth for query parameter names that look credential-like.
- * Shared by diagnostics paths so URL redaction coverage does not drift.
+ * Single source of truth for "which query-param names look like
+ * credentials". Exported so other diagnostic-log code paths (notably
+ * `openaiShim.redactUrlForDiagnostics`) can use the same coverage as
+ * `redactUrlForDisplay` instead of forking a copy that drifts.
  */
 export function shouldRedactUrlQueryParam(name: string): boolean {
   const lower = name.toLowerCase()

@@ -6,12 +6,12 @@ import axios from 'axios'
 import { OAUTH_BETA_HEADER } from '../constants/oauth.js'
 import {
   getAnthropicApiKey,
-  getgakrcliAIOAuthTokens,
+  getGakrCLIAIOAuthTokens,
   handleOAuth401Error,
-  isgakrcliAISubscriber,
+  isGakrCLIAISubscriber,
 } from './auth.js'
 import { getAPIProvider } from './model/providers.js'
-import { getgakrcliCodeUserAgent } from './userAgent.js'
+import { getGakrCLICodeUserAgent } from './userAgent.js'
 import { getWorkload } from './workloadContext.js'
 
 // WARNING: We rely on `gakrcli-cli` in the user agent for log filtering.
@@ -50,16 +50,16 @@ export function getMCPUserAgent(): string {
   return `gakrcli-code/${MACRO.VERSION}${suffix}`
 }
 
-// User-Agent for WebFetch requests to arbitrary sites. `Gakr-User` is
-// Anthropic's publicly documented agent for user-initiated fetches (what site
+// User-Agent for WebFetch requests to arbitrary sites. `GakrCLI-User` is
+// The first-party provider's publicly documented agent for user-initiated fetches (what site
 // operators match in robots.txt); the gakrcli-code suffix lets them distinguish
-// local CLI traffic from gakr.ai server-side fetches.
+// local CLI traffic from gakrcli.ai server-side fetches.
 export function getWebFetchUserAgent(): string {
   const supportUrl =
     getAPIProvider() === 'firstParty'
       ? 'https://support.anthropic.com/'
-      : 'https://github.com/gakrcli-gakrcli/gakrcli'
-  return `Gakr-User (${getgakrcliCodeUserAgent()}; +${supportUrl})`
+      : 'https://github.com/gajjalaashok75-UI/gakrcli'
+  return `GakrCLI-User (${getGakrCLICodeUserAgent()}; +${supportUrl})`
 }
 
 export type AuthHeaders = {
@@ -72,8 +72,8 @@ export type AuthHeaders = {
  * Returns either OAuth headers for Max/Pro users or API key headers for regular users
  */
 export function getAuthHeaders(): AuthHeaders {
-  if (isgakrcliAISubscriber()) {
-    const oauthTokens = getgakrcliAIOAuthTokens()
+  if (isGakrCLIAISubscriber()) {
+    const oauthTokens = getGakrCLIAIOAuthTokens()
     if (!oauthTokens?.accessToken) {
       return {
         headers: {},
@@ -133,7 +133,7 @@ export async function withOAuth401Retry<T>(
         typeof err.response?.data === 'string' &&
         err.response.data.includes('OAuth token has been revoked'))
     if (!isAuthError) throw err
-    const failedAccessToken = getgakrcliAIOAuthTokens()?.accessToken
+    const failedAccessToken = getGakrCLIAIOAuthTokens()?.accessToken
     if (!failedAccessToken) throw err
     await handleOAuth401Error(failedAccessToken)
     return await request()

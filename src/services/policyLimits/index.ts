@@ -7,7 +7,7 @@
  *
  * Eligibility:
  * - Console users (API key): All eligible
- * - OAuth users (Gakr.ai): Only Team and Enterprise/C4E subscribers are eligible
+ * - OAuth users (GakrCLI.ai): Only Team and Enterprise/C4E subscribers are eligible
  * - API fails open (non-blocking) - if fetch fails, continues without restrictions
  * - API returns empty restrictions for users without policy limits
  */
@@ -25,11 +25,11 @@ import {
 import {
   checkAndRefreshOAuthTokenIfNeeded,
   getAnthropicApiKeyWithSource,
-  getgakrcliAIOAuthTokens,
+  getGakrCLIAIOAuthTokens,
 } from '../../utils/auth.js'
 import { registerCleanup } from '../../utils/cleanupRegistry.js'
 import { logForDebugging } from '../../utils/debug.js'
-import { getGakrcliConfigHomeDir } from '../../utils/envUtils.js'
+import { getGakrCLIConfigHomeDir } from '../../utils/envUtils.js'
 import { classifyAxiosError } from '../../utils/errors.js'
 import { safeParseJSON } from '../../utils/json.js'
 import {
@@ -39,7 +39,7 @@ import {
 import { isEssentialTrafficOnly } from '../../utils/privacyLevel.js'
 import { sleep } from '../../utils/sleep.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
-import { getgakrcliCodeUserAgent } from '../../utils/userAgent.js'
+import { getGakrCLICodeUserAgent } from '../../utils/userAgent.js'
 import { getRetryDelay } from '../api/withRetry.js'
 import {
   type PolicyLimitsFetchResult,
@@ -117,7 +117,7 @@ export function initializePolicyLimitsLoadingPromise(): void {
  * Get the path to the policy limits cache file
  */
 function getCachePath(): string {
-  return join(getGakrcliConfigHomeDir(), CACHE_FILENAME)
+  return join(getGakrCLIConfigHomeDir(), CACHE_FILENAME)
 }
 
 /**
@@ -187,13 +187,13 @@ export function isPolicyLimitsEligible(): boolean {
     // No API key available - continue to check OAuth
   }
 
-  // For OAuth users, check if they have Gakr.ai tokens
-  const tokens = getgakrcliAIOAuthTokens()
+  // For OAuth users, check if they have GakrCLI.ai tokens
+  const tokens = getGakrCLIAIOAuthTokens()
   if (!tokens?.accessToken) {
     return false
   }
 
-  // Must have Gakr.ai inference scope
+  // Must have GakrCLI.ai inference scope
   if (!tokens.scopes?.includes(GAKR_AI_INFERENCE_SCOPE)) {
     return false
   }
@@ -244,8 +244,8 @@ function getAuthHeaders(): {
     // No API key available - continue to check OAuth
   }
 
-  // Fall back to OAuth tokens (for Gakr.ai users)
-  const oauthTokens = getgakrcliAIOAuthTokens()
+  // Fall back to OAuth tokens (for GakrCLI.ai users)
+  const oauthTokens = getGakrCLIAIOAuthTokens()
   if (oauthTokens?.accessToken) {
     return {
       headers: {
@@ -315,7 +315,7 @@ async function fetchPolicyLimits(
     const endpoint = getPolicyLimitsEndpoint()
     const headers: Record<string, string> = {
       ...authHeaders.headers,
-      'User-Agent': getgakrcliCodeUserAgent(),
+      'User-Agent': getGakrCLICodeUserAgent(),
     }
 
     if (cachedChecksum) {

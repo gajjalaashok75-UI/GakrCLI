@@ -11,7 +11,7 @@ import {
   embeddedSearchToolsBinaryPath,
   hasEmbeddedSearchTools,
 } from '../embeddedTools.js'
-import { getGakrcliConfigHomeDir } from '../envUtils.js'
+import { getGakrCLIConfigHomeDir } from '../envUtils.js'
 import { pathExists } from '../file.js'
 import { getFsImplementation } from '../fsOperations.js'
 import { logError } from '../log.js'
@@ -263,10 +263,10 @@ function getUserSnapshotContent(configFile: string): string {
 }
 
 /**
- * Generates GakrCLI specific snapshot content
+ * Generates GakrCLI Code specific snapshot content
  * This content is always included regardless of user configuration
  */
-async function getgakrcliCodeSnapshotContent(): Promise<string> {
+async function getGakrCLICodeSnapshotContent(): Promise<string> {
   // Get the appropriate PATH based on platform
   let pathValue = process.env.PATH
   if (getPlatform() === 'windows') {
@@ -350,14 +350,14 @@ async function getSnapshotScript(
   const configFile = getConfigFile(shellPath)
   const isZsh = configFile.endsWith('.zshrc')
 
-  // Generate the user content and GakrCLI content
+  // Generate the user content and GakrCLI Code content
   const userContent = configFileExists
     ? getUserSnapshotContent(configFile)
     : !isZsh
       ? // we need to manually force alias expansion in bash - normally `getUserSnapshotContent` takes care of this
         'echo "shopt -s expand_aliases" >> "$SNAPSHOT_FILE"'
       : ''
-  const gakrcliCodeContent = await getgakrcliCodeSnapshotContent()
+  const gakrcliCodeContent = await getGakrCLICodeSnapshotContent()
 
   const script = `SNAPSHOT_FILE=${quote([snapshotFilePath])}
       ${configFileExists ? `source "${configFile}" < /dev/null` : '# No user config file to source'}
@@ -429,14 +429,14 @@ export const createAndSaveSnapshot = async (
 
       if (!configFileExists) {
         logForDebugging(
-          `Shell config file not found: ${configFile}, creating snapshot with GakrCLI defaults only`,
+          `Shell config file not found: ${configFile}, creating snapshot with GakrCLI Code defaults only`,
         )
       }
 
       // Create unique snapshot path with timestamp and random ID
       const timestamp = Date.now()
       const randomId = Math.random().toString(36).substring(2, 8)
-      const snapshotsDir = join(getGakrcliConfigHomeDir(), 'shell-snapshots')
+      const snapshotsDir = join(getGakrCLIConfigHomeDir(), 'shell-snapshots')
       logForDebugging(`Snapshots directory: ${snapshotsDir}`)
       const shellSnapshotPath = join(
         snapshotsDir,
@@ -463,7 +463,7 @@ export const createAndSaveSnapshot = async (
               : subprocessEnv()) as typeof process.env),
             SHELL: binShell,
             GIT_EDITOR: 'true',
-            gakrcliCODE: '1',
+            GAKRCLICODE: '1',
           },
           timeout: SNAPSHOT_CREATION_TIMEOUT,
           maxBuffer: 1024 * 1024, // 1MB buffer
@@ -485,7 +485,7 @@ export const createAndSaveSnapshot = async (
             logForDebugging(`  - Config file: ${getConfigFile(binShell)}`)
             logForDebugging(`  - Config file exists: ${configFileExists}`)
             logForDebugging(`  - Working directory: ${getCwd()}`)
-            logForDebugging(`  - GakrCLI home: ${getGakrcliConfigHomeDir()}`)
+            logForDebugging(`  - GakrCLI home: ${getGakrCLIConfigHomeDir()}`)
             logForDebugging(`Full snapshot script:\n${snapshotScript}`)
             if (stdout) {
               logForDebugging(

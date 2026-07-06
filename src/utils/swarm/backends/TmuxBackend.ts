@@ -61,9 +61,9 @@ function getTmuxColorName(color: AgentColorName): string {
     red: 'red',
     blue: 'blue',
     green: 'green',
-    yellow: 'blue', // Changed from yellow to blue
+    yellow: 'yellow',
     purple: 'magenta',
-    orange: 'blue', // Changed from orange to blue
+    orange: 'colour208',
     pink: 'colour205',
     cyan: 'cyan',
   }

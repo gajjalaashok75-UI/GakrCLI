@@ -1,4 +1,4 @@
-import { rmSync, renameSync, existsSync, readFileSync } from 'fs'
+import { rmSync, renameSync, existsSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { getProjectsDir } from './envUtils.js'
 import { sanitizePath } from './sessionStoragePortable.js'
@@ -157,6 +157,35 @@ export function getOramaPersistencePath(cwd: string): string {
   return join(projectDir, 'knowledge.orama')
 }
 
+export function getKnowledgeStorageStatus(): {
+  runtime: 'bun' | 'node'
+  jsonPath: string
+  jsonExists: boolean
+  oramaPath: string
+  oramaExists: boolean
+  sqlitePath: string
+  sqliteExists: boolean
+  sqliteReady: boolean
+  sqliteAvailable: boolean
+} {
+  const cwd = getFsImplementation().cwd()
+  const projectDir = join(getProjectsDir(), sanitizePath(cwd))
+  const providers = getProviders()
+  const sqlitePath = join(projectDir, 'knowledge.db')
+
+  return {
+    runtime: typeof Bun === 'undefined' ? 'node' : 'bun',
+    jsonPath: getProjectGraphPath(cwd),
+    jsonExists: existsSync(getProjectGraphPath(cwd)),
+    oramaPath: getOramaPersistencePath(cwd),
+    oramaExists: existsSync(getOramaPersistencePath(cwd)),
+    sqlitePath,
+    sqliteExists: existsSync(sqlitePath),
+    sqliteReady: providers.sqlite.isReady,
+    sqliteAvailable: SQLiteProvider.isRuntimeAvailable(),
+  }
+}
+
 async function isOramaInSync(graph: KnowledgeGraph): Promise<boolean> {
   if (!oramaDb) return false
   const doc = getByID(oramaDb, 'meta:sync')
@@ -194,6 +223,8 @@ export async function initOrama(cwd: string): Promise<void> {
     // 2. Load the base graph state if not already loaded
     if (!projectGraph) {
       loadProjectGraph(cwd)
+    } else if (providers.sqlite.isReady) {
+      providers.sqlite.saveGraph(projectGraph)
     }
 
     // 3. Initialize Orama
@@ -205,7 +236,7 @@ export async function initOrama(cwd: string): Promise<void> {
     if (existsSync(path)) {
       try {
         const data = readFileSync(path)
-        oramaDb = await restore('binary', data)
+        oramaDb = await restore<NonNullable<typeof oramaDb>>('binary', data)
         const graph = projectGraph || loadProjectGraph(cwd)
         if (await isOramaInSync(graph)) {
           restored = true
@@ -266,6 +297,7 @@ export async function saveOrama(cwd: string): Promise<void> {
   const path = getOramaPersistencePath(cwd)
   try {
     const data = await persist(oramaDb, 'binary')
+    // Atomic write with flush using established project utility
     writeFileSyncAndFlush_DEPRECATED(path, data as Buffer)
   } catch (e) {
     console.error('Failed to save Orama DB:', e)

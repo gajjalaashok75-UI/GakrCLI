@@ -6,7 +6,7 @@ import { call as knowledgeCall } from './knowledge.js'
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js'
 import { getArc, addEntity, resetArc } from '../../utils/conversationArc.js'
 import { getGlobalGraph, resetGlobalGraph } from '../../utils/knowledgeGraph.js'
-import { setGakrcliConfigHomeDirForTesting } from '../../utils/envUtils.js'
+import { setGakrCLIConfigHomeDirForTesting } from '../../utils/envUtils.js'
 import {
   acquireSharedMutationLock,
   releaseSharedMutationLock,
@@ -21,7 +21,7 @@ describe('knowledge command', () => {
     await acquireSharedMutationLock('commands/knowledge.test.ts')
     configDir = mkdtempSync(join(tmpdir(), 'gakrcli-knowledge-command-'))
     process.env.GAKR_CONFIG_DIR = configDir
-    setGakrcliConfigHomeDirForTesting(configDir)
+    setGakrCLIConfigHomeDirForTesting(configDir)
     resetArc()
     resetGlobalGraph()
   })
@@ -35,7 +35,7 @@ describe('knowledge command', () => {
       } else {
         process.env.GAKR_CONFIG_DIR = originalConfigDir
       }
-      setGakrcliConfigHomeDirForTesting(undefined)
+      setGakrCLIConfigHomeDirForTesting(undefined)
     } finally {
       const dirToRemove = configDir
       configDir = undefined
@@ -107,5 +107,12 @@ describe('knowledge command', () => {
   it('shows error on unknown subcommand', async () => {
     const res = await knowledgeCallWithCapture('invalid')
     expect(res.toLowerCase()).toContain('unknown subcommand')
+  })
+
+  it('shows storage backend status', async () => {
+    const res = await knowledgeCallWithCapture('status')
+    expect(res).toContain('Knowledge Graph Engine')
+    expect(res).toContain('ENABLED')
+    expect(res).toContain('Stats:')
   })
 })

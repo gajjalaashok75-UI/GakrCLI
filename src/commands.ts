@@ -1,9 +1,11 @@
-// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
+// biome-ignore-all assist/source/organizeImports: internal-only import markers must not be reordered
 import addDir from './commands/add-dir/index.js'
 import autofixPr from './commands/autofix-pr/index.js'
 import backfillSessions from './commands/backfill-sessions/index.js'
+import benchmark from './commands/benchmark.js'
 import btw from './commands/btw/index.js'
 import goodgakrcli from './commands/good-gakrcli/index.js'
+import goal from './commands/goal/index.js'
 import issue from './commands/issue/index.js'
 import feedback from './commands/feedback/index.js'
 import clear from './commands/clear/index.js'
@@ -21,19 +23,25 @@ import diff from './commands/diff/index.js'
 import dream from './commands/dream/index.js'
 import ctx_viz from './commands/ctx_viz/index.js'
 import doctor from './commands/doctor/index.js'
-import knowledge from './commands/knowledge/index.js'
+import onboardGithub from './commands/onboard-github/index.js'
 import memory from './commands/memory/index.js'
 import help from './commands/help/index.js'
 import ide from './commands/ide/index.js'
 import init from './commands/init.js'
 import initVerifiers from './commands/init-verifiers.js'
 import keybindings from './commands/keybindings/index.js'
+import lang from './commands/lang/index.js'
+import lsp from './commands/lsp/index.js'
 import login from './commands/login/index.js'
 import logout from './commands/logout/index.js'
-import lsp from './commands/lsp/index.js'
 import installGitHubApp from './commands/install-github-app/index.js'
+import installSlackApp from './commands/install-slack-app/index.js'
 import breakCache from './commands/break-cache/index.js'
+import cacheProbe from './commands/cache-probe/index.js'
 import cacheStats from './commands/cacheStats/index.js'
+import clearContextWindow from './commands/clear-context-window/index.js'
+import replay from './commands/replay/index.js'
+import setContextWindow from './commands/set-context-window/index.js'
 import mcp from './commands/mcp/index.js'
 import mobile from './commands/mobile/index.js'
 import onboarding from './commands/onboarding/index.js'
@@ -44,14 +52,18 @@ import {
   requestSize,
   requestSizeNonInteractive,
 } from './commands/request-size/index.js'
-import resume from './commands/resume/index.js'
+import resume, { continueCommand } from './commands/resume/index.js'
 import review, { ultrareview } from './commands/review.js'
 import session from './commands/session/index.js'
 import share from './commands/share/index.js'
 import skills from './commands/skills/index.js'
+import skillLearning from './commands/skill-learning/index.js'
+import skillSearch from './commands/skill-search/index.js'
+import skillStoreCommand from './commands/skill-store/index.js'
 import status from './commands/status/index.js'
 import tasks from './commands/tasks/index.js'
 import teleport from './commands/teleport/index.js'
+import tui, { tuiNonInteractive } from './commands/tui/index.js'
 /* eslint-disable @typescript-eslint/no-require-imports */
 const agentsPlatform =
   process.env.USER_TYPE === 'ant'
@@ -62,6 +74,8 @@ import securityReview from './commands/security-review.js'
 import bughunter from './commands/bughunter/index.js'
 import terminalSetup from './commands/terminalSetup/index.js'
 import usage from './commands/usage/index.js'
+import autonomy from './commands/autonomy.js'
+import webTools from './commands/web-tools/index.js'
 import theme from './commands/theme/index.js'
 import logo from './commands/logo/index.js'
 import vim from './commands/vim/index.js'
@@ -90,16 +104,6 @@ const remoteControlServerCommand =
 const voiceCommand = feature('VOICE_MODE')
   ? require('./commands/voice/index.js').default
   : null
-const installSlackApp = (() => {
-  try {
-    return require('./commands/install-slack-app/index.js').default
-  } catch {
-    return null
-  }
-})()
-const forceSnip = feature('HISTORY_SNIP')
-  ? require('./commands/force-snip.js').default
-  : null
 const workflowsCmd = feature('WORKFLOW_SCRIPTS')
   ? (
       require('./commands/workflows/index.js') as typeof import('./commands/workflows/index.js')
@@ -127,15 +131,69 @@ const peersCmd = feature('UDS_INBOX')
       require('./commands/peers/index.js') as typeof import('./commands/peers/index.js')
     ).default
   : null
+const attachCmd = feature('UDS_INBOX')
+  ? require('./commands/attach/index.js').default
+  : null
+const detachCmd = feature('UDS_INBOX')
+  ? require('./commands/detach/index.js').default
+  : null
+const sendCmd = feature('UDS_INBOX')
+  ? require('./commands/send/index.js').default
+  : null
+const pipesCmd = feature('UDS_INBOX')
+  ? require('./commands/pipes/index.js').default
+  : null
+const pipeStatusCmd = feature('UDS_INBOX')
+  ? require('./commands/pipe-status/index.js').default
+  : null
+const historyCmd = feature('UDS_INBOX')
+  ? require('./commands/history/index.js').default
+  : null
+const claimMainCmd = feature('UDS_INBOX')
+  ? require('./commands/claim-main/index.js').default
+  : null
 const forkCmd = feature('FORK_SUBAGENT')
   ? (
       require('./commands/fork/index.js') as typeof import('./commands/fork/index.js')
+    ).default
+  : null
+const jobCmd = feature('TEMPLATES')
+  ? (
+      require('./commands/job/index.js') as typeof import('./commands/job/index.js')
     ).default
   : null
 const buddy = isBuddyEnabled()
   ? (
       require('./commands/buddy/index.js') as typeof import('./commands/buddy/index.js')
     ).default
+  : null
+const poor = feature('POOR')
+  ? (
+      require('./commands/poor/index.js') as typeof import('./commands/poor/index.js')
+    ).default
+  : null
+const daemonCmd = feature('DAEMON') || feature('BG_SESSIONS')
+  ? (
+      require('./commands/daemon/index.js') as typeof import('./commands/daemon/index.js')
+    ).default
+  : null
+const monitorCmd = feature('MONITOR_TOOL')
+  ? require('./commands/monitor.js').default
+  : null
+const coordinatorCmd = feature('COORDINATOR_MODE')
+  ? require('./commands/coordinator.js').default
+  : null
+const forceSnip = feature('HISTORY_SNIP')
+  ? require('./commands/force-snip.js').default
+  : null
+const localMemoryCommand = feature('LOCAL_MEMORY')
+  ? require('./commands/local-memory/index.js').default
+  : null
+const localVaultCommand = feature('LOCAL_VAULT')
+  ? require('./commands/local-vault/index.js').default
+  : null
+const knowledge = feature('KNOWLEDGE')
+  ? require('./commands/knowledge/index.js').default
   : null
 /* eslint-enable @typescript-eslint/no-require-imports */
 import thinkback from './commands/thinkback/index.js'
@@ -150,6 +208,7 @@ import hooks from './commands/hooks/index.js'
 import files from './commands/files/index.js'
 import branch from './commands/branch/index.js'
 import agents from './commands/agents/index.js'
+import autoFix from './commands/auto-fix.js'
 import plugin from './commands/plugin/index.js'
 import reloadPlugins from './commands/reload-plugins/index.js'
 import rewind from './commands/rewind/index.js'
@@ -157,7 +216,9 @@ import heapDump from './commands/heapdump/index.js'
 import mockLimits from './commands/mock-limits/index.js'
 import bridgeKick from './commands/bridge-kick.js'
 import version from './commands/version.js'
+import wiki from './commands/wiki/index.js'
 import summary from './commands/summary/index.js'
+import recap from './commands/recap/index.js'
 import {
   resetLimits,
   resetLimitsNonInteractive,
@@ -168,10 +229,6 @@ import sandboxToggle from './commands/sandbox-toggle/index.js'
 import chrome from './commands/chrome/index.js'
 import stickers from './commands/stickers/index.js'
 import advisor from './commands/advisor.js'
-import autoFix from './commands/auto-fix.js'
-import benchmark from './commands/benchmark.js'
-import cacheProbe from './commands/cache-probe/index.js'
-import wiki from './commands/wiki/index.js'
 import { logError } from './utils/log.js'
 import { toError } from './utils/errors.js'
 import { logForDebugging } from './utils/debug.js'
@@ -181,6 +238,10 @@ import {
   getDynamicSkills,
 } from './skills/loadSkillsDir.js'
 import { getBundledSkills } from './skills/bundledSkills.js'
+import {
+  getGakrCLICommandDescriptionKey,
+  localize,
+} from './i18n/index.js'
 import { getBuiltinPluginSkillCommands } from './plugins/builtinPlugins.js'
 import {
   getPluginCommands,
@@ -189,16 +250,18 @@ import {
   clearPluginSkillsCache,
 } from './utils/plugins/loadPluginCommands.js'
 import memoize from 'lodash-es/memoize.js'
-import { isUsing3PServices, isgakrcliAISubscriber } from './utils/auth.js'
+import { isUsing3PServices, isGakrCLIAISubscriber } from './utils/auth.js'
 import { isFirstPartyAnthropicBaseUrl } from './utils/model/providers.js'
 import env from './commands/env/index.js'
 import exit from './commands/exit/index.js'
 import exportCommand from './commands/export/index.js'
 import model from './commands/model/index.js'
+import mode from './commands/mode/index.js'
 import tag from './commands/tag/index.js'
 import outputStyle from './commands/output-style/index.js'
 import remoteEnv from './commands/remote-env/index.js'
 import upgrade from './commands/upgrade/index.js'
+import update from './commands/update/index.js'
 import {
   extraUsage,
   extraUsageNonInteractive,
@@ -243,6 +306,7 @@ export type {
   ResumeEntrypoint,
 } from './types/command.js'
 export { getCommandName, isCommandEnabled } from './types/command.js'
+export type { Command } from './types/command.js'
 
 // Commands that get eliminated from the external build
 export const INTERNAL_ONLY_COMMANDS = [
@@ -251,11 +315,9 @@ export const INTERNAL_ONLY_COMMANDS = [
   bughunter,
   commit,
   commitPushPr,
-  ctx_viz,
   goodgakrcli,
   issue,
   initVerifiers,
-  ...(forceSnip ? [forceSnip] : []),
   mockLimits,
   bridgeKick,
   version,
@@ -266,7 +328,10 @@ export const INTERNAL_ONLY_COMMANDS = [
   onboarding,
   share,
   summary,
+  recap,
   teleport,
+  tui,
+  tuiNonInteractive,
   antTrace,
   perfIssue,
   env,
@@ -283,6 +348,7 @@ const COMMANDS = memoize((): Command[] => [
   advisor,
   agents,
   autoFix,
+  autonomy,
   benchmark,
   branch,
   btw,
@@ -290,15 +356,18 @@ const COMMANDS = memoize((): Command[] => [
   cacheStats,
   chrome,
   clear,
+  clearContextWindow,
   color,
   compact,
   commitMessage,
   config,
+  continueCommand,
   copy,
   desktop,
   context,
   contextNonInteractive,
   cost,
+  ctx_viz,
   diff,
   dream,
   doctor,
@@ -311,27 +380,37 @@ const COMMANDS = memoize((): Command[] => [
   ide,
   init,
   keybindings,
-  installGitHubApp,
-  ...(installSlackApp ? [installSlackApp] : []),
+  lang,
+  ...(localMemoryCommand ? [localMemoryCommand] : []),
+  ...(localVaultCommand ? [localVaultCommand] : []),
+  ...(knowledge ? [knowledge] : []),
   lsp,
+  installGitHubApp,
+  installSlackApp,
   mcp,
-  knowledge,
   memory,
   mobile,
   model,
+  mode,
+  onboardGithub,
   outputStyle,
   remoteEnv,
   plugin,
   provider,
   pr_comments,
   releaseNotes,
+  replay,
   reloadPlugins,
   rename,
   requestSize,
   requestSizeNonInteractive,
   resume,
   session,
+  setContextWindow,
   skills,
+  skillLearning,
+  skillSearch,
+  skillStoreCommand,
   stats,
   status,
   statusline,
@@ -340,22 +419,31 @@ const COMMANDS = memoize((): Command[] => [
   theme,
   logo,
   feedback,
+  goal,
   review,
   ultrareview,
   rewind,
   securityReview,
   terminalSetup,
   upgrade,
+  update,
   extraUsage,
   extraUsageNonInteractive,
   rateLimitOptions,
   usage,
   usageReport,
+  webTools,
   vim,
   wiki,
   ...(webCmd ? [webCmd] : []),
   ...(forkCmd ? [forkCmd] : []),
+  ...(jobCmd ? [jobCmd] : []),
   ...(buddy ? [buddy] : []),
+  ...(poor ? [poor] : []),
+  ...(daemonCmd ? [daemonCmd] : []),
+  ...(monitorCmd ? [monitorCmd] : []),
+  ...(coordinatorCmd ? [coordinatorCmd] : []),
+  ...(forceSnip ? [forceSnip] : []),
   ...(proactive ? [proactive] : []),
   ...(briefCommand ? [briefCommand] : []),
   ...(assistantCommand ? [assistantCommand] : []),
@@ -373,13 +461,25 @@ const COMMANDS = memoize((): Command[] => [
   ...(!isUsing3PServices() ? [logout, login()].filter(Boolean) : []),
   passes,
   ...(peersCmd ? [peersCmd] : []),
+  ...(attachCmd ? [attachCmd] : []),
+  ...(detachCmd ? [detachCmd] : []),
+  ...(sendCmd ? [sendCmd] : []),
+  ...(pipesCmd ? [pipesCmd] : []),
+  ...(pipeStatusCmd ? [pipeStatusCmd] : []),
+  ...(historyCmd ? [historyCmd] : []),
+  ...(claimMainCmd ? [claimMainCmd] : []),
   tasks,
   ...(workflowsCmd ? [workflowsCmd] : []),
   ...(torch ? [torch] : []),
   ...(process.env.USER_TYPE === 'ant' && !process.env.IS_DEMO
     ? INTERNAL_ONLY_COMMANDS
     : []),
-].filter(isCommand))
+].filter(isCommand).map(withGakrCLICommandLocalizationKey))
+
+function withGakrCLICommandLocalizationKey(cmd: Command): Command {
+  cmd.localizationKey ??= getGakrCLICommandDescriptionKey(cmd.name)
+  return cmd
+}
 
 export const builtInCommandNames = memoize(
   (): Set<string> =>
@@ -450,22 +550,19 @@ const getWorkflowCommands = feature('WORKFLOW_SCRIPTS')
  * Not memoized — auth state can change mid-session (e.g. after /login),
  * so this must be re-evaluated on every getCommands() call.
  */
-export function meetsAvailabilityRequirement(
-  cmd: Command | null | undefined,
-): boolean {
-  if (!cmd || !cmd.availability || !Array.isArray(cmd.availability))
-    return true
+export function meetsAvailabilityRequirement(cmd: Command | null | undefined): boolean {
+  if (!cmd || !cmd.availability || !Array.isArray(cmd.availability)) return true
   for (const a of cmd.availability) {
     switch (a) {
       case 'gakrcli-ai':
-        if (isgakrcliAISubscriber()) return true
+        if (isGakrCLIAISubscriber()) return true
         break
       case 'console':
-        // Console API key user = direct 1P API customer (not 3P, not gakr.ai).
+        // Console API key user = direct 1P API customer (not 3P, not gakrcli.ai).
         // Excludes 3P (Bedrock/Vertex/Foundry) who don't set ANTHROPIC_BASE_URL
         // and gateway users who proxy through a custom base URL.
         if (
-          !isgakrcliAISubscriber() &&
+          !isGakrCLIAISubscriber() &&
           !isUsing3PServices() &&
           isFirstPartyAnthropicBaseUrl()
         )
@@ -669,11 +766,13 @@ export const REMOTE_SAFE_COMMANDS: Set<Command> = new Set([
   copy, // Copy last message
   btw, // Quick note
   feedback, // Send feedback
+  goal, // Manage session goal continuation
   plan, // Plan mode toggle
   keybindings, // Keybinding management
   statusline, // Status line toggle
   stickers, // Stickers
   mobile, // Mobile QR code
+  ctx_viz, // Show context window usage and token breakdown
 ])
 
 /**
@@ -696,6 +795,8 @@ export const BRIDGE_SAFE_COMMANDS: Set<Command> = new Set(
     summary, // Summarize conversation
     releaseNotes, // Show changelog
     files, // List tracked files
+    goal, // Manage session goal continuation
+    ctx_viz, // Show context window usage and token breakdown
   ].filter((c): c is Command => c !== null),
 )
 
@@ -766,31 +867,41 @@ export function getCommand(commandName: string, commands: Command[]): Command {
  * For model-facing prompts (like SkillTool), use cmd.description directly.
  */
 export function formatDescriptionWithSource(cmd: Command): string {
-  const description = cmd.description ?? ''
-
   if (cmd.type !== 'prompt') {
-    return description
+    return formatGakrCLIOwnedDescription(cmd)
   }
 
+  const desc = cmd.description ?? ''
+
   if (cmd.kind === 'workflow') {
-    return `${description} (workflow)`
+    return `${desc} (workflow)`
   }
 
   if (cmd.source === 'plugin') {
     const pluginName = cmd.pluginInfo?.pluginManifest.name
     if (pluginName) {
-      return `(${pluginName}) ${description}`
+      return `(${pluginName}) ${desc}`
     }
-    return `${description} (plugin)`
+    return `${desc} (plugin)`
   }
 
   if (cmd.source === 'builtin' || cmd.source === 'mcp') {
-    return description
+    return cmd.source === 'builtin'
+      ? formatGakrCLIOwnedDescription(cmd)
+      : desc
   }
 
   if (cmd.source === 'bundled') {
-    return `${description} (bundled)`
+    return `${formatGakrCLIOwnedDescription(cmd)} (bundled)`
   }
 
-  return `${description} (${getSettingSourceName(cmd.source)})`
+  return `${desc} (${getSettingSourceName(cmd.source)})`
+}
+
+function formatGakrCLIOwnedDescription(cmd: Command): string {
+  const desc = cmd.description ?? ''
+  if (cmd.localizationKey) {
+    return localize(cmd.localizationKey, desc)
+  }
+  return desc
 }

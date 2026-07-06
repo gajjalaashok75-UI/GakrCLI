@@ -393,7 +393,7 @@ Approval: Review after fixes and resubmit.
 
 When available, consult project-specific documents:
 
-- **CLAUDE.md** / **project guidelines** — File size limits, naming conventions, immutability requirements
+- **GAKRCLI.md** / **project guidelines** — File size limits, naming conventions, immutability requirements
 - **Language-specific rules** — Check `/rules/{language}/` directory for project conventions  
 - **Established patterns** — Match existing code style, architecture, error handling approaches
 - **Database policies** — RLS patterns, migration approaches, query constraints

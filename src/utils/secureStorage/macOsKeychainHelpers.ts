@@ -17,7 +17,7 @@
 import { createHash } from 'crypto'
 import { userInfo } from 'os'
 import { getOauthConfig } from 'src/constants/oauth.js'
-import { getGakrcliConfigHomeDir } from '../envUtils.js'
+import { getGakrCLIConfigHomeDir } from '../envUtils.js'
 import type { SecureStorageData } from './index.js'
 
 // Suffix distinguishing the OAuth credentials keychain entry from the legacy
@@ -33,7 +33,7 @@ export const CREDENTIALS_SERVICE_SUFFIX = '-credentials'
 export function getSecureStorageServiceName(
   serviceSuffix: string = '',
 ): string {
-  const configDir = getGakrcliConfigHomeDir()
+  const configDir = getGakrCLIConfigHomeDir()
   const isDefaultDir = !process.env.GAKR_CONFIG_DIR
 
   // Use a hash of the config dir path to create a unique but stable suffix
@@ -41,7 +41,7 @@ export function getSecureStorageServiceName(
   const dirHash = isDefaultDir
     ? ''
     : `-${createHash('sha256').update(configDir).digest('hex').substring(0, 8)}`
-  return `GakrCLI${getOauthConfig().OAUTH_FILE_SUFFIX}${serviceSuffix}${dirHash}`
+  return `GakrCLI Code${getOauthConfig().OAUTH_FILE_SUFFIX}${serviceSuffix}${dirHash}`
 }
 
 export function getMacOsKeychainStorageServiceName(
@@ -65,7 +65,7 @@ export function getUsername(): string {
 // refreshing/invalidating tokens) without forcing a blocking spawnSync on
 // every read. In-process writes invalidate via clearKeychainCache() directly.
 //
-// The sync read() path takes ~500ms per `security` spawn. With 50+ gakr.ai
+// The sync read() path takes ~500ms per `security` spawn. With 50+ gakrcli.ai
 // MCP connectors authenticating at startup, a short TTL expires mid-storm and
 // triggers repeat sync reads — observed as a 5.5s event-loop stall
 // (go/ccshare/adamj-20260326-212235). 30s of cross-process staleness is fine:

@@ -44,7 +44,7 @@ export function generateKeybindingsTemplate(): string {
   // Format as object wrapper with bindings array
   const config = {
     $schema: 'https://www.schemastore.org/gakrcli-code-keybindings.json',
-    $docs: 'https://github.com/gajjalaashok75-UI/GakrCLI/docs/en/keybindings',
+    $docs: 'https://code.gakrcli.com/docs/en/keybindings',
     bindings,
   }
 

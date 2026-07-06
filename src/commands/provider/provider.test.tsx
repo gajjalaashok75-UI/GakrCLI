@@ -2,7 +2,7 @@ import { PassThrough } from 'node:stream'
 
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test'
 import React from 'react'
-import stripAnsi from 'strip-ansi'
+import { stripVTControlCharacters as stripAnsi } from 'node:util'
 
 import { createRoot, render, useApp } from '../../ink.js'
 import { AppStateProvider } from '../../state/AppState.js'
@@ -278,13 +278,12 @@ test('wizard step remount prevents a typed API key from leaking into the next fi
     getOutput,
     frame => frame.includes('Model step') && !frame.includes('sk-secret-12345678'),
   )
-  expect(output).toContain('Model step')
-  expect(output).not.toContain('sk-secret-12345678')
-
   root.unmount()
   stdin.end()
   stdout.end()
-  await Bun.sleep(25)
+
+  expect(output).toContain('Model step')
+  expect(output).not.toContain('sk-secret-12345678')
 })
 
 test('buildProviderManagerCompletion records provider switch event and model-visible reminder', () => {

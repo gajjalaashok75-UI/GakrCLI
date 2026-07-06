@@ -1,16 +1,16 @@
 import { buildComputerUseTools } from '@ant/computer-use-mcp'
 import { join } from 'path'
-import { fileURLToPath } from 'url'
 import { buildMcpToolName } from '../../services/mcp/mcpStringUtils.js'
 import type { ScopedMcpServerConfig } from '../../services/mcp/types.js'
 
 import { isInBundledMode } from '../bundledMode.js'
+import { distRoot } from '../distRoot.js'
 import { CLI_CU_CAPABILITIES, COMPUTER_USE_MCP_SERVER_NAME } from './common.js'
 import { getChicagoCoordinateMode } from './gates.js'
 
 /**
  * Build the dynamic MCP config + allowed tool names. Mirror of
- * `setupgakrcliInChrome`. The `mcp__computer-use__*` tools are added to
+ * `setupGakrCLIInChrome`. The `mcp__computer-use__*` tools are added to
  * `allowedTools` so they bypass the normal permission prompt — the package's
  * `request_access` handles approval for the whole session.
  *
@@ -34,10 +34,7 @@ export function setupComputerUseMCP(): {
   // type 'stdio' to hit the right branch. Mirrors Chrome's setup.
   const args = isInBundledMode()
     ? ['--computer-use-mcp']
-    : [
-        join(fileURLToPath(import.meta.url), '..', 'cli.js'),
-        '--computer-use-mcp',
-      ]
+    : [join(distRoot, 'cli.js'), '--computer-use-mcp']
 
   return {
     mcpConfig: {

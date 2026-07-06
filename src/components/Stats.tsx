@@ -4,21 +4,21 @@ import { plot as asciichart } from 'asciichart';
 import chalk from 'chalk';
 import figures from 'figures';
 import React, { Suspense, use, useCallback, useEffect, useMemo, useState } from 'react';
-import stripAnsi from 'strip-ansi';
+import { stripVTControlCharacters as stripAnsi } from 'node:util';
 import type { CommandResultDisplay } from '../commands.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import { applyColor } from '../ink/colorize.js';
 import { stringWidth as getStringWidth } from '../ink/stringWidth.js';
 import type { Color } from '../ink/styles.js';
 // eslint-disable-next-line custom-rules/prefer-use-keybindings -- raw j/k/arrow stats navigation
-import { Ansi, Box, Text, useInput } from '../ink.js';
+import { Ansi, Box, type Key, Text, useInput } from '../ink.js';
 import { useKeybinding } from '../keybindings/useKeybinding.js';
 import { getGlobalConfig } from '../utils/config.js';
 import { formatDuration, formatNumber } from '../utils/format.js';
 import { generateHeatmap } from '../utils/heatmap.js';
 import { renderModelName } from '../utils/model/model.js';
 import { copyAnsiToClipboard } from '../utils/screenshotClipboard.js';
-import { aggregategakrcliCodeStatsForRange, type gakrcliCodeStats, type DailyModelTokens, type StatsDateRange } from '../utils/stats.js';
+import { aggregateGakrCLICodeStatsForRange, type GakrCLICodeStats, type DailyModelTokens, type StatsDateRange } from '../utils/stats.js';
 import { resolveThemeSetting } from '../utils/systemTheme.js';
 import { getTheme, themeColorToAnsi } from '../utils/theme.js';
 import { Pane } from './design-system/Pane.js';
@@ -38,13 +38,17 @@ type Props = {
 };
 type StatsResult = {
   type: 'success';
-  data: gakrcliCodeStats;
+  data: GakrCLICodeStats;
 } | {
   type: 'error';
   message: string;
 } | {
   type: 'empty';
 };
+type StatsTab = 'Overview' | 'Models';
+type StatsCache = Partial<Record<StatsDateRange, GakrCLICodeStats>>;
+type ModelUsageStats = GakrCLICodeStats['modelUsage'][string];
+type ModelUsageEntry = [string, ModelUsageStats];
 const DATE_RANGE_LABELS: Record<StatsDateRange, string> = {
   '7d': 'Last 7 days',
   '30d': 'Last 30 days',
@@ -61,7 +65,7 @@ function getNextDateRange(current: StatsDateRange): StatsDateRange {
  * Always loads all-time stats for the heatmap.
  */
 function createAllTimeStatsPromise(): Promise<StatsResult> {
-  return aggregategakrcliCodeStatsForRange('all').then((data): StatsResult => {
+  return aggregateGakrCLICodeStatsForRange('all').then((data): StatsResult => {
     if (!data || data.totalSessions === 0) {
       return {
         type: 'empty'
@@ -79,19 +83,19 @@ function createAllTimeStatsPromise(): Promise<StatsResult> {
     };
   });
 }
-export function Stats(t0) {
+export function Stats(t0: Props): React.ReactNode {
   const $ = _c(4);
   const {
     onClose
   } = t0;
-  let t1;
+  let t1: Promise<StatsResult>;
   if ($[0] === Symbol.for("react.memo_cache_sentinel")) {
     t1 = createAllTimeStatsPromise();
     $[0] = t1;
   } else {
     t1 = $[0];
   }
-  const allTimePromise = t1;
+  const allTimePromise: Promise<StatsResult> = t1;
   let t2;
   if ($[1] === Symbol.for("react.memo_cache_sentinel")) {
     t2 = <Box marginTop={1}><Spinner /><Text> Loading your GakrCLI stats…</Text></Box>;
@@ -118,27 +122,27 @@ type StatsContentProps = {
  * Inner component that uses React 19's use() to read the stats promise.
  * Suspends while loading all-time stats, then handles date range changes without suspending.
  */
-function StatsContent(t0) {
+function StatsContent(t0: StatsContentProps): React.ReactNode {
   const $ = _c(34);
   const {
     allTimePromise,
     onClose
   } = t0;
-  const allTimeResult = use(allTimePromise);
-  const [dateRange, setDateRange] = useState("all");
-  let t1;
+  const allTimeResult: StatsResult = use(allTimePromise);
+  const [dateRange, setDateRange] = useState<StatsDateRange>("all");
+  let t1: StatsCache;
   if ($[0] === Symbol.for("react.memo_cache_sentinel")) {
     t1 = {};
     $[0] = t1;
   } else {
     t1 = $[0];
   }
-  const [statsCache, setStatsCache] = useState(t1);
+  const [statsCache, setStatsCache] = useState<StatsCache>(t1);
   const [isLoadingFiltered, setIsLoadingFiltered] = useState(false);
-  const [activeTab, setActiveTab] = useState("Overview");
-  const [copyStatus, setCopyStatus] = useState(null);
-  let t2;
-  let t3;
+  const [activeTab, setActiveTab] = useState<StatsTab>("Overview");
+  const [copyStatus, setCopyStatus] = useState<string | null>(null);
+  let t2: React.EffectCallback;
+  let t3: [StatsDateRange, StatsCache];
   if ($[1] !== dateRange || $[2] !== statsCache) {
     t2 = () => {
       if (dateRange === "all") {
@@ -149,7 +153,7 @@ function StatsContent(t0) {
       }
       let cancelled = false;
       setIsLoadingFiltered(true);
-      aggregategakrcliCodeStatsForRange(dateRange).then(data => {
+      aggregateGakrCLICodeStatsForRange(dateRange).then(data => {
         if (!cancelled) {
           setStatsCache(prev => ({
             ...prev,
@@ -176,8 +180,8 @@ function StatsContent(t0) {
     t3 = $[4];
   }
   useEffect(t2, t3);
-  const displayStats = dateRange === "all" ? allTimeResult.type === "success" ? allTimeResult.data : null : statsCache[dateRange] ?? (allTimeResult.type === "success" ? allTimeResult.data : null);
-  const allTimeStats = allTimeResult.type === "success" ? allTimeResult.data : null;
+  const displayStats: GakrCLICodeStats | null = dateRange === "all" ? allTimeResult.type === "success" ? allTimeResult.data : null : statsCache[dateRange] ?? (allTimeResult.type === "success" ? allTimeResult.data : null);
+  const allTimeStats: GakrCLICodeStats | null = allTimeResult.type === "success" ? allTimeResult.data : null;
   let t4;
   if ($[5] !== onClose) {
     t4 = () => {
@@ -201,9 +205,9 @@ function StatsContent(t0) {
     t5 = $[7];
   }
   useKeybinding("confirm:no", handleClose, t5);
-  let t6;
+  let t6: (input: string, key: Key) => void;
   if ($[8] !== activeTab || $[9] !== dateRange || $[10] !== displayStats || $[11] !== onClose) {
-    t6 = (input, key) => {
+    t6 = (input: string, key: Key) => {
       if (key.ctrl && (input === "c" || input === "d")) {
         onClose("Stats dialog dismissed", {
           display: "system"
@@ -242,7 +246,7 @@ function StatsContent(t0) {
   if (allTimeResult.type === "empty") {
     let t7;
     if ($[15] === Symbol.for("react.memo_cache_sentinel")) {
-      t7 = <Box marginTop={1}><Text color="warning">No stats available yet. Start using Gakr!</Text></Box>;
+      t7 = <Box marginTop={1}><Text color="warning">No stats available yet. Start using GakrCLI!</Text></Box>;
       $[15] = t7;
     } else {
       t7 = $[15];
@@ -309,10 +313,14 @@ function StatsContent(t0) {
   }
   return t12;
 }
-function _temp(prev_0) {
+function _temp(prev_0: StatsTab): StatsTab {
   return prev_0 === "Overview" ? "Models" : "Overview";
 }
-function DateRangeSelector(t0) {
+type DateRangeSelectorProps = {
+  dateRange: StatsDateRange;
+  isLoading: boolean;
+};
+function DateRangeSelector(t0: DateRangeSelectorProps): React.ReactNode {
   const $ = _c(9);
   const {
     dateRange,
@@ -359,8 +367,8 @@ function OverviewTab({
   dateRange,
   isLoading
 }: {
-  stats: gakrcliCodeStats;
-  allTimeStats: gakrcliCodeStats;
+  stats: GakrCLICodeStats;
+  allTimeStats: GakrCLICodeStats;
   dateRange: StatsDateRange;
   isLoading: boolean;
 }): React.ReactNode {
@@ -379,7 +387,7 @@ function OverviewTab({
   // Calculate range days based on selected date range
   const rangeDays = dateRange === '7d' ? 7 : dateRange === '30d' ? 30 : stats.totalDays;
 
-  // Compute shot stats data (ant-only, gated by feature flag)
+  // Compute shot stats data (internal-only, gated by feature flag)
   let shotStatsData: {
     avgShots: string;
     buckets: {
@@ -510,20 +518,7 @@ function OverviewTab({
           </Text>
         </Box>
       </Box>
-
-      {/* Speculation time saved (ant-only) */}
-      {"external" === 'ant' && stats.totalSpeculationTimeSavedMs > 0 && <Box flexDirection="row" gap={4}>
-            <Box flexDirection="column" width={28}>
-              <Text wrap="truncate">
-                Speculation saved:{' '}
-                <Text color="gakrcli">
-                  {formatDuration(stats.totalSpeculationTimeSavedMs)}
-                </Text>
-              </Text>
-            </Box>
-          </Box>}
-
-      {/* Shot stats (ant-only) */}
+      {/* Shot stats (internal-only) */}
       {shotStatsData && <>
           <Box marginTop={1}>
             <Text>Shot distribution</Text>
@@ -685,7 +680,7 @@ const TIME_COMPARISONS = [{
   name: 'a full night of sleep',
   minutes: 480
 }];
-function generateFunFactoid(stats: gakrcliCodeStats, totalTokens: number): string {
+function generateFunFactoid(stats: GakrCLICodeStats, totalTokens: number): string {
   const factoids: string[] = [];
   if (totalTokens > 0) {
     const matchingBooks = BOOK_COMPARISONS.filter(book => totalTokens >= book.tokens);
@@ -713,7 +708,12 @@ function generateFunFactoid(stats: gakrcliCodeStats, totalTokens: number): strin
   const randomIndex = Math.floor(Math.random() * factoids.length);
   return factoids[randomIndex]!;
 }
-function ModelsTab(t0) {
+type ModelsTabProps = {
+  stats: GakrCLICodeStats;
+  dateRange: StatsDateRange;
+  isLoading: boolean;
+};
+function ModelsTab(t0: ModelsTabProps): React.ReactNode {
   const $ = _c(15);
   const {
     stats,
@@ -728,7 +728,7 @@ function ModelsTab(t0) {
   const {
     columns: terminalWidth
   } = useTerminalSize();
-  const modelEntries = Object.entries(stats.modelUsage).sort(_temp7);
+  const modelEntries: ModelUsageEntry[] = Object.entries(stats.modelUsage).sort(_temp7);
   const t1 = !headerFocused;
   let t2;
   if ($[0] !== t1) {
@@ -813,21 +813,21 @@ function ModelsTab(t0) {
           return <ModelEntry key={model_0} model={model_0} usage={usage_0} totalTokens={totalTokens} />;
         })}</Box>{t9}</Box>{t10}</Box>;
 }
-function _temp1(item, i) {
+function _temp1(item: ChartLegend, i: number): React.ReactNode {
   return <Text key={item.model}>{i > 0 ? " \xB7 " : ""}<Ansi>{item.coloredBullet}</Ansi> {item.model}</Text>;
 }
-function _temp0(t0) {
+function _temp0(t0: ModelUsageEntry): string {
   const [model] = t0;
   return model;
 }
-function _temp9(sum, t0) {
+function _temp9(sum: number, t0: ModelUsageEntry): number {
   const [, usage] = t0;
   return sum + usage.inputTokens + usage.outputTokens;
 }
-function _temp8(prev_0) {
+function _temp8(prev_0: number): number {
   return Math.max(prev_0 - 2, 0);
 }
-function _temp7(t0, t1) {
+function _temp7(t0: ModelUsageEntry, t1: ModelUsageEntry): number {
   const [, a] = t0;
   const [, b] = t1;
   return b.inputTokens + b.outputTokens - (a.inputTokens + a.outputTokens);
@@ -841,7 +841,7 @@ type ModelEntryProps = {
   };
   totalTokens: number;
 };
-function ModelEntry(t0) {
+function ModelEntry(t0: ModelEntryProps): React.ReactNode {
   const $ = _c(21);
   const {
     model,
@@ -1056,7 +1056,7 @@ function generateXAxisLabels(data: DailyModelTokens[], _chartWidth: number, yAxi
 }
 
 // Screenshot functionality
-async function handleScreenshot(stats: gakrcliCodeStats, activeTab: 'Overview' | 'Models', setStatus: (status: string | null) => void): Promise<void> {
+async function handleScreenshot(stats: GakrCLICodeStats, activeTab: 'Overview' | 'Models', setStatus: (status: string | null) => void): Promise<void> {
   setStatus('copying…');
   const ansiText = renderStatsToAnsi(stats, activeTab);
   const result = await copyAnsiToClipboard(ansiText);
@@ -1065,7 +1065,7 @@ async function handleScreenshot(stats: gakrcliCodeStats, activeTab: 'Overview' |
   // Clear status after 2 seconds
   setTimeout(setStatus, 2000, null);
 }
-function renderStatsToAnsi(stats: gakrcliCodeStats, activeTab: 'Overview' | 'Models'): string {
+function renderStatsToAnsi(stats: GakrCLICodeStats, activeTab: 'Overview' | 'Models'): string {
   const lines: string[] = [];
   if (activeTab === 'Overview') {
     lines.push(...renderOverviewToAnsi(stats));
@@ -1092,7 +1092,7 @@ function renderStatsToAnsi(stats: gakrcliCodeStats, activeTab: 'Overview' | 'Mod
   }
   return lines.join('\n');
 }
-function renderOverviewToAnsi(stats: gakrcliCodeStats): string[] {
+function renderOverviewToAnsi(stats: GakrCLICodeStats): string[] {
   const lines: string[] = [];
   const theme = getTheme(resolveThemeSetting(getGlobalConfig().theme));
   const h = (text: string) => applyColor(text, theme.gakrcli as Color);
@@ -1150,13 +1150,7 @@ function renderOverviewToAnsi(stats: gakrcliCodeStats): string[] {
   const peakHourVal = stats.peakActivityHour !== null ? `${stats.peakActivityHour}:00-${stats.peakActivityHour + 1}:00` : 'N/A';
   lines.push(row('Active days', activeDaysVal, 'Peak hour', peakHourVal));
 
-  // Speculation time saved (ant-only)
-  if ("external" === 'ant' && stats.totalSpeculationTimeSavedMs > 0) {
-    const label = 'Speculation saved:'.padEnd(COL1_LABEL_WIDTH);
-    lines.push(label + h(formatDuration(stats.totalSpeculationTimeSavedMs)));
-  }
-
-  // Shot stats (ant-only)
+  // Shot stats (internal-only)
   if (feature('SHOT_STATS') && stats.shotDistribution) {
     const dist = stats.shotDistribution;
     const totalWithShots = Object.values(dist).reduce((s, n) => s + n, 0);
@@ -1188,7 +1182,7 @@ function renderOverviewToAnsi(stats: gakrcliCodeStats): string[] {
   lines.push(chalk.gray(`Stats from the last ${stats.totalDays} days`));
   return lines;
 }
-function renderModelsToAnsi(stats: gakrcliCodeStats): string[] {
+function renderModelsToAnsi(stats: GakrCLICodeStats): string[] {
   const lines: string[] = [];
   const modelEntries = Object.entries(stats.modelUsage).sort(([, a], [, b]) => b.inputTokens + b.outputTokens - (a.inputTokens + a.outputTokens));
   if (modelEntries.length === 0) {

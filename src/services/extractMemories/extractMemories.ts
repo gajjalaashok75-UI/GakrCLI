@@ -56,7 +56,6 @@ import {
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../analytics/growthbook.js'
 import { logEvent } from '../analytics/index.js'
 import { sanitizeToolNameForAnalytics } from '../analytics/metadata.js'
-import { isWorkspacePersistencePath } from '../../utils/workspace.js'
 import {
   buildExtractAutoOnlyPrompt,
   buildExtractCombinedPrompt,
@@ -140,10 +139,7 @@ function hasMemoryWritesSince(
     }
     for (const block of content) {
       const filePath = getWrittenFilePath(block)
-      if (
-        filePath !== undefined &&
-        (isAutoMemPath(filePath) || isWorkspacePersistencePath(filePath))
-      ) {
+      if (filePath !== undefined && isAutoMemPath(filePath)) {
         return true
       }
     }
@@ -213,17 +209,14 @@ export function createAutoMemCanUseTool(memoryDir: string): CanUseToolFn {
       'file_path' in input
     ) {
       const filePath = input.file_path
-      if (
-        typeof filePath === 'string' &&
-        (isAutoMemPath(filePath) || isWorkspacePersistencePath(filePath))
-      ) {
+      if (typeof filePath === 'string' && isAutoMemPath(filePath)) {
         return { behavior: 'allow' as const, updatedInput: input }
       }
     }
 
     return denyAutoMemTool(
       tool,
-      `only ${FILE_READ_TOOL_NAME}, ${GREP_TOOL_NAME}, ${GLOB_TOOL_NAME}, read-only ${BASH_TOOL_NAME}, and ${FILE_EDIT_TOOL_NAME}/${FILE_WRITE_TOOL_NAME} within ${memoryDir} or the known root workspace markdown files are allowed`,
+      `only ${FILE_READ_TOOL_NAME}, ${GREP_TOOL_NAME}, ${GLOB_TOOL_NAME}, read-only ${BASH_TOOL_NAME}, and ${FILE_EDIT_TOOL_NAME}/${FILE_WRITE_TOOL_NAME} within ${memoryDir} are allowed`,
     )
   }
 }
@@ -412,13 +405,11 @@ export function initExtractMemories(): void {
               newMessageCount,
               existingMemories,
               skipIndex,
-              memoryDir,
             )
           : buildExtractAutoOnlyPrompt(
               newMessageCount,
               existingMemories,
               skipIndex,
-              memoryDir,
             )
 
       const result = await runForkedAgent({
@@ -432,7 +423,7 @@ export function initExtractMemories(): void {
         skipTranscript: true,
         // Well-behaved extractions complete in 2-4 turns (read → write).
         // A hard cap prevents verification rabbit-holes from burning turns.
-        maxTurns: 10,
+        maxTurns: 5,
       })
 
       // Advance the cursor only after a successful run. If the agent errors

@@ -6,12 +6,12 @@ import { z } from 'zod/v4';
 import { callIdeRpc } from '../services/mcp/client.js';
 import type { ConnectedMCPServer, MCPServerConnection } from '../services/mcp/types.js';
 import type { PermissionMode } from '../types/permissions.js';
-import { GAKR_IN_CHROME_MCP_SERVER_NAME, isTrackedgakrcliInChromeTabId } from '../utils/gakrcliInChrome/common.js';
+import { GAKR_IN_CHROME_MCP_SERVER_NAME, isTrackedGakrCLIInChromeTabId } from '../utils/gakrcliInChrome/common.js';
 import { lazySchema } from '../utils/lazySchema.js';
 import { enqueuePendingNotification } from '../utils/messageQueueManager.js';
 
 // Schema for the prompt notification from Chrome extension (JSON-RPC 2.0 format)
-const gakrcliInChromePromptNotificationSchema = lazySchema(() => z.object({
+const GakrCLIInChromePromptNotificationSchema = lazySchema(() => z.object({
   method: z.literal('notifications/message'),
   params: z.object({
     prompt: z.string(),
@@ -24,7 +24,7 @@ const gakrcliInChromePromptNotificationSchema = lazySchema(() => z.object({
   })
 }));
 
-export function getGakrcliInChromePermissionMode(toolPermissionMode: PermissionMode): 'ask' | 'skip_all_permission_checks' {
+export function getGakrCLIInChromePermissionMode(toolPermissionMode: PermissionMode): 'ask' | 'skip_all_permission_checks' {
   return toolPermissionMode === 'fullAccess'
     ? 'skip_all_permission_checks'
     : 'ask';
@@ -34,7 +34,7 @@ export function getGakrcliInChromePermissionMode(toolPermissionMode: PermissionM
  * A hook that listens for prompt notifications from the GakrCLI for Chrome extension,
  * enqueues them as user prompts, and syncs permission mode changes to the extension.
  */
-export function usePromptsFromgakrcliInChrome(mcpClients, toolPermissionMode) {
+export function usePromptsFromGakrCLIInChrome(mcpClients, toolPermissionMode) {
   const $ = _c(6);
   useRef(undefined);
   let t0;
@@ -54,7 +54,7 @@ export function usePromptsFromgakrcliInChrome(mcpClients, toolPermissionMode) {
       if (!chromeClient) {
         return;
       }
-      const chromeMode = getGakrcliInChromePermissionMode(toolPermissionMode);
+      const chromeMode = getGakrCLIInChromePermissionMode(toolPermissionMode);
       callIdeRpc("set_permission_mode", {
         mode: chromeMode
       }, chromeClient);

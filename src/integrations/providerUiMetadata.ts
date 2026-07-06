@@ -1,11 +1,12 @@
-import type { AuthMode } from './descriptors.js'
+import { hasUsableOpenAICredential } from '../services/api/credentialPool.js'
+import type { AuthMode, PresetBadge } from './descriptors.js'
 import type { ProviderPresetManifestEntry } from './descriptors.js'
 import { routeForPreset } from './compatibility.js'
 import {
   ORDERED_PROVIDER_PRESETS,
   PROVIDER_PRESET_MANIFEST,
   type ProviderPreset,
-} from './generated/integrationArtifacts.generated.js'
+} from './generated/integrationManifest.generated.js'
 import {
   getRouteDefaultBaseUrl,
   getRouteDefaultModel,
@@ -27,17 +28,30 @@ function readFirstEnvValue(
 ): string {
   for (const envVar of envVars ?? []) {
     const value = processEnv[envVar]?.trim()
-    if (value) {
-      return value
+    if (hasUsableEnvValue(envVar, value)) {
+      return value ?? ''
     }
   }
 
   return ''
 }
 
+function hasUsableEnvValue(envVar: string, value: string | undefined): boolean {
+  if (!value) {
+    return false
+  }
+
+  if (envVar === 'OPENAI_API_KEYS' || envVar === 'OPENAI_API_KEY') {
+    return hasUsableOpenAICredential(value)
+  }
+
+  return true
+}
+
 export type ProviderPresetUiMetadata = {
   apiKey: string
   authMode: AuthMode
+  badge?: PresetBadge
   baseUrl: string
   credentialEnvVars: string[]
   description: string
@@ -83,6 +97,7 @@ export function getProviderPresetUiMetadata(
   return {
     apiKey: readFirstEnvValue(processEnv, credentialEnvVars),
     authMode: descriptor?.setup.authMode ?? 'api-key',
+    badge: presetMetadata.badge,
     baseUrl,
     credentialEnvVars,
     description: presetMetadata.description,

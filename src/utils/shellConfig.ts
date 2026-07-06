@@ -7,7 +7,7 @@ import { open, readFile, stat } from 'fs/promises'
 import { homedir as osHomedir } from 'os'
 import { join } from 'path'
 import { isFsInaccessible } from './errors.js'
-import { getLocalgakrcliPath } from './localInstaller.js'
+import { getLocalGakrCLIPath } from './localInstaller.js'
 
 export const GAKR_ALIAS_REGEX = /^\s*alias\s+gakrcli\s*=/
 
@@ -42,7 +42,7 @@ export function getShellConfigPaths(
  * Preserves custom user aliases that point to other locations
  * Returns the filtered lines and whether our default installer alias was found
  */
-export function filtergakrcliAliases(lines: string[]): {
+export function filterGakrCLIAliases(lines: string[]): {
   filtered: string[]
   hadAlias: boolean
 } {
@@ -62,7 +62,7 @@ export function filtergakrcliAliases(lines: string[]): {
         const target = match[1].trim()
         // Only remove if it points to the installer location
         // The installer always creates aliases with the full expanded path
-        if (target === getLocalgakrcliPath()) {
+        if (target === getLocalGakrCLIPath()) {
           hadAlias = true
           return false // Remove this line
         }
@@ -111,7 +111,7 @@ export async function writeFileLines(
  * Returns the alias target if found, null otherwise
  * @param options Optional overrides for testing (env, homedir)
  */
-export async function findgakrcliAlias(
+export async function findGakrCLIAlias(
   options?: ShellConfigOptions,
 ): Promise<string | null> {
   const configs = getShellConfigPaths(options)
@@ -139,10 +139,10 @@ export async function findgakrcliAlias(
  * Returns the alias target if valid, null otherwise
  * @param options Optional overrides for testing (env, homedir)
  */
-export async function findValidgakrcliAlias(
+export async function findValidGakrCLIAlias(
   options?: ShellConfigOptions,
 ): Promise<string | null> {
-  const aliasTarget = await findgakrcliAlias(options)
+  const aliasTarget = await findGakrCLIAlias(options)
   if (!aliasTarget) return null
 
   const home = options?.homedir ?? osHomedir()

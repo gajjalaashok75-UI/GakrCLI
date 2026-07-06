@@ -62,7 +62,7 @@ export async function execPromptHook(
       const response = await queryModelWithoutStreaming({
         messages: messagesToQuery,
         systemPrompt: asSystemPrompt([
-          `You are evaluating a hook in Gakr.
+          `You are evaluating a hook in GakrCLI Code.
 
 Your response must be a JSON object matching one of the following schemas:
 1. If the condition is met, return: {"ok": true}

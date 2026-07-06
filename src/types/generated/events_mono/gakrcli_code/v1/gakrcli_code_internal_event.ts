@@ -61,9 +61,9 @@ export interface EnvironmentMetadata {
 }
 
 /**
- * SlackContext contains context fields present on every Gakr-in-Slack (CIS) event.
+ * SlackContext contains context fields present on every GakrCLI-in-Slack (CIS) event.
  * Event-specific fields (errorType, durationMs, httpStatus, etc.) go in
- * gakrcliCodeInternalEvent.additional_metadata as JSON.
+ * GakrCLICodeInternalEvent.additional_metadata as JSON.
  */
 export interface SlackContext {
   slack_team_id?: string | undefined
@@ -73,11 +73,11 @@ export interface SlackContext {
 }
 
 /**
- * gakrcliCodeInternalEvent represents events logged from GakrCLI via Statsig
+ * GakrCLICodeInternalEvent represents events logged from GakrCLI Code via Statsig
  * This schema matches the structure in gakrcli-cli-internal/src/services/statsig.ts
  * Source table: proj-product-data-nhme.raw_statsig_internal_tools.events
  */
-export interface gakrcliCodeInternalEvent {
+export interface GakrCLICodeInternalEvent {
   /** Event name (e.g., "tengu_binary_feedback", "tengu_api_success") */
   event_name?: string | undefined
   /** Event timestamp */
@@ -121,7 +121,7 @@ export interface gakrcliCodeInternalEvent {
   agent_id?: string | undefined
   parent_session_id?: string | undefined
   agent_type?: string | undefined
-  /** Gakr-in-Slack context (only present for cis_* events) */
+  /** GakrCLI-in-Slack context (only present for cis_* events) */
   slack?: SlackContext | undefined
   team_name?: string | undefined
   skill_name?: string | undefined
@@ -549,7 +549,7 @@ export const SlackContext: MessageFns<SlackContext> = {
   },
 }
 
-function createBasegakrcliCodeInternalEvent(): gakrcliCodeInternalEvent {
+function createBaseGakrCLICodeInternalEvent(): GakrCLICodeInternalEvent {
   return {
     event_name: '',
     client_timestamp: undefined,
@@ -583,8 +583,8 @@ function createBasegakrcliCodeInternalEvent(): gakrcliCodeInternalEvent {
   }
 }
 
-export const gakrcliCodeInternalEvent: MessageFns<gakrcliCodeInternalEvent> = {
-  fromJSON(object: any): gakrcliCodeInternalEvent {
+export const GakrCLICodeInternalEvent: MessageFns<GakrCLICodeInternalEvent> = {
+  fromJSON(object: any): GakrCLICodeInternalEvent {
     return {
       event_name: isSet(object.event_name)
         ? globalThis.String(object.event_name)
@@ -668,7 +668,7 @@ export const gakrcliCodeInternalEvent: MessageFns<gakrcliCodeInternalEvent> = {
     }
   },
 
-  toJSON(message: gakrcliCodeInternalEvent): unknown {
+  toJSON(message: GakrCLICodeInternalEvent): unknown {
     const obj: any = {}
     if (message.event_name !== undefined) {
       obj.event_name = message.event_name
@@ -760,15 +760,15 @@ export const gakrcliCodeInternalEvent: MessageFns<gakrcliCodeInternalEvent> = {
     return obj
   },
 
-  create<I extends Exact<DeepPartial<gakrcliCodeInternalEvent>, I>>(
+  create<I extends Exact<DeepPartial<GakrCLICodeInternalEvent>, I>>(
     base?: I,
-  ): gakrcliCodeInternalEvent {
-    return gakrcliCodeInternalEvent.fromPartial(base ?? ({} as any))
+  ): GakrCLICodeInternalEvent {
+    return GakrCLICodeInternalEvent.fromPartial(base ?? ({} as any))
   },
-  fromPartial<I extends Exact<DeepPartial<gakrcliCodeInternalEvent>, I>>(
+  fromPartial<I extends Exact<DeepPartial<GakrCLICodeInternalEvent>, I>>(
     object: I,
-  ): gakrcliCodeInternalEvent {
-    const message = createBasegakrcliCodeInternalEvent()
+  ): GakrCLICodeInternalEvent {
+    const message = createBaseGakrCLICodeInternalEvent()
     message.event_name = object.event_name ?? ''
     message.client_timestamp = object.client_timestamp ?? undefined
     message.model = object.model ?? ''

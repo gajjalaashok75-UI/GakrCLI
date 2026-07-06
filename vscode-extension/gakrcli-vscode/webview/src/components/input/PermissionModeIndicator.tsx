@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react';
 import { ModeSelector, type PermissionModeValue } from './ModeSelector';
+import { vscode } from '../../vscode';
 
-// Colors matching GakrCLI permission mode badges.
+// Colors matching GakrCLI's permission mode badges.
 const MODE_CONFIG: Record<PermissionModeValue, { label: string; color: string }> = {
   default:           { label: 'Default',      color: 'var(--vscode-charts-blue, #4fc3f7)' },
   plan:              { label: 'Plan',          color: 'var(--vscode-charts-purple, #ce93d8)' },
@@ -21,6 +22,7 @@ export function PermissionModeIndicator({ currentMode, onModeChange }: Permissio
 
   const handleSelectMode = useCallback((mode: PermissionModeValue) => {
     onModeChange(mode);
+    vscode.postMessage({ type: 'set_permission_mode', mode });
   }, [onModeChange]);
 
   return (

@@ -2,7 +2,10 @@ import * as React from 'react'
 
 import type { LocalJSXCommandCall, LocalJSXCommandOnDone } from '../../types/command.js'
 import { COMMON_HELP_ARGS, COMMON_INFO_ARGS } from '../../constants/xml.js'
-import { ProviderManager, type ProviderManagerResult } from '../../components/ProviderManager.js'
+import {
+  ProviderManager,
+  type ProviderManagerResult,
+} from '../../components/ProviderManager.js'
 import TextInput from '../../components/TextInput.js'
 import {
   Select,
@@ -13,6 +16,7 @@ import { LoadingState } from '../../components/design-system/LoadingState.js'
 import { useCodexOAuthFlow } from '../../components/useCodexOAuthFlow.js'
 import { useTerminalSize } from '../../hooks/useTerminalSize.js'
 import { Box, Text } from '../../ink.js'
+import { probeRouteReadiness } from '../../integrations/discoveryService.js'
 import {
   getProviderPresetUiMetadata,
   getRouteLabel,
@@ -23,8 +27,6 @@ import {
 } from '../../services/api/codexOAuth.js'
 import {
   DEFAULT_CODEX_BASE_URL,
-  DEFAULT_NVIDIA_BASE_URL,
-  DEFAULT_NVIDIA_MODEL,
   DEFAULT_OPENAI_BASE_URL,
   isLocalProviderUrl,
   resolveCodexApiCredentials,
@@ -36,7 +38,6 @@ import {
   buildCodexProfileEnv,
   buildGeminiProfileEnv,
   buildMistralProfileEnv,
-  buildNvidiaNimProfileEnv,
   buildOllamaProfileEnv,
   buildOpenAIProfileEnv,
   createProfileFile,
@@ -71,10 +72,11 @@ import {
   recommendOllamaModel,
   type RecommendationGoal,
 } from '../../utils/providerRecommendation.js'
-import { hasLocalOllama, listOllamaModels ,getOllamaChatBaseUrl,
+import {
+  getOllamaChatBaseUrl,
   getLocalOpenAICompatibleProviderLabel,
-  probeOllamaGenerationReadiness,
-  type OllamaGenerationReadiness,} from '../../utils/providerDiscovery.js'
+  type OllamaGenerationReadiness,
+} from '../../utils/providerDiscovery.js'
 
 export function buildProviderManagerCompletion(result?: ProviderManagerResult): {
   message: string
@@ -99,7 +101,7 @@ export function buildProviderManagerCompletion(result?: ProviderManagerResult): 
   return { message, metaMessages }
 }
 
-  function describeOllamaReadinessIssue(
+function describeOllamaReadinessIssue(
   readiness: OllamaGenerationReadiness,
   options?: {
     baseUrl?: string
@@ -133,21 +135,13 @@ export function buildProviderManagerCompletion(result?: ProviderManagerResult): 
   return ''
 }
 
-type ProviderChoice = 'auto' | ProviderProfile | 'clear'
+type ProviderChoice = 'auto' | ProviderProfile | 'codex-oauth' | 'clear'
 
 type Step =
   | { name: 'choose' }
   | { name: 'auto-goal' }
   | { name: 'auto-detect'; goal: RecommendationGoal }
   | { name: 'ollama-detect' }
-  | { name: 'nvidia-key'; defaultModel: string }
-  | { name: 'nvidia-base'; apiKey: string; defaultModel: string }
-  | {
-      name: 'nvidia-model'
-      apiKey: string
-      baseUrl: string | null
-      defaultModel: string
-    }
   | { name: 'openai-key'; defaultModel: string }
   | { name: 'openai-base'; apiKey: string; defaultModel: string }
   | {
@@ -206,8 +200,6 @@ type TextEntryDialogProps = {
 type ProviderWizardDefaults = {
   openAIModel: string
   openAIBaseUrl: string
-  nvidiaModel: string
-  nvidiaBaseUrl: string
   geminiModel: string
   mistralModel: string
   mistralBaseUrl: string
@@ -223,7 +215,7 @@ function isEnvTruthy(value: string | undefined): boolean {
 
 function getSafeDisplayValue(
   value: string | undefined,
-  processEnv: NodeJS.ProcessEnv,
+  processEnv: SecretSourceEnv,
   profileEnv?: ProfileEnv,
   fallback = '(not set)',
 ): string {
@@ -235,6 +227,7 @@ function getSafeDisplayValue(
 function getConfiguredOpenAICompatibleProviderLabel(
   baseUrl: string,
   options?: {
+    processEnv?: SecretSourceEnv
     model?: string
   },
 ): string {
@@ -269,12 +262,6 @@ export function getProviderWizardDefaults(
   const safeOpenAIBaseUrl =
     sanitizeProviderConfigValue(processEnv.OPENAI_BASE_URL, secretSource) ||
     DEFAULT_OPENAI_BASE_URL
-  const safeNvidiaModel =
-    sanitizeProviderConfigValue(processEnv.NVIDIA_MODEL, secretSource) ||
-    DEFAULT_NVIDIA_MODEL
-  const safeNvidiaBaseUrl =
-    sanitizeProviderConfigValue(processEnv.NVIDIA_BASE_URL, secretSource) ||
-    DEFAULT_NVIDIA_BASE_URL
   const safeGeminiModel =
     sanitizeProviderConfigValue(processEnv.GEMINI_MODEL, secretSource) ||
     DEFAULT_GEMINI_MODEL
@@ -288,8 +275,6 @@ export function getProviderWizardDefaults(
   return {
     openAIModel: safeOpenAIModel,
     openAIBaseUrl: safeOpenAIBaseUrl,
-    nvidiaModel: safeNvidiaModel,
-    nvidiaBaseUrl: safeNvidiaBaseUrl,
     geminiModel: safeGeminiModel,
     mistralModel: safeMistralModel,
     mistralBaseUrl: safeMistralBaseUrl,
@@ -321,21 +306,6 @@ export function buildCurrentProviderSummary(options?: {
     }
   }
 
-  if (isEnvTruthy(processEnv.GAKR_CODE_USE_NVIDIA)) {
-    return {
-      providerLabel: 'NVIDIA NIMs',
-      modelLabel: getSafeDisplayValue(
-        processEnv.NVIDIA_MODEL ?? DEFAULT_NVIDIA_MODEL,
-        processEnv,
-      ),
-      endpointLabel: getSafeDisplayValue(
-        processEnv.NVIDIA_BASE_URL ?? DEFAULT_NVIDIA_BASE_URL,
-        processEnv,
-      ),
-      savedProfileLabel,
-    }
-  }
-
   if (isEnvTruthy(processEnv.GAKR_CODE_USE_MISTRAL)) {
     const mistralMetadata = getProviderPresetUiMetadata('mistral', processEnv)
     return {
@@ -351,6 +321,7 @@ export function buildCurrentProviderSummary(options?: {
       savedProfileLabel,
     }
   }
+
   if (isEnvTruthy(processEnv.GAKR_CODE_USE_GITHUB)) {
     return {
       providerLabel: 'GitHub Models',
@@ -379,6 +350,7 @@ export function buildCurrentProviderSummary(options?: {
         request.baseUrl,
         {
           model: processEnv.OPENAI_MODEL,
+          processEnv: secretSource,
         },
       ),
       modelLabel: getSafeDisplayValue(request.requestedModel, secretSource),
@@ -388,11 +360,11 @@ export function buildCurrentProviderSummary(options?: {
   }
 
   return {
-    providerLabel: 'gakrcli',
+    providerLabel: 'Anthropic',
     modelLabel: getSafeDisplayValue(
       processEnv.ANTHROPIC_MODEL ??
         processEnv.GAKR_MODEL ??
-        'kosmios-0-0',
+        'claude-sonnet-4-6',
       secretSource,
     ),
     endpointLabel: getSafeDisplayValue(
@@ -472,24 +444,6 @@ function buildSavedProfileSummary(
             ? 'configured'
             : undefined,
       }
-    case 'nvidia-nim':
-      return {
-        providerLabel: 'NVIDIA NIMs',
-        modelLabel: getSafeDisplayValue(
-          env.NVIDIA_MODEL ?? DEFAULT_NVIDIA_MODEL,
-          process.env,
-          env,
-        ),
-        endpointLabel: getSafeDisplayValue(
-          env.NVIDIA_BASE_URL ?? DEFAULT_NVIDIA_BASE_URL,
-          process.env,
-          env,
-        ),
-        credentialLabel:
-          maskSecretForDisplay(env.NVIDIA_API_KEY) !== undefined
-            ? 'configured'
-            : undefined,
-      }
     case 'ollama':
       return {
         providerLabel: 'Ollama',
@@ -507,6 +461,7 @@ function buildSavedProfileSummary(
     case 'openai':
     default: {
       const baseUrl = env.OPENAI_BASE_URL ?? DEFAULT_OPENAI_BASE_URL
+
       return {
         providerLabel: getConfiguredOpenAICompatibleProviderLabel(baseUrl, {
           model: env.OPENAI_MODEL,
@@ -567,8 +522,8 @@ export function buildProfileSaveMessage(
 function buildUsageText(): string {
   const summary = buildCurrentProviderSummary()
   const availableProviders = isBareMode()
-    ? 'Choose Auto, Ollama, OpenAI-compatible, NVIDIA NIMs, Gemini, or Codex, then save a profile for the next Gakrcli restart.'
-    : 'Choose Auto, Ollama, OpenAI-compatible, NVIDIA NIMs, Gemini, Codex, or Codex OAuth, then save a profile for the next Gakrcli restart.'
+    ? 'Choose Auto, Ollama, OpenAI-compatible, Gemini, or Codex, then save a provider profile.'
+    : 'Choose Auto, Ollama, OpenAI-compatible, Gemini, Codex, or Codex OAuth, then save a provider profile.'
   return [
     'Usage: /provider',
     '',
@@ -590,6 +545,7 @@ function finishProfileSave(
 ): void {
   void saveProfileAndNotify(onDone, profile, env)
 }
+
 export function buildCodexOAuthProfileEnv(
   tokens: Pick<CodexOAuthTokens, 'accessToken' | 'idToken' | 'accountId'>,
 ): ProfileEnv | null {
@@ -602,6 +558,7 @@ export async function applySavedProfileToCurrentSession(options: {
 }): Promise<string | null> {
   return applySharedProfileToCurrentSession(options)
 }
+
 async function saveProfileAndNotify(
   onDone: LocalJSXCommandOnDone,
   profile: ProviderProfile,
@@ -632,6 +589,7 @@ async function saveProfileAndNotify(
     })
   }
 }
+
 export function TextEntryDialog({
   title,
   subtitle,
@@ -708,6 +666,10 @@ function ProviderChooser({
 }): React.ReactNode {
   const summary = buildCurrentProviderSummary()
   const canUseCodexOAuth = !isBareMode()
+  const ollamaMetadata = getProviderPresetUiMetadata('ollama')
+  const openAIMetadata = getProviderPresetUiMetadata('openai')
+  const geminiMetadata = getProviderPresetUiMetadata('gemini')
+  const mistralMetadata = getProviderPresetUiMetadata('mistral')
   const helperText = canUseCodexOAuth
     ? 'Save a provider profile without editing environment variables first. Codex profiles backed by env, auth.json, or GakrCLI secure storage can switch this session immediately when validation succeeds.'
     : 'Save a provider profile without editing environment variables first. Codex profiles backed by env or auth.json can switch this session immediately.'
@@ -719,31 +681,24 @@ function ProviderChooser({
         'Prefer local Ollama when available, otherwise guide you into OpenAI-compatible setup',
     },
     {
-      label: 'Ollama',
+      label: ollamaMetadata.label,
       value: 'ollama',
-      description: 'Use a local Ollama model with no API key',
+      description: ollamaMetadata.description,
     },
     {
-      label: 'OpenAI-compatible',
+      label: openAIMetadata.name,
       value: 'openai',
-      description:
-        'GPT-4o, DeepSeek, OpenRouter, Groq, LM Studio, and similar APIs',
+      description: 'OpenAI and similar OpenAI-compatible APIs',
     },
     {
-      label: 'NVIDIA NIMs',
-      value: 'nvidia-nim',
-      description:
-        'Use NVIDIA-hosted OpenAI-compatible models with an NVIDIA API key',
-    },
-    {
-      label: 'Gemini',
+      label: geminiMetadata.label,
       value: 'gemini',
-      description: 'Use Google Gemini with API key, access token, or local ADC',
+      description: 'Use Gemini with API key, access token, or local ADC',
     },
     {
-      label: 'Mistral',
+      label: mistralMetadata.label,
       value: 'mistral',
-      description: 'Use Mistral with API key'
+      description: mistralMetadata.description,
     },
     {
       label: 'Codex',
@@ -877,7 +832,17 @@ function AutoRecommendationStep({
     void (async () => {
       const defaultModel = getGoalDefaultOpenAIModel(goal)
       try {
-        const readiness = await probeOllamaGenerationReadiness()
+        const readiness = await probeRouteReadiness('ollama')
+        if (!readiness) {
+          if (!cancelled) {
+            setStatus({
+              state: 'error',
+              message: 'Ollama readiness probe is not configured for this route.',
+            })
+          }
+          return
+        }
+
         if (readiness.state !== 'ready') {
           if (!cancelled) {
             setStatus({
@@ -938,7 +903,9 @@ function AutoRecommendationStep({
               { label: 'Back', value: 'back' },
               { label: 'Cancel', value: 'cancel' },
             ]}
-            onChange={(value: string) => (value === 'back' ? onBack() : onCancel())}
+            onChange={(value: string) =>
+              value === 'back' ? onBack() : onCancel()
+            }
             onCancel={onCancel}
           />
         </Box>
@@ -951,10 +918,10 @@ function AutoRecommendationStep({
       <Dialog title="Auto setup fallback" onCancel={onCancel}>
         <Box flexDirection="column" gap={1}>
           <Text>
-            No viable local Ollama chat model was detected. Auto setup can
-            continue into OpenAI-compatible setup with a default model of{' '}
+            Auto setup can continue into OpenAI-compatible setup with a default model of{' '}
             {status.defaultModel}.
           </Text>
+          <Text dimColor>{status.reason}</Text>
           <Select
             options={[
               { label: 'Continue to OpenAI-compatible setup', value: 'continue' },
@@ -1038,7 +1005,17 @@ function OllamaModelStep({
     let cancelled = false
 
     void (async () => {
-      const readiness = await probeOllamaGenerationReadiness()
+      const readiness = await probeRouteReadiness('ollama')
+      if (!readiness) {
+        if (!cancelled) {
+          setStatus({
+            state: 'unavailable',
+            message: 'Ollama readiness probe is not configured for this route.',
+          })
+        }
+        return
+      }
+
       if (readiness.state !== 'ready') {
         if (!cancelled) {
           setStatus({
@@ -1083,7 +1060,9 @@ function OllamaModelStep({
               { label: 'Back', value: 'back' },
               { label: 'Cancel', value: 'cancel' },
             ]}
-            onChange={(value: string) => (value === 'back' ? onBack() : onCancel())}
+            onChange={(value: string) =>
+              value === 'back' ? onBack() : onCancel()
+            }
             onCancel={onCancel}
           />
         </Box>
@@ -1104,7 +1083,7 @@ function OllamaModelStep({
           defaultFocusValue={status.defaultValue}
           inlineDescriptions
           visibleOptionCount={Math.min(8, status.options.length)}
-          onChange={(value: string)  => {
+          onChange={(value: string) => {
             onSave(
               'ollama',
               buildOllamaProfileEnv(value, {
@@ -1218,7 +1197,9 @@ function CodexCredentialStep({
               { label: 'Back', value: 'back' },
               { label: 'Cancel', value: 'cancel' },
             ]}
-            onChange={(value: string) => (value === 'back' ? onBack() : onCancel())}
+            onChange={(value: string) =>
+              value === 'back' ? onBack() : onCancel()
+            }
             onCancel={onCancel}
           />
         </Box>
@@ -1255,6 +1236,7 @@ function CodexCredentialStep({
           onChange={(value: string) => {
             const env = buildCodexProfileEnv({
               model: value,
+              credentialSource: credentials.credentialSource,
               processEnv: process.env,
             })
             if (env) {
@@ -1286,7 +1268,7 @@ function resolveCodexCredentials(processEnv: NodeJS.ProcessEnv):
       : 'Set CODEX_API_KEY or re-login with the Codex CLI.'
     return {
       ok: false,
-      message: `Codex setup needs existing credentials. Re-login with the Codex CLI or set CODEX_API_KEY. ${authHint}`,
+      message: `Codex setup needs existing credentials. ${oauthHint}, or set CODEX_API_KEY. ${authHint}`,
     }
   }
 
@@ -1294,7 +1276,7 @@ function resolveCodexCredentials(processEnv: NodeJS.ProcessEnv):
     return {
       ok: false,
       message:
-        'Codex auth is missing chatgpt_account_id. Re-login with the Codex CLI or set CHATGPT_ACCOUNT_ID/CODEX_ACCOUNT_ID first.',
+        `Codex auth is missing chatgpt_account_id. ${oauthHint}, or set CHATGPT_ACCOUNT_ID/CODEX_ACCOUNT_ID first.`,
     }
   }
 
@@ -1332,11 +1314,6 @@ export function ProviderWizard({
               setStep({
                 name: 'openai-key',
                 defaultModel: defaults.openAIModel,
-              })
-            } else if (value === 'nvidia-nim') {
-              setStep({
-                name: 'nvidia-key',
-                defaultModel: defaults.nvidiaModel,
               })
             } else if (value === 'gemini') {
               setStep({ name: 'gemini-auth-method' })
@@ -1390,111 +1367,18 @@ export function ProviderWizard({
         />
       )
 
-    case 'nvidia-key':
-      return (
-        <TextEntryDialog
-          resetStateKey={step.name}
-          title="NVIDIA setup"
-          subtitle="Step 1 of 3"
-          description={
-            process.env.NVIDIA_API_KEY
-              ? 'Enter an NVIDIA API key, or leave this blank to reuse the current NVIDIA_API_KEY from this session.'
-              : 'Enter the API key for your NVIDIA provider.'
-          }
-          initialValue=""
-          placeholder="nvapi-..."
-          mask="*"
-          allowEmpty={Boolean(process.env.NVIDIA_API_KEY)}
-          validate={value => {
-            const candidate = value.trim() || process.env.NVIDIA_API_KEY || ''
-            return sanitizeApiKey(candidate)
-              ? null
-              : 'Enter a real API key. Placeholder values like SUA_CHAVE are not valid.'
-          }}
-          onSubmit={value => {
-            const apiKey = value.trim() || process.env.NVIDIA_API_KEY || ''
-            setStep({
-              name: 'nvidia-base',
-              apiKey,
-              defaultModel: step.defaultModel,
-            })
-          }}
-          onCancel={() => setStep({ name: 'choose' })}
-        />
-      )
-
-    case 'nvidia-base':
-      return (
-        <TextEntryDialog
-          resetStateKey={step.name}
-          title="NVIDIA setup"
-          subtitle="Step 2 of 3"
-          description={`Optionally enter a base URL. Leave blank for ${DEFAULT_NVIDIA_BASE_URL}.`}
-          initialValue={
-            defaults.nvidiaBaseUrl === DEFAULT_NVIDIA_BASE_URL
-              ? ''
-              : defaults.nvidiaBaseUrl
-          }
-          placeholder={DEFAULT_NVIDIA_BASE_URL}
-          allowEmpty
-          onSubmit={value => {
-            setStep({
-              name: 'nvidia-model',
-              apiKey: step.apiKey,
-              baseUrl: value.trim() || null,
-              defaultModel: step.defaultModel,
-            })
-          }}
-          onCancel={() =>
-            setStep({
-              name: 'nvidia-key',
-              defaultModel: step.defaultModel,
-            })
-          }
-        />
-      )
-
-    case 'nvidia-model':
-      return (
-        <TextEntryDialog
-          resetStateKey={step.name}
-          title="NVIDIA setup"
-          subtitle="Step 3 of 3"
-          description={`Enter a model name. Leave blank for ${step.defaultModel}.`}
-          initialValue={defaults.nvidiaModel ?? step.defaultModel}
-          placeholder={step.defaultModel}
-          allowEmpty
-          onSubmit={value => {
-            const env = buildNvidiaNimProfileEnv({
-              apiKey: step.apiKey,
-              baseUrl: step.baseUrl,
-              model: value.trim() || step.defaultModel,
-              processEnv: {},
-            })
-            if (env) {
-              finishProfileSave(onDone, 'nvidia-nim', env)
-            }
-          }}
-          onCancel={() =>
-            setStep({
-              name: 'nvidia-base',
-              apiKey: step.apiKey,
-              defaultModel: step.defaultModel,
-            })
-          }
-        />
-      )
-
     case 'openai-key':
+      {
+        const openAIMetadata = getProviderPresetUiMetadata('openai')
       return (
         <TextEntryDialog
           resetStateKey={step.name}
-          title="OpenAI-compatible setup"
+          title={`${openAIMetadata.name} setup`}
           subtitle="Step 1 of 3"
           description={
             process.env.OPENAI_API_KEY
-              ? 'Enter an API key, or leave this blank to reuse the current OPENAI_API_KEY from this session.'
-              : 'Enter the API key for your OpenAI-compatible provider.'
+              ? `Enter an API key, or leave this blank to reuse the current ${openAIMetadata.credentialEnvVars[0] ?? 'OPENAI_API_KEY'} from this session.`
+              : `Enter the API key for ${openAIMetadata.name}.`
           }
           initialValue=""
           placeholder="sk-..."
@@ -1517,14 +1401,17 @@ export function ProviderWizard({
           onCancel={() => setStep({ name: 'choose' })}
         />
       )
+      }
 
     case 'openai-base':
+      {
+        const openAIMetadata = getProviderPresetUiMetadata('openai')
       return (
         <TextEntryDialog
           resetStateKey={step.name}
-          title="OpenAI-compatible setup"
+          title={`${openAIMetadata.name} setup`}
           subtitle="Step 2 of 3"
-          description={`Optionally enter a base URL. Leave blank for ${DEFAULT_OPENAI_BASE_URL}.`}
+          description={`Optionally enter a base URL. Leave blank for ${openAIMetadata.baseUrl || DEFAULT_OPENAI_BASE_URL}.`}
           initialValue={
             defaults.openAIBaseUrl === DEFAULT_OPENAI_BASE_URL
               ? ''
@@ -1548,12 +1435,15 @@ export function ProviderWizard({
           }
         />
       )
+      }
 
     case 'openai-model':
+      {
+        const openAIMetadata = getProviderPresetUiMetadata('openai')
       return (
         <TextEntryDialog
           resetStateKey={step.name}
-          title="OpenAI-compatible setup"
+          title={`${openAIMetadata.name} setup`}
           subtitle="Step 3 of 3"
           description={`Enter a model name. Leave blank for ${step.defaultModel}.`}
           initialValue={defaults.openAIModel ?? step.defaultModel}
@@ -1580,16 +1470,20 @@ export function ProviderWizard({
           }
         />
       )
+      }
+
     case 'mistral-key':
+      {
+        const mistralMetadata = getProviderPresetUiMetadata('mistral')
       return (
         <TextEntryDialog
           resetStateKey={step.name}
-          title="Mistral setup"
+          title={`${mistralMetadata.label} setup`}
           subtitle="Step 1 of 3"
           description={
             process.env.MISTRAL_API_KEY
-              ? 'Enter an API key, or leave this blank to reuse the current MISTRAL_API_KEY from this session.'
-              : 'Enter the API key for your Mistral provider.'
+              ? `Enter an API key, or leave this blank to reuse the current ${mistralMetadata.credentialEnvVars[0] ?? 'MISTRAL_API_KEY'} from this session.`
+              : `Enter the API key for ${mistralMetadata.label}.`
           }
           initialValue=""
           placeholder="..."
@@ -1612,14 +1506,17 @@ export function ProviderWizard({
           onCancel={() => setStep({ name: 'choose' })}
         />
       )
+      }
 
     case 'mistral-base':
+      {
+        const mistralMetadata = getProviderPresetUiMetadata('mistral')
       return (
         <TextEntryDialog
           resetStateKey={step.name}
-          title="Mistral setup"
+          title={`${mistralMetadata.label} setup`}
           subtitle="Step 2 of 3"
-          description={`Optionally enter a base URL. Leave blank for ${DEFAULT_MISTRAL_BASE_URL}.`}
+          description={`Optionally enter a base URL. Leave blank for ${mistralMetadata.baseUrl || DEFAULT_MISTRAL_BASE_URL}.`}
           initialValue={
             defaults.mistralBaseUrl === DEFAULT_MISTRAL_BASE_URL
               ? ''
@@ -1643,12 +1540,15 @@ export function ProviderWizard({
           }
         />
       )
+      }
 
     case 'mistral-model':
+      {
+        const mistralMetadata = getProviderPresetUiMetadata('mistral')
       return (
         <TextEntryDialog
           resetStateKey={step.name}
-          title="Mistral setup"
+          title={`${mistralMetadata.label} setup`}
           subtitle="Step 3 of 3"
           description={`Enter a model name. Leave blank for ${step.defaultModel}.`}
           initialValue={defaults.mistralModel ?? step.defaultModel}
@@ -1674,6 +1574,7 @@ export function ProviderWizard({
           }
         />
       )
+      }
 
     case 'gemini-auth-method': {
       const hasShellGeminiKey = Boolean(

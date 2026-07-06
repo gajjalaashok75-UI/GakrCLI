@@ -1,0 +1,389 @@
+{
+  // ── 1. PERMISSIONS ──────────────────────────────────────────────────────────
+  // Controls which tool invocations are auto-approved, always-blocked, or
+  // require a confirmation prompt. Merged across all settings layers.
+  "permissions": {
+    // Explicitly allowed tool invocations (no prompt).
+    // Each entry is a pattern: "ToolType(pattern)"  or a glob expression.
+    // Examples:
+    //   "Bash(bun test:*)"            → bun test command family
+    //   "WebSearch"                  → all WebSearch calls
+    //   "WebFetch(domain:thehindu.com)" → only that domain
+    "allow": [],
+
+    // Always blocked — reject silently or surface an error.
+    // Overrides "allow" on conflict.
+    "deny": [],
+
+    // Always prompt for user confirmation, even if also matched in "allow".
+    // Useful for commands that look safe but you want double-checked.
+    "ask": [],
+
+    // Overall permission mode for the session:
+    //   "default"  → normal prompt on first use, then remember
+    //   "auto"     → AI classifier decides allow/deny/ask (uses TRANSCRIPT_CLASSIFIER build flag)
+    //   "plan"     → require explicit plan-approval before tool execution continues
+    //   "dangerous"→ bypass most permissions prompts (you must accept the danger dialog first)
+    "defaultMode": "default",
+
+    // Extra gate that controls whether dangerous-mode can be toggled at all:
+    //   "none"    → no bypass possible (default; max safety)
+    //   "enable"  → user can toggle dangerous mode after accepting dialog
+    //   "always"  → suppress the dialog; dangerous mode is silently enabled (DO NOT USE unless you know exactly what you're bypassing)
+    "allowBypassPermissions": "none"
+  },
+
+  // ── 2. CONTEXT & MEMORY ─────────────────────────────────────────────────────
+  // Auto-memory is enabled by default and writes to project memory folders.
+  "autoMemoryEnabled": true,
+
+  // Override default memory directory (~/.gakrcli/workspace/projects/<cwd>/memory/).
+  // Supports ~/ expansion. NOTE: ignored if set inside a repo .gakrcli/settings.json
+  // (security measure — committed settings must not redirect memory to attacker paths).
+  "autoMemoryDirectory": "",
+
+  // Background memory consolidation ("auto-dream") — runs after conversation stops.
+  // Set to override the server-side default. Requires build flag KAIROS_DREAM=true.
+  "autoDreamEnabled": false,
+
+  // Session transcript retention in days:
+  //   n > 0  → keep transcripts n days
+  //   0      → NO transcripts persisted at all; existing ones deleted at each startup
+  "cleanupPeriodDays": 30,
+
+  // File picker should respect .gitignore files
+  // (ignore files like .ignore are always respected regardless of this toggle).
+  "respectGitignore": true,
+
+  // Skill / marketplace sources for this repository.
+  // Use when your project depends on specific plugin bundles.
+  "extraKnownMarketplaces": [],
+
+  // Enterprise: restrict allowed marketplace sources to this allowlist.
+  // Check happens BEFORE download, so blocked entries never hit the filesystem.
+  // Does NOT auto-register listed marketplaces — also add to extraKnownMarketplaces for that.
+  "strictKnownMarketplaces": [],
+
+  // Enterprise: block these marketplace sources entirely.
+  "blockedMarketplaces": [],
+
+  // ── 3. PROVIDERS & MODELS ───────────────────────────────────────────────────
+  // Hosted/openAI-compatible provider endpoints — keyed by name.
+  // Each entry's "base_url" is the OpenAI-compatible root (e.g. local LLM).
+  //   ProviderManager.tsx / src/integrations/vendors/*.ts read these.
+  "agentModels": {
+    // Example — local Ollama:
+    // "ollama": {
+    //   "base_url": "http://localhost:11434/v1",
+    //   "api_key": "ollama"
+    // }
+  },
+
+  // Route each agent by name (or "default") to a specific model string.
+  "agentRouting": {
+    // "default": "gpt-4o"
+  },
+
+  // Force-focus on speed even if capability suffers.
+  // Trades output quality for latency — useful for fast iteration or low-CPU boxes.
+  "fastMode": false,
+
+  // When false, fast mode is OFF when you start a new session (you toggle it manually).
+  "fastModePerSessionOptIn": false,
+
+  // Selected advisor/model name that overrides provider routing for counsel tasks.
+  // Leave unset to respect agentRouting or providerProfile defaults.
+  "advisorModel": "",
+
+  // Effort level for models that support effort tokens.
+  // Values: "low", "medium", "high" "max"  (undefined → provider default).
+  // Only models with an effort field on the route catalog honour this.
+  "effortLevel": "",
+
+  // Extended reasoning enabled by default for every new session.
+  // Toggle via Alt+T in the REPL at runtime.
+  //   true  → always enter extended thinking unless user presses Alt+T off
+  //   false → start with standard thinking; extended on demand
+  "alwaysThinkingEnabled": true,
+
+  // ── 4. UI / DISPLAY ─────────────────────────────────────────────────────────
+  // Controls the visual output style for assistant responses.
+  // Common values: "markdown" / "rich" / "plain"
+  // (exact allowed values are defined in src/utils/settings/types.ts outputStyle enum).
+  "outputStyle": "",
+
+  // Accessibility — reduce or disable UI animations (spinner shimmer, flash effects).
+  "prefersReducedMotion": false,
+
+  // Show a random tip/suggestion under the loading spinner.
+  "spinnerTipsEnabled": true,
+
+  // Customize the loading-verb labels seen in the spinner/examples.
+  // Example shown as comment — drop this shorthand into settings.json.
+  "spinnerVerbs": {
+    "default_verbs": {
+      "default": ["Reasoning", "Thinking", "Synthesizing", "Processing", "Analyzing"],
+      "code": ["Scanning code", "Tracing", "Reading"],
+      "data": ["Running analysis", "Computing", "Aggregating"],
+      "web": ["Searching", "Scouring", "Browsing"],
+      "file": ["Reading files", "Indexing", "Cataloguing"],
+      "system": ["Managing", "Loading", "Preparing"]
+    }
+  },
+
+  // Status notice definitions — show/hide specific notification rows in the REPL.
+  // Maps statusNotices.settingsDefinitions (src/utils/statusNoticeDefinitions.tsx).
+  "statusNotices": {
+    "settingsDefinitions": {
+      // Show network connectivity warnings, quota notices, rate-limit banners etc.
+      "enabled": true
+    }
+  },
+
+  // ── 5. ASSISTANT / KAIROS MODE ──────────────────────────────────────────────
+  // Requires the build flag KAIROS=true in scripts/build.ts AND a rebuild.
+  // As of June 10 2026 the open build ships KAIROS=false; enabling below alone
+  // has no effect until you flip the build flag AND rebuild.
+  "assistant": false,
+
+  // Display name for the assistant — shown when assistant mode is active,
+  // in session lists and brief header.
+  "assistantName": "Autobot",
+
+  // ── 6. AUTH / OAUTH ─────────────────────────────────────────────────────────
+  // XAA (SEP-990 / OpenID Connect) IdP configured once; shared by all
+  // XAA-enabled MCP servers on this machine.
+  "xaa": {
+    "id": "",                     // GakrCLI client_id as registered at the IdP
+    "callbackPort": null          // Loopback port if your IdP does not honour RFC 8252 port-any
+  },
+
+  // CodexOAuth (login via external hosted token flow).
+  "codexOAuth": {
+    // Namespace under which keytar stores the retrieved OAuth token.
+    // Set a unique value per-org or per-user; collisions erase prior token.
+    "secretStorageNamespace": "",
+
+    // Allow OAuth callbacks to localhost (for tooling/development).
+    "enableLocalhostAuth": false
+  },
+
+  // Force a specific login method for the session:
+  //   "gakrcliai"  → standard login (CLI or hosted)
+  //   "console"    → console-only flow (no browser popup)
+  "forceLoginMethod": "gakrcliai",
+
+  // Force specific org UUID (enterprise/managed environments).
+  "forceLoginOrgUUID": "",
+
+  // ── 7. ENVIRONMENT VARIABLES FOR SESSIONS ───────────────────────────────────
+  // Key → Value pairs injected as env vars in every GakrCLI Bash / tool session.
+  // Useful for API keys, PATH tweaks, or proxy configuration.
+  //   NEVER put secrets here if this repo's settings.json is committed / shared;
+  //   use a private workspace settings.json or OS env instead.
+  "env": {},
+
+  // ── 8. TELEMETRY / DIAGNOSTICS ─────────────────────────────────────────────
+  // How often the product asks for feedback (0.0–1.0 per eligible session).
+  // 0.0 → never; 0.25 → ~1 in 4 sessions; 1.0 → every session.
+  "feedbackSurveyRate": 0.25,
+
+  // Internal: path to script that prints OpenTelemetry headers for the gateway.
+  // Only useful if you run a custom proxy that signs requests with OTel headers.
+  // Leave empty unless your devops team set up OTel pipeline.
+  "otelHeadersHelper": "",
+  "otelHeadersEnabled": false,
+
+  // Verbose op-tracing; set true when debugging provider routing / retries.
+  "telemetryVerboseOptTracing": false,
+
+  // ── 9. PLUGIN / MCP SERVER SECTION ─────────────────────────────────────────
+  // Plugin-level configuration; keyed by pluginId.
+  // These are the "userConfigValues" passed to MCP servers at startup.
+  // Each plugin declares its own schema — see the plugin's own config page
+  // for accepted keys/values here.
+  "pluginConfigs": {
+    // Example:
+    // "playwright@marketplace": {
+    //   "mcpServers": {
+    //     "playwright": {
+    //       "command": "npx",
+    //       "args": ["-y", "@executeautomation/playwright-mcp-server"],
+    //       "env": { "PLAYWRIGHT_BROWSER": "chromium" }
+    //     }
+    //   },
+    //   "userConfigValues": {}
+    // },
+    "_note": "Leave empty unless you have plugins installed. Each key is pluginId@marketplaceName."
+  },
+
+  // ── 10. COMPANY / ANNOUNCEMENTS ─────────────────────────────────────────────
+  // Internal or customer announcement card settings — leave unset in personal use.
+  "companyAnnouncements": {
+    "settingsSourceName": "",     // Policy/team config source that owns this block
+    "announcements": []           // Array of { id, title, body, ... } announcement entries
+  },
+
+  // ── 11. TEAMS / ENTERPRISE ──────────────────────────────────────────────────
+  // Team/enterprise notifications (MCP servers with "gakrcli/channel" capability).
+  // Requires channelsEnabled=true (server side must also permit the channels).
+  "channelsEnabled": false,
+  "allowedChannelPlugins": [],   // [{ "marketplace": "...", "plugin": "..." }]
+
+  // Enterprise-only: custom warning appended to the plugin trust dialog.
+  // Admins use this to add org context before users install from a marketplace.
+  "pluginTrustMessage": "",
+
+  // ── 12. NETWORK / FETCH ─────────────────────────────────────────────────────
+  // Skip the pre-flight search-index check in WebFetch.
+  // ONLY useful inside locked-down corporate networks where WebSearch can't reach.
+  // true → faster but loses domain-awareallowlist filtering on WebFetch.
+  "skipWebFetchPreflight": false,
+
+  // ── 13. TERMINAL / INTERNATIONALIZATION ────────────────────────────────────
+  "i18n": {
+    // Options: "system", "en", "fr", "de", "ja", "ko", "zh", "es", ...
+    // "system" follows the OS locale; "en" forces English.
+    "locale": "system"
+  },
+
+  // ── 14. VERSION / DIAGNOSTICS ───────────────────────────────────────────────
+  // Internal use only — do not modify unless your team instructed it.
+  "minimumVersion": "",
+  "plansDirectory": "",          // Override from default ~/.gakrcli/plans/
+
+  // ── 15. KEYBOARD SHORTCUTS ───────────────────────────────────────────────────
+  // Override or disable default REPL keybindings.
+  // Set a binding to "" (empty string) to unbind it.
+  "keyBindings": {
+    // Key             → Default
+    // "toggleWebPreview"  → "ctrl+shift+p"
+    // "toggleDebugConsole"→ "ctrl+shift+x"
+    // See src/keybindings/defaultBindings.ts for the canonical default list.
+    "toggleWebPreview": "ctrl+shift+p",
+    "toggleDebugConsole": "ctrl+shift+x"
+  },
+
+  // ── 16. SECRETS / CREDENTIAL STORAGE ───────────────────────────────────────
+  // Security model for storing OAuth tokens and credentials on disk.
+  // These are consumed by src/utils/secureStorage/* code.
+  "secureStorage": {
+    //   "platform" → OS-native store (Keychain macOS / Credential Manager Windows / Secret Service Linux)
+    //   "json"     → plaintext JSON file (not recommended)
+    //   "none"     → no persistence — you re-login every session
+    // Default is platform ("keytar" on macOS, DPAPI on Windows, libsecret on Linux).
+    // "provider": "platform"
+  },
+
+  // API keys for model providers. Keys are local-only.
+  // keytar / OS credential store is preferred for these over env vars.
+  "apiKeys": {
+    // "openai": "sk-***",
+    // "anthropic": "sk-ant-***",
+    // "local": "ollama"    ← used by ollama vendor, no real key needed
+  },
+
+  // ── 17. SSH REMOTE (requires SSH_REMOTE build flag = true + rebuild) ─────────
+  // Pre-configured SSH sessions for headless/remote dev containers.
+  "sshConfigs": [
+    // {
+    //   "id": "office-vm",
+    //   "name": "Office dev box",
+    //   "sshHost": "user@10.0.0.5",
+    //   "sshPort": 22,
+    //   "sshIdentityFile": "~/.ssh/id_ed25519",
+    //   "startDirectory": "~/projects"
+    // }
+  ],
+
+  // ── 18. HOOKS ───────────────────────────────────────────────────────────────
+  // PreToolUse / PostToolUse / Stop / Prompt / Bash hooks execute shell commands
+  // and can transform state. See docs/hook-chains.md for the full chain model.
+  "hooks": {
+    // "preToolUse": [
+    //   {
+    //     "matcher": "Bash(*)",
+    //     "hooks": [{ "command": "echo about-to-run > /tmp/gakrcli_debug" }]
+    //   }
+    // ],
+    "_note": "Hooks run on every matching tool call — keep echo-friendly or you slow every turn."
+  },
+
+  // ── 19. ENABLE / DISABLE FLAGS ──────────────────────────────────────────────
+  // These booleans flips toggle core CLI interrupts.
+  // Set to true to SILENCE all hooks AND suppress the statusLine renderer.
+  // Use in CI / automated pipelines only; you lose memory/team skills/status notice.
+  "disableHooks": false,
+
+  // ── 20. LOGGING ─────────────────────────────────────────────────────────────
+  "logLevel": "info",
+  // Allowed: "silent" / "error" / "warn" / "info" / "debug"
+  //   "silent" → absolutely no output to logs
+  //   "debug"  → maximum verbosity including per-token cost traces
+
+  // ── 21. TESTING MODE ────────────────────────────────────────────────────────
+  // True → suppresss completion banners and side-effects that break test determinism.
+  "testing": false,
+
+  // ── 22. FEATURE FLAGS (OPEN BUILD — June 10 2026) ──────────────────────────
+  // These keys exist because the schema exposes them, but they have NO effect
+  // unless the matching build flag in scripts/build.ts is also flipped to true
+  // AND the codebase is rebuilt with `bun run build`.
+  //
+  // FLAG         STATUS  → CHANGE IN settings.json   → REBUILD ONE-LINER
+  // ─────────────────────────────────────────────────────────────────────────
+  // VOICE_MODE     false  → "voiceEnabled": false    → VOICE_MODE:true in scripts/build.ts
+  // KAIROS         false  → "assistant": false       → KAIROS:true in scripts/build.ts
+  // PROACTIVE      false  → "minSleepDurationMs": 10000 → PROACTIVE:true in scripts/build.ts
+  // BRIDGE_MODE    false  → (keys not in schema)     → BRIDGE_MODE:true in scripts/build.ts
+  // DAEMON         false  → (CLI route only)         → DAEMON:true in scripts/build.ts
+  // MCP_SKILLS     false  → (no key)                → MCP_SKILLS:true in scripts/build.ts
+  //   NOTE: MCP_SKILLS=true without src/skills/mcpSkills.ts → "fetchMcpSkillsForClient is not a function" crash.
+  //
+  // Always-on open-build flags (compile-time only — rebuild to disable):
+  //   COORDINATOR_MODE · BUDDY · MULTI_TURN_CONTEXT · MONITOR_TOOL · TEAMMEM
+  //   MESSAGE_ACTIONS · CACHED_MICROCOMPACT · AWAY_SUMMARY · TRANSCRIPT_CLASSIFIER
+  //   ULTRATHINK · TOKEN_BUDGET · HISTORY_PICKER · QUICK_SEARCH · SHOT_STATS
+  //   EXTRACT_MEMORIES · FORK_SUBAGENT · VERIFICATION_AGENT · HOOK_PROMPTS · CONVERSATION_ARC
+  //   DUMP_SYSTEM_PROMPT · MESSAGE_ACTIONS
+
+  // Realisable today — use these freely:
+  "voiceEnabled": false,
+
+  // Only meaningful if KAIROS=true in build + rebuild
+  "assistant": false,
+  "assistantName": "Autobot",
+  "defaultView": "chat",            // "chat" (checkpoints) or "transcript" (full), needs KAIROS
+
+  // Auto-mode (permission classifier) — enabled via build flag, but user opts-in here
+  "autoMode": {
+    "allow": [],    // Rules auto-approved by classifier
+    "soft_deny": [],// Rules auto-classified as denied
+    "environment": [] // Env-based classifier overrides
+    // "disable": "disable"  ← uncomment to fully turn off auto mode
+  },
+
+  // ── 23. KNOWLEDGE GRAPH / SESSIONS ──────────────────────────────────────────
+  // Spatial tiles and knowledge graph behaviour (used by conversationRecovery.ts).
+  // Leave empty unless you've enabled those experimental paths.
+  "spatialLayout": [],
+  "historyLayout": [],
+  "historyShouldSnapshot": false,
+
+  // ── 24. FILE SUGGESTIONS ────────────────────────────────────────────────────
+  // Custom command that powers the @ mention file picker.
+  // Example: run bat on the file and return the highlighted output.
+  "fileSuggestion": {
+    "type": "command",
+    "command": ""
+  },
+
+  // ── 25. AGENT MODE (PERMISSION) ─────────────────────────────────────────────
+  // Apply an auto-mode classifier gate on top of standard permissions.
+  // Leave as-is for standard per-tool prompting.
+  "useAutoModeDuringPlan": true,
+
+  // Subtract from the reported context window to keep headroom for tool returns.
+  // Useful for very long sessions; negative = no subtraction.
+  "contextWindowSubtraction": 0
+}

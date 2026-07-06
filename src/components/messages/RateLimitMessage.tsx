@@ -2,10 +2,10 @@ import { c as _c } from "react-compiler-runtime";
 import React, { useEffect, useMemo, useState } from 'react';
 import { extraUsage } from 'src/commands/extra-usage/index.js';
 import { Box, Text } from 'src/ink.js';
-import { usegakrcliAiLimits } from 'src/services/gakrcliAiLimitsHook.js';
+import { useGakrCLIAiLimits } from 'src/services/gakrcliAiLimitsHook.js';
 import { shouldProcessMockLimits } from 'src/services/rateLimitMocking.js'; // Used for /mock-limits command
-import { getRateLimitTier, getSubscriptionType, isgakrcliAISubscriber } from 'src/utils/auth.js';
-import { hasgakrcliAiBillingAccess } from 'src/utils/billing.js';
+import { getRateLimitTier, getSubscriptionType, isGakrCLIAISubscriber } from 'src/utils/auth.js';
+import { hasGakrCLIAiBillingAccess } from 'src/utils/billing.js';
 import { MessageResponse } from '../MessageResponse.js';
 type UpsellParams = {
   shouldShowUpsell: boolean;
@@ -75,7 +75,7 @@ export function RateLimitMessage(t0) {
   const isMax20x = rateLimitTier === "default_gakrcli_max_20x";
   let t3;
   if ($[2] === Symbol.for("react.memo_cache_sentinel")) {
-    t3 = shouldProcessMockLimits() || isgakrcliAISubscriber();
+    t3 = shouldProcessMockLimits() || isGakrCLIAISubscriber();
     $[2] = t3;
   } else {
     t3 = $[2];
@@ -83,7 +83,7 @@ export function RateLimitMessage(t0) {
   const shouldShowUpsell = t3;
   const canSeeRateLimitOptionsUpsell = shouldShowUpsell && !isMax20x;
   const [hasOpenedInteractiveMenu, setHasOpenedInteractiveMenu] = useState(false);
-  const gakrcliAiLimits = usegakrcliAiLimits();
+  const gakrcliAiLimits = useGakrCLIAiLimits();
   const isCurrentlyRateLimited = gakrcliAiLimits.status === "rejected" && gakrcliAiLimits.resetsAt !== undefined && !gakrcliAiLimits.isUsingOverage;
   const shouldAutoOpenRateLimitOptionsMenu = canSeeRateLimitOptionsUpsell && !hasOpenedInteractiveMenu && isCurrentlyRateLimited && onOpenRateLimitOptions;
   let t4;
@@ -115,7 +115,7 @@ export function RateLimitMessage(t0) {
         isExtraUsageCommandEnabled: extraUsage.isEnabled(),
         shouldAutoOpenRateLimitOptionsMenu: !!shouldAutoOpenRateLimitOptionsMenu,
         isTeamOrEnterprise,
-        hasBillingAccess: hasgakrcliAiBillingAccess()
+        hasBillingAccess: hasGakrCLIAiBillingAccess()
       });
       $[7] = shouldAutoOpenRateLimitOptionsMenu;
       $[8] = t7;

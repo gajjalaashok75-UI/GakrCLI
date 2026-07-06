@@ -22,7 +22,8 @@ import { errorMessage } from '../utils/errors.js';
 import { enqueue } from '../utils/messageQueueManager.js';
 import { buildSystemInitMessage } from '../utils/messages/systemInit.js';
 import { createBridgeStatusMessage, createSystemMessage } from '../utils/messages.js';
-import { getAutoModeUnavailableNotification, getAutoModeUnavailableReason, isAutoModeGateEnabled, isBypassPermissionsModeDisabled, transitionPermissionMode } from '../utils/permissions/permissionSetup.js';
+import { requestPermissionModeChange } from '../utils/permissions/permissionModeChange.js';
+import { applyPermissionModeChange } from '../utils/permissions/permissionSetup.js';
 import { getLeaderToolUseConfirmQueue } from '../utils/swarm/leaderPermissionBridge.js';
 
 /** How long after a failure before replBridgeEnabled is auto-cleared (stops retries). */
@@ -48,7 +49,7 @@ const MAX_CONSECUTIVE_INIT_FAILURES = 3;
  * Watches AppState.replBridgeEnabled — when toggled off (via /config or footer),
  * the bridge is torn down. When toggled back on, it re-initializes.
  *
- * Inbound messages from gakr.ai are injected into the REPL via queuedCommands.
+ * Inbound messages from gakrcli.ai are injected into the REPL via queuedCommands.
  */
 export function useReplBridge(messages: Message[], setMessages: (action: React.SetStateAction<Message[]>) => void, abortControllerRef: React.RefObject<AbortController | null>, commands: readonly Command[], mainLoopModel: string): {
   sendBridgeResult: () => void;
@@ -152,7 +153,7 @@ export function useReplBridge(messages: Message[], setMessages: (action: React.S
             shouldShowAppUpgradeMessage
           } = await import('../bridge/envLessBridgeConfig.js');
 
-          // Assistant mode: perpetual bridge session — gakr.ai shows one
+          // Assistant mode: perpetual bridge session — gakrcli.ai shows one
           // continuous conversation across CLI restarts instead of a new
           // session per invocation. initBridgeCore reads bridge-pointer.json
           // (the same crash-recovery file #20735 added) and reuses its
@@ -169,7 +170,7 @@ export function useReplBridge(messages: Message[], setMessages: (action: React.S
             perpetual = isAssistantMode();
           }
 
-          // When a user message arrives from gakr.ai, inject it into the REPL.
+          // When a user message arrives from gakrcli.ai, inject it into the REPL.
           // Preserves the original UUID so that when the message is forwarded
           // back to CCR, it matches the original — avoiding duplicate messages.
           //
@@ -413,7 +414,7 @@ export function useReplBridge(messages: Message[], setMessages: (action: React.S
                 };
               });
             },
-            onSetPermissionMode(mode) {
+            async onSetPermissionMode(mode) {
               // Policy guards MUST fire before transitionPermissionMode —
               // its internal auto-gate check is a defensive throw (with a
               // setAutoModeActive(true) side-effect BEFORE the throw) rather
@@ -424,41 +425,33 @@ export function useReplBridge(messages: Message[], setMessages: (action: React.S
               // These mirror print.ts handleSetPermissionMode; the bridge
               // can't import the checks directly (bootstrap-isolation), so
               // it relies on this verdict to emit the error response.
-              if (mode === 'bypassPermissions') {
-                if (isBypassPermissionsModeDisabled()) {
-                  return {
-                    ok: false,
-                    error: 'Cannot set permission mode to bypassPermissions because it is disabled by settings or configuration'
-                  };
+              let blockedError: string | undefined;
+              const result = await requestPermissionModeChange({
+                mode,
+                toolPermissionContext: store.getState().toolPermissionContext,
+                allowDangerousModeConfirmation: false,
+                onApply: () => {
+                  setAppState(prev_12 => {
+                    const current = prev_12.toolPermissionContext.mode;
+                    if (current === mode) return prev_12;
+                    return {
+                      ...prev_12,
+                      toolPermissionContext: applyPermissionModeChange(prev_12.toolPermissionContext, mode)
+                    };
+                  });
+                },
+                onBlocked: error => {
+                  blockedError = error;
                 }
-                if (!store.getState().toolPermissionContext.isBypassPermissionsModeAvailable) {
-                  return {
-                    ok: false,
-                    error: 'Cannot set permission mode to bypassPermissions because the session was not launched with --dangerously-skip-permissions'
-                  };
-                }
-              }
-              if (feature('TRANSCRIPT_CLASSIFIER') && mode === 'auto' && !isAutoModeGateEnabled()) {
-                const reason = getAutoModeUnavailableReason();
+              });
+              if (result.status !== 'applied') {
                 return {
                   ok: false,
-                  error: reason ? `Cannot set permission mode to auto: ${getAutoModeUnavailableNotification(reason)}` : 'Cannot set permission mode to auto'
+                  error: blockedError ?? `Cannot set permission mode to ${mode}`
                 };
               }
               // Guards passed — apply via the centralized transition so
               // prePlanMode stashing and auto-mode state sync all fire.
-              setAppState(prev_12 => {
-                const current = prev_12.toolPermissionContext.mode;
-                if (current === mode) return prev_12;
-                const next = transitionPermissionMode(current, mode, prev_12.toolPermissionContext);
-                return {
-                  ...prev_12,
-                  toolPermissionContext: {
-                    ...next,
-                    mode
-                  }
-                };
-              });
               // Recheck queued permission prompts now that mode changed.
               setImmediate(() => {
                 getLeaderToolUseConfirmQueue()?.(currentQueue => {

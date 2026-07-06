@@ -1,8 +1,10 @@
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { roughTokenCountEstimation } from '../../services/tokenEstimation.js'
-import { getGakrcliConfigHomeDir } from '../../utils/envUtils.js'
+import { getGakrCLIConfigHomeDir } from '../../utils/envUtils.js'
 import { getErrnoCode, toError } from '../../utils/errors.js'
+import { getDisplayedEffortLevel } from '../../utils/effort.js'
+import { getMainLoopModel } from '../../utils/model/model.js'
 import { logError } from '../../utils/log.js'
 
 const MAX_SECTION_LENGTH = 2000
@@ -85,7 +87,7 @@ REMEMBER: Use the Edit tool in parallel and stop. Do not continue after the edit
  */
 export async function loadSessionMemoryTemplate(): Promise<string> {
   const templatePath = join(
-    getGakrcliConfigHomeDir(),
+    getGakrCLIConfigHomeDir(),
     'session-memory',
     'config',
     'template.md',
@@ -110,7 +112,7 @@ export async function loadSessionMemoryTemplate(): Promise<string> {
  */
 export async function loadSessionMemoryPrompt(): Promise<string> {
   const promptPath = join(
-    getGakrcliConfigHomeDir(),
+    getGakrCLIConfigHomeDir(),
     'session-memory',
     'config',
     'prompt.md',
@@ -235,9 +237,13 @@ export async function buildSessionMemoryUpdatePrompt(
   const sectionReminders = generateSectionReminders(sectionSizes, totalTokens)
 
   // Substitute variables in the prompt
+  const currentModel = getMainLoopModel()
   const variables = {
     currentNotes,
     notesPath,
+    GAKR_MODEL: currentModel,
+    GAKR_EFFORT: getDisplayedEffortLevel(currentModel, undefined),
+    GAKR_CWD: process.cwd(),
   }
 
   const basePrompt = substituteVariables(promptTemplate, variables)

@@ -1,4 +1,3 @@
-import type { ToolUseBlock } from '@anthropic-ai/sdk/resources';
 import { getRemoteSessionUrl } from '../../constants/product.js';
 import { OUTPUT_FILE_TAG, REMOTE_REVIEW_PROGRESS_TAG, REMOTE_REVIEW_TAG, STATUS_TAG, SUMMARY_TAG, TASK_ID_TAG, TASK_NOTIFICATION_TAG, TASK_TYPE_TAG, TOOL_USE_ID_TAG, ULTRAPLAN_TAG } from '../../constants/xml.js';
 import type { SDKAssistantMessage, SDKMessage } from '../../entrypoints/agentSdkTypes.js';
@@ -9,7 +8,7 @@ import { type BackgroundRemoteSessionPrecondition, checkBackgroundRemoteSessionE
 import { logForDebugging } from '../../utils/debug.js';
 import { logError } from '../../utils/log.js';
 import { enqueuePendingNotification } from '../../utils/messageQueueManager.js';
-import { extractTag, extractTextContent } from '../../utils/messages.js';
+import { extractTag } from '../../utils/messages.js';
 import { emitTaskTerminatedSdk } from '../../utils/sdkEventQueue.js';
 import { deleteRemoteAgentMetadata, listRemoteAgentMetadata, type RemoteAgentMetadata, writeRemoteAgentMetadata } from '../../utils/sessionStorage.js';
 import { jsonStringify } from '../../utils/slowOperations.js';
@@ -68,6 +67,15 @@ export type AutofixPrRemoteTaskMetadata = {
   prNumber: number;
 };
 export type RemoteTaskMetadata = AutofixPrRemoteTaskMetadata;
+type TextContentBlock = {
+  type: 'text';
+  text: string;
+};
+type TodoWriteToolUseBlock = {
+  type: 'tool_use';
+  name: string;
+  input?: unknown;
+};
 
 /**
  * Called on every poll tick for tasks with a matching remoteTaskType. Return a
@@ -83,6 +91,55 @@ const completionCheckers = new Map<RemoteTaskType, RemoteTaskCompletionChecker>(
  */
 export function registerCompletionChecker(remoteTaskType: RemoteTaskType, checker: RemoteTaskCompletionChecker): void {
   completionCheckers.set(remoteTaskType, checker);
+}
+
+export type RemoteTaskCompletionHook = (taskId: string, remoteTaskMetadata: RemoteTaskMetadata | undefined) => void;
+
+const completionHooks = new Map<RemoteTaskType, RemoteTaskCompletionHook>();
+
+export function registerCompletionHook(remoteTaskType: RemoteTaskType, hook: RemoteTaskCompletionHook): void {
+  completionHooks.set(remoteTaskType, hook);
+}
+
+function runCompletionHook(taskId: string, task: RemoteAgentTaskState): void {
+  const hook = completionHooks.get(task.remoteTaskType);
+  if (hook) {
+    try {
+      hook(taskId, task.remoteTaskMetadata);
+    } catch (e) {
+      logForDebugging(`completionHook failed for ${task.remoteTaskType}: ${String(e)}`);
+    }
+  }
+}
+
+export type RemoteTaskContentExtractor = (log: SDKMessage[]) => string | null;
+
+const contentExtractors = new Map<RemoteTaskType, RemoteTaskContentExtractor>();
+
+export function registerContentExtractor(remoteTaskType: RemoteTaskType, extractor: RemoteTaskContentExtractor): void {
+  contentExtractors.set(remoteTaskType, extractor);
+}
+
+function tryExtractRichContent(task: RemoteAgentTaskState, log: SDKMessage[]): string | null {
+  const extractor = contentExtractors.get(task.remoteTaskType);
+  if (!extractor) return null;
+  return extractor(log);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object';
+}
+
+function isTextContentBlock(block: unknown): block is TextContentBlock {
+  return isRecord(block) && block.type === 'text' && typeof block.text === 'string';
+}
+
+function isTodoWriteToolUseBlock(block: unknown): block is TodoWriteToolUseBlock {
+  return isRecord(block) && block.type === 'tool_use' && block.name === TodoWriteTool.name;
+}
+
+function extractSdkTextContent(content: unknown[], separator = ''): string {
+  return content.filter(isTextContentBlock).map(block => block.text).join(separator);
 }
 
 /**
@@ -146,9 +203,9 @@ export async function checkRemoteAgentEligibility({
 export function formatPreconditionError(error: BackgroundRemoteSessionPrecondition): string {
   switch (error.type) {
     case 'not_logged_in':
-      return 'Please run /login and sign in with your Gakr.ai account (not Console).';
+      return 'Please run /login and sign in with your GakrCLI.ai account (not Console).';
     case 'no_remote_environment':
-      return 'No cloud environment available. Set one up at https://gakr.ai/code/onboarding?magic=env-setup';
+      return 'No cloud environment available. Set one up at https://gakrcli.ai/code/onboarding?magic=env-setup';
     case 'not_in_git_repo':
       return 'Background tasks require a git repository. Initialize git or run from a git repository.';
     case 'no_git_remote':
@@ -176,6 +233,34 @@ function enqueueRemoteNotification(taskId: string, title: string, status: 'compl
 <${STATUS_TAG}>${status}</${STATUS_TAG}>
 <${SUMMARY_TAG}>Remote task "${title}" ${statusText}</${SUMMARY_TAG}>
 </${TASK_NOTIFICATION_TAG}>`;
+  enqueuePendingNotification({
+    value: message,
+    mode: 'task-notification'
+  });
+}
+
+function enqueueRichRemoteNotification(
+  taskId: string,
+  title: string,
+  status: 'completed' | 'failed' | 'killed',
+  richContent: string,
+  setAppState: SetAppState,
+  toolUseId?: string,
+): void {
+  if (!markTaskNotified(taskId, setAppState)) return;
+  const statusText = status === 'completed' ? 'completed successfully' : status === 'failed' ? 'failed' : 'was stopped';
+  const toolUseIdLine = toolUseId ? `\n<${TOOL_USE_ID_TAG}>${toolUseId}</${TOOL_USE_ID_TAG}>` : '';
+  const outputPath = getTaskOutputPath(taskId);
+  const message = `<${TASK_NOTIFICATION_TAG}>
+<${TASK_ID_TAG}>${taskId}</${TASK_ID_TAG}>${toolUseIdLine}
+<${TASK_TYPE_TAG}>remote_agent</${TASK_TYPE_TAG}>
+<${OUTPUT_FILE_TAG}>${outputPath}</${OUTPUT_FILE_TAG}>
+<${STATUS_TAG}>${status}</${STATUS_TAG}>
+<${SUMMARY_TAG}>Remote task "${title}" ${statusText}</${SUMMARY_TAG}>
+</${TASK_NOTIFICATION_TAG}>
+The remote agent produced the following structured outcome. Summarize the key changes for the user:
+
+${richContent}`;
   enqueuePendingNotification({
     value: message,
     mode: 'task-notification'
@@ -210,7 +295,7 @@ export function extractPlanFromLog(log: SDKMessage[]): string | null {
   for (let i = log.length - 1; i >= 0; i--) {
     const msg = log[i];
     if (msg?.type !== 'assistant') continue;
-    const fullText = extractTextContent(msg.message.content, '\n');
+    const fullText = extractSdkTextContent(msg.message.content, '\n');
     const plan = extractTag(fullText, ULTRAPLAN_TAG);
     if (plan?.trim()) return plan.trim();
   }
@@ -265,7 +350,7 @@ function extractReviewFromLog(log: SDKMessage[]): string | null {
   for (let i = log.length - 1; i >= 0; i--) {
     const msg = log[i];
     if (msg?.type !== 'assistant') continue;
-    const fullText = extractTextContent(msg.message.content, '\n');
+    const fullText = extractSdkTextContent(msg.message.content, '\n');
     const tagged = extractTag(fullText, REMOTE_REVIEW_TAG);
     if (tagged?.trim()) return tagged.trim();
   }
@@ -278,7 +363,7 @@ function extractReviewFromLog(log: SDKMessage[]): string | null {
   if (hookTagged?.trim()) return hookTagged.trim();
 
   // Fallback: concatenate all assistant text in chronological order.
-  const allText = log.filter((msg): msg is SDKAssistantMessage => msg.type === 'assistant').map(msg => extractTextContent(msg.message.content, '\n')).join('\n').trim();
+  const allText = log.filter((msg): msg is SDKAssistantMessage => msg.type === 'assistant').map(msg => extractSdkTextContent(msg.message.content, '\n')).join('\n').trim();
   return allText || null;
 }
 
@@ -306,7 +391,7 @@ function extractReviewTagFromLog(log: SDKMessage[]): string | null {
   for (let i = log.length - 1; i >= 0; i--) {
     const msg = log[i];
     if (msg?.type !== 'assistant') continue;
-    const fullText = extractTextContent(msg.message.content, '\n');
+    const fullText = extractSdkTextContent(msg.message.content, '\n');
     const tagged = extractTag(fullText, REMOTE_REVIEW_TAG);
     if (tagged?.trim()) return tagged.trim();
   }
@@ -322,7 +407,7 @@ function extractReviewTagFromLog(log: SDKMessage[]): string | null {
  * Enqueue a remote-review completion notification. Injects the review text
  * directly into the message queue so the local model receives it on the next
  * turn — no file indirection, no mode change. Session is kept alive so the
- * gakr.ai URL stays a durable record the user can revisit; TTL handles cleanup.
+ * gakrcli.ai URL stays a durable record the user can revisit; TTL handles cleanup.
  */
 function enqueueRemoteReviewNotification(taskId: string, reviewContent: string, setAppState: SetAppState): void {
   if (!markTaskNotified(taskId, setAppState)) return;
@@ -363,11 +448,11 @@ Remote review did not produce output (${reason}). Tell the user to retry /ultrar
  * Extract todo list from SDK messages (finds last TodoWrite tool use).
  */
 function extractTodoListFromLog(log: SDKMessage[]): TodoList {
-  const todoListMessage = log.findLast((msg): msg is SDKAssistantMessage => msg.type === 'assistant' && msg.message.content.some(block => block.type === 'tool_use' && block.name === TodoWriteTool.name));
+  const todoListMessage = log.findLast((msg): msg is SDKAssistantMessage => msg.type === 'assistant' && msg.message.content.some(isTodoWriteToolUseBlock));
   if (!todoListMessage) {
     return [];
   }
-  const input = todoListMessage.message.content.find((block): block is ToolUseBlock => block.type === 'tool_use' && block.name === TodoWriteTool.name)?.input;
+  const input = todoListMessage.message.content.find(isTodoWriteToolUseBlock)?.input;
   if (!input) {
     return [];
   }
@@ -556,7 +641,7 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
       const task = appState.tasks?.[taskId] as RemoteAgentTaskState | undefined;
       if (!task || task.status !== 'running') {
         // Task was killed externally (TaskStopTool) or already terminal.
-        // Session left alive so the gakr.ai URL stays valid — the run_hunt.sh
+        // Session left alive so the gakrcli.ai URL stays valid — the run_hunt.sh
         // post_stage() calls land as assistant events there, and the user may
         // want to revisit them after closing the terminal. TTL reaps it.
         return;
@@ -568,7 +653,7 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
         accumulatedLog = [...accumulatedLog, ...response.newEvents];
         const deltaText = response.newEvents.map(msg => {
           if (msg.type === 'assistant') {
-            return msg.message.content.filter(block => block.type === 'text').map(block => 'text' in block ? block.text : '').join('\n');
+            return extractSdkTextContent(msg.message.content, '\n');
           }
           return jsonStringify(msg);
         }).join('\n');
@@ -582,9 +667,15 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
           status: 'completed',
           endTime: Date.now()
         } : t);
-        enqueueRemoteNotification(taskId, task.title, 'completed', context.setAppState, task.toolUseId);
+        const richContent = tryExtractRichContent(task, accumulatedLog);
+        if (richContent) {
+          enqueueRichRemoteNotification(taskId, task.title, 'completed', richContent, context.setAppState, task.toolUseId);
+        } else {
+          enqueueRemoteNotification(taskId, task.title, 'completed', context.setAppState, task.toolUseId);
+        }
         void evictTaskOutput(taskId);
         void removeRemoteAgentMetadata(taskId);
+        runCompletionHook(taskId, task);
         return;
       }
       const checker = completionCheckers.get(task.remoteTaskType);
@@ -596,9 +687,15 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
             status: 'completed',
             endTime: Date.now()
           } : t);
-          enqueueRemoteNotification(taskId, completionResult, 'completed', context.setAppState, task.toolUseId);
+          const richContent = tryExtractRichContent(task, accumulatedLog);
+          if (richContent) {
+            enqueueRichRemoteNotification(taskId, completionResult, 'completed', richContent, context.setAppState, task.toolUseId);
+          } else {
+            enqueueRemoteNotification(taskId, completionResult, 'completed', context.setAppState, task.toolUseId);
+          }
           void evictTaskOutput(taskId);
           void removeRemoteAgentMetadata(taskId);
+          runCompletionHook(taskId, task);
           return;
         }
       }
@@ -727,7 +824,7 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
         // message queue. No mode change, no file indirection — the local model
         // just sees the review appear as a task-notification on its next turn.
         // Session kept alive — run_hunt.sh's post_stage() has already written
-        // the formatted findings as an assistant event, so the gakr.ai URL
+        // the formatted findings as an assistant event, so the gakrcli.ai URL
         // stays a durable record the user can revisit. TTL handles cleanup.
         if (task.isRemoteReview) {
           // cachedReviewContent hit the tag in the delta scan. Full-log scan
@@ -752,9 +849,15 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
           void removeRemoteAgentMetadata(taskId);
           return; // Stop polling
         }
-        enqueueRemoteNotification(taskId, task.title, finalStatus, context.setAppState, task.toolUseId);
+        const richContent = tryExtractRichContent(task, accumulatedLog);
+        if (richContent) {
+          enqueueRichRemoteNotification(taskId, task.title, finalStatus, richContent, context.setAppState, task.toolUseId);
+        } else {
+          enqueueRemoteNotification(taskId, task.title, finalStatus, context.setAppState, task.toolUseId);
+        }
         void evictTaskOutput(taskId);
         void removeRemoteAgentMetadata(taskId);
+        runCompletionHook(taskId, task);
         return; // Stop polling
       }
     } catch (error) {
@@ -799,7 +902,7 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
 }
 
 /**
- * RemoteAgentTask - Handles remote Gakr.ai session execution.
+ * RemoteAgentTask - Handles remote GakrCLI.ai session execution.
  *
  * Replaces the BackgroundRemoteSession implementation from:
  * - src/utils/background/remote/remoteSession.ts

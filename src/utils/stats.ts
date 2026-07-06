@@ -8,7 +8,8 @@ import { errorMessage, isENOENT } from './errors.js'
 import { getFsImplementation } from './fsOperations.js'
 import { readJSONLFile } from './json.js'
 import { SYNTHETIC_MODEL } from './messages.js'
-import { getProjectsDir, isTranscriptMessage } from './sessionStorage.js'
+import { getProjectsDir } from './envUtils.js'
+import { isTranscriptMessage } from './sessionStorage.js'
 import { SHELL_TOOL_NAMES } from './shell/shellToolUtils.js'
 import { jsonParse } from './slowOperations.js'
 import {
@@ -50,7 +51,7 @@ export type SessionStats = {
   timestamp: string
 }
 
-export type gakrcliCodeStats = {
+export type GakrCLICodeStats = {
   // Activity overview
   totalSessions: number
   totalMessages: number
@@ -81,7 +82,7 @@ export type gakrcliCodeStats = {
   // Speculation time saved
   totalSpeculationTimeSavedMs: number
 
-  // Shot stats (ant-only, gated by SHOT_STATS feature flag)
+  // Shot stats (internal-only, gated by SHOT_STATS feature flag)
   shotDistribution?: { [shotCount: number]: number }
   oneShotRate?: number
 }
@@ -208,7 +209,7 @@ async function processSessionFiles(
       // their token usage counted, but not as separate sessions.
       const isSubagentFile = sessionFile.includes(`${sep}subagents${sep}`)
 
-      // Extract shot count from PR attribution in gh pr create calls (ant-only)
+      // Extract shot count from PR attribution in gh pr create calls (internal-only)
       // This must run before the sidechain filter since subagent transcripts
       // mark all messages as sidechain
       if (feature('SHOT_STATS') && shotDistributionMap) {
@@ -435,12 +436,12 @@ async function getAllSessionFiles(): Promise<string[]> {
 }
 
 /**
- * Convert a PersistedStatsCache to gakrcliCodeStats by computing derived fields.
+ * Convert a PersistedStatsCache to GakrCLICodeStats by computing derived fields.
  */
 function cacheToStats(
   cache: PersistedStatsCache,
   todayStats: ProcessedStats | null,
-): gakrcliCodeStats {
+): GakrCLICodeStats {
   // Merge cache with today's stats
   const dailyActivityMap = new Map<string, DailyActivity>()
   for (const day of cache.dailyActivity) {
@@ -590,7 +591,7 @@ function cacheToStats(
     cache.totalSpeculationTimeSavedMs +
     (todayStats?.totalSpeculationTimeSavedMs || 0)
 
-  const result: gakrcliCodeStats = {
+  const result: GakrCLICodeStats = {
     totalSessions,
     totalMessages,
     totalDays,
@@ -634,10 +635,10 @@ function cacheToStats(
 }
 
 /**
- * Aggregates stats from all GakrCLI sessions across all projects.
+ * Aggregates stats from all GakrCLI Code sessions across all projects.
  * Uses a disk cache to avoid reprocessing historical data.
  */
-export async function aggregategakrcliCodeStats(): Promise<gakrcliCodeStats> {
+export async function aggregateGakrCLICodeStats(): Promise<GakrCLICodeStats> {
   const allSessionFiles = await getAllSessionFiles()
 
   if (allSessionFiles.length === 0) {
@@ -715,11 +716,11 @@ export type StatsDateRange = '7d' | '30d' | 'all'
  * Aggregates stats for a specific date range.
  * For 'all', uses the cached aggregation. For other ranges, processes files directly.
  */
-export async function aggregategakrcliCodeStatsForRange(
+export async function aggregateGakrCLICodeStatsForRange(
   range: StatsDateRange,
-): Promise<gakrcliCodeStats> {
+): Promise<GakrCLICodeStats> {
   if (range === 'all') {
-    return aggregategakrcliCodeStats()
+    return aggregateGakrCLICodeStats()
   }
 
   const allSessionFiles = await getAllSessionFiles()
@@ -739,16 +740,16 @@ export async function aggregategakrcliCodeStatsForRange(
     fromDate: fromDateStr,
   })
 
-  return processedStatsTogakrcliCodeStats(stats)
+  return processedStatsToGakrCLICodeStats(stats)
 }
 
 /**
- * Convert ProcessedStats to gakrcliCodeStats.
+ * Convert ProcessedStats to GakrCLICodeStats.
  * Used for filtered date ranges that bypass the cache.
  */
-function processedStatsTogakrcliCodeStats(
+function processedStatsToGakrCLICodeStats(
   stats: ProcessedStats,
-): gakrcliCodeStats {
+): GakrCLICodeStats {
   const dailyActivitySorted = stats.dailyActivity
     .slice()
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -809,7 +810,7 @@ function processedStatsTogakrcliCodeStats(
         ) + 1
       : 0
 
-  const result: gakrcliCodeStats = {
+  const result: GakrCLICodeStats = {
     totalSessions: stats.sessionStats.length,
     totalMessages: stats.totalMessages,
     totalDays,
@@ -1035,7 +1036,7 @@ export async function readSessionStartDate(
   }
 }
 
-function getEmptyStats(): gakrcliCodeStats {
+function getEmptyStats(): GakrCLICodeStats {
   return {
     totalSessions: 0,
     totalMessages: 0,

@@ -195,7 +195,7 @@ export const SOURCES = [
 ] as const satisfies readonly EditableSettingSource[]
 
 /**
- * The JSON Schema URL for GakrCLI settings
+ * The JSON Schema URL for GakrCLI Code settings
  * You can edit the contents at https://github.com/SchemaStore/schemastore/blob/master/src/schemas/json/gakrcli-code-settings.json
  */
 export const GAKR_CODE_SETTINGS_SCHEMA_URL =

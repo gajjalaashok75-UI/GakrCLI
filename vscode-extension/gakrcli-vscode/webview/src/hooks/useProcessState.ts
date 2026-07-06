@@ -26,6 +26,7 @@ export function useProcessState() {
       if (!data || typeof data !== 'object') return;
 
       if (data.type === 'process_state') {
+        console.log(`[ProcessState] received → ${data.state} (from: ${data.from || 'unknown'})`);
         setStatus(data.state as ProcessStatus);
         // Clear auth error when process recovers
         if (data.state === 'running') {

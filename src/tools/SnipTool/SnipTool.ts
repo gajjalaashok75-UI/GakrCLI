@@ -1,0 +1,79 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
+import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
+import { z } from 'zod/v4'
+import { buildTool, type ToolDef } from '../../Tool.js'
+import { lazySchema } from '../../utils/lazySchema.js'
+import { SNIP_TOOL_NAME } from './prompt.js'
+
+const inputSchema = lazySchema(() =>
+  z.object({
+    message_ids: z
+      .array(z.string())
+      .describe(
+        'Short internal snip message IDs to remove.',
+      ),
+  }),
+)
+type InputSchema = ReturnType<typeof inputSchema>
+
+type Output = { sniped: number }
+
+export const SnipTool = buildTool({
+  name: SNIP_TOOL_NAME,
+  isEnabled() {
+    return true
+  },
+  isConcurrencySafe() {
+    return false
+  },
+  isReadOnly() {
+    return true
+  },
+  async description() {
+    return `Snip messages from your conversation history to free up context window space. Snipped messages are replaced with a compact summary so you retain awareness of what happened without the full content.`
+  },
+  async prompt() {
+    return `Snip messages from your conversation history to free up context window space. Snipped messages are replaced with a compact summary so you retain awareness of what happened without the full content.
+
+Use this when:
+- Your context is getting full and you need to make room
+- Earlier messages contain large tool outputs you no longer need in full
+- You want to compact a long exploration sequence into a summary
+
+Guidelines:
+- Only snip messages you're confident you won't need verbatim again
+- The summary replacement preserves key facts (file paths, decisions, errors found)
+- You cannot un-snip — the original content is gone from context`
+  },
+  get inputSchema(): InputSchema {
+    return inputSchema()
+  },
+  async call(input, context) {
+    const { markForSnip } =
+      require('../../services/compact/snipCompact.js') as typeof import('../../services/compact/snipCompact.js')
+    // Resolve short IDs → UUIDs against THIS conversation's messages so the
+    // pending removal is scoped to this session (see markForSnip). Report the
+    // count that actually resolved, not the raw request length: stale or
+    // unresolvable IDs are never queued, so echoing them would overstate the snip.
+    const queued = markForSnip(input.message_ids, context.messages)
+    return { data: { sniped: queued.length } }
+  },
+  renderToolUseMessage() {
+    return null
+  },
+  userFacingName: () => 'Snip',
+  maxResultSizeChars: 1024,
+  mapToolResultToToolResultBlockParam(
+    content: Output,
+    toolUseID: string,
+  ): ToolResultBlockParam {
+    return {
+      type: 'tool_result',
+      tool_use_id: toolUseID,
+      content:
+        `Queued ${content.sniped} message(s) for snipping before the next model call. ` +
+        `Some may be kept if removing them would split a tool call from its result; ` +
+        `when pruning old tool output, queue the whole related tool interaction.`,
+    }
+  },
+} satisfies ToolDef<InputSchema, Output>)

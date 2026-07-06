@@ -89,3 +89,7 @@ tmp/
 atomic_chat_provider.py
 ollama_provider.py
 smart_router.py
+
+# Local test checker agent and skill
+assets/agents/test-checker.md
+assets/skills/test-checker/

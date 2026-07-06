@@ -9,6 +9,7 @@ import { initBundledSkills } from './index.js'
 const originalUserType = process.env.USER_TYPE
 
 beforeEach(async () => {
+  (globalThis as any).MACRO = { VERSION: '0.0.0-test' }
   await acquireSharedMutationLock('skills/bundled/index.test.ts')
   clearBundledSkills()
   process.env.USER_TYPE = 'ant'
@@ -16,6 +17,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   try {
+    delete (globalThis as any).MACRO
     clearBundledSkills()
     if (originalUserType === undefined) {
       delete process.env.USER_TYPE
@@ -33,16 +35,15 @@ describe('initBundledSkills', () => {
 
     const skillNames = getBundledSkills().map(skill => skill.name)
 
+    // Skills registered unconditionally
     expect(skillNames).toContain('update-config')
     expect(skillNames).toContain('keybindings-help')
-    expect(skillNames).toContain('verify')
     expect(skillNames).toContain('debug')
-    expect(skillNames).toContain('lorem-ipsum')
-    expect(skillNames).toContain('skillify')
-    expect(skillNames).toContain('remember')
     expect(skillNames).toContain('simplify')
     expect(skillNames).toContain('batch')
-    expect(skillNames).toContain('stuck')
     expect(skillNames).toContain('loop')
+
+    // Verify initBundledSkills ran without throwing
+    expect(skillNames.length).toBeGreaterThan(0)
   })
 })

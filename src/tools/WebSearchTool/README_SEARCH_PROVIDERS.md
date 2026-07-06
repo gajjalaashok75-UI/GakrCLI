@@ -31,7 +31,7 @@ export TAVILY_API_KEY=tvly-your-key
 # Exa (neural search, semantic queries)
 export EXA_API_KEY=your-exa-key
 
-# Brave (traditional web search, good coverage)
+# Brave (independent index, good free tier)
 export BRAVE_API_KEY=your-brave-key
 
 # Bing
@@ -294,18 +294,18 @@ GET https://search.example.com/search?q=search+terms
 
 ### Google Custom Search (Built-in Preset)
 
+> ⚠️ **Sunset 2027-01-01.** Google has announced the Custom Search JSON API
+> will be discontinued and is closed to new customers. Use Brave/Tavily/Exa
+> for new setups.
+
 ```bash
 export WEB_PROVIDER=google
 export WEB_KEY=your-google-api-key
 export GOOGLE_CSE_ID=your-programmable-search-engine-id
 ```
 
-`GOOGLE_CSE_ID` is the `cx` value from your Programmable Search Engine. Both
-`WEB_KEY` and `GOOGLE_CSE_ID` are required.
-
-> **Sunset notice:** Google has announced the Custom Search JSON API will be
-> discontinued on 2027-01-01 and is closed to new customers. Prefer Brave,
-> Tavily, or Exa for new setups.
+`GOOGLE_CSE_ID` is the `cx` value from your Programmable Search Engine — both
+the API key and the engine ID are required.
 
 **Request:**
 ```
@@ -328,6 +328,8 @@ GET https://www.googleapis.com/customsearch/v1?q=search+terms&key=your-google-ap
 
 ### Brave (First-Class Adapter)
 
+The recommended way to use Brave — auto-detected, joins the auto fallback chain.
+
 ```bash
 export BRAVE_API_KEY=your-brave-key
 ```
@@ -338,17 +340,14 @@ GET https://api.search.brave.com/res/v1/web/search?q=search+terms&count=15
 X-Subscription-Token: your-brave-key
 ```
 
-### Brave (Built-in Preset)
+### Brave (Built-in Preset, alternative)
+
+For users who prefer the generic preset path. Functionally equivalent to the
+adapter above; either works.
 
 ```bash
 export WEB_PROVIDER=brave
 export WEB_KEY=your-brave-key
-```
-
-**Request:**
-```
-GET https://api.search.brave.com/res/v1/web/search?q=search+terms
-X-Subscription-Token: your-brave-key
 ```
 
 **Response:**
@@ -535,4 +534,4 @@ export const myProvider: SearchProvider = {
 }
 ```
 
-2. Register in `providers/index.ts` — import it and add it to `API_KEY_PROVIDERS`. DuckDuckGo is appended automatically as the no-key fallback in auto mode.
+2. Register in `providers/index.ts` — add import and push to `ALL_PROVIDERS`.

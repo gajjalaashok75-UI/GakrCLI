@@ -14,6 +14,12 @@ import { execFileNoThrow } from '../../utils/execFileNoThrow.js'
 import { logError } from '../../utils/log.js'
 import type { Workflow } from './types.js'
 
+type WorkflowFile = {
+  path: string
+  content: string
+  message: string
+}
+
 async function createWorkflowFile(
   repoName: string,
   branchName: string,
@@ -101,7 +107,7 @@ async function createWorkflowFile(
       '\n\nNeed help? Common issues:\n' +
       '· Permission denied → Run: gh auth refresh -h github.com -s repo,workflow\n' +
       '· Not authorized → Ensure you have admin access to the repository\n' +
-      '· For manual setup → Visit: https://github.com/anthropics/gakrcli-code-action'
+      '· For manual setup → Visit: https://github.com/gajjalaashok75-UI/gakrcli-action'
 
     throw new Error(
       `Failed to create workflow file ${workflowPath}: ${createFileResult.stderr}${helpText}`,
@@ -219,7 +225,7 @@ export async function setupGitHubActions(
 
       updateProgress()
       // Create selected workflow files
-      const workflows = []
+      const workflows: WorkflowFile[] = []
 
       if (selectedWorkflows.includes('gakrcli')) {
         workflows.push({
@@ -274,7 +280,7 @@ export async function setupGitHubActions(
           '\n\nNeed help? Common issues:\n' +
           '· Permission denied → Run: gh auth refresh -h github.com -s repo\n' +
           '· Not authorized → Ensure you have admin access to the repository\n' +
-          '· For manual setup → Visit: https://github.com/anthropics/gakrcli-code-action'
+          '· For manual setup → Visit: https://github.com/gajjalaashok75-UI/gakrcli-action'
 
         throw new Error(
           `Failed to set API key secret: ${setSecretResult.stderr || 'Unknown error'}${helpText}`,

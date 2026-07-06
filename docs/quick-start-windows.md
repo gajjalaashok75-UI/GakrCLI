@@ -1,4 +1,4 @@
-# GakrCLI Quick Start for Windows (v0.5.6)
+# GakrCLI Quick Start for Windows
 
 This guide uses Windows PowerShell.
 
@@ -15,10 +15,10 @@ node --version
 npm --version
 ```
 
-## 2. Install Gakr
+## 2. Install GakrCLI
 
 ```powershell
-npm install -g @gakr-gakr/gakrcli
+npm install -g @gakr-gakr/gakrcli@latest
 ```
 
 ## 3. Pick One Provider
@@ -30,7 +30,7 @@ Replace `sk-your-key-here` with your real key.
 ```powershell
 $env:GAKR_CODE_USE_OPENAI="1"
 $env:OPENAI_API_KEY="sk-your-key-here"
-$env:OPENAI_MODEL="gpt-4o"  # or gpt-4.1
+$env:OPENAI_MODEL="gpt-4o"
 
 gakrcli
 ```
@@ -41,10 +41,12 @@ gakrcli
 $env:GAKR_CODE_USE_OPENAI="1"
 $env:OPENAI_API_KEY="sk-your-key-here"
 $env:OPENAI_BASE_URL="https://api.deepseek.com/v1"
-$env:OPENAI_MODEL="deepseek-chat"
+$env:OPENAI_MODEL="deepseek-v4-flash"
 
 gakrcli
 ```
+
+Use `deepseek-v4-pro` when you want the stronger model. `deepseek-chat` and `deepseek-reasoner` still work as DeepSeek's legacy API aliases.
 
 ### Option C: Ollama
 
@@ -55,11 +57,11 @@ Install Ollama first from:
 Then run:
 
 ```powershell
-ollama pull llama3.2:3b  # or llama3.2:7b, qwen2.5-coder:7b
+ollama pull llama3.1:8b
 
 $env:GAKR_CODE_USE_OPENAI="1"
 $env:OPENAI_BASE_URL="http://localhost:11434/v1"
-$env:OPENAI_MODEL="llama3.2:3b"
+$env:OPENAI_MODEL="llama3.1:8b"
 
 gakrcli
 ```
@@ -101,6 +103,23 @@ Close PowerShell, open a new one, and try again:
 gakrcli
 ```
 
+If PowerShell still says `gakrcli` is not recognized, npm's global bin
+folder may be missing from your user `Path`. Add it, then open a new
+PowerShell window:
+
+```powershell
+$npmPrefix = npm config get prefix
+$currentUserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+
+if (($currentUserPath -split ';') -notcontains $npmPrefix) {
+    [Environment]::SetEnvironmentVariable(
+        "Path",
+        "$currentUserPath;$npmPrefix",
+        "User"
+    )
+}
+```
+
 ## 5. If Your Provider Fails
 
 Check the basics:
@@ -124,21 +143,25 @@ Check the basics:
 - make sure a model is loaded in LM Studio
 - make sure the model name matches what you set in `OPENAI_MODEL`
 
-## 6. Updating Gakr
+## 6. Updating GakrCLI
 
 ```powershell
 npm install -g @gakr-gakr/gakrcli@latest
 ```
 
-## 7. Uninstalling Gakr
+## 7. Uninstalling GakrCLI
 
 ```powershell
 npm uninstall -g @gakr-gakr/gakrcli
 ```
 
+
 ## Need Advanced Setup?
 
-Use:
+For advanced provider setup, custom endpoints, environment variables, and enterprise launch workflows, see the advanced setup guide:
 
-- [Advanced Setup](advanced-setup.md)
-- [Provider Reference](PROVIDERS.md)
+- [Advanced setup](advanced-setup.md)
+
+For Windows helper aliases and launcher shortcuts such as `oc`, `oc-init`, `oc-local`, `oc-provider`, and `oc-check`, see:
+
+- [Windows aliases and launchers](windows-aliases-and-launchers.md)
