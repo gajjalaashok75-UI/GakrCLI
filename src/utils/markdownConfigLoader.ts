@@ -38,7 +38,7 @@ export const GAKR_CONFIG_DIRECTORIES = [
 
 export type GakrCLIConfigDirectory = (typeof GAKR_CONFIG_DIRECTORIES)[number]
 
-const PROJECT_CONFIG_DIR_NAMES = ['.gakrcli', '.gakrcli'] as const
+export const PROJECT_CONFIG_DIR_NAMES = ['.gakrcli', '.gakrcli'] as const
 
 // Concurrency cap for parallel readFile + parseFrontmatter when loading
 // commands/agents/skills/etc. With unbounded Promise.all, a directory holding

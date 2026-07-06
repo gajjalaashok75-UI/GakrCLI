@@ -4246,12 +4246,8 @@ async function run(): Promise<CommanderCommand> {
     });
   }
 
+
   // Report command - generate deterministic JSON task report
-  program
-    .command('report')
-    .description(
-      'Generate a deterministic JSON task report for a session',
-    )
   registerTaskReportCommand(program);
 
   // Doctor command - check installation health
