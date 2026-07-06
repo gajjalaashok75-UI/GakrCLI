@@ -1,4 +1,5 @@
 import { APIUserAbortError } from '@anthropic-ai/sdk'
+import type { AbortReason } from './abortReasons.js'
 
 export class GakrCLIError extends Error {
   constructor(message: string) {

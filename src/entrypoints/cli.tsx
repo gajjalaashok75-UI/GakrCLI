@@ -134,6 +134,104 @@ function isBgSessionsEnabled(options: CliEntrypointOptions): boolean {
   return false
 }
 
+const SKILLS_LEADING_BOOLEAN_FLAGS = new Set([
+  '--preview',
+  '--print',
+  '--verbose',
+  '-v',
+  '--model',
+  '-m',
+])
+
+const SKILLS_LEADING_OPTIONAL_VALUE_FLAGS = new Set([
+  '--continue',
+  '--from-pr',
+  '--print',
+  '-c',
+  '-p',
+  '-r',
+  '--resume',
+])
+
+const SKILLS_LEADING_MULTI_VALUE_FLAGS = new Set([
+  '--add-dir',
+  '--allowedTools',
+  '--allowed-tools',
+  '--betas',
+  '--disallowedTools',
+  '--disallowed-tools',
+  '--file',
+  '--mcp-config',
+  '--plugin-dir',
+  '--provider-env-file',
+  '--tools',
+])
+
+type SkillsCliParseResult = {
+  additionalDirectories: string[]
+  args: string[]
+}
+
+function getSkillsCliArgs(args: string[]): SkillsCliParseResult | undefined {
+  const additionalDirectories: string[] = []
+  let sawPromptModeFlag = false
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]
+    if (arg === 'skills') {
+      if (sawPromptModeFlag) {
+        return undefined
+      }
+      return { additionalDirectories, args: args.slice(index) }
+    }
+    if (SKILLS_LEADING_BOOLEAN_FLAGS.has(arg)) {
+      continue
+    }
+    if (SKILLS_LEADING_MULTI_VALUE_FLAGS.has(arg)) {
+      let consumed = false
+      while (args[index + 1] && !args[index + 1]!.startsWith('-')) {
+        index += 1
+        const value = args[index]
+        if (value === 'skills') {
+          if (sawPromptModeFlag) {
+            return undefined
+          }
+          return {
+            additionalDirectories,
+            args: args.slice(index),
+          }
+        }
+        if (value && arg === '--add-dir') {
+          additionalDirectories.push(value)
+        }
+        consumed = true
+      }
+      if (!consumed) {
+        return undefined
+      }
+      continue
+    }
+    const multiValueEqualsFlag = Array.from(SKILLS_LEADING_MULTI_VALUE_FLAGS)
+      .find(flag => arg?.startsWith(`${flag}=`))
+    if (multiValueEqualsFlag) {
+      continue
+    }
+    if (SKILLS_LEADING_OPTIONAL_VALUE_FLAGS.has(arg)) {
+      index += 1
+      const value = args[index]
+      if (value === 'skills') {
+        return undefined
+      }
+      if (value && !value.startsWith('-')) {
+        sawPromptModeFlag = true
+      }
+      continue
+    }
+    return undefined
+  }
+  return undefined
+}
+
 export async function main(
   args: string[] = process.argv.slice(2),
   options: CliEntrypointOptions = {},
@@ -252,6 +350,20 @@ export async function main(
     },
   })
   reapplyExplicitProviderInputs()
+
+  // Local skills management must stay available even when provider startup
+  // configuration is broken, so users can inspect/fix skills from scripts.
+  const skillsCliArgs = getSkillsCliArgs(args)
+  if (skillsCliArgs) {
+    const { setAdditionalDirectoriesForGakrCLIMd } = await import(
+      '../bootstrap/state.js'
+    )
+    setAdditionalDirectoriesForGakrCLIMd(skillsCliArgs.additionalDirectories)
+    const { runSkillsCli } = await import('../cli/handlers/skillsCli.js')
+    process.argv = [process.argv[0]!, process.argv[1]!, ...skillsCliArgs.args]
+    await runSkillsCli(skillsCliArgs.args)
+    return
+  }
 
   // Pane/window teammates are launched as fresh CLI processes. If the parent
   // selected a configured agentModels key, apply that route before provider

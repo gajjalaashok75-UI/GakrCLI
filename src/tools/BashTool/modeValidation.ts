@@ -5,6 +5,7 @@ import { tryParseShellCommand } from '../../utils/bash/shellQuote.js'
 import { getCwd } from '../../utils/cwd.js'
 import type { PermissionResult } from '../../utils/permissions/PermissionResult.js'
 import type { BashTool } from './BashTool.js'
+import type { LegacyShellParseAnalysis } from './bashCommandAnalysis.js'
 import { checkReadOnlyConstraints } from './readOnlyValidation.js'
 import { checkDangerousRemovalPaths } from './pathValidation.js'
 

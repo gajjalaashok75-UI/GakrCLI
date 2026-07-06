@@ -16,6 +16,7 @@ import type { AgentId } from '../../types/ids.js';
 import type { AssistantMessage } from '../../types/message.js';
 import { parseForSecurity } from '../../utils/bash/ast.js';
 import { splitCommand_DEPRECATED, splitCommandWithOperators } from '../../utils/bash/commands.js';
+import { analyzeBashCommand, parseLegacyShellCommandForAnalysis, type BashCommandAnalysis } from './bashCommandAnalysis.js';
 import { extractGakrCLICodeHints } from '../../utils/gakrcliCodeHints.js';
 import { detectCodeIndexingFromCommand } from '../../utils/codeIndexing.js';
 import { isEnvTruthy } from '../../utils/envUtils.js';

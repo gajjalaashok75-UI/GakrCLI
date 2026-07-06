@@ -316,6 +316,7 @@ import {
 import {
   startQueryProfile,
   logQueryProfileReport,
+  clearQueryProfile,
 } from 'src/utils/queryProfiler.js'
 import { asSessionId } from 'src/types/ids.js'
 import { jsonStringify } from '../utils/slowOperations.js'
@@ -2457,6 +2458,7 @@ function runHeadlessStreaming(
       return
     } finally {
       runPhase = 'finally_flush'
+      clearQueryProfile()
       // Flush pending internal events before going idle
       await structuredIO.flushInternalEvents()
       runPhase = 'finally_post_flush'

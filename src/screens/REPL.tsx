@@ -41,6 +41,7 @@ import { updateLastInteractionTime, getLastInteractionTime, getOriginalCwd, getP
 import { asSessionId, asAgentId } from '../types/ids.js';
 import { logForDebugging } from '../utils/debug.js';
 import { QueryGuard } from '../utils/QueryGuard.js';
+import { getQueryGuardOptionsFromEnv } from '../utils/queryGuardConfig.js';
 import { createCombinedAbortSignal } from '../utils/combinedAbortSignal.js';
 import { isEnvTruthy } from '../utils/envUtils.js';
 import { formatTokens, truncateToWidth } from '../utils/format.js';
@@ -141,7 +142,7 @@ import { gracefulShutdownSync, isShuttingDown } from '../utils/gracefulShutdown.
 import { handlePromptSubmit, type PromptInputHelpers } from '../utils/handlePromptSubmit.js';
 import { useQueueProcessor } from '../hooks/useQueueProcessor.js';
 import { useMailboxBridge } from '../hooks/useMailboxBridge.js';
-import { queryCheckpoint, logQueryProfileReport } from '../utils/queryProfiler.js';
+import { queryCheckpoint, logQueryProfileReport, clearQueryProfile } from '../utils/queryProfiler.js';
 import type { Message as MessageType, UserMessage, ProgressMessage, HookResultMessage, PartialCompactDirection } from '../types/message.js';
 import { query } from '../query.js';
 import type { AutoCompactTrackingState } from '../services/compact/autoCompact.js';
@@ -2988,7 +2989,7 @@ export function REPL({
     // Signal that a query turn has completed successfully
     await onTurnComplete?.(messagesRef.current);
   }, [initialMcpClients, resetLoadingState, getToolUseContext, toolPermissionContext, setAppState, customSystemPrompt, onTurnComplete, appendSystemPrompt, canUseTool, mainThreadAgentDefinition, onQueryEvent, sessionTitle, titleDisabled, getAutoCompactTrackingForSession, setAutoCompactTrackingForSession, setAutoCompactTrackingForSessionIfUnchanged]);
-  const onQuery = useCallback(async (newMessages: MessageType[], abortController: AbortController, shouldQuery: boolean, additionalAllowedTools: string[], mainLoopModelParam: string, onBeforeQueryCallback?: (input: string, newMessages: MessageType[]) => Promise<boolean>, input?: string, effort?: EffortValue): Promise<void> => {
+  const onQuery = useCallback(async (newMessages: MessageType[], abortController: AbortController, shouldQuery: boolean, additionalAllowedTools: string[], mainLoopModelParam: string, onBeforeQueryCallback?: (input: string, newMessages: MessageType[]) => Promise<boolean>, input?: string, effort?: EffortValue): Promise<void | false> => {
     // If this is a teammate, mark them as active when starting a turn
     if (isAgentSwarmsEnabled()) {
       const teamName = getTeamName();
@@ -3018,7 +3019,7 @@ export function REPL({
           logEvent('tengu_concurrent_onquery_enqueued', {});
         }
       });
-      return;
+      return false;
     }
     try {
       // Reset abort and pipe-error flags before starting a new query
@@ -3154,6 +3155,8 @@ export function REPL({
         // controller makes ctrl+c fire onCancel() (aborting nothing) instead of
         // propagating to the double-press exit flow.
         setAbortController(null);
+      } else {
+        clearQueryProfile();
       }
 
       // Auto-restore: if the user interrupted before any meaningful response
