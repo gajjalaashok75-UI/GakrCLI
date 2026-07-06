@@ -3,26 +3,28 @@ import { COMMON_HELP_ARGS, COMMON_INFO_ARGS } from '../../constants/xml.js'
 import { ingestLocalWikiSource } from '../../services/wiki/ingest.js'
 import { initializeWiki } from '../../services/wiki/init.js'
 import { getWikiStatus } from '../../services/wiki/status.js'
+import { forceScanConventions } from '../../services/wiki/conventions.js'
 import type {
   LocalJSXCommandCall,
   LocalJSXCommandOnDone,
 } from '../../types/command.js'
 import { getCwd } from '../../utils/cwd.js'
-import { logError } from '../../utils/log.js'
 
 function renderHelp(): string {
-  return `Usage: /wiki [init|status|ingest <path>]
+  return `Usage: /wiki [init|status|scan|ingest <path>]
 
 Manage the GakrCLI project wiki stored in .gakrcli/wiki.
 
 Commands:
-  /wiki init    Initialize the LLM-maintained wiki structure
-  /wiki status  Show wiki status and raw/page/source counts
-  /wiki ingest  Ingest a local file into generated source notes
+  /wiki init    Initialize the wiki structure in the current project
+  /wiki status  Show wiki status and page/source counts
+  /wiki scan    Re-scan project conventions (build system, test framework, linting, etc.)
+  /wiki ingest  Ingest a local file into wiki sources
 
 Examples:
   /wiki init
   /wiki status
+  /wiki scan
   /wiki ingest README.md`
 }
 
@@ -53,13 +55,13 @@ function formatStatus(status: Awaited<ReturnType<typeof getWikiStatus>>): string
     'GakrCLI wiki status',
     '',
     `Root: ${status.root}`,
-    `Raw files: ${status.rawSourceCount}`,
     `Pages: ${status.pageCount}`,
-    `Source notes: ${status.sourceCount}`,
+    `Sources: ${status.sourceCount}`,
     `Schema: ${status.hasSchema ? 'present' : 'missing'}`,
     `Index: ${status.hasIndex ? 'present' : 'missing'}`,
     `Log: ${status.hasLog ? 'present' : 'missing'}`,
     `Last updated: ${status.lastUpdatedAt ?? 'unknown'}`,
+    `Conventions last scanned: ${status.conventionsScannedAt ?? 'never'}`,
   ].join('\n')
 }
 
@@ -78,18 +80,17 @@ function formatIngestResult(
 async function runWikiCommand(
   onDone: LocalJSXCommandOnDone,
   args: string,
+  contextCwd?: string,
 ): Promise<void> {
-  const cwd = getCwd()
-  const trimmedArgs = args.trim()
-  const [rawSubcommand = '', ...rest] = trimmedArgs.split(/\s+/)
-  const normalized = rawSubcommand.toLowerCase()
+  const cwd = contextCwd ?? getCwd()
+  const normalized = args.trim().toLowerCase()
 
-  if (COMMON_HELP_ARGS.includes(normalized)) {
+  if (COMMON_HELP_ARGS.includes(normalized) || COMMON_INFO_ARGS.includes(normalized)) {
     onDone(renderHelp(), { display: 'system' })
     return
   }
 
-  if (!normalized || normalized === 'status' || COMMON_INFO_ARGS.includes(normalized)) {
+  if (!normalized || normalized === 'status') {
     onDone(formatStatus(await getWikiStatus(cwd)), { display: 'system' })
     return
   }
@@ -99,8 +100,30 @@ async function runWikiCommand(
     return
   }
 
-  if (normalized === 'ingest') {
-    const pathArg = rest.join(' ').trim()
+  if (normalized === 'scan') {
+    const result = await forceScanConventions(cwd)
+    if (!result.saved) {
+      onDone(
+        'The wiki is not initialized yet. Run `/wiki init` first, then `/wiki scan`.',
+        { display: 'system' },
+      )
+      return
+    }
+    onDone(
+      [
+        'Project conventions scanned and saved.',
+        '',
+        result.markdown,
+        '',
+        '_Run `/wiki status` to verify._',
+      ].join('\n'),
+      { display: 'system' },
+    )
+    return
+  }
+
+  if (normalized.startsWith('ingest')) {
+    const pathArg = args.trim().slice('ingest'.length).trim()
     if (!pathArg) {
       onDone('Usage: /wiki ingest <local-file-path>', { display: 'system' })
       return
@@ -112,7 +135,7 @@ async function runWikiCommand(
     return
   }
 
-  onDone(`Unknown wiki subcommand: ${trimmedArgs}\n\n${renderHelp()}`, {
+  onDone(`Unknown wiki subcommand: ${args.trim()}\n\n${renderHelp()}`, {
     display: 'system',
   })
 }
@@ -122,12 +145,6 @@ export const call: LocalJSXCommandCall = async (
   _context,
   args,
 ): Promise<React.ReactNode> => {
-  try {
-    await runWikiCommand(onDone, args ?? '')
-  } catch (error: unknown) {
-    logError(error)
-    const message = error instanceof Error ? error.message : 'Unexpected wiki command error'
-    onDone(`Wiki command failed: ${message}`, { display: 'system' })
-  }
+  await runWikiCommand(onDone, args ?? '', ((_context as any)?.cwd))
   return null
 }

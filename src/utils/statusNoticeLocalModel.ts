@@ -1,5 +1,8 @@
 import { resolveActiveRouteIdFromEnv } from '../integrations/routeMetadata.js'
-import { isLocalProviderUrl } from '../services/api/providerConfig.js'
+import {
+  isDirectLocalOllamaEndpoint,
+  isLocalProviderUrl,
+} from '../services/api/providerConfig.js'
 import type { Tool, ToolPermissionContext } from '../Tool.js'
 import type { AgentDefinitionsResult } from '../tools/AgentTool/loadAgentsDir.js'
 import type { MemoryFileInfo } from './gakrclimd.js'
@@ -11,8 +14,16 @@ import {
 import { formatTokens } from './format.js'
 import { isEnvTruthy } from './envUtils.js'
 import { plural } from './stringUtils.js'
+import {
+  type OllamaContextWarning,
+  checkOllamaPsContextWarning,
+} from './ollamaContext.js'
 
-type ContributorId = 'mcp_tools' | 'agent_descriptions' | 'gakrclimd_files'
+type ContributorId =
+  | 'mcp_tools'
+  | 'agent_descriptions'
+  | 'gakrclimd_files'
+  | 'ollama_context_length'
 
 export type LocalModelContextContributor = {
   id: ContributorId
@@ -56,24 +67,37 @@ function summarizeContextWarning(
   }
 }
 
+function summarizeOllamaContextWarning(
+  warning: OllamaContextWarning,
+): LocalModelContextContributor {
+  return {
+    id: 'ollama_context_length' as ContributorId,
+    message: warning.message,
+    details: warning.details,
+    summary: `Ollama context: ~${formatTokens(warning.currentTokens)} / ~${formatTokens(warning.maxTokens)} tokens`,
+  }
+}
+
 export function buildLocalModelContextLoad(
   warnings: ContextWarnings | null | undefined,
+  extraContributors: LocalModelContextContributor[] = [],
 ): LocalModelContextWarning | null {
-  if (!warnings) {
+  if (!warnings && extraContributors.length === 0) {
     return null
   }
 
   const contributors = [
-    warnings.mcpWarning,
-    warnings.agentWarning,
-    warnings.gakrcliMdWarning,
+    warnings?.mcpWarning ?? null,
+    warnings?.agentWarning ?? null,
+    warnings?.gakrcliMdWarning ?? null,
   ]
-    .filter((warning): warning is ContextWarning => warning != null)
+    .filter((warning): warning is ContextWarning => warning !== null)
     .map(summarizeContextWarning)
     .filter(
       (contributor): contributor is LocalModelContextContributor =>
         contributor !== null,
     )
+    .concat(extraContributors)
 
   if (contributors.length === 0) {
     return null
@@ -136,27 +160,54 @@ export function isActiveProviderLocalModel(
   return isLocalProviderUrl(resolveActiveProviderBaseUrl(processEnv))
 }
 
+function isLoopbackOllamaEndpoint(baseUrl: string | undefined): boolean {
+  if (!baseUrl) {
+    return false
+  }
+  return isDirectLocalOllamaEndpoint(new URL(baseUrl))
+}
+
+async function checkOllamaContextLength(
+  activeModelName: string | undefined,
+  baseUrl: string | undefined,
+): Promise<LocalModelContextContributor | null> {
+  if (!isLoopbackOllamaEndpoint(baseUrl)) {
+    return null
+  }
+
+  const warning = await checkOllamaPsContextWarning(activeModelName)
+  if (!warning) {
+    return null
+  }
+
+  return summarizeOllamaContextWarning(warning)
+}
+
 export async function checkLocalModelContextLoad(
-  tools: Tool[],
+  tools: readonly Tool[],
   agentDefinitions: AgentDefinitionsResult | null | undefined,
   memoryFiles: MemoryFileInfo[],
   getToolPermissionContext: () => Promise<ToolPermissionContext>,
   baseUrl?: string,
+  activeModelName?: string,
 ): Promise<LocalModelContextWarning | null> {
   const resolvedBaseUrl = baseUrl ?? resolveActiveProviderBaseUrl()
   if (!isLocalProviderUrl(resolvedBaseUrl)) {
     return null
   }
 
-  const warnings = await checkContextWarnings(
-    tools,
-    agentDefinitions ?? null,
-    getToolPermissionContext,
-    {
-      memoryFiles,
-      mcpTokenStrategy: 'estimate',
-      includeUnreachableRules: false,
-    },
-  )
-  return buildLocalModelContextLoad(warnings)
+  const [warnings, ollamaWarning] = await Promise.all([
+    checkContextWarnings(
+      tools,
+      agentDefinitions ?? null,
+      getToolPermissionContext,
+      {
+        memoryFiles,
+        mcpTokenStrategy: 'estimate',
+        includeUnreachableRules: false,
+      },
+    ),
+    checkOllamaContextLength(activeModelName, resolvedBaseUrl),
+  ])
+  return buildLocalModelContextLoad(warnings, ollamaWarning ? [ollamaWarning] : [])
 }

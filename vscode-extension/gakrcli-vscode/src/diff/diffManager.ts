@@ -3,16 +3,12 @@
 // permission requests, show VS Code native diff, handle accept/reject,
 // write files, and send control_response back to the CLI.
 
-import type * as VSCode from 'vscode';
+import * as vscode from 'vscode';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { DiffContentProvider } from './diffContentProvider';
+import type { NdjsonTransport } from '../process/ndjsonTransport';
 import type { ControlRequestPermission } from '../types/messages';
-import { vscode } from '../vscodeCompat';
-
-export interface ControlResponseTransport {
-  write(message: unknown): void;
-}
 
 /**
  * Represents a single pending diff waiting for user decision.
@@ -33,10 +29,10 @@ interface PendingDiff {
   /** The full tool input for passing back in updatedInput on accept */
   toolInput: Record<string, unknown>;
   /** The transport to send the control_response on */
-  transport: ControlResponseTransport;
+  transport: NdjsonTransport;
 }
 
-export class DiffManager implements VSCode.Disposable {
+export class DiffManager implements vscode.Disposable {
   /** Pending diffs keyed by normalized file path. One per file at a time. */
   private readonly pendingDiffs = new Map<string, PendingDiff>();
 
@@ -46,14 +42,14 @@ export class DiffManager implements VSCode.Disposable {
     Array<{
       requestId: string;
       request: ControlRequestPermission;
-      transport: ControlResponseTransport;
+      transport: NdjsonTransport;
     }>
   >();
 
   /** Track which diff editor tabs we opened, keyed by file path */
-  private readonly diffEditorTabs = new Map<string, VSCode.Uri>();
+  private readonly diffEditorTabs = new Map<string, vscode.Uri>();
 
-  private readonly disposables: VSCode.Disposable[] = [];
+  private readonly disposables: vscode.Disposable[] = [];
 
   /** Max file size (in bytes) for diff preview -- skip diff for huge files */
   private static readonly MAX_DIFF_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
@@ -61,7 +57,7 @@ export class DiffManager implements VSCode.Disposable {
   constructor(
     private readonly originalProvider: DiffContentProvider,
     private readonly proposedProvider: DiffContentProvider,
-    private readonly outputChannel: VSCode.OutputChannel,
+    private readonly outputChannel: vscode.OutputChannel,
   ) {
     // Listen for tab close events to clean up if user manually closes a diff
     this.disposables.push(
@@ -91,7 +87,7 @@ export class DiffManager implements VSCode.Disposable {
   async showDiff(
     requestId: string,
     request: ControlRequestPermission,
-    transport: ControlResponseTransport,
+    transport: NdjsonTransport,
   ): Promise<void> {
     const input = request.input;
     const filePath = input.file_path as string;
@@ -441,8 +437,8 @@ export class DiffManager implements VSCode.Disposable {
     const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
     if (activeTab?.input && typeof activeTab.input === 'object') {
       const tabInput = activeTab.input as {
-        original?: VSCode.Uri;
-        modified?: VSCode.Uri;
+        original?: vscode.Uri;
+        modified?: vscode.Uri;
       };
       if (tabInput.modified?.scheme === 'gakrcli-diff-proposed') {
         const filePath = tabInput.modified.path;
@@ -514,13 +510,13 @@ export class DiffManager implements VSCode.Disposable {
   /**
    * Check if a tab is one of our diff editors for a specific file.
    */
-  private isOurDiffTab(tab: VSCode.Tab, filePath: string): boolean {
+  private isOurDiffTab(tab: vscode.Tab, filePath: string): boolean {
     if (!tab.input || typeof tab.input !== 'object') {
       return false;
     }
     const tabInput = tab.input as {
-      original?: VSCode.Uri;
-      modified?: VSCode.Uri;
+      original?: vscode.Uri;
+      modified?: vscode.Uri;
     };
     return (
       (tabInput.modified?.scheme === 'gakrcli-diff-proposed' &&
@@ -534,14 +530,14 @@ export class DiffManager implements VSCode.Disposable {
    * Handle tab close events -- if the user manually closes a diff tab,
    * treat it as a rejection so the CLI isn't left hanging.
    */
-  private handleTabClose(event: VSCode.TabChangeEvent): void {
+  private handleTabClose(event: vscode.TabChangeEvent): void {
     for (const closedTab of event.closed) {
       if (!closedTab.input || typeof closedTab.input !== 'object') {
         continue;
       }
       const tabInput = closedTab.input as {
-        original?: VSCode.Uri;
-        modified?: VSCode.Uri;
+        original?: vscode.Uri;
+        modified?: vscode.Uri;
       };
       if (tabInput.modified?.scheme === 'gakrcli-diff-proposed') {
         const filePath = tabInput.modified.path;
@@ -619,7 +615,7 @@ export class DiffManager implements VSCode.Disposable {
     requestId: string,
     toolUseId: string,
     toolInput: Record<string, unknown>,
-    transport: ControlResponseTransport,
+    transport: NdjsonTransport,
   ): void {
     transport.write({
       type: 'control_response',
@@ -647,7 +643,7 @@ export class DiffManager implements VSCode.Disposable {
     requestId: string,
     toolUseId: string,
     message: string,
-    transport: ControlResponseTransport,
+    transport: NdjsonTransport,
   ): void {
     transport.write({
       type: 'control_response',

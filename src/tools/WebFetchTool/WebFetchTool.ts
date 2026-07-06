@@ -7,7 +7,6 @@ import { lazySchema } from '../../utils/lazySchema.js'
 import type { PermissionDecision } from '../../utils/permissions/PermissionResult.js'
 import { getRuleByContentsForTool } from '../../utils/permissions/permissions.js'
 import { isPreapprovedHost } from './preapproved.js'
-import { applyCommunityWebCleaners } from './communityPort.js'
 import { DESCRIPTION, WEB_FETCH_TOOL_NAME } from './prompt.js'
 import {
   getToolUseSummary,
@@ -22,24 +21,24 @@ import {
   isPreapprovedUrl,
   MAX_MARKDOWN_LENGTH,
 } from './utils.js'
+import { firecrawlScrape } from '../firecrawl/client.js'
+import { applyCommunityWebCleaners } from './communityPort.js'
 
 function isFirecrawlEnabled(): boolean {
-  return (
-    Boolean(process.env.FIRECRAWL_API_KEY) ||
-    Boolean(process.env.FIRECRAWL_API_URL)
-  )
+  return Boolean(process.env.FIRECRAWL_API_KEY) || Boolean(process.env.FIRECRAWL_API_URL)
 }
 
 async function scrapeWithFirecrawl(
   url: string,
+  signal?: AbortSignal,
 ): Promise<{ markdown: string; bytes: number }> {
-  const { FirecrawlClient } = await import('@mendable/firecrawl-js')
-  const app = new FirecrawlClient({
+  const result = await firecrawlScrape(url, {
     apiKey: process.env.FIRECRAWL_API_KEY,
     apiUrl: process.env.FIRECRAWL_API_URL,
+    formats: ['markdown'],
+    signal,
   })
-  const result = await app.scrape(url, { formats: ['markdown'] })
-  const markdown = (result as { markdown?: string }).markdown ?? ''
+  const markdown = result.markdown ?? ''
   return { markdown, bytes: Buffer.byteLength(markdown) }
 }
 
@@ -234,7 +233,7 @@ ${DESCRIPTION}`
     const start = Date.now()
 
     if (isFirecrawlEnabled()) {
-      const { markdown, bytes } = await scrapeWithFirecrawl(url)
+      const { markdown, bytes } = await scrapeWithFirecrawl(url, abortController.signal)
       const cleanedMarkdown = applyCommunityWebCleaners(markdown)
       const result = await applyPromptToMarkdown(
         prompt,
@@ -245,7 +244,7 @@ ${DESCRIPTION}`
       )
       return {
         data: {
-          bytes: Buffer.byteLength(cleanedMarkdown) || bytes,
+          bytes,
           code: 200,
           codeText: 'OK',
           result,
@@ -293,7 +292,7 @@ To complete your request, I need to fetch content from the redirected URL. Pleas
     }
 
     const {
-      content,
+      content: rawContent,
       bytes,
       code,
       codeText,
@@ -302,20 +301,21 @@ To complete your request, I need to fetch content from the redirected URL. Pleas
       persistedSize,
     } = response as FetchedContent
 
+    const content = applyCommunityWebCleaners(rawContent)
+
     const isPreapproved = isPreapprovedUrl(url)
-    const cleanedContent = applyCommunityWebCleaners(content)
 
     let result: string
     if (
       isPreapproved &&
       contentType.includes('text/markdown') &&
-      cleanedContent.length < MAX_MARKDOWN_LENGTH
+      content.length < MAX_MARKDOWN_LENGTH
     ) {
-      result = cleanedContent
+      result = content
     } else {
       result = await applyPromptToMarkdown(
         prompt,
-        cleanedContent,
+        content,
         abortController.signal,
         isNonInteractiveSession,
         isPreapproved,
@@ -323,7 +323,7 @@ To complete your request, I need to fetch content from the redirected URL. Pleas
     }
 
     // Binary content (PDFs, etc.) was additionally saved to disk with a
-    // mime-derived extension. Note it so the agent can inspect the raw file
+    // mime-derived extension. Note it so GakrCLI can inspect the raw file
     // if the Haiku summary above isn't enough.
     if (persistedPath) {
       result += `\n\n[Binary content (${contentType}, ${formatFileSize(persistedSize ?? bytes)}) also saved to ${persistedPath}]`

@@ -83,14 +83,16 @@ import { getSkillToolCommands, getMcpSkillCommands } from '../commands.js'
 import type { Command } from '../types/command.js'
 import uniqBy from 'lodash-es/uniqBy.js'
 import { getProjectRoot } from '../bootstrap/state.js'
-import { formatCommandsWithinBudget } from '../tools/SkillTool/prompt.js'
+import {
+  formatCommandsWithinBudget,
+  SUBAGENT_SKILL_LISTING_CHAR_BUDGET,
+} from '../tools/SkillTool/prompt.js'
 import { getContextWindowForModel } from './context.js'
 import type { DiscoverySignal } from '../services/skillSearch/signals.js'
 // Conditional require for DCE. All skill-search string literals that would
 // otherwise leak into external builds live inside these modules. The only
-// surfaces in THIS file are: the maybe() call (gated via spread below) and
-// the skill_listing suppression check (uses the same skillSearchModules null
-// check). The type-only DiscoverySignal import above is erased at compile time.
+// direct surface in THIS file is the maybe() call gated via spread below. The
+// type-only DiscoverySignal import above is erased at compile time.
 /* eslint-disable @typescript-eslint/no-require-imports */
 const skillSearchModules = feature('EXPERIMENTAL_SKILL_SEARCH')
   ? {
@@ -194,7 +196,7 @@ import {
   isThinkingMessage,
 } from './messages.js'
 import { isHumanTurn } from './messagePredicates.js'
-import { isEnvTruthy, getGakrcliConfigHomeDir } from './envUtils.js'
+import { isEnvTruthy, getGakrCLIConfigHomeDir } from './envUtils.js'
 import { feature } from 'bun:bundle'
 /* eslint-disable @typescript-eslint/no-require-imports */
 const BRIEF_TOOL_NAME: string | null =
@@ -217,6 +219,10 @@ import {
   isAutoCompactEnabled,
 } from '../services/compact/autoCompact.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
+import {
+  getAutoCompactThreshold,
+  getEffectiveContextWindowSize,
+} from '../services/compact/autoCompact.js'
 import {
   hasInstructionsLoadedHook,
   executeInstructionsLoadedHooks,
@@ -266,6 +272,21 @@ export const AUTO_MODE_ATTACHMENT_CONFIG = {
   TURNS_BETWEEN_ATTACHMENTS: 5,
   FULL_REMINDER_EVERY_N_ATTACHMENTS: 5,
 } as const
+
+const SKILL_LISTING_SUPPRESSED_QUERY_SOURCES = new Set([
+  'compact',
+  'extract_memories',
+  'session_memory',
+])
+
+export function shouldIncludeSkillListingAttachment(
+  querySource?: QuerySource,
+): boolean {
+  return !(
+    typeof querySource === 'string' &&
+    SKILL_LISTING_SUPPRESSED_QUERY_SOURCES.has(querySource)
+  )
+}
 
 const MAX_MEMORY_LINES = 200
 // Line cap alone doesn't bound size (200 × 500-char lines = 100KB).  The
@@ -873,7 +894,9 @@ export async function getAttachments(
     maybe('nested_memory', () => getNestedMemoryAttachments(context)),
     // relevant_memories moved to async prefetch (startRelevantMemoryPrefetch)
     maybe('dynamic_skill', () => getDynamicSkillAttachments(context)),
-    maybe('skill_listing', () => getSkillListingAttachments(context)),
+    ...(shouldIncludeSkillListingAttachment(querySource)
+      ? [maybe('skill_listing', () => getSkillListingAttachments(context))]
+      : []),
     // Inter-turn skill discovery now runs via startSkillDiscoveryPrefetch
     // (query.ts, concurrent with the main turn). The blocking call that
     // previously lived here was the assistant_turn signal — 97% of those
@@ -1703,8 +1726,7 @@ function isInstructionsMemoryType(
     type === 'User' ||
     type === 'Project' ||
     type === 'Local' ||
-    type === 'Managed' ||
-    type === 'Workspace'
+    type === 'Managed'
   )
 }
 
@@ -2735,12 +2757,19 @@ async function getSkillListingAttachments(
     `Sending ${newSkills.length} skills via attachment (${isInitial ? 'initial' : 'dynamic'}, ${sent.size} total sent)`,
   )
 
-  // Format within budget using existing logic
+  // Subagents can each receive their own initial listing. Keep those
+  // discoverability hints compact; the Skill tool still loads full content.
   const contextWindowTokens = getContextWindowForModel(
     toolUseContext.options.mainLoopModel,
     getSdkBetas(),
   )
-  const content = formatCommandsWithinBudget(newSkills, contextWindowTokens)
+  const content = formatCommandsWithinBudget(
+    newSkills,
+    contextWindowTokens,
+    toolUseContext.agentId
+      ? { maxCharBudget: SUBAGENT_SKILL_LISTING_CHAR_BUDGET }
+      : undefined,
+  )
 
   return [
     {
@@ -3540,7 +3569,7 @@ async function getAsyncHookResponseAttachments(): Promise<Attachment[]> {
 
 /**
  * Get teammate mailbox attachments for agent swarm communication
- * Teammates are independent GakrCLI sessions running in parallel (swarms),
+ * Teammates are independent GakrCLI Code sessions running in parallel (swarms),
  * not parent-child subagent relationships.
  *
  * This function checks two sources for messages:
@@ -3809,7 +3838,7 @@ function getTeamContextAttachment(messages: Message[]): Attachment[] {
     return []
   }
 
-  const configDir = getGakrcliConfigHomeDir()
+  const configDir = getGakrCLIConfigHomeDir()
   const teamConfigPath = `${configDir}/teams/${teamName}/config.json`
   const taskListPath = `${configDir}/tasks/${teamName}/`
 
@@ -3981,8 +4010,43 @@ export function getCompactionReminderAttachment(
  * interval resets on prior nudges, snip markers, snip boundaries, and
  * compact boundaries.
  */
+const MIN_SNIP_NUDGE_TOKENS = 10_000
+const MAX_SNIP_NUDGE_REPEAT_TOKENS = 100_000
+const SNIP_NUDGE_START_FRACTION = 0.60
+const SNIP_NUDGE_REPEAT_FRACTION = 0.10
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
+}
+
+export function getSnipNudgeRepeatInterval(model: string): number {
+  const effectiveWindow = getEffectiveContextWindowSize(model)
+  return clamp(
+    Math.floor(effectiveWindow * SNIP_NUDGE_REPEAT_FRACTION),
+    MIN_SNIP_NUDGE_TOKENS,
+    MAX_SNIP_NUDGE_REPEAT_TOKENS,
+  )
+}
+
+export function getSnipNudgeStartThreshold(model: string): number {
+  const effectiveWindow = getEffectiveContextWindowSize(model)
+  const autoCompactThreshold = getAutoCompactThreshold(model)
+  const leadTokens = getSnipNudgeRepeatInterval(model)
+  const fractionalStart = Math.floor(effectiveWindow * SNIP_NUDGE_START_FRACTION)
+  const preAutoCompactStart = Math.max(
+    MIN_SNIP_NUDGE_TOKENS,
+    autoCompactThreshold - leadTokens,
+  )
+
+  return Math.max(
+    MIN_SNIP_NUDGE_TOKENS,
+    Math.min(fractionalStart, preAutoCompactStart),
+  )
+}
+
 export function getContextEfficiencyAttachment(
   messages: Message[],
+  model: string,
 ): Attachment[] {
   if (!feature('HISTORY_SNIP')) {
     return []
@@ -3996,7 +4060,14 @@ export function getContextEfficiencyAttachment(
     return []
   }
 
-  if (!shouldNudgeForSnips(messages)) {
+  const usedTokens = tokenCountWithEstimation(messages)
+  const startThreshold = getSnipNudgeStartThreshold(model)
+  if (usedTokens < startThreshold) {
+    return []
+  }
+
+  const repeatInterval = getSnipNudgeRepeatInterval(model)
+  if (!shouldNudgeForSnips(messages, repeatInterval)) {
     return []
   }
 

@@ -1,21 +1,15 @@
 // src/settings/settingsSync.ts
-// Wrapper around vscode.workspace.getConfiguration('gakrcliCode') for provider settings.
+// Wrapper around vscode.workspace.getConfiguration('gakrcli') for provider settings.
 
 import * as vscode from 'vscode';
 
 export class SettingsSync {
   private get config() {
-    return vscode.workspace.getConfiguration('gakrcliCode');
+    return vscode.workspace.getConfiguration('gakrcli');
   }
 
   get selectedProvider(): string {
     return this.config.get<string>('selectedProvider', 'anthropic');
-  }
-
-  hasConfiguredProvider(): boolean {
-    return this.config.inspect<string>('selectedProvider')?.globalValue !== undefined ||
-      this.config.inspect<string>('selectedProvider')?.workspaceValue !== undefined ||
-      this.config.inspect<string>('selectedProvider')?.workspaceFolderValue !== undefined;
   }
 
   get selectedModel(): string | undefined {

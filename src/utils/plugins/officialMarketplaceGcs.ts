@@ -26,7 +26,7 @@ type SafeString = AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
 // `latest` has Cache-Control: max-age=300 so CDN staleness is bounded.
 // Backend (anthropic#317037) populates this prefix.
 const GCS_BASE =
-  'https://downloads.gakr.ai/gakrcli-code-releases/plugins/gakrcli-plugins-official'
+  'https://downloads.gakrcli.ai/gakrcli-code-releases/plugins/gakrcli-plugins-official'
 
 // Zip arc paths are seed-dir-relative (marketplaces/gakrcli-plugins-official/…)
 // so the titanium seed machinery can use the same zip. Strip this prefix when
@@ -158,7 +158,7 @@ export async function fetchOfficialMarketplaceFromGcs(
     // values below are static enums or a git SHA — not code/filepaths/PII.
     logEvent('tengu_plugin_remote_fetch', {
       source: 'marketplace_gcs' as SafeString,
-      host: 'downloads.gakr.ai' as SafeString,
+      host: 'downloads.gakrcli.ai' as SafeString,
       is_official: true,
       outcome: outcome as SafeString,
       duration_ms: Math.round(performance.now() - start),

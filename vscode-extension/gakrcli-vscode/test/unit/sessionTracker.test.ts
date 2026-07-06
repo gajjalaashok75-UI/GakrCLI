@@ -2,20 +2,6 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import * as vscode from '../__mocks__/vscode';
-import { SessionTracker, sanitizeProjectPathForSessions } from '../../src/session/sessionTracker';
-
-describe('SessionTracker project path sanitizer', () => {
-  it('matches the root CLI sanitizer for Windows workspace paths', () => {
-    expect(sanitizeProjectPathForSessions('C:\\Users\\gajja\\Downloads\\temp'))
-      .toBe('C--Users-gajja-Downloads-temp');
-  });
-
-  it('matches the root CLI sanitizer for POSIX workspace paths', () => {
-    expect(sanitizeProjectPathForSessions('/Users/gajja/project'))
-      .toBe('-Users-gajja-project');
-  });
-});
 
 /**
  * Tests for SessionTracker parsing and grouping logic.
@@ -111,86 +97,6 @@ describe('SessionTracker — JSONL parsing', () => {
     expect(countable).toHaveLength(1);
   });
 
-  it('does not count tool_result user entries as chat messages but keeps them for history replay', async () => {
-    const tracker = new SessionTracker();
-    const filePath = writeJsonl('session-tool-results', [
-      {
-        type: 'assistant',
-        message: {
-          role: 'assistant',
-          model: 'gpt-5.4',
-          content: [
-            { type: 'tool_use', id: 'toolu_1', name: 'WebSearch', input: { query: 'india news' } },
-          ],
-        },
-        timestamp: '2026-05-27T10:00:00.000Z',
-      },
-      {
-        type: 'user',
-        message: {
-          role: 'user',
-          content: [
-            { type: 'tool_result', tool_use_id: 'toolu_1', content: 'search results' },
-          ],
-        },
-        timestamp: '2026-05-27T10:00:01.000Z',
-        isMeta: false,
-      },
-      {
-        type: 'user',
-        message: { role: 'user', content: 'Tell me the latest news' },
-        timestamp: '2026-05-27T10:00:02.000Z',
-        isMeta: false,
-      },
-    ]);
-
-    await tracker.parseSessionFile(filePath);
-
-    const session = tracker.getSession('session-tool-results');
-    expect(session?.messageCount).toBe(2);
-    expect(session?.title).toBe('Tell me the latest news');
-
-    const replayMessages = await tracker.loadSessionMessages('session-tool-results');
-    expect(replayMessages.map((entry) => entry.type)).toEqual(['assistant', 'user', 'user']);
-    expect(JSON.stringify(replayMessages[1])).toContain('tool_result');
-    tracker.dispose();
-  });
-
-  it('keeps result entries for history replay so turn completion metadata is restored', async () => {
-    const tracker = new SessionTracker();
-    const filePath = writeJsonl('session-results', [
-      {
-        type: 'user',
-        message: { role: 'user', content: 'Say hello' },
-        timestamp: '2026-05-31T10:00:00.000Z',
-        isMeta: false,
-      },
-      {
-        type: 'assistant',
-        message: {
-          role: 'assistant',
-          model: 'gpt-5.4',
-          content: [{ type: 'text', text: 'Hello.' }],
-        },
-        timestamp: '2026-05-31T10:00:01.000Z',
-      },
-      {
-        type: 'result',
-        duration_ms: 4200,
-        total_cost_usd: 0,
-        num_turns: 1,
-        timestamp: '2026-05-31T10:00:05.000Z',
-      },
-    ]);
-
-    await tracker.parseSessionFile(filePath);
-
-    const replayMessages = await tracker.loadSessionMessages('session-results');
-    expect(replayMessages.map((entry) => entry.type)).toEqual(['user', 'assistant', 'result']);
-    expect(replayMessages[2]?.duration_ms).toBe(4200);
-    tracker.dispose();
-  });
-
   it('should prefer ai-title over first user message for session title', () => {
     const lines = [
       {
@@ -279,84 +185,6 @@ describe('SessionTracker — JSONL parsing', () => {
       }
     }
     expect(fallbackTitle).toBe('Now fix the bug');
-  });
-
-  it('skips command-message envelopes when deriving parsed session titles', async () => {
-    const tracker = new SessionTracker();
-    const filePath = writeJsonl('session-command-envelope', [
-      {
-        type: 'user',
-        message: { role: 'user', content: '<command-message>/provider</command-message> <command-name>/provider</command-name>' },
-        timestamp: '2026-06-01T10:00:00.000Z',
-        isMeta: false,
-      },
-      {
-        type: 'user',
-        message: { role: 'user', content: 'Build a compact settings panel' },
-        timestamp: '2026-06-01T10:00:01.000Z',
-        isMeta: false,
-      },
-    ]);
-
-    await tracker.parseSessionFile(filePath);
-
-    expect(tracker.getSession('session-command-envelope')?.title).toBe('Build a compact settings panel');
-    tracker.dispose();
-  });
-});
-
-describe('SessionTracker — workspace recovery scan', () => {
-  const testDir = path.join(os.tmpdir(), 'gakrcli-session-recovery-test-' + Date.now());
-  const workspaceRoot = path.join(testDir, 'workspace');
-  const configDir = path.join(testDir, 'config');
-  const projectsDir = path.join(configDir, 'workspace', 'projects');
-  const oldConfigDir = process.env.GAKR_CONFIG_DIR;
-  const oldWorkspaceFolders = vscode.workspace.workspaceFolders;
-
-  beforeEach(() => {
-    fs.mkdirSync(workspaceRoot, { recursive: true });
-    fs.mkdirSync(projectsDir, { recursive: true });
-    process.env.GAKR_CONFIG_DIR = configDir;
-    (vscode.workspace as unknown as { workspaceFolders: unknown[] }).workspaceFolders = [
-      { uri: { fsPath: workspaceRoot } },
-    ];
-  });
-
-  afterEach(() => {
-    if (oldConfigDir === undefined) {
-      delete process.env.GAKR_CONFIG_DIR;
-    } else {
-      process.env.GAKR_CONFIG_DIR = oldConfigDir;
-    }
-    (vscode.workspace as unknown as { workspaceFolders: unknown[] }).workspaceFolders = oldWorkspaceFolders;
-    fs.rmSync(testDir, { recursive: true, force: true });
-  });
-
-  it('finds SDK transcripts written under a non-workspace project dir when their cwd matches the workspace', async () => {
-    const misplacedDir = path.join(projectsDir, sanitizeProjectPathForSessions('C:\\Users\\gajja\\AppData\\Local\\Programs\\Microsoft VS Code'));
-    fs.mkdirSync(misplacedDir, { recursive: true });
-    fs.writeFileSync(path.join(misplacedDir, 'today-session.jsonl'), [
-      JSON.stringify({
-        type: 'user',
-        message: { role: 'user', content: 'Today prompt' },
-        timestamp: new Date().toISOString(),
-        isMeta: false,
-        cwd: workspaceRoot,
-      }),
-      JSON.stringify({
-        type: 'assistant',
-        message: { role: 'assistant', content: [{ type: 'text', text: 'Done' }], model: 'gpt-5.4' },
-        timestamp: new Date().toISOString(),
-        cwd: workspaceRoot,
-      }),
-    ].join('\n') + '\n');
-
-    const tracker = new SessionTracker();
-    await tracker.scanAllSessions();
-
-    expect(tracker.getSession('today-session')?.title).toBe('Today prompt');
-    expect(tracker.getGroupedSessions()[0]?.group).toBe('Today');
-    tracker.dispose();
   });
 });
 

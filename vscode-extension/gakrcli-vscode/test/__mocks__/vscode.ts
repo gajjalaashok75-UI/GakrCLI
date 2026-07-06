@@ -193,6 +193,8 @@ export const window = {
     text: '',
     command: '',
     tooltip: '',
+    color: undefined,
+    backgroundColor: undefined,
     show: () => {},
     hide: () => {},
     dispose: () => {},

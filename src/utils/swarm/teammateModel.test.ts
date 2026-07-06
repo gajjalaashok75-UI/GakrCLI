@@ -17,7 +17,6 @@ afterEach(() => {
 })
 
 async function importFreshTeammateModelModule(provider = 'mistral') {
-  mock.restore()
   mock.module('../model/providers.js', () => ({
     getAPIProvider: () => provider,
   }))

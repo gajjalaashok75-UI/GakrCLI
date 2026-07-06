@@ -22,7 +22,7 @@ import {
   logEvent,
 } from 'src/services/analytics/index.js'
 import { logForDebugging } from '../debug.js'
-import { getGakrcliConfigHomeDir } from '../envUtils.js'
+import { getGakrCLIConfigHomeDir } from '../envUtils.js'
 import { getErrnoCode } from '../errors.js'
 import { execFileNoThrow } from '../execFileNoThrow.js'
 import { getInitialSettings } from '../settings/settings.js'
@@ -30,10 +30,10 @@ import { which } from '../which.js'
 import { getUserBinDir, getXDGDataHome } from '../xdg.js'
 import { DEEP_LINK_PROTOCOL } from './parseDeepLink.js'
 
-export const MACOS_BUNDLE_ID = 'com.gakr-gakr.gakrcli-vscode-url-handler'
-const APP_NAME = 'GakrCLI URL Handler'
+export const MACOS_BUNDLE_ID = 'com.anthropic.gakrcli-code-url-handler'
+const APP_NAME = 'GakrCLI Code URL Handler'
 const DESKTOP_FILE_NAME = 'gakrcli-code-url-handler.desktop'
-const MACOS_APP_NAME = 'GakrCLI URL Handler.app'
+const MACOS_APP_NAME = 'GakrCLI Code URL Handler.app'
 
 // Shared between register* (writes these paths/values) and
 // isProtocolHandlerCurrent (reads them back). Keep the writer and reader
@@ -108,7 +108,7 @@ async function registerMacos(gakrcliPath: string): Promise<void> {
   <array>
     <dict>
       <key>CFBundleURLName</key>
-      <string>GakrCLI Deep Link</string>
+      <string>GakrCLI Code Deep Link</string>
       <key>CFBundleURLSchemes</key>
       <array>
         <string>${DEEP_LINK_PROTOCOL}</string>
@@ -146,7 +146,7 @@ async function registerLinux(gakrcliPath: string): Promise<void> {
 
   const desktopEntry = `[Desktop Entry]
 Name=${APP_NAME}
-Comment=Handle ${DEEP_LINK_PROTOCOL}:// deep links for Gakr
+Comment=Handle ${DEEP_LINK_PROTOCOL}:// deep links for GakrCLI Code
 ${linuxExecLine(gakrcliPath)}
 Type=Application
 NoDisplay=true
@@ -215,7 +215,7 @@ async function registerWindows(gakrcliPath: string): Promise<void> {
 export async function registerProtocolHandler(
   gakrcliPath?: string,
 ): Promise<void> {
-  const resolved = gakrcliPath ?? (await resolvegakrcliPath())
+  const resolved = gakrcliPath ?? (await resolveGakrCLIPath())
 
   switch (process.platform) {
     case 'darwin':
@@ -238,7 +238,7 @@ export async function registerProtocolHandler(
  * auto-updates; falls back to process.execPath when the symlink is absent
  * (dev builds, non-native installs).
  */
-async function resolvegakrcliPath(): Promise<string> {
+async function resolveGakrCLIPath(): Promise<string> {
   const binaryName = process.platform === 'win32' ? 'gakrcli.exe' : 'gakrcli'
   const stablePath = path.join(getUserBinDir(), binaryName)
   try {
@@ -303,7 +303,7 @@ export async function ensureDeepLinkProtocolRegistered(): Promise<void> {
     return
   }
 
-  const gakrcliPath = await resolvegakrcliPath()
+  const gakrcliPath = await resolveGakrCLIPath()
   if (await isProtocolHandlerCurrent(gakrcliPath)) {
     return
   }
@@ -313,7 +313,7 @@ export async function ensureDeepLinkProtocolRegistered(): Promise<void> {
   // doesn't generate a failure event on every startup. Marker lives in
   // ~/.gakrcli (per-machine, not synced) rather than ~/.gakrcli.json (can sync).
   const failureMarkerPath = path.join(
-    getGakrcliConfigHomeDir(),
+    getGakrCLIConfigHomeDir(),
     '.deep-link-register-failed',
   )
   try {

@@ -1,12 +1,8 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
-import {
-  acquireSharedMutationLock,
-  releaseSharedMutationLock,
-} from '../../test/sharedMutationLock.js'
+import { acquireSharedMutationLock, releaseSharedMutationLock } from '../../test/sharedMutationLock.js'
 
 import {
   DEFAULT_GITHUB_MODELS_API_MODEL,
-  normalizeGithubCopilotModel,
   normalizeGithubModelsApiModel,
   resolveProviderRequest,
 } from './providerConfig.js'
@@ -42,20 +38,6 @@ afterEach(() => {
   } finally {
     releaseSharedMutationLock()
   }
-})
-
-test.each([
-  ['copilot', DEFAULT_GITHUB_MODELS_API_MODEL],
-  ['github:copilot', DEFAULT_GITHUB_MODELS_API_MODEL],
-  ['', DEFAULT_GITHUB_MODELS_API_MODEL],
-  ['github:gpt-4o', 'gpt-4o'],
-  ['gpt-4o', 'gpt-4o'],
-  ['claude-sonnet-4-6', 'claude-sonnet-4.6'],
-  ['github:claude-opus-4-6', 'claude-opus-4.6'],
-  ['anthropic/claude-haiku-4-5', 'claude-haiku-4.5'],
-  ['openai/gpt-4.1', 'gpt-4.1'],
-] as const)('normalizeGithubCopilotModel(%s) -> %s', (input, expected) => {
-  expect(normalizeGithubCopilotModel(input)).toBe(expected)
 })
 
 test.each([

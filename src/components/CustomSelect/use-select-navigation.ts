@@ -10,9 +10,10 @@ import OptionMap from './option-map.js'
 import type { OptionWithDescription } from './select.js'
 
 /**
- * Compare two option arrays for structural equality on properties that affect
- * navigation behavior. ReactNode labels and onChange functions are intentionally
- * excluded because their identities are unstable across renders.
+ * Compare two option arrays for structural equality on properties that
+ * affect navigation behavior. ReactNode `label` and function `onChange`
+ * are intentionally excluded — they are identity-unstable (new reference
+ * each render) but don't change navigation semantics.
  */
 export function optionsNavigateEqual<T>(
   a: OptionWithDescription<T>[],

@@ -1,4 +1,4 @@
-// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
+// biome-ignore-all assist/source/organizeImports: internal-only import markers must not be reordered
 import { toolMatchesName, type Tool, type Tools } from './Tool.js'
 import { AgentTool } from './tools/AgentTool/AgentTool.js'
 import { SkillTool } from './tools/SkillTool/SkillTool.js'
@@ -11,28 +11,20 @@ import { NotebookEditTool } from './tools/NotebookEditTool/NotebookEditTool.js'
 import { WebFetchTool } from './tools/WebFetchTool/WebFetchTool.js'
 import { TaskStopTool } from './tools/TaskStopTool/TaskStopTool.js'
 import { BriefTool } from './tools/BriefTool/BriefTool.js'
-// Dead code elimination: conditional import for ant-only tools
-/* eslint-disable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
-const REPLTool =
-  process.env.USER_TYPE === 'ant'
-    ? require('./tools/REPLTool/REPLTool.js').REPLTool
-    : null
-const SuggestBackgroundPRTool =
-  process.env.USER_TYPE === 'ant'
-    ? require('./tools/SuggestBackgroundPRTool/SuggestBackgroundPRTool.js')
-        .SuggestBackgroundPRTool
-    : null
+import { ConfigTool } from './tools/ConfigTool/ConfigTool.js'
+// Dead code elimination: conditional import for internal-only tools
+/* eslint-disable @typescript-eslint/no-require-imports */
+const REPLTool = null
+const SuggestBackgroundPRTool = null
 const SleepTool =
   feature('PROACTIVE') || feature('KAIROS')
     ? require('./tools/SleepTool/SleepTool.js').SleepTool
     : null
-const cronTools = feature('AGENT_TRIGGERS')
-  ? [
-      require('./tools/ScheduleCronTool/CronCreateTool.js').CronCreateTool,
-      require('./tools/ScheduleCronTool/CronDeleteTool.js').CronDeleteTool,
-      require('./tools/ScheduleCronTool/CronListTool.js').CronListTool,
-    ]
-  : []
+const cronTools = [
+  require('./tools/ScheduleCronTool/CronCreateTool.js').CronCreateTool,
+  require('./tools/ScheduleCronTool/CronDeleteTool.js').CronDeleteTool,
+  require('./tools/ScheduleCronTool/CronListTool.js').CronListTool,
+]
 const RemoteTriggerTool = feature('AGENT_TRIGGERS_REMOTE')
   ? require('./tools/RemoteTriggerTool/RemoteTriggerTool.js').RemoteTriggerTool
   : null
@@ -59,7 +51,6 @@ import { TodoWriteTool } from './tools/TodoWriteTool/TodoWriteTool.js'
 import { ExitPlanModeV2Tool } from './tools/ExitPlanModeTool/ExitPlanModeV2Tool.js'
 import { TestingPermissionTool } from './tools/testing/TestingPermissionTool.js'
 import { GrepTool } from './tools/GrepTool/GrepTool.js'
-import { TungstenTool } from './tools/TungstenTool/TungstenTool.js'
 // Lazy require to break circular dependency: tools.ts -> TeamCreateTool/TeamDeleteTool -> ... -> tools.ts
 /* eslint-disable @typescript-eslint/no-require-imports */
 const getTeamCreateTool = () =>
@@ -77,16 +68,18 @@ import { LSPTool } from './tools/LSPTool/LSPTool.js'
 import { ListMcpResourcesTool } from './tools/ListMcpResourcesTool/ListMcpResourcesTool.js'
 import { ReadMcpResourceTool } from './tools/ReadMcpResourceTool/ReadMcpResourceTool.js'
 import { ToolSearchTool } from './tools/ToolSearchTool/ToolSearchTool.js'
+import { SearchExtraToolsTool } from './tools/SearchExtraToolsTool/SearchExtraToolsTool.js'
+import { ExecuteTool } from './tools/ExecuteTool/ExecuteTool.js'
 import { EnterPlanModeTool } from './tools/EnterPlanModeTool/EnterPlanModeTool.js'
 import { EnterWorktreeTool } from './tools/EnterWorktreeTool/EnterWorktreeTool.js'
 import { ExitWorktreeTool } from './tools/ExitWorktreeTool/ExitWorktreeTool.js'
-import { ConfigTool } from './tools/ConfigTool/ConfigTool.js'
 import { TaskCreateTool } from './tools/TaskCreateTool/TaskCreateTool.js'
 import { TaskGetTool } from './tools/TaskGetTool/TaskGetTool.js'
 import { TaskUpdateTool } from './tools/TaskUpdateTool/TaskUpdateTool.js'
 import { TaskListTool } from './tools/TaskListTool/TaskListTool.js'
 import uniqBy from 'lodash-es/uniqBy.js'
 import { isToolSearchEnabledOptimistic } from './utils/toolSearch.js'
+import { isSearchExtraToolsEnabledOptimistic } from './utils/searchExtraTools.js'
 import { isTodoV2Enabled } from './utils/tasks.js'
 // Dead code elimination: conditional import for GAKR_CODE_VERIFY_PLAN
 /* eslint-disable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
@@ -124,6 +117,18 @@ const coordinatorModeModule = feature('COORDINATOR_MODE')
   : null
 const SnipTool = feature('HISTORY_SNIP')
   ? require('./tools/SnipTool/SnipTool.js').SnipTool
+  : null
+const DiscoverSkillsTool = feature('EXPERIMENTAL_SKILL_SEARCH')
+  ? require('./tools/DiscoverSkillsTool/DiscoverSkillsTool.js').DiscoverSkillsTool
+  : null
+const GoalTool = feature('GOAL')
+  ? require('./tools/GoalTool/GoalTool.js').GoalTool
+  : null
+const LocalMemoryRecallTool = feature('LOCAL_MEMORY')
+  ? require('./tools/LocalMemoryRecallTool/LocalMemoryRecallTool.js').LocalMemoryRecallTool
+  : null
+const VaultHttpFetchTool = feature('LOCAL_VAULT')
+  ? require('./tools/VaultHttpFetchTool/VaultHttpFetchTool.js').VaultHttpFetchTool
   : null
 const ListPeersTool = feature('UDS_INBOX')
   ? require('./tools/ListPeersTool/ListPeersTool.js').ListPeersTool
@@ -219,8 +224,8 @@ export function getAllBaseTools(): Tools {
     AskUserQuestionTool,
     SkillTool,
     EnterPlanModeTool,
-    ...(process.env.USER_TYPE === 'ant' ? [ConfigTool] : []),
-    ...(process.env.USER_TYPE === 'ant' ? [TungstenTool] : []),
+    ...(LocalMemoryRecallTool ? [LocalMemoryRecallTool] : []),
+    ...(VaultHttpFetchTool ? [VaultHttpFetchTool] : []),
     ...(SuggestBackgroundPRTool ? [SuggestBackgroundPRTool] : []),
     ...(WebBrowserTool ? [WebBrowserTool] : []),
     ...(isTodoV2Enabled()
@@ -231,31 +236,41 @@ export function getAllBaseTools(): Tools {
     ...(TerminalCaptureTool ? [TerminalCaptureTool] : []),
     LSPTool,
     ...(isWorktreeModeEnabled() ? [EnterWorktreeTool, ExitWorktreeTool] : []),
-    getSendMessageTool(),
+    // Use filter(Boolean) to handle case where getter might return null/undefined
+    ...(getSendMessageTool() ? [getSendMessageTool()] : []),
     ...(ListPeersTool ? [ListPeersTool] : []),
     ...(isAgentSwarmsEnabled()
-      ? [getTeamCreateTool(), getTeamDeleteTool()]
+      ? [getTeamCreateTool(), getTeamDeleteTool()].filter(Boolean)
       : []),
     ...(VerifyPlanExecutionTool ? [VerifyPlanExecutionTool] : []),
     ...(process.env.USER_TYPE === 'ant' && REPLTool ? [REPLTool] : []),
     ...(WorkflowTool ? [WorkflowTool] : []),
     ...(SleepTool ? [SleepTool] : []),
-    ...cronTools,
+    ...(cronTools ?? []),
     ...(RemoteTriggerTool ? [RemoteTriggerTool] : []),
     ...(MonitorTool ? [MonitorTool] : []),
     BriefTool,
+    ConfigTool,
     ...(SendUserFileTool ? [SendUserFileTool] : []),
     ...(PushNotificationTool ? [PushNotificationTool] : []),
     ...(SubscribePRTool ? [SubscribePRTool] : []),
     ...(getPowerShellTool() ? [getPowerShellTool()] : []),
     ...(SnipTool ? [SnipTool] : []),
+    ...(DiscoverSkillsTool ? [DiscoverSkillsTool] : []),
+    ...(GoalTool ? [GoalTool] : []),
     ...(process.env.NODE_ENV === 'test' ? [TestingPermissionTool] : []),
     ListMcpResourcesTool,
     ReadMcpResourceTool,
     // Include ToolSearchTool when tool search might be enabled (optimistic check)
     // The actual decision to defer tools happens at request time in gakrcli.ts
     ...(isToolSearchEnabledOptimistic() ? [ToolSearchTool] : []),
-  ].filter(isDefinedTool)
+    // Include SearchExtraToolsTool when tool search might be enabled (optimistic check)
+    ...(isSearchExtraToolsEnabledOptimistic() ? [SearchExtraToolsTool] : []),
+    // ExecuteExtraTool (ExecuteTool) is a first-class tool — always available, not deferred.
+    // Models use it to invoke deferred tools discovered via SearchExtraTools.
+    ExecuteTool,
+    // Filter out any null/undefined tools that might have been added by getters
+  ].filter(Boolean)
 }
 
 /**
@@ -318,9 +333,7 @@ export const getTools = (permissionContext: ToolPermissionContext): Tools => {
   const tools = getAllBaseTools().filter(tool => !specialTools.has(tool.name))
 
   // Filter out tools that are denied by the deny rules
-  let allowedTools = filterToolsByDenyRules(tools, permissionContext).filter(
-    isDefinedTool,
-  )
+  let allowedTools = filterToolsByDenyRules(tools, permissionContext)
 
   // When REPL mode is enabled, hide primitive tools from direct use.
   // They're still accessible inside REPL via the VM context.
@@ -335,7 +348,11 @@ export const getTools = (permissionContext: ToolPermissionContext): Tools => {
     }
   }
 
-  const isEnabled = allowedTools.map(_ => _.isEnabled())
+  // Filter out any null/undefined tools that might have slipped through
+  // (defensive check against initialization timing issues)
+  allowedTools = allowedTools.filter(Boolean)
+
+  const isEnabled = allowedTools.map(_ => typeof _.isEnabled === 'function' ? _.isEnabled() : true)
   return allowedTools.filter((_, i) => isEnabled[i])
 }
 
@@ -361,11 +378,9 @@ export function assembleToolPool(
 ): Tools {
   const builtInTools = getTools(permissionContext)
 
-  // Filter out MCP tools that are in the deny list
-  const allowedMcpTools = filterToolsByDenyRules(
-    mcpTools,
-    permissionContext,
-  ).filter(isDefinedTool)
+  // Filter out MCP tools that are in the deny list, and filter out any null/undefined
+  // tools that might have been added by MCP client initialization
+  const allowedMcpTools = filterToolsByDenyRules(mcpTools, permissionContext).filter(Boolean)
 
   // Sort each partition for prompt-cache stability, keeping built-ins as a
   // contiguous prefix. The server's gakrcli_code_system_cache_policy places a

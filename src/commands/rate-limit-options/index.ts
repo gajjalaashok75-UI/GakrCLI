@@ -1,12 +1,12 @@
 import type { Command } from '../../commands.js'
-import { isgakrcliAISubscriber } from '../../utils/auth.js'
+import { isGakrCLIAISubscriber } from '../../utils/auth.js'
 
 const rateLimitOptions = {
   type: 'local-jsx',
   name: 'rate-limit-options',
   description: 'Show options when rate limit is reached',
   isEnabled: () => {
-    if (!isgakrcliAISubscriber()) {
+    if (!isGakrCLIAISubscriber()) {
       return false
     }
 

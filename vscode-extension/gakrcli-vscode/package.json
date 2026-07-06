@@ -2,7 +2,7 @@
 	"name": "gakrcli-vscode",
 	"displayName": "GakrCLI VS Code",
 	"description": "GakrCLI VS Code: AI coding assistant powered by any LLM",
-	"version": "0.2.4",
+	"version": "0.2.5",
 	"publisher": "gakr-gakr",
 	"license": "MIT",
 	"repository": {
@@ -36,12 +36,12 @@
 		"configuration": {
 			"title": "GakrCLI",
 			"properties": {
-				"gakrcliCode.selectedModel": {
+				"gakrcli.selectedModel": {
 					"type": "string",
 					"default": "default",
 					"description": "The AI model for GakrCLI."
 				},
-				"gakrcliCode.environmentVariables": {
+				"gakrcli.environmentVariables": {
 					"type": "array",
 					"items": {
 						"type": "object",
@@ -61,27 +61,27 @@
 						]
 					},
 					"default": [],
-					"description": "Environment variables to set when launching GakrCLI. Saved GakrCLI provider profiles are loaded automatically from the workspace or user config directory."
+					"description": "Environment variables to set when launching GakrCLI.\n\nPrefer setting environment variables in GakrCLI's settings.json.\nSee documentation: https://code.gakrcli.com/docs/en/settings"
 				},
-				"gakrcliCode.useTerminal": {
+				"gakrcli.useTerminal": {
 					"type": "boolean",
 					"default": false,
 					"description": "Launch GakrCLI in the terminal instead of the native UI."
 				},
-				"gakrcliCode.allowDangerouslySkipPermissions": {
+				"gakrcli.allowDangerouslySkipPermissions": {
 					"type": "boolean",
 					"description": "Allow bypass permissions mode. Recommended only for sandboxes with no internet access."
 				},
-				"gakrcliCode.processWrapper": {
+				"gakrcli.gakrcliProcessWrapper": {
 					"type": "string",
-					"description": "Executable path used to launch GakrCLI."
+					"description": "Executable path used to launch the GakrCLI process."
 				},
-				"gakrcliCode.respectGitIgnore": {
+				"gakrcli.respectGitIgnore": {
 					"type": "boolean",
 					"default": true,
 					"description": "Respect .gitignore files when performing file searches. Tip: You can still filter by other exclusion patterns in .ignore when this is disabled."
 				},
-				"gakrcliCode.initialPermissionMode": {
+				"gakrcli.initialPermissionMode": {
 					"type": "string",
 					"enum": [
 						"default",
@@ -93,22 +93,22 @@
 					"default": "default",
 					"description": "Initial permission mode for new conversations."
 				},
-				"gakrcliCode.disableLoginPrompt": {
+				"gakrcli.disableLoginPrompt": {
 					"type": "boolean",
 					"default": false,
 					"description": "When true, never prompt for login/authentication in the extension. Used when authentication is handled externally."
 				},
-				"gakrcliCode.autosave": {
+				"gakrcli.autosave": {
 					"type": "boolean",
 					"default": true,
 					"description": "Automatically save files before GakrCLI reads or writes them."
 				},
-				"gakrcliCode.useCtrlEnterToSend": {
+				"gakrcli.useCtrlEnterToSend": {
 					"type": "boolean",
 					"default": false,
 					"description": "When enabled, use Ctrl/Cmd+Enter to send prompts instead of just Enter. This allows Enter to create new lines."
 				},
-				"gakrcliCode.preferredLocation": {
+				"gakrcli.preferredLocation": {
 					"type": "string",
 					"enum": [
 						"sidebar",
@@ -121,32 +121,32 @@
 					"default": "panel",
 					"description": "Where GakrCLI opens by default. This setting updates automatically when you open GakrCLI in a new location."
 				},
-				"gakrcliCode.enableNewConversationShortcut": {
+				"gakrcli.enableNewConversationShortcut": {
 					"type": "boolean",
 					"default": false,
 					"description": "Use the Cmd/Ctrl+N keyboard shortcut to start a new conversation when GakrCLI is focused."
 				},
-				"gakrcliCode.hideOnboarding": {
+				"gakrcli.hideOnboarding": {
 					"type": "boolean",
 					"default": false,
 					"description": "Hide the onboarding checklist in GakrCLI."
 				},
-				"gakrcliCode.usePythonEnvironment": {
+				"gakrcli.usePythonEnvironment": {
 					"type": "boolean",
 					"default": true,
 					"markdownDescription": "Automatically activate the workspace's Python environment when running GakrCLI. Requires the [Python](https://marketplace.visualstudio.com/items?itemName=ms-python.python) extension."
 				},
-				"gakrcliCode.selectedProvider": {
+				"gakrcli.selectedProvider": {
 					"type": "string",
 					"default": "anthropic",
 					"description": "The selected AI provider for GakrCLI."
 				},
-				"gakrcliCode.apiKey": {
+				"gakrcli.apiKey": {
 					"type": "string",
 					"default": "",
 					"description": "API key for the selected provider."
 				},
-				"gakrcliCode.baseUrl": {
+				"gakrcli.baseUrl": {
 					"type": "string",
 					"default": "",
 					"description": "Base URL for the selected provider (for custom/OpenAI-compatible providers)."
@@ -252,6 +252,18 @@
 				"title": "GakrCLI: Install Plugin"
 			},
 			{
+				"command": "gakrcli.acceptProposedDiff",
+				"title": "GakrCLI: Accept Proposed Changes",
+				"enablement": "gakrcli.viewingProposedDiff",
+				"icon": "$(check)"
+			},
+			{
+				"command": "gakrcli.rejectProposedDiff",
+				"title": "GakrCLI: Reject Proposed Changes",
+				"enablement": "gakrcli.viewingProposedDiff",
+				"icon": "$(discard)"
+			},
+			{
 				"command": "gakrcli.insertAtMentioned",
 				"title": "GakrCLI: Insert At-Mentioned"
 			},
@@ -277,7 +289,7 @@
 				"mac": "cmd+escape",
 				"win": "ctrl+escape",
 				"linux": "ctrl+escape",
-				"when": "!config.gakrcliCode.useTerminal && editorTextFocus"
+				"when": "!config.gakrcli.useTerminal && editorTextFocus"
 			},
 			{
 				"command": "gakrcli.blur",
@@ -285,7 +297,7 @@
 				"mac": "cmd+escape",
 				"win": "ctrl+escape",
 				"linux": "ctrl+escape",
-				"when": "!config.gakrcliCode.useTerminal && !editorTextFocus"
+				"when": "!config.gakrcli.useTerminal && !editorTextFocus"
 			},
 			{
 				"command": "gakrcli.editor.open",
@@ -293,7 +305,7 @@
 				"mac": "cmd+shift+escape",
 				"win": "ctrl+shift+escape",
 				"linux": "ctrl+shift+escape",
-				"when": "!config.gakrcliCode.useTerminal"
+				"when": "!config.gakrcli.useTerminal"
 			},
 			{
 				"command": "gakrcli.terminal.open.keyboard",
@@ -301,7 +313,7 @@
 				"mac": "cmd+escape",
 				"win": "ctrl+escape",
 				"linux": "ctrl+escape",
-				"when": "config.gakrcliCode.useTerminal"
+				"when": "config.gakrcli.useTerminal"
 			},
 			{
 				"command": "gakrcli.insertAtMentioned",
@@ -317,7 +329,7 @@
 				"mac": "cmd+n",
 				"win": "ctrl+n",
 				"linux": "ctrl+n",
-				"when": "config.gakrcliCode.enableNewConversationShortcut && (activeWebviewPanelId == 'gakrcliPanel' || (gakrcli.sideBarActive && !editorFocus && !panelFocus))"
+				"when": "config.gakrcli.enableNewConversationShortcut && (activeWebviewPanelId == 'gakrcliPanel' || (gakrcli.sideBarActive && !editorFocus && !panelFocus))"
 			}
 		],
 		"viewsContainers": {
@@ -428,13 +440,23 @@
 					"group": "navigation"
 				},
 				{
+					"command": "gakrcli.acceptProposedDiff",
+					"when": "gakrcli.viewingProposedDiff",
+					"group": "navigation"
+				},
+				{
+					"command": "gakrcli.rejectProposedDiff",
+					"when": "gakrcli.viewingProposedDiff",
+					"group": "navigation"
+				},
+				{
 					"command": "gakrcli.editor.openLast",
-					"when": "!config.gakrcliCode.useTerminal",
+					"when": "!config.gakrcli.useTerminal",
 					"group": "navigation"
 				},
 				{
 					"command": "gakrcli.terminal.open",
-					"when": "config.gakrcliCode.useTerminal",
+					"when": "config.gakrcli.useTerminal",
 					"group": "navigation"
 				}
 			],
@@ -465,11 +487,11 @@
 				},
 				{
 					"command": "gakrcli.insertAtMentioned",
-					"when": "config.gakrcliCode.useTerminal"
+					"when": "config.gakrcli.useTerminal"
 				},
 				{
 					"command": "gakrcli.insertAtMention",
-					"when": "!config.gakrcliCode.useTerminal"
+					"when": "!config.gakrcli.useTerminal"
 				},
 				{
 					"command": "gakrcli.installPlugin",
@@ -489,7 +511,7 @@
 		"build:extension": "node esbuild.config.mjs",
 		"build:webview": "cd webview && npx vite build",
 		"watch": "node esbuild.config.mjs --watch",
-		"package": "npx @vscode/vsce package",
+		"package": "npx @vscode/vsce package --no-dependencies",
 		"lint": "eslint src/ webview/src/",
 		"format": "prettier --write \"src/**/*.ts\" \"webview/src/**/*.{ts,tsx}\"",
 		"test": "vitest run",
@@ -506,8 +528,5 @@
 		"prettier": "^3.3.0",
 		"typescript": "^5.5.0",
 		"vitest": "^1.6.0"
-	},
-	"dependencies": {
-		"@gakr-gakr/gakrcli": "^0.5.6"
 	}
 }

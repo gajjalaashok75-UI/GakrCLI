@@ -3,7 +3,7 @@
 // Only reachable in ant builds (gated by feature('VOICE_MODE') in useVoice.ts import).
 //
 // Connects to Anthropic's voice_stream WebSocket endpoint using the same
-// OAuth credentials as Gakr.  The endpoint uses conversation_engine
+// OAuth credentials as GakrCLI Code.  The endpoint uses conversation_engine
 // backed models for speech-to-text.  Designed for hold-to-talk: hold the
 // keybinding to record, release to stop and submit.
 //
@@ -16,7 +16,7 @@ import WebSocket from 'ws'
 import { getOauthConfig } from '../constants/oauth.js'
 import {
   checkAndRefreshOAuthTokenIfNeeded,
-  getgakrcliAIOAuthTokens,
+  getGakrCLIAIOAuthTokens,
   isAnthropicAuthEnabled,
 } from '../utils/auth.js'
 import { logForDebugging } from '../utils/debug.js'
@@ -96,13 +96,13 @@ type VoiceStreamMessage =
 // ─── Availability ──────────────────────────────────────────────────────
 
 export function isVoiceStreamAvailable(): boolean {
-  // voice_stream uses the same OAuth as GakrCLI — available when the
-  // user is authenticated with Anthropic (Gakr.ai subscriber or has
+  // voice_stream uses the same OAuth as GakrCLI Code — available when the
+  // user is authenticated with Anthropic (GakrCLI.ai subscriber or has
   // valid OAuth tokens).
   if (!isAnthropicAuthEnabled()) {
     return false
   }
-  const tokens = getgakrcliAIOAuthTokens()
+  const tokens = getGakrCLIAIOAuthTokens()
   return tokens !== null && tokens.accessToken !== null
 }
 
@@ -115,7 +115,7 @@ export async function connectVoiceStream(
   // Ensure OAuth token is fresh before connecting
   await checkAndRefreshOAuthTokenIfNeeded()
 
-  const tokens = getgakrcliAIOAuthTokens()
+  const tokens = getGakrCLIAIOAuthTokens()
   if (!tokens?.accessToken) {
     logForDebugging('[voice_stream] No OAuth token available')
     return null
@@ -123,11 +123,11 @@ export async function connectVoiceStream(
 
   // voice_stream is a private_api route, but /api/ws/ is also exposed on
   // the api.anthropic.com listener (service_definitions.yaml private-api:
-  // visibility.external: true). We target that host instead of gakr.ai
-  // because the gakr.ai CF zone uses TLS fingerprinting and challenges
+  // visibility.external: true). We target that host instead of gakrcli.ai
+  // because the gakrcli.ai CF zone uses TLS fingerprinting and challenges
   // non-browser clients (anthropics/gakrcli-code#34094). Same private-api
   // pod, same OAuth Bearer auth — just a CF zone that doesn't block us.
-  // Desktop dictation still uses gakr.ai (Swift URLSession has a
+  // Desktop dictation still uses gakrcli.ai (Swift URLSession has a
   // browser-class JA3 fingerprint, so CF lets it through).
   const wsBaseUrl =
     process.env.VOICE_STREAM_BASE_URL ||

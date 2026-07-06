@@ -55,10 +55,11 @@ import { type MCPProgress, MCPTool } from '../../tools/MCPTool/MCPTool.js'
 import { createMcpAuthTool } from '../../tools/McpAuthTool/McpAuthTool.js'
 import { ReadMcpResourceTool } from '../../tools/ReadMcpResourceTool/ReadMcpResourceTool.js'
 import { createAbortController } from '../../utils/abortController.js'
+import { AbortError, isAbortError } from '../../utils/errors.js'
 import { count } from '../../utils/array.js'
 import {
   checkAndRefreshOAuthTokenIfNeeded,
-  getgakrcliAIOAuthTokens,
+  getGakrCLIAIOAuthTokens,
   handleOAuth401Error,
 } from '../../utils/auth.js'
 import { registerCleanup } from '../../utils/cleanupRegistry.js'
@@ -66,9 +67,7 @@ import { detectCodeIndexingFromMcpServerName } from '../../utils/codeIndexing.js
 import { logForDebugging } from '../../utils/debug.js'
 import { isEnvDefinedFalsy, isEnvTruthy } from '../../utils/envUtils.js'
 import {
-  AbortError,
   errorMessage,
-  isAbortError,
   TelemetrySafeError_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
 } from '../../utils/errors.js'
 import { getMCPUserAgent } from '../../utils/http.js'
@@ -129,11 +128,11 @@ import { classifyMcpToolForCollapse } from '../../tools/MCPTool/classifyForColla
 import { clearKeychainCache } from '../../utils/secureStorage/macOsKeychainHelpers.js'
 import { sleep } from '../../utils/sleep.js'
 import {
-  gakrcliAuthProvider,
+  GakrCLIAuthProvider,
   hasMcpDiscoveryButNoToken,
   wrapFetchWithStepUpDetection,
 } from './auth.js'
-import { markgakrcliAiMcpConnected } from './gakrcliai.js'
+import { markGakrCLIAiMcpConnected } from './gakrcliai.js'
 import { getAllMcpConfigs, isMcpServerDisabled } from './config.js'
 import { getMcpServerHeaders } from './headersHelper.js'
 import { SdkControlClientTransport } from './SdkControlTransport.js'
@@ -233,9 +232,9 @@ function getMcpToolTimeoutMs(): number {
   )
 }
 
-import { isgakrcliInChromeMCPServer } from '../../utils/gakrcliInChrome/common.js'
+import { isGakrCLIInChromeMCPServer } from '../../utils/gakrcliInChrome/common.js'
 
-// Lazy: toolRendering.tsx pulls React/ink; only needed when Gakr-in-Chrome MCP server is connected
+// Lazy: toolRendering.tsx pulls React/ink; only needed when GakrCLI-in-Chrome MCP server is connected
 /* eslint-disable @typescript-eslint/no-require-imports */
 const gakrcliInChromeToolRendering =
   (): typeof import('../../utils/gakrcliInChrome/toolRendering.js') =>
@@ -255,7 +254,7 @@ const isComputerUseMCPServer = feature('CHICAGO_MCP')
 
 import { mkdir, readFile, unlink, writeFile } from 'fs/promises'
 import { dirname, join } from 'path'
-import { getGakrcliConfigHomeDir } from '../../utils/envUtils.js'
+import { getGakrCLIConfigHomeDir } from '../../utils/envUtils.js'
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { jsonParse, jsonStringify } from '../../utils/slowOperations.js'
 
@@ -264,7 +263,7 @@ const MCP_AUTH_CACHE_TTL_MS = 15 * 60 * 1000 // 15 min
 type McpAuthCacheData = Record<string, { timestamp: number }>
 
 function getMcpAuthCachePath(): string {
-  return join(getGakrcliConfigHomeDir(), 'mcp-needs-auth-cache.json')
+  return join(getGakrCLIConfigHomeDir(), 'mcp-needs-auth-cache.json')
 }
 
 // Memoized so N concurrent isMcpAuthCached() calls during batched connection
@@ -355,7 +354,7 @@ function handleRemoteAuthFailure(
   const label: Record<typeof transportType, string> = {
     sse: 'SSE',
     http: 'HTTP',
-    'gakrcliai-proxy': 'gakr.ai proxy',
+    'gakrcliai-proxy': 'gakrcli.ai proxy',
   }
   logMCPDebug(
     name,
@@ -366,27 +365,27 @@ function handleRemoteAuthFailure(
 }
 
 /**
- * Fetch wrapper for gakr.ai proxy connections. Attaches the OAuth bearer
+ * Fetch wrapper for gakrcli.ai proxy connections. Attaches the OAuth bearer
  * token and retries once on 401 via handleOAuth401Error (force-refresh).
  *
  * The Anthropic API path has this retry (withRetry.ts, grove.ts) to handle
  * memoize-cache staleness and clock drift. Without the same here, a single
- * stale token mass-401s every gakr.ai connector and sticks them all in the
+ * stale token mass-401s every gakrcli.ai connector and sticks them all in the
  * 15-min needs-auth cache.
  */
-export function creategakrcliAiProxyFetch(innerFetch: FetchLike): FetchLike {
+export function createGakrCLIAiProxyFetch(innerFetch: FetchLike): FetchLike {
   return async (url, init) => {
     const doRequest = async () => {
       await checkAndRefreshOAuthTokenIfNeeded()
-      const currentTokens = getgakrcliAIOAuthTokens()
+      const currentTokens = getGakrCLIAIOAuthTokens()
       if (!currentTokens) {
-        throw new Error('No gakr.ai OAuth token available')
+        throw new Error('No gakrcli.ai OAuth token available')
       }
       // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
       const headers = new Headers(init?.headers)
       headers.set('Authorization', `Bearer ${currentTokens.accessToken}`)
       const response = await innerFetch(url, { ...init, headers })
-      // Return the exact token that was sent. Reading getgakrcliAIOAuthTokens()
+      // Return the exact token that was sent. Reading getGakrCLIAIOAuthTokens()
       // again after the request is wrong under concurrent 401s: another
       // connector's handleOAuth401Error clears the memoize cache, so we'd read
       // the NEW token from keychain, pass it to handleOAuth401Error, which
@@ -411,7 +410,7 @@ export function creategakrcliAiProxyFetch(innerFetch: FetchLike): FetchLike {
     })
     if (!tokenChanged) {
       // ELOCKED contention: another connector may have won the lockfile and refreshed — check if token changed underneath us
-      const now = getgakrcliAIOAuthTokens()?.accessToken
+      const now = getGakrCLIAIOAuthTokens()?.accessToken
       if (!now || now === sentToken) {
         return response
       }
@@ -581,6 +580,21 @@ export async function cleanupFailedConnection(
   await transport.close().catch(() => {})
 }
 
+export function logMcpServerStderr(
+  name: string,
+  stderrOutput: string,
+  connectedSuccessfully: boolean,
+): void {
+  if (!stderrOutput) return
+
+  const message = `Server stderr: ${stderrOutput}`
+  if (connectedSuccessfully) {
+    logMCPDebug(name, message)
+  } else {
+    logMCPError(name, message)
+  }
+}
+
 function isLocalMcpServer(config: ScopedMcpServerConfig): boolean {
   return !config.type || config.type === 'stdio' || config.type === 'sdk'
 }
@@ -637,7 +651,7 @@ export const connectToServer = memoize(
 
       if (serverRef.type === 'sse') {
         // Create an auth provider for this server
-        const authProvider = new gakrcliAuthProvider(name, serverRef)
+        const authProvider = new GakrCLIAuthProvider(name, serverRef)
 
         // Get combined headers (static + dynamic)
         const combinedHeaders = await getMcpServerHeaders(name, serverRef)
@@ -729,7 +743,7 @@ export const connectToServer = memoize(
         const wsHeaders = {
           'User-Agent': getMCPUserAgent(),
           ...(serverRef.authToken && {
-            'X-Gakr-Code-Ide-Authorization': serverRef.authToken,
+            'X-GakrCLI-Code-Ide-Authorization': serverRef.authToken,
           }),
         }
 
@@ -818,7 +832,7 @@ export const connectToServer = memoize(
         )
 
         // Create an auth provider for this server
-        const authProvider = new gakrcliAuthProvider(name, serverRef)
+        const authProvider = new GakrCLIAuthProvider(name, serverRef)
 
         // Get combined headers (static + dynamic)
         const combinedHeaders = await getMcpServerHeaders(name, serverRef)
@@ -887,21 +901,21 @@ export const connectToServer = memoize(
       } else if (serverRef.type === 'gakrcliai-proxy') {
         logMCPDebug(
           name,
-          `Initializing gakr.ai proxy transport for server ${serverRef.id}`,
+          `Initializing gakrcli.ai proxy transport for server ${serverRef.id}`,
         )
 
-        const tokens = getgakrcliAIOAuthTokens()
+        const tokens = getGakrCLIAIOAuthTokens()
         if (!tokens) {
-          throw new Error('No gakr.ai OAuth token found')
+          throw new Error('No gakrcli.ai OAuth token found')
         }
 
         const oauthConfig = getOauthConfig()
         const proxyUrl = `${oauthConfig.MCP_PROXY_URL}${oauthConfig.MCP_PROXY_PATH.replace('{server_id}', serverRef.id)}`
 
-        logMCPDebug(name, `Using gakr.ai proxy at ${proxyUrl}`)
+        logMCPDebug(name, `Using gakrcli.ai proxy at ${proxyUrl}`)
 
         // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
-        const fetchWithAuth = creategakrcliAiProxyFetch(globalThis.fetch)
+        const fetchWithAuth = createGakrCLIAiProxyFetch(globalThis.fetch)
 
         const proxyOptions = getProxyFetchOptions()
         const transportOptions: StreamableHTTPClientTransportOptions = {
@@ -920,23 +934,23 @@ export const connectToServer = memoize(
           new URL(proxyUrl),
           transportOptions,
         )
-        logMCPDebug(name, `gakr.ai proxy transport created successfully`)
+        logMCPDebug(name, `gakrcli.ai proxy transport created successfully`)
       } else if (
         (serverRef.type === 'stdio' || !serverRef.type) &&
-        isgakrcliInChromeMCPServer(name)
+        isGakrCLIInChromeMCPServer(name)
       ) {
         // Run the Chrome MCP server in-process to avoid spawning a ~325 MB subprocess
         const { createChromeContext } = await import(
           '../../utils/gakrcliInChrome/mcpServer.js'
         )
-        const { creategakrcliForChromeMcpServer } = await import(
-          '@ant/gakrcli-for-chrome-mcp'
+        const { createGakrCLIForChromeMcpServer } = await import(
+          '@gakr-gakr/gakrcli-for-chrome-mcp'
         )
         const { createLinkedTransportPair } = await import(
           './InProcessTransport.js'
         )
         const context = createChromeContext(serverRef.env)
-        inProcessServer = creategakrcliForChromeMcpServer(context)
+        inProcessServer = createGakrCLIForChromeMcpServer(context)
         const [clientTransport, serverTransport] = createLinkedTransportPair()
         await inProcessServer.connect(serverTransport)
         transport = clientTransport
@@ -961,11 +975,17 @@ export const connectToServer = memoize(
         transport = clientTransport
         logMCPDebug(name, `In-process Computer Use MCP server started`)
       } else if (serverRef.type === 'stdio' || !serverRef.type) {
-        const finalCommand =
-          process.env.GAKR_CODE_SHELL_PREFIX || serverRef.command
-        const finalArgs = process.env.GAKR_CODE_SHELL_PREFIX
-          ? [[serverRef.command, ...serverRef.args].join(' ')]
-          : serverRef.args
+        // Split the prefix into separate args so we hand a real array to the
+        // MCP SDK's stdio transport.  Joining the server command + its args
+        // into one string and putting that single string inside a one-element
+        // array causes the SDK to shell-invoke the whole blob, letting shell
+        // metacharacters in serverRef.args run arbitrary commands before the
+        // target binary even starts.
+        const { command: finalCommand, args: finalArgs } = buildMcpStdioCommand(
+          serverRef.command,
+          serverRef.args ?? [],
+          process.env.GAKR_CODE_SHELL_PREFIX,
+        )
         transport = new StdioClientTransport({
           command: finalCommand,
           args: finalArgs,
@@ -974,7 +994,6 @@ export const connectToServer = memoize(
             ...serverRef.env,
           } as Record<string, string>,
           stderr: 'pipe', // prevents error output from the MCP server from printing to the UI
-          cwd: serverRef.cwd,
         })
       } else {
         throw new Error(`Unsupported server type: ${serverRef.type}`)
@@ -1004,10 +1023,12 @@ export const connectToServer = memoize(
 
       const client = new Client(
         {
+          // name stays 'gakrcli-code' for compatibility with MCP servers that
+          // gate features on the upstream client identifier.
           name: 'gakrcli-code',
-          title: 'Gakr',
+          title: 'GakrCLI',
           version: MACRO.VERSION ?? 'unknown',
-          description: "Anthropic's agentic coding tool",
+          description: 'GakrCLI — coding-agent CLI for any LLM provider',
           websiteUrl: PRODUCT_URL,
         },
         {
@@ -1099,7 +1120,7 @@ export const connectToServer = memoize(
       try {
         await Promise.race([connectPromise, timeoutPromise])
         if (stderrOutput) {
-          logMCPError(name, `Server stderr: ${stderrOutput}`)
+          logMcpServerStderr(name, stderrOutput, true)
           stderrOutput = '' // Release accumulated string to prevent memory growth
         }
         const elapsed = Date.now() - connectStartTime
@@ -1147,7 +1168,7 @@ export const connectToServer = memoize(
         ) {
           logMCPDebug(
             name,
-            `gakr.ai proxy connection failed after ${elapsed}ms: ${error.message}`,
+            `gakrcli.ai proxy connection failed after ${elapsed}ms: ${error.message}`,
           )
           logMCPError(name, error)
 
@@ -1170,7 +1191,7 @@ export const connectToServer = memoize(
           await cleanupFailedConnection(transport)
         }
         if (stderrOutput) {
-          logMCPError(name, `Server stderr: ${stderrOutput}`)
+          logMcpServerStderr(name, stderrOutput, false)
         }
         throw error
       }
@@ -2017,9 +2038,9 @@ export const fetchToolsForClient = memoizeWithLRU(
               const displayName = tool.annotations?.title || tool.name
               return `${client.name} - ${displayName} (MCP)`
             },
-            ...(isgakrcliInChromeMCPServer(client.name) &&
+            ...(isGakrCLIInChromeMCPServer(client.name) &&
               (client.config.type === 'stdio' || !client.config.type)
-              ? gakrcliInChromeToolRendering().getgakrcliInChromeMCPToolOverrides(
+              ? gakrcliInChromeToolRendering().getGakrCLIInChromeMCPToolOverrides(
                 tool.name,
               )
               : {}),
@@ -2206,7 +2227,7 @@ export async function reconnectMcpServerImpl(
     }
 
     if (config.type === 'gakrcliai-proxy') {
-      markgakrcliAiMcpConnected(name)
+      markGakrCLIAiMcpConnected(name)
     }
 
     const supportsResources = !!client.capabilities?.resources
@@ -2379,7 +2400,7 @@ export async function getMcpToolsCommandsAndResources(
       }
 
       if (config.type === 'gakrcliai-proxy') {
-        markgakrcliAiMcpConnected(name)
+        markGakrCLIAiMcpConnected(name)
       }
 
       const supportsResources = !!client.capabilities?.resources
@@ -3191,6 +3212,9 @@ async function callMCPTool({
         errorDetails = String(result.error)
       }
       logMCPError(name, errorDetails)
+      // Include server and tool name in telemetry for debugging, but keep
+      // the human-readable message unchanged to avoid breaking error consumers
+      // that parse the message string.
       throw new McpToolCallError_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS(
         errorDetails,
         `MCP tool [${name}] ${tool}: ${errorDetails}`,
@@ -3309,6 +3333,66 @@ function extractToolUseId(message: AssistantMessage): string | undefined {
 }
 
 /**
+ * Build the command and args for a stdio MCP transport, applying the
+ * GAKR_CODE_SHELL_PREFIX split into separate argv entries. This
+ * ensures the MCP SDK receives a proper command + args[] instead of
+ * a shell-joined string, preventing shell metacharacter injection
+ * from serverRef.args.
+ *
+ * When a prefix is set, prefixParts[0] becomes the command and
+ * prefixParts[1..] + original command + original args become the
+ * argv array.
+ */
+export function buildMcpStdioCommand(
+  command: string,
+  args: string[],
+  shellPrefix?: string,
+): { command: string; args: string[] } {
+  if (!shellPrefix) {
+    return { command, args }
+  }
+
+  let finalCommand: string
+  let prefixArgs: string[]
+
+  // Split on the last " -c" to preserve spaced executable path
+  // (e.g. "C:\Program Files\Git\bin\bash.exe -c"). When no " -c" is
+  // present, fall back to plain whitespace split.
+  const cIndex = shellPrefix.lastIndexOf(' -c')
+  if (cIndex > 0) {
+    finalCommand = shellPrefix.substring(0, cIndex)
+    prefixArgs = ['-c', ...shellPrefix.substring(cIndex + 3).split(/\s+/).filter(Boolean)]
+  } else {
+    const parts = shellPrefix.split(/\s+/).filter(Boolean)
+    if (parts.length === 0) return { command, args }
+    finalCommand = parts[0]
+    prefixArgs = parts.slice(1)
+  }
+
+  // Shell -c prefix (e.g. sh -c, bash -c): everything after -c is a single
+  // shell command string, not individual argv entries. Without this join,
+  // sh -c runs only the first word as the command string and treats the
+  // remaining entries as shell positional parameters ($0, $1, ...), so the
+  // MCP server never receives its configured arguments.
+  //
+  // Each original command/arg is single-quote-escaped to prevent shell
+  // injection via MCP server args (e.g. --path=/tmp; rm -rf / would
+  // otherwise execute the semicolon as a command separator).
+  if (prefixArgs.includes('-c')) {
+    const cmdStr = [command, ...args].map(a => `'${a.replace(/'/g, "'\\''")}'`).join(' ')
+    return {
+      command: finalCommand,
+      args: [...prefixArgs, cmdStr],
+    }
+  }
+
+  return {
+    command: finalCommand,
+    args: [...prefixArgs, command, ...args],
+  }
+}
+
+/**
  * Sets up SDK MCP clients by creating transports and connecting them.
  * This is used for SDK MCP servers that run in the same process as the SDK.
  *
@@ -3336,10 +3420,12 @@ export async function setupSdkMcpClients(
 
       const client = new Client(
         {
+          // name stays 'gakrcli-code' for compatibility with MCP servers that
+          // gate features on the upstream client identifier.
           name: 'gakrcli-code',
-          title: 'Gakr',
+          title: 'GakrCLI',
           version: MACRO.VERSION ?? 'unknown',
-          description: "Anthropic's agentic coding tool",
+          description: 'GakrCLI — coding-agent CLI for any LLM provider',
           websiteUrl: PRODUCT_URL,
         },
         {

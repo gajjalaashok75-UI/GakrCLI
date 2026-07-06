@@ -30,7 +30,7 @@ class DomainBlockedError extends Error {
 class DomainCheckFailedError extends Error {
   constructor(domain: string) {
     super(
-      `Unable to verify if domain ${domain} is safe to fetch. This may be due to network restrictions or enterprise security policies blocking gakr.ai.`,
+      `Unable to verify if domain ${domain} is safe to fetch. This may be due to network restrictions or enterprise security policies blocking gakrcli.ai.`,
     )
     this.name = 'DomainCheckFailedError'
   }
@@ -84,6 +84,43 @@ export function clearWebFetchCache(): void {
   DOMAIN_CHECK_CACHE.clear()
 }
 
+/**
+ * Normalizes a response header value to a string.
+ * Axios can return string, string[], or undefined — this flattens arrays
+ * and filters out undefined values.
+ */
+function responseHeaderToString(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return value
+  }
+  if (Array.isArray(value)) {
+    const parts = value
+      .map(responseHeaderToString)
+      .filter((part): part is string => part !== undefined)
+    return parts.length > 0 ? parts.join(', ') : undefined
+  }
+  return undefined
+}
+
+/**
+ * Reads a header value from an Axios response, trying the AxiosHeaders-style
+ * get() method first, then falling back to direct property access.
+ */
+function getResponseHeader(
+  headers: AxiosResponse<unknown>['headers'],
+  name: string,
+): string | undefined {
+  const headersWithGet = headers as { get?: (headerName: string) => unknown }
+  if (typeof headersWithGet.get === 'function') {
+    const value = responseHeaderToString(headersWithGet.get(name))
+    if (value !== undefined) {
+      return value
+    }
+  }
+
+  return responseHeaderToString(headers[name.toLowerCase()])
+}
+
 // Lazy singleton — defers the turndown → @mixmark-io/domino import (~1.4MB
 // retained heap) until the first HTML fetch, and reuses one instance across
 // calls (construction builds 15 rule objects; .turndown() is stateless).
@@ -102,7 +139,7 @@ function getTurndownService(): Promise<InstanceType<TurndownCtor>> {
 // for a data exfiltration. However, this is too restrictive for some customers'
 // legitimate use cases, such as JWT-signed URLs (e.g., cloud service signed URLs)
 // that can be much longer. We already require user approval for each domain,
-// which provides a primary security boundary. In addition, GakrCLI has
+// which provides a primary security boundary. In addition, GakrCLI Code has
 // other data exfil channels, and this one does not seem relatively high risk,
 // so I'm removing that length restriction. -ab
 const MAX_URL_LENGTH = 2000
@@ -332,11 +369,16 @@ export async function getWithPermittedRedirects(
         }
         const arrayBuffer = await fetchResponse.arrayBuffer()
         // Build an AxiosResponse-like shape so downstream code stays happy
+        // (Headers.entries() requires the DOM.Iterable lib; forEach does not.)
+        const responseHeaders: Record<string, string> = {}
+        fetchResponse.headers.forEach((value, key) => {
+          responseHeaders[key] = value
+        })
         return {
           data: new Uint8Array(arrayBuffer),
           status: fetchResponse.status,
           statusText: fetchResponse.statusText,
-          headers: Object.fromEntries(fetchResponse.headers.entries()),
+          headers: responseHeaders,
           config: axiosConfig,
           request: undefined,
         } as unknown as AxiosResponse<ArrayBuffer>
@@ -350,7 +392,10 @@ export async function getWithPermittedRedirects(
       error.response &&
       [301, 302, 307, 308].includes(error.response.status)
     ) {
-      const redirectLocation = error.response.headers.location
+      const redirectLocation = getResponseHeader(
+        error.response.headers,
+        'location',
+      )
       if (!redirectLocation) {
         throw new Error('Redirect missing Location header')
       }
@@ -446,7 +491,7 @@ export async function getURLMarkdownContent(
 
     // Check if the user has opted to skip the blocklist check
     // This is for enterprise customers with restrictive security policies
-    // that prevent outbound connections to gakr.ai
+    // that prevent outbound connections to gakrcli.ai
     const settings = getSettings_DEPRECATED()
     if (!settings.skipWebFetchPreflight) {
       const checkResult = await checkDomainBlocklist(hostname)
@@ -494,9 +539,9 @@ export async function getURLMarkdownContent(
   // This lets GC reclaim up to MAX_HTTP_CONTENT_LENGTH (10MB) before Turndown
   // builds its DOM tree (which can be 3-5x the HTML size).
   ;(response as { data: unknown }).data = null
-  const contentType = response.headers['content-type'] ?? ''
+  const contentType = getResponseHeader(response.headers, 'content-type') ?? ''
 
-  // Binary content: save raw bytes to disk with a proper extension so gakrcli
+  // Binary content: save raw bytes to disk with a proper extension so GakrCLI
   // can inspect the file later. We still fall through to the utf-8 decode +
   // Haiku path below — for PDFs in particular the decoded string has enough
   // ASCII structure (/Title, text streams) that Haiku can summarize it, and

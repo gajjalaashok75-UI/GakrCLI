@@ -17,7 +17,7 @@ import { lt } from '../utils/semver.js'
  * Runtime check for bridge mode entitlement.
  *
  * Remote Control requires a gakrcli.ai subscription (the bridge auths to CCR
- * with the gakrcli.ai OAuth token). isgakrcliAISubscriber() excludes
+ * with the gakrcli.ai OAuth token). isGakrCLIAISubscriber() excludes
  * Bedrock/Vertex/Foundry, apiKeyHelper/gateway deployments, env-var API keys,
  * and Console API logins — none of which have the OAuth token CCR needs.
  * See github.com/deshaw/anthropic-issues/issues/24.
@@ -30,7 +30,7 @@ export function isBridgeEnabled(): boolean {
   // Negative pattern (if (!feature(...)) return) does not eliminate
   // inline string literals from external builds.
   return feature('BRIDGE_MODE')
-    ? isgakrcliAISubscriber() &&
+    ? isGakrCLIAISubscriber() &&
         getFeatureValue_CACHED_MAY_BE_STALE('tengu_ccr_bridge', false)
     : false
 }
@@ -49,7 +49,7 @@ export function isBridgeEnabled(): boolean {
  */
 export async function isBridgeEnabledBlocking(): Promise<boolean> {
   return feature('BRIDGE_MODE')
-    ? isgakrcliAISubscriber() &&
+    ? isGakrCLIAISubscriber() &&
         (await checkGate_CACHED_OR_BLOCKING('tengu_ccr_bridge'))
     : false
 }
@@ -69,7 +69,7 @@ export async function isBridgeEnabledBlocking(): Promise<boolean> {
  */
 export async function getBridgeDisabledReason(): Promise<string | null> {
   if (feature('BRIDGE_MODE')) {
-    if (!isgakrcliAISubscriber()) {
+    if (!isGakrCLIAISubscriber()) {
       return 'Remote Control requires a gakrcli.ai subscription. Run `gakrcli auth login` to sign in with your gakrcli.ai account.'
     }
     if (!hasProfileScope()) {
@@ -87,13 +87,13 @@ export async function getBridgeDisabledReason(): Promise<string | null> {
 }
 
 // try/catch: main.tsx:5698 calls isBridgeEnabled() while defining the Commander
-// program, before enableConfigs() runs. isgakrcliAISubscriber() → getGlobalConfig()
+// program, before enableConfigs() runs. isGakrCLIAISubscriber() → getGlobalConfig()
 // throws "Config accessed before allowed" there. Pre-config, no OAuth token can
 // exist anyway — false is correct. Same swallow getFeatureValue_CACHED_MAY_BE_STALE
 // already does at growthbook.ts:775-780.
-function isgakrcliAISubscriber(): boolean {
+function isGakrCLIAISubscriber(): boolean {
   try {
-    return authModule.isgakrcliAISubscriber()
+    return authModule.isGakrCLIAISubscriber()
   } catch {
     return false
   }
@@ -133,7 +133,7 @@ export function isEnvLessBridgeEnabled(): boolean {
  * Kill-switch for the `cse_*` → `session_*` client-side retag shim.
  *
  * The shim exists because compat/convert.go:27 validates TagSession and the
- * gakr.ai frontend routes on `session_*`, while v2 worker endpoints hand out
+ * gakrcli.ai frontend routes on `session_*`, while v2 worker endpoints hand out
  * `cse_*`. Once the server tags by environment_kind and the frontend accepts
  * `cse_*` directly, flip this to false to make toCompatSessionId a no-op.
  * Defaults to true — the shim stays active until explicitly disabled.
@@ -174,7 +174,7 @@ export function checkBridgeMinVersion(): string | null {
 
 /**
  * Default for remoteControlAtStartup when the user hasn't explicitly set it.
- * When the CCR_AUTO_CONNECT build flag is present (ant-only) and the
+ * When the CCR_AUTO_CONNECT build flag is present (internal-only) and the
  * tengu_cobalt_harbor GrowthBook gate is on, all sessions connect to CCR by
  * default — the user can still opt out by setting remoteControlAtStartup=false
  * in config (explicit settings always win over this default).

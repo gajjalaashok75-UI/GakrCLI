@@ -41,7 +41,7 @@ export const CONSOLE_OAUTH_SCOPES = [
   GAKR_AI_PROFILE_SCOPE,
 ] as const
 
-// Gakr.ai OAuth scopes - for Gakr.ai subscribers (Pro/Max/Team/Enterprise)
+// GakrCLI.ai OAuth scopes - for GakrCLI.ai subscribers (Pro/Max/Team/Enterprise)
 export const GAKR_AI_OAUTH_SCOPES = [
   GAKR_AI_PROFILE_SCOPE,
   GAKR_AI_INFERENCE_SCOPE,
@@ -51,7 +51,7 @@ export const GAKR_AI_OAUTH_SCOPES = [
 ] as const
 
 // All OAuth scopes - union of all scopes used in GakrCLI CLI
-// When logging in, request all scopes in order to handle both Console -> Gakr.ai redirect
+// When logging in, request all scopes in order to handle both Console -> GakrCLI.ai redirect
 // Ensure that `OAuthConsentPage` in apps repo is kept in sync with this list.
 export const ALL_OAUTH_SCOPES = Array.from(
   new Set([...CONSOLE_OAUTH_SCOPES, ...GAKR_AI_OAUTH_SCOPES]),
@@ -62,17 +62,17 @@ type OauthConfig = {
   CONSOLE_AUTHORIZE_URL: string
   GAKR_AI_AUTHORIZE_URL: string
   /**
-   * The gakr.ai web origin. Separate from GAKR_AI_AUTHORIZE_URL because
+   * The gakrcli.ai web origin. Separate from GAKR_AI_AUTHORIZE_URL because
    * that now routes through gakrcli.com/cai/* for attribution — deriving
    * .origin from it would give gakrcli.com, breaking links to /code,
-   * /settings/connectors, and other gakr.ai web pages.
+   * /settings/connectors, and other gakrcli.ai web pages.
    */
   GAKR_AI_ORIGIN: string
   TOKEN_URL: string
   API_KEY_URL: string
   ROLES_URL: string
   CONSOLE_SUCCESS_URL: string
-  gakrcliAI_SUCCESS_URL: string
+  GAKRCLIAI_SUCCESS_URL: string
   MANUAL_REDIRECT_URL: string
   CLIENT_ID: string
   OAUTH_FILE_SUFFIX: string
@@ -83,19 +83,19 @@ type OauthConfig = {
 // Production OAuth configuration - Used in normal operation
 const PROD_OAUTH_CONFIG = {
   BASE_API_URL: 'https://api.anthropic.com',
-  CONSOLE_AUTHORIZE_URL: 'https://platform.claude.com/oauth/authorize',
+  CONSOLE_AUTHORIZE_URL: 'https://platform.gakrcli.com/oauth/authorize',
   // Bounces through gakrcli.com/cai/* so CLI sign-ins connect to gakrcli.com
-  // visits for attribution. 307s to gakr.ai/oauth/authorize in two hops.
-  GAKR_AI_AUTHORIZE_URL: 'https://claude.com/cai/oauth/authorize',
-  GAKR_AI_ORIGIN: 'https://claude.ai',
-  TOKEN_URL: 'https://platform.claude.com/v1/oauth/token',
-  API_KEY_URL: 'https://api.anthropic.com/api/oauth/claude_cli/create_api_key',
-  ROLES_URL: 'https://api.anthropic.com/api/oauth/claude_cli/roles',
+  // visits for attribution. 307s to gakrcli.ai/oauth/authorize in two hops.
+  GAKR_AI_AUTHORIZE_URL: 'https://gakrcli.com/cai/oauth/authorize',
+  GAKR_AI_ORIGIN: 'https://gakrcli.ai',
+  TOKEN_URL: 'https://platform.gakrcli.com/v1/oauth/token',
+  API_KEY_URL: 'https://api.anthropic.com/api/oauth/gakrcli_cli/create_api_key',
+  ROLES_URL: 'https://api.anthropic.com/api/oauth/gakrcli_cli/roles',
   CONSOLE_SUCCESS_URL:
-    'https://platform.claude.com/buy_credits?returnUrl=/oauth/code/success%3Fapp%3Dgakrcli-code',
-  gakrcliAI_SUCCESS_URL:
-    'https://platform.claude.com/oauth/code/success?app=gakrcli-code',
-  MANUAL_REDIRECT_URL: 'https://platform.claude.com/oauth/code/callback',
+    'https://platform.gakrcli.com/buy_credits?returnUrl=/oauth/code/success%3Fapp%3Dgakrcli-code',
+  GAKRCLIAI_SUCCESS_URL:
+    'https://platform.gakrcli.com/oauth/code/success?app=gakrcli-code',
+  MANUAL_REDIRECT_URL: 'https://platform.gakrcli.com/oauth/code/callback',
   CLIENT_ID: '9d1c250a-e61b-44d9-88ed-5944d1962f5e',
   // No suffix for production config
   OAUTH_FILE_SUFFIX: '',
@@ -106,12 +106,12 @@ const PROD_OAUTH_CONFIG = {
 /**
  * Client ID Metadata Document URL for MCP OAuth (CIMD / SEP-991).
  * When an MCP auth server advertises client_id_metadata_document_supported: true,
- * GakrCLI uses this URL as its client_id instead of Dynamic Client Registration.
+ * GakrCLI Code uses this URL as its client_id instead of Dynamic Client Registration.
  * The URL must point to a JSON document hosted by Anthropic.
  * See: https://datatracker.ietf.org/doc/html/draft-ietf-oauth-client-id-metadata-document-00
  */
 export const MCP_CLIENT_METADATA_URL =
-  'https://claude.ai/oauth/claude-code-client-metadata'
+  'https://gakrcli.ai/oauth/gakrcli-code-client-metadata'
 
 // Staging OAuth configuration - only included in ant builds with staging flag
 // Uses literal check for dead code elimination
@@ -122,16 +122,16 @@ const STAGING_OAUTH_CONFIG =
         CONSOLE_AUTHORIZE_URL:
           'https://platform.staging.ant.dev/oauth/authorize',
         GAKR_AI_AUTHORIZE_URL:
-          'https://claude-ai.staging.ant.dev/oauth/authorize',
-        GAKR_AI_ORIGIN: 'https://claude-ai.staging.ant.dev',
+          'https://gakrcli-ai.staging.ant.dev/oauth/authorize',
+        GAKR_AI_ORIGIN: 'https://gakrcli-ai.staging.ant.dev',
         TOKEN_URL: 'https://platform.staging.ant.dev/v1/oauth/token',
         API_KEY_URL:
-          'https://api-staging.anthropic.com/api/oauth/claude_cli/create_api_key',
+          'https://api-staging.anthropic.com/api/oauth/gakrcli_cli/create_api_key',
         ROLES_URL:
-          'https://api-staging.anthropic.com/api/oauth/claude_cli/roles',
+          'https://api-staging.anthropic.com/api/oauth/gakrcli_cli/roles',
         CONSOLE_SUCCESS_URL:
           'https://platform.staging.ant.dev/buy_credits?returnUrl=/oauth/code/success%3Fapp%3Dgakrcli-code',
-        gakrcliAI_SUCCESS_URL:
+        GAKRCLIAI_SUCCESS_URL:
           'https://platform.staging.ant.dev/oauth/code/success?app=gakrcli-code',
         MANUAL_REDIRECT_URL:
           'https://platform.staging.ant.dev/oauth/code/callback',
@@ -161,10 +161,10 @@ function getLocalOauthConfig(): OauthConfig {
     GAKR_AI_AUTHORIZE_URL: `${apps}/oauth/authorize`,
     GAKR_AI_ORIGIN: apps,
     TOKEN_URL: `${api}/v1/oauth/token`,
-    API_KEY_URL: `${api}/api/oauth/claude_cli/create_api_key`,
-    ROLES_URL: `${api}/api/oauth/claude_cli/roles`,
+    API_KEY_URL: `${api}/api/oauth/gakrcli_cli/create_api_key`,
+    ROLES_URL: `${api}/api/oauth/gakrcli_cli/roles`,
     CONSOLE_SUCCESS_URL: `${consoleBase}/buy_credits?returnUrl=/oauth/code/success%3Fapp%3Dgakrcli-code`,
-    gakrcliAI_SUCCESS_URL: `${consoleBase}/oauth/code/success?app=gakrcli-code`,
+    GAKRCLIAI_SUCCESS_URL: `${consoleBase}/oauth/code/success?app=gakrcli-code`,
     MANUAL_REDIRECT_URL: `${consoleBase}/oauth/code/callback`,
     CLIENT_ID: '22422756-60c9-4084-8eb7-27705fd5cf9a',
     OAUTH_FILE_SUFFIX: '-local-oauth',
@@ -177,10 +177,11 @@ function getLocalOauthConfig(): OauthConfig {
 // Only FedStart/PubSec deployments are permitted to prevent OAuth tokens
 // from being sent to arbitrary endpoints.
 const ALLOWED_OAUTH_BASE_URLS = [
-  'https://beacon.claude-ai.staging.ant.dev',
-  'https://claude.fedstart.com',
-  'https://claude-staging.fedstart.com',
+  'https://beacon.gakrcli-ai.staging.ant.dev',
+  'https://gakrcli.fedstart.com',
+  'https://gakrcli-staging.fedstart.com',
 ]
+
 // Default to prod config, override with test/staging if enabled
 export function getOauthConfig(): OauthConfig {
   let config: OauthConfig = (() => {
@@ -214,7 +215,7 @@ export function getOauthConfig(): OauthConfig {
       API_KEY_URL: `${base}/api/oauth/gakrcli_cli/create_api_key`,
       ROLES_URL: `${base}/api/oauth/gakrcli_cli/roles`,
       CONSOLE_SUCCESS_URL: `${base}/oauth/code/success?app=gakrcli-code`,
-      gakrcliAI_SUCCESS_URL: `${base}/oauth/code/success?app=gakrcli-code`,
+      GAKRCLIAI_SUCCESS_URL: `${base}/oauth/code/success?app=gakrcli-code`,
       MANUAL_REDIRECT_URL: `${base}/oauth/code/callback`,
       OAUTH_FILE_SUFFIX: '-custom-oauth',
     }

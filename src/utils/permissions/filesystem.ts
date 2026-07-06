@@ -10,14 +10,16 @@ import {
   GAKR_FOLDER_PERMISSION_PATTERN,
   FILE_EDIT_TOOL_NAME,
   GLOBAL_GAKR_FOLDER_PERMISSION_PATTERN,
+  LEGACY_GLOBAL_GAKR_FOLDER_PERMISSION_PATTERN,
 } from 'src/tools/FileEditTool/constants.js'
 import type { z } from 'zod/v4'
 import { getOriginalCwd, getSessionId } from '../../bootstrap/state.js'
+import { PRODUCT_DISPLAY_NAME } from '../../constants/product.js'
 import { checkStatsigFeatureGate_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
 import type { AnyObject, Tool, ToolPermissionContext } from '../../Tool.js'
 import { FILE_READ_TOOL_NAME } from '../../tools/FileReadTool/prompt.js'
 import { getCwd } from '../cwd.js'
-import { getGakrcliConfigHomeDir } from '../envUtils.js'
+import { getGakrCLIConfigHomeDir } from '../envUtils.js'
 import {
   getFsImplementation,
   getPathsForPermissionCheck,
@@ -39,13 +41,6 @@ import {
 import { containsVulnerableUncPath } from '../shell/readOnlyCommandValidation.js'
 import { getToolResultsDir } from '../toolResultStorage.js'
 import { windowsPathToPosixPath } from '../windowsPaths.js'
-
-export function isGakrCommitMessagePath(absolutePath: string): boolean {
-  return (
-    normalize(absolutePath).toLowerCase() ===
-    normalize(join(getOriginalCwd(), '.git', 'GAKR_COMMIT_MSG')).toLowerCase()
-  )
-}
 import type {
   PermissionDecision,
   PermissionResult,
@@ -72,6 +67,7 @@ export const DANGEROUS_FILES = [
   '.ripgreprc',
   '.mcp.json',
   '.gakrcli.json',
+  '.gakrcli.json',
 ] as const
 
 /**
@@ -83,12 +79,13 @@ export const DANGEROUS_DIRECTORIES = [
   '.vscode',
   '.idea',
   '.gakrcli',
+  '.gakrcli',
 ] as const
 
 /**
  * Normalizes a path for case-insensitive comparison.
  * This prevents bypassing security checks using mixed-case paths on case-insensitive
- * filesystems (macOS/Windows) like `.gakrcli/Settings.locaL.json`.
+ * filesystems (macOS/Windows) like `.cLauDe/Settings.locaL.json`.
  *
  * We always normalize to lowercase regardless of platform for consistent security.
  * @param path The path to normalize
@@ -99,13 +96,15 @@ export function normalizeCaseForComparison(path: string): string {
 }
 
 /**
- * If filePath is inside a .gakrcli/skills/{name}/ directory (project or global),
- * return the skill name and a session-allow pattern scoped to just that skill.
+ * If filePath is inside a .gakrcli/skills/{name}/ directory (project) or
+ * .gakrcli/skills/{name}/ directory (global), plus the legacy global
+ * .gakrcli/skills path, return the skill name and a session-allow pattern
+ * scoped to just that skill.
  * Used to offer a narrower "allow edits to this skill only" option in the
  * permission dialog and SDK suggestions, so iterating on one skill doesn't
  * require granting session access to all of .gakrcli/ (settings.json, hooks/, etc.).
  */
-export function getgakrcliSkillScope(
+export function getGakrCLISkillScope(
   filePath: string,
 ): { skillName: string; pattern: string } | null {
   const absolutePath = expandPath(filePath)
@@ -115,6 +114,10 @@ export function getgakrcliSkillScope(
     {
       dir: expandPath(join(getOriginalCwd(), '.gakrcli', 'skills')),
       prefix: '/.gakrcli/skills/',
+    },
+    {
+      dir: expandPath(join(homedir(), '.gakrcli', 'skills')),
+      prefix: '~/.gakrcli/skills/',
     },
     {
       dir: expandPath(join(homedir(), '.gakrcli', 'skills')),
@@ -204,17 +207,19 @@ function getSettingsPaths(): string[] {
   ).filter(path => path !== undefined)
 }
 
-export function isgakrcliSettingsPath(filePath: string): boolean {
+export function isGakrCLISettingsPath(filePath: string): boolean {
   // SECURITY: Normalize path structure first to prevent bypass via redundant ./
   // sequences like `./.gakrcli/./settings.json` which would evade the endsWith() check
   const expandedPath = expandPath(filePath)
 
   // Normalize for case-insensitive comparison to prevent bypassing security
-  // with paths like .gakrcli/Settings.locaL.json
+  // with paths like .cLauDe/Settings.locaL.json
   const normalizedPath = normalizeCaseForComparison(expandedPath)
 
   // Use platform separator so endsWith checks work on both Unix (/) and Windows (\)
   if (
+    normalizedPath.endsWith(`${sep}.gakrcli${sep}settings.json`) ||
+    normalizedPath.endsWith(`${sep}.gakrcli${sep}settings.local.json`) ||
     normalizedPath.endsWith(`${sep}.gakrcli${sep}settings.json`) ||
     normalizedPath.endsWith(`${sep}.gakrcli${sep}settings.local.json`)
   ) {
@@ -228,9 +233,9 @@ export function isgakrcliSettingsPath(filePath: string): boolean {
   )
 }
 
-// Always ask when GakrCLI tries to edit its own config files
-function isgakrcliConfigFilePath(filePath: string): boolean {
-  if (isgakrcliSettingsPath(filePath)) {
+// Always ask when GakrCLI Code tries to edit its own config files
+function isGakrCLIConfigFilePath(filePath: string): boolean {
+  if (isGakrCLISettingsPath(filePath)) {
     return true
   }
 
@@ -240,11 +245,17 @@ function isgakrcliConfigFilePath(filePath: string): boolean {
   const commandsDir = join(getOriginalCwd(), '.gakrcli', 'commands')
   const agentsDir = join(getOriginalCwd(), '.gakrcli', 'agents')
   const skillsDir = join(getOriginalCwd(), '.gakrcli', 'skills')
+  const openCommandsDir = join(getOriginalCwd(), '.gakrcli', 'commands')
+  const openAgentsDir = join(getOriginalCwd(), '.gakrcli', 'agents')
+  const openSkillsDir = join(getOriginalCwd(), '.gakrcli', 'skills')
 
   return (
     pathInWorkingPath(filePath, commandsDir) ||
     pathInWorkingPath(filePath, agentsDir) ||
-    pathInWorkingPath(filePath, skillsDir)
+    pathInWorkingPath(filePath, skillsDir) ||
+    pathInWorkingPath(filePath, openCommandsDir) ||
+    pathInWorkingPath(filePath, openAgentsDir) ||
+    pathInWorkingPath(filePath, openSkillsDir)
   )
 }
 
@@ -311,7 +322,7 @@ export function isScratchpadEnabled(): boolean {
  * On Unix: 'gakrcli-{uid}' to prevent multi-user permission conflicts
  * On Windows: 'gakrcli' (tmpdir() is already per-user)
  */
-export function getgakrcliTempDirName(): string {
+export function getGakrCLITempDirName(): string {
   if (getPlatform() === 'windows') {
     return 'gakrcli'
   }
@@ -326,7 +337,7 @@ export function getgakrcliTempDirName(): string {
  * Uses TMPDIR env var if set, otherwise:
  * - On Unix: /tmp/gakrcli-{uid}/ (resolved to /private/tmp/gakrcli-{uid}/ on macOS)
  * - On Windows: {tmpdir}/gakrcli/ (e.g., C:\Users\{user}\AppData\Local\Temp\gakrcli\)
- * This is a per-user temporary directory used by GakrCLI for all temp files.
+ * This is a per-user temporary directory used by GakrCLI Code for all temp files.
  *
  * NOTE: We resolve symlinks to ensure this path matches the resolved paths used
  * in permission checks. On macOS, /tmp is a symlink to /private/tmp, so without
@@ -335,7 +346,7 @@ export function getgakrcliTempDirName(): string {
 // Memoized: called per-tool from permission checks (yoloClassifier, sandbox-adapter)
 // and per-turn from BashTool prompt. Inputs (GAKR_CODE_TMPDIR env + platform) are
 // fixed at startup, and the realpath of the system tmp dir does not change mid-session.
-export const getgakrcliTempDir = memoize(function getgakrcliTempDir(): string {
+export const getGakrCLITempDir = memoize(function getGakrCLITempDir(): string {
   const baseTmpDir =
     process.env.GAKR_CODE_TMPDIR ||
     (getPlatform() === 'windows' ? tmpdir() : '/tmp')
@@ -350,7 +361,7 @@ export const getgakrcliTempDir = memoize(function getgakrcliTempDir(): string {
     // If resolution fails, use the original path
   }
 
-  return join(resolvedBaseTmpDir, getgakrcliTempDirName()) + sep
+  return join(resolvedBaseTmpDir, getGakrCLITempDirName()) + sep
 })
 
 /**
@@ -372,7 +383,7 @@ export const getgakrcliTempDir = memoize(function getgakrcliTempDir(): string {
 export const getBundledSkillsRoot = memoize(
   function getBundledSkillsRoot(): string {
     const nonce = randomBytes(16).toString('hex')
-    return join(getgakrcliTempDir(), 'bundled-skills', MACRO.VERSION, nonce)
+    return join(getGakrCLITempDir(), 'bundled-skills', MACRO.VERSION, nonce)
   },
 )
 
@@ -381,7 +392,7 @@ export const getBundledSkillsRoot = memoize(
  * Path format: /tmp/gakrcli-{uid}/{sanitized-cwd}/
  */
 export function getProjectTempDir(): string {
-  return join(getgakrcliTempDir(), sanitizePath(getOriginalCwd())) + sep
+  return join(getGakrCLITempDir(), sanitizePath(getOriginalCwd())) + sep
 }
 
 /**
@@ -427,6 +438,24 @@ function isScratchpadPath(absolutePath: string): boolean {
   return (
     normalizedPath === scratchpadDir ||
     normalizedPath.startsWith(scratchpadDir + sep)
+  )
+}
+
+function pathsEqualForPermission(a: string, b: string): boolean {
+  return normalizeCaseForComparison(normalize(a)) ===
+    normalizeCaseForComparison(normalize(b))
+}
+
+export function isGakrCLICommitMessagePath(absolutePath: string): boolean {
+  const expectedPath = join(getOriginalCwd(), '.git', 'GAKR_COMMIT_MSG')
+  const expectedForms = getPathsForPermissionCheck(expectedPath)
+  const targetForms = getPathsForPermissionCheck(absolutePath)
+
+  return (
+    targetForms.length > 0 &&
+    targetForms.every(target =>
+      expectedForms.some(expected => pathsEqualForPermission(target, expected)),
+    )
   )
 }
 
@@ -498,7 +527,7 @@ function isDangerousFilePathToAutoEdit(path: string): boolean {
  * Detects suspicious Windows path patterns that could bypass security checks.
  * These patterns include:
  * - NTFS Alternate Data Streams (e.g., file.txt::$DATA or file.txt:stream)
- * - 8.3 short names (e.g., GIT~1, gakrcli~1, SETTIN~1.JSON)
+ * - 8.3 short names (e.g., GIT~1, GAKRCLI~1, SETTIN~1.JSON)
  * - Long path prefixes (e.g., \\?\C:\..., \\.\C:\..., //?/C:/..., //./C:/...)
  * - Trailing dots and spaces (e.g., .git., .gakrcli , .bashrc...)
  * - DOS device names (e.g., .git.CON, settings.json.PRN, .bashrc.AUX)
@@ -559,7 +588,7 @@ function hasSuspiciousWindowsPathPattern(path: string): boolean {
 
   // Check for 8.3 short names
   // Look for '~' followed by a digit
-  // Examples: GIT~1, gakrcli~1, SETTIN~1.JSON, BASHRC~1
+  // Examples: GIT~1, GAKRCLI~1, SETTIN~1.JSON, BASHRC~1
   if (/~\d/.test(path)) {
     return true
   }
@@ -615,7 +644,7 @@ function hasSuspiciousWindowsPathPattern(path: string): boolean {
  * This function performs comprehensive safety checks including:
  * - Suspicious Windows path patterns (NTFS streams, 8.3 names, long path prefixes, etc.)
  * - GakrCLI config files (.gakrcli/settings.json, .gakrcli/commands/, .gakrcli/agents/)
- * - MCP CLI state files (managed internally by Gakr)
+ * - MCP CLI state files (managed internally by GakrCLI Code)
  * - Dangerous files (.bashrc, .gitconfig, .git/, .vscode/, .idea/, etc.)
  *
  * IMPORTANT: This function checks BOTH the original path AND resolved symlink paths
@@ -639,7 +668,7 @@ export function checkPathSafetyForAutoEdit(
     if (hasSuspiciousWindowsPathPattern(pathToCheck)) {
       return {
         safe: false,
-        message: `GakrCLI requested permissions to write to ${path}, which contains a suspicious Windows path pattern that requires manual approval.`,
+        message: `${PRODUCT_DISPLAY_NAME} requested permissions to write to ${path}, which contains a suspicious Windows path pattern that requires manual approval.`,
         classifierApprovable: false,
       }
     }
@@ -647,10 +676,10 @@ export function checkPathSafetyForAutoEdit(
 
   // Check for GakrCLI config files on all paths
   for (const pathToCheck of pathsToCheck) {
-    if (isgakrcliConfigFilePath(pathToCheck)) {
+    if (isGakrCLIConfigFilePath(pathToCheck)) {
       return {
         safe: false,
-        message: `GakrCLI requested permissions to write to ${path}, but you haven't granted it yet.`,
+        message: `${PRODUCT_DISPLAY_NAME} requested permissions to write to ${path}, but you haven't granted it yet.`,
         classifierApprovable: true,
       }
     }
@@ -661,7 +690,7 @@ export function checkPathSafetyForAutoEdit(
     if (isDangerousFilePathToAutoEdit(pathToCheck)) {
       return {
         safe: false,
-        message: `GakrCLI requested permissions to edit ${path} which is a sensitive file.`,
+        message: `${PRODUCT_DISPLAY_NAME} requested permissions to edit ${path} which is a sensitive file.`,
         classifierApprovable: true,
       }
     }
@@ -728,7 +757,7 @@ export function pathInWorkingPath(path: string, workingPath: string): boolean {
     .replace(/^\/private\/tmp(\/|$)/, '/tmp$1')
 
   // Normalize case for case-insensitive comparison to prevent bypassing security
-  // checks on case-insensitive filesystems (macOS/Windows) like .gakrcli/CoMmAnDs
+  // checks on case-insensitive filesystems (macOS/Windows) like .cLauDe/CoMmAnDs
   const caseNormalizedPath = normalizeCaseForComparison(normalizedPath)
   const caseNormalizedWorkingPath = normalizeCaseForComparison(
     normalizedWorkingPath,
@@ -1042,7 +1071,7 @@ export function checkReadPermissionForTool(
   if (typeof tool.getPath !== 'function') {
     return {
       behavior: 'ask',
-      message: `GakrCLI requested permissions to use ${tool.name}, but you haven't granted it yet.`,
+      message: `${PRODUCT_DISPLAY_NAME} requested permissions to use ${tool.name}, but you haven't granted it yet.`,
     }
   }
   const path = tool.getPath(input)
@@ -1061,7 +1090,7 @@ export function checkReadPermissionForTool(
     if (pathToCheck.startsWith('\\\\') || pathToCheck.startsWith('//')) {
       return {
         behavior: 'ask',
-        message: `GakrCLI requested permissions to read from ${path}, which appears to be a UNC path that could access network resources.`,
+        message: `${PRODUCT_DISPLAY_NAME} requested permissions to read from ${path}, which appears to be a UNC path that could access network resources.`,
         decisionReason: {
           type: 'other',
           reason: 'UNC path detected (defense-in-depth check)',
@@ -1075,7 +1104,7 @@ export function checkReadPermissionForTool(
     if (hasSuspiciousWindowsPathPattern(pathToCheck)) {
       return {
         behavior: 'ask',
-        message: `GakrCLI requested permissions to read from ${path}, which contains a suspicious Windows path pattern that requires manual approval.`,
+        message: `${PRODUCT_DISPLAY_NAME} requested permissions to read from ${path}, which contains a suspicious Windows path pattern that requires manual approval.`,
         decisionReason: {
           type: 'other',
           reason:
@@ -1119,7 +1148,7 @@ export function checkReadPermissionForTool(
     if (askRule) {
       return {
         behavior: 'ask',
-        message: `GakrCLI requested permissions to read from ${path}, but you haven't granted it yet.`,
+        message: `${PRODUCT_DISPLAY_NAME} requested permissions to read from ${path}, but you haven't granted it yet.`,
         decisionReason: {
           type: 'rule',
           rule: askRule,
@@ -1186,7 +1215,7 @@ export function checkReadPermissionForTool(
   // At this point, isInWorkingDir is false (from step #6), so path is outside working directories
   return {
     behavior: 'ask',
-    message: `GakrCLI requested permissions to read from ${path}, but you haven't granted it yet.`,
+    message: `${PRODUCT_DISPLAY_NAME} requested permissions to read from ${path}, but you haven't granted it yet.`,
     suggestions: generateSuggestions(
       path,
       'read',
@@ -1218,7 +1247,7 @@ export function checkWritePermissionForTool<Input extends AnyObject>(
   if (typeof tool.getPath !== 'function') {
     return {
       behavior: 'ask',
-      message: `GakrCLI requested permissions to use ${tool.name}, but you haven't granted it yet.`,
+      message: `${PRODUCT_DISPLAY_NAME} requested permissions to use ${tool.name}, but you haven't granted it yet.`,
     }
   }
   const path = tool.getPath(input)
@@ -1251,24 +1280,10 @@ export function checkWritePermissionForTool<Input extends AnyObject>(
   const internalEditResult = checkEditableInternalPath(
     absolutePathForEdit,
     input,
+    toolPermissionContext,
   )
   if (internalEditResult.behavior !== 'passthrough') {
     return internalEditResult
-  }
-
-  if (
-    (toolPermissionContext.mode === 'bypassPermissions' ||
-      toolPermissionContext.mode === 'fullAccess') &&
-    isGakrCommitMessagePath(absolutePathForEdit)
-  ) {
-    return {
-      behavior: 'allow',
-      updatedInput: input,
-      decisionReason: {
-        type: 'other',
-        reason: 'GakrCLI commit message file is allowed for writing',
-      },
-    }
   }
 
   // 1.6. Check for .gakrcli/** allow rules BEFORE safety checks
@@ -1293,19 +1308,23 @@ export function checkWritePermissionForTool<Input extends AnyObject>(
     'allow',
   )
   if (gakrcliFolderAllowRule) {
-    // Check if this rule is scoped under .gakrcli/ (project or global).
-    // Accepts both the broad patterns ('/.gakrcli/**', '~/.gakrcli/**') and
-    // narrowed ones like '/.gakrcli/skills/my-skill/**' so users can grant
+    // Check if this rule is scoped under a GakrCLI config folder.
+    // Accepts broad project/global patterns ('/.gakrcli/**',
+    // '~/.gakrcli/**', and legacy '~/.gakrcli/**') plus narrowed skill
+    // patterns like '~/.gakrcli/skills/my-skill/**' so users can grant
     // session access to a single skill without also exposing settings.json
     // or hooks/. The rule already matched the path via matchingRuleForInput;
     // this is an additional scope check. Reject '..' to prevent a rule like
-    // '/.gakrcli/../**' from leaking this bypass outside .gakrcli/.
+    // '/.gakrcli/../**' from leaking this bypass outside the config folder.
     const ruleContent = gakrcliFolderAllowRule.ruleValue.ruleContent
     if (
       ruleContent &&
       (ruleContent.startsWith(GAKR_FOLDER_PERMISSION_PATTERN.slice(0, -2)) ||
         ruleContent.startsWith(
           GLOBAL_GAKR_FOLDER_PERMISSION_PATTERN.slice(0, -2),
+        ) ||
+        ruleContent.startsWith(
+          LEGACY_GLOBAL_GAKR_FOLDER_PERMISSION_PATTERN.slice(0, -2),
         )) &&
       !ruleContent.includes('..') &&
       ruleContent.endsWith('/**')
@@ -1331,7 +1350,7 @@ export function checkWritePermissionForTool<Input extends AnyObject>(
     // Everything else (.gakrcli/settings.json, .git/, .vscode/, .idea/) falls
     // back to generateSuggestions — its setMode suggestion doesn't bypass
     // this check, but preserving it avoids a surprising empty array.
-    const skillScope = getgakrcliSkillScope(path)
+    const skillScope = getGakrCLISkillScope(path)
     const safetySuggestions: PermissionUpdate[] = skillScope
       ? [
           {
@@ -1370,7 +1389,7 @@ export function checkWritePermissionForTool<Input extends AnyObject>(
     if (askRule) {
       return {
         behavior: 'ask',
-        message: `GakrCLI requested permissions to write to ${path}, but you haven't granted it yet.`,
+        message: `${PRODUCT_DISPLAY_NAME} requested permissions to write to ${path}, but you haven't granted it yet.`,
         decisionReason: {
           type: 'rule',
           rule: askRule,
@@ -1417,7 +1436,7 @@ export function checkWritePermissionForTool<Input extends AnyObject>(
   // 5. Default to asking for permission
   return {
     behavior: 'ask',
-    message: `GakrCLI requested permissions to write to ${path}, but you haven't granted it yet.`,
+    message: `${PRODUCT_DISPLAY_NAME} requested permissions to write to ${path}, but you haven't granted it yet.`,
     suggestions: generateSuggestions(
       path,
       'write',
@@ -1501,6 +1520,7 @@ export function generateSuggestions(
 export function checkEditableInternalPath(
   absolutePath: string,
   input: { [key: string]: unknown },
+  toolPermissionContext?: ToolPermissionContext,
 ): PermissionResult {
   // SECURITY: Normalize path to prevent traversal bypasses via .. segments
   // This is defense-in-depth; individual helper functions also normalize
@@ -1542,7 +1562,7 @@ export function checkEditableInternalPath(
   if (feature('TEMPLATES')) {
     const jobDir = process.env.GAKR_JOB_DIR
     if (jobDir) {
-      const jobsRoot = join(getGakrcliConfigHomeDir(), 'jobs')
+      const jobsRoot = join(getGakrCLIConfigHomeDir(), 'jobs')
       const jobDirForms = getPathsForPermissionCheck(jobDir).map(normalize)
       const jobsRootForms = getPathsForPermissionCheck(jobsRoot).map(normalize)
       // Hijack guard: every resolved form of the job dir must sit under
@@ -1619,6 +1639,24 @@ export function checkEditableInternalPath(
       decisionReason: {
         type: 'other',
         reason: 'Preview launch config is allowed for writing',
+      },
+    }
+  }
+
+  // /commit uses this project-local file to pass multi-line commit messages
+  // safely through shells on Windows. It is data-only and intentionally scoped
+  // to one exact file; other .git/ paths still go through safety checks.
+  if (
+    (toolPermissionContext?.mode === 'bypassPermissions' ||
+      toolPermissionContext?.mode === 'fullAccess') &&
+    isGakrCLICommitMessagePath(normalizedPath)
+  ) {
+    return {
+      behavior: 'allow',
+      updatedInput: input,
+      decisionReason: {
+        type: 'other',
+        reason: 'GakrCLI commit message file is allowed for writing',
       },
     }
   }
@@ -1747,7 +1785,7 @@ export function checkReadableInternalPath(
   }
 
   // Tasks directory (~/.gakrcli/tasks/) for swarm task coordination
-  const tasksDir = join(getGakrcliConfigHomeDir(), 'tasks') + sep
+  const tasksDir = join(getGakrCLIConfigHomeDir(), 'tasks') + sep
   if (
     normalizedPath === tasksDir.slice(0, -1) ||
     normalizedPath.startsWith(tasksDir)
@@ -1763,7 +1801,7 @@ export function checkReadableInternalPath(
   }
 
   // Teams directory (~/.gakrcli/teams/) for swarm coordination
-  const teamsReadDir = join(getGakrcliConfigHomeDir(), 'teams') + sep
+  const teamsReadDir = join(getGakrCLIConfigHomeDir(), 'teams') + sep
   if (
     normalizedPath === teamsReadDir.slice(0, -1) ||
     normalizedPath.startsWith(teamsReadDir)

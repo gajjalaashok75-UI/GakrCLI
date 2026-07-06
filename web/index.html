@@ -1,37 +1,28 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="description" content="gakrcli is an open-source, terminal-first coding agent for understanding projects, editing code, running tools, and validating changes." />
-    <meta name="theme-color" content="#fafaf7" />
-    <meta name="color-scheme" content="light dark" />
-    <meta property="og:title" content="gakrcli - ship with agents, keep control" />
-    <meta property="og:description" content="an open-source coding agent that runs in your terminal, talks to your chosen model, edits code, runs checks, and keeps every change reviewable." />
-    <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="gakrcli" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="gakrcli - ship with agents, keep control" />
-    <meta name="twitter:description" content="open-source coding agents in your terminal, on your model, with reviewable changes." />
-    <title>gakrcli - ship with agents, keep control</title>
-    <link rel="icon" type="image/png" href="/gakrcli.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&display=swap" />
     <script>
-      // Theme bootstrap runs before paint to prevent flash.
-      // Default is light; user toggle is honored via localStorage.
+      // Theme bootstrap — runs before paint to prevent flash.
+      // Falls back to OS preference when the user hasn't chosen explicitly.
       (function () {
         try {
-          var stored = localStorage.getItem('gakrcli-theme');
-          var theme = stored === 'dark' || stored === 'light' ? stored : 'light';
-          document.documentElement.dataset.theme = theme;
-          document.documentElement.style.colorScheme = theme;
-        } catch (_) {
-          document.documentElement.dataset.theme = 'light';
+          var stored = localStorage.getItem('gakrcli-theme')
+          var t = stored || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+          document.documentElement.dataset.theme = t
+          document.documentElement.style.colorScheme = t
+        } catch (e) {
+          /* storage unavailable — stay light */
         }
-      })();
+      })()
     </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#faf9f5" />
+    <meta name="color-scheme" content="dark light" />
+    <link rel="icon" type="image/svg+xml" href="/gakrcli-logo.svg" />
+    <link rel="icon" type="image/png" href="/gakrcli.png" />
+    <link rel="sitemap" href="/sitemap.xml" />
+    <title>gakrcli — open-source coding agent CLI for any model</title>
   </head>
   <body>
     <div id="root"></div>

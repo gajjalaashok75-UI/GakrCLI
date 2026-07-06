@@ -42,7 +42,7 @@ import {
 import { count } from '../../utils/array.js'
 import {
   checkAndRefreshOAuthTokenIfNeeded,
-  getgakrcliAIOAuthTokens,
+  getGakrCLIAIOAuthTokens,
 } from '../../utils/auth.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { classifyAxiosError } from '../../utils/errors.js'
@@ -53,7 +53,7 @@ import {
 } from '../../utils/model/providers.js'
 import { sleep } from '../../utils/sleep.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
-import { getgakrcliCodeUserAgent } from '../../utils/userAgent.js'
+import { getGakrCLICodeUserAgent } from '../../utils/userAgent.js'
 import { logEvent } from '../analytics/index.js'
 import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../analytics/metadata.js'
 import { getRetryDelay } from '../api/withRetry.js'
@@ -152,7 +152,7 @@ function isUsingOAuth(): boolean {
   if (getAPIProvider() !== 'firstParty' || !isFirstPartyAnthropicBaseUrl()) {
     return false
   }
-  const tokens = getgakrcliAIOAuthTokens()
+  const tokens = getGakrCLIAIOAuthTokens()
   return Boolean(
     tokens?.accessToken &&
       tokens.scopes?.includes(GAKR_AI_INFERENCE_SCOPE) &&
@@ -170,13 +170,13 @@ function getAuthHeaders(): {
   headers?: Record<string, string>
   error?: string
 } {
-  const oauthTokens = getgakrcliAIOAuthTokens()
+  const oauthTokens = getGakrCLIAIOAuthTokens()
   if (oauthTokens?.accessToken) {
     return {
       headers: {
         Authorization: `Bearer ${oauthTokens.accessToken}`,
         'anthropic-beta': OAUTH_BETA_HEADER,
-        'User-Agent': getgakrcliCodeUserAgent(),
+        'User-Agent': getGakrCLICodeUserAgent(),
       },
     }
   }

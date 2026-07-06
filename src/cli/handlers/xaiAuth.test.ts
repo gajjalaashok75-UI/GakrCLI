@@ -7,7 +7,7 @@ import {
   acquireSharedMutationLock,
   releaseSharedMutationLock,
 } from '../../test/sharedMutationLock.js'
-import { setGakrcliConfigHomeDirForTesting } from '../../utils/envUtils.js'
+import { setGakrCLIConfigHomeDirForTesting } from '../../utils/envUtils.js'
 
 // GAKR_CODE_SIMPLE puts utils that touch secure storage into a no-op
 // "bare" mode — clearXaiCredentials() succeeds without touching the
@@ -29,15 +29,15 @@ beforeEach(async () => {
   process.env.GAKR_CONFIG_DIR = tempConfigDir
   process.env.GAKR_CODE_SIMPLE = '1'
   // Other test files (SQLiteProvider, knowledgeGraph, …) call
-  // setGakrcliConfigHomeDirForTesting and may leak the override. Pin it
+  // setGakrCLIConfigHomeDirForTesting and may leak the override. Pin it
   // to our temp dir so clearPersistedXaiOAuthProfile's path resolution
   // lands on the file we just wrote.
-  setGakrcliConfigHomeDirForTesting(tempConfigDir)
+  setGakrCLIConfigHomeDirForTesting(tempConfigDir)
 })
 
 afterEach(() => {
   try {
-    setGakrcliConfigHomeDirForTesting(undefined)
+    setGakrCLIConfigHomeDirForTesting(undefined)
     process.chdir(originalCwd)
     rmSync(tempConfigDir, { recursive: true, force: true })
     rmSync(tempCwd, { recursive: true, force: true })
@@ -81,7 +81,7 @@ async function freshHandlerModules() {
   //
   // `clearPersistedXaiOAuthProfile` is wrapped to pin the configDir to
   // our temp dir — other test files run in parallel and call
-  // `setGakrcliConfigHomeDirForTesting`, so the default-path resolution
+  // `setGakrCLIConfigHomeDirForTesting`, so the default-path resolution
   // inside the real helper can't be trusted in the broader suite. The
   // production code still calls it with no args (default path); this
   // wrapper only fences the test.

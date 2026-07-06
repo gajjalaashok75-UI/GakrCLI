@@ -57,7 +57,7 @@ export class NdjsonTransport {
       for (const cb of this.messageCallbacks) {
         cb(parsed);
       }
-    } catch {
+    } catch (err) {
       const error = new Error(
         `Failed to parse NDJSON line: ${trimmed.substring(0, 200)}${trimmed.length > 200 ? '...' : ''}`,
       );

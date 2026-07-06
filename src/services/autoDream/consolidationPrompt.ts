@@ -28,14 +28,14 @@ Session transcripts: \`${transcriptDir}\` (large JSONL files — grep narrowly, 
 - \`ls\` the memory directory to see what already exists
 - Read \`${ENTRYPOINT_NAME}\` to understand the current index
 - Skim existing topic files so you improve them rather than creating duplicates
-- If legacy \`logs/\` or \`sessions/\` subdirectories already exist, review only the recent entries needed to migrate durable signal into topic files. Do not create new log files.
+- If \`logs/\` or \`sessions/\` subdirectories exist (assistant-mode layout), review recent entries there
 
 ## Phase 2 — Gather recent signal
 
 Look for new information worth persisting. Sources in rough priority order:
 
-1. **Existing memories that drifted** — facts that contradict something you see in the codebase now
-2. **Legacy logs or sessions** if present — migrate only durable, non-duplicate signal into semantic topic files
+1. **Daily logs** (\`logs/YYYY/MM/YYYY-MM-DD.md\`) if present — these are the append-only stream
+2. **Existing memories that drifted** — facts that contradict something you see in the codebase now
 3. **Transcript search** — if you need specific context (e.g., "what was the error message from yesterday's build failure?"), grep the JSONL transcripts for narrow terms:
    \`grep -rn "<narrow term>" ${transcriptDir}/ --include="*.jsonl" | tail -50\`
 

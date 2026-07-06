@@ -53,8 +53,8 @@ import {
   getAddDirExtraMarketplaces,
 } from './addDirPluginSettings.js'
 import { markPluginVersionOrphaned } from './cacheUtils.js'
-import { classifyFetchError, logPluginFetch } from './fetchTelemetry.js'
 import { buildGitChildEnv } from './gitEnv.js'
+import { classifyFetchError, logPluginFetch } from './fetchTelemetry.js'
 import { removeAllPluginsForMarketplace } from './installedPluginsManager.js'
 import {
   extractHostFromSource,
@@ -94,6 +94,70 @@ import {
 type LoadedPluginMarketplace = {
   marketplace: PluginMarketplace
   cachePath: string
+}
+
+/** Memoized per-directory case-sensitivity probe results. */
+const caseInsensitiveFsCache = new Map<string, boolean>()
+
+/**
+ * Flip the case of the last alphabetic character in a path, yielding a variant
+ * that differs only in case (so it targets the same entry on a case-insensitive
+ * volume). Returns the input unchanged when there is no alphabetic character.
+ */
+function flipLastAlphaCase(p: string): string {
+  for (let i = p.length - 1; i >= 0; i--) {
+    const c = p[i]!
+    const lower = c.toLowerCase()
+    const upper = c.toUpperCase()
+    if (lower !== upper) {
+      return p.slice(0, i) + (c === upper ? lower : upper) + p.slice(i + 1)
+    }
+  }
+  return p
+}
+
+/**
+ * Probe whether the filesystem backing `dir` treats paths case-insensitively,
+ * rather than assuming it from process.platform. Windows volumes are always
+ * case-insensitive (and inode numbers there are unreliable), so trust the
+ * platform. Everywhere else — including macOS, which can mount case-sensitive
+ * APFS/HFS+ volumes — stat `dir` under a case-flipped name and treat the volume
+ * as case-insensitive only when both names resolve to the same inode. Memoized
+ * per directory; falls back to case-sensitive on any probe error.
+ */
+function isCaseInsensitiveFsAt(dir: string): boolean {
+  if (process.platform === 'win32') return true
+  const key = resolve(dir)
+  const cached = caseInsensitiveFsCache.get(key)
+  if (cached !== undefined) return cached
+  let result = false
+  try {
+    const flipped = flipLastAlphaCase(key)
+    if (flipped !== key) {
+      const fs = getFsImplementation()
+      const original = fs.statSync(key)
+      const alt = fs.statSync(flipped)
+      result = original.ino === alt.ino && original.dev === alt.dev
+    }
+  } catch {
+    // The case-flipped path does not exist → the volume is case-sensitive.
+    result = false
+  }
+  caseInsensitiveFsCache.set(key, result)
+  return result
+}
+
+/**
+ * Compare two filesystem paths honoring the case sensitivity of the volume
+ * backing `probeDir` (the directory both paths live under). On a
+ * case-insensitive volume a case-only difference means the same directory; on
+ * case-sensitive volumes such paths are genuinely distinct, so an unconditional
+ * lowercase comparison would wrongly collapse them.
+ */
+function pathsEqualForFs(a: string, b: string, probeDir: string): boolean {
+  return isCaseInsensitiveFsAt(probeDir)
+    ? a.toLowerCase() === b.toLowerCase()
+    : a === b
 }
 
 /**
@@ -511,6 +575,7 @@ function seedDirFor(installLocation: string): string | undefined {
  * Provides helpful error messages for common failure scenarios.
  * If a ref is specified, fetches and checks out that specific branch or tag.
  */
+
 const DEFAULT_PLUGIN_GIT_TIMEOUT_MS = 120 * 1000
 
 function getPluginGitTimeoutMs(): number {
@@ -1277,7 +1342,7 @@ async function cacheMarketplaceFromUrl(
   const headers = {
     ...customHeaders,
     // User-Agent must come last to prevent override (for consistency with WebFetch)
-    'User-Agent': 'Gakr-Code-Plugin-Manager',
+    'User-Agent': 'GakrCLI-Code-Plugin-Manager',
   }
 
   let response
@@ -1359,7 +1424,7 @@ async function cacheMarketplaceFromUrl(
 function getCachePathForSource(source: MarketplaceSource): string {
   const tempName =
     source.source === 'github'
-      ? source.repo.replace('/', '-')
+      ? source.repo.replace('/', '-').toLowerCase()
       : source.source === 'npm'
         ? source.package.replace('@', '').replace('/', '-')
         : source.source === 'file'
@@ -1710,7 +1775,9 @@ async function loadAndCacheMarketplace(
     }
 
     // Now rename the cache path to use the marketplace's actual name
-    const finalCachePath = join(cacheDir, marketplace.name)
+    // Normalize to lowercase to match getCachePathForSource's convention,
+    // which prevents case-only collisions on case-insensitive filesystems.
+    const finalCachePath = join(cacheDir, marketplace.name.toLowerCase())
     // Defense-in-depth: the schema rejects path separators, .., and . in marketplace.name,
     // but verify the computed path is a strict subdirectory of cacheDir before fs.rm.
     // A malicious marketplace.json with a crafted name must never cause us to rm outside
@@ -1727,26 +1794,39 @@ async function loadAndCacheMarketplace(
       temporaryCachePath !== finalCachePath &&
       !isLocalMarketplaceSource(source)
     ) {
-      try {
-        // Remove the destination if it already exists, then rename
+      // On case-insensitive filesystems (e.g. Windows NTFS), when temp and final
+      // paths differ only in case they refer to the same directory. fs.rm would
+      // destroy the source data, making the subsequent rename fail with ENOENT.
+      // Skip the rename block when paths are the same. On case-sensitive volumes
+      // a case-only difference is a genuinely distinct directory, so the rename
+      // must still run there.
+      const samePath = pathsEqualForFs(
+        temporaryCachePath,
+        finalCachePath,
+        cacheDir,
+      )
+      if (!samePath) {
         try {
-          onProgress?.('Cleaning up old marketplace cache…')
-        } catch (callbackError) {
-          logForDebugging(
-            `Progress callback error: ${errorMessage(callbackError)}`,
-            { level: 'warn' },
+          // Remove the destination if it already exists, then rename
+          safeCallProgress(onProgress, 'Cleaning up old marketplace cache…')
+          await fs.rm(finalCachePath, { recursive: true, force: true })
+          // Rename temp cache to final name
+          try {
+            await fs.rename(temporaryCachePath, finalCachePath)
+          } catch (renameError) {
+            // Rename may fail for cross-device moves (EXDEV). Fall back to
+            // copy + delete.
+            await fs.cp(temporaryCachePath, finalCachePath, { recursive: true })
+            await fs.rm(temporaryCachePath, { recursive: true, force: true })
+          }
+          temporaryCachePath = finalCachePath
+          cleanupNeeded = false // Successfully renamed, no cleanup needed
+        } catch (error) {
+          const errorMsg = errorMessage(error)
+          throw new Error(
+            `Failed to finalize marketplace cache. Please manually delete the directory at ${finalCachePath} if it exists and try again.\n\nTechnical details: ${errorMsg}`,
           )
         }
-        await fs.rm(finalCachePath, { recursive: true, force: true })
-        // Rename temp cache to final name
-        await fs.rename(temporaryCachePath, finalCachePath)
-        temporaryCachePath = finalCachePath
-        cleanupNeeded = false // Successfully renamed, no cleanup needed
-      } catch (error) {
-        const errorMsg = errorMessage(error)
-        throw new Error(
-          `Failed to finalize marketplace cache. Please manually delete the directory at ${finalCachePath} if it exists and try again.\n\nTechnical details: ${errorMsg}`,
-        )
       }
     }
 
@@ -1894,7 +1974,7 @@ export async function addMarketplaceSource(
       const cacheDir = resolve(getMarketplacesCacheDir())
       const resolvedOld = resolve(oldEntry.installLocation)
       const resolvedNew = resolve(cachePath)
-      if (resolvedOld === resolvedNew) {
+      if (pathsEqualForFs(resolvedOld, resolvedNew, cacheDir)) {
         // Same dir — loadAndCacheMarketplace already overwrote in place.
         // Nothing to clean.
       } else if (
@@ -1945,7 +2025,7 @@ export async function removeMarketplaceSource(name: string): Promise<void> {
     throw new Error(`Marketplace '${name}' not found`)
   }
 
-  if (isBuiltInMarketplace(name)) {
+    if (isBuiltInMarketplace(name)) {
     throw new Error(
       `Marketplace '${name}' is built in and cannot be removed. ` +
         `To stop using a plugin from this marketplace, disable or uninstall the plugin instead.`,
@@ -1969,10 +2049,14 @@ export async function removeMarketplaceSource(name: string): Promise<void> {
   delete config[name]
   await saveKnownMarketplacesConfig(config)
 
-  // Clean up cached files (both directory and JSON formats)
+  // Clean up cached files (both directory and JSON formats).
+  // Prefer the recorded installLocation: recomputing a lowercased path would
+  // miss a mixed-case cache directory on case-sensitive filesystems (Linux),
+  // leaving the real cache behind. Fall back to the legacy computed path for
+  // older entries that predate installLocation tracking.
   const fs = getFsImplementation()
   const cacheDir = getMarketplacesCacheDir()
-  const cachePath = join(cacheDir, name)
+  const cachePath = entry.installLocation ?? join(cacheDir, name.toLowerCase())
   await fs.rm(cachePath, { recursive: true, force: true })
   const jsonCachePath = join(cacheDir, `${name}.json`)
   await fs.rm(jsonCachePath, { force: true })
@@ -2010,7 +2094,10 @@ export async function removeMarketplaceSource(name: string): Promise<void> {
     // Remove related plugins from enabledPlugins (format: "plugin@marketplace")
     if (settings.enabledPlugins) {
       const marketplaceSuffix = `@${name}`
-      const updatedPlugins = { ...settings.enabledPlugins }
+      // Use undefined values (NOT delete) to signal key removal via mergeWith
+      const updatedPlugins: Partial<SettingsJson['enabledPlugins']> = {
+        ...settings.enabledPlugins,
+      }
       let removedPlugins = false
 
       for (const pluginId in updatedPlugins) {
@@ -2021,7 +2108,8 @@ export async function removeMarketplaceSource(name: string): Promise<void> {
       }
 
       if (removedPlugins) {
-        updates.enabledPlugins = updatedPlugins
+        updates.enabledPlugins =
+          updatedPlugins as SettingsJson['enabledPlugins']
         needsUpdate = true
       }
     }
@@ -2152,7 +2240,7 @@ export const getMarketplace = memoize(
       throw new Error(
         `Marketplace "${name}" has a relative source path (${entry.source.path}) ` +
           `in known_marketplaces.json — this is stale state from an older ` +
-          `GakrCLI version. Run 'gakrcli plugin marketplace remove ${name}' and ` +
+          `GakrCLI Code version. Run 'gakrcli marketplace remove ${name}' and ` +
           `re-add it from the original project directory.`,
       )
     }
@@ -2651,4 +2739,8 @@ export async function setMarketplaceAutoUpdate(
 
 export const _test = {
   redactUrlCredentials,
+  loadAndCacheMarketplace,
+  isCaseInsensitiveFsAt,
+  pathsEqualForFs,
+  _clearCaseInsensitiveFsCache: () => caseInsensitiveFsCache.clear(),
 }

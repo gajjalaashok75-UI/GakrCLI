@@ -4,6 +4,7 @@ import type { CanUseToolFn } from '../hooks/useCanUseTool.js'
 import type { CompactionResult } from '../services/compact/compact.js'
 import type { ScopedMcpServerConfig } from '../services/mcp/types.js'
 import type { ToolUseContext } from '../Tool.js'
+import type { AgentDefinition } from '../tools/AgentTool/loadAgentsDir.js'
 import type { EffortValue } from '../utils/effort.js'
 import type { IDEExtensionInstallationStatus, IdeType } from '../utils/ide.js'
 import type { SettingSource } from '../utils/settings/constants.js'
@@ -12,15 +13,30 @@ import type { ThemeName } from '../utils/theme.js'
 import type { LogOption } from './logs.js'
 import type { Message } from './message.js'
 import type { PluginManifest } from './plugin.js'
+import type { LocalizationKey } from '../i18n/types.js'
 
 export type LocalCommandResult =
-  | { type: 'text'; value: string }
+  | {
+      type: 'text'
+      value: string
+      display?: 'skip'
+      shouldQuery?: boolean
+      metaMessages?: string[]
+      nextInput?: string
+      submitNextInput?: boolean
+    }
   | {
       type: 'compact'
       compactionResult: CompactionResult
       displayText?: string
+      nextInput?: string
+      submitNextInput?: boolean
     }
-  | { type: 'skip' } // Skip messages
+  | {
+      type: 'skip'
+      nextInput?: string
+      submitNextInput?: boolean
+    } // Skip messages
 
 export type PromptCommand = {
   type: 'prompt'
@@ -90,6 +106,7 @@ export type LocalJSXCommandContext = ToolUseContext & {
     config: Record<string, ScopedMcpServerConfig>,
   ) => void
   onInstallIDEExtension?: (ide: IdeType) => void
+  setActiveSessionAgent?: (agent: AgentDefinition) => void
   resume?: (
     sessionId: UUID,
     log: LogOption,
@@ -163,18 +180,19 @@ type LocalJSXCommand = {
  * of the listed auth types. See meetsAvailabilityRequirement() in commands.ts.
  *
  * Example: `availability: ['gakrcli-ai', 'console']` shows the command to
- * gakr.ai subscribers and direct Console API key users (api.anthropic.com),
+ * gakrcli.ai subscribers and direct Console API key users (api.anthropic.com),
  * but hides it from Bedrock/Vertex/Foundry users and custom base URL users.
  */
 export type CommandAvailability =
-  // gakr.ai OAuth subscriber (Pro/Max/Team/Enterprise via gakr.ai)
+  // gakrcli.ai OAuth subscriber (Pro/Max/Team/Enterprise via gakrcli.ai)
   | 'gakrcli-ai'
-  // Console API key user (direct api.anthropic.com, not via gakr.ai OAuth)
+  // Console API key user (direct api.anthropic.com, not via gakrcli.ai OAuth)
   | 'console'
 
 export type CommandBase = {
   availability?: CommandAvailability[]
   description: string
+  localizationKey?: LocalizationKey
   hasUserSpecifiedDescription?: boolean
   /** Defaults to true. Only set when the command has conditional enablement (feature flags, env checks, etc). */
   isEnabled?: () => boolean
@@ -185,6 +203,7 @@ export type CommandBase = {
   isMcp?: boolean
   argumentHint?: string // Hint text for command arguments (displayed in gray after command)
   whenToUse?: string // From the "Skill" spec. Detailed usage scenarios for when to use this command
+  whenToUseLocalizationKey?: LocalizationKey
   version?: string // Version of the command/skill
   disableModelInvocation?: boolean // Whether to disable this command from being invoked by models
   userInvocable?: boolean // Whether users can invoke this skill by typing /skill-name

@@ -10,7 +10,7 @@ This reference is based on the current `vscode-extension/gakrcli-vscode/package.
 | Package name | `gakrcli-vscode` |
 | Version | `0.2.4` |
 | VS Code engine | `^1.94.0` |
-| Runtime dependency | `@gakr-gakr/gakrcli@^0.5.6` |
+| Runtime dependency | `@gakr-gakr/gakrcli@^0.5.7` |
 | Main entry | `dist/extension.js` |
 
 ## Commands

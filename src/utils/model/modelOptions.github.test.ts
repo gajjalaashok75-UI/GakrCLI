@@ -96,10 +96,8 @@ afterEach(() => {
     saveGlobalConfig(current => ({
       ...current,
       additionalModelOptionsCache: originalConfig.additionalModelOptionsCache,
-      additionalModelOptionsCacheScope:
-        originalConfig.additionalModelOptionsCacheScope,
-      openaiAdditionalModelOptionsCache:
-        originalConfig.openaiAdditionalModelOptionsCache,
+      additionalModelOptionsCacheScope: originalConfig.additionalModelOptionsCacheScope,
+      openaiAdditionalModelOptionsCache: originalConfig.openaiAdditionalModelOptionsCache,
       openaiAdditionalModelOptionsCacheByProfile:
         originalConfig.openaiAdditionalModelOptionsCacheByProfile,
       providerProfiles: originalConfig.providerProfiles,

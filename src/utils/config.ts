@@ -14,14 +14,11 @@ import type {
 } from '../services/oauth/types.js'
 import { getCwd } from '../utils/cwd.js'
 import { registerCleanup } from './cleanupRegistry.js'
+import { createDeferredWriter } from './deferredConfigWrites.js'
 import { logForDebugging } from './debug.js'
 import { logForDiagnosticsNoPII } from './diagLogs.js'
-import { getGlobalGakrcliFile } from './env.js'
-import {
-  getGakrcliConfigHomeDir,
-  getGakrcliWorkspaceDir,
-  isEnvTruthy,
-} from './envUtils.js'
+import { getGlobalGakrCLIFile } from './env.js'
+import { getGakrCLIConfigHomeDir, isEnvTruthy } from './envUtils.js'
 import { ConfigParseError, getErrnoCode } from './errors.js'
 import { writeFileSyncAndFlush_DEPRECATED } from './file.js'
 import { getFsImplementation } from './fsOperations.js'
@@ -117,8 +114,10 @@ export type ProjectConfig = {
 
   hasCompletedProjectOnboarding?: boolean
   projectOnboardingSeenCount: number
-  hasgakrcliMdExternalIncludesApproved?: boolean
-  hasgakrcliMdExternalIncludesWarningShown?: boolean
+  hasGakrCLIMdExternalIncludesApproved?: boolean
+  hasGakrCLIMdExternalIncludesApprovedForUser?: boolean
+  hasGakrCLIMdExternalIncludesWarningShown?: boolean
+  hasGakrCLIMdExternalIncludesWarningShownForUser?: boolean
   // MCP server approval fields - migrated to settings but kept for backward compatibility
   enabledMcpjsonServers?: string[]
   disabledMcpjsonServers?: string[]
@@ -148,8 +147,10 @@ const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
   disabledMcpjsonServers: [],
   hasTrustDialogAccepted: false,
   projectOnboardingSeenCount: 0,
-  hasgakrcliMdExternalIncludesApproved: false,
-  hasgakrcliMdExternalIncludesWarningShown: false,
+  hasGakrCLIMdExternalIncludesApproved: false,
+  hasGakrCLIMdExternalIncludesApprovedForUser: false,
+  hasGakrCLIMdExternalIncludesWarningShown: false,
+  hasGakrCLIMdExternalIncludesWarningShownForUser: false,
 }
 
 export type InstallMethod = 'local' | 'native' | 'global' | 'unknown'
@@ -186,10 +187,30 @@ export type DiffTool = 'terminal' | 'auto'
 export type ShowCacheStatsMode = 'off' | 'compact' | 'full'
 export const SHOW_CACHE_STATS_MODES = ['off', 'compact', 'full'] as const satisfies readonly ShowCacheStatsMode[]
 
+export const MAX_MESSAGES_COMPACTION_THRESHOLDS = [
+  'off',
+  '100',
+  '200',
+  '500',
+  '1000',
+] as const
+export type MaxMessagesCompactionThreshold =
+  (typeof MAX_MESSAGES_COMPACTION_THRESHOLDS)[number]
+
+export function normalizeMaxMessagesCompactionThreshold(
+  value: unknown,
+): MaxMessagesCompactionThreshold {
+  return MAX_MESSAGES_COMPACTION_THRESHOLDS.includes(
+    value as MaxMessagesCompactionThreshold,
+  )
+    ? (value as MaxMessagesCompactionThreshold)
+    : 'off'
+}
+
 export type OutputStyle = string
 
 export type Providers = string
-export type OpenAICompatibleApiFormat = 'chat_completions' | 'responses'
+export type OpenAICompatibleApiFormat = 'chat_completions' | 'responses' | 'responses_compat'
 export type OpenAICompatibleAuthScheme = 'bearer' | 'raw'
 
 export type ProviderProfile = {
@@ -204,6 +225,11 @@ export type ProviderProfile = {
   authScheme?: OpenAICompatibleAuthScheme
   authHeaderValue?: string
   customHeaders?: Record<string, string>
+  /**
+   * Optional manual override for the provider/model context window in tokens.
+   * Applied to OpenAI-compatible providers when resolving runtime limits.
+   */
+  maxContextLength?: number
 }
 
 export type GlobalConfig = {
@@ -231,7 +257,7 @@ export type GlobalConfig = {
   // @deprecated - Migrated to ~/.gakrcli/cache/changelog.md. Keep for migration support.
   cachedChangelog?: string
   mcpServers?: Record<string, McpServerConfig>
-  // gakr.ai MCP connectors that have successfully connected at least once.
+  // gakrcli.ai MCP connectors that have successfully connected at least once.
   // Used to gate "connector unavailable" / "needs auth" startup notifications:
   // a connector the user has actually used is worth flagging when it breaks,
   // but an org-configured connector that's been needs-auth since day one is
@@ -249,9 +275,9 @@ export type GlobalConfig = {
   }
   primaryApiKey?: string // Primary API key for the user when no environment variable is set, set via oauth (TODO: rename)
   hasAcknowledgedCostThreshold?: boolean
-  hasSeenUndercoverAutoNotice?: boolean // ant-only: whether the one-time auto-undercover explainer has been shown
-  hasSeenUltraplanTerms?: boolean // ant-only: whether the one-time CCR terms notice has been shown in the ultraplan launch dialog
-  hasResetAutoModeOptInForDefaultOffer?: boolean // ant-only: one-shot migration guard, re-prompts churned auto-mode users
+  hasSeenUndercoverAutoNotice?: boolean // internal-only: whether the one-time auto-undercover explainer has been shown
+  hasSeenUltraplanTerms?: boolean // internal-only: whether the one-time CCR terms notice has been shown in the ultraplan launch dialog
+  hasResetAutoModeOptInForDefaultOffer?: boolean // internal-only: one-shot migration guard, re-prompts churned auto-mode users
   oauthAccount?: AccountInfo
   iterm2KeyBindingInstalled?: boolean // Legacy - keeping for backward compatibility
   editorMode?: EditorMode
@@ -297,6 +323,14 @@ export type GlobalConfig = {
   tipsHistory: {
     [tipId: string]: number // Key is tipId, value is the numStartups when tip was last shown
   }
+
+  // Sponsored tip throttling. lastShownAt is numStartups when last sponsored tip
+  // was displayed; used with sponsoredTipsFrequency to enforce a 1-in-N cap.
+  sponsoredTipsHistory?: {
+    lastShownAt: number
+    totalShown: number
+  }
+
   // /buddy companion soul — bones regenerated from userId on read. See src/buddy/.
   companion?: import('../buddy/types.js').StoredCompanion
   companionMuted?: boolean
@@ -401,7 +435,7 @@ export type GlobalConfig = {
   showSpinnerTree?: boolean // Whether to show the teammate spinner tree instead of pills
 
   // First start time tracking
-  firstStartTime?: string // ISO timestamp when GakrCLI was first started on this machine
+  firstStartTime?: string // ISO timestamp when GakrCLI Code was first started on this machine
 
   messageIdleNotifThresholdMs: number // How long the user has to have been idle to get a notification that GakrCLI is done generating
 
@@ -424,10 +458,10 @@ export type GlobalConfig = {
   inputNeededNotifEnabled?: boolean
   agentPushNotifEnabled?: boolean
 
-  // GakrCLI usage tracking
-  gakrcliCodeFirstTokenDate?: string // ISO timestamp of the user's first GakrCLI OAuth token
+  // GakrCLI Code usage tracking
+  gakrcliCodeFirstTokenDate?: string // ISO timestamp of the user's first GakrCLI Code OAuth token
 
-  // Model switch callout tracking (ant-only)
+  // Model switch callout tracking (internal-only)
   modelSwitchCalloutDismissed?: boolean // Whether user chose "Don't show again"
   modelSwitchCalloutLastShown?: number // Timestamp of last shown (don't show for 24h)
   modelSwitchCalloutVersion?: string
@@ -479,7 +513,7 @@ export type GlobalConfig = {
   // Cached GrowthBook feature values
   cachedGrowthBookFeatures?: { [featureName: string]: unknown }
 
-  // Local GrowthBook overrides (ant-only, set via /config Gates tab).
+  // Local GrowthBook overrides (internal-only, set via /config Gates tab).
   // Checked after env-var overrides but before the real resolved value.
   growthBookOverrides?: { [featureName: string]: unknown }
 
@@ -528,7 +562,7 @@ export type GlobalConfig = {
   officialMarketplaceAutoInstallNextRetryTime?: number // Earliest time to retry again
 
   // GakrCLI in Chrome settings
-  hasCompletedgakrcliInChromeOnboarding?: boolean // Whether GakrCLI in Chrome onboarding has been shown
+  hasCompletedGakrCLIInChromeOnboarding?: boolean // Whether GakrCLI in Chrome onboarding has been shown
   gakrcliInChromeDefaultEnabled?: boolean // Whether GakrCLI in Chrome is enabled by default (undefined means platform default)
   cachedChromeExtensionInstalled?: boolean // Cached result of whether Chrome extension is installed
 
@@ -543,7 +577,7 @@ export type GlobalConfig = {
   lspRecommendationNeverPlugins?: string[] // Plugin IDs to never suggest
   lspRecommendationIgnoredCount?: number // Track ignored recommendations (stops after 5)
 
-  // GakrCLI hint protocol state (<gakrcli-code-hint /> tags from CLIs/SDKs).
+  // GakrCLI Code hint protocol state (<gakrcli-code-hint /> tags from CLIs/SDKs).
   // Nested by hint type so future types (docs, mcp, ...) slot in without new
   // top-level keys.
   gakrcliCodeHints?: {
@@ -567,7 +601,10 @@ export type GlobalConfig = {
   // PR status footer configuration (feature-flagged via GrowthBook)
   prStatusFooterEnabled?: boolean // Show PR review status in footer (default: true)
 
-  // Tmux live panel visibility (ant-only, toggled via Enter on tmux pill)
+  // Built-in status bar shown when no custom statusLine command is configured (default: true)
+  defaultStatusLineEnabled?: boolean
+
+  // Tmux live panel visibility (internal-only, toggled via Enter on tmux pill)
   tungstenPanelVisible?: boolean
 
   // Cached org-level fast mode status from the API.
@@ -586,11 +623,12 @@ export type GlobalConfig = {
   // undefined = no cache, null = extra usage enabled, string = disabled reason.
   cachedExtraUsageDisabledReason?: string | null
 
-  // Auto permissions notification tracking (ant-only)
+  // Auto permissions notification tracking (internal-only)
   autoPermissionsNotificationCount?: number // Number of times the auto permissions notification has been shown
 
-  // Speculation configuration (ant-only)
+  // Speculation configuration (internal-only)
   speculationEnabled?: boolean // Whether speculation is enabled (default: true)
+
 
   // Client data for server-side experiments (fetched during bootstrap).
   clientDataCache?: Record<string, unknown> | null
@@ -627,9 +665,17 @@ export type GlobalConfig = {
   // Knowledge Graph configuration
   knowledgeGraphEnabled: boolean
 
-  // Startup splash logo color scheme. Stored as a plain string and validated
-  // on read to avoid pulling UI modules into the config layer.
+  // Startup splash logo color scheme — set via /logo. See
+  // src/components/StartupScreen.palettes.ts for valid values. Stored as a
+  // plain string (validated on read) to avoid pulling a UI module into the
+  // config layer. Falls back to 'sunset' if missing or unrecognized.
   logoColor?: string
+
+  // Message-count-based compaction threshold. Set via /config.
+  // 'off' = disabled (default). Otherwise, one of '100', '200', '500', '1000'.
+  // When enabled, triggers forced compaction if the message count exceeds the
+  // chosen threshold, regardless of token usage.
+  maxMessagesCompactionThreshold?: MaxMessagesCompactionThreshold
 }
 
 /**
@@ -638,7 +684,7 @@ export type GlobalConfig = {
  * a factory gives fresh refs at zero clone cost.
  */
 function createDefaultGlobalConfig(): GlobalConfig {
-  return {
+  const config: GlobalConfig = {
     numStartups: 0,
     installMethod: undefined,
     autoUpdates: undefined,
@@ -671,6 +717,7 @@ function createDefaultGlobalConfig(): GlobalConfig {
     autoInstallIdeExtension: true,
     fileCheckpointingEnabled: true,
     terminalProgressBarEnabled: true,
+    defaultStatusLineEnabled: true,
     cachedStatsigGates: {},
     cachedDynamicConfigs: {},
     cachedGrowthBookFeatures: {},
@@ -679,7 +726,9 @@ function createDefaultGlobalConfig(): GlobalConfig {
     providerProfiles: [],
     openaiAdditionalModelOptionsCacheByProfile: {},
     knowledgeGraphEnabled: true,
+    maxMessagesCompactionThreshold: 'off',
   }
+  return config
 }
 
 export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = createDefaultGlobalConfig()
@@ -702,6 +751,7 @@ export const GLOBAL_CONFIG_KEYS = [
   'diffTool',
   'env',
   'tipsHistory',
+  'sponsoredTipsHistory',
   'todoFeatureEnabled',
   'showExpandedTodos',
   'messageIdleNotifThresholdMs',
@@ -715,7 +765,7 @@ export const GLOBAL_CONFIG_KEYS = [
   'agentPushNotifEnabled',
   'respectGitignore',
   'gakrcliInChromeDefaultEnabled',
-  'hasCompletedgakrcliInChromeOnboarding',
+  'hasCompletedGakrCLIInChromeOnboarding',
   'lspRecommendationDisabled',
   'lspRecommendationNeverPlugins',
   'lspRecommendationIgnoredCount',
@@ -724,10 +774,12 @@ export const GLOBAL_CONFIG_KEYS = [
   'flickerFreeMode',
   'permissionExplainerEnabled',
   'prStatusFooterEnabled',
+  'defaultStatusLineEnabled',
   'remoteControlAtStartup',
   'remoteDialogSeen',
   'knowledgeGraphEnabled',
   'logoColor',
+  'maxMessagesCompactionThreshold',
 ] as const
 
 export type GlobalConfigKey = (typeof GLOBAL_CONFIG_KEYS)[number]
@@ -826,13 +878,29 @@ export function isPathTrusted(dir: string): boolean {
 }
 
 // We have to put this test code here because Jest doesn't support mocking ES modules :O
-const TEST_GLOBAL_CONFIG_FOR_TESTING: GlobalConfig = {
-  ...DEFAULT_GLOBAL_CONFIG,
-  autoUpdates: false,
-  knowledgeGraphEnabled: true,
+// Use function accessors backed by `var` so cyclic test-only module graphs
+// never trip TDZ while config.ts is still evaluating.
+var testGlobalConfigForTesting: GlobalConfig | undefined
+var testProjectConfigForTesting: ProjectConfig | undefined
+
+function getTestGlobalConfigForTesting(): GlobalConfig {
+  if (!testGlobalConfigForTesting) {
+    testGlobalConfigForTesting = {
+      ...DEFAULT_GLOBAL_CONFIG,
+      autoUpdates: false,
+      knowledgeGraphEnabled: true,
+    }
+  }
+  return testGlobalConfigForTesting
 }
-const TEST_PROJECT_CONFIG_FOR_TESTING: ProjectConfig = {
-  ...DEFAULT_PROJECT_CONFIG,
+
+function getTestProjectConfigForTesting(): ProjectConfig {
+  if (!testProjectConfigForTesting) {
+    testProjectConfigForTesting = {
+      ...DEFAULT_PROJECT_CONFIG,
+    }
+  }
+  return testProjectConfigForTesting
 }
 
 export function isProjectConfigKey(key: string): key is ProjectConfigKey {
@@ -864,19 +932,29 @@ export function saveGlobalConfig(
   updater: (currentConfig: GlobalConfig) => GlobalConfig,
 ): void {
   if (process.env.NODE_ENV === 'test') {
-    const config = updater(TEST_GLOBAL_CONFIG_FOR_TESTING)
+    const current = getTestGlobalConfigForTesting()
+    const config = updater(current)
     // Skip if no changes (same reference returned)
-    if (config === TEST_GLOBAL_CONFIG_FOR_TESTING) {
+    if (config === current) {
       return
     }
-    Object.assign(TEST_GLOBAL_CONFIG_FOR_TESTING, config)
+    Object.assign(current, config)
     return
   }
+
+  // Apply any queued deferred writes first. A direct save re-reads the on-disk
+  // config and write-throughs that snapshot into globalConfigCache; without
+  // draining the deferred queue first, that snapshot would drop the pending
+  // counter deltas the cache is holding and same-process readers would observe
+  // stale values until the debounce fires. flushGlobalConfigWrites() is a no-op
+  // when nothing is queued, and the drain empties the queue before its own
+  // saveGlobalConfig runs, so this recurses at most one level.
+  flushGlobalConfigWrites()
 
   let written: GlobalConfig | null = null
   try {
     const didWrite = saveConfigWithLock(
-      getGlobalGakrcliFile(),
+      getGlobalGakrCLIFile(),
       createDefaultGlobalConfig,
       current => {
         const config = updater(current)
@@ -914,7 +992,7 @@ export function saveGlobalConfig(
     // getConfig returns defaults. Refuse to write those over a good cached
     // config to avoid wiping auth. See GH #3117.
     const currentConfig = getConfig(
-      getGlobalGakrcliFile(),
+      getGlobalGakrCLIFile(),
       createDefaultGlobalConfig,
     )
     if (wouldLoseAuthState(currentConfig)) {
@@ -934,7 +1012,7 @@ export function saveGlobalConfig(
       ...config,
       projects: removeProjectHistory(currentConfig.projects),
     }
-    saveConfig(getGlobalGakrcliFile(), written, DEFAULT_GLOBAL_CONFIG)
+    saveConfig(getGlobalGakrCLIFile(), written, DEFAULT_GLOBAL_CONFIG)
     writeThroughGlobalConfigCache(written)
   }
 }
@@ -950,7 +1028,7 @@ let lastReadFileStats: { mtime: number; size: number } | null = null
 let configCacheHits = 0
 let configCacheMisses = 0
 // Session-total count of actual disk writes to the global config file.
-// Exposed for ant-only dev diagnostics (see inc-4552) so anomalous write
+// Exposed for internal-only dev diagnostics (see inc-4552) so anomalous write
 // rates surface in the UI before they corrupt ~/.gakrcli.json.
 let globalConfigWriteCount = 0
 
@@ -984,13 +1062,20 @@ registerCleanup(async () => {
  * @internal
  */
 function migrateConfigFields(config: GlobalConfig): GlobalConfig {
+  const normalizedConfig = {
+    ...config,
+    maxMessagesCompactionThreshold: normalizeMaxMessagesCompactionThreshold(
+      config.maxMessagesCompactionThreshold,
+    ),
+  }
+
   // Already migrated
-  if (config.installMethod !== undefined) {
-    return config
+  if (normalizedConfig.installMethod !== undefined) {
+    return normalizedConfig
   }
 
   // autoUpdaterStatus is removed from the type but may exist in old configs
-  const legacy = config as GlobalConfig & {
+  const legacy = normalizedConfig as GlobalConfig & {
     autoUpdaterStatus?:
       | 'migrated'
       | 'installed'
@@ -1002,7 +1087,7 @@ function migrateConfigFields(config: GlobalConfig): GlobalConfig {
 
   // Determine install method and auto-update preference from old field
   let installMethod: InstallMethod = 'unknown'
-  let autoUpdates = config.autoUpdates ?? true // Default to enabled unless explicitly disabled
+  let autoUpdates = normalizedConfig.autoUpdates ?? true // Default to enabled unless explicitly disabled
 
   switch (legacy.autoUpdaterStatus) {
     case 'migrated':
@@ -1027,7 +1112,7 @@ function migrateConfigFields(config: GlobalConfig): GlobalConfig {
   }
 
   return {
-    ...config,
+    ...normalizedConfig,
     installMethod,
     autoUpdates,
   }
@@ -1071,7 +1156,7 @@ let freshnessWatcherStarted = false
 function startGlobalConfigFreshnessWatcher(): void {
   if (freshnessWatcherStarted || process.env.NODE_ENV === 'test') return
   freshnessWatcherStarted = true
-  const file = getGlobalGakrcliFile()
+  const file = getGlobalGakrCLIFile()
   watchFile(
     file,
     { interval: CONFIG_FRESHNESS_POLL_MS, persistent: false },
@@ -1117,7 +1202,7 @@ function writeThroughGlobalConfigCache(config: GlobalConfig): void {
 
 export function getGlobalConfig(): GlobalConfig {
   if (process.env.NODE_ENV === 'test') {
-    return TEST_GLOBAL_CONFIG_FOR_TESTING
+    return getTestGlobalConfigForTesting()
   }
 
   // Fast path: pure memory read. After startup, this always hits — our own
@@ -1135,12 +1220,12 @@ export function getGlobalConfig(): GlobalConfig {
   try {
     let stats: { mtimeMs: number; size: number } | null = null
     try {
-      stats = getFsImplementation().statSync(getGlobalGakrcliFile())
+      stats = getFsImplementation().statSync(getGlobalGakrCLIFile())
     } catch {
       // File doesn't exist
     }
     const config = migrateConfigFields(
-      getConfig(getGlobalGakrcliFile(), createDefaultGlobalConfig),
+      getConfig(getGlobalGakrCLIFile(), createDefaultGlobalConfig),
     )
     globalConfigCache = {
       config,
@@ -1154,7 +1239,7 @@ export function getGlobalConfig(): GlobalConfig {
   } catch {
     // If anything goes wrong, fall back to uncached behavior
     return migrateConfigFields(
-      getConfig(getGlobalGakrcliFile(), createDefaultGlobalConfig),
+      getConfig(getGlobalGakrCLIFile(), createDefaultGlobalConfig),
     )
   }
 }
@@ -1162,7 +1247,7 @@ export function getGlobalConfig(): GlobalConfig {
 /**
  * Returns the effective value of remoteControlAtStartup. Precedence:
  *   1. User's explicit config value (always wins — honors opt-out)
- *   2. CCR auto-connect default (ant-only build, GrowthBook-gated)
+ *   2. CCR auto-connect default (internal-only build, GrowthBook-gated)
  *   3. false (Remote Control must be explicitly opted into)
  */
 export function getRemoteControlAtStartup(): boolean {
@@ -1213,7 +1298,7 @@ function saveConfig<A extends object>(
       mode: 0o600,
     },
   )
-  if (file === getGlobalGakrcliFile()) {
+  if (file === getGlobalGakrCLIFile()) {
     globalConfigWriteCount++
   }
 }
@@ -1261,7 +1346,7 @@ function saveConfigWithLock<A extends object>(
 
     // Check for stale write - file changed since we last read it
     // Only check for global config file since lastReadFileStats tracks that specific file
-    if (lastReadFileStats && file === getGlobalGakrcliFile()) {
+    if (lastReadFileStats && file === getGlobalGakrCLIFile()) {
       try {
         const currentStats = fs.statSync(file)
         if (
@@ -1288,7 +1373,7 @@ function saveConfigWithLock<A extends object>(
     // momentarily corrupted (concurrent writes, kill-during-write), this
     // returns defaults -- we must not write those back over good config.
     const currentConfig = getConfig(file, createDefault)
-    if (file === getGlobalGakrcliFile() && wouldLoseAuthState(currentConfig)) {
+    if (file === getGlobalGakrCLIFile() && wouldLoseAuthState(currentConfig)) {
       logForDebugging(
         'saveConfigWithLock: re-read config is missing auth that cache has; refusing to write to avoid wiping ~/.gakrcli.json. See GH #3117.',
         { level: 'error' },
@@ -1391,7 +1476,7 @@ function saveConfigWithLock<A extends object>(
         mode: 0o600,
       },
     )
-    if (file === getGlobalGakrcliFile()) {
+    if (file === getGlobalGakrCLIFile()) {
       globalConfigWriteCount++
     }
     return true
@@ -1419,7 +1504,7 @@ export function enableConfigs(): void {
   configReadingAllowed = true
   // We only check the global config because currently all the configs share a file
   getConfig(
-    getGlobalGakrcliFile(),
+    getGlobalGakrCLIFile(),
     createDefaultGlobalConfig,
     true /* throw on invalid */,
   )
@@ -1434,7 +1519,7 @@ export function enableConfigs(): void {
  * Uses ~/.gakrcli/backups/ to keep the home directory clean.
  */
 function getConfigBackupDir(): string {
-  return join(getGakrcliConfigHomeDir(), 'backups')
+  return join(getGakrCLIConfigHomeDir(), 'backups')
 }
 
 /**
@@ -1528,7 +1613,7 @@ function getConfig<A>(
       const backupPath = findMostRecentBackup(file)
       if (backupPath) {
         process.stderr.write(
-          `\ngakrcli configuration file not found at: ${file}\n` +
+          `\nGakrCLI configuration file not found at: ${file}\n` +
             `A backup file exists at: ${backupPath}\n` +
             `You can manually restore it by running: cp "${backupPath}" "${file}"\n\n`,
         )
@@ -1575,7 +1660,7 @@ function getConfig<A>(
       }
 
       process.stderr.write(
-        `\ngakrcli configuration file at ${file} is corrupted: ${error.message}\n`,
+        `\nGakrCLI configuration file at ${file} is corrupted: ${error.message}\n`,
       )
 
       // Try to backup the corrupted config file (only if not already backed up)
@@ -1675,7 +1760,7 @@ export const getProjectPathForConfig = memoize((): string => {
 
 export function getCurrentProjectConfig(): ProjectConfig {
   if (process.env.NODE_ENV === 'test') {
-    return TEST_PROJECT_CONFIG_FOR_TESTING
+    return getTestProjectConfigForTesting()
   }
 
   const absolutePath = getProjectPathForConfig()
@@ -1700,12 +1785,13 @@ export function saveCurrentProjectConfig(
   updater: (currentConfig: ProjectConfig) => ProjectConfig,
 ): void {
   if (process.env.NODE_ENV === 'test') {
-    const config = updater(TEST_PROJECT_CONFIG_FOR_TESTING)
+    const current = getTestProjectConfigForTesting()
+    const config = updater(current)
     // Skip if no changes (same reference returned)
-    if (config === TEST_PROJECT_CONFIG_FOR_TESTING) {
+    if (config === current) {
       return
     }
-    Object.assign(TEST_PROJECT_CONFIG_FOR_TESTING, config)
+    Object.assign(current, config)
     return
   }
   const absolutePath = getProjectPathForConfig()
@@ -1713,7 +1799,7 @@ export function saveCurrentProjectConfig(
   let written: GlobalConfig | null = null
   try {
     const didWrite = saveConfigWithLock(
-      getGlobalGakrcliFile(),
+      getGlobalGakrCLIFile(),
       createDefaultGlobalConfig,
       current => {
         const currentProjectConfig =
@@ -1743,7 +1829,7 @@ export function saveCurrentProjectConfig(
 
     // Same race window as saveGlobalConfig's fallback -- refuse to write
     // defaults over good cached config. See GH #3117.
-    const config = getConfig(getGlobalGakrcliFile(), createDefaultGlobalConfig)
+    const config = getConfig(getGlobalGakrCLIFile(), createDefaultGlobalConfig)
     if (wouldLoseAuthState(config)) {
       logForDebugging(
         'saveCurrentProjectConfig fallback: re-read config is missing auth that cache has; refusing to write. See GH #3117.',
@@ -1766,7 +1852,7 @@ export function saveCurrentProjectConfig(
         [absolutePath]: newProjectConfig,
       },
     }
-    saveConfig(getGlobalGakrcliFile(), written, DEFAULT_GLOBAL_CONFIG)
+    saveConfig(getGlobalGakrCLIFile(), written, DEFAULT_GLOBAL_CONFIG)
     writeThroughGlobalConfigCache(written)
   }
 }
@@ -1855,15 +1941,13 @@ export function getMemoryPath(memoryType: MemoryType): string {
 
   switch (memoryType) {
     case 'User':
-      return join(getGakrcliConfigHomeDir(), 'GAKRCLI.md')
+      return join(getGakrCLIConfigHomeDir(), 'GAKRCLI.md')
     case 'Local':
       return join(cwd, 'gakrcli.local.md')
     case 'Project':
-      return join(cwd, 'GAKRCLI.md')
+      return join(cwd, PRIMARY_PROJECT_INSTRUCTION_FILE)
     case 'Managed':
       return join(getManagedFilePath(), 'GAKRCLI.md')
-    case 'Workspace':
-      return join(getGakrcliWorkspaceDir(), 'GAKRCLI.md')
     case 'AutoMem':
       return getAutoMemEntrypoint()
   }
@@ -1874,12 +1958,12 @@ export function getMemoryPath(memoryType: MemoryType): string {
   return '' // unreachable in external builds where TeamMem is not in MemoryType
 }
 
-export function getManagedgakrcliRulesDir(): string {
+export function getManagedGakrCLIRulesDir(): string {
   return join(getManagedFilePath(), '.gakrcli', 'rules')
 }
 
-export function getUsergakrcliRulesDir(): string {
-  return join(getGakrcliConfigHomeDir(), 'rules')
+export function getUserGakrCLIRulesDir(): string {
+  return join(getGakrCLIConfigHomeDir(), 'rules')
 }
 
 // Exported for testing only
@@ -1891,3 +1975,61 @@ export function _setGlobalConfigCacheForTesting(
   globalConfigCache.config = config
   globalConfigCache.mtime = config ? Date.now() : 0
 }
+
+// ---------------------------------------------------------------------------
+// Deferred config write engine (debounced coalesced writes)
+// ---------------------------------------------------------------------------
+
+const CONFIG_FLUSH_DEBOUNCE_MS = 500
+
+// The queue/debounce/write-through/batch-drain logic lives in a generic,
+// disk-free engine (see deferredConfigWrites.ts) so it can be unit-tested with
+// injected storage/scheduler. Here we wire the real saveGlobalConfig, in-memory
+// cache, and timers into it.
+const globalConfigDeferredWriter = createDeferredWriter<
+  GlobalConfig,
+  ReturnType<typeof setTimeout>
+>({
+  debounceMs: CONFIG_FLUSH_DEBOUNCE_MS,
+  save: updater => saveGlobalConfig(updater),
+  readCache: () => globalConfigCache.config,
+  writeThrough: next => writeThroughGlobalConfigCache(next),
+  setTimer: (fn, ms) => {
+    const timer = setTimeout(fn, ms)
+    // A pending config flush must never hold the process open on its own.
+    timer.unref?.()
+    return timer
+  },
+  clearTimer: timer => clearTimeout(timer),
+})
+
+export function saveGlobalConfigDeferred(
+  updater: (currentConfig: GlobalConfig) => GlobalConfig,
+): void {
+  // Keep tests synchronous and observable, matching saveGlobalConfig.
+  if (process.env.NODE_ENV === 'test') {
+    saveGlobalConfig(updater)
+    return
+  }
+  // Prime the cache before enqueueing. The deferred writer only write-throughs
+  // the pending updater when there is a cached config to apply it to; on a cold
+  // cache (no prior read) it would skip the write-through and the first deferred
+  // counter update would be invisible to getGlobalConfig() until the debounce
+  // flush — breaking same-process read coherence.
+  if (globalConfigCache.config === null) {
+    getGlobalConfig()
+  }
+  globalConfigDeferredWriter.defer(updater)
+}
+
+// Force any queued deferred writes to disk now. Safe to call repeatedly; a
+// no-op when nothing is pending. Call before reading the config from disk in
+// another process, or before spawning a subprocess that reads it.
+export function flushGlobalConfigWrites(): void {
+  globalConfigDeferredWriter.flush()
+}
+
+// Flush queued writes on shutdown.
+registerCleanup(async () => {
+  flushGlobalConfigWrites()
+})

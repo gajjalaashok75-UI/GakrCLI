@@ -6,6 +6,7 @@ import { format } from 'util'
 import { logForDebugging } from '../debug.js'
 import { COMPUTER_USE_MCP_SERVER_NAME } from './common.js'
 import { createCliExecutor } from './executor.js'
+import { createCrossPlatformExecutor } from './executorCrossPlatform.js'
 import { getChicagoEnabled, getChicagoSubGates } from './gates.js'
 import { requireComputerUseSwift } from './swiftLoader.js'
 
@@ -40,11 +41,20 @@ export function getComputerUseHostAdapter(): ComputerUseHostAdapter {
   cached = {
     serverName: COMPUTER_USE_MCP_SERVER_NAME,
     logger: new DebugLogger(),
-    executor: createCliExecutor({
-      getMouseAnimationEnabled: () => getChicagoSubGates().mouseAnimation,
-      getHideBeforeActionEnabled: () => getChicagoSubGates().hideBeforeAction,
-    }),
+    executor:
+      process.platform === 'darwin'
+        ? createCliExecutor({
+            getMouseAnimationEnabled: () => getChicagoSubGates().mouseAnimation,
+            getHideBeforeActionEnabled: () => getChicagoSubGates().hideBeforeAction,
+          })
+        : createCrossPlatformExecutor({
+            getMouseAnimationEnabled: () => getChicagoSubGates().mouseAnimation,
+            getHideBeforeActionEnabled: () => getChicagoSubGates().hideBeforeAction,
+          }),
     ensureOsPermissions: async () => {
+      if (process.platform !== 'darwin') {
+        return { granted: true }
+      }
       const cu = requireComputerUseSwift()
       const accessibility = cu.tcc.checkAccessibility()
       const screenRecording = cu.tcc.checkScreenRecording()

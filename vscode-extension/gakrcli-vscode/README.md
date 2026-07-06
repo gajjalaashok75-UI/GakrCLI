@@ -1,204 +1,302 @@
 <div align="center">
 
-<img src="resources/gakrcli-logo.png" alt="GakrCLI VS Code" width="400" height="400">
+<img src="resources/gakrcli-logo.png" alt="GakrCLI VS Code" width="128" height="128">
 
 # GakrCLI VS Code
 
-**Version 0.2.4**
+**The open AI coding assistant for VS Code — powered by any LLM you choose.**
 
-Native VS Code chat for GakrCLI, powered by the `@gakr-gakr/gakrcli` SDK.
+OpenAI · Anthropic · Google Gemini · DeepSeek · Ollama · AWS Bedrock · Vertex AI · GitHub Models · 200+ OpenAI-compatible endpoints.
+
+[![VS Code Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/gakr-gakr.gakrcli-vscode?label=marketplace&color=007ACC)](https://marketplace.visualstudio.com/items?itemName=gakr-gakr.gakrcli-vscode)
+[![Installs](https://img.shields.io/visual-studio-marketplace/i/gakr-gakr.gakrcli-vscode)](https://marketplace.visualstudio.com/items?itemName=gakr-gakr.gakrcli-vscode)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Claude Code compatible](https://img.shields.io/badge/Claude%20Code-compatible-8a63d2.svg)](#multi-provider-support)
 
 </div>
 
-GakrCLI VS Code brings the GakrCLI agent into the editor with a webview chat, compact tool-call rows, native model/provider controls, permission prompts, session history, file mentions, diff workflows, live context usage, and terminal fallback.
+---
+
+## Why GakrCLI?
+
+Modern AI coding assistants are powerful — but they lock you into one provider, one billing account, one pricing tier. GakrCLI flips the model: **one polished VS Code UI, any LLM backend you want**.
+
+- Already paying for OpenAI GPT-4o? Use it.
+- Prefer Claude Sonnet via Anthropic's direct API? Use it.
+- Running Ollama or LM Studio locally for privacy? Use it.
+- On an enterprise plan with AWS Bedrock or Vertex AI? Use it.
+- Hitting rate limits? Switch providers mid-session with `/provider`.
+
+GakrCLI is a full-featured **VS Code extension** that wraps the open-source [GakrCLI CLI](https://www.npmjs.com/package/@gitlawb/gakrcli). The CLI is where all the intelligence lives — tool use, provider routing, MCP, slash commands. The extension gives you a first-class editor experience on top: streaming chat panel, native diff viewer, @-mentions, session history, checkpoints, and more.
+
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Install](#install)
+- [Quick Start](#quick-start)
+- [Multi-Provider Support](#multi-provider-support)
+- [Keyboard Shortcuts](#keyboard-shortcuts)
+- [Slash Commands](#slash-commands)
+- [Settings](#settings)
+- [Architecture](#architecture)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
+
+## Features
+
+### Chat & Conversation
+- **Streaming chat panel** with markdown rendering and syntax-highlighted code
+- **Tool-call visualization** — collapsible blocks show what the AI is reading, editing, and running
+- **Session history** — browse, resume, or fork any past conversation
+- **Checkpoint / rewind** — snapshot the workspace and restore to any point
+- **Stop / interrupt** generation at any time; no half-finished edits
+
+### Native VS Code Integration
+- **Diff viewer** — AI-proposed changes open in VS Code's built-in diff editor with Accept / Reject buttons in the editor title bar
+- **@-mentions** — reference files, folders, symbols, and line ranges for precise context
+- **Status bar** with live token count and cost
+- **Git worktree support** — run parallel AI sessions on the same repo without conflicts
+- **Onboarding walkthrough** for first-time users
+
+### Multi-Provider Support
+Switch between LLM providers on the fly via `/provider`, the provider badge, or env vars:
+
+| Provider | Models | Setup |
+|---|---|---|
+| **OpenAI** | GPT-4o, GPT-4 Turbo, GPT-4o-mini | `OPENAI_API_KEY` |
+| **Anthropic** | Claude Opus, Sonnet, Haiku | Claude Code OAuth or `ANTHROPIC_API_KEY` |
+| **Google Gemini** | Gemini 2.0 Flash, Pro | `GOOGLE_API_KEY` |
+| **Ollama** | Llama 3, Mistral, CodeLlama (local, free) | `OPENAI_BASE_URL=http://localhost:11434/v1` |
+| **DeepSeek** | DeepSeek V3, R1 | OpenAI-compatible endpoint |
+| **AWS Bedrock** | Claude via Bedrock | AWS credentials |
+| **Google Vertex AI** | Claude via Vertex | GCP credentials |
+| **GitHub Models** | Various via GitHub Marketplace | GitHub PAT |
+| **Codex (ChatGPT)** | gpt-5.4, codexplan, codexspark | `OPENAI_BASE_URL=https://api.codex.openai.com/v1` |
+| **Custom** | Any OpenAI-compatible endpoint | `OPENAI_BASE_URL` |
+
+### Developer Tools
+- **5 permission modes** — Default, Plan, Accept Edits, Bypass, Don't Ask
+- **MCP (Model Context Protocol)** server integration — extend the AI with your own tools
+- **Plugin manager** — install / update / manage MCP plugins from inside the editor
+- **Slash commands** — `/commit`, `/review`, `/diff`, `/resume`, `/compact`, `/mcp`, and more
+- **Environment variable injection** per workspace
+- **Respects `.gitignore`** in file searches by default
+
+---
 
 ## Install
 
-From the VS Code Marketplace:
+### From the VS Code Marketplace (recommended)
+
+Search for **GakrCLI** in the Extensions panel (`Ctrl+Shift+X` / `Cmd+Shift+X`) and click **Install**, or:
 
 ```bash
 code --install-extension gakr-gakr.gakrcli-vscode
 ```
 
-From a local package:
+### From a `.vsix` file (latest dev build)
+
+Download the latest `.vsix` from [Releases](https://github.com/gajjalaashok75-UI/gakrcli-vscode/releases), then:
 
 ```bash
-code --install-extension gakrcli-vscode-0.2.4.vsix
+code --install-extension gakrcli-vscode-0.2.5.vsix
 ```
 
-The extension package depends on `@gakr-gakr/gakrcli`. For terminal mode, install the CLI globally too:
+### Prerequisites
+
+GakrCLI requires the underlying CLI:
 
 ```bash
-npm install -g @gakr-gakr/gakrcli@0.5.6
+npm install -g @gitlawb/gakrcli
 ```
 
-## Open GakrCLI
+(The extension is a thin UI wrapper — all AI intelligence lives in the CLI.)
 
-- Command Palette: `GakrCLI: Open`
-- New editor tab: `GakrCLI: Open in New Tab`
-- Primary editor: `GakrCLI: Open in Primary Editor`
-- Side bar: `GakrCLI: Open in Side Bar`
-- Terminal fallback: `GakrCLI: Open in Terminal`
+---
 
-Keyboard shortcuts:
+## Quick Start
 
-| Action | macOS | Windows/Linux |
-| --- | --- | --- |
-| Open or focus GakrCLI | `Cmd+Escape` | `Ctrl+Escape` |
-| Open in a new tab | `Cmd+Shift+Escape` | `Ctrl+Shift+Escape` |
-| Insert an at-mention from the editor | `Alt+K` | `Alt+K` |
-| New conversation | `Cmd+N` when enabled | `Ctrl+N` when enabled |
+### 1. Install the CLI
 
-## Provider Setup
-
-Use the provider badge in the composer or run `/provider` from the chat.
-
-Supported provider families include:
-
-- Anthropic Claude
-- OpenAI
-- Google Gemini
-- DeepSeek
-- Bankr
-- Moonshot AI and Kimi Code
-- MiniMax
-- Mistral AI
-- NVIDIA NIM
-- xAI
-- Xiaomi MiMo
-- Z.AI
-- Azure OpenAI
-- Alibaba DashScope China and International
-- GitHub Copilot / GitHub Models
-- Groq
-- Hicap
-- OpenRouter
-- Together AI
-- Venice
-- AWS Bedrock
-- Google Vertex AI
-- Ollama
-- LM Studio
-- Atomic Chat
-- Custom OpenAI-compatible endpoints
-
-The extension reads active GakrCLI provider profiles and can also use explicit VS Code settings under `gakrcliCode.*`.
-
-## Features
-
-- Streaming assistant messages with markdown, code blocks, tables, and visible list markers.
-- Compact tool rows for Bash, Read, Write, Edit, Glob, and other tools.
-- Expandable tool details that keep large inputs and outputs scrollable without stretching the whole chat.
-- Conversation-level copy action instead of repeated copy icons on every text fragment.
-- Hidden reasoning blocks with only a live thinking indicator during active reasoning.
-- Live context usage meter with token capacity, fill line, and autocompact tooltip.
-- Compacting and compacted transcript dividers.
-- Native permission and clarification dialogs.
-- Permission modes: Default, Plan, Accept Edits, Bypass, and Don't Ask.
-- Provider picker, model picker, Fast mode, reasoning effort, MCP, and plugin controls.
-- Session history, resume, new conversation, and live title fallback.
-- File and image attachments through the add menu.
-- At-mentions for files and editor context.
-- Diff accept/reject integration for proposed edits.
-- Terminal fallback for users who prefer the CLI terminal UI.
-
-## SDK Runtime
-
-The native webview path uses the SDK directly. This avoids scraping terminal text and lets the UI render structured events:
-
-```text
-React webview
-  -> VS Code extension host
-  -> @gakr-gakr/gakrcli/sdk
-  -> provider runtime, tools, MCP, sessions, plugins
+```bash
+npm install -g @gitlawb/gakrcli
 ```
 
-SDK-backed behavior in this release:
+### 2. Configure a provider
 
-- Live context percent is scoped per conversation and updates from SDK usage snapshots.
-- Context display remains stable during refreshes instead of bouncing to zero between snapshots.
-- Autocompact state is surfaced as compacting and compacted transcript dividers.
-- Tool calls render as compact rows first, then expand to input/output details on click.
-- Thinking content is hidden, while the active thinking indicator remains visible.
-- Bash sandbox errors are annotated without breaking tool output rendering.
-- Session title fallback is kept in sync for new and resumed chats.
-
-Terminal mode still uses the integrated terminal:
-
-```text
-VS Code command
-  -> integrated terminal
-  -> gakrcli command
+**OpenAI (simplest):**
+```bash
+export GAKR_CODE_USE_OPENAI=1
+export OPENAI_API_KEY=sk-your-key-here
+export OPENAI_MODEL=gpt-4o
 ```
+
+**Anthropic (native Claude):**
+```bash
+export ANTHROPIC_API_KEY=sk-ant-your-key
+# Claude Code OAuth also works if you're already signed in
+```
+
+**Google Gemini:**
+```bash
+export GAKR_CODE_USE_GEMINI=1
+export GOOGLE_API_KEY=AIza-your-key
+export GEMINI_MODEL=gemini-2.0-flash
+```
+
+**Ollama (local, free, private):**
+```bash
+ollama serve  # start Ollama first
+export GAKR_CODE_USE_OPENAI=1
+export OPENAI_API_KEY=ollama
+export OPENAI_BASE_URL=http://localhost:11434/v1
+export OPENAI_MODEL=llama3
+```
+
+**AWS Bedrock:**
+```bash
+export GAKR_CODE_USE_BEDROCK=1
+export AWS_REGION=us-east-1
+# Standard AWS credentials chain (env / ~/.aws / IAM role)
+```
+
+**Any OpenAI-compatible endpoint (DeepSeek, Together, Fireworks, OpenRouter, …):**
+```bash
+export GAKR_CODE_USE_OPENAI=1
+export OPENAI_API_KEY=sk-your-key
+export OPENAI_BASE_URL=https://api.deepseek.com/v1
+export OPENAI_MODEL=deepseek-chat
+```
+
+Or just open GakrCLI and use `/provider` to set up providers interactively.
+
+### 3. Open GakrCLI
+
+- Press `Cmd+Escape` (macOS) / `Ctrl+Escape` (Windows/Linux), **or**
+- Click the GakrCLI icon in the Activity Bar, **or**
+- Run `GakrCLI: Open in New Tab` from the Command Palette
+
+### 4. Start coding
+
+Type your prompt. Use `@` to mention files, `/` for slash commands. The AI edits stream into a VS Code diff view — accept, reject, or let it keep going.
+
+---
+
+## Keyboard Shortcuts
+
+| Action | macOS | Windows / Linux |
+|---|---|---|
+| Open / Focus GakrCLI | `Cmd+Escape` | `Ctrl+Escape` |
+| Open in new tab | `Cmd+Shift+Escape` | `Ctrl+Shift+Escape` |
+| Insert @-mention | `Alt+K` | `Alt+K` |
+| New conversation | `Cmd+N` | `Ctrl+N` (opt-in, see settings) |
+
+---
+
+## Slash Commands
+
+Type `/` in the chat input to browse all available commands. Highlights:
+
+| Command | Description |
+|---|---|
+| `/provider` | Set up and switch LLM providers |
+| `/model` | Switch between models for the current provider |
+| `/compact` | Compact conversation context to save tokens |
+| `/resume` | Browse and resume past sessions |
+| `/diff` | Show current git diff in the chat |
+| `/commit` | Ask the AI to create a git commit |
+| `/review` | Review code, a diff, or a PR |
+| `/mcp` | Manage MCP servers |
+| `/plugins` | Manage GakrCLI plugins |
+| `/help` | Show all commands |
+
+---
 
 ## Settings
 
-Important settings:
+All settings live under `gakrcli.*` in VS Code settings:
 
-| Setting | Default | Purpose |
-| --- | --- | --- |
-| `gakrcliCode.initialPermissionMode` | `default` | Starting permission mode for new chats. |
-| `gakrcliCode.environmentVariables` | `[]` | Extra environment variables passed to the runtime. |
-| `gakrcliCode.useTerminal` | `false` | Open the terminal UI instead of the native webview. |
-| `gakrcliCode.allowDangerouslySkipPermissions` | `false` | Allow bypass mode when you explicitly opt in. |
-| `gakrcliCode.respectGitIgnore` | `true` | Respect `.gitignore` during file searches. |
-| `gakrcliCode.autosave` | `true` | Save files before GakrCLI reads or writes. |
-| `gakrcliCode.useCtrlEnterToSend` | `false` | Use Ctrl/Cmd+Enter to send. |
-| `gakrcliCode.preferredLocation` | `panel` | Default UI location. |
-| `gakrcliCode.enableNewConversationShortcut` | `false` | Enable Cmd/Ctrl+N in the GakrCLI view. |
-| `gakrcliCode.hideOnboarding` | `false` | Hide onboarding. |
-| `gakrcliCode.selectedProvider` | `anthropic` | Explicit extension provider fallback. |
-| `gakrcliCode.selectedModel` | `default` | Explicit extension model fallback. |
-| `gakrcliCode.apiKey` | empty | Explicit extension API key fallback. |
-| `gakrcliCode.baseUrl` | empty | Explicit extension base URL fallback. |
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `gakrcli.selectedModel` | string | `"default"` | AI model to use |
+| `gakrcli.initialPermissionMode` | enum | `"default"` | Starting permission mode |
+| `gakrcli.useCtrlEnterToSend` | boolean | `false` | Require Ctrl+Enter to send (vs plain Enter) |
+| `gakrcli.preferredLocation` | enum | `"panel"` | Default panel location |
+| `gakrcli.autosave` | boolean | `true` | Auto-save before AI reads or writes |
+| `gakrcli.respectGitIgnore` | boolean | `true` | Honor `.gitignore` in file searches |
+| `gakrcli.useTerminal` | boolean | `false` | Launch in terminal mode instead of webview |
+| `gakrcli.environmentVariables` | array | `[]` | Extra env vars passed to the AI process |
+| `gakrcli.hideOnboarding` | boolean | `false` | Hide the onboarding checklist |
+| `gakrcli.enableNewConversationShortcut` | boolean | `false` | Enable Cmd/Ctrl+N to start a new conversation |
 
-## Developer Tools
+---
 
-- `/provider` to set up and switch providers.
-- `/model` to switch the active model.
-- `/compact` to compact conversation context.
-- `/resume` to browse and resume sessions.
-- `/diff` to show current git changes.
-- `/commit` to create a commit message and commit when approved.
-- `/review` to review code, a diff, or a PR.
-- `/mcp` to manage MCP servers.
-- `/plugins` to manage plugins.
-- `/agents` and `/skills` to browse local agent and skill catalogs.
+## Architecture
 
-## Development
+```
+┌─────────────────────────────────┐
+│  Webview (React + Tailwind)     │  ← UI: chat panel, diff, mentions
+└───────────────┬─────────────────┘
+                │ postMessage
+┌───────────────▼─────────────────┐
+│  Extension Host (TypeScript)    │  ← VS Code integration, permissions, sessions
+└───────────────┬─────────────────┘
+                │ stdin / stdout NDJSON
+┌───────────────▼─────────────────┐
+│  GakrCLI CLI (child process) │  ← Intelligence: tools, providers, MCP, plugins
+└───────────────┬─────────────────┘
+                │ OpenAI Chat Completions API
+┌───────────────▼─────────────────┐
+│  Any LLM provider               │  ← OpenAI / Anthropic / Gemini / Ollama / …
+└─────────────────────────────────┘
+```
+
+The extension is deliberately thin. All provider logic, tool execution, MCP server plumbing, and slash-command handling happens inside the CLI — so upgrading the brain means `npm install -g @gitlawb/gakrcli@latest` with no VS Code reinstall needed.
+
+---
+
+## Contributing
 
 ```bash
-cd vscode-extension/gakrcli-vscode
+git clone https://github.com/gajjalaashok75-UI/gakrcli-vscode
+cd gakrcli-vscode
 npm install
-cd webview
-npm install
-cd ..
+cd webview && npm install && cd ..
 npm run build
+```
+
+**Development (watch mode):**
+```bash
+npm run watch
+# Press F5 in VS Code to launch an Extension Development Host
+```
+
+**Run tests:**
+```bash
 npm test
 ```
 
-Package locally:
-
+**Package a `.vsix`:**
 ```bash
-npx @vscode/vsce package
+npx @vscode/vsce package --no-dependencies --allow-missing-repository
 ```
 
-Dry-run package inspection:
+Issues and PRs welcome — see the [issue tracker](https://github.com/gajjalaashok75-UI/gakrcli-vscode/issues).
 
-```bash
-npx @vscode/vsce ls --tree
-```
-
-Release note: `gakrcli-vscode@0.2.4` depends on `@gakr-gakr/gakrcli@0.5.6`, so publish the root npm package first, then refresh this extension lockfile before building the final VSIX.
-
-## More Docs
-
-- [User guide](docs/USER_GUIDE.md)
-- [Command and settings reference](docs/REFERENCE.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Publishing checklist](docs/PUBLISHING.md)
-- [Root GakrCLI README](../../README.md)
+---
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
+
+---
+
+<div align="center">
+
+**Keywords:** vscode extension · ai coding assistant · claude code alternative · openai gpt-4o · claude sonnet · gemini · ollama · aws bedrock · local llm · mcp · model context protocol · diff viewer · chat panel · typescript
+
+</div>

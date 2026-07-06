@@ -17,7 +17,7 @@ import {
   logEvent,
 } from '../../services/analytics/index.js'
 import {
-  type gakrcliCodeHint,
+  type GakrCLICodeHint,
   hasShownHintThisSession,
   setPendingHint,
 } from '../gakrcliCodeHints.js'
@@ -62,7 +62,7 @@ export type PluginHintRecommendation = {
  * just to strip a stderr line. The async marketplace-cache check happens
  * later in resolvePluginHint (hook side).
  */
-export function maybeRecordPluginHint(hint: gakrcliCodeHint): void {
+export function maybeRecordPluginHint(hint: GakrCLICodeHint): void {
   if (!getFeatureValue_CACHED_MAY_BE_STALE('tengu_lapis_finch', false)) return
   if (hasShownHintThisSession()) return
 
@@ -101,7 +101,7 @@ export function _resetHintRecommendationForTesting(): void {
  * the plugin isn't in the marketplace cache — the hint is discarded.
  */
 export async function resolvePluginHint(
-  hint: gakrcliCodeHint,
+  hint: GakrCLICodeHint,
 ): Promise<PluginHintRecommendation | null> {
   const pluginId = hint.value
   const { name, marketplace } = parsePluginIdentifier(pluginId)

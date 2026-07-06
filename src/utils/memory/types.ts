@@ -5,7 +5,6 @@ export const MEMORY_TYPE_VALUES = [
   'Project',
   'Local',
   'Managed',
-  'Workspace',
   'AutoMem',
   ...(feature('TEAMMEM') ? (['TeamMem'] as const) : []),
 ] as const

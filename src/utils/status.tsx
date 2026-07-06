@@ -3,14 +3,14 @@ import figures from 'figures';
 import * as React from 'react';
 import { color, Text } from '../ink.js';
 import type { MCPServerConnection } from '../services/mcp/types.js';
-import { getAccountInformation, isgakrcliAISubscriber } from './auth.js';
+import { getAccountInformation, isGakrCLIAISubscriber } from './auth.js';
 import { getLargeMemoryFiles, getMemoryFiles, MAX_MEMORY_CHARACTER_COUNT } from './gakrclimd.js';
 import { getDoctorDiagnostic } from './doctorDiagnostic.js';
 import { getAWSRegion, getDefaultVertexRegion, isEnvTruthy } from './envUtils.js';
 import { getDisplayPath } from './file.js';
 import { formatNumber } from './format.js';
 import { getIdeClientName, type IDEExtensionInstallationStatus, isJetBrainsIde, toIDEDisplayName } from './ide.js';
-import { getgakrcliAiUserDefaultModelDescription, modelDisplayString } from './model/model.js';
+import { getGakrCLIAiUserDefaultModelDescription, modelDisplayString } from './model/model.js';
 import { getAPIProvider, type APIProvider } from './model/providers.js';
 import { resolveProviderRequest } from '../services/api/providerConfig.js';
 import { getMTLSConfig } from './mtls.js';
@@ -478,8 +478,8 @@ export function buildAPIProviderProperties(): Property[] {
 }
 export function getModelDisplayLabel(mainLoopModel: string | null): string {
   let modelLabel = modelDisplayString(mainLoopModel);
-  if (mainLoopModel === null && isgakrcliAISubscriber()) {
-    const description = getgakrcliAiUserDefaultModelDescription();
+  if (mainLoopModel === null && isGakrCLIAISubscriber()) {
+    const description = getGakrCLIAiUserDefaultModelDescription();
     modelLabel = `${chalk.bold('Default')} ${description}`;
   }
   return modelLabel;

@@ -22,9 +22,13 @@ afterAll(() => {
   }
 })
 
-import stripAnsi from 'strip-ansi'
+import { stripVTControlCharacters as stripAnsi } from 'node:util'
 import { detectProvider, printStartupScreen } from './StartupScreen.js'
-import { getGlobalConfig, saveGlobalConfig } from '../utils/config.js'
+import {
+  type GlobalConfig,
+  getGlobalConfig,
+  saveGlobalConfig,
+} from '../utils/config.js'
 import {
   resetSettingsCache,
   setSessionSettingsCache,
@@ -56,13 +60,15 @@ const ENV_KEYS = [
   'ANTHROPIC_DEFAULT_SONNET_MODEL',
   'ANTHROPIC_DEFAULT_HAIKU_MODEL',
   'ANTHROPIC_BASE_URL',
+  'ANTHROPIC_API_KEY',
 ]
 
 const originalEnv: Record<string, string | undefined> = {}
 const originalMacro = (globalThis as Record<string, unknown>).MACRO
 const originalIsTTY = process.stdout.isTTY
 const originalWrite = process.stdout.write
-const originalConfig = getGlobalConfig()
+// `model` is a legacy loose key not declared on GlobalConfig.
+const originalModel = (getGlobalConfig() as GlobalConfig & Record<string, unknown>).model
 
 beforeEach(() => {
   for (const key of ENV_KEYS) {
@@ -73,7 +79,6 @@ beforeEach(() => {
   saveGlobalConfig(current => ({
     ...current,
     model: undefined,
-    logoColor: undefined,
   }))
 })
 
@@ -81,8 +86,7 @@ afterEach(() => {
   resetSettingsCache()
   saveGlobalConfig(current => ({
     ...current,
-    model: originalConfig.model,
-    logoColor: originalConfig.logoColor,
+    model: originalModel,
   }))
   ;(globalThis as Record<string, unknown>).MACRO = originalMacro
   Object.defineProperty(process.stdout, 'isTTY', {
@@ -257,6 +261,15 @@ describe('detectProvider — explicit dedicated-provider env flags', () => {
     process.env.MINIMAX_API_KEY = 'test-key'
     expect(detectProvider().name).toBe('MiniMax')
   })
+
+  test('Anthropic-compatible MiniMax profile is labeled MiniMax', () => {
+    process.env.ANTHROPIC_BASE_URL = 'https://api.minimax.io/anthropic'
+    process.env.ANTHROPIC_API_KEY = 'test-key'
+    process.env.ANTHROPIC_MODEL = 'MiniMax-M2.7'
+
+    expect(detectProvider().name).toBe('MiniMax')
+    expect(detectProvider().baseUrl).toBe('https://api.minimax.io/anthropic')
+  })
 })
 
 // --- modelOverride from --model flag ---
@@ -269,6 +282,7 @@ describe('detectProvider — modelOverride from --model flag', () => {
   })
 
   test('modelOverride alias is resolved for Anthropic', () => {
+    process.env.ANTHROPIC_DEFAULT_OPUS_MODEL = 'claude-opus-4-6'
     const result = detectProvider('opus')
     expect(result.name).toBe('Anthropic')
     expect(result.model).toContain('opus')
@@ -326,32 +340,5 @@ describe('detectProvider — modelOverride from --model flag', () => {
     const result = detectProvider()
     expect(result.name).toBe('Anthropic')
     expect(result.model).toContain('sonnet')
-  })
-})
-
-describe('printStartupScreen — logo palette persistence', () => {
-  test('uses the saved logo palette when rendering on startup', () => {
-    let output = ''
-    Object.defineProperty(process.stdout, 'isTTY', {
-      configurable: true,
-      value: true,
-    })
-    process.stdout.write = ((chunk: string | Uint8Array) => {
-      output += chunk.toString()
-      return true
-    }) as typeof process.stdout.write
-    ;(globalThis as Record<string, unknown>).MACRO = {
-      VERSION: '0.0.0-test',
-      DISPLAY_VERSION: '0.0.0-test',
-    }
-    saveGlobalConfig(current => ({
-      ...current,
-      logoColor: 'sunset',
-    }))
-
-    printStartupScreen()
-
-    expect(output).toContain('\x1b[38;2;255;180;100m')
-    expect(output).toContain('\x1b[38;2;240;148;100m')
   })
 })

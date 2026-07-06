@@ -150,9 +150,10 @@ export const KEYBINDING_ACTIONS = [
   'diff:viewDetails',
   'diff:previousFile',
   'diff:nextFile',
-  // Model picker actions (ant-only)
+  // Model picker actions (internal-only)
   'modelPicker:decreaseEffort',
   'modelPicker:increaseEffort',
+  'modelPicker:refresh',
   // Select component actions (distinct from confirm: to avoid collisions)
   'select:next',
   'select:previous',
@@ -224,7 +225,7 @@ export const KeybindingsSchema = lazySchema(() =>
         .describe('Array of keybinding blocks by context'),
     })
     .describe(
-      'GakrCLI keybindings configuration. Customize keyboard shortcuts by context.',
+      'GakrCLI Code keybindings configuration. Customize keyboard shortcuts by context.',
     ),
 )
 

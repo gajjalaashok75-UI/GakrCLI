@@ -9,12 +9,12 @@ import {
   logEvent,
 } from '../../services/analytics/index.js'
 import { getSSLErrorHint } from '../../services/api/errorUtils.js'
-import { fetchAndStoregakrcliCodeFirstTokenDate } from '../../services/api/firstTokenDate.js'
+import { fetchAndStoreGakrCLICodeFirstTokenDate } from '../../services/api/firstTokenDate.js'
 import {
   createAndStoreApiKey,
   fetchAndStoreUserRoles,
   refreshOAuthToken,
-  shouldUsegakrcliAIAuth,
+  shouldUseGakrCLIAIAuth,
   storeOAuthAccountInfo,
 } from '../../services/oauth/client.js'
 import { getOauthProfileFromOauthToken } from '../../services/oauth/getOauthProfile.js'
@@ -92,8 +92,8 @@ export async function installOAuthTokens(tokens: OAuthTokens): Promise<void> {
     logForDebugging(String(err), { level: 'error' }),
   )
 
-  if (shouldUsegakrcliAIAuth(tokens.scopes)) {
-    await fetchAndStoregakrcliCodeFirstTokenDate().catch(err =>
+  if (shouldUseGakrCLIAIAuth(tokens.scopes)) {
+    await fetchAndStoreGakrCLICodeFirstTokenDate().catch(err =>
       logForDebugging(String(err), { level: 'error' }),
     )
   } else {
@@ -112,20 +112,27 @@ export async function installOAuthTokens(tokens: OAuthTokens): Promise<void> {
 export async function authLogin({
   email,
   sso,
+  console: useConsole,
   gakrcliai,
 }: {
   email?: string
   sso?: boolean
+  console?: boolean
   gakrcliai?: boolean
 }): Promise<void> {
+  if (useConsole && gakrcliai) {
+    process.stderr.write(
+      'Error: --console and --gakrcliai cannot be used together.\n',
+    )
+    process.exit(1)
+  }
+
   const settings = getInitialSettings()
-  // Determine which OAuth flow to use: GakrCLI subscription (true) or Console (false, now removed).
-  // Default to GakrCLI subscription. The --gakrcliai flag is the only option and is true by default.
-  // If forceLoginMethod is set (enterprise setting), respect it, but only 'gakrai' is valid.
-  const forceLoginMethod = settings.forceLoginMethod
-  const loginWithgakrcliAi = forceLoginMethod
-    ? forceLoginMethod === 'gakrai'
-    : true
+  // forceLoginMethod is a hard constraint (enterprise setting) — matches ConsoleOAuthFlow behavior.
+  // Without it, --console selects Console; --gakrcliai (or no flag) selects gakrcli.ai.
+  const loginWithGakrCLIAi = settings.forceLoginMethod
+    ? settings.forceLoginMethod === 'gakrcliai'
+    : !useConsole
   const orgUUID = settings.forceLoginOrgUUID
 
   // Fast path: if a refresh token is provided via env var, skip the browser
@@ -137,7 +144,7 @@ export async function authLogin({
       process.stderr.write(
         'GAKR_CODE_OAUTH_SCOPES is required when using GAKR_CODE_OAUTH_REFRESH_TOKEN.\n' +
           'Set it to the space-separated scopes the refresh token was issued with\n' +
-          '(e.g. "user:inference" or "user:profile user:inference user:sessions:gakr_code user:mcp_servers").\n',
+          '(e.g. "user:inference" or "user:profile user:inference user:sessions:gakrcli_code user:mcp_servers").\n',
       )
       process.exit(1)
     }
@@ -164,7 +171,7 @@ export async function authLogin({
       })
 
       logEvent('tengu_oauth_success', {
-        loginWithgakrcliAi: shouldUsegakrcliAIAuth(tokens.scopes),
+        loginWithGakrCLIAi: shouldUseGakrCLIAIAuth(tokens.scopes),
       })
       process.stdout.write('Login successful.\n')
       process.exit(0)
@@ -183,7 +190,7 @@ export async function authLogin({
   const oauthService = new OAuthService()
 
   try {
-    logEvent('tengu_oauth_flow_start', { loginWithgakrcliAi })
+    logEvent('tengu_oauth_flow_start', { loginWithGakrCLIAi })
 
     const result = await oauthService.startOAuthFlow(
       async url => {
@@ -191,7 +198,7 @@ export async function authLogin({
         process.stdout.write(`If the browser didn't open, visit: ${url}\n`)
       },
       {
-        loginWithgakrcliAi,
+        loginWithGakrCLIAi,
         loginHint: email,
         loginMethod: resolvedLoginMethod,
         orgUUID,
@@ -206,7 +213,7 @@ export async function authLogin({
       process.exit(1)
     }
 
-    logEvent('tengu_oauth_success', { loginWithgakrcliAi })
+    logEvent('tengu_oauth_success', { loginWithGakrCLIAi })
 
     process.stdout.write('Login successful.\n')
     process.exit(0)
@@ -240,8 +247,8 @@ export async function authStatus(opts: {
   let authMethod: string = 'none'
   if (using3P) {
     authMethod = 'third_party'
-  } else if (authTokenSource === 'gakr.ai') {
-    authMethod = 'gakr.ai'
+  } else if (authTokenSource === 'gakrcli.ai') {
+    authMethod = 'gakrcli.ai'
   } else if (authTokenSource === 'apiKeyHelper') {
     authMethod = 'api_key_helper'
   } else if (authTokenSource !== 'none') {
@@ -249,7 +256,7 @@ export async function authStatus(opts: {
   } else if (apiKeySource === 'ANTHROPIC_API_KEY' || hasApiKeyEnvVar) {
     authMethod = 'api_key'
   } else if (apiKeySource === '/login managed key') {
-    authMethod = 'gakr.ai'
+    authMethod = 'gakrcli.ai'
   }
 
   if (opts.text) {
@@ -299,7 +306,7 @@ export async function authStatus(opts: {
     if (resolvedApiKeySource) {
       output.apiKeySource = resolvedApiKeySource
     }
-    if (authMethod === 'gakr.ai') {
+    if (authMethod === 'gakrcli.ai') {
       output.email = oauthAccount?.emailAddress ?? null
       output.orgId = oauthAccount?.organizationUuid ?? null
       output.orgName = oauthAccount?.organizationName ?? null
@@ -318,6 +325,6 @@ export async function authLogout(): Promise<void> {
     process.stderr.write('Failed to log out.\n')
     process.exit(1)
   }
-  process.stdout.write('Successfully logged out from your GakrCLI account.\n')
+  process.stdout.write('Successfully logged out from your Anthropic account.\n')
   process.exit(0)
 }

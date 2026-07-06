@@ -5,7 +5,7 @@ import { getPlatform } from '../utils/platform.js'
 import type { KeybindingBlock } from './types.js'
 
 /**
- * Default keybindings that match current GakrCLI behavior.
+ * Default keybindings that match current GakrCLI Code behavior.
  * These are loaded first, then user keybindings.json overrides them.
  */
 
@@ -306,12 +306,29 @@ export const DEFAULT_BINDINGS: KeybindingBlock[] = [
       // Note: diff:back is handled by left arrow in detail mode
     },
   },
-  // Model picker effort cycling (ant-only)
+  // Model picker effort cycling (internal-only)
   {
     context: 'ModelPicker',
     bindings: {
       left: 'modelPicker:decreaseEffort',
       right: 'modelPicker:increaseEffort',
+      r: 'modelPicker:refresh',
+    },
+  },
+  // Effort panel (slash /effort without args)
+  {
+    context: 'EffortPanel',
+    bindings: {
+      left: 'effortPanel:decrease',
+      right: 'effortPanel:increase',
+      h: 'effortPanel:decrease',
+      l: 'effortPanel:increase',
+      home: 'effortPanel:home',
+      end: 'effortPanel:end',
+      enter: 'effortPanel:confirm',
+      escape: 'effortPanel:cancel',
+      q: 'effortPanel:cancel',
+      'ctrl+c': 'effortPanel:cancel',
     },
   },
   // Select component navigation (used by /model, /resume, permission prompts, etc.)

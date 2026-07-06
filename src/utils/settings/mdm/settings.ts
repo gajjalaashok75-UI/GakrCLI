@@ -1,11 +1,11 @@
 /**
- * MDM (Mobile Device Management) profile enforcement for GakrCLI managed settings.
+ * MDM (Mobile Device Management) profile enforcement for GakrCLI Code managed settings.
  *
  * Reads enterprise settings from OS-level MDM configuration:
  * - macOS: `com.anthropic.gakrclicode` preference domain
  *   (MDM profiles at /Library/Managed Preferences/ only — not user-writable ~/Library/Preferences/)
- * - Windows: `HKLM\SOFTWARE\Policies\gakrcliCode` (admin-only)
- *   and `HKCU\SOFTWARE\Policies\gakrcliCode` (user-writable, lowest priority)
+ * - Windows: `HKLM\SOFTWARE\Policies\GakrCLICode` (admin-only)
+ *   and `HKCU\SOFTWARE\Policies\GakrCLICode` (user-writable, lowest priority)
  * - Linux: No MDM equivalent (uses /etc/gakrcli-code/managed-settings.json instead)
  *
  * Policy settings use "first source wins" — the highest-priority source that exists

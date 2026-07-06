@@ -4,16 +4,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNotifications } from 'src/context/notifications.js';
 import { Text } from 'src/ink.js';
 import { getRateLimitWarning, getUsingOverageText } from 'src/services/gakrcliAiLimits.js';
-import { usegakrcliAiLimits } from 'src/services/gakrcliAiLimitsHook.js';
+import { useGakrCLIAiLimits } from 'src/services/gakrcliAiLimitsHook.js';
 import { getSubscriptionType } from 'src/utils/auth.js';
-import { hasgakrcliAiBillingAccess } from 'src/utils/billing.js';
+import { hasGakrCLIAiBillingAccess } from 'src/utils/billing.js';
 import { getIsRemoteMode } from '../../bootstrap/state.js';
 export function useRateLimitWarningNotification(model) {
   const $ = _c(17);
   const {
     addNotification
   } = useNotifications();
-  const gakrcliAiLimits = usegakrcliAiLimits();
+  const gakrcliAiLimits = useGakrCLIAiLimits();
   let t0;
   if ($[0] !== gakrcliAiLimits || $[1] !== model) {
     t0 = getRateLimitWarning(gakrcliAiLimits, model);
@@ -44,7 +44,7 @@ export function useRateLimitWarningNotification(model) {
   const subscriptionType = t2;
   let t3;
   if ($[6] === Symbol.for("react.memo_cache_sentinel")) {
-    t3 = hasgakrcliAiBillingAccess();
+    t3 = hasGakrCLIAiBillingAccess();
     $[6] = t3;
   } else {
     t3 = $[6];

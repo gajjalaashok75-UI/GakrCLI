@@ -47,6 +47,7 @@ export function ExportDialog({
     columns
   } = useTerminalSize();
 
+  // Handle going back through steps
   const handleGoBack = useCallback(() => {
     if (step === 'filename') {
       setStep('method');
@@ -119,6 +120,7 @@ export function ExportDialog({
     }
   };
 
+  // Dialog calls onCancel when Escape is pressed.
   const handleCancel = useCallback(() => {
     if (isExportingRef.current) return;
     if (step !== 'format') {
@@ -155,6 +157,7 @@ export function ExportDialog({
     description: `Save as ${selectedFormat} to a file in the current directory`
   }];
 
+  // Custom input guide that changes based on dialog state
   function renderInputGuide(exitState: ExitState): React.ReactNode {
     if (step === 'filename') {
       return <Byline>

@@ -5,7 +5,7 @@ import { fileSuffixForOauthConfig } from '../constants/oauth.js'
 import { isRunningWithBun } from './bundledMode.js'
 import { createCombinedAbortSignal } from './combinedAbortSignal.js'
 import {
-  getGakrcliConfigHomeDir,
+  getGakrCLIConfigHomeDir,
   isEnvTruthy,
 } from './envUtils.js'
 import { findExecutable } from './findExecutable.js'
@@ -14,36 +14,39 @@ import { which } from './which.js'
 
 type Platform = 'win32' | 'darwin' | 'linux'
 
-export function resolveGlobalGakrcliFile(options: {
+export function resolveGlobalGakrCLIFile(options: {
   configDirEnv?: string
   homeDir?: string
   oauthSuffix?: string
+  existsSync: (path: string) => boolean
 }): string {
   const oauthSuffix = options.oauthSuffix ?? ''
   const configDir = options.configDirEnv || options.homeDir || homedir()
+  const hasExplicitConfigDir = Boolean(options.configDirEnv)
   const newFilename = `.gakrcli${oauthSuffix}.json`
 
   return join(configDir, newFilename)
 }
 
 // Config and data paths
-export const getGlobalGakrcliFile = memoize((): string => {
+export const getGlobalGakrCLIFile = memoize((): string => {
   // Legacy fallback for backwards compatibility
   if (
     getFsImplementation().existsSync(
-      join(getGakrcliConfigHomeDir(), '.config.json'),
+      join(getGakrCLIConfigHomeDir(), '.config.json'),
     )
   ) {
-    return join(getGakrcliConfigHomeDir(), '.config.json')
+    return join(getGakrCLIConfigHomeDir(), '.config.json')
   }
 
   const oauthSuffix = fileSuffixForOauthConfig()
   const configDir = process.env.GAKR_CONFIG_DIR || homedir()
-
-  return resolveGlobalGakrcliFile({
+  
+  return resolveGlobalGakrCLIFile({
     configDirEnv: process.env.GAKR_CONFIG_DIR,
     homeDir: configDir,
     oauthSuffix,
+    existsSync: path => getFsImplementation().existsSync(path),
   })
 })
 
@@ -76,7 +79,7 @@ async function isCommandAvailable(command: string): Promise<boolean> {
 }
 
 const detectPackageManagers = memoize(async (): Promise<string[]> => {
-  const packageManagers = []
+  const packageManagers: string[] = []
 
   if (await isCommandAvailable('npm')) packageManagers.push('npm')
   if (await isCommandAvailable('yarn')) packageManagers.push('yarn')
@@ -86,7 +89,7 @@ const detectPackageManagers = memoize(async (): Promise<string[]> => {
 })
 
 const detectRuntimes = memoize(async (): Promise<string[]> => {
-  const runtimes = []
+  const runtimes: string[] = []
 
   if (await isCommandAvailable('bun')) runtimes.push('bun')
   if (await isCommandAvailable('deno')) runtimes.push('deno')

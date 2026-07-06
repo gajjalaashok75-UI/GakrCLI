@@ -11,10 +11,9 @@
  * with (the channel's MCP tool, SendUserMessage, or both).
  *
  * feature('KAIROS') || feature('KAIROS_CHANNELS'). Runtime gate tengu_harbor.
- * Cloud sessions require gakr.ai OAuth auth; open/local third-party-provider
- * sessions use explicit --channels opt-in plus the local approved-plugin
- * allowlist. Teams/Enterprise orgs must explicitly opt in via
- * channelsEnabled: true in managed settings.
+ * Requires gakrcli.ai OAuth auth — API key users are blocked until
+ * console gets a channelsEnabled admin surface. Teams/Enterprise orgs
+ * must explicitly opt in via channelsEnabled: true in managed settings.
  */
 
 import type { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js'
@@ -22,9 +21,8 @@ import { z } from 'zod/v4'
 import { type ChannelEntry, getAllowedChannels } from '../../bootstrap/state.js'
 import { CHANNEL_TAG } from '../../constants/xml.js'
 import {
-  getgakrcliAIOAuthTokens,
+  getGakrCLIAIOAuthTokens,
   getSubscriptionType,
-  isUsing3PServices,
 } from '../../utils/auth.js'
 import { lazySchema } from '../../utils/lazySchema.js'
 import { parsePluginIdentifier } from '../../utils/plugins/pluginIdentifier.js'
@@ -114,14 +112,7 @@ export function wrapChannelMessage(
     .filter(([k]) => SAFE_META_KEY.test(k))
     .map(([k, v]) => ` ${k}="${escapeXmlAttr(v)}"`)
     .join('')
-  return [
-    '<channel_delivery_instruction>',
-    'This message came from an external channel. If you answer it, use that channel MCP server\'s reply/send tool with the chat_id or destination in the channel tag. Do not answer channel messages with normal assistant prose, and do not add a visible terminal response after the channel reply tool call.',
-    '</channel_delivery_instruction>',
-    `<${CHANNEL_TAG} source="${escapeXmlAttr(serverName)}"${attrs}>`,
-    content,
-    `</${CHANNEL_TAG}>`,
-  ].join('\n')
+  return `<${CHANNEL_TAG} source="${escapeXmlAttr(serverName)}"${attrs}>\n${content}\n</${CHANNEL_TAG}>`
 }
 
 /**
@@ -187,7 +178,7 @@ export function findChannelEntry(
  * elimination). Gate order: capability → runtime gate (tengu_harbor) →
  * auth (OAuth only) → org policy → session --channels → allowlist.
  * API key users are blocked at the auth layer — channels requires
- * gakr.ai auth; console orgs have no admin opt-in surface yet.
+ * gakrcli.ai auth; console orgs have no admin opt-in surface yet.
  *
  *   skip      Not a channel server, or managed org hasn't opted in, or
  *             not in session --channels. Connection stays up; handler
@@ -225,16 +216,14 @@ export function gateChannelServer(
     }
   }
 
-  // Upstream cloud channels require OAuth because org policy and allowlist
-  // decisions come from gakr.ai. In the open/local build, third-party provider
-  // sessions (OpenAI-compatible, Gemini, NVIDIA, etc.) do not have gakr.ai
-  // OAuth at all, so rely on the explicit --channels opt-in plus the local
-  // allowlist ledger instead.
-  if (!isUsing3PServices() && !getgakrcliAIOAuthTokens()?.accessToken) {
+  // OAuth-only. API key users (console) are blocked — there's no
+  // channelsEnabled admin surface in console yet, so the policy opt-in
+  // flow doesn't exist for them. Drop this when console parity lands.
+  if (!getGakrCLIAIOAuthTokens()?.accessToken) {
     return {
       action: 'skip',
       kind: 'auth',
-      reason: 'channels requires gakr.ai authentication (run /login)',
+      reason: 'channels requires gakrcli.ai authentication (run /login)',
     }
   }
 

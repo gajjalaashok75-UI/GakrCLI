@@ -4,6 +4,12 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ## [Unreleased]
 
+### Fixed (2026-06-22)
+
+- **Fixed Windows spawn stdin piping by spawning node directly**: On Windows, `shell: true` + `cmd.exe /c` wrapping passes args unsafely and breaks stdin piping through 3+ process layers. Added `resolveWindowsCliPath()` which finds the npm-installed `gakrcli.js` via `APPDATA`/`LOCALAPPDATA` and spawns `process.execPath` (node) directly — bypassing cmd.exe entirely. This fixes the initialize handshake: the extension can now send `control_request { subtype: 'initialize' }` to the CLI and get a response in <10s instead of hanging until the 300s timeout. On non-Windows, no shell is used (executable is directly in PATH as a symlink). The `bin/gakrcli` heap relaunch (`spawnSync` of itself with `--max-old-space-size`) is suppressed via `GAKR_DISABLE_HEAP_RELAUNCH=1` to avoid an extra process layer that could interfere with the extension's own lifecycle.
+- **`--provider` flag removed from CLI spawn args**: The extension was passing `--provider anthropic` to the spawned CLI, overriding the user's configured provider in `~/.gakrcli/settings.json` and causing "Not logged in" auth errors. Removed `--provider` from `ProcessManager.buildArgs()` so the CLI uses its own provider config and credentials. Aligned with reference `openclaude-vscode` implementation.
+- **Increased init timeout to 300s for provider/model discovery**: Increased `INIT_TIMEOUT_MS` and `SPAWN_POLL_TIMEOUT_MS` from 120s to 300s to accommodate slow provider/model discovery on cold starts. Added periodic "Still waiting for init..." diagnostic logging every 30s. Fixes the infinite "Starting → timeout → crashed → refresh → Starting" loop.
+
 ### Fixed (2026-06-01)
 
 - Restored visible unordered, ordered, and nested list markers in assistant markdown output after Tailwind's base reset removed default bullets.

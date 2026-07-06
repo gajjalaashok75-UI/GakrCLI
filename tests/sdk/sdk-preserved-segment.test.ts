@@ -153,22 +153,17 @@ function createCompactTranscriptWithPreservedSegment(
 }
 
 let tempDirs: string[] = []
-let originalConfigDir: string | undefined
 let originalSessionId: SessionId
 let originalSessionProjectDir: string | null
 let originalCwd: string
 let originalOriginalCwd: string
 
 beforeEach(async () => {
-  await acquireSharedMutationLock('tests/sdk/sdk-preserved-segment.test.ts')
-  originalConfigDir = process.env.GAKR_CONFIG_DIR
+  await acquireSharedMutationLock('sdk-preserved-segment')
   originalSessionId = getSessionId()
   originalSessionProjectDir = getSessionProjectDir()
   originalCwd = getCwdState()
   originalOriginalCwd = getOriginalCwd()
-  const configDir = join(tmpdir(), `sdk-preserved-config-${randomUUID()}`)
-  process.env.GAKR_CONFIG_DIR = configDir
-  tempDirs.push(configDir)
 })
 
 afterEach(() => {
@@ -176,12 +171,6 @@ afterEach(() => {
     switchSession(originalSessionId, originalSessionProjectDir)
     setCwdState(originalCwd)
     setOriginalCwd(originalOriginalCwd)
-    if (originalConfigDir === undefined) {
-      delete process.env.GAKR_CONFIG_DIR
-    } else {
-      process.env.GAKR_CONFIG_DIR = originalConfigDir
-    }
-
     for (const dir of tempDirs) {
       rmSync(dir, { recursive: true, force: true })
     }

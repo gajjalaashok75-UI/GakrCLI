@@ -12,6 +12,7 @@ import { resolveAntModel } from './model/antModels.js'
 import { get3PModelCapabilityOverride } from './model/modelSupportOverrides.js'
 import { getAPIProvider } from './model/providers.js'
 import { getSettingsWithErrors } from './settings/settings.js'
+import { isEnvTruthy } from './envUtils.js'
 
 export type ThinkingConfig =
   | { type: 'adaptive' }
@@ -128,9 +129,9 @@ export function modelSupportsThinking(model: string): boolean {
   // launch DRI and research. This can greatly affect model quality and bashing.
   const canonical = getCanonicalName(model)
   const provider = getAPIProvider()
-  // 1P and Foundry: all Claude 4+ models (including Haiku 4.5)
+  // 1P and Foundry: all GakrCLI 4+ models (including Haiku 4.5)
   if (provider === 'foundry' || provider === 'firstParty') {
-    return !canonical.includes('claude-3-')
+    return !canonical.includes('gakrcli-3-')
   }
   if (
     canonical.startsWith('deepseek-v4-') ||
@@ -142,6 +143,10 @@ export function modelSupportsThinking(model: string): boolean {
     const descriptorSupportsThinking = routeCatalogSupportsThinking(model)
     if (descriptorSupportsThinking !== undefined) {
       return descriptorSupportsThinking
+    }
+    const routeId = resolveActiveRouteIdFromEnv(process.env)
+    if (routeId === 'ollama') {
+      return false
     }
   }
   // 3P (Bedrock/Vertex): only Opus 4+ and Sonnet 4+
@@ -155,7 +160,7 @@ export function modelSupportsAdaptiveThinking(model: string): boolean {
     return supported3P
   }
   const canonical = getCanonicalName(model)
-  // Supported by a subset of Claude 4 models
+  // Supported by a subset of GakrCLI 4 models
   if (canonical.includes('opus-4-7') || canonical.includes('opus-4-6') || canonical.includes('sonnet-4-6')) {
     return true
   }
@@ -198,4 +203,15 @@ export function shouldEnableThinkingByDefault(): boolean {
 
   // Enable thinking by default unless explicitly disabled.
   return true
+}
+
+export function shouldUseThinkingForModel(
+  model: string,
+  thinkingConfig: ThinkingConfig,
+): boolean {
+  return (
+    thinkingConfig.type !== 'disabled' &&
+    !isEnvTruthy(process.env.GAKR_CODE_DISABLE_THINKING) &&
+    modelSupportsThinking(model)
+  )
 }

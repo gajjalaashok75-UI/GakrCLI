@@ -7,6 +7,7 @@ import {
 } from './config.js'
 import type {
   ConfigScope,
+  McpStdioServerConfig,
   ScopedMcpServerConfig,
 } from './types.js'
 import { describeMcpConfigFilePath, getProjectMcpServerStatus } from './utils.js'
@@ -211,8 +212,14 @@ function getConfigSignature(config: ScopedMcpServerConfig): string {
       return `${config.scope}:${config.type}:${config.url}`
     case 'sdk':
       return `${config.scope}:${config.type}:${config.name}`
-    default:
-      return `${config.scope}:${config.type ?? 'stdio'}:${config.command}:${JSON.stringify(config.args ?? [])}`
+    default: {
+      // 'sse-ide' / 'ws-ide' configs also land here; they carry no
+      // command/args, so read them as optional stdio fields.
+      const { command, args } = config as Partial<
+        Pick<McpStdioServerConfig, 'command' | 'args'>
+      >
+      return `${config.scope}:${config.type ?? 'stdio'}:${command}:${JSON.stringify(args ?? [])}`
+    }
   }
 }
 
@@ -300,7 +307,7 @@ function buildObservedDefinition(
       getSourceType(activeConfig) === 'plugin'
         ? `plugin:${activeConfig.pluginSource ?? 'unknown'}`
         : getSourceType(activeConfig) === 'gakrcliai'
-          ? 'gakr.ai'
+          ? 'gakrcli.ai'
           : activeConfig.scope,
     transport: getTransport(activeConfig),
     runtimeVisible: options?.runtimeVisible ?? true,
@@ -319,7 +326,7 @@ function hasDefinitionForRuntimeSource(
     runtimeSourceType === 'plugin'
       ? `plugin:${runtimeConfig.pluginSource ?? 'unknown'}`
       : runtimeSourceType === 'gakrcliai'
-        ? 'gakr.ai'
+        ? 'gakrcli.ai'
         : deps.describeMcpConfigFilePath(runtimeConfig.scope)
 
   return definitions.some(

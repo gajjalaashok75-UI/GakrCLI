@@ -88,9 +88,11 @@ Fork yourself (omit \`subagent_type\`) when the intermediate tool output isn't w
 
 Forks are cheap because they share your prompt cache. Don't set \`model\` on a fork \u2014 a different model can't reuse the parent's cache. Pass a short \`name\` (one or two words, lowercase) so the user can see the fork in the teams panel and steer it mid-run.
 
-**Don't peek.** The tool result includes an \`output_file\` path — do not Read or tail it unless the user explicitly asks for a progress check. You get a completion notification; trust it. Reading the transcript mid-flight pulls the fork's tool noise into your context, which defeats the point of forking.
+**Don't peek.** The tool result includes an \`output_file\` path — do not Read or tail it unless the user explicitly asks for a progress check. You get a completion notification; trust it. Reading the transcript mid-flight pulls the fork's tool noise into your context, which defeats the point of forking. If you need to course-correct, use SendMessage — never Read.
 
 **Don't race.** After launching, you know nothing about what the fork found. Never fabricate or predict fork results in any format — not as prose, summary, or structured output. The notification arrives as a user-role message in a later turn; it is never something you write yourself. If the user asks a follow-up before the notification lands, tell them the fork is still running — give status, not a guess.
+
+**Don't take over.** A fork that looks stuck is usually in its read phase, not failing. Course-correct with SendMessage; never write its output yourself or discard its result when it lands. Override belongs to the Review phase.
 
 **Writing a fork prompt.** Since the fork inherits your context, the prompt is a *directive* — what to do, not what the situation is. Be specific about scope: what's in, what's out, what another agent is handling. Don't re-explain background.
 `
@@ -156,34 +158,24 @@ ${AGENT_TOOL_NAME}({
   const currentExamples = `Example usage:
 
 <example_agent_descriptions>
-"test-runner": use this agent after you are done writing code to run tests
-"greeting-responder": use this agent to respond to user greetings with a friendly joke
+"gakrcli-code-guide": use this agent when the user asks how GakrCLI Code works or how to use its features
+"statusline-setup": use this agent to configure the user's GakrCLI Code status line setting
 </example_agent_descriptions>
 
 <example>
-user: "Please write a function that checks if a number is prime"
-assistant: I'm going to use the ${FILE_WRITE_TOOL_NAME} tool to write the following code:
-<code>
-function isPrime(n) {
-  if (n <= 1) return false
-  for (let i = 2; i * i <= n; i++) {
-    if (n % i === 0) return false
-  }
-  return true
-}
-</code>
+user: "How do I configure GakrCLI Code hooks?"
 <commentary>
-Since a significant piece of code was written and the task was completed, now use the test-runner agent to run the tests
+This is a GakrCLI Code usage question, so use the gakrcli-code-guide agent
 </commentary>
-assistant: Uses the ${AGENT_TOOL_NAME} tool to launch the test-runner agent
+assistant: Uses the ${AGENT_TOOL_NAME} tool to launch the gakrcli-code-guide agent
 </example>
 
 <example>
-user: "Hello"
+user: "Set up my GakrCLI Code status line"
 <commentary>
-Since the user is greeting, use the greeting-responder agent to respond with a friendly joke
+This matches the statusline-setup agent, so use it to configure the setting
 </commentary>
-assistant: "I'm going to use the ${AGENT_TOOL_NAME} tool to launch the greeting-responder agent"
+assistant: "I'm going to use the ${AGENT_TOOL_NAME} tool to launch the statusline-setup agent"
 </example>
 `
 
@@ -270,10 +262,6 @@ Usage notes:
 - If the agent description mentions that it should be used proactively, then you should try your best to use it without the user having to ask for it first. Use your judgement.
 - If the user specifies that they want you to run agents "in parallel", you MUST send a single message with multiple ${AGENT_TOOL_NAME} tool use content blocks. For example, if you need to launch both a build-validator agent and a test-runner agent in parallel, send a single message with both tool calls.
 - You can optionally set \`isolation: "worktree"\` to run the agent in a temporary git worktree, giving it an isolated copy of the repository. The worktree is automatically cleaned up if the agent makes no changes; if changes are made, the worktree path and branch are returned in the result.${
-    process.env.USER_TYPE === 'ant'
-      ? `\n- You can set \`isolation: "remote"\` to run the agent in a remote CCR environment. This is always a background task; you'll be notified when it completes. Use for long-running tasks that need a fresh sandbox.`
-      : ''
-  }${
     isInProcessTeammate()
       ? `
 - The run_in_background, name, team_name, and mode parameters are not available in this context. Only synchronous subagents are supported.`

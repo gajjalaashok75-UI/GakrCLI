@@ -1,4 +1,4 @@
-// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
+// biome-ignore-all assist/source/organizeImports: internal-only import markers must not be reordered
 import { type as osType, version as osVersion, release as osRelease } from 'os'
 import { env } from '../utils/env.js'
 import { getIsGit } from '../utils/git.js'
@@ -59,6 +59,7 @@ import { TICK_TAG } from './xml.js'
 import { logForDebugging } from '../utils/debug.js'
 import { loadMemoryPrompt } from '../memdir/memdir.js'
 import { isUndercover } from '../utils/undercover.js'
+import { getAntModelOverrideConfig } from '../utils/model/antModels.js'
 import { isMcpInstructionsDeltaEnabled } from '../utils/mcpInstructionsDelta.js'
 
 // Dead code elimination: conditional imports for feature-gated modules
@@ -100,7 +101,7 @@ import type { OutputStyleConfig } from './outputStyles.js'
 import { CYBER_RISK_INSTRUCTION } from './cyberRiskInstruction.js'
 
 export const GAKR_CODE_DOCS_MAP_URL =
-  'https://github.com/gajjalaashok75-UI/GakrCLI/docs/en/gakrcli_code_docs_map.md'
+  'https://github.com/gajjalaashok75-UI/gakrcli'
 
 /**
  * Boundary marker separating static (cross-org cacheable) content from dynamic content.
@@ -115,14 +116,7 @@ export const SYSTEM_PROMPT_DYNAMIC_BOUNDARY =
   '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__'
 
 // @[MODEL LAUNCH]: Update the latest frontier model.
-const FRONTIER_MODEL_NAME = 'GakrCLI Opus 4.6'
-
-// @[MODEL LAUNCH]: Update the model family IDs below to the latest in each tier.
-const GAKR_4_5_OR_4_6_MODEL_IDS = {
-  opus: 'gakrcli-opus-4-6',
-  sonnet: 'gakrcli-sonnet-4-6',
-  haiku: 'gakrcli-haiku-4-5-20251001',
-}
+const FRONTIER_MODEL_NAME = 'claude opus 4.7'
 
 function getHooksSection(): string {
   return `Users may configure 'hooks', shell commands that execute in response to events like tool calls, in settings. Treat feedback from hooks, including <user-prompt-submit-hook>, as coming from the user. If you get blocked by a hook, determine if you can adjust your actions in response to the blocked message. If not, ask the user to check their hooks configuration.`
@@ -242,7 +236,7 @@ function getSimpleDoingTasksSection(): string {
       : []),
     ...(process.env.USER_TYPE === 'ant'
       ? [
-          `If the user reports a bug, slowness, or unexpected behavior with GakrCLI itself (as opposed to asking you to fix their own code), recommend /issue for model-related problems such as odd outputs, wrong tool choices, hallucinations, or refusals. For product bugs, crashes, slowness, or general issues, recommend opening a GitHub issue at https://github.com/gajjalaashok75-UI/GakrCLI/issues with the relevant session details. Only recommend this when the user is describing a problem with GakrCLI.`,
+          `If the user reports a bug, slowness, or unexpected behavior with GakrCLI itself (as opposed to asking you to fix their own code), recommend the appropriate slash command: /issue for model-related problems (odd outputs, wrong tool choices, hallucinations, refusals), or /share to upload the full session transcript for product bugs, crashes, slowness, or general issues. Only recommend these when the user is describing a problem with GakrCLI.`,
         ]
       : []),
     `If the user asks for help or wants to give feedback inform them of the following:`,
@@ -389,7 +383,7 @@ function getSessionSpecificGuidanceSection(
       : null,
     hasAgentTool &&
     feature('VERIFICATION_AGENT') &&
-    // 3P default: false — verification agent is ant-only A/B
+    // 3P default: false — verification agent is internal-only A/B
     getFeatureValue_CACHED_MAY_BE_STALE('tengu_hive_evidence', false)
       ? `The contract: when non-trivial implementation happens on your turn, independent adversarial verification must happen before you report completion \u2014 regardless of who did the implementing (you directly, a fork you spawned, or a subagent). You are the one reporting to the user; you own the gate. Non-trivial means: 3+ file edits, backend/API changes, or infrastructure changes. Spawn the ${AGENT_TOOL_NAME} tool with subagent_type="${VERIFICATION_AGENT_TYPE}". Your own checks, caveats, and a fork's self-checks do NOT substitute \u2014 only the verifier assigns a verdict; you cannot self-assign PARTIAL. Pass the original user request, all files changed (by anyone), the approach, and the plan file path if applicable. Flag concerns if you have them but do NOT share test results or claim things work. On FAIL: fix, resume the verifier with its findings plus your fix, repeat until PASS. On PASS: spot-check it \u2014 re-run 2-3 commands from its report, confirm every PASS has a Command run block with output that matches your re-run. If any PASS lacks a command block or diverges, resume the verifier with the specifics. On PARTIAL (from the verifier): report what passed and what could not be verified.`
       : null,
@@ -449,8 +443,7 @@ export async function getSystemPrompt(
 ): Promise<string[]> {
   if (isEnvTruthy(process.env.GAKR_CODE_SIMPLE)) {
     return [
-      `You operate inside GakrCLI, an open-source command-line interface, agent harness, and orchestration runtime for coding agents. Your assistant identity may be defined by workspace files such as IDENTITY.md and SOUL.md.\n\nCWD: ${getCwd()}\nDate: ${getSessionStartDate()}`,
-
+      `You are GakrCLI, an open-source coding agent and CLI.\n\nCWD: ${getCwd()}\nDate: ${getSessionStartDate()}`,
     ]
   }
 
@@ -710,17 +703,17 @@ export async function computeSimpleEnvInfo(
 // @[MODEL LAUNCH]: Add a knowledge cutoff date for the new model.
 function getKnowledgeCutoff(modelId: string): string | null {
   const canonical = getCanonicalName(modelId)
-  if (canonical.includes('gakrcli-sonnet-4-6')) {
+  if (canonical.includes('claude-sonnet-4-6')) {
     return 'August 2025'
-  } else if (canonical.includes('gakrcli-opus-4-6')) {
+  } else if (canonical.includes('claude-opus-4-6')) {
     return 'May 2025'
-  } else if (canonical.includes('gakrcli-opus-4-5')) {
+  } else if (canonical.includes('claude-opus-4-5')) {
     return 'May 2025'
-  } else if (canonical.includes('gakrcli-haiku-4')) {
+  } else if (canonical.includes('claude-haiku-4')) {
     return 'February 2025'
   } else if (
-    canonical.includes('gakrcli-opus-4') ||
-    canonical.includes('gakrcli-sonnet-4')
+    canonical.includes('claude-opus-4') ||
+    canonical.includes('claude-sonnet-4')
   ) {
     return 'January 2025'
   }
@@ -822,6 +815,8 @@ function getFunctionResultClearingSection(model: string): string | null {
   }
   const config = getCachedMCConfigForFRC()
   if (!config) {
+    // External/stub builds return null from getCachedMCConfig — abort the
+    // section rather than trying to read .supportedModels off null.
     return null
   }
   const isModelSupported = config.supportedModels?.some(pattern =>

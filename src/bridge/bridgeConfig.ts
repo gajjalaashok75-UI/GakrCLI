@@ -1,18 +1,18 @@
 /**
- * Shared bridge auth/URL resolution. Consolidates the ant-only
+ * Shared bridge auth/URL resolution. Consolidates the internal-only
  * GAKR_BRIDGE_* dev overrides that were previously copy-pasted across
  * a dozen files — inboundAttachments, BriefTool/upload, bridgeMain,
  * initReplBridge, remoteBridgeCore, daemon workers, /rename,
  * /remote-control.
  *
- * Two layers: *Override() returns the ant-only env var (or undefined);
+ * Two layers: *Override() returns the internal-only env var (or undefined);
  * the non-Override versions fall through to the real OAuth store/config.
  * Callers that compose with a different auth source (e.g. daemon workers
  * using IPC auth) use the Override getters directly.
  */
 
 import { getOauthConfig } from '../constants/oauth.js'
-import { getgakrcliAIOAuthTokens } from '../utils/auth.js'
+import { getGakrCLIAIOAuthTokens } from '../utils/auth.js'
 
 /** Dev override: GAKR_BRIDGE_OAUTH_TOKEN, else undefined. */
 export function getBridgeTokenOverride(): string | undefined {
@@ -29,7 +29,7 @@ export function getBridgeBaseUrlOverride(): string | undefined {
  * keychain. Undefined means "not logged in".
  */
 export function getBridgeAccessToken(): string | undefined {
-  return getBridgeTokenOverride() ?? getgakrcliAIOAuthTokens()?.accessToken
+  return getBridgeTokenOverride() ?? getGakrCLIAIOAuthTokens()?.accessToken
 }
 
 /**
@@ -38,4 +38,9 @@ export function getBridgeAccessToken(): string | undefined {
  */
 export function getBridgeBaseUrl(): string {
   return getBridgeBaseUrlOverride() ?? getOauthConfig().BASE_API_URL
+}
+
+/** True when the user has explicitly configured a custom bridge server. */
+export function isSelfHostedBridge(): boolean {
+  return !!getBridgeBaseUrlOverride()
 }

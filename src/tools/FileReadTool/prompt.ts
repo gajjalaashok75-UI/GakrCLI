@@ -1,8 +1,7 @@
 import { isPDFSupported } from '../../utils/pdfUtils.js'
 import { BASH_TOOL_NAME } from '../BashTool/toolName.js'
-
-// Use a string constant for tool names to avoid circular dependencies
-export const FILE_READ_TOOL_NAME = 'Read'
+import { FILE_READ_TOOL_NAME } from './constants.js'
+export { FILE_READ_TOOL_NAME } from './constants.js'
 
 export const FILE_UNCHANGED_STUB =
   'File unchanged since last read. The content from the earlier Read tool_result in this conversation is still current — refer to that instead of re-reading.'
@@ -37,7 +36,7 @@ Usage:
 - By default, it reads up to ${MAX_LINES_TO_READ} lines starting from the beginning of the file${maxSizeInstruction}
 ${offsetInstruction}
 ${lineFormat}
-- This tool allows GakrCLI to read images (eg PNG, JPG, etc). When reading an image file the contents are presented visually as GakrCLI is a multimodal LLM.${
+- This tool allows GakrCLI Code to read images (eg PNG, JPG, etc). When reading an image file the contents are presented visually as GakrCLI Code is a multimodal LLM.${
     isPDFSupported()
       ? '\n- This tool can read PDF files (.pdf). For large PDFs (more than 10 pages), you MUST provide the pages parameter to read specific page ranges (e.g., pages: "1-5"). Reading a large PDF without the pages parameter will fail. Maximum 20 pages per request.'
       : ''

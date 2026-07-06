@@ -18,7 +18,7 @@ import {
   createPermissionRequestMessage,
   getRuleByContentsForToolName,
 } from '../../utils/permissions/permissions.js'
-import { isGakrCommitMessagePath } from '../../utils/permissions/filesystem.js'
+import { isGakrCLICommitMessagePath } from '../../utils/permissions/filesystem.js'
 import {
   matchWildcardPattern,
   parsePermissionRule,
@@ -85,6 +85,27 @@ const GIT_SAFETY_WRITE_CMDLETS = new Set([
   'export-clixml',
 ])
 
+export function isUnsafeDotGitWritePathForPowerShell(
+  path: string,
+  toolPermissionContext: ToolPermissionContext,
+): boolean {
+  if (!isDotGitPathPS(path)) {
+    return false
+  }
+
+  if (
+    (toolPermissionContext.mode === 'bypassPermissions' ||
+      toolPermissionContext.mode === 'fullAccess') &&
+    // Keep this aligned with the shared filesystem permission exception:
+    // /commit's temp file is scoped to the project root .git directory.
+    isGakrCLICommitMessagePath(resolve(getOriginalCwd(), path))
+  ) {
+    return false
+  }
+
+  return true
+}
+
 /**
  * External archive-extraction applications that write files to cwd with
  * archive-controlled paths. `tar -xf payload.tar; git status` defeats
@@ -112,25 +133,6 @@ const GIT_SAFETY_ARCHIVE_EXTRACTORS = new Set([
   'gunzip.exe',
   'expand-archive',
 ])
-
-export function isUnsafeDotGitWritePathForPowerShell(
-  path: string,
-  toolPermissionContext: ToolPermissionContext,
-): boolean {
-  if (!isDotGitPathPS(path)) {
-    return false
-  }
-
-  if (
-    (toolPermissionContext.mode === 'bypassPermissions' ||
-      toolPermissionContext.mode === 'fullAccess') &&
-    isGakrCommitMessagePath(resolve(getOriginalCwd(), path))
-  ) {
-    return false
-  }
-
-  return true
-}
 
 /**
  * Extract the command name from a PowerShell command string.

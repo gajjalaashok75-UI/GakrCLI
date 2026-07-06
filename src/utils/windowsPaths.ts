@@ -102,7 +102,7 @@ export const findGitBashPath = memoize((): string => {
     }
     // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.error(
-      `GakrCLI was unable to find GAKR_CODE_GIT_BASH_PATH path "${process.env.GAKR_CODE_GIT_BASH_PATH}"`,
+      `GakrCLI Code was unable to find GAKR_CODE_GIT_BASH_PATH path "${process.env.GAKR_CODE_GIT_BASH_PATH}"`,
     )
     // eslint-disable-next-line custom-rules/no-process-exit
     process.exit(1)
@@ -118,7 +118,7 @@ export const findGitBashPath = memoize((): string => {
 
   // biome-ignore lint/suspicious/noConsole:: intentional console output
   console.error(
-    'GakrCLI on Windows requires git-bash (https://git-scm.com/downloads/win). If installed but not in PATH, set environment variable pointing to your bash.exe, similar to: GAKR_CODE_GIT_BASH_PATH=C:\\Program Files\\Git\\bin\\bash.exe',
+    'GakrCLI Code on Windows requires git-bash (https://git-scm.com/downloads/win). If installed but not in PATH, set environment variable pointing to your bash.exe, similar to: GAKR_CODE_GIT_BASH_PATH=C:\\Program Files\\Git\\bin\\bash.exe',
   )
   // eslint-disable-next-line custom-rules/no-process-exit
   process.exit(1)

@@ -1,6 +1,6 @@
 import type { LocalCommandCall } from '../../types/command.js';
 import { getArcSummary, resetArc, getArcStats } from '../../utils/conversationArc.js';
-import { getGlobalGraph, resetGlobalGraph } from '../../utils/knowledgeGraph.js';
+import { getGlobalGraph, getKnowledgeStorageStatus , resetGlobalGraph } from '../../utils/knowledgeGraph.js';
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js';
 import chalk from 'chalk';
 
@@ -13,6 +13,7 @@ export const call: LocalCommandCall = async (args, _context) => {
     const config = getGlobalConfig();
     const stats = getArcStats();
     const graph = getGlobalGraph();
+    const storage = getKnowledgeStorageStatus();
     const entityCount = Object.keys(graph.entities).length;
     
     const statusText = (config.knowledgeGraphEnabled !== false)
@@ -22,6 +23,12 @@ export const call: LocalCommandCall = async (args, _context) => {
     let output = `${chalk.bold('Knowledge Graph Engine')}: ${statusText}\n`;
     if (stats) {
       output += `• Stats: ${stats.goalCount} goals, ${stats.milestoneCount} milestones, ${entityCount} technical facts learned`;
+    }
+    output += `\nStorage: JSON ${storage.jsonExists ? 'present' : 'missing'}, Orama ${storage.oramaExists ? 'present' : 'missing'}, SQLite ${storage.sqliteExists ? 'present' : 'missing'}`;
+    if (!storage.sqliteAvailable) {
+      output += ` (SQLite runtime unavailable in ${storage.runtime})`;
+    } else if (!storage.sqliteReady) {
+      output += ' (SQLite available but not initialized yet)';
     }
     
     return { type: 'text', value: output };

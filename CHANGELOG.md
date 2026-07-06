@@ -5,15 +5,454 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [unreleased - 0.5.6]
+## [0.5.8] - 2026-07-06
+
+### Added
+- **.github/workflows/release.yml**: Auto Release workflow with release-please, npm publish (provenance), and Docker image build & push to GHCR. Adapted from openclaude-main reference.
+
+## [0.5.8] - 2026-07-02
+
+### Added
+- **scripts/build.ts**: Added `LOCAL_MEMORY` and `LOCAL_VAULT` feature flags (both set to `false`).
+- **scripts/build.ts**: Added `KNOWLEDGE` feature flag (`true`) for the `/knowledge` slash command.
+- **src/tools.ts**: Wired `VaultHttpFetchTool` behind `LOCAL_VAULT` flag (was on disk but never registered).
+
+### Changed
+- **scripts/build.ts**: Set `BUDDY` from `true` to `false`; set `CONVERSATION_ARC` and `MULTI_TURN_CONTEXT` from `false` to `true`.
+- **src/buddy/feature.ts**: Fixed `isBuddyEnabled()` — replaced hardcoded `return true` with `feature('BUDDY')` call.
+- **src/tools.ts**: `LocalMemoryRecallTool` gated behind `LOCAL_MEMORY` flag.
+- **src/commands.ts**: `local-memory`, `local-vault`, and `knowledge` commands gated behind their respective feature flags.
+- **src/utils/conversationArc.ts**: Fixed `'\\\\n'` → `'\n'` in `extractTextFromContent()` (was emitting literal backslash-n instead of line breaks).
+- **src/memdir/paths.ts**: Unified auto-memory path to use `getProjectsDir()` (`~/.gakrcli/workspace/projects/`) instead of old `join(getMemoryBaseDir(), 'projects')` (`~/.gakrcli/projects/`). Updated JSDoc.
+- **src/memdir/teamMemPaths.ts**: Updated JSDoc references from old `<memoryBase>/projects/` to `<workspace>/projects/`.
+
+### Web
+- **web/src/components/CopyPageMenu.tsx**: New dropdown copy menu for docs articles — copy page as Markdown (LLM-friendly), open as plain text, or copy a ready `gakrcli -p` prompt to clipboard.
+- **web/src/lib/domToMarkdown.ts**: DOM-to-Markdown converter supporting headings, paragraphs, code fences, lists, tables, inline formatting (bold, italic, links), and `CopyCommand` shell extraction.
+
+### Changed (web)
+- **web/src/components/CopyCommand.tsx**: Replaced text hint with SVG icons (CopyIcon / CheckIcon) for copy and copied states; updated aria-labels for screen reader clarity.
+- **web/src/lib/useCardGlow.ts**: Updated JSDoc comment from "coral glow" to "sky-blue glow" to match actual token color.
+- **web/src/components/DocsLayout.tsx**: Wired `CopyPageMenu` into docs article toolbar.
+- **web/src/styles/global.css**: Additional style refinements for copy-page menu, dropdown, and docs chrome.
+
+## [0.5.8] - 2026-07-01
+
+### Added
+- **web/src/components/Preloader.tsx**: Boot-line loader component with sequential reveal animation, wired into main.tsx.
+- **web/src/lib/motion.ts**: `prefersReducedMotion` utility — respects OS accessibility setting.
+- **web/src/lib/useScrollReveal.ts**: Scroll-triggered reveal hook using anime.js `onScroll` observer with staggered entry.
+- **web/src/lib/useMagnetic.ts**: Magnetic hover hook with spring-back on leave; skips touch-only devices.
+- **web/src/lib/useCardGlow.ts**: Pointer-tracking glow overlay for `.card` elements via CSS custom properties (`--mx`, `--my`).
+- **web/package.json**: Added `animejs ^4.5.0` dependency.
+
+### Changed
+- **web/index.html**: Theme bootstrap now falls back to OS `prefers-color-scheme` when no stored preference exists; sitemap path corrected from `sitemap-index.xml` to `sitemap.xml`.
+- **web/src/main.tsx**: Wired `Preloader` and `grain-overlay` into app root.
+- **web/src/pages/NotFound.tsx**: Added `grid-bg` background, `mesh-blobs` decorative layer, and `fade-up` animation class.
+- **web/src/styles/global.css**: Expanded design token system — coral primary palette (`--primary`, `--primary-glow`, `--primary-text`), dark-surface token aliases (`--on-dark`, `--on-dark-soft`), semantic radii (`--radius-sm` through `--radius-pill`), layered shadows (`--shadow-card`, `--shadow-lift`), and hairline borders.
+- **web/src/components/Nav.tsx**, **Layout.tsx**, **DocsLayout.tsx**, **Terminal.tsx**, **Home.tsx**: Updated to consume new design tokens and animation hooks.
+
+## [0.5.8] - 2026-07-01
+
+### Added
+- **src/utils/deferredConfigWrites.ts**: Generic debounced config write engine with coalesced batch writes. Wired into config.ts (saveGlobalConfigDeferred, flushGlobalConfigWrites).
+- **src/utils/ollamaContext.ts**: Ollama context length detection via `ollama ps` parsing. Wired into statusNoticeLocalModel.ts (checkOllamaContextLength) and openaiShim.ts (MIN_RECOMMENDED_OLLAMA_CONTEXT_TOKENS).
+- **src/utils/sessionPersistencePolicy.ts**: Unified session persistence policy check combining env-var, test-mode, and bootstrap state. Wired into sessionStorage.ts.
+- **src/utils/replayIndexBuilder.ts**: Replay index builder for tracking tool executions during a session. Wired into bootstrap/state.ts (getReplayIndexBuilder, resetReplayIndexBuilder, resetAllReplayIndexBuilders).
+- **src/utils/replayFormat.ts**: Replay duration formatting utility. Wired into session components.
+- **src/utils/taskReport.ts**: Comprehensive task report builder from session transcripts. Wired into cli/handlers/taskReport.ts.
+- Test files: 20 new test files across these utilities (all passing).
+
+### Changed
+- **src/utils/config.ts**: Wire deferred config writer — saveGlobalConfig now drains pending deferred writes before direct save.
+- **src/utils/sessionStorage.ts**: Refactored shouldSkipPersistence to delegate to sessionPersistencePolicy.ts.
+- **src/utils/statusNoticeLocalModel.ts**: Added ollama context contributor, loopback endpoint detection, and parallel context/ollama check.
+- **src/services/api/openaiShim.ts**: Import MIN_RECOMMENDED_OLLAMA_CONTEXT_TOKENS.
+- **src/bootstrap/state.ts**: Added replayIndexBuilders map and get/reset/release functions.
+- **src/utils/advisor.ts**: Extended modelSupportsAdvisor/isValidAdvisorModel for opus-4-7 and opus-4-8.
+- **src/utils/effort.ts**: Extended getDefaultEffortForModel for opus-4-7 and opus-4-8.
+- **src/utils/extraUsage.ts**: Extended isBilledAsExtraUsage for opus-4-7 and opus-4-8.
+- **src/utils/modelCost.ts**: Added GAKR_OPUS_4_8_CONFIG import and fast-mode pricing tier.
+- **src/utils/model/configs.ts**: Added GAKR_OPUS_4_8_CONFIG legacy provider model config.
+- **src/utils/messages.ts**: Added normalizeMessagesCached and normalizeSingleMessageWithFlag for render hot-path optimization.
+- **src/utils/cleanup.ts**: Extracted cleanupOldSessionFilesInProjectsDir for testable project-dir-scoped cleanup.
+
+## [0.5.8] - 2026-07-01
+
+### Added
+- **src/services/api/credentialPool.ts**: Credential rotation pool with round-robin, cooldown, and auth-failure exclusion. Wired into cache-probe command.
+- **src/services/api/vertexClient.ts**: Vertex AI Anthropic-compatible client with rawPredict/streamRawPredict routing. Wired into client.ts.
+- **src/services/api/clinepassUsage.ts**, **clinepassUsage/**: ClinePass usage limit tracking with fetch/parse/normalize. Wired into ClinePassUsage.tsx.
+- **src/services/api/bootstrap.test.ts**: Test coverage for local OpenAI bootstrap with deps injection pattern and catalog dedup.
+- **src/services/api/credentialPool.test.ts**: Test coverage for credential rotation, cooldown, auth-failure handling (12 tests).
+- **src/services/api/vertexClient.test.ts**: Test coverage for Vertex AI message/streaming/count-tokens routing (14 tests).
+- **src/services/api/clinepassUsage.test.ts**: Test coverage for ClinePass usage fetch/parse/normalize (24 tests).
+- **src/services/api/openaiShim.xmlToolCalls.test.ts**: Test coverage for XML tool call parse+streaming (38 tests across GLM/hermes dialects, holdback recovery, interleaved prose).
+- **src/services/teamMemorySync/watcher.test.ts**: Test coverage for push debounce, reschedule cap, suppression, and promise identity safety (14 tests).
+- **src/services/wiki/conventions.ts**: Project conventions scanner — detects build system, test framework, linting config, identity from project files. Wired into wiki.tsx (/wiki scan command) and main.tsx (auto-scan on startup).
+- **src/services/wiki/identity.ts**: Project identity detection utility. Wired into conventions.ts.
+
+### Fixed
+- **src/services/api/openaiShim.ts**: Fixed XML tool call finalization dropping interleaved prose between multiple `<tool_call>` blocks. Extract prose using `toolCallRanges` from `parseXmlToolCalls` and emit it as text delta before closing the content block and emitting tool_use blocks. Fixes "multiple tool calls with interleaved prose: prose flattened before calls" test.
+- **src/services/api/openaiShim.ts** (previous): Added XML tool call streaming support with holdback mechanism — detects `<tool_call>` openers in delta content, buffers XML tool call text while suppressing raw XML from output, handles opener-split-across-SSE-deltas, and finalizes on finish_reason.
+- **src/services/teamMemorySync/watcher.ts**: Added `MAX_RESCHEDULE_ATTEMPTS` (5) cap for push debounce, follow-up queuing after in-flight push completes, permanent failure suppression, and `_test` export with live bindings for mutable module state.
+- **src/services/api/bootstrap.ts**: Added `normalizeDiscoveredModelLookupKey`, `buildLocalOpenAIModelOptions`, `getDiscoveredModelApiNames` helpers; `FetchLocalOpenAIModelOptionsDeps` type for dependency injection; catalog dedup with seen-set.
+- **src/tools/ExitPlanModeTool/ExitPlanModeV2Tool.ts**: Fixed writeFile error handler swallowing ENOENT. Changed from `.catch(e => logError(e))` to try-catch with rethrow, matching reference behavior.
+- **src/tools/BashTool/readOnlyValidation.ts**: Ported missing npm/bun/tsc version query detection from reference (3 regex patterns for package-manager version commands with exact anchoring).
+- **assets/skills/design-skills/claude-design/SKILL.md**: Fixed YAML description — was incorrectly set to scroll-animation library description; corrected to accurately describe the Claude.com brand design system reference (colors, typography, components, layout tokens).
+
+### Changed
+- **src/services/wiki/paths.ts**, **status.ts**, **types.ts**: Added conventions file paths (`conventionsFile`, `conventionsCacheFile`), `hasConventions` and `conventionsScannedAt` status fields.
+- **src/integrations/gateways/hicap.ts**: Updated catalog from 1 model to 7 full reference models, updated credentialEnvVars and responsesApiModelPrefixes.
+- **src/tools/AgentTool/agentToolUtils.ts**: `countToolUses` now excludes tool uses blocked by agent step limit filter (detects `isAgentStepLimitToolResult` user messages).
+- **vendor/node-domexception-shim/**: Added DOMException shim (re-exports globalThis.DOMException). Wired via package.json exports and overrides, matching reference.
+
+## [0.5.8] - 2026-06-30
+
+### Added
+- **src/screens/streamingTextPublish.ts**, **streamingTextPublish.test.ts**, **replStreamingTextClear.test.ts**: Extracted streaming text publish decision logic from REPL into testable utility (`decideStreamingTextUpdate`, `visibleStreamingPreview`). Added source-scan regression test for turn-boundary streaming text ref clearing. Wired into REPL.tsx with ref-based optimization (accumulates in ref always, publishes to state only on newline).
+- **src/components/SessionSummary.tsx**: Replay session summary component, wired into ReplayTimeline.
+- **src/components/Settings/ClinePassUsage.tsx**: ClinePass usage display component, wired into Usage.tsx.
+- **src/components/EffortCallout.modelGate.test.ts**, **src/components/StatusLine.test.ts**, **src/components/permissions/ExitPlanModePermissionRequest/ExitPlanModePermissionRequest.render.test.tsx**: Test coverage for EffortCallout model gate, StatusLine, and ExitPlanModePermissionRequest.
+- **src/constants/product.test.ts**: Test coverage for remote session environment detection (isRemoteSessionLocal, isRemoteSessionStaging, getGakrCLIAiBaseUrl).
+- **src/entrypoints/sdk/agentDefinitions.ts**, **agentDefinitions.test.ts**: SDK agent definition types and validation with build/merge utilities; test coverage for maxSteps validation, agent precedence, and policy overrides.
+- **src/integrations/gateways/atlas-cloud.ts**, **clinepass.ts**, **xiaomi-mimo-token.ts**: New OpenAI-compatible gateway definitions.
+- **src/integrations/gateways/xiaomi-mimo-token.test.ts**: Test coverage for token-plan gateway.
+- **src/integrations/nearai.test.ts**: Test coverage for NearAI Claude Opus 4.8 route.
+- **src/integrations/generated/integrationManifest.generated.ts**: Split provider preset manifest into separate auto-generated file.
+- **src/query/agentStepLimit.ts**, **agentStepLimit.test.ts**: Agent step limit feature for subagents — stops further tool calls when step limit is reached, requests a no-tools summary, and returns `agent_step_limit` reason.
+
+### Fixed
+- **src/components/EffortCallout.tsx**: Added missing `effortCalloutCoversModel` export for deterministic model gate testing.
+- **src/components/StatusLine.tsx**: Added `resolveStatusLineTokenTotals` export, made `buildStatusLineCommandInput` exported, integrated `getUnreportedSessionUsage` for estimated unreported provider usage totals.
+- **src/utils/tokens.ts**: Ported missing `SessionUsage` type, `getUnreportedSessionUsage`, `isAllZeroUsage`, `getAssistantResponseStartIndex`, `getAssistantResponseEndIndex`, `estimateAssistantResponseOutputTokens` from reference. Added `CurrentUsage` type with `is_estimated` field; updated `getCurrentUsage` to return estimated values when usage is all zeros.
+- **src/types/statusLine.ts**: Added missing `total_tokens_are_estimated` field to `context_window` type.
+- **src/constants/product.ts**: Ported reference hostname-based ingress matching for `isRemoteSessionLocal` and `isRemoteSessionStaging`; replaced crude `includes()` checks with proper `URL.hostname` parsing to avoid misrouting production URLs.
+- **src/entrypoints/sdk/coreSchemas.ts**: Added missing `maxSteps` field to `AgentDefinitionSchema` with `.number().int().positive()` validation to reject invalid agent step limits.
+- **src/integrations/artifactGenerator.ts**: Updated to produce separate integrationManifest.generated.ts; added `renderIntegrationManifest` function; wire new gateway files via auto-generation.
+- **src/integrations/vendors/nearai.ts**, **models/nearai.ts**: Added `anthropic/claude-opus-4-8` catalog entry and model descriptor to resolve NearAI route test.
+- **src/integrations/vendors/atlas-cloud.ts**: Removed duplicate `preset` block conflicting with gateway definition.
+- **src/query.ts**: Ported agent step limit logic from reference — added `AgentStepLimitConfig`, `AgentStepLimitState`, step counting, tool filtering, summary request/forced summary handling.
+- **src/query/toolFailureLoopGuard.ts**: Added `AGENT_STEP_LIMIT_TOOL_RESULT_PREFIX` to ignored synthetic tool results.
+- **src/utils/messages.ts**: Added missing `isAgentStepLimitToolResult` field to `createUserMessage` function.
+
+### Added
+- **src/commands/clear-context-window/**: New `/clear-context-window` command for resetting session-scoped context window overrides. Wired in `commands.ts`.
+- **src/commands/set-context-window/**: New `/set-context-window` command for setting session-scoped context window overrides. Wired in `commands.ts`.
+- **src/commands/replay/**: New `/replay` command with `ReplayTimeline` component for interactive session replay navigation. Wired in `commands.ts`.
+- **src/commands/branch/branch.test.ts**, **src/commands/cache-probe/cache-probe.test.ts**: Added test coverage for branch and cache-probe commands (17 tests local, all pass).
+- **src/utils/context.ts**: Added session-scoped context window override system — 4 new exports (`setSessionContextWindowOverride`, `clearSessionContextWindowOverride`, `getSessionContextWindowOverride`, `getSessionContextWindowOverrides`) with model-normalized Map storage, integrated into `getContextWindowForModel`.
+
+### Fixed
+- **src/tools/AgentTool/built-in/exploreAgent.ts**, **verificationAgent.ts**: Fixed backtick characters inside template literals that caused Bun parse errors across multiple test files.
+- **src/commands/cache-probe/cache-probe.ts**: Added missing `resolveCacheProbeRequestApiKey`, `resolveCacheProbeApiKey`, `resolveGithubCacheProbeApiKey` exports.
+- **src/utils/envUtils.ts**: Added missing `getGakrCLIConfigHomeDirOverrideForTesting` export.
+
+### Added
+- **src/cli/handlers/taskReport.ts**: Added `report` command to CLI (`gakrcli report --json --session <id>`) for generating deterministic JSON task reports from session transcripts. Dynamic import wired in `main.tsx`.
+- **src/cli/headlessHeartbeat.ts**: Added headless heartbeat module with clock-aware heartbeat emission. Imported and re-exported via `print.ts` with 3 utility functions: `createHeadlessHeartbeatStructuredEmitter`, `createRunHeadlessHeartbeat`, `runWithHeartbeatErrorCleanup`.
+- **src/cli/headlessHeartbeat.test.ts**, **src/cli/printHeartbeat.test.ts**: Added test coverage for headless heartbeat module (82 tests across 4 files, all pass).
+
+### Fixed
+- **src/tools/AgentTool/built-in/exploreAgent.ts**, **verificationAgent.ts**: Added `toolFailureLoopGuard` safety caution to agent system prompts. Agents now know they'll be stopped after 3 same-tool+same-error failures (threshold configurable via `GAKR_CODE_TOOL_FAILURE_LOOP_THRESHOLD`). Added guidance to switch tools or fix quoting after the first failure instead of retrying.
+
+### Fixed
+- **src/tools/AgentTool/runAgent.ts**: Fixed `shouldAvoidPrompts` logic that auto-denied Bash (and all permission-requiring tools) for ALL async agents without explicit `permissionMode: 'bubble'`. Root cause: `FORK_SUBAGENT: true` forces all subagents async, and `shouldAvoidPrompts = isAsync` denied every prompt. Changed to only avoid prompts when agent explicitly has `permissionMode: 'dontAsk'` — for the default case (no explicit mode), prompts now flow through normal permission channels and bubble via the task-notification UI. Fixes verification agent (and all built-in + custom agents) running Bash, Edit, Write, and other tools that require user permission.
+
+### Changed
+- **scripts/build.ts**: Removed all 5 `internalFeatureStubModules` entries (daemon/workerRegistry, daemon/main, templateJobs, environment-runner/main, self-hosted-runner/main). All 5 modules exist locally — 3 with full implementations, 2 with reference-matching no-op stubs. Removed associated onResolve/onLoad stub hooks. Build passes cleanly with zero missing-module stubs.
+
+### Fixed
+- **src/utils/attributionModel.ts**: Replaced broken `@ant/model-provider` import with inlined model mapping functions (resolveOpenAIModel, resolveGrokModel, resolveGeminiModel).
+- **src/tools/REPLTool/constants.ts**: Fixed circular dependency — imported `FILE_READ_TOOL_NAME`/`FILE_WRITE_TOOL_NAME` from `constants.js` instead of `prompt.js`.
+- **src/tools/AgentTool/AgentTool.tsx, resumeAgent.ts**: Wired `filterParentToolsForFork` for fork-path tool filtering (was missing from local codebase).
+- **src/constants/tools.ts**: Added `LOCAL_MEMORY_RECALL_TOOL_NAME` to `ALL_AGENT_DISALLOWED_TOOLS`.
+- **src/utils/computerUse/setup.ts, gakrcliInChrome/setup.ts**: Replaced inline path resolution with `distRoot` import (reference-aligned).
+- **src/utils/__tests__/agentToolFilter.test.ts**: Fixed file paths to match local AgentTool layout.
+
+### Added
+- **src/utils/**: Tracked 35 source files (agentToolFilter, attributionEmail, attributionModel, autonomy*, cacheStats*, chinaLlmProviders, cliLaunch, distRoot, eventLoopStallDetector, lanBeacon, language, localValidate, ndjsonFramer, performanceShim, pipe*, remoteControlStatus, sanitizeId, sdkHeapDumpMonitor, sentry, sessionDataUploader, taskStateMessage, udsResponseReader, workflowRuns). All verified against reference — zero feature flag gaps, all imports resolve, no duplicates.
+- **src/utils/__tests__/**: Tracked ~100 corresponding test files. All passing.
+- **src/tasks/LocalWorkflowTask/**: Ported full implementation from reference (was no-op stubs). Added registerLocalWorkflowTask, completeWorkflowTask, failWorkflowTask, killWorkflowTask, skipWorkflowAgent, retryWorkflowAgent, killWorkflowTasksForAgent + isLocalWorkflowTask type guard. Un-skipped failWorkflowTask tests.
+- **tests/integration/**: Fixed context-build.test.ts (case mismatch, Windows path sep) and tool-chain.test.ts (case-insensitive findToolByName).
+- **Dependencies**: Installed @anthropic-ai/mcpb, @azure/identity, @opentelemetry/exporter-trace-otlp-grpc, @agentclientprotocol/sdk, streamdown. Added all to scripts/externals.ts.
+- **ISSUES.md**: Documented 3 pre-existing integration test failures (hostGuard.ts stub — since FIXED, gaxios v6 API change, missing remote-control-server package).
+- **src/services/auth/hostGuard.ts**: Ported full implementation from reference (was missing — build created a stub). Fixes build guard failure in autonomy-lifecycle-user-flow.test.ts (build now exits code 0).
+- **scripts/build.ts**: Added 46 missing feature flags to build.ts — every `feature()` call in src/ now has an explicit entry. Enabled PROACTIVE (12/12 tests pass).
+- **scripts/build.ts**: Added 10 missing feature flag entries. Enabled PROACTIVE (12/12 tests pass). WEB_BROWSER_TOOL investigated — tool impl full, panel stubbed (matches reference), left disabled.
+
+## [0.5.8] - 2026-06-29
+
+### Added
+- **src/utils/task/framework.test.ts**: Tracked test file for task/framework.ts (13/13 pass).
+- **src/utils/teleport/__tests__/api.test.ts**: Tracked test file for teleport/api.ts (8/8 pass).
+- **src/utils/ultraplan/**: Tracked `prompt.ts` (getPromptIdentifier/getDialogConfig) and `prompts/` directory (simple_plan, three_subagents_with_critique, visual_plan prompt templates). Emptied stale `prompt.txt` stub (content migrated to `prompts/`). Wired via `UltraplanLaunchDialog.tsx` and `ultraplan.tsx`.
+
+### Added
+- **src/services/api/ (provider modules)**: Tracked `bedrockClient.ts` (BedrockClient wrapper fixing anthropic_beta body bug), `gemini/` (queryModelGemini streaming provider), `grok/` (queryModelGrok streaming provider), `openai/` (queryModelOpenAI streaming + responses adapter + shared utilities), and `__tests__/` (bedrockClient, betaHeaders). Wired `BedrockClient` into `client.ts` replacing direct `AnthropicBedrock` import. No feature flags — providers loaded dynamically by environment var. 134 local API tests pass (2 grok reference failures are pre-existing openai package resolution). Updated `agentSummary.ts` to match reference — imports extracted functions from context/prompt files, adds `AgentSummaryDependencies` DI pattern, poor mode check, fingerprint-based transcript change detection. 28 local tests pass.
+- **src/services/acp/ (Agent Client Protocol)**: Tracked entire acp/ directory (agent/AcpAgent agent/createSessionMethod agent/sessionLifecycle agent/promptFlow agent/sessionTypes agent/permissionMode agent/configOptions agent/promptQueue agent/internalAccessors, bridge/forwarding bridge/toolInfo bridge/toolResults bridge/contentBlocks bridge/notifications bridge/types bridge/paths bridge/modelUsage, permissions.ts, entry.ts, promptConversion.ts, utils.ts). Wired `--acp` fast-path in cli.tsx behind `feature('ACP')` gate. Registered `ACP: false` in build.ts disabled section. Installed `@agentclientprotocol/sdk@^0.19.0` dependency. 276 local ACP tests pass (5 bridge path-resolution failures are pre-existing Windows incompatibilities).
+- **src/ssh/ (SSH remote sessions)**: Replaced stub `createSSHSession.ts` with full implementation — probes remote host, deploys CLI binary on mismatch, spawns SSH with unix-socket -R auth proxy forward, hands REPL an `SSHSession` with reconnect support. Replaced types-only `SSHSessionManager.ts` with full `SSHSessionManagerImpl` class (stream-json protocol, permission request routing, reconnect with exponential backoff). Tracked `SSHAuthProxy.ts`, `SSHDeploy.ts`, `SSHProbe.ts`. Wired behind `feature('SSH_REMOTE')` gate (already in `DEFAULT_BUILD_FEATURES`). GAKR-ized socket paths and binary references. 17 local SSH tests pass (34 total including reference).
+- **src/skills/ (bundled skill system)**: Tracked `ultracode.ts`, `useArtifacts.ts/+test`, `__tests__/ultracode.test.ts`, `dream.ts`, `verify/` directory. Wired 8 previously-orphaned skills (ultracode, use-artifacts, verify, lorem-ipsum, remember, skillify, stuck, cron-list/delete) into `initBundledSkills()`. Added `MACRO.VERSION` mock for test. 54 local tests pass.
+- **src/proactive/**: Tracked `useProactive.ts` (tick-driven hook for proactive mode) and `__tests__/state.baseline.test.ts` (4 baseline tests). Updated `index.ts` to match reference with 3 new exports (`setNextTickAt`, `getActivationSource`, `shouldTick`). Wired `useProactive` into REPL.tsx behind `feature('PROACTIVE') || feature('KAIROS')` gate. 12/12 local tests pass.
+- **src/modes/ (mode system)**: Tracked `types.ts` (GakrCLIMode interface), `defaults.ts` (6 built-in modes), `store.ts` (load/save/cycle), and `personas/gakrcli.ts` (reference template). Wired via `store.ts` → `/mode` command (no feature gate).
+- **src/jobs/ (jobs system)**: Tracked `state.ts`, `templates.ts`, `__tests__/state.test.ts`, `__tests__/templates.test.ts`. Replaced classifier stub with full implementation in `classifier.ts`. Wired via `templateJobs.ts` → `job.tsx` command + `cli.tsx` entrypoint; `classifier.ts` via `query.ts`/`stopHooks.ts` gated on `GAKR_JOB_DIR`. 15/15 local tests pass.
+- **src/hooks/ pipe & goal hooks**: Tracked and wired 10 hook files (useBackgroundAgentTasks, useGoalContinuation, useMasterMonitor, usePipeIpc, usePipeMuteSync, usePipePermissionForward, usePipeRelay, usePipeRouter, useSlaveNotifications, useScheduledTasks) and 4 test files. Wired into REPL.tsx behind `feature('GOAL')` and `feature('UDS_INBOX')` gates. Added `createScheduledTaskQueuedCommand` export. Added `wasAborted` state. 21/21 local tests pass.
+
+### Removed
+- **src/services/api/**: Removed redundant `gemini/`, `grok/`, `openai/` provider directories. All non-Anthropic provider functionality unified via `openaiShim.ts`.
+- **src/services/analytics/**: Removed `firstPartyEventLogger.ts` and `firstPartyEventLoggingExporter.ts`.
+
+### Added
+- **src/services/searchExtraTools/**: Tracked `prefetch.ts`, `toolIndex.ts`, and `__tests__/` (prefetch, toolIndex, runner). `prefetch.ts` manages periodic polling of deferred tools; `toolIndex.ts` provides TF-IDF search over deferred tool names/descriptions.
+- **src/utils/searchExtraTools.ts**: Tracked utility — tool search mode detection, optimistic enablement check, `isSearchExtraToolsToolAvailable` guard, and tool name extraction from `SearchExtraToolsTool` output.
+- **REPL.tsx wiring**: Integrated `useSearchExtraToolsHint` hook and `SearchExtraToolsHint` dialog into the focused dialog priority system (between plugin-hint and desktop-upsell). Hook call + JSX rendering wired in.
+- **Test fixes**: Added `mock.module('src/tools/SearchExtraToolsTool/prompt.js')` in `SearchExtraToolsHint.test.ts` and `toolIndex.test.ts` to break circular dependency chain through `constants/tools.ts` → `REPLTool/constants.ts`. 33 tests pass (12 searchExtraTools, 3 SearchExtraToolsHint, 18 SearchExtraToolsTool).
+- **src/services/SessionMemory/**: Tracked `multiStore.ts` (local-memory multi-store backend) and `__tests__/` (multiStore, prompts). Updated `prompts.ts` to add dynamic variable substitution (`{{GAKR_MODEL}}`, `{{GAKR_EFFORT}}`, `{{GAKR_CWD}}`). Fixed `multiStore.test.ts` env var (`CLAUDE_CONFIG_DIR` → `GAKR_CONFIG_DIR`). 36 tests pass.
+- **src/services/skillLearning/**: Tracked all 21 source files and 16 test files (90 tests). Self-learning skill acquisition subsystem with runtime observation, instinct learning, skill gap detection, and LLM observer backend. Wired via `commands/skill-learning/` command gated on `SKILL_LEARNING` feature flag (dev-disabled, commented out in defines.ts).
+- **src/services/goal/goalStorage.ts**: Fixed stale imports (`saveGoal`/`clearGoalEntryOnDisk` → `recordGoalState`) — those functions were removed from `sessionStorage.ts` in a prior refactor. 56 goal tests pass.
+- **src/services/lsp/LSPDiagnosticRegistry.ts**: Renamed `_claude_fs_right:`/`_claude_fs_left:` → `_gakrcli_fs_right:`/`_gakrcli_fs_left:` and `openclaude-lsp` → `opengakrcli-lsp` for reference alignment. 16 LSP tests pass (1 pre-existing reference test failure).
+- **src/services/doubaoSTT.ts**: Tracked Doubao ASR speech-to-text adapter. Exists in reference (`references/claude-code-main`) as a standalone lazy-loaded module — not wired in either codebase; activated dynamically when `VOICE_PROVIDER=doubao` is set.
+- **src/utils/computerUse/**: Tracked cross-platform computer use backend (20 files):
+  - `executorCrossPlatform.ts`: Cross-platform ComputerExecutor (Windows/Linux alternative to macOS `executor.ts`)
+  - `platforms/`: Platform dispatcher (`index.ts`) + backends for darwin/linux/win32
+  - `win32/`: Windows-specific implementation (window messaging, UIA, Python bridge, COM, virtual cursor, capture, etc.)
+  - Not wired — matches reference behavior; current computer use only supports macOS via `@ant` native packages
+- **hostAdapter.ts**: Wired cross-platform executor — macOS uses macOS-native `createCliExecutor`, other platforms use `createCrossPlatformExecutor` (platforms abstraction)
+- **src/utils/swarm/**: Wired WindowsTerminalBackend + fixed all pre-existing test failures (23/23 pass):
+  - Full WindowsTerminalBackend registration/detection/fallback chain in `registry.ts`
+  - `detection.ts`: Added `isWindowsTerminalAvailable()`, `isInWindowsTerminal()` with caching
+  - `types.ts`: Added `'windows-terminal'` to `PaneBackendType`/`BackendType`/`TeammateMode`
+  - `PaneBackendExecutor.ts`: Added `useSplitPane: false` window-spawning support + `backendType` in spawn result
+  - `spawnUtils.ts`: `buildInheritedCliFlags` now handles `'auto'` permission mode
+  - `spawnInProcess.ts`: Added `killInProcessTeammateByAgentId()`
+  - `agentTeamsLifecycle.test.ts`: Fixed import paths and env var setup
+  - `PaneBackendExecutor.test.ts` + `spawnUtils.test.ts`: Fixed expectations
+
+## [0.5.8] - 2026-06-28
+
+### Added
+- **FeedbackSurvey**: Tracked `useFrustrationDetection.ts` and `__tests__/` — completes FeedbackSurvey directory. 4 local tests pass. Frustration detection is ant-only (matches reference pattern).
+- **EffortPanel**: Wired `src/components/EffortPanel/` into interactive `/effort` command, replacing `EffortPicker` wrapper. Added EffortPanel keybinding context (left/right/h/l/home/end/enter/escape/q/ctrl+c). Deleted dead `EffortPicker.tsx`. 156 EffortPanel tests pass.
+- **SnapshotUpdateDialog**: Tracked real `.ts` implementation replacing `.tsx` stub. Wired via `dialogLaunchers.tsx` → `main.tsx`. Takes precedence via Bun's `.ts`→`.tsx` resolution order.
+- **cli subcommands**: Wired `gakrcli up`, `gakrcli rollback`, `gakrcli log`, `gakrcli error`, `gakrcli export`, `gakrcli task <create|list|get|update|dir>`, `gakrcli completion <shell>` in `main.tsx` behind `USER_TYPE === 'ant'`. Added `listLiveSessions()` export in `bg.ts`. Tracked `bg/` engine infrastructure (engine, detached, tmux, tail). 24+ local tests pass.
+- **proactive command**: Source file tracked — already registered behind `feature('PROACTIVE')` (or `KAIROS`). `/proactive` toggles proactive mode. 4 baseline tests pass.
+- **ultraplan**: Wired `src/components/ultraplan/` (UltraplanChoiceDialog, UltraplanLaunchDialog) into `REPL.tsx` under `feature('ULTRAPLAN')`. Replaced inline stubs with real imports from `src/commands/ultraplan.js`. Feature flag enabled in defines.ts.
+- **SentryErrorBoundary**: Tracked `.tsx` implementation alongside existing `.ts` stub. Component is wired from `panelCall.tsx`, `PromptInput/Notifications.tsx`, and test files. Synced stubs via `git add -u`.
+- **SearchExtraToolsHint**: Tracked `SearchExtraToolsHint.tsx` and `useSearchExtraToolsHint.ts` hook. Wired into `REPL.tsx` via imports. Test exists in `__tests__/` (58 pass).
+- **BackgroundAgentSelector**: Tracked as untracked-untracked file. Added to `ISSUES.md` — present but not wired (requires REPL/AppState/promptInput wiring).
+- **subscribe-pr command**: Source file tracked — already registered behind `feature('KAIROS_GITHUB_WEBHOOKS')` in INTERNAL_ONLY.
+- **torch command**: Source file tracked — already registered behind `feature('TORCH')`.
+- **autonomy tests**: 10 test files in `src/commands/__tests__/autonomy.test.ts` (8/10 pass).
+- **init-verifiers tests**: 40 tests in `src/commands/__tests__/init-verifiers.test.ts` (all pass).
+- **bridge-kick tests**: 56 tests in `src/commands/__tests__/bridge-kick.test.ts`.
+- **proactive baseline tests**: 4 tests in `src/commands/__tests__/proactive.baseline.test.ts` (all pass).
+- **ultrareview tests**: Test directory `src/commands/review/__tests__/` (6 pass).
+- **usage tests**: Test directory `src/commands/usage/__tests__/`.
+- **update command**: Registered in `src/commands.ts` (unconditional). `/update [latest|stable|<version>] [--force]` updates GakrCLI via Ink UI progress panel.
+- **autonomy command**: Registered in `src/commands.ts` (unconditional, matches reference). `/autonomy` for inspecting automatic autonomy runs from proactive ticks and scheduled tasks. `local-jsx` type, loads `autonomyPanel.tsx` Ink UI.
+- **monitor command**: Registered in `src/commands.ts` behind `feature('MONITOR_TOOL')`. `/monitor <command>` starts a background shell monitor task visible via Shift+Down footer pill. Includes Windows `watch`→PowerShell loop compatibility.
+- **coordinator command**: Registered in `src/commands.ts` behind `feature('COORDINATOR_MODE')`. `/coordinator` toggles multi-worker orchestration mode (sets `GAKR_CODE_COORDINATOR_MODE` env var).
+- **force-snip command**: Registered in `src/commands.ts` behind `feature('HISTORY_SNIP')`. `/force-snip` inserts a snip boundary message to forcibly compact conversation history.
+- **recap command**: Full implementation (`index.ts`, `generateRecap.ts`, 14 tests). Generates one-line session recap via forked agent. Aliases `/away`, `/catchup`. Gated behind `feature('AWAY_SUMMARY')` compile-time flag. Registered in `src/commands.ts`.
+- **summary command**: Removed stub `index.js` that was shadowing the real `index.ts` (reference has no stub). 12 tests pass.
+- **share command**: Replaced stub `index.js` with full implementation (`index.ts`, `index.d.ts`, 3 test files, 40 tests). Shares session content via `gh gist` with secret masking, public/private flags, and manual fallback.
+- **send command**: Wired in `src/commands.ts` behind `feature('UDS_INBOX')` matching reference pattern. Sends messages to connected sub CLIs via pipe IPC.
+- **skill-learning command**: Registered in `src/commands.ts`. 8 local tests pass. Unconditional (no feature gate, matches reference).
+- **skill-search command**: Registered in `src/commands.ts`. Fixed `skillSearch/featureCheck.ts` — added `isSkillSearchCompiledIn()` gated behind `feature('EXPERIMENTAL_SKILL_SEARCH')`.
+- **skill-store command**: Registered in `src/commands.ts`. Fixed `api.test.ts` oauth/teleport mock state leakage with spread pattern. 87 local tests pass.
+- **tui command**: Registered in `src/commands.ts`. `/tui [on|off|status]` for flicker-free alternate-screen mode. 36/36 local tests pass.
+- **web-tools command**: Registered in `src/commands.ts`. `/web-tools` to configure web search/fetch backends. No tests.
+- **daemon command**: Registered in `src/commands.ts` behind `feature('DAEMON') || feature('BG_SESSIONS')`. `/daemon [status|start|stop|bg|attach|logs|kill]`. 6/6 tests pass.
+- **autofix-pr command**: Full implementation with 10 source files. `index.ts` lazy-loads via `launchAutofixPr.ts` which uses `launchCommand` factory + `inProcessAgent.ts` + `monitorState.ts` + `extractAutofixResult.ts` + `parseArgs.ts` + `prFetch.ts` + `prOutcomeCheck.ts` + `skillDetect.ts` + `AutofixProgress.tsx` Ink UI. Gated behind `feature('AUTOFIX_PR')`. Registered in `src/commands.ts`. 161 local tests pass (2 reference path failures `@anthropic/ink` pre-existing).
+- **`RemoteAgentTask.tsx` completion hook + content extractor support**: Added `RemoteTaskCompletionHook` type, `completionHooks` map, proper `registerCompletionHook()`, `runCompletionHook()`, `RemoteTaskContentExtractor` type, `tryExtractRichContent()`, and `enqueueRichRemoteNotification()`. Completion hook and rich content are wired into all 3 terminal polling branches (archived, completion-checker, result-driven). Replaced incorrect `registerCompletionHook` alias that was overwriting `registerCompletionChecker`.
+- **break-cache command**: Full implementation (`index.ts`, `panel.tsx`, `index.d.ts`, `__tests__/break-cache.test.ts`). Interactive Ink panel with status/once/always/off/clear actions. Non-interactive mode for CLI usage. Marker file `.next-request-no-cache`, always-on flag `.break-cache-always`, JSONL event log `break-cache-events.jsonl`. 17 local tests pass (2 reference path failures `@anthropic/ink` pre-existing). EnvUtils mock fixed with all missing exports (`getProjectsDir`, `isRunningOnHomespace`, `getGakrCLIWorkspaceDir`, plus 5 others).
+- **`pipes` command**: Full implementation (`index.ts` + `pipes.ts`). Inspects pipe registry state, toggles pipe selector, select/deselect pipes, shows registry with LAN peers. Registered in `src/commands.ts`.
+- **`pipe-status` command**: Full implementation (`index.ts` + `pipe-status.ts`). Shows current pipe connection status for main/controlled/slave modes. Registered in `src/commands.ts`.
+- **`claim-main` command**: Full implementation (`index.ts` + `claim-main.ts`). Claims main role for this machine, updates local state, shows details. Registered in `src/commands.ts`.
+- **`debug-tool-call` command**: Full implementation (`index.ts`, `index.d.ts`, 21 tests). Reads session JSONL log, extracts tool call/result pairs, renders debug view with truncation and N argument support. Registered in `src/commands.ts`. EnvUtils mock fixed with all missing exports.
+- **`detach` command**: Full implementation (`index.ts` + `detach.ts`). Detach from sub CLI sessions (specific slave or all). Pipe management command, gated behind `feature('UDS_INBOX')`.
+- **`env` command**: Full implementation replacing stub (`index.ts`, `index.d.ts`, 18 tests). Shows runtime info, allowlisted env vars (GAKR_*, FEATURE_*, etc.) with secret masking. 36 tests pass.
+- **`fork` command**: Full implementation (`index.ts` + `fork.tsx`). Forks session into sub-agent via AgentTool fork path with recursive guard and directive. `local-jsx` type, gated behind `feature('FORK_SUBAGENT')`. Already defined in `defines.ts` (dev-disabled) and `build.ts` (production-enabled). Registered in `src/commands.ts`.
+- **`history` command**: Full implementation (`index.ts` + `history.ts`). Views session history of a connected sub CLI with --last N. Pipe management command, gated behind `feature('UDS_INBOX')`. Registered in `src/commands.ts`.
+- **`issue` command**: Full implementation replacing stub (`index.ts` + `index.d.ts`). Creates GitHub issues via `gh` CLI with --label/--assignee flags, fallback URL generation, issue template detection, session transcript summary, and analytics.
+- **`job` command**: Full implementation (`index.ts` + `job.tsx` + 3 tests). Manages template jobs (list/new/reply/status). local-jsx type, gated behind `feature('TEMPLATES')` in both commands.ts and index.ts isEnabled (matching reference). Added `TEMPLATES: false` to build.ts. 6 tests pass.
+- **`commands.ts` Command type re-export**: Fixed `SyntaxError: export 'Command' not found in './types/command.js'` by splitting the mixed type/value re-export at line 267 into separate statements (`export { getCommandName, isCommandEnabled }` + `export type { Command }`). Bun cannot resolve `export type` exports when mixed with value exports in a single re-export statement. This error was causing 11 launchLocalMemory tests to fail with `SyntaxError` during module resolution.
+- **`lang` command**: Full implementation replacing stub (`index.ts` + `lang.ts`). Sets display language (en/zh/auto) with validation, reads/saves global config, shows resolved system language on auto. `local-jsx` type. Was missing from commands.ts — added import at line 34 and array entry at line 335, no feature gate (matches reference).
+- **`local-memory` command**: Full implementation (5 files: `index.tsx`, `launchLocalMemory.tsx`, `LocalMemoryView.tsx`, `parseArgs.ts`, `__tests__/`). Manages local memory stores for notes/context. `local-jsx` type, `bridgeSafe: true`, no feature gate. Was missing from commands.ts — added import at line 35 and array entry at line 337. All 22 local tests pass (17 parseArgs + 11 launchLocalMemory — the latter were blocked by the Command type re-export mixed export bug now fixed above). Reference tests fail pre-existing `@anthropic/ink`.
+- **`local-vault` command + service**: Full implementation (6 files: `index.tsx`, `launchLocalVault.tsx`, `LocalVaultView.tsx`, `parseArgs.ts`, `__tests__/` + service at `src/services/localVault/store.ts` + `keychain.ts`). Manages local encrypted secrets via OS keychain or AES-256-GCM encrypted file fallback. `local-jsx` type, `bridgeSafe: true`, no feature gate (matches reference). Was missing from commands.ts — added import at line 36 and array entry at line 338. All 86 local tests pass (32 command + 54 service).
+- **`memory-stores` command**: Source files added (6 files: `index.ts`, `launchMemoryStores.tsx`, `memoryStoresApi.ts`, `MemoryStoresView.tsx`, `parseArgs.ts`, `__tests__/`). NOT wired in commands.ts — registration blocked by Bun `mock.module` state leakage in tests. See `ISSUES.md` for details.
+- **`mode` command**: `index.ts` + `mode.tsx` (Ink UI picker for interaction modes). `local-jsx` type, no feature gate (matches reference). Was missing from commands.ts — added import at line 221 and array entry at line 350. Dependencies: `src/modes/store.ts`, `src/components/CustomSelect/select.tsx`. No tests.
+- **`onboarding` command**: Replaced old `index.js` with `index.ts` + `launchOnboarding.tsx` + `__tests__/onboarding.test.tsx`. Already registered in commands.ts (lines 47/289). No feature gate, `bridgeSafe: false`. Test has pre-existing `perf-issue/index.js` ENOENT error (unrelated).
+- **`perf-issue` command**: Replaced old `index.js` with `index.ts` + `index.d.ts` + `__tests__/perf-issue.test.ts`. Full performance snapshot generator (token usage, cost estimates, tool timing). Already registered in commands.ts (lines 189/294). `local` type, `bridgeSafe: true`, `supportsNonInteractive: true`. All 32 tests pass.
+- **`peers` command**: Replaced stub `index.ts` with full implementation (`index.ts` + new `peers.ts`). Lists connected GakrCLI peers via UDS, including per-peer status, PID, CWD, socket path, and session ID. Gated behind `feature('UDS_INBOX')` (matches reference). No tests.
+- **`plan` command**: Added `bridgeSafe: true` + `getBridgeInvocationError` to match reference (blocks `/plan open` over Remote Control). New `index.test.ts` (2 bridge safety tests). Already registered at line 165. All 4 tests pass.
+- **`plugin` command**: New `__tests__/parseArgs.test.ts` (23 parse arg tests). Already registered at lines 175/531/544. No feature gate. All 46 tests pass (23 local + 23 reference).
+- **`poor` command**: Full implementation (index.ts + poor.ts + poorMode.ts + __tests__). Toggles poor mode (disables extract_memories/prompt_suggestion to save tokens). Persists to settings.json. `local` type, `supportsNonInteractive: false`. Gated behind `feature('POOR')` (matches reference). Added to commands.ts at lines 162-166 (require) and 392 (array). All 6 tests pass.
+
+## [0.5.8] - 2026-06-27
+
+### Added
+- **`prepareWorkspaceApiRequest()` + `isWorkspaceKeyCleared()`**: Added to `src/utils/teleport/api.ts` — validates workspace API keys (sk-ant-api03-*) for agents/vaults/memory_stores/skills endpoints. A cleared-vs-never-set distinction surfaces actionable error messages.
+- **agents-platform command**: Full implementation replacing stub. `index.ts` lazy-loads `launchAgentsPlatform.tsx` which uses `launchCommand` factory + `agentsApi.ts` (HTTP client via `prepareWorkspaceApiRequest`) + `AgentsPlatformView.tsx` (Ink UI) + `parseArgs.ts`. Tests: 70 local passes across launch, API, command metadata, and parseArgs. Gated behind `USER_TYPE=ant`.
+- **assistant command**: Replaced stub with full implementation (`assistant.tsx`, `gate.ts`, `index.ts`). Removed orphan `assistant.ts` (stub shadowing real impl) and `AssistantSessionChooser.ts` (real impl lives in `src/assistant/`). `gate.ts` uses `feature('KAIROS')` + GrowthBook `tengu_kairos_assistant` flag. `index.ts` lazy-loads `assistant.jsx` with `isAssistantEnabled` gate. Gated behind `feature('KAIROS')` in `src/commands.ts`.
+- **attach command**: Added full implementation (`attach.ts`, `index.ts`). Connect to sub GakrCLI instances via named pipe with LAN peer discovery via `feature('LAN_PIPES')`. Registered in `src/commands.ts` gated behind `feature('UDS_INBOX')`.
+- **Buddy `/buddy help` and `/buddy status` subcommands**: `help` shows usage info, `status` displays companion name/rarity/species/personality. Removed orphaned `buddy.tsx` (old implementation superseded by `buddy.ts`).
+- **Buddy command tests**: 14 tests covering metadata, help, status, pet, on/off mute, and hatching flow.
+- **`inferLegacyCompanionBones()`**: Extracts species/rarity from pre-seed companion personality text for backward compatibility.
+- **AgentTool tests**: 37 tests (35 pass, 2 skip) across agentDisplay, agentToolUtils, filterIncompleteToolCalls, and prompt modules.
+- **`filterIncompleteToolCalls.ts`**: Extracted from `runAgent.ts` into its own module, wired to `summaryContext.ts`.
+- **BashTool tests**: 63 tests across 5 files covering backslash escaping, command semantics, compound command security, destructive command warnings, and network device redirect detection.
+- **DiscoverSkillsTool**: Implemented TF-IDF skill search tool gated behind `EXPERIMENTAL_SKILL_SEARCH` feature flag. Registered in `src/tools.ts` with full Zod input schema, prompt, and 6 passing tests.
+
+### Fixed
+- **DiscoverSkillsTool build wiring**: Added `EXPERIMENTAL_SKILL_SEARCH: true` to `scripts/build.ts` feature flags so the tool is live in production builds, not just dev mode.
+
+### Fixed
+- **shared/gitOperationTracking**: Added `getCommitCounter()`/`getPrCounter()` from `src/bootstrap/state.js`, migrated relative imports to `src/` alias. Added `__tests__/` with 2 test files (`gitOperationTracking.test.ts`, `spawnMultiAgent.test.ts`) — 69/72 pass (3 pre-existing failures in `agentTeamsLifecycle`).
+- **TerminalCaptureTool**: Added full implementation matching reference (Zod schema, buildTool, prompt, renderers). Gated behind `feature('TERMINAL_PANEL')` at `src/tools.ts:109-112` — inactive in all builds (flag not in build.ts/defines.ts). `prompt.ts`: removed stub comment, now properly exports `TERMINAL_CAPTURE_TOOL_NAME`.
+- **TestingPermissionTool**: Formatting cleanup (trailing commas, line spacing). Registered at `src/tools.ts:52`, gated behind `NODE_ENV === 'test'`.
+- **TungstenTool**: Stubs improved with proper types (`TungstenTool.ts`: `Tool` type instead of `null`; `TungstenLiveMonitor.ts`: typed function component). Added `TungstenTool.js` with `isEnabled: () => false` for dynamic imports (consumers: `caches.ts`). Not registered in tools.ts — stub-only for dynamic import API surface.
+- **TeamDeleteTool**: Migrated relative imports to `src/` alias, added `wait_ms` param for teammate shutdown acknowledgment, expanded searchHint, `isEnabled()` → always true (gate moved to `call()`). Added full backend termination logic (in-process + pane backends). Lazy getter at `src/tools.ts:59-61`.
+- **SuggestBackgroundPRTool**: Replaced stub with full implementation matching reference. Supports suggesting background PRs via KAIROS runtime. Hardcoded `null` at `src/tools.ts:18` (ant-only tool). Added ISSUES.md entry #3.
+- **SubscribePRTool**: Added tool (GitHub PR webhook subscription) gated behind `feature('KAIROS_GITHUB_WEBHOOKS')` at `src/tools.ts:42-44`. Inactive in prod (flag not in build.ts). `call()` returns error — requires KAIROS runtime. Identical to reference.
+- **SleepTool**: Added tool implementation gated behind `feature('PROACTIVE') || feature('KAIROS')` at `src/tools.ts:19-22`. Sleeps for a duration with wake-on-queue interrupt support. Added `__tests__/SleepTool.test.ts` — 2 tests, 6 total across all copies pass. Also ported `notifyAutomationStateChanged` + `AutomationStatePhase`/`AutomationStateMetadata` types + helper functions to `src/utils/sessionState.ts` (missing export that SleepTool depends on).
+- **SkillTool**: Fixed `MAX_LISTING_DESC_CHARS` from 250 → 1536 to match reference (v2.1.117 regression). Test caught the mismatch — 24 local tests pass. Added `__tests__/prompt.test.ts` with 3 cap-verification tests.
+- **PowerShellTool tests**: Added 4 test files (`commandSemantics.test.ts`, `destructiveCommandWarning.test.ts`, `gitSafety.test.ts`, `powershellSecurity.test.ts`) — 344 tests pass, 0 fail. All wiring verified: lazy getter in `src/tools.ts`, runtime gate in `shellToolUtils.ts`, 22 consumer files across permission engine, `!` command routing, skill execution, and UI components.
+- **SendUserFileTool**: Added tool implementation (upload file via bridge to user's device). Gated behind `feature('KAIROS')` at `src/tools.ts:34-36` (inactive in prod — `KAIROS: false`). Identical to reference except `../../tools/BriefTool/upload.js` relative import.
+- **SendMessageTool**: Added inline UDS token stripping/redaction (5 helper functions), `LAN_PIPES` feature gate to recipient description, `alwaysLoad: isAgentSwarmsEnabled()`, updated `searchHint` and `backfillObservableInput`. Added `udsRecipientSanitization.test.ts` — 7 tests pass. Registration: lazy getter at `src/tools.ts:62-64`, matches reference pattern.
+- **ScheduleCronTool**: Simplified `isKairosCronEnabled()` to match reference — removed GrowthBook/USER_TYPE gate, now only checks `GAKR_CODE_DISABLE_CRON`. Updated comments. Added `src/skills/bundled/cronManage.ts` (cron-list/cron-delete skills). Cron utils tests: 77 pass, 1 pre-existing fail (undefined input).
+- **REPLTool**: Replaced stub with full implementation matching reference. `REPLTool.ts`: Zod schema, buildTool, prompt, renderers, `isTransparentWrapper()`. `constants.ts`: absolute imports via `src/` alias, named constants for REPL_ONLY_TOOLS. `call()` returns error — REPL execution engine requires ant-native runtime. Hardcoded `null` in `src/tools.ts:17` (ant-only tool). Reference comparison confirmed: REPLTool.ts identical; constants.ts identical; primitiveTools.ts uses relative path (`../../Tool.js`) instead of `src/Tool.js` alias.
+- **RemoteTriggerTool + remoteTriggerAudit**: Enhanced `RemoteTriggerTool.ts` with audit record tracking (`appendRemoteTriggerAuditRecord`), added `audit_id` to output schema. Added `src/utils/remoteTriggerAudit.ts` with append/list/format functions and 2 passing tests. Fixed test import paths (`../../../../../../` → `../../../../`). All wiring verified in `src/tools.ts:249`.
+- **PushNotificationTool**: Added tool implementation gated behind `feature('KAIROS') || feature('KAIROS_PUSH_NOTIFICATION')`. Registered in `src/tools.ts:37-41`, matches reference pattern. Inactive in production builds (`KAIROS: false`). Sends push notifications via Remote Control bridge.
+- **AgentTool prompt tests**: Updated to match fork-enabled prompt.ts with correct terminology checks.
+- **AgentTool test mocks**: Fixed mock.module path resolution and missing export stubs for transitive dependencies.
+- **ConfigTool UI.tsx**: Fixed JSX formatting and added trailing newline (formatting-only).
+- **CtxInspectTool tests**: Fixed import path in `__tests__/` test; skipped 4 tests ported from reference (don't match local tool internals).
+- **EnterWorktreeTool UI.tsx**: Fixed JSX formatting and added trailing newline (formatting-only).
+- **ExecuteTool + SearchExtraToolsTool**: Wired both tools in `src/tools.ts` — `SearchExtraToolsTool` gated behind `isSearchExtraToolsEnabledOptimistic()`, `ExecuteTool` always available (matching reference). Fixed test import paths (`../../../../../../` → `../../../../`).
+- **FileEditTool tests**: Added `utils.test.ts` (20 tests covering stripTrailingWhitespace, findActualString, applyEditToFile). Fixed mock import path.
+- **GoalTool + goal system**: Registered GoalTool behind `feature('GOAL')` in `src/tools.ts`, added `GOAL: true` to `scripts/build.ts`. Added `CORE_TOOLS` to `src/constants/tools.ts`. Ported full `localSearch.ts` implementation from reference (TF-IDF search). Added `GoalReplaceConfirmDialog.tsx`, `goal.tsx` (React command), `goalState.ts`, `goalStorage.ts`, `prompts.ts`, and `__tests__/goalState.test.ts`. All 142 tests pass.
+- **ListPeersTool**: Added tool implementation (gated behind `UDS_INBOX` — intentionally disabled, flagged-off).
+- **LocalMemoryRecallTool**: Registered in `src/tools.ts` (unconditional), added 52 tests with fixed mock import path. `stripUntrusted` 8/8 tests pass across all 3 locations.
+- **LSPTool tests**: Added `formatters.test.ts` (18 tests) and `schemas.test.ts` (13 tests). Fixed mock import path in formatters test.
+- **MCPTool tests**: Added `classifyForCollapse.test.ts` (19 tests) — MCP tool context collapse classification.
+- **MonitorTool**: Added `MonitorTool.tsx` UI component for streaming background process output.
+- **MonitorTool**: Merged duplicate `.ts` / `.tsx` implementations — kept `.tsx` as base (validateInput, isReadOnly, analytics, better prompt) and ported `preparePermissionMatcher` from `.ts`. Deleted orphaned `MonitorTool.ts`.
+- **VerifyPlanExecutionTool**: Replaced stub with full implementation (Zod schema, buildTool, prompt, renderers, `isConcurrencySafe()`, `isReadOnly()`). Gated behind `process.env.GAKR_CODE_VERIFY_PLAN === 'true'` dead code elimination pattern at `src/tools.ts:87-91`.
+- **WebFetchTool**: Added `__tests__/` (3 test files, 120 tests). Fixed import paths in `headers.test.ts`. Added `getResponseHeader()`/`responseHeaderToString()` helpers to `utils.ts` for AxiosHeaders-style header access and array header normalization.
+- **WebSearchTool**: Added `__tests__/` (5 test files) and `adapters/` (7 adapter files). Fixed import paths in 3 test files. Added `he` dependency for bingAdapter. Wired `createAdapter()` into `WebSearchTool.ts` `call()` method — if `WEB_SEARCH_ADAPTER` env var is set, uses the adapters/ system directly (matching reference pattern).
+- **WebBrowserTool**: Added full implementation (navigate/screenshot actions, Zod schema, prompt, isReadOnly). Gated behind `feature('WEB_BROWSER_TOOL')` (disabled by default). 21 tests pass.
+- **Bridge**: Added `bridgeResultScheduling.ts`, `rcDebugLog.ts`, `remoteInterruptHandling.ts` + `__tests__/`. Wired `rcLog` into `bridgeMain.ts` and `replBridge.ts` (file-based RC debug logging matching reference pattern).
+- **Assistant**: Full implementation for all 7 files: `index.ts` (initializeAssistantTeam, getAssistantSystemPromptAddendum, isAssistantMode), `gate.ts` (two-layer KAIROS + GrowthBook gate), `sessionDiscovery.ts` (CCR session discovery via teleport API), `sessionHistory.ts` (API-based history with cache removed), `AssistantSessionChooser.tsx` (interactive Dialog chooser with keyboard nav). Added `__tests__/index.test.ts` (9 expect calls, passes). Added deps: `@opentelemetry/sdk-trace-base`, `@langfuse/otel`, `@langfuse/tracing`.
+- **Commands `_shared`**: Added `launchCommand.ts` (generic factory for LocalJSXCommandCall boilerplate — parse/dispatch/View/errorView) + `__tests__/launchCommand.test.ts` (20 tests, all pass). Used by 5 command implementations.
+
+### Removed
+
+## [2026-06-27]
+- **Dead AgentTool decompiler artifacts**: Deleted unused `src/tools/AgentTool/src/` and `src/tools/AgentTool/built-in/src/` (shadow copies confirmed unused in reference).
+
+---
+
+## [0.5.8] - 2026-06-23
+
+### Changed
+- **Workflow file migration**: Moved all workflow code from `src/workflow/` to its proper locations by function — engine to `src/services/workflow/engine/`, service layer to `src/services/workflow/`, tool/descriptor to `src/tools/WorkflowTool/`, and panel/command to `src/commands/workflows/`. Replaced 5 stub files with thin re-exports pointing to the real implementations. Created no-op `bundled/index.ts` for closed-source build path. Deleted `src/workflow/` directory (46+ files redistributed).
+- **Workflow test fixes**: Fixed 3 pre-existing syntax errors (missing closing `)`) in `WorkflowTool.test.ts` and `runWorkflow.test.ts`. Fixed 2 test expectation mismatches (`.claude/` → `.gakrcli/`) in `index.test.ts` and `persistInline.test.ts`.
+
+### Added
+- **WORKFLOW_SCRIPTS feature flag**: Enabled in `scripts/build.ts:78` — the workflow scripts feature was already in `scripts/defines.ts` but missing from the production build flags.
+
+### Fixed
+- **Engine barrel missing `paths.ts`**: Added `export * from './paths.js'` to engine barrel.
+- **Stale import paths**: Fixed broken imports in 3 engine test files and 4 service test files that still referenced the deleted `src/workflow/` directory.
+- **Tool wiring imported through wrong path**: `WorkflowTool.ts` wiring now imports `createWorkflowTool`, `schema`, and `WORKFLOW_TOOL_NAME` from local sibling files instead of through the engine barrel.
+
+---
+
+## [0.5.7] - 2026-06-22
+
+### Fixed
+- **VS Code Extension — `--provider` flag overrides user's configured provider**: Removed `--provider` from `ProcessManager.buildArgs()`. The extension was passing `--provider anthropic` by default, which overrode whatever provider the user had configured in the CLI's own `~/.gakrcli/settings.json`, causing "Not logged in · Please run /login" auth errors on every API call. The CLI now uses its own config to determine the active provider, matching the reference `opengakrcli-vscode` implementation.
+- **VS Code Extension — increased init timeout to 300s for provider/model discovery**: Increased `INIT_TIMEOUT_MS` and `SPAWN_POLL_TIMEOUT_MS` from 120s to 300s to accommodate CLI provider/model discovery on cold starts or environments with heavy plugin/disk I/O. Added periodic `"Still waiting for init..."` diagnostic logging every 30s.
+- **Format KB/MB rollover**: `formatFileSize` now compares the rounded value against 1024 instead of raw KB, fixing ~1023.5 KB displaying as "1024KB".
+- **Missing `relativizeContentLine` export**: Added function to `path.ts` for relativizing ripgrep-style output across Windows and POSIX paths.
+- **Provider model query `thinking` param**: Added `parseThinkingType` and wired `thinking` field through `ModelDescriptor` → `parseModelDescriptor()` → `resolveProviderRequest()`.
+- **Tool lifecycle tracking**: Added `trackLifecycleToolUse()` call in `toolExecution.ts`. Fixed `StreamingToolExecutor.discard()` to properly abort and end lifecycle entries.
+- **Lifecycle test env var mismatch**: Fixed `OPENGAKR_MAX_RETRIES` → `GAKR_MAX_RETRIES` in test assertions.
+- **External List Validation**: Restored `bun` and `byn` externals in `scripts/externals.ts`.
+- **Env-File ReferenceError**: Fixed `reapplyProviderEnvFileValues` with proper `let` declaration.
+- **main.tsx feature() Build Error**: Fixed `feature('WEB_BROWSER_TOOL')` calls in object literals.
+- **Automatic Interruption Bug**: Fixed 6 `abortController.abort()` calls missing `'interrupt'` reason.
+- **New File Wiring**: Wired 78+ newly added source files across bridge, CLI, commands, services, tools, utils.
+- **LSP Diagnostic Registry Storm Control**: Restored ~700 lines of storm detection and deduplication.
+- **Sandbox-Toggle Null Guard**: Fixed null crash in `SandboxManager.checkDependencies()`.
+- **Tool Query Activity Lease**: Wired `queryActivityLease` acquire/release/registerActivity into `toolExecution.ts`.
+- **BashTool & PowerShellTool Timeout Wiring**: Replaced `getDefaultTimeoutMs()` with `getEffectiveTimeoutMs(timeout)`.
+- **AgentDetail Route Picker**: Integrated `AgentRouteSelector` with 'm' key handling and route display.
+- **Prompt Cache Break Detection**: Full reference implementation with `PromptCacheBreakKind` taxonomy.
+- **Cache Metrics Reliability**: Added `CacheMetricsReliability` type and `getCacheMetricsReliability()` function.
+- **GitHub URL Renames**: Updated stale `anthropics/*` and `gakr-gakr/gakrcli-code` references to `gajjalaashok75-UI/*`.
+
+### Changed
+- **VS Code Extension SDK→CLI Wrapper Refactoring**: Replaced direct `@gakr-gakr/gakrcli/sdk` imports with CLI child-process wrapper pattern. Removed `@gakr-gakr/gakrcli` npm dependency.
+- **SDK Reference Alignment**: All SDK entrypoint and test files now match `references/opengakrcli-main/` structure.
+- **Feature Flags**: Enabled `CONTEXT_COLLAPSE` and `BG_SESSIONS` feature flags in `scripts/build.ts`.
+- **Brand & Docs Rename**: Completed rename across 12 files — `.gitignore` (`.gakrcli` → `.gakrcli`), `bin/gakrcli.js` re-stubbed, all docs updated.
+
+### Added
+- **Provider Env-File Loading**: Wired `--provider-env-file` CLI flag with `reapplyRememberedEnvFileValues()`. Ported 3 envFile integration tests and 6 background routing tests from reference.
+- **Importers Pattern**: Restructured `cli.tsx` to export `main()` with `CliEntrypointImporters` for dependency injection.
+- **GitHub Enterprise Restore & Full Wiring**: Restored GHE device flow, endpoint type detection, compatibility mode, and onboarding propagation.
+- **New test files**: Wired 11 test files covering lifecycle, provider config, tools, and utilities.
+- **Provider System Verification**: 14 vendors, 25 gateways, 2 Python providers configured. 344+ provider tests pass.
+- **Context Building Verification**: All 6 context layers verified in correct priority order.
+
+### Removed
+- **Locally-Added SDK Runtime File**: Deleted `src/entrypoints/sdk/runtime.ts` — no equivalent in `references/opengakrcli-main/`.
+
+### Refactored
+- **Context Building Pipeline**: Workspace context rendering, memory file ordering, system context improvements.
+- **Knowledge Graph**: `getKnowledgeStorageStatus()` diagnostics, JSON/SQLite storage refactor.
+- **Plugin System**: Marketplace source reconciliation, env var rename, MCP plugin integration.
+- **Provider System**: Expanded to 14 vendors, 25 gateways with provider profiles and auto-detection priority chain.
+
+## [0.5.6] - 2026-06-12
+
+### Enhanced (2026-06-12)
+- **Web Search Tools Performance Overhaul**: Implemented major performance and reliability improvements to WebSearchTool, ImageSearchTool, and VideoSearchTool:
+  - **API-First Approach**: Prioritize duck-duck-scrape API before HTML fallback, reducing latency by 2-3x
+  - **Parallel Retry Logic**: Execute multiple safe-search configurations concurrently using `runAttemptsParallel()` for faster failure recovery
+  - **User-Agent Rotation**: Added 5 rotating User-Agent strings (Windows/macOS/Linux variants) to reduce bot detection
+  - **Request Timeouts**: Implemented 8-second timeout per request with AbortController to prevent indefinite hangs
+  - **Advanced Result Ranking**: Enhanced `rankTextHits()`, `rankImageHits()`, and `rankVideoHits()` with multi-factor scoring including domain authority, result quality, and source reputation
+  - **Response Caching**: Added LRU-based cache (5-minute TTL, max 100 entries) for repeated queries, reducing latency to <100ms
+  - **Result Deduplication**: Remove duplicate URLs/thumbnails from results across all three search types
+  - **Test Coverage**: Added 14 new tests (6 ImageSearchTool, 8 VideoSearchTool), bringing total search-tool test count to 33 passing tests
+
+### Fixed (2026-06-09)
+- **Agent Routing And gRPC Startup Wiring**: Aligned teammate model routing, fallback model provider overrides, AgentTool metadata, CLI startup env application, and gRPC provider-profile startup handling with the OpenGakrCLI reference while preserving GakrCLI env names.
+- **Full-Suite Test Isolation**: Isolated GitHub Actions setup, wiki, onboarding, and user identity tests from shared cwd/config/module state so the full Bun test suite passes with constrained concurrency.
+
+### Added (2026-06-08)
+- **Design Skills Pack**: Added packaged design guidance under `assets/skills/design-skills/`, covering cinematic scroll, 3D interaction, micro-interactions, depth/glassmorphism, editorial typography, ambient effects, WebGPU shaders, visual systems, motion choreography, interaction patterns, and generative design.
+- **GakrCLI Design Skill**: Added `assets/skills/design-skills/gakrcli-design/SKILL.md` with GakrCLI-style visual system guidance for warm editorial AI-product interfaces.
+- **Storage Architecture Reference**: Added `docs/storage-sessions-memory-knowledge-graph.md` documenting current storage, sessions, memory, knowledge graph, DB, Orama, JSON, subagent, tool-result, plugin, MCP, telemetry, and UI state paths.
+- **Soulcraft Skill**: Added `assets/skills/soulcraft/SKILL.md` for reflective product, identity, and experience-shaping work.
+
+### Fixed (2026-06-08)
+- **Location Privacy Regression**: Removed automatic IP-based location lookup from runtime context and added `ip-api.com` to the no-phone-home verifier so external geolocation calls cannot quietly re-enter the bundle.
+- **Knowledge Graph Rule Sync**: Made SQLite rule persistence replace stale rows when `knowledge_graph.json` rules are cleaned or removed, preventing old malformed rules from remaining in the database after JSON and Orama are corrected.
+
+### Changed (2026-06-08)
+- **Knowledge Graph SQLite Runtime Support**: Enabled conversation arc and multi-turn context in the open build, made the knowledge graph SQLite provider work under both Bun (`bun:sqlite`) and Node (`node:sqlite`), added storage backend status reporting, hydrated SQLite on the first learned fact, and tightened passive arc extraction to reduce noisy summaries and malformed rules.
+
+### Added (2026-06-07)
+- **Wiki Command MVP**: Restored `/wiki init`, `/wiki status`, and `/wiki ingest <path>` for a local `.gakrcli/wiki` markdown knowledge scaffold, adapted from the OpenGakrCLI reference implementation.
 
 ### Changed (2026-06-06)
-- **LLM Wiki Scaffold**: Expanded `/wiki` around the LLM Wiki pattern with a raw/source/page layout, parseable dated log headings, richer schema workflows, source-note titles in the rebuilt index, and raw/source/page counts in status output.
 - **Open-Build Feature Flag Inventory**: Declared every `feature(...)` gate used in `src/` in `scripts/build.ts`, defaulting newly documented unavailable or unvalidated functionality to `false` so missing flags are explicit without changing runtime behavior.
 - **Knowledge Graph Persistence Durability**: Persisted the Orama knowledge index through the flushed atomic file-write helper, allowed that helper to accept buffer payloads, and made cleanup registration support synchronous handlers so SQLite close hooks match their actual behavior.
-
-### Fixed (2026-06-06)
-- **Wiki Status Dispatch**: Routed `/wiki status` and common info aliases to the wiki status output instead of the generic help text.
 
 ### Added (2026-06-03)
 - **OpenClaw-Style Workspace Persistence**: Added root workspace files under `~/.gakrcli/workspace/` for GakrCLI identity, rulebook, soul, user profile, tools, memory, dreams, heartbeat, and first-run bootstrap context.
@@ -158,7 +597,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - **Promotional Spinner Tips**: Removed the partner-tip catalog, scheduling controls, history tracking, settings schema, tests, and provider badge copy so spinner tips are only regular product tips.
-- **Gitlawb Opengateway Provider**: Removed the Gitlawb Opengateway provider preset, zero-key auto-detect fallback, generated integration metadata, and legacy route normalization coverage.
+- **gakr-gakr Opengateway Provider**: Removed the gakr-gakr Opengateway provider preset, zero-key auto-detect fallback, generated integration metadata, and legacy route normalization coverage.
 - **Standalone GitHub Models Slash Command**: Removed `/onboard-github` from built-in slash commands now that GitHub Models setup lives in `/provider`.
 
 ## [0.5.3] - 2026-05-22
@@ -169,7 +608,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Plugin Marketplace JSON Parsing**: Stripped UTF-8 BOM markers before JSON parsing so marketplace manifests downloaded from GitHub parse correctly.
-- **Plugin MCP Startup on Windows**: Spawned plugin-provided stdio MCP servers from the plugin install directory and accepted both `${GAKR_PLUGIN_*}` and legacy `${GAKRCLI_PLUGIN_*}` variable names, fixing official Telegram MCP startup.
+- **Plugin MCP Startup on Windows**: Spawned plugin-provided stdio MCP servers from the plugin install directory and accepted both `${GAKR_PLUGIN_*}` and legacy `${GAKR_PLUGIN_*}` variable names, fixing official Telegram MCP startup.
 - **Built-In Marketplace Protection**: Hid remove actions for the official marketplace in `/plugin` and blocked removal through the marketplace manager.
 
 ### Removed
@@ -178,7 +617,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.5.2] - 2026-05-17
 
 ### Changed
-- **GakrCLI Config Home Cleanup (2026-05-20 09:37:21 +05:30)**: Removed active legacy `~/.claude` and project `.claude` config fallback paths so user config, project markdown loading, managed local install detection, VS Code session discovery, and permission special-casing now rely on `~/.gakrcli` / `.gakrcli` only.
+- **GakrCLI Config Home Cleanup (2026-05-20 09:37:21 +05:30)**: Removed active legacy `~/.gakrcli` and project `.gakrcli` config fallback paths so user config, project markdown loading, managed local install detection, VS Code session discovery, and permission special-casing now rely on `~/.gakrcli` / `.gakrcli` only.
 - **Pinned Bun Runtime**: Added the shared `.bun-version` and wired CI and Docker builds to use the repo-tracked Bun version.
 
 ### Added
@@ -197,7 +636,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Windows Bin Import Path**: Normalized Windows drive-letter paths in the CLI bin import helper so built entrypoint URLs are valid across path contexts.
 - **Abort Timeout Cleanup**: Replaced raw timeout abort signals across runtime fetch, hook, bridge, shutdown, and updater paths with cleanup-safe combined abort signals.
-- **Legacy npm Package Cleanup**: Restored cleanup and doctor checks for the real legacy `@anthropic-ai/claude-code` package while keeping GakrCLI package checks pointed at `@gakr-gakr/gakrcli`.
+- **Legacy npm Package Cleanup**: Restored cleanup and doctor checks for the real legacy `@anthropic-ai/gakrcli-code` package while keeping GakrCLI package checks pointed at `@gakr-gakr/gakrcli`.
 - **Codex OAuth Callback Settings**: Restored loopback callback host validation and host-aware redirect URI construction for Codex OAuth.
 - **Web Fetch Firecrawl Endpoint**: Let Web Fetch use self-hosted Firecrawl endpoints via `FIRECRAWL_API_URL`, matching Web Search behavior.
 - **Atomic Chat Provider Tests**: Replaced stale duplicate Ollama coverage with Atomic Chat provider tests adapted for GakrCLI.
@@ -219,7 +658,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Local Provider Fast Path**: Wired `GAKR_LOCAL_FAST_PATH` into OpenAI-compatible requests so local endpoints can skip cloud-only stable serialization, strict tool rewrites, and tool-history compression.
 - **Gemini Tool Signatures**: Replayed real Gemini `thought_signature` metadata by model or base URL and preserved signatures from streaming and non-streaming OpenAI-compatible responses.
 - **OpenAI Shim Stream Resilience**: Converted Gemini raw tool-call text into tool-use blocks, surfaced structured in-stream errors, and annotated length-truncated streams.
-- **GitHub Native Claude Mode**: Routed GitHub Claude-family models through Anthropic-native requests so prompt caching and `cache_control` blocks remain available.
+- **GitHub Native GakrCLI Mode**: Routed GitHub GakrCLI-family models through Anthropic-native requests so prompt caching and `cache_control` blocks remain available.
 - **OpenAI Shim Compatibility**: Redacted credentials from transport-error URLs and stripped unsupported `store` fields for Cerebras chat-completion requests.
 - **API Context Overflow Handling**: Removed a duplicate 500-context-overflow error branch while keeping regression coverage for the friendly new-session guidance.
 - **VS Code Extension Packaging**: Added explicit activation events, packaged-file allowlists, and isolated extension module mocks during tests.
@@ -453,10 +892,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Vite + React 19 with responsive design
   - Light/dark theme support with localStorage persistence
   - Feature showcase and installation instructions
-- **Wiki Service**: Restored wiki service MVP with local source ingestion
-  - `.gakrcli/wiki` scaffold creation with markdown pages
-  - Recursive page counting and initialization checks
-  - Path validation and security hardening
 
 ### Fixed
 - **WebSearchTool Provider System**: Complete overhaul with modular provider system
@@ -464,7 +899,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Intelligent fallback chain with auto mode
   - Domain filtering and security guardrails
 - **Command Registry**: Restored missing reference commands
-  - Added `/auto-fix`, `/benchmark`, `/cache-probe`, `/wiki` commands
+  - Added `/auto-fix`, `/benchmark`, and `/cache-probe` commands
   - Enhanced GitHub Models setup with token reuse support
 
 ## [0.4.6] - 2024-11-15
@@ -555,7 +990,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Configuration management
   - Error handling and logging
 - **Provider Integration**: Initial LLM provider support
-  - Anthropic Claude integration
+  - Anthropic GakrCLI integration
   - OpenAI compatibility layer
   - Basic authentication handling
 

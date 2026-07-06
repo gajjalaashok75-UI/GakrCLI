@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { getOauthConfig } from 'src/constants/oauth.js'
 import { getOrganizationUUID } from 'src/services/oauth/client.js'
-import { getgakrcliAIOAuthTokens } from '../auth.js'
+import { getGakrCLIAIOAuthTokens } from '../auth.js'
 import { toError } from '../errors.js'
 import { logError } from '../log.js'
 import { getOAuthHeaders } from './api.js'
@@ -30,10 +30,10 @@ export type EnvironmentListResponse = {
  * @throws Error if the API request fails or no access token is available
  */
 export async function fetchEnvironments(): Promise<EnvironmentResource[]> {
-  const accessToken = getgakrcliAIOAuthTokens()?.accessToken
+  const accessToken = getGakrCLIAIOAuthTokens()?.accessToken
   if (!accessToken) {
     throw new Error(
-      'GakrCLI web sessions require authentication with a Gakr.ai account. API key authentication is not sufficient. Please run /login to authenticate, or check your authentication status with /status.',
+      'GakrCLI Code web sessions require authentication with a GakrCLI.ai account. API key authentication is not sufficient. Please run /login to authenticate, or check your authentication status with /status.',
     )
   }
 
@@ -76,7 +76,7 @@ export async function fetchEnvironments(): Promise<EnvironmentResource[]> {
 export async function createDefaultCloudEnvironment(
   name: string,
 ): Promise<EnvironmentResource> {
-  const accessToken = getgakrcliAIOAuthTokens()?.accessToken
+  const accessToken = getGakrCLIAIOAuthTokens()?.accessToken
   if (!accessToken) {
     throw new Error('No access token available')
   }

@@ -31,7 +31,6 @@ async function runCommand(
     }
 
     let timedOut = false
-    let settled = false
     let stdout = ''
     let stderr = ''
 
@@ -77,7 +76,6 @@ async function runCommand(
 
     const onAbort = () => {
       killTree()
-      finish(1, false)
     }
     signal?.addEventListener('abort', onAbort, { once: true })
 
@@ -88,34 +86,31 @@ async function runCommand(
       stderr += data.toString()
     })
 
-    const finish = (code: number | null, timedOutValue = timedOut) => {
-      if (settled) return
-      settled = true
+    const timer = setTimeout(() => {
+      timedOut = true
+      killTree()
+    }, timeout)
+
+    proc.on('close', (code) => {
       clearTimeout(timer)
       signal?.removeEventListener('abort', onAbort)
       resolve({
         stdout: stdout.slice(0, 10000),
         stderr: stderr.slice(0, 10000),
         exitCode: code ?? 1,
-        timedOut: timedOutValue,
+        timedOut,
       })
-    }
-
-    const timer = setTimeout(() => {
-      timedOut = true
-      killTree()
-      finish(1, true)
-    }, timeout)
-
-    proc.on('close', (code) => {
-      finish(code)
     })
 
     proc.on('error', () => {
-      if (!stderr) {
-        stderr = 'Command failed to start'
-      }
-      finish(1, false)
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
+      resolve({
+        stdout,
+        stderr: stderr || 'Command failed to start',
+        exitCode: 1,
+        timedOut: false,
+      })
     })
   })
 }

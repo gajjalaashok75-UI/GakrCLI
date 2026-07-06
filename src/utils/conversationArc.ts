@@ -25,11 +25,10 @@ export async function finalizeArcTurn(): Promise<void> {
 
   const completedGoals = arc.goals.filter(g => g.status === 'completed')
   const graph = getGlobalGraph()
-  // Heuristic to detect new facts: entities added after arc start
-  const newFacts = Object.values(graph.entities).filter(e =>
-    e.id.includes(String(arc.id.split('_')[1])) ||
-    graph.lastUpdateTime > arc.startTime
-  )
+  const newFacts = Object.values(graph.entities).filter(e => {
+    const createdAt = Number(e.id.split('_')[1])
+    return Number.isFinite(createdAt) && createdAt >= arc.startTime
+  })
 
   if (completedGoals.length === 0 && arc.decisions.length === 0 && newFacts.length === 0) return
 
@@ -122,7 +121,7 @@ function extractTextFromContent(content: unknown): string {
     return content
       .filter((block: any) => block.type === 'text' && typeof block.text === 'string')
       .map((block: any) => block.text)
-      .join('\\n')
+      .join('\n')
   }
   return ''
 }

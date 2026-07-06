@@ -5,20 +5,14 @@ import { mkdtemp, readFile, rm } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import React from 'react'
-import stripAnsi from 'strip-ansi'
+import { stripVTControlCharacters as stripAnsi } from 'node:util'
 
 import { createRoot } from '../ink.js'
 import { KeybindingSetup } from '../keybindings/KeybindingProviderSetup.js'
 import { AppStateProvider } from '../state/AppState.js'
-import {
-  acquireSharedMutationLock,
-  releaseSharedMutationLock,
-} from '../test/sharedMutationLock.js'
 import type { ExportFormat } from '../utils/exportFormats.js'
 
 const setClipboard = mock(async (_content: string) => '')
-
-await acquireSharedMutationLock('components/ExportDialog.test.tsx')
 
 mock.module('../ink/termio/osc.js', () => ({
   setClipboard,
@@ -77,11 +71,7 @@ afterEach(() => {
 })
 
 afterAll(() => {
-  try {
-    mock.restore()
-  } finally {
-    releaseSharedMutationLock()
-  }
+  mock.restore()
 })
 
 test('shows export format choices before export method choices', async () => {

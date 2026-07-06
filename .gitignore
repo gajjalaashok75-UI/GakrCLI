@@ -2,6 +2,7 @@
 node_modules/
 package-lock.json
 bun.lockb
+package/
 cook/
 COOK.md
 compiled/
@@ -20,9 +21,9 @@ web/*.tsbuildinfo
 .env.*.local
 .env.*
 !.env.example
-
+log.md
 # User/workspace-specific config
-.claude
+.gakrcli
 .gakrcli/
 .gakrcli-profile.json
 .opengakrcli/
@@ -63,9 +64,20 @@ references/
 temp/
 tmp/
 *.tmp
-
+COOK.md
 # Graphify cache (generated)
 src/utils/graphify-out/cache/
 
 # Build cache
 src/utils/graphify-out/
+
+# Local test checker agent and skill
+assets/agents/test-checker.md
+assets/skills/test-checker/
+
+
+
+#ignore for some days 
+packages/chrome-extension
+packages/mcp-chrome-bridge
+packages/mcp-chrome-shared

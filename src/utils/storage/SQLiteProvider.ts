@@ -1,24 +1,41 @@
 import { join } from 'path'
 import { existsSync, mkdirSync, unlinkSync, statSync } from 'fs'
+import { createRequire } from 'module'
 import type { Entity, Relation, SemanticSummary, KnowledgeGraph } from '../knowledgeGraph.js'
 import { registerCleanup } from '../cleanupRegistry.js'
+
+const require = createRequire(import.meta.url)
 
 /**
  * SQLite Storage Provider for Knowledge Graph.
  * Provides ACID-compliant, high-performance relational storage.
- * Runtime-safe: Falls back to no-op if bun:sqlite is unavailable (e.g. on Node.js).
+ * Runtime-safe: uses Bun's SQLite driver in Bun and Node's built-in
+ * node:sqlite driver when available.
  */
 export class SQLiteProvider {
   private db: any = null
   private dbPath: string
   private isInitialized = false
 
+  public static isRuntimeAvailable(): boolean {
+    try {
+      if (typeof Bun !== 'undefined') {
+        require('bun:sqlite')
+        return true
+      }
+      require('node:sqlite')
+      return true
+    } catch {
+      return false
+    }
+  }
+
   constructor(projectDir: string) {
     if (!existsSync(projectDir)) {
       mkdirSync(projectDir, { recursive: true })
     }
     this.dbPath = join(projectDir, 'knowledge.db')
-    
+
     // Ensure connection is closed on process exit
     registerCleanup(() => this.close())
   }
@@ -67,7 +84,7 @@ export class SQLiteProvider {
           try { unlinkSync(file) } catch {}
         }
       }
-      
+
       if (typeof Bun !== 'undefined') {
         const { Database } = await import('bun:sqlite')
         this.db = new Database(this.dbPath)
@@ -80,6 +97,45 @@ export class SQLiteProvider {
       console.warn(`Critical SQLite failure during self-heal at ${this.dbPath}. Falling back to JSON:`, e)
       this.isInitialized = true
       this.db = null
+    }
+  }
+  private async openDatabase(): Promise<any> {
+    if (typeof Bun !== 'undefined') {
+      const { Database } = await import('bun:sqlite')
+      return new Database(this.dbPath)
+    }
+
+    const { DatabaseSync } = await import('node:sqlite')
+    return new DatabaseSync(this.dbPath)
+  }
+
+  private openDatabaseSync(): any {
+    if (typeof Bun !== 'undefined') {
+      const { Database } = require('bun:sqlite')
+      return new Database(this.dbPath)
+    }
+
+    const { DatabaseSync } = require('node:sqlite')
+    return new DatabaseSync(this.dbPath)
+  }
+
+  private runTransaction(fn: () => void): void {
+    if (!this.db) return
+
+    if (typeof this.db.transaction === 'function') {
+      this.db.transaction(fn)()
+      return
+    }
+
+    this.db.exec('BEGIN')
+    try {
+      fn()
+      this.db.exec('COMMIT')
+    } catch (error) {
+      try {
+        this.db.exec('ROLLBACK')
+      } catch {}
+      throw error
     }
   }
 
@@ -131,36 +187,44 @@ export class SQLiteProvider {
     if (!this.db) return
 
     try {
-      this.db.transaction(() => {
-        const upsertEntity = this.db!.prepare(`
-          INSERT INTO entities (id, type, name, attributes, last_updated) 
+      this.runTransaction(() => {
+        const statements: any[] = []
+        const prepare = (sql: string) => {
+          const statement = this.db!.prepare(sql)
+          statements.push(statement)
+          return statement
+        }
+
+        try {
+        const upsertEntity = prepare(`
+          INSERT INTO entities (id, type, name, attributes, last_updated)
           VALUES ($id, $type, $name, $attributes, $last_updated)
-          ON CONFLICT(id) DO UPDATE SET 
-            type=excluded.type, 
-            name=excluded.name, 
-            attributes=excluded.attributes, 
+          ON CONFLICT(id) DO UPDATE SET
+            type=excluded.type,
+            name=excluded.name,
+            attributes=excluded.attributes,
             last_updated=excluded.last_updated
         `)
-        
-        const upsertSummary = this.db!.prepare(`
-          INSERT INTO summaries (id, content, keywords, timestamp) 
+
+        const upsertSummary = prepare(`
+          INSERT INTO summaries (id, content, keywords, timestamp)
           VALUES ($id, $content, $keywords, $timestamp)
-          ON CONFLICT(id) DO UPDATE SET 
-            content=excluded.content, 
-            keywords=excluded.keywords, 
+          ON CONFLICT(id) DO UPDATE SET
+            content=excluded.content,
+            keywords=excluded.keywords,
             timestamp=excluded.timestamp
         `)
 
-        const upsertRelation = this.db!.prepare(`
-          INSERT INTO relations (source_id, target_id, type) 
+        const upsertRelation = prepare(`
+          INSERT INTO relations (source_id, target_id, type)
           VALUES ($source_id, $target_id, $type)
           ON CONFLICT(source_id, target_id, type) DO NOTHING
         `)
 
-        const upsertRule = this.db!.prepare(`
-          INSERT INTO rules (content, timestamp) 
+        const upsertRule = prepare(`
+          INSERT INTO rules (content, timestamp)
           VALUES ($content, $timestamp)
-          ON CONFLICT(content) DO UPDATE SET 
+          ON CONFLICT(content) DO UPDATE SET
             timestamp=excluded.timestamp
         `)
 
@@ -191,6 +255,11 @@ export class SQLiteProvider {
           })
         }
 
+        // Replace all rules — this is a full graph save, so stale rules
+        // that are no longer in the new graph must be removed.
+        const deleteAllRules = prepare('DELETE FROM rules')
+        deleteAllRules.run()
+
         for (const rule of graph.rules) {
           upsertRule.run({
             $content: rule,
@@ -200,7 +269,14 @@ export class SQLiteProvider {
 
         this.db!.prepare('INSERT OR REPLACE INTO sync_meta (key, value) VALUES (?, ?)')
           .run('last_update_time', graph.lastUpdateTime.toString())
-      })()
+      } finally {
+          for (const statement of statements) {
+            try {
+              statement.finalize?.()
+            } catch {}
+          }
+        }
+      })
     } catch (e) {
       console.error('Failed to save graph to SQLite:', e)
     }
@@ -211,9 +287,17 @@ export class SQLiteProvider {
     if (!this.db) return null
 
     try {
+      const statements: any[] = []
+      const prepare = (sql: string) => {
+        const statement = this.db!.prepare(sql)
+        statements.push(statement)
+        return statement
+      }
+
+      try {
       const entitiesRaw = this.db.query('SELECT * FROM entities').all() as any[]
       const summariesRaw = this.db.query('SELECT * FROM summaries').all() as any[]
-      
+
       if (entitiesRaw.length === 0 && summariesRaw.length === 0) {
         return null
       }
@@ -253,6 +337,13 @@ export class SQLiteProvider {
         summaries,
         rules,
         lastUpdateTime: meta ? parseInt(meta.value) : Date.now()
+      }
+      } finally {
+        for (const statement of statements) {
+          try {
+            statement.finalize?.()
+          } catch {}
+        }
       }
     } catch (e) {
       return null

@@ -1,24 +1,22 @@
-import { setMainLoopModelOverride } from '../bootstrap/state.js'
-import { isAntEmployee } from '../utils/buildConfig.js'
+import {
+  setMainLoopModelOverride,
+  setSessionBypassPermissionsMode,
+  setSessionDangerousPermissionMode,
+} from '../bootstrap/state.js'
 import {
   clearApiKeyHelperCache,
   clearAwsCredentialsCache,
   clearGcpCredentialsCache,
 } from '../utils/auth.js'
 import { getGlobalConfig, saveGlobalConfig } from '../utils/config.js'
-import { isEnvTruthy } from '../utils/envUtils.js'
 import { toError } from '../utils/errors.js'
-import {
-  applyGithubProviderProcessEnv,
-  buildGithubProviderSettingsEnv,
-} from '../utils/githubProviderMode.js'
 import { logError } from '../utils/log.js'
 import { applyConfigEnvironmentVariables } from '../utils/managedEnv.js'
+import { persistActiveProviderProfileModel } from '../utils/providerProfiles.js'
 import {
   permissionModeFromString,
   toExternalPermissionMode,
 } from '../utils/permissions/PermissionMode.js'
-import { persistActiveProviderProfileModel } from '../utils/providerProfiles.js'
 import {
   notifyPermissionModeChanged,
   notifySessionMetadataChanged,
@@ -72,6 +70,15 @@ export function onChangeAppState({
   const prevMode = oldState.toolPermissionContext.mode
   const newMode = newState.toolPermissionContext.mode
   if (prevMode !== newMode) {
+    setSessionBypassPermissionsMode(
+      newMode === 'bypassPermissions' || newMode === 'fullAccess',
+    )
+    setSessionDangerousPermissionMode(
+      newMode === 'bypassPermissions' || newMode === 'fullAccess'
+        ? newMode
+        : null,
+    )
+
     // CCR external_metadata must not receive internal-only mode names
     // (bubble, ungated auto). Externalize first — and skip
     // the CCR notify if the EXTERNAL mode didn't change (e.g.,
@@ -113,24 +120,15 @@ export function onChangeAppState({
     newState.mainLoopModel !== oldState.mainLoopModel &&
     newState.mainLoopModel !== null
   ) {
-    const isGithubProviderActive = isEnvTruthy(process.env.GAKR_CODE_USE_GITHUB)
-
     // Save to settings
-    updateSettingsForSource(
-      'userSettings',
-      isGithubProviderActive
-        ? {
-            model: newState.mainLoopModel,
-            env: buildGithubProviderSettingsEnv(newState.mainLoopModel),
-          }
-        : { model: newState.mainLoopModel },
-    )
-    if (isGithubProviderActive) {
-      applyGithubProviderProcessEnv(newState.mainLoopModel)
-    } else {
+    updateSettingsForSource('userSettings', { model: newState.mainLoopModel })
+    setMainLoopModelOverride(newState.mainLoopModel)
+
+    // Keep active provider profiles in sync with /model choices so restarts
+    // keep using the last selected model instead of the profile's old default.
+    if (process.env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED === '1') {
       persistActiveProviderProfileModel(newState.mainLoopModel)
     }
-    setMainLoopModelOverride(newState.mainLoopModel)
   }
 
   // expandedView → persist as showExpandedTodos + showSpinnerTree for backwards compat
@@ -159,18 +157,6 @@ export function onChangeAppState({
       ...current,
       verbose,
     }))
-  }
-
-  // tungstenPanelVisible (ant-only tmux panel sticky toggle)
-  if (isAntEmployee()) {
-    if (
-      newState.tungstenPanelVisible !== oldState.tungstenPanelVisible &&
-      newState.tungstenPanelVisible !== undefined &&
-      getGlobalConfig().tungstenPanelVisible !== newState.tungstenPanelVisible
-    ) {
-      const tungstenPanelVisible = newState.tungstenPanelVisible
-      saveGlobalConfig(current => ({ ...current, tungstenPanelVisible }))
-    }
   }
 
   // settings: clear auth-related caches when settings change

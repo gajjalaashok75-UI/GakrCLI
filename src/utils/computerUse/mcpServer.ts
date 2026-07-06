@@ -7,7 +7,6 @@ import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { homedir } from 'os'
 
 import { shutdownDatadog } from '../../services/analytics/datadog.js'
-import { shutdown1PEventLogging } from '../../services/analytics/firstPartyEventLogger.js'
 import { initializeAnalyticsSink } from '../../services/analytics/sink.js'
 import { enableConfigs } from '../config.js'
 import { logForDebugging } from '../debug.js'
@@ -40,7 +39,12 @@ async function tryGetInstalledAppNames(): Promise<string[] | undefined> {
     )
     return undefined
   }
-  return filterAppsForDescription(installed, homedir())
+  // optionalModules.d.ts stubs InstalledApp.path as optional; Spotlight
+  // enumeration always returns a path, which filterAppsForDescription needs.
+  return filterAppsForDescription(
+    installed as Parameters<typeof filterAppsForDescription>[0],
+    homedir(),
+  )
 }
 
 /**
@@ -79,7 +83,7 @@ export async function createComputerUseMcpServerForCli(): Promise<
 
 /**
  * Subprocess entrypoint for `--computer-use-mcp`. Mirror of
- * `rungakrcliInChromeMcpServer` — stdio transport, exit on stdin close,
+ * `runGakrCLIInChromeMcpServer` — stdio transport, exit on stdin close,
  * flush analytics before exit.
  */
 export async function runComputerUseMcpServer(): Promise<void> {
@@ -93,7 +97,7 @@ export async function runComputerUseMcpServer(): Promise<void> {
   const shutdownAndExit = async (): Promise<void> => {
     if (exiting) return
     exiting = true
-    await Promise.all([shutdown1PEventLogging(), shutdownDatadog()])
+    await shutdownDatadog()
     // eslint-disable-next-line custom-rules/no-process-exit
     process.exit(0)
   }

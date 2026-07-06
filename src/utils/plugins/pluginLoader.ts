@@ -1,7 +1,7 @@
 /**
  * Plugin Loader Module
  *
- * This module is responsible for discovering, loading, and validating GakrCLI  plugins
+ * This module is responsible for discovering, loading, and validating GakrCLI Code plugins
  * from various sources including marketplaces and git repositories.
  *
  * NPM packages are also supported but must be referenced through marketplaces - the marketplace
@@ -1279,7 +1279,7 @@ async function validatePluginPaths(
   contextLabel: string,
   errors: PluginError[],
 ): Promise<string[]> {
-  // Parallelize the async pathExists checks
+  // Parallelize the async path checks
   const checks = await Promise.all(
     relPaths.map(async relPath => ({
       relPath,
@@ -1600,7 +1600,7 @@ export async function createPluginFromPath(
             type: 'path-not-found',
             source,
             plugin: manifest.name,
-            path: check.fullPath,
+            path: check.fullPath!,
             component: 'commands',
           })
         }
@@ -2022,9 +2022,12 @@ async function loadPluginSettings(
 }
 
 /**
- * Merge two HooksSettings objects
+ * Merge two HooksSettings objects. Concatenates matcher arrays for events
+ * that appear in both `base` and `additional`. Exported so callers (and
+ * tests) can verify the supplement path keeps both sets of matchers
+ * rather than dropping the base ones via object spread.
  */
-function mergeHooksSettings(
+export function mergeHooksSettings(
   base: HooksSettings | undefined,
   additional: HooksSettings,
 ): HooksSettings {
@@ -2225,6 +2228,7 @@ async function loadPluginsFromMarketplaces({
       return cacheOnly
         ? loadPluginFromMarketplaceEntryCacheOnly(
             result.entry,
+            result.marketplaceInstallLocation,
             pluginId,
             enabledValue === true,
             errors,
@@ -2269,6 +2273,7 @@ async function loadPluginsFromMarketplaces({
  */
 async function loadPluginFromMarketplaceEntryCacheOnly(
   entry: PluginMarketplaceEntry,
+  marketplaceInstallLocation: string,
   pluginId: string,
   enabled: boolean,
   errorsOut: PluginError[],
@@ -2276,21 +2281,53 @@ async function loadPluginFromMarketplaceEntryCacheOnly(
 ): Promise<LoadedPlugin | null> {
   let pluginPath: string
 
-  // Cache-only means "use the materialized installation", even for
-  // marketplace-relative sources. The full loader copies those sources into a
-  // versioned cache and records that path in installed_plugins.json; startup,
-  // /reload-plugins downstream consumers, and MCP config should all see the
-  // same installed files instead of drifting back to the marketplace checkout.
-  if (!installPath || !(await pathExists(installPath))) {
-    errorsOut.push({
-      type: 'plugin-cache-miss',
-      source: pluginId,
-      plugin: entry.name,
-      installPath: installPath ?? '(not recorded)',
-    })
-    return null
+  // Prefer the recorded installPath when available (cache-only mode).
+  // This handles both local-relative and external-source plugins that
+  // have already been installed/cached to a known path.
+  if (installPath) {
+    if (!(await pathExists(installPath))) {
+      errorsOut.push({
+        type: 'plugin-cache-miss',
+        source: pluginId,
+        plugin: entry.name,
+        installPath,
+      })
+      return null
+    }
+    pluginPath = installPath
+  } else if (typeof entry.source === 'string') {
+    // Local relative path — read from the marketplace source dir directly.
+    // Skip copyPluginToVersionedCache; startup doesn't need a fresh copy.
+    let marketplaceDir: string
+    try {
+      marketplaceDir = (await stat(marketplaceInstallLocation)).isDirectory()
+        ? marketplaceInstallLocation
+        : join(marketplaceInstallLocation, '..')
+    } catch {
+      errorsOut.push({
+        type: 'plugin-cache-miss',
+        source: pluginId,
+        plugin: entry.name,
+        installPath: marketplaceInstallLocation,
+      })
+      return null
+    }
+    pluginPath = join(marketplaceDir, entry.source)
+    // finishLoadingPluginFromPath reads pluginPath — its error handling
+    // surfaces ENOENT as a load failure, no need to pre-check here.
+  } else {
+    // External source (npm/github/url/git-subdir) — use recorded installPath.
+    if (!installPath || !(await pathExists(installPath))) {
+      errorsOut.push({
+        type: 'plugin-cache-miss',
+        source: pluginId,
+        plugin: entry.name,
+        installPath: installPath ?? '(not recorded)',
+      })
+      return null
+    }
+    pluginPath = installPath
   }
-  pluginPath = installPath
 
   // Zip cache extraction — must still happen in cacheOnly mode (invariant 4)
   if (isPluginZipCacheEnabled() && pluginPath.endsWith('.zip')) {
@@ -2323,22 +2360,6 @@ async function loadPluginFromMarketplaceEntryCacheOnly(
     enabled,
     errorsOut,
     pluginPath,
-  )
-}
-
-export async function loadPluginFromMarketplaceEntryCacheOnlyForTesting(
-  entry: PluginMarketplaceEntry,
-  pluginId: string,
-  enabled: boolean,
-  errorsOut: PluginError[],
-  installPath: string | undefined,
-): Promise<LoadedPlugin | null> {
-  return loadPluginFromMarketplaceEntryCacheOnly(
-    entry,
-    pluginId,
-    enabled,
-    errorsOut,
-    installPath,
   )
 }
 
@@ -3137,12 +3158,15 @@ async function finishLoadingPluginFromPath(
       }
     }
 
-    // Supplement hooks from marketplace entry
+    // Supplement hooks from marketplace entry. Object spread would replace
+    // each event's matcher array wholesale, silently dropping matchers that
+    // plugin.json already registered for the same event. mergeHooksSettings
+    // concatenates per-event arrays the way the rest of this file does.
     if (entry.hooks) {
-      plugin.hooksConfig = {
-        ...(plugin.hooksConfig || {}),
-        ...(entry.hooks as HooksSettings),
-      }
+      plugin.hooksConfig = mergeHooksSettings(
+        plugin.hooksConfig,
+        entry.hooks as HooksSettings,
+      )
     }
   }
 
@@ -3395,7 +3419,7 @@ export const loadAllPlugins = memoize(async (): Promise<PluginLoadResult> => {
  *
  * GAKR_CODE_SYNC_PLUGIN_INSTALL=1 delegates to the full loader — that
  * mode explicitly opts into blocking install before first query, and
- * main.tsx's getGakrcliCodeMcpConfigs()/getInitialSettings().agent run
+ * main.tsx's getGakrCLICodeMcpConfigs()/getInitialSettings().agent run
  * BEFORE runHeadless() can warm this cache. First-run CCR/headless has
  * no installed_plugins.json, so cache-only would miss plugin MCP servers
  * and plugin settings (the agent key). The interactive startup win is
@@ -3572,4 +3596,30 @@ export function cachePluginSettings(plugins: LoadedPlugin[]): void {
  */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * Testing-only export: wrapper around loadPluginFromMarketplaceEntryCacheOnly
+ * that infers the marketplaceInstallLocation from the installPath.
+ * The marketplace dir is assumed to be three levels up from installPath
+ * (which is at .../installed-cache/<name>/<version>/) and then into marketplace/.
+ */
+export async function loadPluginFromMarketplaceEntryCacheOnlyForTesting(
+  entry: PluginMarketplaceEntry,
+  pluginId: string,
+  enabled: boolean,
+  errorsOut: PluginError[],
+  installPath: string | undefined,
+): Promise<LoadedPlugin | null> {
+  const marketplaceInstallLocation = installPath
+    ? join(installPath, '..', '..', '..', 'marketplace')
+    : ''
+  return loadPluginFromMarketplaceEntryCacheOnly(
+    entry,
+    marketplaceInstallLocation,
+    pluginId,
+    enabled,
+    errorsOut,
+    installPath,
+  )
 }

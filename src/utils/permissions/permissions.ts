@@ -1,5 +1,6 @@
 import { feature } from 'bun:bundle'
 import { APIUserAbortError } from '@anthropic-ai/sdk'
+import { PRODUCT_DISPLAY_NAME } from '../../constants/product.js'
 import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
 import {
   getToolNameForPermissionCheck,
@@ -22,7 +23,10 @@ import {
   SETTING_SOURCES,
 } from '../settings/constants.js'
 import { plural } from '../stringUtils.js'
-import { permissionModeTitle } from './PermissionMode.js'
+import {
+  type PermissionMode,
+  permissionModeTitle,
+} from './PermissionMode.js'
 import type {
   PermissionAskDecision,
   PermissionDecision,
@@ -62,6 +66,15 @@ const classifierDecisionModule = feature('TRANSCRIPT_CLASSIFIER')
 const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER')
   ? (require('./autoModeState.js') as typeof import('./autoModeState.js'))
   : null
+
+function applyPermissionUpdatesToLiveContext(
+  context: ToolPermissionContext,
+  updates: PermissionUpdate[],
+): ToolPermissionContext {
+  const { applyPermissionUpdatesToLiveContext: applyLiveUpdates } =
+    require('./permissionSetup.js') as typeof import('./permissionSetup.js')
+  return applyLiveUpdates(context, updates)
+}
 
 import {
   addToTurnClassifierDuration,
@@ -205,7 +218,7 @@ export function createPermissionRequestMessage(
   }
 
   // Default message without listing allowed commands
-  const message = `GakrCLI requested permissions to use ${toolName}, but you haven't granted it yet.`
+  const message = `${PRODUCT_DISPLAY_NAME} requested permissions to use ${toolName}, but you haven't granted it yet.`
 
   return message
 }
@@ -423,14 +436,21 @@ async function runPermissionRequestHooksForHeadlessAgent(
         const finalInput = decision.updatedInput ?? input
         // Persist permission updates if provided
         if (decision.updatedPermissions?.length) {
-          persistPermissionUpdates(decision.updatedPermissions)
-          context.setAppState(prev => ({
-            ...prev,
-            toolPermissionContext: applyPermissionUpdates(
+          // Capture so the narrowing survives into the setAppState callback
+          const updatedPermissions = decision.updatedPermissions
+          let updatedContext = context.getAppState().toolPermissionContext
+          context.setAppState(prev => {
+            updatedContext = applyPermissionUpdatesToLiveContext(
               prev.toolPermissionContext,
-              decision.updatedPermissions!,
-            ),
-          }))
+              updatedPermissions,
+            )
+            if (prev.toolPermissionContext === updatedContext) return prev
+            return {
+              ...prev,
+              toolPermissionContext: updatedContext,
+            }
+          })
+          persistPermissionUpdates(decision.updatedPermissions)
         }
         return {
           behavior: 'allow',
@@ -446,7 +466,7 @@ async function runPermissionRequestHooksForHeadlessAgent(
           logForDebugging(
             `Hook interrupt: tool=${tool.name} hookMessage=${decision.message}`,
           )
-          context.abortController.abort()
+          context.abortController.abort('interrupt')
         }
         return {
           behavior: 'deny',
@@ -558,7 +578,7 @@ export const hasPermissionsToUseTool: CanUseToolFn = async (
         createDenialTrackingState()
 
       // PowerShell requires explicit user permission in auto mode unless
-      // POWERSHELL_AUTO_MODE (ant-only build flag) is on. When disabled, this
+      // POWERSHELL_AUTO_MODE (internal-only build flag) is on. When disabled, this
       // guard keeps PS out of the classifier and skips the acceptEdits
       // fast-path below. When enabled, PS flows through to the classifier like
       // Bash — the classifier prompt gets POWERSHELL_DENY_GUIDANCE appended so
@@ -844,11 +864,9 @@ export const hasPermissionsToUseTool: CanUseToolFn = async (
         // the tengu_iron_gate_closed gate.
         if (classifierResult.unavailable) {
           if (
-            getFeatureValue_CACHED_WITH_REFRESH(
-              'tengu_iron_gate_closed',
-              true,
-              CLASSIFIER_FAIL_CLOSED_REFRESH_MS,
-            )
+            // The local growthbook shim takes no refresh-interval argument;
+            // CLASSIFIER_FAIL_CLOSED_REFRESH_MS documents the intended cadence.
+            getFeatureValue_CACHED_WITH_REFRESH('tengu_iron_gate_closed', true)
           ) {
             logForDebugging(
               'Auto mode classifier unavailable, denying with retry guidance (fail closed)',
@@ -1074,6 +1092,7 @@ export async function checkRuleBasedPermissions(
   context: ToolUseContext,
 ): Promise<PermissionAskDecision | PermissionDenyDecision | null> {
   const appState = context.getAppState()
+  const isFullAccessMode = appState.toolPermissionContext.mode === 'fullAccess'
 
   // 1a. Entire tool is denied by rule
   const denyRule = getDenyRuleForTool(appState.toolPermissionContext, tool)
@@ -1097,7 +1116,7 @@ export async function checkRuleBasedPermissions(
       SandboxManager.isAutoAllowBashIfSandboxedEnabled() &&
       shouldUseSandbox(input)
 
-    if (!canSandboxAutoAllow) {
+    if (!canSandboxAutoAllow && !isFullAccessMode) {
       return {
         behavior: 'ask',
         decisionReason: {
@@ -1131,6 +1150,10 @@ export async function checkRuleBasedPermissions(
     return toolPermissionResult
   }
 
+  if (isFullAccessMode) {
+    return null
+  }
+
   // 1f. Content-specific ask rules from tool.checkPermissions
   // (e.g. Bash(npm publish:*) → {ask, type:'rule', ruleBehavior:'ask'})
   if (
@@ -1143,10 +1166,14 @@ export async function checkRuleBasedPermissions(
 
   // 1g. Safety checks (e.g. .git/, .gakrcli/, .vscode/, shell configs) are
   // bypass-immune — they must prompt even when a PreToolUse hook returned
-  // allow. checkPathSafetyForAutoEdit returns {type:'safetyCheck'} for these.
+  // allow. Full Access is the explicit second-level opt-in that skips them.
+  // checkPathSafetyForAutoEdit returns {type:'safetyCheck'} for these.
   if (
     toolPermissionResult?.behavior === 'ask' &&
-    toolPermissionResult.decisionReason?.type === 'safetyCheck'
+    toolPermissionResult.decisionReason?.type === 'safetyCheck' &&
+    // Widen: control flow already narrowed 'fullAccess' away via the
+    // isFullAccessMode early return; keep the defensive re-check as-is.
+    (appState.toolPermissionContext.mode as PermissionMode) !== 'fullAccess'
   ) {
     return toolPermissionResult
   }
@@ -1165,6 +1192,7 @@ async function hasPermissionsToUseToolInner(
   }
 
   let appState = context.getAppState()
+  let isFullAccessMode = appState.toolPermissionContext.mode === 'fullAccess'
 
   // 1. Check if the tool is denied
   // 1a. Entire tool is denied
@@ -1182,7 +1210,7 @@ async function hasPermissionsToUseToolInner(
 
   // 1b. Check if the entire tool should always ask for permission
   const askRule = getAskRuleForTool(appState.toolPermissionContext, tool)
-  if (askRule && appState.toolPermissionContext.mode !== 'fullAccess') {
+  if (askRule) {
     // When autoAllowBashIfSandboxed is on, sandboxed commands skip the ask rule and
     // auto-allow via Bash's checkPermissions. Commands that won't be sandboxed (excluded
     // commands, dangerouslyDisableSandbox) still need to respect the ask rule.
@@ -1192,7 +1220,7 @@ async function hasPermissionsToUseToolInner(
       SandboxManager.isAutoAllowBashIfSandboxedEnabled() &&
       shouldUseSandbox(input)
 
-    if (!canSandboxAutoAllow) {
+    if (!canSandboxAutoAllow && !isFullAccessMode) {
       return {
         behavior: 'ask',
         decisionReason: {
@@ -1235,6 +1263,19 @@ async function hasPermissionsToUseToolInner(
     return toolPermissionResult
   }
 
+  appState = context.getAppState()
+  isFullAccessMode = appState.toolPermissionContext.mode === 'fullAccess'
+  if (isFullAccessMode) {
+    return {
+      behavior: 'allow',
+      updatedInput: getUpdatedInputOrFallback(toolPermissionResult, input),
+      decisionReason: {
+        type: 'mode',
+        mode: 'fullAccess',
+      },
+    }
+  }
+
   // 1f. Content-specific ask rules from tool.checkPermissions take precedence
   // over bypassPermissions mode. When a user explicitly configures a
   // content-specific ask rule (e.g. Bash(npm publish:*)), the tool's
@@ -1243,7 +1284,6 @@ async function hasPermissionsToUseToolInner(
   // just as deny rules are respected at step 1d.
   if (
     toolPermissionResult?.behavior === 'ask' &&
-    appState.toolPermissionContext.mode !== 'fullAccess' &&
     toolPermissionResult.decisionReason?.type === 'rule' &&
     toolPermissionResult.decisionReason.rule.ruleBehavior === 'ask'
   ) {
@@ -1251,12 +1291,13 @@ async function hasPermissionsToUseToolInner(
   }
 
   // 1g. Safety checks (e.g. .git/, .gakrcli/, .vscode/, shell configs) are
-  // bypass-immune — they must prompt even in bypassPermissions mode.
+  // bypass-immune — they must prompt even in bypassPermissions mode. Full
+  // Access is the explicit second-level opt-in that skips these prompts.
   // checkPathSafetyForAutoEdit returns {type:'safetyCheck'} for these paths.
   if (
     toolPermissionResult?.behavior === 'ask' &&
-    appState.toolPermissionContext.mode !== 'fullAccess' &&
-    toolPermissionResult.decisionReason?.type === 'safetyCheck'
+    toolPermissionResult.decisionReason?.type === 'safetyCheck' &&
+    appState.toolPermissionContext.mode !== 'fullAccess'
   ) {
     return toolPermissionResult
   }

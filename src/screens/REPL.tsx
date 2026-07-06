@@ -21,6 +21,13 @@ import { Box, Text, useStdin, useTheme, useTerminalFocus, useTerminalTitle, useT
 import type { TabStatusKind } from '../ink/hooks/use-tab-status.js';
 import { CostThresholdDialog } from '../components/CostThresholdDialog.js';
 import { IdleReturnDialog } from '../components/IdleReturnDialog.js';
+import { ResumeCompactPrompt } from '../components/ResumeCompactPrompt.js';
+import { CompactProgressBar } from '../components/CompactProgressBar.js';
+import { SearchExtraToolsHint } from '../components/SearchExtraToolsHint.js';
+import { useSearchExtraToolsHint } from '../hooks/useSearchExtraToolsHint.js';
+import { UltraplanChoiceDialog } from '../components/ultraplan/UltraplanChoiceDialog.js';
+import { UltraplanLaunchDialog } from '../components/ultraplan/UltraplanLaunchDialog.js';
+import { launchUltraplan } from '../commands/ultraplan.js';
 import * as React from 'react';
 import { useEffect, useMemo, useRef, useState, useCallback, useDeferredValue, useLayoutEffect, type RefObject } from 'react';
 import { useNotifications } from '../context/notifications.js';
@@ -28,8 +35,9 @@ import { sendNotification } from '../services/notifier.js';
 import { startPreventSleep, stopPreventSleep } from '../services/preventSleep.js';
 import { useTerminalNotification } from '../ink/useTerminalNotification.js';
 import { hasCursorUpViewportYankBug } from '../ink/terminal.js';
-import { createFileStateCacheWithSizeLimit, mergeFileStateCaches, READ_FILE_STATE_CACHE_SIZE } from '../utils/fileStateCache.js';
-import { updateLastInteractionTime, getLastInteractionTime, getOriginalCwd, getProjectRoot, getSessionId, switchSession, setCostStateForRestore, getTurnHookDurationMs, getTurnHookCount, resetTurnHookDuration, getTurnToolDurationMs, getTurnToolCount, resetTurnToolDuration, getTurnClassifierDurationMs, getTurnClassifierCount, resetTurnClassifierDuration } from '../bootstrap/state.js';
+import { createFileStateCacheWithSizeLimit, mergeFileStateCaches, READ_FILE_STATE_CACHE_SIZE, type FileStateCache } from '../utils/fileStateCache.js';
+import { registerPrunableCache } from '../utils/memoryPressure.js';
+import { updateLastInteractionTime, getLastInteractionTime, getOriginalCwd, getProjectRoot, getSessionId, switchSession, setCostStateForRestore, resetTurnHookDuration, resetTurnToolDuration, resetTurnClassifierDuration, setMainLoopModelOverride, setMainThreadAgentType } from '../bootstrap/state.js';
 import { asSessionId, asAgentId } from '../types/ids.js';
 import { logForDebugging } from '../utils/debug.js';
 import { QueryGuard } from '../utils/QueryGuard.js';
@@ -45,7 +53,6 @@ import { WorkerPendingPermission } from '../components/permissions/WorkerPending
 import { injectUserMessageToTeammate, getAllInProcessTeammateTasks } from '../tasks/InProcessTeammateTask/InProcessTeammateTask.js';
 import { isLocalAgentTask, queuePendingMessage, appendMessageToLocalAgent, type LocalAgentTaskState } from '../tasks/LocalAgentTask/LocalAgentTask.js';
 import { registerLeaderToolUseConfirmQueue, unregisterLeaderToolUseConfirmQueue, registerLeaderSetToolPermissionContext, unregisterLeaderSetToolPermissionContext } from '../utils/swarm/leaderPermissionBridge.js';
-import { endInteractionSpan } from '../utils/telemetry/sessionTracing.js';
 import { useLogMessages } from '../hooks/useLogMessages.js';
 import { useReplBridge } from '../hooks/useReplBridge.js';
 import { type Command, type CommandResultDisplay, type ResumeEntrypoint, getCommandName, isCommandEnabled } from '../commands.js';
@@ -65,10 +72,8 @@ import type { DirectConnectConfig } from '../server/directConnectManager.js';
 import { useSSHSession } from '../hooks/useSSHSession.js';
 import { useAssistantHistory } from '../hooks/useAssistantHistory.js';
 import type { SSHSession } from '../ssh/createSSHSession.js';
-import { SkillImprovementSurvey } from '../components/SkillImprovementSurvey.js';
-import { useSkillImprovementSurvey } from '../hooks/useSkillImprovementSurvey.js';
-import { useMoreRight } from '../moreright/useMoreRight.js';
 import { SpinnerWithVerb, BriefIdleStatus, type SpinnerMode } from '../components/Spinner.js';
+import { CompletionFlash } from '../components/Spinner/CompletionFlash.js';
 import { getSystemPrompt } from '../constants/prompts.js';
 import { buildEffectiveSystemPrompt } from '../utils/systemPrompt.js';
 import { getSystemContext, getUserContext } from '../context.js';
@@ -103,16 +108,6 @@ const useVoiceIntegration: typeof import('../hooks/useVoiceIntegration.js').useV
   resetAnchor: () => { }
 });
 const VoiceKeybindingHandler: typeof import('../hooks/useVoiceIntegration.js').VoiceKeybindingHandler = feature('VOICE_MODE') ? require('../hooks/useVoiceIntegration.js').VoiceKeybindingHandler : () => null;
-// Frustration detection is internal-only (dogfooding). Conditional require so external
-// builds eliminate the module entirely (including its two O(n) useMemos that run
-// on every messages change, plus the GrowthBook fetch).
-const useFrustrationDetection: typeof import('../components/FeedbackSurvey/useFrustrationDetection.js').useFrustrationDetection = "external" === 'ant' ? require('../components/FeedbackSurvey/useFrustrationDetection.js').useFrustrationDetection : () => ({
-  state: 'closed',
-  handleTranscriptSelect: () => { }
-});
-// Ant-only org warning. Conditional require so the org UUID list is
-// eliminated from external builds (one UUID is on excluded-strings).
-const useAntOrgWarningNotification: typeof import('../hooks/notifs/useAntOrgWarningNotification.js').useAntOrgWarningNotification = "external" === 'ant' ? require('../hooks/notifs/useAntOrgWarningNotification.js').useAntOrgWarningNotification : () => { };
 // Dead code elimination: conditional import for coordinator mode
 const getCoordinatorUserContext: (mcpClients: ReadonlyArray<{
   name: string;
@@ -122,19 +117,20 @@ const getCoordinatorUserContext: (mcpClients: ReadonlyArray<{
 /* eslint-enable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
 import useCanUseTool from '../hooks/useCanUseTool.js';
 import type { ToolPermissionContext, Tool } from '../Tool.js';
-import { applyPermissionUpdate, applyPermissionUpdates, persistPermissionUpdate } from '../utils/permissions/PermissionUpdate.js';
+import { applyPermissionUpdate, persistPermissionUpdate } from '../utils/permissions/PermissionUpdate.js';
 import { buildPermissionUpdates } from '../components/permissions/ExitPlanModePermissionRequest/ExitPlanModePermissionRequest.js';
-import { stripDangerousPermissionsForAutoMode } from '../utils/permissions/permissionSetup.js';
+import { applyPermissionUpdatesToLiveContext, stripDangerousPermissionsForAutoMode } from '../utils/permissions/permissionSetup.js';
 import { getScratchpadDir, isScratchpadEnabled } from '../utils/permissions/filesystem.js';
+import { isDangerousPermissionMode } from '../utils/permissions/PermissionMode.js';
 import { WEB_FETCH_TOOL_NAME } from '../tools/WebFetchTool/prompt.js';
 import { SLEEP_TOOL_NAME } from '../tools/SleepTool/prompt.js';
 import { clearSpeculativeChecks } from '../tools/BashTool/bashPermissions.js';
 import type { AutoUpdaterResult } from '../utils/autoUpdater.js';
-import { getGlobalConfig, saveGlobalConfig, getGlobalConfigWriteCount } from '../utils/config.js';
+import { getGlobalConfig, saveGlobalConfig } from '../utils/config.js';
 import { hasConsoleBillingAccess } from '../utils/billing.js';
 import { logEvent, type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from 'src/services/analytics/index.js';
 import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js';
-import { textForResubmit, handleMessageFromStream, type StreamingToolUse, type StreamingThinking, isCompactBoundaryMessage, getMessagesAfterCompactBoundary, getContentText, createUserMessage, createAssistantMessage, createTurnDurationMessage, createAgentsKilledMessage, createApiMetricsMessage, createSystemMessage, createCommandInputMessage, formatCommandInputTags } from '../utils/messages.js';
+import { textForResubmit, handleMessageFromStream, type StreamingToolUse, type StreamingThinking, isCompactBoundaryMessage, getMessagesAfterCompactBoundary, getContentText, createUserMessage, createAssistantMessage, createTurnDurationMessage, createAgentsKilledMessage, createSystemMessage, createCommandInputMessage, formatCommandInputTags } from '../utils/messages.js';
 import { getCurrentTurnCacheMetrics, resetCurrentTurn } from '../services/api/cacheStatsTracker.js';
 import { formatCacheMetricsCompact, formatCacheMetricsFull } from '../services/api/cacheMetrics.js';
 import { generateSessionTitle } from '../utils/sessionTitle.js';
@@ -148,6 +144,7 @@ import { useMailboxBridge } from '../hooks/useMailboxBridge.js';
 import { queryCheckpoint, logQueryProfileReport } from '../utils/queryProfiler.js';
 import type { Message as MessageType, UserMessage, ProgressMessage, HookResultMessage, PartialCompactDirection } from '../types/message.js';
 import { query } from '../query.js';
+import type { AutoCompactTrackingState } from '../services/compact/autoCompact.js';
 import { mergeClients, useMergedClients } from '../hooks/useMergedClients.js';
 import { getQuerySourceForREPL } from '../utils/promptCategory.js';
 import { useMergedTools } from '../hooks/useMergedTools.js';
@@ -171,12 +168,12 @@ import type { AgentDefinition } from '../tools/AgentTool/loadAgentsDir.js';
 import { resolveAgentTools } from '../tools/AgentTool/agentToolUtils.js';
 import { resumeAgentBackground } from '../tools/AgentTool/resumeAgent.js';
 import { useMainLoopModel } from '../hooks/useMainLoopModel.js';
-import { useAppState, useSetAppState, useAppStateStore } from '../state/AppState.js';
+import { useAppState, useSetAppState, useAppStateStore, type AppState } from '../state/AppState.js';
 import type { ContentBlockParam, ImageBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs';
 import type { ProcessUserInputContext } from '../utils/processUserInput/processUserInput.js';
 import type { PastedContent } from '../utils/config.js';
 import { copyPlanForFork, copyPlanForResume, getPlanSlug, setPlanSlug } from '../utils/plans.js';
-import { clearSessionMetadata, resetSessionFilePointer, adoptResumedSessionFile, removeTranscriptMessage, restoreSessionMetadata, getCurrentSessionTitle, isEphemeralToolProgress, isLoggableMessage, saveWorktreeState, getAgentTranscript } from '../utils/sessionStorage.js';
+import { clearSessionMetadata, resetSessionFilePointer, adoptResumedSessionFile, removeTranscriptMessage, restoreSessionMetadata, getCurrentSessionTitle, isEphemeralToolProgress, isLoggableMessage, saveWorktreeState, getAgentTranscript, saveAgentSetting } from '../utils/sessionStorage.js';
 import { deserializeMessages } from '../utils/conversationRecovery.js';
 import { extractReadFilesFromMessages, extractBashToolsFromMessages } from '../utils/queryHelpers.js';
 import { resetMicrocompactState } from '../services/compact/microCompact.js';
@@ -189,21 +186,44 @@ import { fileHistoryMakeSnapshot, type FileHistoryState, fileHistoryRewind, type
 import { type AttributionState, incrementPromptCount } from '../utils/commitAttribution.js';
 import { recordAttributionSnapshot } from '../utils/sessionStorage.js';
 import { computeStandaloneAgentContext, restoreAgentFromSession, restoreSessionStateFromLog, restoreWorktreeForResume, exitRestoredWorktree } from '../utils/sessionRestore.js';
+import { notifySessionMetadataChanged } from '../utils/sessionState.js';
 import { isBgSession, updateSessionName, updateSessionActivity } from '../utils/concurrentSessions.js';
 import { isInProcessTeammateTask, type InProcessTeammateTaskState } from '../tasks/InProcessTeammateTask/types.js';
 import { restoreRemoteAgentTasks } from '../tasks/RemoteAgentTask/RemoteAgentTask.js';
 import { useInboxPoller } from '../hooks/useInboxPoller.js';
+import { getActiveSessionAgentModelSelection } from './replActiveAgentModel.js';
+import type { ModelSetting } from '../utils/model/model.js';
 // Dead code elimination: conditional import for loop mode
 /* eslint-disable @typescript-eslint/no-require-imports */
 const proactiveModule = feature('PROACTIVE') || feature('KAIROS') ? require('../proactive/index.js') : null;
 const PROACTIVE_NO_OP_SUBSCRIBE = (_cb: () => void) => () => { };
 const PROACTIVE_FALSE = () => false;
 const SUGGEST_BG_PR_NOOP = (_p: string, _n: string): boolean => false;
-const useProactive = feature('PROACTIVE') || feature('KAIROS') ? require('../proactive/useProactive.js').useProactive : null;
 const useScheduledTasks = require('../hooks/useScheduledTasks.js').useScheduledTasks;
+const useGoalContinuation: typeof import('../hooks/useGoalContinuation.js').useGoalContinuation | null = feature('GOAL')
+  ? require('../hooks/useGoalContinuation.js').useGoalContinuation
+  : null;
+const useProactive =
+  feature('PROACTIVE') || feature('KAIROS') ? require('../proactive/useProactive.js').useProactive : null;
+const useMasterMonitor = feature('UDS_INBOX')
+  ? require('../hooks/useMasterMonitor.js').useMasterMonitor
+  : () => undefined;
+const useSlaveNotifications = feature('UDS_INBOX')
+  ? require('../hooks/useSlaveNotifications.js').useSlaveNotifications
+  : () => undefined;
+const usePipeIpc = feature('UDS_INBOX') ? require('../hooks/usePipeIpc.js').usePipeIpc : () => undefined;
+const usePipeRelay = feature('UDS_INBOX')
+  ? require('../hooks/usePipeRelay.js').usePipeRelay
+  : () => ({ relayPipeMessage: () => false, pipeReturnHadErrorRef: { current: false } });
+const usePipePermissionForward = feature('UDS_INBOX')
+  ? require('../hooks/usePipePermissionForward.js').usePipePermissionForward
+  : () => undefined;
+const usePipeMuteSync = feature('UDS_INBOX') ? require('../hooks/usePipeMuteSync.js').usePipeMuteSync : () => undefined;
+const usePipeRouter = feature('UDS_INBOX')
+  ? require('../hooks/usePipeRouter.js').usePipeRouter
+  : () => ({ routeToSelectedPipes: () => false });
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { isAgentSwarmsEnabled } from '../utils/agentSwarmsEnabled.js';
-import { useTaskListWatcher } from '../hooks/useTaskListWatcher.js';
 import type { SandboxAskCallback, NetworkHostPattern } from '../utils/sandbox/sandbox-adapter.js';
 import { type IDEExtensionInstallationStatus, closeOpenDiffs, getConnectedIdeClient, type IdeType } from '../utils/ide.js';
 import { useIDEIntegration } from '../hooks/useIDEIntegration.js';
@@ -222,11 +242,6 @@ import { EffortCallout, shouldShowEffortCallout } from '../components/EffortCall
 import type { EffortValue } from '../utils/effort.js';
 import { RemoteCallout } from '../components/RemoteCallout.js';
 import { getAPIProvider } from '../utils/model/providers.js';
-/* eslint-disable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
-const AntModelSwitchCallout = "external" === 'ant' ? require('../components/AntModelSwitchCallout.js').AntModelSwitchCallout : null;
-const shouldShowAntModelSwitch = "external" === 'ant' ? require('../components/AntModelSwitchCallout.js').shouldShowModelSwitchCallout : (): boolean => false;
-const UndercoverAutoCallout = "external" === 'ant' ? require('../components/UndercoverAutoCallout.js').UndercoverAutoCallout : null;
-/* eslint-enable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
 import { activityManager } from '../utils/activityManager.js';
 import { createAbortController } from '../utils/abortController.js';
 import { MCPConnectionManager } from 'src/services/mcp/MCPConnectionManager.js';
@@ -238,11 +253,13 @@ import { useInstallMessages } from 'src/hooks/notifs/useInstallMessages.js';
 import { useAwaySummary } from 'src/hooks/useAwaySummary.js';
 import { useChromeExtensionNotification } from 'src/hooks/useChromeExtensionNotification.js';
 import { useOfficialMarketplaceNotification } from 'src/hooks/useOfficialMarketplaceNotification.js';
-import { usePromptsFromgakrcliInChrome } from 'src/hooks/usePromptsFromgakrcliInChrome.js';
+import { usePromptsFromGakrCLIInChrome } from 'src/hooks/usePromptsFromGakrCLIInChrome.js';
 import { getTipToShowOnSpinner, recordShownTip } from 'src/services/tips/tipScheduler.js';
 import type { Theme } from 'src/utils/theme.js';
+import { resolveCriticalInputDialog } from './replFocusedInputDialog.js';
 import { isPromptTypingSuppressionActive } from './replInputSuppression.js';
 import { shouldRunStartupChecks } from './replStartupGates.js';
+import { decideStreamingTextUpdate } from './streamingTextPublish.js';
 import { checkAndDisableBypassPermissionsIfNeeded, checkAndDisableAutoModeIfNeeded, useKickOffCheckAndDisableBypassPermissionsIfNeeded, useKickOffCheckAndDisableAutoModeIfNeeded } from 'src/utils/permissions/bypassPermissionsKillswitch.js';
 import { SandboxManager } from 'src/utils/sandbox/sandbox-adapter.js';
 import { SANDBOX_NETWORK_ACCESS_TOOL_NAME } from 'src/cli/structuredIO.js';
@@ -256,8 +273,8 @@ import { AUTO_MODE_DESCRIPTION } from 'src/components/AutoModeOptInDialog.js';
 import { useLspInitializationNotification } from 'src/hooks/notifs/useLspInitializationNotification.js';
 import { useLspPluginRecommendation } from 'src/hooks/useLspPluginRecommendation.js';
 import { LspRecommendationMenu } from 'src/components/LspRecommendation/LspRecommendationMenu.js';
-import { usegakrcliCodeHintRecommendation } from 'src/hooks/usegakrcliCodeHintRecommendation.js';
-import { PluginHintMenu } from 'src/components/gakrcliCodeHint/PluginHintMenu.js';
+import { useGakrCLICodeHintRecommendation } from 'src/hooks/useGakrCLICodeHintRecommendation.js';
+import { PluginHintMenu } from 'src/components/GakrCLICodeHint/PluginHintMenu.js';
 import { DesktopUpsellStartup, shouldShowDesktopUpsellStartup } from 'src/components/DesktopUpsell/DesktopUpsellStartup.js';
 import { usePluginInstallationStatus } from 'src/hooks/notifs/usePluginInstallationStatus.js';
 import { usePluginAutoupdateNotification } from 'src/hooks/notifs/usePluginAutoupdateNotification.js';
@@ -274,7 +291,6 @@ import { useTeammateLifecycleNotification } from 'src/hooks/notifs/useTeammateSh
 import { useFastModeNotification } from 'src/hooks/notifs/useFastModeNotification.js';
 import { AutoRunIssueNotification, shouldAutoRunIssue, getAutoRunIssueReasonText, getAutoRunCommand, type AutoRunIssueReason } from '../utils/autoRunIssue.js';
 import type { HookProgress } from '../types/hooks.js';
-import { TungstenLiveMonitor } from '../tools/TungstenTool/TungstenLiveMonitor.js';
 /* eslint-disable @typescript-eslint/no-require-imports */
 const WebBrowserPanelModule = feature('WEB_BROWSER_TOOL') ? require('../tools/WebBrowserTool/WebBrowserPanel.js') as typeof import('../tools/WebBrowserTool/WebBrowserPanel.js') : null;
 /* eslint-enable @typescript-eslint/no-require-imports */
@@ -283,7 +299,6 @@ import { useIssueFlagBanner } from '../hooks/useIssueFlagBanner.js';
 import { CompanionSprite, CompanionFloatingBubble, MIN_COLS_FOR_FULL_SPRITE } from '../buddy/CompanionSprite.js';
 import { isBuddyEnabled } from '../buddy/feature.js';
 import { fireCompanionObserver } from '../buddy/observer.js';
-import { DevBar } from '../components/DevBar.js';
 // Session manager removed - using AppState now
 import type { RemoteSessionConfig } from '../remote/RemoteSessionManager.js';
 import { REMOTE_SAFE_COMMANDS } from '../commands.js';
@@ -310,12 +325,13 @@ const HISTORY_STUB = {
 // Window after a user-initiated scroll during which type-into-empty does NOT
 // repin to bottom. Josh Rosen's workflow: GakrCLI emits long output → scroll
 // up to read the start → start typing → before this fix, snapped to bottom.
-// Internal report 1773545449871739
+// https://anthropic.slack.com/archives/C07VBSHV7EV/p1773545449871739
 const RECENT_SCROLL_REPIN_WINDOW_MS = 3000;
 
 // Use LRU cache to prevent unbounded memory growth
 // 100 files should be sufficient for most coding sessions while preventing
 // memory issues when working across many files in large projects
+
 
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
@@ -564,18 +580,22 @@ export type Props = {
   disabled?: boolean;
   // Optional agent definition to use for the main thread
   mainThreadAgentDefinition?: AgentDefinition;
+  // The effective non-agent model to restore when switching to an agent that inherits
+  baseMainLoopModel?: ModelSetting;
+  // True when startup had an explicit model override that agent switching must preserve
+  hasExplicitModelOverride?: boolean;
   // When true, disables all slash commands
   disableSlashCommands?: boolean;
-  // Task list id: when set, enables tasks mode that watches a task list and auto-processes tasks.
-  taskListId?: string;
   // Remote session config for --remote mode (uses CCR as execution engine)
   remoteSessionConfig?: RemoteSessionConfig;
-  // Direct connect config for `GakrCLI connect` mode (connects to a GakrCLI server)
+  // Direct connect config for `gakrcli connect` mode (connects to a gakrcli server)
   directConnectConfig?: DirectConnectConfig;
   // SSH session for `gakrcli ssh` mode (local REPL, remote tools over ssh)
   sshSession?: SSHSession;
   // Thinking configuration to use when thinking is enabled
   thinkingConfig: ThinkingConfig;
+  // Model to fallback to when primary model returns overloaded errors (529)
+  fallbackModel?: string;
 };
 export type Screen = 'prompt' | 'transcript';
 export function REPL({
@@ -598,19 +618,20 @@ export function REPL({
   onTurnComplete,
   disabled = false,
   mainThreadAgentDefinition: initialMainThreadAgentDefinition,
+  baseMainLoopModel = null,
+  hasExplicitModelOverride = false,
   disableSlashCommands = false,
-  taskListId,
   remoteSessionConfig,
   directConnectConfig,
   sshSession,
-  thinkingConfig
+  thinkingConfig,
+  fallbackModel
 }: Props): React.ReactNode {
   const isRemoteSession = !!remoteSessionConfig;
 
   // Env-var gates hoisted to mount-time — isEnvTruthy does toLowerCase+trim+
   // includes, and these were on the render path (hot during PageUp spam).
   const titleDisabled = useMemo(() => isEnvTruthy(process.env.GAKR_CODE_DISABLE_TERMINAL_TITLE), []);
-  const moreRightEnabled = useMemo(() => "external" === 'ant' && isEnvTruthy(process.env.GAKR_MORERIGHT), []);
   const disableVirtualScroll = useMemo(() => isEnvTruthy(process.env.GAKR_CODE_DISABLE_VIRTUAL_SCROLL), []);
   const disableMessageActions = feature('MESSAGE_ACTIONS') ?
     // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
@@ -640,6 +661,29 @@ export function REPL({
   const ultraplanLaunchPending = useAppState(s => s.ultraplanLaunchPending);
   const viewingAgentTaskId = useAppState(s => s.viewingAgentTaskId);
   const setAppState = useSetAppState();
+  const autoCompactTrackingBySessionRef = useRef(new Map<ReturnType<typeof getSessionId>, AutoCompactTrackingState>());
+  const getAutoCompactTrackingForSession = useCallback((sessionId: ReturnType<typeof getSessionId>) => autoCompactTrackingBySessionRef.current.get(sessionId), []);
+  const setAutoCompactTrackingForSession = useCallback((sessionId: ReturnType<typeof getSessionId>, tracking: AutoCompactTrackingState | undefined) => {
+    if (tracking) {
+      autoCompactTrackingBySessionRef.current.set(sessionId, tracking);
+    } else {
+      autoCompactTrackingBySessionRef.current.delete(sessionId);
+    }
+  }, []);
+  const setAutoCompactTrackingForSessionIfUnchanged = useCallback((sessionId: ReturnType<typeof getSessionId>, expected: AutoCompactTrackingState | undefined, tracking: AutoCompactTrackingState | undefined) => {
+    if (autoCompactTrackingBySessionRef.current.get(sessionId) !== expected) {
+      return false;
+    }
+    if (tracking) {
+      autoCompactTrackingBySessionRef.current.set(sessionId, tracking);
+    } else {
+      autoCompactTrackingBySessionRef.current.delete(sessionId);
+    }
+    return true;
+  }, []);
+  const resetAutoCompactTracking = useCallback(() => {
+    autoCompactTrackingBySessionRef.current.clear();
+  }, []);
 
   // Bootstrap: retained local_agent that hasn't loaded disk yet → read
   // sidechain JSONL and UUID-merge with whatever stream has appended so far.
@@ -674,6 +718,36 @@ export function REPL({
   const store = useAppStateStore();
   const terminal = useTerminalNotification();
   const mainLoopModel = useMainLoopModel();
+  const appMainLoopModel = useAppState(s => s.mainLoopModel);
+  const appMainLoopModelForSession = useAppState(s => s.mainLoopModelForSession);
+  const initialAgentModelSelection = !hasExplicitModelOverride && initialMainThreadAgentDefinition?.model && initialMainThreadAgentDefinition.model !== 'inherit' ? getActiveSessionAgentModelSelection({
+    agent: initialMainThreadAgentDefinition,
+    baseMainLoopModel,
+    hasExplicitModelOverride,
+    hasAgentManagedModel: false
+  }) : undefined;
+  const explicitModelOverrideRef = useRef(hasExplicitModelOverride);
+  const baseMainLoopModelRef = useRef<ModelSetting | undefined>(baseMainLoopModel);
+  const agentManagedModelRef = useRef<ModelSetting | undefined>(initialAgentModelSelection?.shouldUpdateModel ? initialAgentModelSelection.mainLoopModelForSession : undefined);
+  const previousMainLoopModelForSessionRef = useRef(appMainLoopModelForSession);
+  const didTrackInitialModelStateRef = useRef(false);
+  useEffect(() => {
+    const previousMainLoopModelForSession = previousMainLoopModelForSessionRef.current;
+    previousMainLoopModelForSessionRef.current = appMainLoopModelForSession;
+
+    if (!didTrackInitialModelStateRef.current) {
+      didTrackInitialModelStateRef.current = true;
+      return;
+    }
+
+    const currentEffectiveModelSetting = appMainLoopModelForSession ?? appMainLoopModel;
+    const clearedAgentManagedSessionModel = previousMainLoopModelForSession !== null && appMainLoopModelForSession === null;
+    if (!clearedAgentManagedSessionModel && currentEffectiveModelSetting === agentManagedModelRef.current) return;
+
+    explicitModelOverrideRef.current = true;
+    baseMainLoopModelRef.current = currentEffectiveModelSetting;
+    agentManagedModelRef.current = undefined;
+  }, [appMainLoopModel, appMainLoopModelForSession]);
 
   // Note: standaloneAgentContext is initialized in main.tsx (via initialState) or
   // ResumeConversation.tsx (via setAppState before rendering REPL) to avoid
@@ -733,13 +807,6 @@ export function REPL({
   const [ideToInstallExtension, setIDEToInstallExtension] = useState<IdeType | null>(null);
   const [ideInstallationStatus, setIDEInstallationStatus] = useState<IDEExtensionInstallationStatus | null>(null);
   const [showIdeOnboarding, setShowIdeOnboarding] = useState(false);
-  // Dead code elimination: model switch callout state (internal-only)
-  const [showModelSwitchCallout, setShowModelSwitchCallout] = useState(() => {
-    if ("external" === 'ant') {
-      return shouldShowAntModelSwitch();
-    }
-    return false;
-  });
   const [showEffortCallout, setShowEffortCallout] = useState(() => shouldShowEffortCallout(mainLoopModel));
   const showRemoteCallout = useAppState(s => s.showRemoteCallout);
   const [showDesktopUpsellStartup, setShowDesktopUpsellStartup] = useState(() => shouldShowDesktopUpsellStartup());
@@ -762,7 +829,6 @@ export function REPL({
   useFastModeNotification();
   useDeprecationWarningNotification(mainLoopModel);
   useNpmDeprecationNotification();
-  useAntOrgWarningNotification();
   useInstallMessages();
   useChromeExtensionNotification();
   useOfficialMarketplaceNotification();
@@ -775,7 +841,8 @@ export function REPL({
   const {
     recommendation: hintRecommendation,
     handleResponse: handleHintResponse
-  } = usegakrcliCodeHintRecommendation();
+  } = useGakrCLICodeHintRecommendation();
+  const searchExtraToolsHint = useSearchExtraToolsHint();
 
   // Memoize the combined initial tools array to prevent reference changes
   const combinedInitialTools = useMemo(() => {
@@ -799,9 +866,9 @@ export function REPL({
   // Deferring startup checks is handled below (after promptTypingSuppressionActive
   // is declared) to avoid temporal dead zone issues.
 
-  // Allow GakrClI in Chrome MCP to send prompts through MCP notifications
+  // Allow GakrCLI in Chrome MCP to send prompts through MCP notifications
   // and sync permission mode changes to the Chrome extension
-  usePromptsFromgakrcliInChrome(isRemoteSession ? EMPTY_MCP_CLIENTS : mcpClients, toolPermissionContext.mode);
+  usePromptsFromGakrCLIInChrome(isRemoteSession ? EMPTY_MCP_CLIENTS : mcpClients, toolPermissionContext.mode);
 
   // Initialize swarm features: teammate hooks and context
   // Handles both fresh spawns and resumed teammate sessions
@@ -921,6 +988,10 @@ export function REPL({
   // external loading by setIsExternalLoading.
   const isLoading = isQueryActive || isExternalLoading;
 
+  // Track whether the last query was aborted (Ctrl+C / Escape).
+  // useGoalContinuation reads this to avoid auto-continuing after a user abort.
+  const [wasAborted, setWasAborted] = useState(false);
+
   // Elapsed time is computed by SpinnerWithVerb from these refs on each
   // animation frame, avoiding a useInterval that re-renders the entire REPL.
   const [userInputOnProcessing, setUserInputOnProcessingRaw] = React.useState<string | undefined>(undefined);
@@ -1013,25 +1084,6 @@ export function REPL({
           });
         }
       });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  const [showUndercoverCallout, setShowUndercoverCallout] = useState(false);
-  useEffect(() => {
-    if ("external" === 'ant') {
-      void (async () => {
-        // Wait for repo classification to settle (memoized, no-op if primed).
-        const {
-          isInternalModelRepo
-        } = await import('../utils/commitAttribution.js');
-        await isInternalModelRepo();
-        const {
-          shouldShowUndercoverAutoNotice
-        } = await import('../utils/undercover.js');
-        if (shouldShowUndercoverAutoNotice()) {
-          setShowUndercoverCallout(true);
-        }
-      })();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1459,45 +1511,41 @@ export function REPL({
   // Ref instead of state to avoid triggering React re-renders on every
   // streaming text_delta. The spinner reads this via its animation timer.
   const responseLengthRef = useRef(0);
-  // API performance metrics ref for internal-only spinner display (TTFT/OTPS).
-  // Accumulates metrics from all API requests in a turn for P50 aggregation.
-  const apiMetricsRef = useRef<Array<{
-    ttftMs: number;
-    firstTokenTime: number;
-    lastTokenTime: number;
-    responseLengthBaseline: number;
-    // Tracks responseLengthRef at the time of the last content addition.
-    // Updated by both streaming deltas and subagent message content.
-    // lastTokenTime is also updated at the same time, so the OTPS
-    // denominator correctly includes subagent processing time.
-    endResponseLength: number;
-  }>>([]);
   const setResponseLength = useCallback((f: (prev: number) => number) => {
-    const prev = responseLengthRef.current;
-    responseLengthRef.current = f(prev);
-    // When content is added (not a compaction reset), update the latest
-    // metrics entry so OTPS reflects all content generation activity.
-    // Updating lastTokenTime here ensures the denominator includes both
-    // streaming time AND subagent execution time, preventing inflation.
-    if (responseLengthRef.current > prev) {
-      const entries = apiMetricsRef.current;
-      if (entries.length > 0) {
-        const lastEntry = entries.at(-1)!;
-        lastEntry.lastTokenTime = Date.now();
-        lastEntry.endResponseLength = responseLengthRef.current;
-      }
-    }
+    responseLengthRef.current = f(responseLengthRef.current);
   }, []);
 
-  // Streaming text display: set state directly per delta (Ink's 16ms render
-  // throttle batches rapid updates). Cleared on message arrival (messages.ts)
-  // so displayedMessages switches from deferredMessages to messages atomically.
+  // Streaming text display. streamingTextRef holds the full accumulated text
+  // (eager, per delta); streamingText state is only published when the visible
+  // (newline-truncated) preview actually changes. The Ink root is a LegacyRoot,
+  // so every setState from a stream event commits a synchronous REPL render —
+  // and because the preview hides the in-progress trailing line, deltas between
+  // newlines never change anything on screen. Publishing only on newline (and
+  // on clear) drops those no-op renders entirely under fast streams
+  // (100-300 deltas/sec) while keeping the displayed text byte-identical.
+  // Cleared on message arrival (messages.ts) so displayedMessages switches from
+  // deferredMessages to messages atomically.
   const [streamingText, setStreamingText] = useState<string | null>(null);
+  const streamingTextRef = useRef<string | null>(null);
+  const lastFlushedStreamingVisibleRef = useRef<string | null>(null);
   const reducedMotion = useAppState(s => s.settings.prefersReducedMotion) ?? false;
   const showStreamingText = !reducedMotion && !hasCursorUpViewportYankBug();
   const onStreamingText = useCallback((f: (current: string | null) => string | null) => {
-    if (!showStreamingText) return;
-    setStreamingText(f);
+    // decideStreamingTextUpdate keeps the ref current even when the live preview
+    // is disabled (reduced-motion / cursor-up yank bug) — the Esc handler
+    // recovers partial assistant output from it — and publishes to state only
+    // when the newline-truncated visible preview changes.
+    const decision = decideStreamingTextUpdate(
+      streamingTextRef.current,
+      f,
+      showStreamingText,
+      lastFlushedStreamingVisibleRef.current,
+    );
+    streamingTextRef.current = decision.nextText;
+    if (decision.publish) {
+      lastFlushedStreamingVisibleRef.current = decision.nextVisible;
+      setStreamingText(decision.nextText);
+    }
   }, [showStreamingText]);
 
   // Hide the in-progress source line so text streams line-by-line, not
@@ -1509,6 +1557,12 @@ export function REPL({
   const [spinnerMessage, setSpinnerMessage] = useState<string | null>(null);
   const [spinnerColor, setSpinnerColor] = useState<keyof Theme | null>(null);
   const [spinnerShimmerColor, setSpinnerShimmerColor] = useState<keyof Theme | null>(null);
+  const [compactProgressRatio, setCompactProgressRatio] = useState<number | null>(null);
+  const [resumeCompactPending, setResumeCompactPending] = useState<{
+    tokenCount: number;
+    model: string;
+    messages: MessageType[];
+  } | null>(null);
   const [isMessageSelectorVisible, setIsMessageSelectorVisible] = useState(false);
   const [messageSelectorPreselect, setMessageSelectorPreselect] = useState<UserMessage | undefined>(undefined);
   const [showCostDialog, setShowCostDialog] = useState(false);
@@ -1605,16 +1659,19 @@ export function REPL({
     // External loading (remote/backgrounding) is reset separately by those hooks.
     setIsExternalLoading(false);
     setUserInputOnProcessing(undefined);
+    // Clear any in-flight compaction progress so an aborted/errored compaction
+    // does not leave the progress bar rendered in the idle UI.
+    setCompactProgressRatio(null);
     responseLengthRef.current = 0;
-    apiMetricsRef.current = [];
+    streamingTextRef.current = null;
+    lastFlushedStreamingVisibleRef.current = null;
     setStreamingText(null);
     setStreamingToolUses([]);
     setSpinnerMessage(null);
     setSpinnerColor(null);
     setSpinnerShimmerColor(null);
     pickNewSpinnerTip();
-    endInteractionSpan();
-    // Speculative bash classifier checks are only valid for the current
+        // Speculative bash classifier checks are only valid for the current
     // turn's commands — clear after each turn to avoid accumulating
     // Promise chains for unconsumed checks (denied/aborted paths).
     clearSpeculativeChecks();
@@ -1692,17 +1749,31 @@ export function REPL({
     const inProgressToolUses = lastAssistant.message.content.filter(b => b.type === 'tool_use' && inProgressToolUseIDs.has(b.id));
     return inProgressToolUses.length > 0 && inProgressToolUses.every(b => b.type === 'tool_use' && b.name === SLEEP_TOOL_NAME);
   }, [messages, inProgressToolUseIDs]);
-  const {
-    onBeforeQuery: mrOnBeforeQuery,
-    onTurnComplete: mrOnTurnComplete,
-    render: mrRender
-  } = useMoreRight({
-    enabled: moreRightEnabled,
-    setMessages,
-    inputValue,
-    setInputValue,
-    setToolJSX
-  });
+  const mrOnBeforeQuery = useCallback(async (_input: string, _allMessages: MessageType[], _newMessageCount: number) => true, []);
+  const mrOnTurnComplete = useCallback(async (_allMessages: MessageType[], _aborted: boolean) => { }, []);
+  const mrRender = useCallback(() => null, []);
+  const abortTimedOutQuery = useCallback(() => {
+    const activeAbortController = abortControllerRef.current;
+    if (activeAbortController && !activeAbortController.signal.aborted) {
+      activeAbortController.abort('query-timeout');
+    }
+    if (feature('TOKEN_BUDGET')) {
+      snapshotOutputTokensForTurn(null);
+    }
+
+    // QueryGuard calls this before forceEnd(); defer UI cleanup until after
+    // the guard has released so the normal stale-generation finally path skips.
+    queueMicrotask(() => {
+      resetLoadingState();
+      setAbortController(null);
+      void mrOnTurnComplete(messagesRef.current, true);
+    });
+  }, [mrOnTurnComplete, resetLoadingState]);
+
+  useEffect(() => {
+    return queryGuard.setTimeoutHandler(abortTimedOutQuery);
+  }, [abortTimedOutQuery, queryGuard]);
+
   const showSpinner = (!toolJSX || toolJSX.showSpinner === true) && toolUseConfirmQueue.length === 0 && promptQueue.length === 0 && (
     // Show spinner during input processing, API call, while teammates are running,
     // or while pending task notifications are queued (prevents spinner bounce between consecutive notifications)
@@ -1722,7 +1793,6 @@ export function REPL({
   // This is used to prevent the survey from opening while prompts are active
   const hasActivePrompt = toolUseConfirmQueue.length > 0 || promptQueue.length > 0 || sandboxPermissionRequestQueue.length > 0 || elicitation.queue.length > 0 || workerSandboxPermissions.queue.length > 0;
   const feedbackSurveyOriginal = useFeedbackSurvey(messages, isLoading, submitCount, 'session', hasActivePrompt);
-  const skillImprovementSurvey = useSkillImprovementSurvey(setMessages);
   const showIssueFlagBanner = useIssueFlagBanner(messages, submitCount);
 
   // Wrap feedback survey handler to trigger auto-run /issue
@@ -1751,8 +1821,10 @@ export function REPL({
     enabled: !isRemoteSession
   });
 
-  // Frustration detection: show transcript sharing prompt after detecting frustrated messages
-  const frustrationDetection = useFrustrationDetection(messages, isLoading, hasActivePrompt, feedbackSurvey.state !== 'closed' || postCompactSurvey.state !== 'closed' || memorySurvey.state !== 'closed');
+  const frustrationDetection = useMemo(() => ({
+    state: 'closed' as const,
+    handleTranscriptSelect: () => { }
+  }), []);
 
   // Initialize IDE integration
   useIDEIntegration({
@@ -1769,6 +1841,7 @@ export function REPL({
   const resume = useCallback(async (sessionId: UUID, log: LogOption, entrypoint: ResumeEntrypoint) => {
     const resumeStart = performance.now();
     try {
+      resetAutoCompactTracking();
       // Deserialize messages to properly clean up the conversation
       // This filters unresolved tool uses and adds a synthetic assistant message if needed
       const messages = deserializeMessages(log.messages);
@@ -1975,6 +2048,16 @@ export function REPL({
 
       // Clear input to ensure no residual state
       setInputValue('');
+
+      // Prompt to compact if the resumed session is large
+      if (feature('RESUME_COMPACT_PROMPT')) {
+        const { shouldPromptCompactOnResume } = await import('../services/compact/resumeCompactPrompt.js');
+        if (shouldPromptCompactOnResume(hydratedMessages, mainLoopModel, false)) {
+          const tokenCount = (await import('../utils/tokens.js')).tokenCountWithEstimation(hydratedMessages);
+          setResumeCompactPending({ tokenCount, model: mainLoopModel, messages: hydratedMessages });
+        }
+      }
+
       logEvent('tengu_session_resumed', {
         entrypoint: entrypoint as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
         success: true,
@@ -1987,13 +2070,17 @@ export function REPL({
       });
       throw error;
     }
-  }, [resetLoadingState, setAppState]);
+  }, [resetLoadingState, resetAutoCompactTracking, setAppState]);
 
   // Lazy init: useRef(createX()) would call createX on every render and
   // discard the result. LRUCache construction inside FileStateCache is
   // expensive (~170ms), so we use useState's lazy initializer to create
   // it exactly once, then feed that stable reference into useRef.
-  const [initialReadFileState] = useState(() => createFileStateCacheWithSizeLimit(READ_FILE_STATE_CACHE_SIZE));
+  const [initialReadFileState] = useState(() => {
+    const cache = createFileStateCacheWithSizeLimit(READ_FILE_STATE_CACHE_SIZE)
+    registerPrunableCache(cache)
+    return cache
+  });
   const readFileState = useRef(initialReadFileState);
   const bashTools = useRef(new Set<string>());
   const bashToolsProcessedIdx = useRef(0);
@@ -2009,7 +2096,7 @@ export function REPL({
   const loadedNestedMemoryPathsRef = useRef(new Set<string>());
 
   // Helper to restore read file state from messages (used for resume flows)
-  // This allows Gakrcli to edit files that were read in previous sessions
+  // This allows GakrCLI to edit files that were read in previous sessions
   const restoreReadFileState = useCallback((messages: MessageType[], cwd: string) => {
     const extracted = extractReadFilesFromMessages(messages, cwd, READ_FILE_STATE_CACHE_SIZE);
     readFileState.current = mergeFileStateCaches(readFileState.current, extracted);
@@ -2029,6 +2116,20 @@ export function REPL({
         getAppState: () => store.getState(),
         setAppState
       });
+      // Startup resume paths (--continue, --resume <id>, ResumeConversation
+      // screen) install initialMessages via the initial useState rather than
+      // the resume() callback at line ~2024, so schedule the compact prompt
+      // here too. Uses the already-hydrated `messages` state, which mirrors
+      // the hydration applied in resume().
+      if (feature('RESUME_COMPACT_PROMPT')) {
+        void (async () => {
+          const { shouldPromptCompactOnResume } = await import('../services/compact/resumeCompactPrompt.js');
+          if (shouldPromptCompactOnResume(messages, mainLoopModel, false)) {
+            const tokenCount = (await import('../utils/tokens.js')).tokenCountWithEstimation(messages);
+            setResumeCompactPending({ tokenCount, model: mainLoopModel, messages });
+          }
+        })();
+      }
     }
     // Only run on mount - initialMessages shouldn't change during component lifetime
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2056,37 +2157,36 @@ export function REPL({
   // Permission and interactive dialogs can show even when toolJSX is set,
   // as long as shouldContinueAnimation is true. This prevents deadlocks when
   // agents set background hints while waiting for user interaction.
-  function getFocusedInputDialog(): 'message-selector' | 'sandbox-permission' | 'tool-permission' | 'prompt' | 'worker-sandbox-permission' | 'elicitation' | 'cost' | 'idle-return' | 'init-onboarding' | 'ide-onboarding' | 'model-switch' | 'undercover-callout' | 'effort-callout' | 'remote-callout' | 'lsp-recommendation' | 'plugin-hint' | 'desktop-upsell' | 'ultraplan-choice' | 'ultraplan-launch' | undefined {
+  function getFocusedInputDialog(): 'message-selector' | 'sandbox-permission' | 'tool-permission' | 'prompt' | 'worker-sandbox-permission' | 'elicitation' | 'cost' | 'idle-return' | 'init-onboarding' | 'ide-onboarding' | 'effort-callout' | 'remote-callout' | 'lsp-recommendation' | 'plugin-hint' | 'search-extra-tools-hint' | 'desktop-upsell' | 'ultraplan-choice' | 'ultraplan-launch' | 'resume-compact' | undefined {
     // Exit states always take precedence
     if (isExiting || exitFlow) return undefined;
 
     // High priority dialogs (always show regardless of typing)
     if (isMessageSelectorVisible) return 'message-selector';
 
-    // Suppress interrupt dialogs while user is actively typing
-    if (promptTypingSuppressionActive) return undefined;
-    if (sandboxPermissionRequestQueue[0]) return 'sandbox-permission';
+    // Resume compact prompt — shown after resuming a large session
+    if (resumeCompactPending) return 'resume-compact';
 
-    // Permission/interactive dialogs (show unless blocked by toolJSX)
-    const allowDialogsWithAnimation = !toolJSX || toolJSX.shouldContinueAnimation;
-    if (allowDialogsWithAnimation && toolUseConfirmQueue[0]) return 'tool-permission';
-    if (allowDialogsWithAnimation && promptQueue[0]) return 'prompt';
-    // Worker sandbox permission prompts (network access) from swarm workers
-    if (allowDialogsWithAnimation && workerSandboxPermissions.queue[0]) return 'worker-sandbox-permission';
-    if (allowDialogsWithAnimation && elicitation.queue[0]) return 'elicitation';
-    if (allowDialogsWithAnimation && showingCostDialog) return 'cost';
+    const allowDialogsWithAnimation = !toolJSX || !!toolJSX.shouldContinueAnimation;
+    const criticalDialog = resolveCriticalInputDialog({
+      sandboxPermissionPending: !!sandboxPermissionRequestQueue[0],
+      toolUseConfirmPending: !!toolUseConfirmQueue[0],
+      promptPending: !!promptQueue[0],
+      workerSandboxPermissionPending: !!workerSandboxPermissions.queue[0],
+      elicitationPending: !!elicitation.queue[0],
+      showingCostDialog,
+      allowDialogsWithAnimation,
+    });
+    if (criticalDialog) return criticalDialog;
+
+    // Suppress lower-priority interrupt dialogs while user is actively typing
+    if (promptTypingSuppressionActive) return undefined;
     if (allowDialogsWithAnimation && idleReturnPending) return 'idle-return';
     if (feature('ULTRAPLAN') && allowDialogsWithAnimation && !isLoading && ultraplanPendingChoice) return 'ultraplan-choice';
     if (feature('ULTRAPLAN') && allowDialogsWithAnimation && !isLoading && ultraplanLaunchPending) return 'ultraplan-launch';
 
     // Onboarding dialogs (special conditions)
     if (allowDialogsWithAnimation && showIdeOnboarding) return 'ide-onboarding';
-
-    // Model switch callout (internal-only, eliminated from external builds)
-    if ("external" === 'ant' && allowDialogsWithAnimation && showModelSwitchCallout) return 'model-switch';
-
-    // Undercover auto-enable explainer (internal-only, eliminated from external builds)
-    if ("external" === 'ant' && allowDialogsWithAnimation && showUndercoverCallout) return 'undercover-callout';
 
     // Effort callout (shown once for Opus 4.6 users when effort is enabled)
     if (allowDialogsWithAnimation && showEffortCallout) return 'effort-callout';
@@ -2101,14 +2201,14 @@ export function REPL({
     // Plugin hint from CLI/SDK stderr (same priority band as LSP rec)
     if (allowDialogsWithAnimation && hintRecommendation && startupChecksStartedRef.current) return 'plugin-hint';
 
+    // Tool search hint (discovered deferred tools relevant to current query)
+    if (allowDialogsWithAnimation && searchExtraToolsHint.visible && startupChecksStartedRef.current) return 'search-extra-tools-hint';
+
     // Desktop app upsell (max 3 launches, lowest priority)
     if (allowDialogsWithAnimation && showDesktopUpsellStartup && startupChecksStartedRef.current) return 'desktop-upsell';
     return undefined;
   }
   const focusedInputDialog = getFocusedInputDialog();
-
-  // True when permission prompts exist but are hidden because the user is typing
-  const hasSuppressedDialogs = promptTypingSuppressionActive && (sandboxPermissionRequestQueue[0] || toolUseConfirmQueue[0] || promptQueue[0] || workerSandboxPermissions.queue[0] || elicitation.queue[0] || showingCostDialog);
 
   // Keep ref in sync so timer callbacks can read the current value
   focusedInputDialogRef.current = focusedInputDialog;
@@ -2200,6 +2300,9 @@ export function REPL({
     // defined but .aborted === true), so isActive becomes false if no other
     // activating conditions hold — leaving the Escape keybinding inactive.
     setAbortController(null);
+
+    // Mark aborted for useGoalContinuation to skip auto-continue
+    setWasAborted(true);
 
     // forceEnd() skips the finally path — fire directly (aborted=true).
     void mrOnTurnComplete(messagesRef.current, true);
@@ -2309,7 +2412,7 @@ export function REPL({
 
       // When the REPL bridge is connected, also forward the sandbox
       // permission request as a can_use_tool control_request so the
-      // remote user (e.g. on gakr.ai) can approve it too.
+      // remote user (e.g. on gakrcli.ai) can approve it too.
       if (feature('BRIDGE_MODE')) {
         const bridgeCallbacks = store.getState().replBridgePermissionCallbacks;
         if (bridgeCallbacks) {
@@ -2525,29 +2628,23 @@ export function REPL({
       dynamicSkillDirTriggers: new Set<string>(),
       discoveredSkillNames: discoveredSkillNamesRef.current,
       setResponseLength,
-      pushApiMetricsEntry: "external" === 'ant' ? (ttftMs: number) => {
-        const now = Date.now();
-        const baseline = responseLengthRef.current;
-        apiMetricsRef.current.push({
-          ttftMs,
-          firstTokenTime: now,
-          lastTokenTime: now,
-          responseLengthBaseline: baseline,
-          endResponseLength: baseline
-        });
-      } : undefined,
       setStreamMode,
       onCompactProgress: event => {
         switch (event.type) {
           case 'hooks_start':
-            setSpinnerColor('GakrcliBlue_FOR_SYSTEM_SPINNER');
+            setSpinnerColor('gakrcliBlue_FOR_SYSTEM_SPINNER');
             setSpinnerShimmerColor('gakrcliBlueShimmer_FOR_SYSTEM_SPINNER');
             setSpinnerMessage(event.hookType === 'pre_compact' ? 'Running PreCompact hooks\u2026' : event.hookType === 'post_compact' ? 'Running PostCompact hooks\u2026' : 'Running SessionStart hooks\u2026');
             break;
           case 'compact_start':
             setSpinnerMessage('Compacting conversation');
+            setCompactProgressRatio(0);
+            break;
+          case 'compact_progress':
+            setCompactProgressRatio(event.ratio);
             break;
           case 'compact_end':
+            setCompactProgressRatio(null);
             setSpinnerMessage(null);
             setSpinnerColor(null);
             setSpinnerShimmerColor(null);
@@ -2560,6 +2657,31 @@ export function REPL({
       },
       resume,
       setConversationId,
+      setActiveSessionAgent: agent => {
+        const modelSelection = getActiveSessionAgentModelSelection({
+          agent,
+          baseMainLoopModel: baseMainLoopModelRef.current,
+          hasExplicitModelOverride: explicitModelOverrideRef.current,
+          hasAgentManagedModel: agentManagedModelRef.current !== undefined
+        });
+        setMainThreadAgentDefinition(agent);
+        setMainThreadAgentType(agent.agentType);
+        saveAgentSetting(agent.agentType);
+        if (modelSelection.shouldUpdateModel) {
+          agentManagedModelRef.current = modelSelection.mainLoopModelForSession;
+          setMainLoopModelOverride(modelSelection.mainLoopModelForSession);
+          notifySessionMetadataChanged({
+            model: modelSelection.mainLoopModelForSession
+          });
+        }
+        setAppState(prev => ({
+          ...prev,
+          agent: agent.agentType,
+          ...(modelSelection.shouldUpdateModel ? {
+            mainLoopModelForSession: modelSelection.mainLoopModelForSession
+          } : {})
+        }));
+      },
       requestPrompt: feature('HOOK_PROMPTS') ? requestPrompt : undefined,
       contentReplacementState: contentReplacementStateRef.current,
       syncToolResultReplacements
@@ -2568,6 +2690,7 @@ export function REPL({
 
   // Session backgrounding (Ctrl+B to background/foreground)
   const handleBackgroundQuery = useCallback(() => {
+    const backgroundSessionId = getSessionId();
     // Stop the foreground query so the background one takes over
     abortController?.abort('background');
     // Aborting subagents may produce task-completed notifications.
@@ -2608,14 +2731,19 @@ export function REPL({
           systemContext,
           canUseTool,
           toolUseContext,
-          querySource: getQuerySourceForREPL()
+          fallbackModel,
+          querySource: getQuerySourceForREPL(),
+          autoCompactTracking: getAutoCompactTrackingForSession(backgroundSessionId),
+          onAutoCompactTrackingChange: tracking => {
+            setAutoCompactTrackingForSession(backgroundSessionId, tracking);
+          }
         },
         description: terminalTitle,
         setAppState,
         agentDefinition: mainThreadAgentDefinition
       });
     })();
-  }, [abortController, mainLoopModel, toolPermissionContext, mainThreadAgentDefinition, getToolUseContext, customSystemPrompt, appendSystemPrompt, canUseTool, setAppState]);
+  }, [abortController, mainLoopModel, toolPermissionContext, mainThreadAgentDefinition, getToolUseContext, customSystemPrompt, appendSystemPrompt, canUseTool, setAppState, getAutoCompactTrackingForSession, setAutoCompactTrackingForSession, fallbackModel]);
   const {
     handleBackgroundSession
   } = useSessionBackgrounding({
@@ -2683,24 +2811,12 @@ export function REPL({
         }
       }
     }, newContent => {
-      // setResponseLength handles updating both responseLengthRef (for
-      // spinner animation) and apiMetricsRef (endResponseLength/lastTokenTime
-      // for OTPS). No separate metrics update needed here.
+      // setResponseLength updates responseLengthRef for spinner animation.
       setResponseLength(length => length + newContent.length);
     }, setStreamMode, setStreamingToolUses, tombstonedMessage => {
       setMessages(oldMessages => oldMessages.filter(m => m !== tombstonedMessage));
       void removeTranscriptMessage(tombstonedMessage.uuid);
-    }, setStreamingThinking, metrics => {
-      const now = Date.now();
-      const baseline = responseLengthRef.current;
-      apiMetricsRef.current.push({
-        ...metrics,
-        firstTokenTime: now,
-        lastTokenTime: now,
-        responseLengthBaseline: baseline,
-        endResponseLength: baseline
-      });
-    }, onStreamingText);
+    }, setStreamingThinking, undefined, onStreamingText);
   }, [setMessages, setResponseLength, setStreamMode, setStreamingToolUses, setStreamingThinking, onStreamingText]);
   const onQueryImpl = useCallback(async (messagesIncludingNewMessages: MessageType[], newMessages: MessageType[], abortController: AbortController, shouldQuery: boolean, additionalAllowedTools: string[], mainLoopModelParam: string, effort?: EffortValue) => {
     // Prepare IDE integration for new prompt. Read mcpClients fresh from
@@ -2715,7 +2831,7 @@ export function REPL({
       }
     }
 
-    // Mark onboarding as complete when any user message is sent to Gakrcli
+    // Mark onboarding as complete when any user message is sent to GakrCLI
     void maybeMarkProjectOnboardingComplete();
 
     // Extract a session title from the first real user message. One-shot
@@ -2724,7 +2840,7 @@ export function REPL({
     // which was broken by SessionStart hook messages (prepended via
     // useDeferredHookMessages) and attachment messages (appended by
     // processTextPrompt) — both pushed length past 1 on turn one, so the
-    // title silently fell through to the "GakrCLI" default.
+    // title silently fell through to the "GakrCLI Code" default.
     if (!titleDisabled && !sessionTitle && !agentTitle && !haikuTitleAttemptedRef.current) {
       const firstUserMessage = newMessages.find(m => m.type === 'user' && !m.isMeta);
       const text = firstUserMessage?.type === 'user' ? getContentText(firstUserMessage.message.content) : null;
@@ -2776,6 +2892,7 @@ export function REPL({
       // handleMessageFromStream. Clear context-blocked if a compact boundary
       // is present so proactive ticks resume after compaction.
       if (newMessages.some(isCompactBoundaryMessage)) {
+        setAutoCompactTrackingForSession(getSessionId(), undefined);
         // Bump conversationId so Messages.tsx row keys change and
         // stale memoized rows remount with post-compact content.
         setConversationId(randomUUID());
@@ -2788,6 +2905,8 @@ export function REPL({
       return;
     }
     const toolUseContext = getToolUseContext(messagesIncludingNewMessages, newMessages, abortController, mainLoopModelParam);
+    const querySessionId = getSessionId();
+    const queryAutoCompactTracking = getAutoCompactTrackingForSession(querySessionId);
     // getToolUseContext reads tools/mcpClients fresh from store.getState()
     // (via computeTools/mergeClients). Use those rather than the closure-
     // captured `tools`/`mcpClients` — useManageMCPConnections may have
@@ -2834,6 +2953,7 @@ export function REPL({
     resetTurnHookDuration();
     resetTurnToolDuration();
     resetTurnClassifierDuration();
+    let expectedAutoCompactTracking = queryAutoCompactTracking;
     for await (const event of query({
       messages: messagesIncludingNewMessages,
       systemPrompt,
@@ -2841,7 +2961,14 @@ export function REPL({
       systemContext,
       canUseTool,
       toolUseContext,
-      querySource: getQuerySourceForREPL()
+      querySource: getQuerySourceForREPL(),
+      fallbackModel,
+      autoCompactTracking: queryAutoCompactTracking,
+      onAutoCompactTrackingChange: tracking => {
+        if (setAutoCompactTrackingForSessionIfUnchanged(querySessionId, expectedAutoCompactTracking, tracking)) {
+          expectedAutoCompactTracking = tracking;
+        }
+      }
     })) {
       onQueryEvent(event);
     }
@@ -2853,41 +2980,6 @@ export function REPL({
     }
     queryCheckpoint('query_end');
 
-    // Capture internal-only API metrics before resetLoadingState clears the ref.
-    // For multi-request turns (tool use loops), compute P50 across all requests.
-    if ("external" === 'ant' && apiMetricsRef.current.length > 0) {
-      const entries = apiMetricsRef.current;
-      const ttfts = entries.map(e => e.ttftMs);
-      // Compute per-request OTPS using only active streaming time and
-      // streaming-only content. endResponseLength tracks content added by
-      // streaming deltas only, excluding subagent/compaction inflation.
-      const otpsValues = entries.map(e => {
-        const delta = Math.round((e.endResponseLength - e.responseLengthBaseline) / 4);
-        const samplingMs = e.lastTokenTime - e.firstTokenTime;
-        return samplingMs > 0 ? Math.round(delta / (samplingMs / 1000)) : 0;
-      });
-      const isMultiRequest = entries.length > 1;
-      const hookMs = getTurnHookDurationMs();
-      const hookCount = getTurnHookCount();
-      const toolMs = getTurnToolDurationMs();
-      const toolCount = getTurnToolCount();
-      const classifierMs = getTurnClassifierDurationMs();
-      const classifierCount = getTurnClassifierCount();
-      const turnMs = Date.now() - loadingStartTimeRef.current;
-      setMessages(prev => [...prev, createApiMetricsMessage({
-        ttftMs: isMultiRequest ? median(ttfts) : ttfts[0]!,
-        otps: isMultiRequest ? median(otpsValues) : otpsValues[0]!,
-        isP50: isMultiRequest,
-        hookDurationMs: hookMs > 0 ? hookMs : undefined,
-        hookCount: hookCount > 0 ? hookCount : undefined,
-        turnDurationMs: turnMs > 0 ? turnMs : undefined,
-        toolDurationMs: toolMs > 0 ? toolMs : undefined,
-        toolCount: toolCount > 0 ? toolCount : undefined,
-        classifierDurationMs: classifierMs > 0 ? classifierMs : undefined,
-        classifierCount: classifierCount > 0 ? classifierCount : undefined,
-        configWriteCount: getGlobalConfigWriteCount()
-      })]);
-    }
     resetLoadingState();
 
     // Log query profiling report if enabled
@@ -2895,7 +2987,7 @@ export function REPL({
 
     // Signal that a query turn has completed successfully
     await onTurnComplete?.(messagesRef.current);
-  }, [initialMcpClients, resetLoadingState, getToolUseContext, toolPermissionContext, setAppState, customSystemPrompt, onTurnComplete, appendSystemPrompt, canUseTool, mainThreadAgentDefinition, onQueryEvent, sessionTitle, titleDisabled]);
+  }, [initialMcpClients, resetLoadingState, getToolUseContext, toolPermissionContext, setAppState, customSystemPrompt, onTurnComplete, appendSystemPrompt, canUseTool, mainThreadAgentDefinition, onQueryEvent, sessionTitle, titleDisabled, getAutoCompactTrackingForSession, setAutoCompactTrackingForSession, setAutoCompactTrackingForSessionIfUnchanged]);
   const onQuery = useCallback(async (newMessages: MessageType[], abortController: AbortController, shouldQuery: boolean, additionalAllowedTools: string[], mainLoopModelParam: string, onBeforeQueryCallback?: (input: string, newMessages: MessageType[]) => Promise<boolean>, input?: string, effort?: EffortValue): Promise<void> => {
     // If this is a teammate, mark them as active when starting a turn
     if (isAgentSwarmsEnabled()) {
@@ -2929,6 +3021,9 @@ export function REPL({
       return;
     }
     try {
+      // Reset abort and pipe-error flags before starting a new query
+      pipeReturnHadErrorRef.current = false;
+      setWasAborted(false);
       // isLoading is derived from queryGuard — tryStart() above already
       // transitioned dispatching→running, so no setter call needed here.
       resetTimingRefs();
@@ -2945,8 +3040,9 @@ export function REPL({
         const parsedBudget = input ? parseTokenBudget(input) : null;
         snapshotOutputTokensForTurn(parsedBudget ?? getCurrentTurnTokenBudget());
       }
-      apiMetricsRef.current = [];
       setStreamingToolUses([]);
+      streamingTextRef.current = null;
+      lastFlushedStreamingVisibleRef.current = null;
       setStreamingText(null);
 
       // messagesRef is updated synchronously by the setMessages wrapper
@@ -2972,6 +3068,7 @@ export function REPL({
       // running→idle. Returns false if a newer query owns the guard
       // (cancel+resubmit race where the stale finally fires as a microtask).
       if (queryGuard.end(thisGeneration)) {
+        setWasAborted(abortController.signal.aborted);
         setLastQueryCompletionTime(Date.now());
         skipIdleCheckRef.current = false;
         // Always reset loading state in finally - this ensures cleanup even
@@ -2983,23 +3080,6 @@ export function REPL({
         // Notify bridge clients that the turn is complete so mobile apps
         // can stop the spark animation and show post-turn UI.
         sendBridgeResultRef.current();
-
-        // Auto-hide tungsten panel content at turn end (internal-only), but keep
-        // tungstenActiveSession set so the pill stays in the footer and the user
-        // can reopen the panel. Background tmux tasks (e.g. /hunter) run for
-        // minutes — wiping the session made the pill disappear entirely, forcing
-        // the user to re-invoke Tmux just to peek. Skip on abort so the panel
-        // stays open for inspection (matches the turn-duration guard below).
-        if ("external" === 'ant' && !abortController.signal.aborted) {
-          setAppState(prev => {
-            if (prev.tungstenActiveSession === undefined) return prev;
-            if (prev.tungstenPanelAutoHidden === true) return prev;
-            return {
-              ...prev,
-              tungstenPanelAutoHidden: true
-            };
-          });
-        }
 
         // Capture budget info before clearing (internal-only)
         let budgetInfo: {
@@ -3118,6 +3198,7 @@ export function REPL({
     async function processInitialMessage(initialMsg: NonNullable<typeof pending>) {
       // Clear context if requested (plan mode exit)
       if (initialMsg.clearContext) {
+        resetAutoCompactTracking();
         // Preserve the plan slug before clearing context, so the new session
         // can access the same plan file after regenerateSessionId()
         const oldPlanSlug = initialMsg.message.planContent ? getPlanSlug() : undefined;
@@ -3144,11 +3225,10 @@ export function REPL({
         }
       }
 
-      // Atomically: clear initial message, set permission mode and rules, and store plan for verification
-      const shouldStorePlanForVerification = initialMsg.message.planContent && "external" === 'ant' && isEnvTruthy(undefined);
+      // Atomically clear the initial message and apply permission mode/rules.
       setAppState(prev => {
         // Build and apply permission updates (mode + allowedPrompts rules)
-        let updatedToolPermissionContext = initialMsg.mode ? applyPermissionUpdates(prev.toolPermissionContext, buildPermissionUpdates(initialMsg.mode, initialMsg.allowedPrompts)) : prev.toolPermissionContext;
+        let updatedToolPermissionContext = initialMsg.mode ? applyPermissionUpdatesToLiveContext(prev.toolPermissionContext, buildPermissionUpdates(initialMsg.mode, initialMsg.allowedPrompts)) : prev.toolPermissionContext;
         // For auto, override the mode (buildPermissionUpdates maps
         // it to 'default' via toExternalPermissionMode) and strip dangerous rules
         if (feature('TRANSCRIPT_CLASSIFIER') && initialMsg.mode === 'auto') {
@@ -3161,14 +3241,7 @@ export function REPL({
         return {
           ...prev,
           initialMessage: null,
-          toolPermissionContext: updatedToolPermissionContext,
-          ...(shouldStorePlanForVerification && {
-            pendingPlanVerification: {
-              plan: initialMsg.message.planContent!,
-              verificationStarted: false,
-              verificationCompleted: false
-            }
-          })
+          toolPermissionContext: updatedToolPermissionContext
         };
       });
 
@@ -3221,13 +3294,14 @@ export function REPL({
       }, 100, initialMessageRef);
     }
     void processInitialMessage(pending);
-  }, [initialMessage, isLoading, setMessages, setAppState, onQuery, mainLoopModel, tools]);
+  }, [initialMessage, isLoading, setMessages, setAppState, onQuery, mainLoopModel, tools, resetAutoCompactTracking]);
   const onSubmit = useCallback(async (input: string, helpers: PromptInputHelpers, speculationAccept?: {
     state: ActiveSpeculationState;
     speculationSessionTimeSavedMs: number;
     setAppState: SetAppState;
   }, options?: {
     fromKeybinding?: boolean;
+    slashCommandOverride?: Command;
   }) => {
     // Re-pin scroll to bottom on submit so the user always sees the new
     // exchange (matches OpenCode's auto-scroll behavior).
@@ -3309,7 +3383,7 @@ export function REPL({
               });
               // In fullscreen the command just showed as a centered modal
               // pane — the notification above is enough feedback. Adding
-              // "❯ /config" + "⎿ dismissed" to the transcript is clutter
+              // "❯ /config" + "└ dismissed" to the transcript is clutter
               // (those messages are type:system subtype:local_command —
               // user-visible but NOT sent to the model, so skipping them
               // doesn't change model context). Outside fullscreen the
@@ -3595,6 +3669,7 @@ export function REPL({
       canUseTool,
       addNotification,
       setMessages,
+      slashCommandOverride: options?.slashCommandOverride,
       // Read via ref so streamMode can be dropped from onSubmit deps —
       // handlePromptSubmit only uses it for debug log + telemetry event.
       streamMode: streamModeRef.current,
@@ -3740,6 +3815,7 @@ export function REPL({
       rewindToMessageIndex: messageIndex
     });
     setMessages(prev.slice(0, messageIndex));
+    resetAutoCompactTracking();
     // Careful, this has to happen after setMessages
     setConversationId(randomUUID());
     // Reset cached microcompact state so stale pinned cache edits
@@ -3758,13 +3834,15 @@ export function REPL({
       /* eslint-enable @typescript-eslint/no-require-imports */
     }
 
-    // Restore state from the message we're rewinding to
+    // Restore state from the message we're rewinding to.
+    // Dangerous modes are never restored from rewind snapshots.
+    const rewindRestorablePermissionMode = message.permissionMode && !isDangerousPermissionMode(message.permissionMode) ? message.permissionMode : undefined;
     setAppState(prev => ({
       ...prev,
       // Restore permission mode from the message
-      toolPermissionContext: message.permissionMode && prev.toolPermissionContext.mode !== message.permissionMode ? {
+      toolPermissionContext: rewindRestorablePermissionMode && prev.toolPermissionContext.mode !== rewindRestorablePermissionMode ? {
         ...prev.toolPermissionContext,
-        mode: message.permissionMode
+        mode: rewindRestorablePermissionMode
       } : prev.toolPermissionContext,
       // Clear stale prompt suggestion from previous conversation state
       promptSuggestion: {
@@ -3775,7 +3853,7 @@ export function REPL({
         generationRequestId: null
       }
     }));
-  }, [setMessages, setAppState]);
+  }, [setMessages, resetAutoCompactTracking, setAppState]);
 
   // Synchronous rewind + input population. Used directly by auto-restore on
   // interrupt (so React batches with the abort's setMessages → single render,
@@ -3900,7 +3978,7 @@ export function REPL({
   useLogMessages(messages, messages.length === initialMessages?.length);
 
   // REPL Bridge: replicate user/assistant messages to the bridge session
-  // for remote access via gakr.ai. No-op in external builds or when not enabled.
+  // for remote access via gakrcli.ai. No-op in external builds or when not enabled.
   const {
     sendBridgeResult
   } = useReplBridge(messages, setMessages, abortControllerRef, commands, mainLoopModel);
@@ -3977,9 +4055,9 @@ export function REPL({
     }
   }, [submitCount]);
 
-  // Show notification when GAKRCLI is done responding and user is idle
+  // Show notification when GakrCLI is done responding and user is idle
   useEffect(() => {
-    // Don't set up notification if GAKRCLI is busy
+    // Don't set up notification if GakrCLI is busy
     if (isLoading) return;
 
     // Only enable notifications after the first new interaction in this session
@@ -3993,7 +4071,7 @@ export function REPL({
       // Check if user has interacted since the response ended
       const lastUserInteraction = getLastInteractionTime();
       if (lastUserInteraction > lastQueryCompletionTime) {
-        // User has interacted since GAKRCLI finished - they're not idle, don't notify
+        // User has interacted since GakrCLI finished - they're not idle, don't notify
         return;
       }
 
@@ -4003,7 +4081,7 @@ export function REPL({
         // Use ref to get current dialog state, avoiding stale closure
         focusedInputDialogRef.current === undefined && idleTimeSinceResponse >= getGlobalConfig().messageIdleNotifThresholdMs) {
         void sendNotification({
-          message: 'GAKRCLI is waiting for your input',
+          message: 'GakrCLI is waiting for your input',
           notificationType: 'idle_prompt'
         }, terminal);
       }
@@ -4122,41 +4200,54 @@ export function REPL({
     setMessages
   });
 
+  // UDS_INBOX hooks — pipe/slave messaging infrastructure
+  const { relayPipeMessage, pipeReturnHadErrorRef } = usePipeRelay();
+  useSlaveNotifications();
+  usePipePermissionForward({ store, tools, setMessages, setToolUseConfirmQueue, getToolUseContext, mainLoopModel });
+  usePipeMuteSync({ setToolUseConfirmQueue });
+  usePipeIpc({ store, handleIncomingPrompt });
+  const { routeToSelectedPipes } = usePipeRouter({ store, setAppState, addNotification });
+  useMasterMonitor();
+
+  // Proactive mode: auto-tick when enabled (via /proactive command)
+  useProactive?.({
+    isLoading: isLoading || initialMessage !== null,
+    queuedCommandsLength: queuedCommands.length,
+    hasActiveLocalJsxUI: isShowingLocalJSXCommand,
+    isInPlanMode: toolPermissionContext.mode === 'plan',
+    onQueueTick: (command: QueuedCommand) => enqueue(command),
+  });
+
+  // Goal auto-continuation: enqueue a steering prompt when idle + active goal
+  useGoalContinuation?.({
+    isLoading: isLoading || initialMessage !== null,
+    wasAborted,
+    queuedCommandsLength: queuedCommands.length,
+    hasActiveLocalJsxUI: isShowingLocalJSXCommand,
+    isInPlanMode: toolPermissionContext.mode === 'plan',
+    isQueryActiveNow: queryGuard.getSnapshot,
+    onContinuationEnqueued: ({ turn, objective }) => {
+      const visibleGoalTurnInput = `Goal auto-continue (${turn}/1): continue advancing "${objective}".`;
+      setMessages(oldMessages => [
+        ...oldMessages,
+        createUserMessage({
+          content: visibleGoalTurnInput,
+          isVisibleInTranscriptOnly: true,
+        }),
+      ]);
+    },
+    onMaxTurnsReached: () => {
+      addNotification({
+        key: 'goal-max-turns-reached',
+        text: 'Goal reached max continuation turns (1). Run /goal continue to reset turn counter and continue.',
+        priority: 'immediate',
+      });
+    },
+  });
+
   // Note: Permission polling is now handled by useInboxPoller
   // - Workers receive permission responses via mailbox messages
   // - Leaders receive permission requests via mailbox messages
-
-  if ("external" === 'ant') {
-    // Tasks mode: watch for tasks and auto-process them
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    // biome-ignore lint/correctness/useHookAtTopLevel: conditional for dead code elimination in external builds
-    useTaskListWatcher({
-      taskListId,
-      isLoading,
-      onSubmitTask: handleIncomingPrompt
-    });
-
-    // Loop mode: auto-tick when enabled (via /job command)
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    // biome-ignore lint/correctness/useHookAtTopLevel: conditional for dead code elimination in external builds
-    useProactive?.({
-      // Suppress ticks while an initial message is pending — the initial
-      // message will be processed asynchronously and a premature tick would
-      // race with it, causing concurrent-query enqueue of expanded skill text.
-      isLoading: isLoading || initialMessage !== null,
-      queuedCommandsLength: queuedCommands.length,
-      hasActiveLocalJsxUI: isShowingLocalJSXCommand,
-      isInPlanMode: toolPermissionContext.mode === 'plan',
-      onSubmitTick: (prompt: string) => handleIncomingPrompt(prompt, {
-        isMeta: true
-      }),
-      onQueueTick: (prompt: string) => enqueue({
-        mode: 'prompt',
-        value: prompt,
-        isMeta: true
-      })
-    });
-  }
 
   // Abort the current operation when a 'now' priority message arrives
   // (e.g. from a chat UI client via UDS).
@@ -4235,11 +4326,6 @@ export function REPL({
 
     // Fall back to default behavior
     const hookType = currentHooks[0]?.data.hookEvent === 'SubagentStop' ? 'subagent stop' : 'stop';
-    if ("external" === 'ant') {
-      const cmd = currentHooks[completedCount]?.data.command;
-      const label = cmd ? ` '${truncateToWidth(cmd, 40)}'` : '';
-      return total === 1 ? `running ${hookType} hook${label}` : `running ${hookType} hook${label}\u2026 ${completedCount}/${total}`;
-    }
     return total === 1 ? `running ${hookType} hook` : `running stop hooks… ${completedCount}/${total}`;
   }, [messages, isLoading]);
 
@@ -4644,10 +4730,14 @@ export function REPL({
         {toolJSX && !(toolJSX.isLocalJSXCommand && toolJSX.isImmediate) && !toolJsxCentered && <Box flexDirection="column" width="100%">
           {toolJSX.jsx}
         </Box>}
-        {"external" === 'ant' && <TungstenLiveMonitor />}
         {feature('WEB_BROWSER_TOOL') ? WebBrowserPanelModule && <WebBrowserPanelModule.WebBrowserPanel /> : null}
         <Box flexGrow={1} />
-        {showSpinner && <SpinnerWithVerb mode={streamMode} spinnerTip={spinnerTip} responseLengthRef={responseLengthRef} apiMetricsRef={apiMetricsRef} overrideMessage={spinnerMessage} spinnerSuffix={stopHookSpinnerSuffix} verbose={verbose} loadingStartTimeRef={loadingStartTimeRef} totalPausedMsRef={totalPausedMsRef} pauseStartTimeRef={pauseStartTimeRef} overrideColor={spinnerColor} overrideShimmerColor={spinnerShimmerColor} hasActiveTools={inProgressToolUseIDs.size > 0} leaderIsIdle={!isLoading} />}
+        {showSpinner && <SpinnerWithVerb mode={streamMode} spinnerTip={spinnerTip} responseLengthRef={responseLengthRef} overrideMessage={spinnerMessage} spinnerSuffix={stopHookSpinnerSuffix} verbose={verbose} loadingStartTimeRef={loadingStartTimeRef} totalPausedMsRef={totalPausedMsRef} pauseStartTimeRef={pauseStartTimeRef} overrideColor={spinnerColor} overrideShimmerColor={spinnerShimmerColor} hasActiveTools={inProgressToolUseIDs.size > 0} leaderIsIdle={!isLoading} />}
+        {/* Permanently mounted: it observes the isLoading transition to flash
+            `✓ Done` for ~1.5s. Suppressed wherever another element owns the
+            row or the user's attention. */}
+        <CompletionFlash turnActive={isLoading || userInputOnProcessing !== undefined} suppressed={isBriefOnly || hasRunningTeammates || hasActivePrompt || viewedAgentTask !== undefined} loadingStartTimeRef={loadingStartTimeRef} totalPausedMsRef={totalPausedMsRef} />
+        {compactProgressRatio !== null && feature('RESUME_COMPACT_PROMPT') && <CompactProgressBar ratio={compactProgressRatio} />}
         {!showSpinner && !isLoading && !userInputOnProcessing && !hasRunningTeammates && isBriefOnly && !viewedAgentTask && <BriefIdleStatus />}
         {isFullscreenEnvEnabled() && <PromptInputQueuedCommands />}
       </>} bottom={<Box flexDirection={isBuddyEnabled() && companionNarrow ? 'column' : 'row'} width="100%" alignItems={isBuddyEnabled() && companionNarrow ? undefined : 'flex-end'}>
@@ -4842,6 +4932,7 @@ export function REPL({
               });
             }
             if (action === 'clear') {
+              resetAutoCompactTracking();
               const {
                 clearConversation
               } = await import('../commands/clear/conversation.js');
@@ -4866,18 +4957,23 @@ export function REPL({
               resetHistory: () => { }
             });
           }} />}
-          {focusedInputDialog === 'ide-onboarding' && <IdeOnboardingDialog onDone={() => setShowIdeOnboarding(false)} installationStatus={ideInstallationStatus} />}
-          {"external" === 'ant' && focusedInputDialog === 'model-switch' && AntModelSwitchCallout && <AntModelSwitchCallout onDone={(selection: string, modelAlias?: string) => {
-            setShowModelSwitchCallout(false);
-            if (selection === 'switch' && modelAlias) {
-              setAppState(prev => ({
-                ...prev,
-                mainLoopModel: modelAlias,
-                mainLoopModelForSession: null
-              }));
+          {focusedInputDialog === 'resume-compact' && resumeCompactPending && <ResumeCompactPrompt tokenCount={resumeCompactPending.tokenCount} model={resumeCompactPending.model} onDone={async choice => {
+            const pending = resumeCompactPending;
+            setResumeCompactPending(null);
+            logEvent('tengu_resume_compact_prompt', {
+              action: (choice === 'yes' ? 'accept' : 'decline') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+              tokenCount: pending.tokenCount,
+            });
+            if (choice === 'yes') {
+              skipIdleCheckRef.current = true;
+              void onSubmitRef.current('/compact', {
+                setCursorOffset: () => {},
+                clearBuffer: () => {},
+                resetHistory: () => {}
+              });
             }
           }} />}
-          {"external" === 'ant' && focusedInputDialog === 'undercover-callout' && UndercoverAutoCallout && <UndercoverAutoCallout onDone={() => setShowUndercoverCallout(false)} />}
+          {focusedInputDialog === 'ide-onboarding' && <IdeOnboardingDialog onDone={() => setShowIdeOnboarding(false)} installationStatus={ideInstallationStatus} />}
           {focusedInputDialog === 'effort-callout' && <EffortCallout model={mainLoopModel} onDone={selection => {
             setShowEffortCallout(false);
             if (selection !== 'dismiss') {
@@ -4905,6 +5001,14 @@ export function REPL({
           {exitFlow}
 
           {focusedInputDialog === 'plugin-hint' && hintRecommendation && <PluginHintMenu pluginName={hintRecommendation.pluginName} pluginDescription={hintRecommendation.pluginDescription} marketplaceName={hintRecommendation.marketplaceName} sourceCommand={hintRecommendation.sourceCommand} onResponse={handleHintResponse} />}
+
+          {focusedInputDialog === 'search-extra-tools-hint' && searchExtraToolsHint.visible && (
+            <SearchExtraToolsHint
+              tools={searchExtraToolsHint.tools}
+              onSelect={searchExtraToolsHint.handleSelect}
+              onDismiss={searchExtraToolsHint.handleDismiss}
+            />
+          )}
 
           {focusedInputDialog === 'lsp-recommendation' && lspRecommendation && <LspRecommendationMenu pluginName={lspRecommendation.pluginName} pluginDescription={lspRecommendation.pluginDescription} fileExtension={lspRecommendation.fileExtension} onResponse={handleLspResponse} />}
 
@@ -4959,11 +5063,9 @@ export function REPL({
             {postCompactSurvey.state !== 'closed' ? <FeedbackSurvey state={postCompactSurvey.state} lastResponse={postCompactSurvey.lastResponse} handleSelect={postCompactSurvey.handleSelect} inputValue={inputValue} setInputValue={setInputValue} /> : memorySurvey.state !== 'closed' ? <FeedbackSurvey state={memorySurvey.state} lastResponse={memorySurvey.lastResponse} handleSelect={memorySurvey.handleSelect} handleTranscriptSelect={memorySurvey.handleTranscriptSelect} inputValue={inputValue} setInputValue={setInputValue} message="How well did GakrCLI use its memory? (optional)" /> : <FeedbackSurvey state={feedbackSurvey.state} lastResponse={feedbackSurvey.lastResponse} handleSelect={feedbackSurvey.handleSelect} handleTranscriptSelect={feedbackSurvey.handleTranscriptSelect} inputValue={inputValue} setInputValue={setInputValue} />}
             {/* Frustration-triggered transcript sharing prompt */}
             {frustrationDetection.state !== 'closed' && <FeedbackSurvey state={frustrationDetection.state} lastResponse={null} handleSelect={() => { }} handleTranscriptSelect={frustrationDetection.handleTranscriptSelect} inputValue={inputValue} setInputValue={setInputValue} />}
-            {/* Skill improvement survey - appears when improvements detected (internal-only) */}
-            {"external" === 'ant' && skillImprovementSurvey.suggestion && <SkillImprovementSurvey isOpen={skillImprovementSurvey.isOpen} skillName={skillImprovementSurvey.suggestion.skillName} updates={skillImprovementSurvey.suggestion.updates} handleSelect={skillImprovementSurvey.handleSelect} inputValue={inputValue} setInputValue={setInputValue} />}
             {showIssueFlagBanner && <IssueFlagBanner />}
             { }
-            <PromptInput debug={debug} ideSelection={ideSelection} hasSuppressedDialogs={!!hasSuppressedDialogs} isLocalJSXCommandActive={isShowingLocalJSXCommand} getToolUseContext={getToolUseContext} toolPermissionContext={toolPermissionContext} setToolPermissionContext={setToolPermissionContext} apiKeyStatus={apiKeyStatus} commands={renderCommands} agents={agentDefinitions.activeAgents} isLoading={isLoading} onExit={handleExit} verbose={verbose} messages={messages} onAutoUpdaterResult={setAutoUpdaterResult} autoUpdaterResult={autoUpdaterResult} input={inputValue} onInputChange={setInputValue} mode={inputMode} onModeChange={setInputMode} stashedPrompt={stashedPrompt} setStashedPrompt={setStashedPrompt} submitCount={submitCount} onShowMessageSelector={handleShowMessageSelector} onMessageActionsEnter={
+            <PromptInput debug={debug} ideSelection={ideSelection} isLocalJSXCommandActive={isShowingLocalJSXCommand} getToolUseContext={getToolUseContext} toolPermissionContext={toolPermissionContext} setToolPermissionContext={setToolPermissionContext} apiKeyStatus={apiKeyStatus} commands={renderCommands} agents={agentDefinitions.activeAgents} isLoading={isLoading} onExit={handleExit} verbose={verbose} messages={messages} onAutoUpdaterResult={setAutoUpdaterResult} autoUpdaterResult={autoUpdaterResult} input={inputValue} onInputChange={setInputValue} mode={inputMode} onModeChange={setInputMode} stashedPrompt={stashedPrompt} setStashedPrompt={setStashedPrompt} submitCount={submitCount} onShowMessageSelector={handleShowMessageSelector} onMessageActionsEnter={
               // Works during isLoading — edit cancels first; uuid selection survives appends.
               feature('MESSAGE_ACTIONS') && isFullscreenEnvEnabled() && !disableMessageActions ? enterMessageActions : undefined} mcpClients={mcpClients} pastedContents={pastedContents} setPastedContents={setPastedContents} vimMode={vimMode} setVimMode={setVimMode} showBashesDialog={showBashesDialog} setShowBashesDialog={setShowBashesDialog} onSubmit={onSubmit} onAgentSubmit={onAgentSubmit} isSearchingHistory={isSearchingHistory} setIsSearchingHistory={setIsSearchingHistory} helpOpen={isHelpOpen} setHelpOpen={setIsHelpOpen} insertTextRef={feature('VOICE_MODE') ? insertTextRef : undefined} voiceInterimRange={voice.interimRange} />
             <SessionBackgroundHint onBackgroundSession={handleBackgroundSession} isLoading={isLoading} />
@@ -5027,7 +5129,8 @@ export function REPL({
               setMessages(postCompact);
             }
             // Partial compact bypasses handleMessageFromStream — clear
-            // the context-blocked flag so proactive ticks resume.
+            // the auto-compact breaker and context-blocked flag.
+            setAutoCompactTrackingForSession(getSessionId(), undefined);
             if (feature('PROACTIVE') || feature('KAIROS')) {
               proactiveModule?.setContextBlocked(false);
             }
@@ -5053,7 +5156,6 @@ export function REPL({
             setIsMessageSelectorVisible(false);
             setMessageSelectorPreselect(undefined);
           }} />}
-          {"external" === 'ant' && <DevBar />}
         </Box>
         {isBuddyEnabled() && !(companionNarrow && isFullscreenEnvEnabled()) && companionVisible ? <CompanionSprite /> : null}
       </Box>} />

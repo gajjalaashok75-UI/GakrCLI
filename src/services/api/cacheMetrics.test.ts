@@ -205,7 +205,7 @@ describe('extractCacheMetrics — Copilot / Ollama (unsupported)', () => {
       cache_read_input_tokens: 800,
       cache_creation_input_tokens: 100,
     }
-    const m = extractCacheMetrics(usage, 'copilot-claude')
+    const m = extractCacheMetrics(usage, 'copilot-gakrcli')
     expect(m.supported).toBe(true)
     expect(m.read).toBe(800)
     expect(m.created).toBe(100)
@@ -240,7 +240,7 @@ describe('resolveCacheProvider', () => {
   test('github with claude hint → copilot-claude', () => {
     expect(
       resolveCacheProvider('github', { githubNativeAnthropic: true }),
-    ).toBe('copilot-claude')
+    ).toBe('copilot-gakrcli')
   })
   test('openai with localhost / loopback → self-hosted', () => {
     // These used to return 'ollama'; the bucket is now 'self-hosted'

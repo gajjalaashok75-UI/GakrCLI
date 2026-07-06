@@ -13,6 +13,7 @@ import { c as _c } from "react-compiler-runtime";
  */
 import * as React from 'react';
 import { useCallback, useMemo, useState } from 'react';
+import { PRODUCT_DISPLAY_NAME } from '../../constants/product.js';
 import type { HookEvent } from 'src/entrypoints/agentSdkTypes.js';
 import { useAppState, useAppStateStore } from 'src/state/AppState.js';
 import type { CommandResultDisplay } from '../../commands.js';
@@ -48,6 +49,10 @@ type ModeState = {
   event: HookEvent;
   hook: IndividualHookConfig;
 };
+type HooksByEventAndMatcher = Record<
+  HookEvent,
+  Record<string, IndividualHookConfig[]>
+>;
 export function HooksConfigMenu(t0) {
   const $ = _c(100);
   const {
@@ -105,7 +110,7 @@ export function HooksConfigMenu(t0) {
   } else {
     t4 = $[7];
   }
-  const hooksByEventAndMatcher = t4;
+  const hooksByEventAndMatcher: HooksByEventAndMatcher = t4;
   let t5;
   if ($[8] !== hooksByEventAndMatcher || $[9] !== selectedEvent) {
     t5 = getSortedMatchersForEvent(hooksByEventAndMatcher, selectedEvent);
@@ -258,7 +263,7 @@ export function HooksConfigMenu(t0) {
   const hooksDisabled_1 = settings_1?.disableAllHooks === true;
   let t20;
   if ($[33] !== hooksByEventAndMatcher) {
-    const byEvent = {};
+    const byEvent: Partial<Record<HookEvent, number>> = {};
     let total = 0;
     for (const [event_0, matchers] of Object.entries(hooksByEventAndMatcher)) {
       const eventCount = Object.values(matchers).reduce(_temp5, 0);
@@ -351,7 +356,7 @@ export function HooksConfigMenu(t0) {
     }
     let t32;
     if ($[53] !== disabledByPolicy) {
-      t32 = !disabledByPolicy && <Text dimColor={true}>To re-enable hooks, remove "disableAllHooks" from settings.json or ask Gakr.</Text>;
+      t32 = !disabledByPolicy && <Text dimColor={true}>To re-enable hooks, remove "disableAllHooks" from settings.json or ask {PRODUCT_DISPLAY_NAME}.</Text>;
       $[53] = disabledByPolicy;
       $[54] = t32;
     } else {
@@ -558,7 +563,7 @@ export function HooksConfigMenu(t0) {
 function _temp6() {
   return <Text>Esc to close</Text>;
 }
-function _temp5(sum, hooks) {
+function _temp5(sum: number, hooks: IndividualHookConfig[]): number {
   return sum + hooks.length;
 }
 function _temp4(tool) {

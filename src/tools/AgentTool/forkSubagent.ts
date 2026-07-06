@@ -78,7 +78,7 @@ export const FORK_AGENT = {
 export function isInForkChild(messages: MessageType[]): boolean {
   return messages.some(m => {
     if (m.type !== 'user') return false
-    const content = m.message.content
+    const content = m.message!.content
     if (!Array.isArray(content)) return false
     return content.some(
       block =>
@@ -115,14 +115,20 @@ export function buildForkedMessages(
     uuid: randomUUID(),
     message: {
       ...assistantMessage.message,
-      content: [...assistantMessage.message.content],
+      content: [
+        ...(Array.isArray(assistantMessage.message.content)
+          ? assistantMessage.message.content
+          : []),
+      ],
     },
   }
 
   // Collect all tool_use blocks from the assistant message
-  const toolUseBlocks = assistantMessage.message.content.filter(
-    (block): block is BetaToolUseBlock => block.type === 'tool_use',
-  )
+  const toolUseBlocks = (
+    Array.isArray(assistantMessage.message.content)
+      ? assistantMessage.message.content
+      : []
+  ).filter((block): block is BetaToolUseBlock => block.type === 'tool_use')
 
   if (toolUseBlocks.length === 0) {
     logForDebugging(

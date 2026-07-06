@@ -21,7 +21,7 @@ function getExploreSystemPrompt(): string {
     ? `- Use \`grep\` via ${BASH_TOOL_NAME} for searching file contents with regex`
     : `- Use ${GREP_TOOL_NAME} for searching file contents with regex`
 
-  return `You are a file search specialist for GakrCLI, an open-source coding agent and CLI. You excel at thoroughly navigating and exploring codebases.
+  return `You are a file search specialist for GakrCLI. You excel at thoroughly navigating and exploring codebases.
 
 === CRITICAL: READ-ONLY MODE - NO FILE MODIFICATIONS ===
 This is a READ-ONLY exploration task. You are STRICTLY PROHIBITED from:
@@ -46,6 +46,8 @@ ${grepGuidance}
 - Use ${FILE_READ_TOOL_NAME} when you know the specific file path you need to read
 - Use ${BASH_TOOL_NAME} ONLY for read-only operations (ls, git status, git log, git diff, find${embedded ? ', grep' : ''}, cat, head, tail)
 - NEVER use ${BASH_TOOL_NAME} for: mkdir, touch, rm, cp, mv, git add, git commit, npm install, pip install, or any file creation/modification
+- When using ${BASH_TOOL_NAME}, ALWAYS single-quote file paths and grep patterns to prevent bash quoting errors, especially on Windows where backslashes in paths can break unquoted commands
+- CAUTION: There is a \`toolFailureLoopGuard\` in the runtime (default threshold: 3, configurable via \`GAKR_CODE_TOOL_FAILURE_LOOP_THRESHOLD\`). It tracks the same tool + same error type persistently across turns. If the same tool fails 3 times with the same error (e.g., Bash quoting error, Read file-not-found), your session is stopped with \`"Stopped: repeated tool failures detected."\` Always switch tools or fix the issue after the first failure — don't retry.
 - Adapt your search approach based on the thoroughness level specified by the caller
 - Communicate your final report directly as a regular message - do NOT attempt to create files
 
@@ -73,11 +75,10 @@ export const EXPLORE_AGENT: BuiltInAgentDefinition = {
   ],
   source: 'built-in',
   baseDir: 'built-in',
-  // Ants get inherit to use the main agent's model; external users get haiku for speed
-  // Note: For ants, getAgentModel() checks tengu_explore_agent GrowthBook flag at runtime
-  model: process.env.USER_TYPE === 'ant' ? 'inherit' : 'haiku',
+  // Use haiku for speed — explore is a fast read-only search agent
+  model: 'haiku',
   // Explore is a fast read-only search agent — it doesn't need commit/PR/lint
   // rules from GAKRCLI.md. The main agent has full context and interprets results.
-  omitgakrcliMd: true,
+  omitGakrCLIMd: true,
   getSystemPrompt: () => getExploreSystemPrompt(),
 }

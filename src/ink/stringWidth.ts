@@ -1,6 +1,6 @@
 import emojiRegex from 'emoji-regex'
 import { eastAsianWidth } from 'get-east-asian-width'
-import stripAnsi from 'strip-ansi'
+import { stripVTControlCharacters as stripAnsi } from 'node:util'
 import { getGraphemeSegmenter } from '../utils/intl.js'
 
 const EMOJI_REGEX = emojiRegex()
@@ -71,10 +71,13 @@ export function stringWidthJavaScript(str: string): number {
     EMOJI_REGEX.lastIndex = 0
     if (EMOJI_REGEX.test(grapheme)) {
       const graphemeWidth = getEmojiWidth(grapheme)
-      // Many text-presentation symbols are matched by emoji-regex but render
-      // as narrow unless qualified by VS16.
+      // If it's a single codepoint and getEmojiWidth returned 2, double-check
+      // if it should actually be narrow (width 1). Many symbols are matched
+      // by emoji-regex but render as width 1 in terminals unless qualified
+      // by VS16.
       if (graphemeWidth === 2 && [...grapheme].length === 1) {
         const codePoint = grapheme.codePointAt(0)!
+        // Symbol ranges (U+2000 - U+2BFF) are narrow by default
         if (codePoint >= 0x2000 && codePoint <= 0x2bff) {
           width += eastAsianWidth(codePoint, { ambiguousAsWide: false })
           continue

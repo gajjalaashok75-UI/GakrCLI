@@ -5,10 +5,10 @@ This checklist is for publishing GakrCLI VS Code 0.2.4.
 ## Versions
 
 - `package.json` version: `0.2.4`
-- root GakrCLI dependency: `@gakr-gakr/gakrcli@^0.5.6`
-- root GakrCLI package version: `0.5.6`
+- root GakrCLI dependency: `@gakr-gakr/gakrcli@^0.5.7`
+- root GakrCLI package version: `0.5.7`
 
-Publish order matters: publish `@gakr-gakr/gakrcli@0.5.6` to npm first, then refresh this extension lockfile and package the VSIX. npm cannot resolve `@gakr-gakr/gakrcli@^0.5.6` until that root package version exists on the registry.
+Publish order matters: publish `@gakr-gakr/gakrcli@0.5.7` to npm first, then refresh this extension lockfile and package the VSIX. npm cannot resolve `@gakr-gakr/gakrcli@^0.5.7` until that root package version exists on the registry.
 
 ## Preflight
 

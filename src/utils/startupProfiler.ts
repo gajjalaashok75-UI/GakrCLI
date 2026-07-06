@@ -16,7 +16,7 @@ import {
   logEvent,
 } from '../services/analytics/index.js'
 import { logForDebugging } from './debug.js'
-import { getGakrcliConfigHomeDir, isEnvTruthy } from './envUtils.js'
+import { getGakrCLIConfigHomeDir, isEnvTruthy } from './envUtils.js'
 import { getFsImplementation } from './fsOperations.js'
 import { formatMs, formatTimelineLine, getPerformance } from './profilerBase.js'
 import { writeFileSync_DEPRECATED } from './slowOperations.js'
@@ -149,7 +149,7 @@ export function isDetailedProfilingEnabled(): boolean {
 }
 
 export function getStartupPerfLogPath(): string {
-  return join(getGakrcliConfigHomeDir(), 'startup-perf', `${getSessionId()}.txt`)
+  return join(getGakrCLIConfigHomeDir(), 'startup-perf', `${getSessionId()}.txt`)
 }
 
 /**

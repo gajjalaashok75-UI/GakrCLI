@@ -16,9 +16,9 @@ export const getManagedFilePath = memoize(function (): string {
 
   switch (getPlatform()) {
     case 'macos':
-      return '/Library/Application Support/gakrcliCode'
+      return '/Library/Application Support/GakrCLICode'
     case 'windows':
-      return 'C:\\Program Files\\gakrcliCode'
+      return 'C:\\Program Files\\GakrCLICode'
     default:
       return '/etc/gakrcli-code'
   }

@@ -15,10 +15,10 @@ const PLATFORMS: Record<Platform, {
   url: string;
 }> = {
   ios: {
-    url: ''
+    url: 'https://apps.apple.com/app/gakrcli-by-anthropic/id6473753684'
   },
   android: {
-    url: ''
+    url: 'https://play.google.com/store/apps/details?id=com.anthropic.gakrcli'
   }
 };
 function MobileQRCode(t0) {

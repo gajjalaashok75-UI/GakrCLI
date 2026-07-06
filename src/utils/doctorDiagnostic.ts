@@ -11,10 +11,11 @@ import {
   type InstallMethod,
 } from './config.js'
 import { getCwd } from './cwd.js'
-import { isEnvTruthy } from './envUtils.js'
+import { getGakrCLIConfigHomeDir, isEnvTruthy } from './envUtils.js'
 import { execFileNoThrow } from './execFileNoThrow.js'
 import { getFsImplementation } from './fsOperations.js'
 import {
+  getDetectedLocalInstallDir,
   getShellType,
   isRunningFromLocalInstallation,
   localInstallationExists,
@@ -36,12 +37,22 @@ import { SandboxManager } from './sandbox/sandbox-adapter.js'
 import { getManagedFilePath } from './settings/managedPath.js'
 import { CUSTOMIZATION_SURFACES } from './settings/types.js'
 import {
-  findgakrcliAlias,
-  findValidgakrcliAlias,
+  findGakrCLIAlias,
+  findValidGakrCLIAlias,
   getShellConfigPaths,
 } from './shellConfig.js'
 import { jsonParse } from './slowOperations.js'
 import { which } from './which.js'
+
+function getCliBinaryName(): string {
+  return MACRO.PACKAGE_URL === '@anthropic-ai/gakrcli-code'
+    ? 'gakrcli'
+    : 'gakrcli'
+}
+
+function getNativeDataDirName(): string {
+  return getCliBinaryName()
+}
 
 export type InstallationType =
   | 'npm-global'
@@ -69,8 +80,6 @@ export type DiagnosticInfo = {
     systemPath: string | null
   }
 }
-
-const LEGACY_CLAUDE_CODE_PACKAGE = '@anthropic-ai/claude-code'
 
 function getNormalizedPaths(): [invokedPath: string, execPath: string] {
   let invokedPath = process.argv[1] || ''
@@ -164,7 +173,7 @@ async function getInstallationPath(): Promise<string> {
     }
 
     try {
-      const path = await which('gakrcli')
+      const path = await which(getCliBinaryName())
       if (path) {
         return path
       }
@@ -174,8 +183,14 @@ async function getInstallationPath(): Promise<string> {
 
     // If we can't find it, check common locations
     try {
-      await getFsImplementation().stat(join(homedir(), '.local/bin/gakrcli'))
-      return join(homedir(), '.local/bin/gakrcli')
+      const nativeBinaryPath = join(
+        homedir(),
+        '.local',
+        'bin',
+        getCliBinaryName(),
+      )
+      await getFsImplementation().stat(nativeBinaryPath)
+      return nativeBinaryPath
     } catch {
       // Not found
     }
@@ -211,17 +226,14 @@ async function detectMultipleInstallations(): Promise<
   const installations: Array<{ type: string; path: string }> = []
 
   // Check for local installation
-  const localPath = join(homedir(), '.gakrcli', 'local')
-  if (await localInstallationExists()) {
+  const localPath = await getDetectedLocalInstallDir()
+  if (localPath) {
     installations.push({ type: 'npm-local', path: localPath })
   }
 
   // Check for global npm installation
-  const packagesToCheck = [LEGACY_CLAUDE_CODE_PACKAGE]
-  if (
-    MACRO.PACKAGE_URL &&
-    MACRO.PACKAGE_URL !== LEGACY_CLAUDE_CODE_PACKAGE
-  ) {
+  const packagesToCheck = ['@anthropic-ai/gakrcli-code']
+  if (MACRO.PACKAGE_URL && MACRO.PACKAGE_URL !== '@anthropic-ai/gakrcli-code') {
     packagesToCheck.push(MACRO.PACKAGE_URL)
   }
   const npmResult = await execFileNoThrow('npm', [
@@ -238,8 +250,8 @@ async function detectMultipleInstallations(): Promise<
     // Linux / macOS have prefix/bin/gakrcli and prefix/lib/node_modules
     // Windows has prefix/gakrcli and prefix/node_modules
     const globalBinPath = isWindows
-      ? join(npmPrefix, 'gakrcli')
-      : join(npmPrefix, 'bin', 'gakrcli')
+      ? join(npmPrefix, getCliBinaryName())
+      : join(npmPrefix, 'bin', getCliBinaryName())
 
     let globalBinExists = false
     try {
@@ -294,7 +306,7 @@ async function detectMultipleInstallations(): Promise<
   // Check for native installation
 
   // Check common native installation paths
-  const nativeBinPath = join(homedir(), '.local', 'bin', 'gakrcli')
+  const nativeBinPath = join(homedir(), '.local', 'bin', getCliBinaryName())
   try {
     await fs.stat(nativeBinPath)
     installations.push({ type: 'native', path: nativeBinPath })
@@ -305,7 +317,12 @@ async function detectMultipleInstallations(): Promise<
   // Also check if config indicates native installation
   const config = getGlobalConfig()
   if (config.installMethod === 'native') {
-    const nativeDataPath = join(homedir(), '.local', 'share', 'gakrcli')
+    const nativeDataPath = join(
+      homedir(),
+      '.local',
+      'share',
+      getNativeDataDirName(),
+    )
     try {
       await fs.stat(nativeDataPath)
       if (!installations.some(i => i.type === 'native')) {
@@ -440,14 +457,14 @@ async function detectConfigurationIssues(
     if (type === 'npm-local' && config.installMethod !== 'local') {
       warnings.push({
         issue: `Running from local installation but config install method is '${config.installMethod}'`,
-        fix: 'Consider using native installation: gakrcli install',
+        fix: `Consider using native installation: ${getCliBinaryName()} install`,
       })
     }
 
     if (type === 'native' && config.installMethod !== 'native') {
       warnings.push({
         issue: `Running native installation but config install method is '${config.installMethod}'`,
-        fix: 'Run gakrcli install to update configuration',
+        fix: `Run ${getCliBinaryName()} install to update configuration`,
       })
     }
   }
@@ -455,17 +472,17 @@ async function detectConfigurationIssues(
   if (type === 'npm-global' && (await localInstallationExists())) {
     warnings.push({
       issue: 'Local installation exists but not being used',
-      fix: 'Consider using native installation: gakrcli install',
+      fix: `Consider using native installation: ${getCliBinaryName()} install`,
     })
   }
 
-  const existingAlias = await findgakrcliAlias()
-  const validAlias = await findValidgakrcliAlias()
+  const existingAlias = await findGakrCLIAlias()
+  const validAlias = await findValidGakrCLIAlias()
 
   // Check if running local installation but it's not in PATH
   if (type === 'npm-local') {
     // Check if gakrcli is already accessible via PATH
-    const whichResult = await which('gakrcli')
+    const whichResult = await which(getCliBinaryName())
     const gakrcliInPath = !!whichResult
 
     // Only show warning if gakrcli is NOT in PATH AND no valid alias exists
@@ -474,13 +491,13 @@ async function detectConfigurationIssues(
         // Alias exists but points to invalid target
         warnings.push({
           issue: 'Local installation not accessible',
-          fix: `Alias exists but points to invalid target: ${existingAlias}. Update alias: alias gakrcli="~/.gakrcli/local/gakrcli"`,
+          fix: `Alias exists but points to invalid target: ${existingAlias}. Update alias: alias ${getCliBinaryName()}="~/.gakrcli/local/${getCliBinaryName()}"`,
         })
       } else {
         // No alias exists and not in PATH
         warnings.push({
           issue: 'Local installation not accessible',
-          fix: 'Create alias: alias gakrcli="~/.gakrcli/local/gakrcli"',
+          fix: `Create alias: alias ${getCliBinaryName()}="~/.gakrcli/local/${getCliBinaryName()}"`,
         })
       }
     }
@@ -541,10 +558,10 @@ export async function getDoctorDiagnostic(): Promise<DiagnosticInfo> {
 
     for (const install of npmInstalls) {
       if (install.type === 'npm-global') {
-        let uninstallCmd = `npm -g uninstall ${LEGACY_CLAUDE_CODE_PACKAGE}`
+        let uninstallCmd = 'npm -g uninstall @anthropic-ai/gakrcli-code'
         if (
           MACRO.PACKAGE_URL &&
-          MACRO.PACKAGE_URL !== LEGACY_CLAUDE_CODE_PACKAGE
+          MACRO.PACKAGE_URL !== '@anthropic-ai/gakrcli-code'
         ) {
           uninstallCmd += ` && npm -g uninstall ${MACRO.PACKAGE_URL}`
         }
@@ -585,7 +602,7 @@ export async function getDoctorDiagnostic(): Promise<DiagnosticInfo> {
     if (!hasUpdatePermissions && !getAutoUpdaterDisabledReason()) {
       warnings.push({
         issue: 'Insufficient permissions for auto-updates',
-        fix: 'Do one of: (1) Re-install node without sudo, or (2) Use `gakrcli install` for native installation',
+        fix: `Do one of: (1) Re-install node without sudo, or (2) Use \`${getCliBinaryName()} install\` for native installation`,
       })
     }
   }

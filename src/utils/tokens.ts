@@ -1,19 +1,22 @@
 import type { BetaUsage as Usage } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
+import {
+  roughTokenCountEstimation,
+  roughTokenCountEstimationForMessage,
+  roughTokenCountEstimationForMessages,
+} from '../services/tokenEstimation.js'
 import type { AssistantMessage, Message } from '../types/message.js'
-import { IncrementalTokenCounter } from './incrementalTokenCounter.js'
 import { SYNTHETIC_MESSAGES, SYNTHETIC_MODEL } from './messages.js'
 import { jsonStringify } from './slowOperations.js'
-
-export { extractThinkingTokens } from './thinkingTokenExtractor.js'
+import { IncrementalTokenCounter } from './incrementalTokenCounter.js'
 
 let _tokenCounter: IncrementalTokenCounter | undefined
 
 export function getIncrementalTokenCounter(): IncrementalTokenCounter {
   if (!_tokenCounter) {
     _tokenCounter = new IncrementalTokenCounter({
-      tokenBudget: 100_000,
+      tokenBudget: 100000,
       autoInvalidate: true,
-      estimationMultiplier: 1,
+      estimationMultiplier: 1.0,
     })
   }
   return _tokenCounter
@@ -150,16 +153,29 @@ export function messageTokenCountFromLastAPIResponse(
   return 0
 }
 
-export function getCurrentUsage(messages: Message[]): {
-  input_tokens: number
-  output_tokens: number
-  cache_creation_input_tokens: number
-  cache_read_input_tokens: number
-} | null {
+export function getCurrentUsage(messages: Message[]): CurrentUsage | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i]
     const usage = message ? getTokenUsage(message) : undefined
     if (usage) {
+      if (isAllZeroUsage(usage)) {
+        const startIndex = getAssistantResponseStartIndex(messages, i)
+        const estimatedInputTokens = Math.max(
+          1,
+          roughTokenCountEstimationForMessages(messages.slice(0, startIndex)),
+        )
+        const estimatedOutputTokens = Math.max(
+          1,
+          estimateAssistantResponseOutputTokens(messages, i),
+        )
+        return {
+          input_tokens: estimatedInputTokens,
+          output_tokens: estimatedOutputTokens,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+          is_estimated: true,
+        }
+      }
       return {
         input_tokens: usage.input_tokens,
         output_tokens: usage.output_tokens,
@@ -211,6 +227,320 @@ export function getAssistantMessageContentLength(
     }
   }
   return contentLength
+}
+
+/**
+ * Extract thinking tokens from an assistant message.
+ * Returns breakdown of thinking vs output tokens.
+ */
+export function extractThinkingTokens(
+  message: AssistantMessage,
+): { thinking: number; output: number; total: number } {
+  let thinking = 0
+  let output = 0
+
+  for (const block of message.message.content) {
+    if (block.type === 'thinking') {
+      thinking += roughTokenCountEstimation(block.thinking)
+    } else if (block.type === 'redacted_thinking') {
+      thinking += roughTokenCountEstimation(block.data)
+    } else if (block.type === 'text') {
+      output += roughTokenCountEstimation(block.text)
+    } else if (block.type === 'tool_use') {
+      output += roughTokenCountEstimation(jsonStringify(block.input))
+    }
+  }
+
+  return { thinking, output, total: thinking + output }
+}
+
+export type CurrentUsage = {
+  input_tokens: number
+  output_tokens: number
+  cache_creation_input_tokens: number
+  cache_read_input_tokens: number
+  is_estimated?: boolean
+}
+
+export type SessionUsage = {
+  input_tokens: number
+  output_tokens: number
+}
+
+function isAllZeroUsage(usage: Usage): boolean {
+  return getTokenCountFromUsage(usage) === 0
+}
+
+function getAssistantResponseStartIndex(
+  messages: readonly Message[],
+  index: number,
+): number {
+  const message = messages[index]
+  const responseId = message ? getAssistantMessageId(message) : undefined
+  if (!responseId) return index
+
+  let startIndex = index
+  let j = index - 1
+  while (j >= 0) {
+    const prior = messages[j]
+    const priorId = prior ? getAssistantMessageId(prior) : undefined
+    if (priorId === responseId) {
+      startIndex = j
+    } else if (priorId !== undefined) {
+      break
+    }
+    j--
+  }
+  return startIndex
+}
+
+function getAssistantResponseEndIndex(
+  messages: readonly Message[],
+  index: number,
+): number {
+  const message = messages[index]
+  const responseId = message ? getAssistantMessageId(message) : undefined
+  if (!responseId) return index
+
+  let endIndex = index
+  for (let i = index + 1; i < messages.length; i++) {
+    const current = messages[i]
+    if (current && getAssistantMessageId(current) === responseId) {
+      endIndex = i
+    }
+  }
+  return endIndex
+}
+
+function estimateAssistantResponseOutputTokens(
+  messages: readonly Message[],
+  index: number,
+): number {
+  const message = messages[index]
+  const responseId = message ? getAssistantMessageId(message) : undefined
+  if (!responseId) {
+    return message ? roughTokenCountEstimationForMessage(message) : 0
+  }
+
+  const startIndex = getAssistantResponseStartIndex(messages, index)
+  let estimatedOutputTokens = 0
+  for (let i = startIndex; i <= index; i++) {
+    const current = messages[i]
+    if (current && getAssistantMessageId(current) === responseId) {
+      estimatedOutputTokens += roughTokenCountEstimationForMessage(current)
+    }
+  }
+  return estimatedOutputTokens
+}
+
+export function getUnreportedSessionUsage(
+  messages: readonly Message[],
+): SessionUsage | null {
+  let inputTokens = 0
+  let outputTokens = 0
+  const prefixTokenCounts: number[] = [0]
+  const seenResponseIds = new Set<string>()
+
+  for (const message of messages) {
+    prefixTokenCounts.push(
+      prefixTokenCounts[prefixTokenCounts.length - 1]! +
+        roughTokenCountEstimationForMessage(message),
+    )
+  }
+
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i]
+    const usage = message ? getTokenUsage(message) : undefined
+    if (!message || !usage || !isAllZeroUsage(usage)) continue
+
+    const responseId = getAssistantMessageId(message)
+    if (responseId) {
+      if (seenResponseIds.has(responseId)) continue
+      seenResponseIds.add(responseId)
+    }
+
+    const startIndex = getAssistantResponseStartIndex(messages, i)
+    const endIndex = getAssistantResponseEndIndex(messages, i)
+    inputTokens += Math.max(1, prefixTokenCounts[startIndex] ?? 0)
+    outputTokens += Math.max(
+      1,
+      estimateAssistantResponseOutputTokens(messages, endIndex),
+    )
+  }
+
+  if (inputTokens === 0 && outputTokens === 0) return null
+
+  return {
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+  }
+}
+
+/**
+ * Token usage history entry for tracking patterns over time.
+ */
+export interface TokenUsageEntry {
+  timestamp: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheCreationTokens: number
+  model: string
+}
+
+/**
+ * Token analytics summary from historical data.
+ */
+export interface TokenAnalytics {
+  totalRequests: number
+  totalInputTokens: number
+  totalOutputTokens: number
+  totalCacheRead: number
+  totalCacheCreation: number
+  averageInputPerRequest: number
+  averageOutputPerRequest: number
+  cacheHitRate: number
+  mostUsedModel: string
+  requestsLastHour: number
+  requestsLastDay: number
+}
+
+/**
+ * Historical Token Analytics Tracker
+ * 
+ * Tracks token usage patterns over time for analytics,
+ * cost optimization, and capacity planning.
+ */
+export class TokenUsageTracker {
+  private history: TokenUsageEntry[] = []
+  private readonly maxEntries: number
+
+  constructor(maxEntries = 1000) {
+    this.maxEntries = maxEntries
+  }
+
+  /**
+   * Record a token usage event from API response.
+   */
+  record(usage: {
+    input_tokens: number
+    output_tokens: number
+    cache_read_input_tokens?: number
+    cache_creation_input_tokens?: number
+    model: string
+  }): void {
+    const entry: TokenUsageEntry = {
+      timestamp: Date.now(),
+      inputTokens: usage.input_tokens,
+      outputTokens: usage.output_tokens,
+      cacheReadTokens: usage.cache_read_input_tokens ?? 0,
+      cacheCreationTokens: usage.cache_creation_input_tokens ?? 0,
+      model: usage.model,
+    }
+
+    this.history.push(entry)
+
+    // Trim old entries
+    if (this.history.length > this.maxEntries) {
+      this.history = this.history.slice(-this.maxEntries)
+    }
+  }
+
+  /**
+   * Get analytics summary for all recorded usage.
+   */
+  getAnalytics(): TokenAnalytics {
+    if (this.history.length === 0) {
+      return {
+        totalRequests: 0,
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        totalCacheRead: 0,
+        totalCacheCreation: 0,
+        averageInputPerRequest: 0,
+        averageOutputPerRequest: 0,
+        cacheHitRate: 0,
+        mostUsedModel: 'unknown',
+        requestsLastHour: 0,
+        requestsLastDay: 0,
+      }
+    }
+
+    const now = Date.now()
+    const hourAgo = now - 60 * 60 * 1000
+    const dayAgo = now - 24 * 60 * 60 * 1000
+
+    let totalInput = 0
+    let totalOutput = 0
+    let totalCacheRead = 0
+    let totalCacheCreation = 0
+    let modelCounts = new Map<string, number>()
+    let requestsLastHour = 0
+    let requestsLastDay = 0
+
+    for (const entry of this.history) {
+      totalInput += entry.inputTokens
+      totalOutput += entry.outputTokens
+      totalCacheRead += entry.cacheReadTokens
+      totalCacheCreation += entry.cacheCreationTokens
+
+      modelCounts.set(entry.model, (modelCounts.get(entry.model) ?? 0) + 1)
+
+      if (entry.timestamp >= hourAgo) requestsLastHour++
+      if (entry.timestamp >= dayAgo) requestsLastDay++
+    }
+
+    // Find most used model
+    let mostUsedModel = 'unknown'
+    let maxCount = 0
+    for (const [model, count] of modelCounts) {
+      if (count > maxCount) {
+        maxCount = count
+        mostUsedModel = model
+      }
+    }
+
+    const totalRequests = this.history.length
+    const totalCache = totalCacheRead + totalCacheCreation
+    const totalTokens = totalInput + totalOutput + totalCache
+    const cacheHitRate = totalTokens > 0 ? (totalCacheRead / totalTokens) * 100 : 0
+
+    return {
+      totalRequests,
+      totalInputTokens: totalInput,
+      totalOutputTokens: totalOutput,
+      totalCacheRead,
+      totalCacheCreation,
+      averageInputPerRequest: Math.round(totalInput / totalRequests),
+      averageOutputPerRequest: Math.round(totalOutput / totalRequests),
+      cacheHitRate: Math.round(cacheHitRate),
+      mostUsedModel,
+      requestsLastHour,
+      requestsLastDay,
+    }
+  }
+
+  /**
+   * Get recent entries within time window.
+   */
+  getRecent(windowMs: number): TokenUsageEntry[] {
+    const cutoff = Date.now() - windowMs
+    return this.history.filter(e => e.timestamp >= cutoff)
+  }
+
+  /**
+   * Clear history.
+   */
+  clear(): void {
+    this.history = []
+  }
+
+  /**
+   * Get history size.
+   */
+  get size(): number {
+    return this.history.length
+  }
 }
 
 /**
@@ -274,3 +604,5 @@ export function tokenCountWithEstimation(messages: readonly Message[]): number {
   }
   return getIncrementalTokenCounter().getCount(messages)
 }
+
+

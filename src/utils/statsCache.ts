@@ -4,7 +4,7 @@ import { open } from 'fs/promises'
 import { join } from 'path'
 import type { ModelUsage } from '../entrypoints/agentSdkTypes.js'
 import { logForDebugging } from './debug.js'
-import { getGakrcliConfigHomeDir } from './envUtils.js'
+import { getGakrCLIConfigHomeDir } from './envUtils.js'
 import { errorMessage } from './errors.js'
 import { getFsImplementation } from './fsOperations.js'
 import { logError } from './log.js'
@@ -70,12 +70,12 @@ export type PersistedStatsCache = {
   hourCounts: { [hour: number]: number }
   // Speculation time saved across all sessions
   totalSpeculationTimeSavedMs: number
-  // Shot distribution: map of shot count → number of sessions (ant-only)
+  // Shot distribution: map of shot count → number of sessions (internal-only)
   shotDistribution?: { [shotCount: number]: number }
 }
 
 export function getStatsCachePath(): string {
-  return join(getGakrcliConfigHomeDir(), STATS_CACHE_FILENAME)
+  return join(getGakrCLIConfigHomeDir(), STATS_CACHE_FILENAME)
 }
 
 function getEmptyCache(): PersistedStatsCache {
@@ -165,7 +165,7 @@ export async function loadStatsCache(): Promise<PersistedStatsCache> {
         `Migrated stats cache from v${parsed.version} to v${STATS_CACHE_VERSION}`,
       )
       // Persist migration so we don't re-migrate on every load.
-      // aggregategakrcliCodeStats() skips its save when lastComputedDate is
+      // aggregateGakrCLICodeStats() skips its save when lastComputedDate is
       // already current, so without this the on-disk file stays at the old
       // version indefinitely.
       await saveStatsCache(migrated)
@@ -220,7 +220,7 @@ export async function saveStatsCache(
 
   try {
     // Ensure the directory exists
-    const configDir = getGakrcliConfigHomeDir()
+    const configDir = getGakrCLIConfigHomeDir()
     try {
       await fs.mkdir(configDir)
     } catch {

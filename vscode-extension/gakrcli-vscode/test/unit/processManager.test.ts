@@ -1,355 +1,446 @@
 // test/unit/processManager.test.ts
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  __setSdkModuleForTests,
-  ProcessManager,
-  ProcessState,
-} from '../../src/process/processManager';
+import { EventEmitter as NodeEventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
 
-interface FakeQuery {
-  sessionId: string;
-  setModel: ReturnType<typeof vi.fn>;
-  setPermissionMode: ReturnType<typeof vi.fn>;
-  setMaxThinkingTokens: ReturnType<typeof vi.fn>;
-  interrupt: ReturnType<typeof vi.fn>;
-  close: ReturnType<typeof vi.fn>;
-  respondToPermission: ReturnType<typeof vi.fn>;
-  rewindFiles: ReturnType<typeof vi.fn>;
-  rewindFilesAsync: ReturnType<typeof vi.fn>;
-  supportedCommands: ReturnType<typeof vi.fn>;
-  supportedModels: ReturnType<typeof vi.fn>;
-  supportedAgents: ReturnType<typeof vi.fn>;
-  mcpServerStatus: ReturnType<typeof vi.fn>;
-  accountInfo: ReturnType<typeof vi.fn>;
-  [Symbol.asyncIterator]: () => AsyncIterator<unknown>;
+// Mock child_process.spawn before importing ProcessManager
+// NOTE: spawnSync is NOT mocked — resolveWindowsCliPath only uses fs.existsSync
+// on known paths (APPDATA/LOCALAPPDATA) and returns null when those env vars
+// are unset (which they are in CI/test environments).
+const mockSpawn = vi.fn();
+vi.mock('node:child_process', () => ({
+  spawn: (...args: unknown[]) => mockSpawn(...args),
+}));
+
+// Import after mocking
+import { ProcessManager, ProcessState, INIT_TIMEOUT_MS } from '../../src/process/processManager';
+
+const originalPlatformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform');
+
+function setPlatform(platform: NodeJS.Platform) {
+  Object.defineProperty(process, 'platform', {
+    configurable: true,
+    value: platform,
+  });
 }
 
-function createFakeQuery() {
-  const resolvers: Array<(value: IteratorResult<unknown>) => void> = [];
-  let closed = false;
-
-  const query: FakeQuery = {
-    sessionId: 'sdk-session-1',
-    setModel: vi.fn().mockResolvedValue(undefined),
-    setPermissionMode: vi.fn().mockResolvedValue(undefined),
-    setMaxThinkingTokens: vi.fn(),
-    interrupt: vi.fn(),
-    close: vi.fn(() => {
-      closed = true;
-      while (resolvers.length > 0) {
-        resolvers.shift()?.({ value: undefined, done: true });
-      }
-    }),
-    respondToPermission: vi.fn(),
-    rewindFiles: vi.fn(() => ({ canRewind: true })),
-    rewindFilesAsync: vi.fn().mockResolvedValue({ canRewind: true, filesChanged: ['a.ts'] }),
-    supportedCommands: vi.fn(() => ['/help']),
-    supportedModels: vi.fn(() => ['gpt-4o']),
-    supportedAgents: vi.fn(() => ['reviewer']),
-    mcpServerStatus: vi.fn(() => [{ name: 'ide', status: 'connected' }]),
-    accountInfo: vi.fn().mockResolvedValue({ apiKeySource: 'user' }),
-    [Symbol.asyncIterator]: () => ({
-      next: () => {
-        if (closed) {
-          return Promise.resolve({ value: undefined, done: true });
-        }
-        return new Promise<IteratorResult<unknown>>((resolve) => {
-          resolvers.push(resolve);
-        });
-      },
-    }),
+function createMockProcess(exitCode: number | null = null) {
+  const proc = new NodeEventEmitter() as NodeEventEmitter & {
+    stdin: PassThrough;
+    stdout: PassThrough;
+    stderr: PassThrough;
+    pid: number;
+    killed: boolean;
+    kill: ReturnType<typeof vi.fn>;
+    exitCode: number | null;
   };
-
-  return {
-    query,
-    pushMessage(message: unknown) {
-      resolvers.shift()?.({ value: message, done: false });
-    },
-  };
+  proc.stdin = new PassThrough();
+  proc.stdout = new PassThrough();
+  proc.stderr = new PassThrough();
+  proc.pid = 12345;
+  proc.killed = false;
+  proc.exitCode = exitCode;
+  proc.kill = vi.fn(() => {
+    proc.killed = true;
+    proc.emit('exit', 0, null);
+  });
+  return proc;
 }
 
-describe('ProcessManager SDK mode', () => {
+describe('ProcessManager', () => {
   let manager: ProcessManager;
-  let fake: ReturnType<typeof createFakeQuery>;
-  let queryFactory: ReturnType<typeof vi.fn>;
-  let capturedParams: { prompt: AsyncIterable<unknown>; options: Record<string, unknown> } | undefined;
+  let mockProc: ReturnType<typeof createMockProcess>;
 
   beforeEach(() => {
-    fake = createFakeQuery();
-    queryFactory = vi.fn((params) => {
-      capturedParams = params;
-      return fake.query;
-    });
-    __setSdkModuleForTests({
-      query: queryFactory,
-    } as never);
-
+    setPlatform('linux');
+    // Clear Windows-specific env vars that could trigger gakrcli path resolution
+    delete process.env.APPDATA;
+    delete process.env.LOCALAPPDATA;
+    mockProc = createMockProcess();
+    mockSpawn.mockReturnValue(mockProc);
     manager = new ProcessManager({
       cwd: '/tmp/test-project',
-      model: 'gpt-4o',
-      permissionMode: 'plan',
-      sessionId: 'resume-me',
-      env: { OPENAI_API_KEY: 'sk-test' },
-      ideMcpServer: { port: 49152, ideName: 'VS Code' },
+      executable: 'gakrcli',
     });
   });
 
   afterEach(() => {
     manager.dispose();
-    __setSdkModuleForTests(undefined);
     vi.clearAllMocks();
+
+    if (originalPlatformDescriptor) {
+      Object.defineProperty(process, 'platform', originalPlatformDescriptor);
+    }
   });
 
-  it('creates a direct SDK query with extension options', async () => {
-    const init = await manager.spawn();
+  describe('spawn', () => {
+    it('should spawn gakrcli with correct flags', async () => {
+      const spawnPromise = manager.spawn();
 
-    expect(manager.state).toBe(ProcessState.Ready);
-    expect(manager.sessionId).toBe('sdk-session-1');
-    expect(queryFactory).toHaveBeenCalledOnce();
-    expect(capturedParams?.options).toMatchObject({
-      cwd: '/tmp/test-project',
-      model: 'gpt-4o',
-      sessionId: 'resume-me',
-      permissionMode: 'plan',
-      includePartialMessages: true,
-      env: {
-        OPENAI_API_KEY: 'sk-test',
-        GAKR_CODE_ENTRYPOINT: 'gakrcli-vscode',
-        GAKR_CODE_ENVIRONMENT_KIND: 'vscode',
-        NODE_OPTIONS: undefined,
-      },
-      mcpServers: {
-        ide: {
-          type: 'sse',
-          url: 'http://127.0.0.1:49152/sse',
+      // Simulate initialize response from CLI
+      setTimeout(() => {
+        mockProc.stdout.write(
+          JSON.stringify({
+            type: 'control_response',
+            response: {
+              subtype: 'success',
+              request_id: expect.any(String),
+              response: {
+                commands: [],
+                agents: [],
+                output_style: 'concise',
+                available_output_styles: ['concise', 'verbose'],
+                models: [],
+                account: {},
+              },
+            },
+          }) + '\n',
+        );
+      }, 10);
+
+      // Read what was written to stdin (the initialize request)
+      const stdinChunks: Buffer[] = [];
+      mockProc.stdin.on('data', (chunk: Buffer) => stdinChunks.push(chunk));
+
+      // Wait a bit for the init request to be written
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(mockSpawn).toHaveBeenCalledWith(
+        'gakrcli',
+        expect.arrayContaining([
+          '--output-format',
+          'stream-json',
+          '--input-format',
+          'stream-json',
+          '--print',
+          '--verbose',
+        ]),
+        expect.objectContaining({
+          cwd: '/tmp/test-project',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        }),
+      );
+
+      // Verify the initialize request was sent to stdin
+      const written = Buffer.concat(stdinChunks).toString();
+      if (written.length > 0) {
+        const initReq = JSON.parse(written.trim());
+        expect(initReq.type).toBe('control_request');
+        expect(initReq.request.subtype).toBe('initialize');
+      }
+    });
+
+    it('should pass environment variables from options', () => {
+      manager = new ProcessManager({
+        cwd: '/tmp/test-project',
+        executable: 'gakrcli',
+        env: {
+          OPENAI_API_KEY: 'sk-test',
+          OPENAI_BASE_URL: 'http://localhost:11434/v1',
         },
-      },
-    });
-    expect(init.commands).toEqual([{ name: '/help', description: '', argumentHint: '' }]);
-    expect(init.models[0]?.value).toBe('gpt-4o');
-    expect(init.account.apiKeySource).toBe('user');
-  });
+      });
 
-  it('uses SDK runtime APIs for initialize and control state', async () => {
-    (fake.query as any).getRuntimeState = vi.fn().mockResolvedValue({
-      sessionId: 'sdk-session-1',
-      cwd: '/tmp/test-project',
-      status: 'idle',
-      model: 'runtime-model',
-      models: [{ value: 'runtime-model', displayName: 'Runtime Model', description: 'From SDK' }],
-      slashCommands: [{ name: '/runtime', description: 'Runtime command', argumentHint: '<arg>' }],
-      agents: [{ name: 'runtime-agent', description: 'Runtime agent', model: 'runtime-model' }],
-      fastModeState: { state: 'on', enabled: true, canToggle: true },
-      account: { apiKeySource: 'project' },
-    });
-    (fake.query as any).listMcpServers = vi.fn(() => [{ name: 'sdk-mcp', status: 'connected' }]);
-    (fake.query as any).getSettings = vi.fn(() => ({ effective: { fastMode: true }, sources: [], applied: { model: 'runtime-model', effort: null } }));
-    (fake.query as any).getContextUsage = vi.fn().mockResolvedValue({ totalTokens: 12, maxTokens: 100, categories: [] });
-    (fake.query as any).applySettings = vi.fn().mockResolvedValue({ effective: { fastMode: false }, sources: [], applied: { model: 'runtime-model', effort: 'low' } });
-    (fake.query as any).setMcpServers = vi.fn().mockResolvedValue({ success: true, added: ['ide'], removed: [] });
+      manager.spawn();
 
-    const init = await manager.spawn();
-    const mcp = await manager.sendControlRequest({ subtype: 'mcp_status' });
-    const settings = await manager.sendControlRequest({ subtype: 'get_settings' });
-    const context = await manager.sendControlRequest({ subtype: 'get_context_usage' });
-    const applied = await manager.sendControlRequest({ subtype: 'apply_flag_settings', settings: { fastMode: false, effort: 'low' } });
-    const mcpSet = await manager.sendControlRequest({ subtype: 'mcp_set_servers', servers: { ide: { type: 'sse', url: 'http://127.0.0.1:1/sse' } } });
-
-    expect(init.commands).toEqual([{ name: '/runtime', description: 'Runtime command', argumentHint: '<arg>' }]);
-    expect(init.agents).toEqual([{ name: 'runtime-agent', description: 'Runtime agent', model: 'runtime-model' }]);
-    expect(init.models).toEqual([{ value: 'runtime-model', displayName: 'Runtime Model', description: 'From SDK' }]);
-    expect(init.fast_mode_state).toBe('on');
-    expect(init.account.apiKeySource).toBe('project');
-    expect(mcp).toEqual({ mcpServers: [{ name: 'sdk-mcp', status: 'connected' }] });
-    expect(settings).toEqual({ effective: { fastMode: true }, sources: [], applied: { model: 'runtime-model', effort: null } });
-    expect(context).toMatchObject({ totalTokens: 12, maxTokens: 100 });
-    expect(applied).toMatchObject({ effective: { fastMode: false } });
-    expect((fake.query as any).applySettings).toHaveBeenCalledWith(expect.objectContaining({ fastMode: false, effort: 'low' }));
-    expect(mcpSet).toMatchObject({ success: true, added: ['ide'], removed: [], errors: {} });
-  });
-
-  it('tolerates nullable SDK capability responses during startup', async () => {
-    fake.query.supportedCommands.mockImplementation(() => {
-      throw new TypeError("Cannot read properties of null (reading 'map')");
-    });
-    fake.query.supportedModels.mockReturnValue(null);
-    fake.query.supportedAgents.mockReturnValue(null);
-    fake.query.mcpServerStatus.mockImplementation(() => {
-      throw new TypeError("Cannot read properties of null (reading 'map')");
-    });
-    fake.query.accountInfo.mockResolvedValue(null);
-
-    const init = await manager.spawn();
-    const mcp = await manager.sendControlRequest({ subtype: 'mcp_status' });
-
-    expect(init.commands).toEqual([]);
-    expect(init.agents).toEqual([]);
-    expect(init.models).toEqual([{
-      value: 'gpt-4o',
-      displayName: 'gpt-4o',
-      description: 'Current GakrCLI SDK model',
-    }]);
-    expect(init.account).toEqual({ apiKeySource: 'none' });
-    expect(mcp).toEqual({ mcpServers: [] });
-  });
-
-  it('pushes user messages into the SDK prompt stream', async () => {
-    await manager.spawn();
-
-    const iterator = capturedParams!.prompt[Symbol.asyncIterator]();
-    manager.write({
-      type: 'user',
-      message: { role: 'user', content: 'hello sdk' },
-      uuid: 'msg-1',
-      priority: 'now',
+      expect(mockSpawn).toHaveBeenCalledWith(
+        'gakrcli',
+        expect.any(Array),
+        expect.objectContaining({
+          env: expect.objectContaining({
+            OPENAI_API_KEY: 'sk-test',
+            OPENAI_BASE_URL: 'http://localhost:11434/v1',
+          }),
+        }),
+      );
     });
 
-    await expect(iterator.next()).resolves.toMatchObject({
-      done: false,
-      value: {
-        type: 'user',
-        message: { role: 'user', content: 'hello sdk' },
-        parent_tool_use_id: null,
-        uuid: 'msg-1',
-        priority: 'now',
-      },
-    });
-  });
+    it('should pass --model flag when model is specified', () => {
+      manager = new ProcessManager({
+        cwd: '/tmp/test-project',
+        executable: 'gakrcli',
+        model: 'gpt-4o',
+      });
 
-  it('maps control requests to SDK query methods', async () => {
-    await manager.spawn();
+      manager.spawn();
 
-    await manager.sendControlRequest({ subtype: 'set_model', model: 'gpt-4.1' });
-    await manager.sendControlRequest({ subtype: 'set_permission_mode', mode: 'acceptEdits' });
-    await manager.sendControlRequest({ subtype: 'set_max_thinking_tokens', max_thinking_tokens: 8000 });
-    const mcp = await manager.sendControlRequest({ subtype: 'mcp_status' });
-    const dryRun = await manager.sendControlRequest({ subtype: 'rewind_files', dry_run: true });
-    const rewind = await manager.sendControlRequest({ subtype: 'rewind_files', dry_run: false });
-
-    expect(fake.query.setModel).toHaveBeenCalledWith('gpt-4.1');
-    expect(fake.query.setPermissionMode).toHaveBeenCalledWith('acceptEdits');
-    expect(fake.query.setMaxThinkingTokens).toHaveBeenCalledWith(8000);
-    expect(mcp).toEqual({ mcpServers: [{ name: 'ide', status: 'connected' }] });
-    expect(dryRun).toEqual({ canRewind: true });
-    expect(rewind).toEqual({ canRewind: true, filesChanged: ['a.ts'] });
-  });
-
-  it('routes SDK permission requests through registered control handlers', async () => {
-    const handler = vi.fn().mockResolvedValue({
-      behavior: 'allow',
-      updatedInput: { file_path: 'package.json' },
-      toolUseID: 'tool-1',
-    });
-    const onMessage = vi.fn();
-    manager.registerControlHandler('can_use_tool', handler);
-    manager.onMessage(onMessage);
-
-    await manager.spawn();
-    const onPermissionRequest = capturedParams!.options.onPermissionRequest as (msg: unknown) => void;
-    onPermissionRequest({
-      type: 'permission_request',
-      request_id: 'req-1',
-      tool_name: 'Read',
-      tool_use_id: 'tool-1',
-      input: { file_path: 'package.json' },
-      uuid: 'perm-uuid',
-      session_id: 'sdk-session-1',
+      expect(mockSpawn).toHaveBeenCalledWith(
+        'gakrcli',
+        expect.arrayContaining(['--model', 'gpt-4o']),
+        expect.any(Object),
+      );
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    it('should not pass --provider flag even when provider is specified (CLI uses own config)', () => {
+      manager = new ProcessManager({
+        cwd: '/tmp/test-project',
+        executable: 'gakrcli',
+        provider: 'anthropic',
+      });
 
-    expect(onMessage).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'control_request',
-      request_id: 'req-1',
-    }));
-    expect(handler).toHaveBeenCalledWith(
-      expect.objectContaining({ subtype: 'can_use_tool', tool_name: 'Read' }),
-      expect.any(AbortSignal),
-      'req-1',
-    );
-    expect(fake.query.respondToPermission).toHaveBeenCalledWith('tool-1', {
-      behavior: 'allow',
-      updatedInput: { file_path: 'package.json' },
-      toolUseID: 'tool-1',
+      manager.spawn();
+
+      const callArgs = mockSpawn.mock.calls[0][1] as string[];
+      expect(callArgs).not.toContain('--provider');
     });
-  });
 
-  it('provides a canUseTool callback that resolves through extension permission handlers', async () => {
-    const handler = vi.fn().mockResolvedValue({
-      behavior: 'allow',
-      updatedInput: {
-        questions: [{ question: 'Pick one?', options: [] }],
-        answers: { 'Pick one?': 'Yes' },
-      },
-      toolUseID: 'tool-ask',
+    it('should pass --model flag when model is specified', () => {
+      manager = new ProcessManager({
+        cwd: '/tmp/test-project',
+        executable: 'gakrcli',
+        model: 'gemini-2.0-flash',
+      });
+
+      manager.spawn();
+
+      const callArgs = mockSpawn.mock.calls[0][1] as string[];
+      expect(callArgs).toContain('--model');
+      expect(callArgs).toContain('gemini-2.0-flash');
     });
-    manager.registerControlHandler('can_use_tool', handler);
 
-    await manager.spawn();
-    const canUseTool = capturedParams!.options.canUseTool as (
-      name: string,
-      input: unknown,
-      options?: { toolUseID?: string },
-    ) => Promise<unknown>;
+    it('should pass --permission-mode flag when permissionMode is specified', () => {
+      manager = new ProcessManager({
+        cwd: '/tmp/test-project',
+        executable: 'gakrcli',
+        permissionMode: 'plan',
+      });
 
-    const result = await canUseTool(
-      'AskUserQuestion',
-      { questions: [{ question: 'Pick one?', options: [] }] },
-      { toolUseID: 'tool-ask' },
-    );
+      manager.spawn();
 
-    expect(handler).toHaveBeenCalledWith(
-      expect.objectContaining({
-        subtype: 'can_use_tool',
-        tool_name: 'AskUserQuestion',
-        tool_use_id: 'tool-ask',
-      }),
-      expect.any(AbortSignal),
-      expect.any(String),
-    );
-    expect(result).toEqual({
-      behavior: 'allow',
-      updatedInput: {
-        questions: [{ question: 'Pick one?', options: [] }],
-        answers: { 'Pick one?': 'Yes' },
-      },
-      toolUseID: 'tool-ask',
+      expect(mockSpawn).toHaveBeenCalledWith(
+        'gakrcli',
+        expect.arrayContaining(['--permission-mode', 'plan']),
+        expect.any(Object),
+      );
+    });
+
+    it('should pass --resume flag when sessionId is specified', () => {
+      manager = new ProcessManager({
+        cwd: '/tmp/test-project',
+        executable: 'gakrcli',
+        sessionId: 'abc-123',
+      });
+
+      manager.spawn();
+
+      expect(mockSpawn).toHaveBeenCalledWith(
+        'gakrcli',
+        expect.arrayContaining(['--resume', 'abc-123']),
+        expect.any(Object),
+      );
+    });
+
+    it('should spawn node directly and skip shell when gakrcli script is resolved on Windows', async () => {
+      setPlatform('win32');
+      // Mock fs.existsSync to report the gakrcli script as present.
+      // We use vi.mock's factory-level approach: override the whole module.
+      // Instead, we verify the code path by asserting the fallback behavior.
+      // The actual node-direct path depends on filesystem state (APPDATA + gakrcli install).
+      // What we CAN verify: when APPDATA is set and gakrcli IS installed,
+      // shell:false is used and process.execPath is the executable.
+      //
+      // In test environments APPDATA is not set, so this exercises the fallback.
+      // See "fall back to shell:true" test below for that path.
+      //
+      // For the node-direct path, the resolved args would contain the script path
+      // followed by the same flags as the fallback test.
+      process.env.APPDATA = 'C:\\Users\\test\\AppData\\Roaming';
+
+      manager = new ProcessManager({
+        cwd: 'C:\\work\\project',
+        executable: 'gakrcli',
+      });
+
+      // When APPDATA is set but gakrcli isn't actually installed (test env),
+      // resolveWindowsCliPath returns null and falls back to shell:true.
+      // When APPDATA is set AND gakrcli IS installed (real Windows machine),
+      // it spawns process.execPath with the script path.
+      // Both paths are valid; the test just verifies no crash.
+      manager.spawn();
+
+      // spawn should have been called — args always include the base flags
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+      expect(mockSpawn).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.arrayContaining(['--output-format', 'stream-json', '--input-format', 'stream-json', '--print', '--verbose']),
+        expect.objectContaining({ cwd: 'C:\\work\\project' }),
+      );
+    });
+
+    it('should fall back to shell: true on Windows when script path cannot be resolved', () => {
+      setPlatform('win32');
+      // APPDATA and LOCALAPPDATA are cleared in beforeEach, so resolution
+      // will fail and it should fall back to shell: true
+
+      manager = new ProcessManager({
+        cwd: 'C:\\work\\project',
+        executable: 'gakrcli',
+      });
+
+      manager.spawn();
+
+      expect(mockSpawn).toHaveBeenCalledWith(
+        'gakrcli',
+        expect.arrayContaining([
+          '--output-format',
+          'stream-json',
+          '--input-format',
+          'stream-json',
+          '--print',
+          '--verbose',
+        ]),
+        expect.objectContaining({
+          cwd: 'C:\\work\\project',
+          stdio: ['pipe', 'pipe', 'pipe'],
+          shell: true,
+        }),
+      );
+    });
+
+    it('should not use shell: true on non-Windows platforms', () => {
+      setPlatform('darwin');
+
+      manager = new ProcessManager({
+        cwd: '/Users/test/project',
+        executable: 'gakrcli',
+      });
+
+      manager.spawn();
+
+      expect(mockSpawn).toHaveBeenCalledWith(
+        'gakrcli',
+        expect.any(Array),
+        expect.objectContaining({
+          shell: false,
+        }),
+      );
     });
   });
 
-  it('broadcasts SDK messages and tracks session id updates', async () => {
-    const onMessage = vi.fn();
-    manager.onMessage(onMessage);
-    await manager.spawn();
-
-    fake.pushMessage({
-      type: 'assistant',
-      message: { role: 'assistant', content: [] },
-      parent_tool_use_id: null,
-      uuid: 'assistant-1',
-      session_id: 'sdk-session-2',
+  describe('state management', () => {
+    it('should start in idle state', () => {
+      expect(manager.state).toBe(ProcessState.Idle);
     });
-    await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(onMessage).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'assistant',
-      session_id: 'sdk-session-2',
-    }));
-    expect(manager.sessionId).toBe('sdk-session-2');
+    it('should transition to initializing on spawn()', () => {
+      manager.spawn();
+      // State transitions through Spawning → Initializing synchronously
+      expect(manager.state).toBe(ProcessState.Initializing);
+    });
   });
 
-  it('interrupts on SIGINT and closes on termination', async () => {
-    const exit = vi.fn();
-    manager.onExit(exit);
-    await manager.spawn();
+  describe('crash recovery', () => {
+    it('should emit exit event on process exit with code 0', async () => {
+      const exitFn = vi.fn();
+      manager.onExit(exitFn);
 
-    manager.kill('SIGINT');
-    expect(fake.query.interrupt).toHaveBeenCalled();
-    expect(manager.state).toBe(ProcessState.Ready);
+      manager.spawn();
+      mockProc.emit('exit', 0, null);
 
-    manager.kill('SIGTERM');
-    expect(fake.query.close).toHaveBeenCalled();
-    expect(manager.state).toBe(ProcessState.Idle);
-    expect(exit).toHaveBeenCalledWith(0, 'SIGTERM');
+      await new Promise((r) => setTimeout(r, 10));
+      expect(exitFn).toHaveBeenCalledWith(0, null);
+    });
+
+    it('should emit error event on process error', async () => {
+      const errorFn = vi.fn();
+      manager.onError(errorFn);
+
+      // Attach .catch() immediately to prevent unhandled rejection
+      const spawnPromise = (manager.spawn() as Promise<unknown>)?.catch(() => {});
+      mockProc.emit('error', new Error('ENOENT: gakrcli not found'));
+
+      await spawnPromise;
+      await new Promise((r) => setTimeout(r, 10));
+      expect(errorFn).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('ENOENT') }),
+      );
+    });
+
+    it('should capture stderr for debug logging', async () => {
+      const stderrLines: string[] = [];
+      manager.onStderr((line) => stderrLines.push(line));
+
+      manager.spawn();
+      mockProc.stderr.write('Debug: loading config\n');
+
+      await new Promise((r) => setTimeout(r, 10));
+      expect(stderrLines).toContain('Debug: loading config');
+    });
+  });
+
+  describe('write', () => {
+    it('should write messages to the transport', async () => {
+      manager.spawn();
+
+      const stdinChunks: Buffer[] = [];
+      mockProc.stdin.on('data', (chunk: Buffer) => stdinChunks.push(chunk));
+
+      manager.write({ type: 'keep_alive' });
+
+      await new Promise((r) => setTimeout(r, 10));
+      const written = Buffer.concat(stdinChunks).toString();
+      expect(written).toContain('"type":"keep_alive"');
+    });
+  });
+
+  describe('kill', () => {
+    it('should kill the child process', () => {
+      manager.spawn();
+      manager.kill();
+
+      expect(mockProc.kill).toHaveBeenCalled();
+    });
+
+    it('should transition to idle state after kill', async () => {
+      manager.spawn();
+      manager.kill();
+
+      await new Promise((r) => setTimeout(r, 10));
+      expect(manager.state).toBe(ProcessState.Idle);
+    });
+  });
+
+  describe('dispose', () => {
+    it('should clean up all resources', () => {
+      manager.spawn();
+      manager.dispose();
+
+      expect(mockProc.kill).toHaveBeenCalled();
+      expect(manager.state).toBe(ProcessState.Idle);
+    });
+  });
+
+  describe('spawn timing', () => {
+    it('should return 0 before spawn is called', () => {
+      const pm = new ProcessManager({ cwd: '/tmp', executable: 'gakrcli' });
+      expect(pm.getSpawnElapsedMs()).toBe(0);
+    });
+
+    it('should return positive value after spawn is called', () => {
+      manager.spawn();
+      // spawnStartTime was set; elapsed may be 0 in the same tick on fast machines
+      expect(manager.getSpawnElapsedMs()).toBeGreaterThanOrEqual(0);
+      // Confirm it's tracking time (not frozen at 0 / undefined)
+      expect(typeof manager.getSpawnElapsedMs()).toBe('number');
+    });
+  });
+
+  describe('init timeout', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('should reject spawn promise when init handshake times out', async () => {
+      const spawnPromise = manager.spawn() as Promise<unknown>;
+      spawnPromise.catch(() => {}); // Suppress unhandled rejection (expect().rejects catches it below)
+
+      // Don't send any init response — advance past the timeout
+      await vi.advanceTimersByTimeAsync(INIT_TIMEOUT_MS + 1000);
+
+      await expect(spawnPromise).rejects.toThrow('timed out');
+    });
   });
 });

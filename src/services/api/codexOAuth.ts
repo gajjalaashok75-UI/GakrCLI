@@ -10,9 +10,9 @@ import {
   CODEX_OAUTH_ORIGINATOR,
   CODEX_OAUTH_SCOPE,
   escapeHtml,
-  exchangeCodexIdTokenForApiKey,
   getCodexOAuthCallbackHost,
   getCodexOAuthCallbackOrigin,
+  exchangeCodexIdTokenForApiKey,
   getCodexOAuthCallbackPort,
   getCodexOAuthClientId,
   parseChatgptAccountId,
@@ -163,6 +163,7 @@ async function exchangeAuthorizationCode(options: {
   } finally {
     cleanup()
   }
+
   const accessToken = asTrimmedString(payload.access_token)
   const refreshToken = asTrimmedString(payload.refresh_token)
   if (!accessToken || !refreshToken) {
@@ -186,10 +187,28 @@ async function exchangeAuthorizationCode(options: {
   }
 }
 
+type CodexOAuthServiceOptions = {
+  callbackPort?: number
+  callbackHost?: string
+  createAuthCodeListener?: (callbackPath: string) => CodexOAuthListener
+}
+
+type CodexOAuthListener = Pick<
+  AuthCodeListener,
+  | 'start'
+  | 'hasPendingResponse'
+  | 'waitForAuthorization'
+  | 'handleSuccessRedirect'
+  | 'handleErrorRedirect'
+  | 'cancelPendingAuthorization'
+>
+
 export class CodexOAuthService {
-  private authCodeListener: AuthCodeListener | null = null
+  private authCodeListener: CodexOAuthListener | null = null
   private port: number | null = null
   private tokenExchangeAbortController: AbortController | null = null
+
+  constructor(private readonly options: CodexOAuthServiceOptions = {}) {}
 
   private buildCancellationError(): Error {
     return new Error('Codex OAuth flow was cancelled.')
@@ -199,9 +218,13 @@ export class CodexOAuthService {
     authURLHandler: (authUrl: string) => Promise<void>,
   ): Promise<CodexOAuthTokens> {
     const codeVerifier = generateCodeVerifier()
-    const callbackPort = getCodexOAuthCallbackPort()
-    const callbackHost = getCodexOAuthCallbackHost()
-    const authCodeListener = new AuthCodeListener('/auth/callback')
+    const callbackPort =
+      this.options.callbackPort ?? getCodexOAuthCallbackPort()
+    const callbackHost =
+      this.options.callbackHost ?? getCodexOAuthCallbackHost()
+    const authCodeListener =
+      this.options.createAuthCodeListener?.('/auth/callback') ??
+      new AuthCodeListener('/auth/callback')
 
     this.authCodeListener = authCodeListener
     this.port = null

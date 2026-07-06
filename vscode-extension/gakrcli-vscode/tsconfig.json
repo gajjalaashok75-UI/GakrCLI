@@ -11,9 +11,6 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "baseUrl": ".",
-    "paths": {
-      "@gakr-gakr/gakrcli/sdk": ["node_modules/@gakr-gakr/gakrcli/src/entrypoints/sdk.d.ts"]
-    },
     "declaration": true,
     "sourceMap": true
   },

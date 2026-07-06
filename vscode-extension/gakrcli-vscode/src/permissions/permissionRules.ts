@@ -9,7 +9,8 @@ const STORAGE_KEY = 'gakrcli.permissionRules.alwaysAllow';
 export class PermissionRules {
   private readonly rules = new Set<string>();
 
-  constructor(private readonly context: vscode.ExtensionContext) {
+  constructor(context: vscode.ExtensionContext) {
+    this.context = context;
     const stored = context.workspaceState.get<string[]>(STORAGE_KEY, []);
     for (const rule of stored) {
       this.rules.add(rule);
@@ -17,11 +18,7 @@ export class PermissionRules {
   }
 
   has(toolName: string): boolean {
-    if (this.rules.has(toolName)) {
-      return true;
-    }
-    const normalized = toolName.toLowerCase();
-    return Array.from(this.rules).some((rule) => rule.toLowerCase() === normalized);
+    return this.rules.has(toolName);
   }
 
   add(toolName: string): void {

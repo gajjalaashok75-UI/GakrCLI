@@ -218,6 +218,8 @@ function buildInheritedCliFlags(options?: {
   // Plan mode takes precedence over bypass permissions for safety
   if (planModeRequired) {
     // Don't inherit bypass permissions when plan mode is required
+  } else if (permissionMode === 'fullAccess') {
+    flags.push('--permission-mode fullAccess')
   } else if (
     permissionMode === 'bypassPermissions' ||
     getSessionBypassPermissionsMode()
@@ -300,7 +302,7 @@ export async function generateUniqueTeammateName(
 // ============================================================================
 
 /**
- * Ensures a team file exists on disk. If it doesn't (e.g. when a non-Gakr
+ * Ensures a team file exists on disk. If it doesn't (e.g. when a non-GakrCLI
  * model skips the TeamCreate step), auto-creates a minimal team file so
  * the spawn can proceed.
  */
@@ -373,7 +375,7 @@ async function ensureTeamFileExists(
 /**
  * Handle spawn operation using split-pane view (default).
  * When inside tmux: Creates teammates in a shared window with leader on left, teammates on right.
- * When outside tmux: Creates a gakr-swarm session with all teammates in a tiled layout.
+ * When outside tmux: Creates a gakrcli-swarm session with all teammates in a tiled layout.
  */
 async function handleSpawnSplitPane(
   input: SpawnInput,
@@ -464,7 +466,7 @@ async function handleSpawnSplitPane(
   // Create a pane in the swarm view
   // - Inside tmux: splits current window (leader on left, teammates on right)
   // - In iTerm2 with it2: uses native iTerm2 split panes
-  // - Outside both: creates gakr-swarm session with tiled teammates
+  // - Outside both: creates gakrcli-swarm session with tiled teammates
   const { paneId, isFirstTeammate } = await createTeammatePaneInSwarmView(
     sanitizedName,
     teammateColor,
@@ -476,7 +478,7 @@ async function handleSpawnSplitPane(
     await enablePaneBorderStatus()
   }
 
-  // Build the command to spawn gakrcli with teammate identity
+  // Build the command to spawn GakrCLI Code with teammate identity
   // Note: We spawn without a prompt - initial instructions are sent via mailbox
   const binaryPath = getTeammateCommand()
 
@@ -515,7 +517,7 @@ async function handleSpawnSplitPane(
 
   const flagsStr = inheritedFlags ? ` ${inheritedFlags}` : ''
   // Propagate env vars that teammates need but may not inherit from tmux split-window shells.
-  // Includes gakrcli, GAKR_CODE_EXPERIMENTAL_AGENT_TEAMS, and API provider vars.
+  // Includes GAKRCLICODE, GAKR_CODE_EXPERIMENTAL_AGENT_TEAMS, and API provider vars.
   const envStr = buildInheritedEnvVars()
   const spawnCommand = `cd ${quote([workingDir])} && env ${envStr} ${quote([binaryPath])} ${teammateArgs}${flagsStr}`
 
@@ -678,7 +680,7 @@ async function handleSpawnSeparateWindow(
 
   const paneId = createWindowResult.stdout.trim()
 
-  // Build the command to spawn GakrCLI with teammate identity
+  // Build the command to spawn GakrCLI Code with teammate identity
   // Note: We spawn without a prompt - initial instructions are sent via mailbox
   const binaryPath = getTeammateCommand()
 
@@ -717,7 +719,7 @@ async function handleSpawnSeparateWindow(
 
   const flagsStr = inheritedFlags ? ` ${inheritedFlags}` : ''
   // Propagate env vars that teammates need but may not inherit from tmux split-window shells.
-  // Includes GakrCLI, GAKR_CODE_EXPERIMENTAL_AGENT_TEAMS, and API provider vars.
+  // Includes GAKRCLICODE, GAKR_CODE_EXPERIMENTAL_AGENT_TEAMS, and API provider vars.
   const envStr = buildInheritedEnvVars()
   const spawnCommand = `cd ${quote([workingDir])} && env ${envStr} ${quote([binaryPath])} ${teammateArgs}${flagsStr}`
 
@@ -1100,7 +1102,7 @@ async function handleSpawnInProcess(
 }
 
 /**
- * Handle spawn operation - creates a new GakrCLI instance.
+ * Handle spawn operation - creates a new GakrCLI Code instance.
  * Uses in-process mode when enabled, otherwise uses tmux/iTerm2 split-pane view.
  * Falls back to in-process if pane backend detection fails (e.g., iTerm2 without
  * it2 CLI or tmux installed).

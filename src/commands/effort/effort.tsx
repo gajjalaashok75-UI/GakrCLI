@@ -5,7 +5,7 @@ import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEve
 import { useAppState, useSetAppState } from '../../state/AppState.js';
 import type { LocalJSXCommandOnDone } from '../../types/command.js';
 import { type EffortValue, getDisplayedEffortLevel, getEffortEnvOverride, getEffortValueDescription, isEffortLevel, isOpenAIEffortLevel, modelUsesOpenAIEffort, openAIEffortToStandard, toPersistableEffort } from '../../utils/effort.js';
-import { EffortPicker } from '../../components/EffortPicker.js';
+import { EffortPanel } from '../../components/EffortPanel/EffortPanel.js';
 import { updateSettingsForSource } from '../../utils/settings/settings.js';
 const COMMON_HELP_ARGS = ['help', '-h', '--help'];
 type EffortCommandResult = {
@@ -114,7 +114,7 @@ export function executeEffort(args: string): EffortCommandResult {
     return setEffortValue(normalized);
   }
   if (isOpenAIEffortLevel(normalized)) {
-    // Normalize OpenAI-shaped 'xhigh' -> standard 'max' so it persists.
+    // Normalize OpenAI-shaped 'xhigh' → standard 'max' so it persists.
     return setEffortValue(openAIEffortToStandard(normalized));
   }
   return {
@@ -176,46 +176,20 @@ function ApplyEffortAndClose(t0) {
 export async function call(onDone: LocalJSXCommandOnDone, _context: unknown, args?: string): Promise<React.ReactNode> {
   args = args?.trim() || '';
   if (COMMON_HELP_ARGS.includes(args)) {
-    onDone('Usage: /effort [low|medium|high|max|xhigh|auto]\n\nEffort levels:\n- low: Quick, straightforward implementation\n- medium: Balanced approach with standard testing\n- high: Comprehensive implementation with extensive testing\n- max: Maximum capability with deepest reasoning (Opus 4.6 only)\n- xhigh: Extra-high reasoning for OpenAI/Codex models (alias for max)\n- auto: Use the default effort level for your model');
+    onDone('Usage: /effort [low|medium|high|max|xhigh|auto]\n\nEffort levels:\n- low: Quick, straightforward implementation\n- medium: Balanced approach with standard testing\n- high: Comprehensive implementation with extensive testing\n- max: Maximum capability with deepest reasoning (Opus 4.6+)\n- xhigh: Extra-high reasoning (OpenAI/Codex and Opus 4.7+)\n- auto: Use the default effort level for your model');
     return;
   }
   if (args === 'current' || args === 'status') {
     return <ShowCurrentEffort onDone={onDone} />;
   }
   if (!args) {
-    return <EffortPickerWrapper onDone={onDone} />;
+    return <EffortPanelWrapper onDone={onDone} />;
   }
   const result = executeEffort(args);
   return <ApplyEffortAndClose result={result} onDone={onDone} />;
 }
 
-function EffortPickerWrapper({ onDone }: { onDone: LocalJSXCommandOnDone }) {
-  const setAppState = useSetAppState();
-  const model = useMainLoopModel();
-  const usesOpenAIEffort = modelUsesOpenAIEffort(model);
-
-  function handleSelect(effort: EffortValue | undefined) {
-    const persistable = toPersistableEffort(effort);
-    if (persistable !== undefined) {
-      updateSettingsForSource('userSettings', {
-        effortLevel: persistable
-      });
-    }
-    logEvent('tengu_effort_command', {
-      effort: (effort ?? 'auto') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-    });
-    setAppState(prev => ({
-      ...prev,
-      effortValue: effort
-    }));
-    const description = effort ? getEffortValueDescription(effort) : 'Use default effort level for your model';
-    const suffix = persistable !== undefined ? '' : ' (this session only)';
-    onDone(`Set effort level to ${effort ?? 'auto'}${suffix}: ${description}`);
-  }
-
-  function handleCancel() {
-    onDone('Cancelled');
-  }
-
-  return <EffortPicker onSelect={handleSelect} onCancel={handleCancel} />;
+function EffortPanelWrapper({ onDone }: { onDone: LocalJSXCommandOnDone }) {
+  const effortValue = useAppState(s => s.effortValue);
+  return <EffortPanel appStateEffort={effortValue} onDone={onDone} />;
 }

@@ -18,7 +18,7 @@
  *   - Pure functions, no globals: callers pass the provider explicitly so
  *     that tests, background agents and teammates get consistent results
  *     even when the process-level provider flag differs.
- *   - Honest N/A: Copilot (non-Claude) and Ollama do not expose cache data
+ *   - Honest N/A: Copilot (non-GakrCLI) and Ollama do not expose cache data
  *     at all. Returning 0 would lie and corrupt aggregate hit-rate, so we
  *     return `supported: false` and let the display decide how to render.
  *   - `hitRate` is null whenever there is no input to compare against
@@ -42,7 +42,7 @@
  *                       usage.prompt_cache_miss_tokens
  *   - Gemini:           usage.cached_content_token_count,
  *                       usage.prompt_token_count
- *   - Copilot (non-Claude) / Ollama: not reported → supported=false
+ *   - Copilot (non-GakrCLI) / Ollama: not reported → supported=false
  */
 import type { APIProvider } from '../../utils/model/providers.js'
 
@@ -63,7 +63,7 @@ export type CacheAwareProvider =
   // local to one branch.
   | 'self-hosted'
   | 'copilot'
-  | 'copilot-claude'
+  | 'copilot-gakrcli'
 
 /** Unified cache metrics for one API response. */
 export type CacheMetrics = {
@@ -224,7 +224,7 @@ function isLocalOrPrivateUrl(url: string): boolean {
 /**
  * Map the canonical APIProvider enum (+ environment hints) into a
  * cache-capability bucket. We separate `copilot` (no cache) from
- * `copilot-claude` (Anthropic shim via Copilot with explicit cache)
+ * `copilot-gakrcli` (Anthropic shim via Copilot with explicit cache)
  * because the two behave very differently even under the same provider
  * flag — see `isGithubNativeAnthropicMode` in utils/model/providers.ts.
  *
@@ -244,7 +244,7 @@ export function resolveCacheProvider(
   hints?: { githubNativeAnthropic?: boolean; openAiBaseUrl?: string },
 ): CacheAwareProvider {
   if (provider === 'github') {
-    return hints?.githubNativeAnthropic ? 'copilot-claude' : 'copilot'
+    return hints?.githubNativeAnthropic ? 'copilot-gakrcli' : 'copilot'
   }
   if (provider === 'firstParty' || provider === 'bedrock' || provider === 'vertex' || provider === 'foundry') {
     return 'anthropic'
@@ -271,6 +271,23 @@ export function resolveCacheProvider(
   // 'openai' for normalization purposes — if the provider doesn't emit the
   // field we simply get zeros, and hitRate stays null via the 0-guard below.
   return 'openai'
+}
+
+export type CacheMetricsReliability =
+  | 'reliable'
+  | 'advisory'
+  | 'unsupported'
+
+export function getCacheMetricsReliability(
+  provider: CacheAwareProvider,
+): CacheMetricsReliability {
+  if (provider === 'copilot' || provider === 'ollama') {
+    return 'unsupported'
+  }
+  if (provider === 'anthropic' || provider === 'copilot-gakrcli') {
+    return 'reliable'
+  }
+  return 'advisory'
 }
 
 /**
@@ -415,7 +432,7 @@ export function extractCacheMetrics(
   const read = asNumber(u.cache_read_input_tokens)
   const created = asNumber(u.cache_creation_input_tokens)
   const fresh = asNumber(u.input_tokens)
-  // Copilot vanilla (no Claude) and Ollama don't expose cache fields at
+  // Copilot vanilla (no GakrCLI) and Ollama don't expose cache fields at
   // all as a provider-identity matter. These are explicit provider
   // selections (via GAKR_CODE_USE_GITHUB and the Ollama base-URL
   // default port), so we can hard-wire `supported: false` and let the

@@ -33,68 +33,20 @@ import {
   regenerateSessionId,
   getSessionId,
   runWithSdkContext,
-  getSdkBetas,
 } from '../../bootstrap/state.js'
 import type { SessionId } from '../../types/ids.js'
 import { getAgentDefinitionsWithOverrides } from '../../tools/AgentTool/loadAgentsDir.js'
-import type { Command } from '../../types/command.js'
-import { getCommandName } from '../../types/command.js'
 import type {
   RewindFilesResult,
   McpServerStatus,
   ApiKeySource,
   PermissionResult,
 } from './coreTypes.generated.js'
-import type {
-  SDKApplySettingsInput,
-  SDKContextUsage,
-  SDKFastModeState,
-  SDKModelInfo,
-  SDKMutationResult,
-  SDKPluginInfo,
-  SDKProviderInfo,
-  SDKProviderProfileInfo,
-  SDKReasoningConfig,
-  SDKRunSlashCommandResult,
-  SDKRuntimeState,
-  SDKSettingsSnapshot,
-  SDKSlashCommandInfo,
-  SDKTodoState,
-  SDKUsageSummary,
-} from './runtime.js'
-import {
-  applyModelToProfile,
-  buildRuntimeState,
-  commandToInfo,
-  emptyUsageSummary,
-  getActiveProviderProfile,
-  getFastModeState,
-  getReasoningConfig,
-  getSettingsSnapshot,
-  getTodoStateFromState,
-  loadSlashCommandsForSdk,
-  listPluginCommandsFromStore,
-  listModelsFromState,
-  listPluginsFromState,
-  listProviderProfiles,
-  listProviders,
-  listSlashCommandsFromState,
-  setActiveProviderProfile,
-  updateStoreFastMode,
-  usageSummaryFromResult,
-} from './runtime.js'
 import {
   fileHistoryCanRestore,
   fileHistoryGetDiffStats,
   fileHistoryRewind,
 } from '../../utils/fileHistory.js'
-import { getProjectDir, resetSessionFilePointer } from '../../utils/sessionStorage.js'
-import { getContextWindowForModel } from '../../utils/context.js'
-import {
-  getAutoCompactThreshold,
-  isAutoCompactEnabled,
-} from '../../services/compact/autoCompact.js'
-import { tokenCountWithEstimation } from '../../utils/tokens.js'
 import type { MCPServerConnection } from '../../services/mcp/types.js'
 import {
   acquireEnvMutex,
@@ -129,35 +81,6 @@ import {
   buildConversationChain,
   stripExtraFields,
 } from './transcript.js'
-
-type SdkAsyncContext = {
-  sessionId: SessionId
-  sessionProjectDir: string | null
-  cwd: string
-  originalCwd: string
-  parentSessionId?: SessionId
-}
-
-function iterateWithSdkContext<T>(
-  context: SdkAsyncContext,
-  iterator: AsyncGenerator<T>,
-): AsyncGenerator<T> {
-  return (async function* (): AsyncGenerator<T> {
-    try {
-      while (true) {
-        const next = await runWithSdkContext(context, () => iterator.next())
-        if (next.done) {
-          return next.value
-        }
-        yield next.value
-      }
-    } finally {
-      if (iterator.return) {
-        await runWithSdkContext(context, () => iterator.return(undefined))
-      }
-    }
-  })()
-}
 
 // ============================================================================
 // QueryOptions type
@@ -280,58 +203,6 @@ export interface Query {
   accountInfo(): Promise<{ apiKeySource: ApiKeySource; [key: string]: unknown }>
   /** Set the thinking token budget. */
   setMaxThinkingTokens(tokens: number): void
-  /** Return a complete headless runtime snapshot for SDK hosts. */
-  getRuntimeState(): Promise<SDKRuntimeState>
-  /** Return merged/effective settings visible to this query. */
-  getSettings(): SDKSettingsSnapshot
-  /** Apply supported runtime settings to this query. */
-  applySettings(settings: SDKApplySettingsInput): Promise<SDKSettingsSnapshot>
-  /** List known provider presets. */
-  listProviders(): SDKProviderInfo[]
-  /** List saved provider profiles. */
-  listProviderProfiles(): SDKProviderProfileInfo[]
-  /** Return the active provider profile, if one exists. */
-  getActiveProviderProfile(): SDKProviderProfileInfo | undefined
-  /** Activate a saved provider profile by id. */
-  setActiveProviderProfile(profileId: string): Promise<SDKMutationResult>
-  /** List configured/catalog models for the active route. */
-  listModels(): SDKModelInfo[]
-  /** Discover provider models where a provider supports discovery. */
-  discoverModels(): Promise<SDKModelInfo[]>
-  /** Return current permission mode. */
-  getPermissionMode(): QueryPermissionMode
-  /** Return current reasoning/thinking configuration. */
-  getReasoningConfig(): SDKReasoningConfig
-  /** Set named reasoning effort and matching thinking budget. */
-  setReasoningEffort(effort: 'low' | 'medium' | 'high' | 'max' | number | null): SDKReasoningConfig
-  /** Return current fast mode state. */
-  getFastModeState(): SDKFastModeState
-  /** Toggle fast mode for future turns. */
-  setFastMode(enabled: boolean): SDKFastModeState
-  /** Estimate current context usage. */
-  getContextUsage(): Promise<SDKContextUsage>
-  /** Return usage/cost from the latest result message observed by this query. */
-  getUsageSummary(): SDKUsageSummary
-  /** Return the current TodoWrite task state for headless hosts. */
-  getTodoState(): SDKTodoState
-  /** List slash commands known to the active SDK runtime. */
-  listSlashCommands(): SDKSlashCommandInfo[]
-  /** Run or classify a slash command without importing TUI UI. */
-  runSlashCommand(command: string, args?: string): Promise<SDKRunSlashCommandResult>
-  /** Alias for mcpServerStatus with SDK naming parity. */
-  listMcpServers(): McpServerStatus[]
-  /** Replace dynamic MCP server config for future reconnects. */
-  setMcpServers(servers: Record<string, unknown>): Promise<SDKMutationResult>
-  /** Toggle an MCP server in the current SDK session. */
-  toggleMcpServer(serverName: string, enabled: boolean): Promise<SDKMutationResult>
-  /** Reconnect a known MCP server where possible. */
-  reconnectMcpServer(serverName: string): Promise<SDKMutationResult>
-  /** List currently loaded plugins and plugin errors. */
-  listPlugins(): SDKPluginInfo[]
-  /** Enable/disable a plugin through headless plugin operations. */
-  setPluginEnabled(pluginName: string, enabled: boolean): Promise<SDKMutationResult>
-  /** Return refreshed plugin and command state. */
-  reloadPlugins(): Promise<SDKMutationResult>
 }
 
 // ============================================================================
@@ -527,10 +398,6 @@ class QueryImpl implements Query {
   private permissionContext: ToolPermissionContext
   private timeoutQueue: SDKPermissionTimeoutMessage[] = []
   private agentFailureQueue: SDKAgentLoadFailureMessage[] = []
-  private runtimeStatus: 'idle' | 'running' | 'closed' = 'idle'
-  private lastUsageSummary: SDKUsageSummary = emptyUsageSummary()
-  private slashCommandRegistry: Command[] = []
-  private slashCommandInfos: SDKSlashCommandInfo[] | undefined
 
   constructor(
     engine: QueryEngine | null,
@@ -640,7 +507,8 @@ class QueryImpl implements Query {
     }
 
     const self = this
-    const inner = (async function* (): AsyncGenerator<SDKMessage> {
+    const inner = runWithSdkContext(sdkContext, () => {
+      return (async function* (): AsyncGenerator<SDKMessage> {
         // Fast exit: if interrupt()/close() was called before iteration
         // started, skip init entirely — avoids auth/network side-effects.
         if (self.abortController.signal.aborted) return
@@ -671,11 +539,6 @@ class QueryImpl implements Query {
             ...prev,
             agentDefinitions: agentDefs,
           }))
-
-          await self.refreshSlashCommands()
-          if (typeof self.engine.setCommands === 'function') {
-            self.engine.setCommands(self.slashCommandRegistry)
-          }
 
           // Inject agents into the engine
           if (self.userAgents && Object.keys(self.userAgents).length > 0) {
@@ -798,9 +661,7 @@ class QueryImpl implements Query {
               regenerateSessionId()
               effectiveSessionId = getSessionId()
             }
-            resolvedTranscriptDir ??= getProjectDir(self.cwd)
             switchSession(effectiveSessionId as SessionId, resolvedTranscriptDir)
-            await resetSessionFilePointer()
 
             // Sync resolved sessionId and transcript dir back to authoritative fields
             self._sessionId = effectiveSessionId
@@ -808,10 +669,8 @@ class QueryImpl implements Query {
             sdkContext.sessionProjectDir = resolvedTranscriptDir
 
             // Submit to engine
-            self.runtimeStatus = 'running'
             if (typeof self.prompt === 'string') {
               for await (const engineMsg of self.engine.submitMessage(self.prompt)) {
-                self.recordUsageIfResult(engineMsg)
                 yield engineMsg
                 yield* self.drainTimeoutQueue()
                 yield* self.drainAgentFailureQueue()
@@ -821,7 +680,6 @@ class QueryImpl implements Query {
                 if (self.abortController.signal.aborted) break
                 const content = extractPromptFromUserMessage(userMessage)
                 for await (const engineMsg of self.engine.submitMessage(content, { uuid: userMessage.uuid })) {
-                  self.recordUsageIfResult(engineMsg)
                   yield engineMsg
                   yield* self.drainTimeoutQueue()
                   yield* self.drainAgentFailureQueue()
@@ -832,9 +690,6 @@ class QueryImpl implements Query {
             yield* self.drainTimeoutQueue()
             yield* self.drainAgentFailureQueue()
           } finally {
-            if (self.runtimeStatus !== 'closed') {
-              self.runtimeStatus = 'idle'
-            }
             // Clean up timeout and agent failure queues
             self.timeoutQueue.length = 0
             self.agentFailureQueue.length = 0
@@ -854,16 +709,10 @@ class QueryImpl implements Query {
               releaseEnvMutex()
             }
           }
-    })()
+      })()
+    })
 
-    yield* iterateWithSdkContext(sdkContext, inner)
-  }
-
-  private recordUsageIfResult(message: unknown): void {
-    const usage = usageSummaryFromResult(message)
-    if (usage) {
-      this.lastUsageSummary = usage
-    }
+    yield* inner
   }
 
   async setModel(model: string): Promise<void> {
@@ -874,7 +723,6 @@ class QueryImpl implements Query {
       mainLoopModel: model,
       mainLoopModelForSession: model,
     }))
-    applyModelToProfile(model)
   }
 
   async setPermissionMode(mode: QueryPermissionMode): Promise<void> {
@@ -897,7 +745,6 @@ class QueryImpl implements Query {
   }
 
   close(): void {
-    this.runtimeStatus = 'closed'
     this.interrupt()
     this.abortController.abort()
     // Disconnect MCP clients to prevent resource leaks
@@ -1027,11 +874,8 @@ class QueryImpl implements Query {
     const state = this.appStateStore.getState()
     // Commands come from MCP servers and plugins
     const mcpCommands = state.mcp.commands?.map(c => c.name ?? c) ?? []
-    const pluginCommands = [
-      ...(state.plugins.commands?.map(c => c.name ?? c) ?? []),
-      ...listPluginCommandsFromStore().map(c => c.name ?? c),
-    ]
-    return [...new Set([...mcpCommands, ...pluginCommands])]
+    const pluginCommands = state.plugins.commands?.map(c => c.name ?? c) ?? []
+    return [...mcpCommands, ...pluginCommands]
   }
 
   supportedModels(): string[] {
@@ -1111,357 +955,6 @@ class QueryImpl implements Query {
       ? { type: 'enabled', budgetTokens: tokens }
       : { type: 'disabled' })
   }
-
-  async getRuntimeState(): Promise<SDKRuntimeState> {
-    const slashCommands = await this.getSlashCommandInfos()
-    return buildRuntimeState({
-      sessionId: this.sessionId,
-      cwd: this.cwd,
-      status: this.runtimeStatus,
-      state: this.appStateStore.getState(),
-      mcpServers: this.mcpServerStatus(),
-      account: await this.accountInfo(),
-      usage: this.lastUsageSummary,
-      slashCommands,
-    })
-  }
-
-  getSettings(): SDKSettingsSnapshot {
-    return getSettingsSnapshot(this.appStateStore.getState())
-  }
-
-  async applySettings(settings: SDKApplySettingsInput): Promise<SDKSettingsSnapshot> {
-    if (settings.model !== undefined && settings.model !== null) {
-      await this.setModel(settings.model)
-    }
-    if (settings.permissionMode) {
-      await this.setPermissionMode(settings.permissionMode)
-    }
-    if (settings.maxThinkingTokens !== undefined) {
-      this.setMaxThinkingTokens(settings.maxThinkingTokens ?? 0)
-    } else if (settings.effort !== undefined) {
-      this.setReasoningEffort(settings.effort)
-    }
-    if (settings.fastMode !== undefined) {
-      this.setFastMode(settings.fastMode)
-    }
-    if (settings.env) {
-      this.envOverrides = {
-        ...(this.envOverrides ?? {}),
-        ...settings.env,
-      }
-    }
-    return this.getSettings()
-  }
-
-  listProviders(): SDKProviderInfo[] {
-    return listProviders()
-  }
-
-  listProviderProfiles(): SDKProviderProfileInfo[] {
-    return listProviderProfiles()
-  }
-
-  getActiveProviderProfile(): SDKProviderProfileInfo | undefined {
-    return getActiveProviderProfile()
-  }
-
-  async setActiveProviderProfile(profileId: string): Promise<SDKMutationResult> {
-    const result = setActiveProviderProfile(profileId)
-    const profile = result.profile as SDKProviderProfileInfo | undefined
-    if (result.success && profile?.model) {
-      await this.setModel(profile.model)
-    }
-    return result
-  }
-
-  listModels(): SDKModelInfo[] {
-    return listModelsFromState(this.appStateStore.getState())
-  }
-
-  async discoverModels(): Promise<SDKModelInfo[]> {
-    // Prefer configured/catalog models for this first headless pass. Dynamic
-    // network discovery remains provider-specific and should be layered behind
-    // this stable method without changing the return shape.
-    return this.listModels()
-  }
-
-  getPermissionMode(): QueryPermissionMode {
-    return this.appStateStore.getState().toolPermissionContext.mode as QueryPermissionMode
-  }
-
-  getReasoningConfig(): SDKReasoningConfig {
-    return getReasoningConfig(this.appStateStore.getState())
-  }
-
-  setReasoningEffort(effort: 'low' | 'medium' | 'high' | 'max' | number | null): SDKReasoningConfig {
-    const effortToTokens = (value: typeof effort): number | undefined => {
-      if (typeof value === 'number') return value
-      switch (value) {
-        case 'low':
-          return 1000
-        case 'medium':
-          return 8000
-        case 'high':
-          return 16000
-        case 'max':
-          return undefined
-        default:
-          return 0
-      }
-    }
-    const tokens = effortToTokens(effort)
-    this.appStateStore.setState(prev => ({
-      ...prev,
-      effortValue: effort === null ? undefined : effort,
-      thinkingEnabled: effort !== null && tokens !== 0,
-      thinkingBudgetTokens: tokens && tokens > 0 ? tokens : undefined,
-    }))
-    this.engine.setThinkingConfig(
-      effort === null || tokens === 0
-        ? { type: 'disabled' }
-        : tokens
-          ? { type: 'enabled', budgetTokens: tokens }
-          : { type: 'adaptive' },
-    )
-    return this.getReasoningConfig()
-  }
-
-  getFastModeState(): SDKFastModeState {
-    return getFastModeState(this.appStateStore.getState())
-  }
-
-  setFastMode(enabled: boolean): SDKFastModeState {
-    return updateStoreFastMode(this.appStateStore, enabled)
-  }
-
-  async getContextUsage(): Promise<SDKContextUsage> {
-    try {
-      const { collectContextData } = await import('../../commands/context/context-noninteractive.js')
-      const state = this.appStateStore.getState()
-      const baseTools = getTools(this.permissionContext)
-      const mcpTools = state.mcp.tools ?? []
-      const tools = [
-        ...baseTools,
-        ...mcpTools.filter(tool => !baseTools.some(base => base.name === tool.name)),
-      ]
-      return await collectContextData({
-        messages: this.engine.getMessages() as any,
-        getAppState: () => this.appStateStore.getState(),
-        options: {
-          mainLoopModel: state.mainLoopModel ?? 'default',
-          tools,
-          agentDefinitions: state.agentDefinitions,
-        },
-      }) as SDKContextUsage
-    } catch {
-      const state = this.appStateStore.getState()
-      const model = state.mainLoopModel ?? 'default'
-      const messages = this.engine.getMessages() as any
-      const rawMaxTokens = getContextWindowForModel(model, getSdkBetas())
-      const totalTokens = Math.max(0, tokenCountWithEstimation(messages))
-      const autoCompactEnabled = isAutoCompactEnabled()
-      return {
-        categories: [],
-        totalTokens,
-        maxTokens: rawMaxTokens,
-        rawMaxTokens,
-        percentage: rawMaxTokens > 0
-          ? Math.max(0, Math.min(100, Math.round((totalTokens / rawMaxTokens) * 100)))
-          : 0,
-        gridRows: [],
-        model,
-        memoryFiles: [],
-        mcpTools: [],
-        agents: [],
-        isAutoCompactEnabled: autoCompactEnabled,
-        autoCompactThreshold: autoCompactEnabled ? getAutoCompactThreshold(model) : undefined,
-        apiUsage: null,
-        source: 'local_estimate',
-      }
-    }
-  }
-
-  getUsageSummary(): SDKUsageSummary {
-    return this.lastUsageSummary
-  }
-
-  getTodoState(): SDKTodoState {
-    return getTodoStateFromState(this.appStateStore.getState())
-  }
-
-  listSlashCommands(): SDKSlashCommandInfo[] {
-    return this.slashCommandInfos ?? listSlashCommandsFromState(this.appStateStore.getState(), this.slashCommandRegistry)
-  }
-
-  async runSlashCommand(commandName: string, args = ''): Promise<SDKRunSlashCommandResult> {
-    const normalized = commandName.replace(/^\/+/, '')
-    await this.refreshSlashCommands()
-    const state = this.appStateStore.getState()
-    const command = [
-      ...this.slashCommandRegistry,
-      ...(state.mcp.commands ?? []),
-      ...(state.plugins.commands ?? []),
-      ...listPluginCommandsFromStore(),
-    ].find(cmd => {
-      const name = getCommandName(cmd).replace(/^\/+/, '')
-      return name === normalized || cmd.aliases?.some(alias => alias.replace(/^\/+/, '') === normalized)
-    })
-
-    if (!command) {
-      return { type: 'not_found', command: commandName }
-    }
-
-    const info = commandToInfo(command)
-    if (command.type === 'local-jsx') {
-      return { type: 'requires_ui', command: info }
-    }
-    if (command.type === 'prompt') {
-      return {
-        type: 'unsupported',
-        command: info,
-        reason: 'Prompt slash command execution requires a full ToolUseContext and is not yet available through the headless SDK.',
-      }
-    }
-    return {
-      type: 'unsupported',
-      command: info,
-      reason: `Local command execution is not yet available through the headless SDK. Args: ${args}`,
-    }
-  }
-
-  private async getSlashCommandInfos(): Promise<SDKSlashCommandInfo[]> {
-    await this.refreshSlashCommands()
-    return this.listSlashCommands()
-  }
-
-  private async refreshSlashCommands(): Promise<void> {
-    this.slashCommandRegistry = await loadSlashCommandsForSdk(this.cwd)
-    this.slashCommandInfos = listSlashCommandsFromState(this.appStateStore.getState(), this.slashCommandRegistry)
-  }
-
-  listMcpServers(): McpServerStatus[] {
-    return this.mcpServerStatus()
-  }
-
-  async setMcpServers(servers: Record<string, unknown>): Promise<SDKMutationResult> {
-    const previous = new Set(Object.keys(this.mcpServers ?? {}))
-    this.mcpServers = {
-      ...(this.mcpServers ?? {}),
-      ...servers,
-    }
-    const next = new Set(Object.keys(this.mcpServers))
-    return {
-      success: true,
-      added: [...next].filter(name => !previous.has(name)),
-      removed: [...previous].filter(name => !next.has(name)),
-      mcpServers: this.mcpServerStatus(),
-    }
-  }
-
-  async toggleMcpServer(serverName: string, enabled: boolean): Promise<SDKMutationResult> {
-    try {
-      const { setMcpServerEnabled } = await import('../../services/mcp/config.js')
-      setMcpServerEnabled(serverName, enabled)
-      return {
-        success: true,
-        serverName,
-        enabled,
-        mcpServers: this.mcpServerStatus(),
-      }
-    } catch (error) {
-      return {
-        success: false,
-        serverName,
-        enabled,
-        message: error instanceof Error ? error.message : String(error),
-      }
-    }
-  }
-
-  async reconnectMcpServer(serverName: string): Promise<SDKMutationResult> {
-    const config = this.mcpServers?.[serverName]
-    if (!config) {
-      return {
-        success: false,
-        serverName,
-        message: `No SDK MCP config is registered for ${serverName}`,
-      }
-    }
-
-    try {
-      const { clients, tools: mcpTools } = await connectSdkMcpServers({ [serverName]: config })
-      if (clients.length > 0) {
-        const existing = this.engine.getMcpClients?.() ?? []
-        this.engine.setMcpClients([
-          ...existing.filter(client => client.name !== serverName),
-          ...clients,
-        ] as MCPServerConnection[])
-      }
-      if (mcpTools.length > 0) {
-        const allTools = [...getTools(this.permissionContext)]
-        for (const mcpTool of mcpTools) {
-          if (!allTools.some(tool => tool.name === mcpTool.name)) {
-            allTools.push(mcpTool)
-          }
-        }
-        this.engine.updateTools(allTools)
-      }
-      return {
-        success: true,
-        serverName,
-        mcpServers: this.mcpServerStatus(),
-      }
-    } catch (error) {
-      return {
-        success: false,
-        serverName,
-        message: error instanceof Error ? error.message : String(error),
-      }
-    }
-  }
-
-  listPlugins(): SDKPluginInfo[] {
-    return listPluginsFromState(this.appStateStore.getState())
-  }
-
-  async setPluginEnabled(pluginName: string, enabled: boolean): Promise<SDKMutationResult> {
-    try {
-      const { setPluginEnabledOp } = await import('../../services/plugins/pluginOperations.js')
-      const result = await setPluginEnabledOp(pluginName, enabled)
-      return {
-        success: result.success,
-        message: result.message,
-        pluginId: result.pluginId,
-        pluginName: result.pluginName,
-        scope: result.scope,
-        plugins: this.listPlugins(),
-      }
-    } catch (error) {
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : String(error),
-      }
-    }
-  }
-
-  async reloadPlugins(): Promise<SDKMutationResult> {
-    this.appStateStore.setState(prev => ({
-      ...prev,
-      plugins: {
-        ...prev.plugins,
-        needsRefresh: true,
-      },
-    }))
-    return {
-      success: true,
-      message: 'Plugin reload requested; active SDK state will refresh on the next plugin load boundary.',
-      commands: this.listSlashCommands(),
-      plugins: this.listPlugins(),
-      mcpServers: this.mcpServerStatus(),
-      error_count: this.appStateStore.getState().plugins.errors.length,
-    }
-  }
 }
 
 // ============================================================================
@@ -1538,7 +1031,7 @@ export function query(params: {
   // Note: We pass settings?.env to QueryImpl for application AFTER init() runs.
   // This ensures our env vars override config file env vars, not vice versa.
   // init() calls applyConfigEnvironmentVariables() which would override pre-applied env.
-  // Top-level `env` takes precedence over `settings.env` for gakrcli  SDK compatibility.
+  // Top-level `env` takes precedence over `settings.env` for GakrCLI SDK compatibility.
   // NOTE: undefined values are KEPT and treated as explicit unset requests
   // (GakrCLI SDK convention: { FOO: undefined } means "unset inherited FOO")
   const rawEnvOverrides = options.env ?? settings?.env

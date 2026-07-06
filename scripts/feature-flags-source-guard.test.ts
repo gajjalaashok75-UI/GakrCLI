@@ -22,6 +22,7 @@ type FlagGuard = {
 
 const FLAG_REQUIRES_SOURCE: FlagGuard[] = [
   { flag: 'MCP_SKILLS', source: 'src/skills/mcpSkills.ts' },
+  { flag: 'CONTEXT_COLLAPSE', source: 'src/services/contextCollapse/index.ts' },
   { flag: 'KAIROS', source: 'src/assistant/index.ts' },
   { flag: 'KAIROS', source: 'src/assistant/gate.ts' },
   { flag: 'KAIROS', source: 'src/assistant/sessionDiscovery.ts' },
@@ -45,6 +46,6 @@ test('build feature flags are not enabled without their source files', () => {
 
     // When the source IS present, the flag can be either true or false; either
     // is fine. We only care about the "enabled but missing" combination.
-    expect(true).toBe(true)
+    expect(isEnabled && !sourceExists).toBe(false)
   }
 })

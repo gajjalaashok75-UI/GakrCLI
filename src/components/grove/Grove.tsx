@@ -53,7 +53,7 @@ function GracePeriodContentBody() {
   }
   let t4;
   if ($[4] === Symbol.for("react.memo_cache_sentinel")) {
-    t4 = <Box paddingLeft={1}><Text>{t2}{t3}<Text>— Allow the use of your chats and coding sessions to train and improve Anthropic AI models. Change anytime in your Privacy Settings (<Link url="https://gakr.ai/settings/data-privacy-controls" />).</Text></Text></Box>;
+    t4 = <Box paddingLeft={1}><Text>{t2}{t3}<Text>— Allow the use of your chats and coding sessions to train and improve Anthropic AI models. Change anytime in your Privacy Settings (<Link url="https://gakrcli.ai/settings/data-privacy-controls" />).</Text></Text></Box>;
     $[4] = t4;
   } else {
     t4 = $[4];
@@ -106,7 +106,7 @@ function PostGracePeriodContentBody() {
   }
   let t2;
   if ($[2] === Symbol.for("react.memo_cache_sentinel")) {
-    t2 = <Box flexDirection="column"><Text bold={true}>Help improve Gakr</Text><Text>Allow the use of your chats and coding sessions to train and improve Anthropic AI models. You can change this anytime in Privacy Settings</Text><Link url="https://gakr.ai/settings/data-privacy-controls" /></Box>;
+    t2 = <Box flexDirection="column"><Text bold={true}>Help improve GakrCLI</Text><Text>Allow the use of your chats and coding sessions to train and improve Anthropic AI models. You can change this anytime in Privacy Settings</Text><Link url="https://gakrcli.ai/settings/data-privacy-controls" /></Box>;
     $[2] = t2;
   } else {
     t2 = $[2];
@@ -141,15 +141,15 @@ function PostGracePeriodContentBody() {
   }
   return t6;
 }
-export function GroveDialog(t0) {
+export function GroveDialog(t0: Props) {
   const $ = _c(34);
   const {
     showIfAlreadyViewed,
     location,
     onDone
   } = t0;
-  const [shouldShowDialog, setShouldShowDialog] = useState(null);
-  const [groveConfig, setGroveConfig] = useState(null);
+  const [shouldShowDialog, setShouldShowDialog] = useState<boolean | null>(null);
+  const [groveConfig, setGroveConfig] = useState<GroveConfig | null>(null);
   let t1;
   let t2;
   if ($[0] !== location || $[1] !== onDone || $[2] !== showIfAlreadyViewed) {
@@ -235,13 +235,13 @@ export function GroveDialog(t0) {
   let t4;
   if ($[8] !== groveConfig?.domain_excluded) {
     t4 = groveConfig?.domain_excluded ? [{
-      label: "Accept terms \xB7 Help improve Gakr: OFF (for emails with your domain)",
+      label: "Accept terms \xB7 Help improve GakrCLI: OFF (for emails with your domain)",
       value: "accept_opt_out"
     }] : [{
-      label: "Accept terms \xB7 Help improve Gakr: ON",
+      label: "Accept terms \xB7 Help improve GakrCLI: ON",
       value: "accept_opt_in"
     }, {
-      label: "Accept terms \xB7 Help improve Gakr: OFF",
+      label: "Accept terms \xB7 Help improve GakrCLI: OFF",
       value: "accept_opt_out"
     }];
     $[8] = groveConfig?.domain_excluded;
@@ -354,7 +354,7 @@ type PrivacySettingsDialogProps = {
   domainExcluded?: boolean;
   onDone(): void;
 };
-export function PrivacySettingsDialog(t0) {
+export function PrivacySettingsDialog(t0: PrivacySettingsDialogProps) {
   const $ = _c(17);
   const {
     settings,
@@ -425,14 +425,14 @@ export function PrivacySettingsDialog(t0) {
   }
   let t5;
   if ($[9] === Symbol.for("react.memo_cache_sentinel")) {
-    t5 = <Text>Review and manage your privacy settings at{" "}<Link url="https://gakr.ai/settings/data-privacy-controls" /></Text>;
+    t5 = <Text>Review and manage your privacy settings at{" "}<Link url="https://gakrcli.ai/settings/data-privacy-controls" /></Text>;
     $[9] = t5;
   } else {
     t5 = $[9];
   }
   let t6;
   if ($[10] === Symbol.for("react.memo_cache_sentinel")) {
-    t6 = <Box width={44}><Text bold={true}>Help improve Gakr</Text></Box>;
+    t6 = <Box width={44}><Text bold={true}>Help improve GakrCLI</Text></Box>;
     $[10] = t6;
   } else {
     t6 = $[10];

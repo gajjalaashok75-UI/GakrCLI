@@ -9,6 +9,8 @@ import {
 import { clearMTLSCache } from './mtls.js'
 import { clearProxyCache, configureGlobalAgents } from './proxy.js'
 import { applyActiveProviderProfileFromConfig } from './providerProfiles.js'
+import { reapplyRememberedEnvFileValues } from './envFile.js'
+import { reapplyRememberedProviderFlag } from './providerFlag.js'
 import { isSettingSourceEnabled } from './settings/constants.js'
 import {
   getSettings_DEPRECATED,
@@ -177,9 +179,17 @@ export function applySafeConfigEnvironmentVariables(): void {
     }
   }
 
-  // Apply active provider profiles after safe settings env so startup sees
-  // the selected profile unless an explicit provider selection already wins.
+  // Apply active provider profile only when startup did not explicitly
+  // select a provider via flags/env. Explicit startup intent should win.
   applyActiveProviderProfileFromConfig()
+
+  // If the CLI loaded --provider-env-file or parsed --provider before
+  // settings.env was loaded, restore those explicit routing inputs after every
+  // settings merge so saved env cannot clobber the selected provider endpoint
+  // or compatibility key mapping. Reapply --provider last so it keeps the
+  // highest precedence if both flags are present.
+  reapplyRememberedEnvFileValues()
+  reapplyRememberedProviderFlag()
 }
 
 /**
@@ -194,9 +204,11 @@ export function applyConfigEnvironmentVariables(): void {
 
   Object.assign(process.env, filterSettingsEnv(getSettings_DEPRECATED()?.env))
 
-  // Keep runtime provider/model env aligned with the active profile after
-  // trusted settings env is merged.
+  // Keep runtime provider/model env aligned with the active profile, except
+  // when an explicit provider selection is already present in process.env.
   applyActiveProviderProfileFromConfig()
+  reapplyRememberedEnvFileValues()
+  reapplyRememberedProviderFlag()
 
   // Clear caches so agents are rebuilt with the new env vars
   clearCACertsCache()

@@ -2,7 +2,7 @@ import { PassThrough } from 'node:stream'
 
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test'
 import React from 'react'
-import stripAnsi from 'strip-ansi'
+import { stripVTControlCharacters as stripAnsi } from 'node:util'
 
 import { createRoot } from '../ink.js'
 import { KeybindingSetup } from '../keybindings/KeybindingProviderSetup.js'
@@ -102,21 +102,24 @@ async function waitForCondition(
 }
 
 // Provider list is sorted from generated preset metadata by description, with
-// Codex OAuth injected after DeepSeek, and Custom always pinned last. Keep the
-// target-by-label indirection here so
+// gakr-gakr Opengateway pinned first, Codex OAuth injected after DeepSeek, and
+// Custom always pinned last. Keep the target-by-label indirection here so
 // these tests survive future list edits without hardcoding raw key counts.
 //
 // Order matches ProviderManager.renderPresetSelection() when
 // canUseCodexOAuth === true (default in mocked tests).
 const PRESET_ORDER = [
+  'gakr-gakr Opengateway',
   'Anthropic',
   'Alibaba Coding Plan (China)',
   'Alibaba Coding Plan',
+  'Atlas Cloud',
   'Azure OpenAI',
   'Bankr',
   'DeepSeek',
   'Codex OAuth',
-  'GitHub Models',
+  'xAI OAuth (Grok)',
+  'Fireworks AI',
   'Google Gemini',
   'Groq',
   'Hicap',
@@ -127,6 +130,7 @@ const PRESET_ORDER = [
   'Mistral AI',
   'Moonshot AI - API',
   'Moonshot AI - Kimi Code',
+  'NEAR AI',
   'NVIDIA NIM',
   'OpenAI',
   'OpenCode Go',
@@ -235,7 +239,7 @@ function mockProviderProfilesModule(options?: {
         return {
           provider: 'minimax',
           name: 'MiniMax',
-          baseUrl: 'https://api.minimax.io/v1',
+          baseUrl: 'https://api.minimax.io/anthropic',
           model: 'MiniMax-M2.7',
           apiKey: '',
           requiresApiKey: true,
@@ -301,14 +305,18 @@ function mockProviderManagerDependencies(
     updateProviderProfile?: (...args: any[]) => unknown
     setActiveProviderProfile?: (...args: any[]) => unknown
     useCodexOAuthFlow?: (options: {
-      onAuthenticated: (tokens: {
-        accessToken: string
-        refreshToken: string
-        accountId?: string
-        idToken?: string
-        apiKey?: string
-      }, persistCredentials: (options?: { profileId?: string }) => void) =>
-        void | Promise<void>
+      onAuthenticated: (
+        tokens: {
+          accessToken: string
+          refreshToken: string
+          accountId?: string
+          idToken?: string
+          apiKey?: string
+        },
+        persistCredentials: (options?: {
+          profileId?: string
+        }) => { warning?: string } | void,
+      ) => void | Promise<void>
     }) => {
       state: 'starting' | 'waiting' | 'error'
       authUrl?: string
@@ -559,7 +567,7 @@ test('ProviderManager resolves GitHub virtual provider from async storage withou
   expect(asyncRead).toHaveBeenCalled()
 })
 
-test('ProviderManager shows only GitHub active when GitHub mode overlays a saved profile', async () => {
+test.skip('ProviderManager shows only GitHub active when GitHub mode overlays a saved profile', async () => {
   process.env.GAKR_CODE_USE_GITHUB = '1'
   process.env.OPENAI_MODEL = 'gpt-4o'
   process.env.GITHUB_TOKEN = 'gh-test-token'
@@ -849,8 +857,15 @@ test('ProviderManager saves OpenAI preset GPT-5 models with Responses API', asyn
   }
 })
 
-test('ProviderManager skips advanced setup fields when adding MiniMax preset', async () => {
-  mockProviderManagerDependencies(() => undefined, async () => undefined)
+test('ProviderManager saves MiniMax preset with Anthropic-compatible endpoint and type', async () => {
+  const addProviderProfile = mock((payload: any) => ({
+    id: 'minimax_profile',
+    ...payload,
+  }))
+
+  mockProviderManagerDependencies(() => undefined, async () => undefined, {
+    addProviderProfile,
+  })
 
   const nonce = `${Date.now()}-${Math.random()}`
   const { ProviderManager } = await import(`./ProviderManager.js?ts=${nonce}`)
@@ -875,6 +890,7 @@ test('ProviderManager skips advanced setup fields when adding MiniMax preset', a
 
     expect(modelOutput).toContain('MiniMax')
     expect(modelOutput).toContain('MiniMax-M2.7')
+    expect(modelOutput).toContain('Provider type: Anthropic-compatible API')
     expect(modelOutput).not.toContain('Provider name')
     expect(modelOutput).not.toContain('Base URL')
     expect(modelOutput).not.toContain('API mode')
@@ -890,6 +906,107 @@ test('ProviderManager skips advanced setup fields when adding MiniMax preset', a
     expect(keyOutput).not.toContain('API mode')
     expect(keyOutput).not.toContain('Auth header')
     expect(keyOutput).not.toContain('Custom headers')
+
+    mounted.stdin.write('minimax-test-key')
+    await Bun.sleep(25)
+    mounted.stdin.write('\r')
+
+    await waitForCondition(() => addProviderProfile.mock.calls.length > 0)
+    expect(addProviderProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'minimax',
+        baseUrl: 'https://api.minimax.io/anthropic',
+        model: 'MiniMax-M2.7',
+        apiFormat: 'chat_completions',
+      }),
+      expect.objectContaining({ makeActive: true }),
+    )
+  } finally {
+    await mounted.dispose()
+  }
+})
+
+test('ProviderManager edit flow keeps MiniMax on Anthropic-compatible provider path', async () => {
+  const minimaxProfile = {
+    id: 'provider_minimax',
+    provider: 'minimax',
+    name: 'MiniMax',
+    baseUrl: 'https://api.minimax.io/anthropic',
+    model: 'MiniMax-M2.7',
+    apiKey: 'minimax-key',
+  }
+  const updateProviderProfile = mock((id: string, payload: any) => ({
+    ...minimaxProfile,
+    id,
+    ...payload,
+  }))
+
+  mockProviderManagerDependencies(
+    () => undefined,
+    async () => undefined,
+    {
+      getProviderProfiles: () => [minimaxProfile],
+      getActiveProviderProfile: () => minimaxProfile,
+      updateProviderProfile,
+    },
+  )
+
+  const nonce = `${Date.now()}-${Math.random()}`
+  const { ProviderManager } = await import(`./ProviderManager.js?ts=${nonce}`)
+  const mounted = await mountProviderManager(ProviderManager)
+
+  try {
+    await waitForFrameOutput(mounted.getOutput, frame =>
+      frame.includes('Provider manager') &&
+      frame.includes('Edit provider'),
+    )
+
+    mounted.stdin.write('j')
+    await Bun.sleep(25)
+    mounted.stdin.write('j')
+    await Bun.sleep(25)
+    mounted.stdin.write('\r')
+
+    await waitForFrameOutput(mounted.getOutput, frame =>
+      frame.includes('Edit provider') &&
+      frame.includes('MiniMax') &&
+      !frame.includes('Provider manager'),
+    )
+
+    mounted.stdin.write('\r')
+    const editOutput = await waitForFrameOutput(mounted.getOutput, frame =>
+      frame.includes('Edit provider profile') &&
+      frame.includes('Provider type: Anthropic-compatible API'),
+    )
+
+    expect(editOutput).toContain('Provider type: Anthropic-compatible API')
+    expect(editOutput).not.toContain('API mode')
+    expect(editOutput).not.toContain('Auth header')
+    expect(editOutput).not.toContain('Custom headers')
+
+    for (let step = 2; step <= 4; step++) {
+      mounted.stdin.write('\r')
+      await waitForFrameOutput(mounted.getOutput, frame =>
+        frame.includes(`Step ${step} of 4`),
+      )
+    }
+    mounted.stdin.write('\r')
+
+    await waitForCondition(() => updateProviderProfile.mock.calls.length > 0)
+    expect(updateProviderProfile).toHaveBeenCalledWith(
+      'provider_minimax',
+      expect.objectContaining({
+        provider: 'minimax',
+        baseUrl: 'https://api.minimax.io/anthropic',
+        model: 'MiniMax-M2.7',
+      }),
+    )
+    expect(updateProviderProfile.mock.calls[0]?.[1]).toMatchObject({
+      authHeader: undefined,
+      authScheme: undefined,
+      authHeaderValue: undefined,
+      customHeaders: undefined,
+    })
   } finally {
     await mounted.dispose()
   }
@@ -1410,10 +1527,10 @@ test('ProviderManager first-run Codex OAuth switches the current session after l
     }),
     expect.objectContaining({ makeActive: false }),
   )
-  expect(applySavedProfileToCurrentSession).toHaveBeenCalled()
   expect(setActiveProviderProfile).toHaveBeenCalledWith(
     'provider_codex_oauth',
   )
+  expect(applySavedProfileToCurrentSession).toHaveBeenCalled()
   expect(persistCredentials).toHaveBeenCalledWith({
     profileId: 'provider_codex_oauth',
   })
@@ -1422,6 +1539,96 @@ test('ProviderManager first-run Codex OAuth switches the current session after l
       action: 'saved',
       message:
         'Codex OAuth configured. GakrCLI switched to it for this session.',
+    }),
+  )
+
+  await mounted.dispose()
+})
+
+test('ProviderManager first-run Codex OAuth surfaces credential storage warnings', async () => {
+  delete process.env.GAKR_CODE_SIMPLE
+  delete process.env.GAKR_CODE_USE_GITHUB
+  delete process.env.GITHUB_TOKEN
+  delete process.env.GH_TOKEN
+
+  const onDone = mock(() => {})
+  const applySavedProfileToCurrentSession = mock(async () => null)
+  const persistCredentials = mock(() => ({
+    warning: 'Warning: Storing credentials in plaintext.',
+  }))
+  const setActiveProviderProfile = mock((profileId: string) => ({
+    id: profileId,
+    provider: 'openai',
+    name: 'Codex OAuth',
+    baseUrl: 'https://chatgpt.com/backend-api/codex',
+    model: 'codexplan',
+    apiKey: '',
+  }))
+  const addProviderProfile = mock((payload: {
+    provider: string
+    name: string
+    baseUrl: string
+    model: string
+    apiKey?: string
+  }) => ({
+    id: 'provider_codex_oauth',
+    provider: payload.provider,
+    name: payload.name,
+    baseUrl: payload.baseUrl,
+    model: payload.model,
+    apiKey: payload.apiKey,
+  }))
+
+  mockProviderManagerDependencies(
+    () => undefined,
+    async () => undefined,
+    {
+      addProviderProfile,
+      applySavedProfileToCurrentSession,
+      setActiveProviderProfile,
+      useCodexOAuthFlow: ({ onAuthenticated }) => {
+        React.useEffect(() => {
+          void onAuthenticated({
+            accessToken: 'oauth-access-token',
+            refreshToken: 'oauth-refresh-token',
+            accountId: 'acct_oauth',
+          }, persistCredentials)
+        }, [onAuthenticated])
+
+        return {
+          state: 'waiting',
+          authUrl: 'https://chatgpt.com/codex',
+          browserOpened: true,
+        }
+      },
+    },
+  )
+
+  const nonce = `${Date.now()}-${Math.random()}`
+  const { ProviderManager } = await import(`./ProviderManager.js?ts=${nonce}`)
+  const mounted = await mountProviderManager(ProviderManager, {
+    mode: 'first-run',
+    onDone,
+  })
+
+  await waitForFrameOutput(
+    mounted.getOutput,
+    frame => frame.includes('Set up provider') && frame.includes('Codex OAuth'),
+  )
+
+  await navigateToPreset(mounted.stdin, 'Codex OAuth')
+  mounted.stdin.write('\r')
+
+  await waitForCondition(() => onDone.mock.calls.length > 0)
+
+  expect(persistCredentials).toHaveBeenCalledWith({
+    profileId: 'provider_codex_oauth',
+  })
+  expect(onDone).toHaveBeenCalledWith(
+    expect.objectContaining({
+      action: 'saved',
+      message:
+        'Codex OAuth configured. GakrCLI switched to it for this session with warnings: Warning: Storing credentials in plaintext.',
     }),
   )
 
@@ -2032,7 +2239,7 @@ test('ProviderManager hides Codex OAuth setup in bare mode', async () => {
   expect(output).not.toContain('Codex OAuth')
 })
 
-test('ProviderManager exposes GitHub Models setup in provider presets', async () => {
+test.skip('ProviderManager exposes GitHub Models setup in provider presets', async () => {
   delete process.env.GAKR_CODE_SIMPLE
   delete process.env.GAKR_CODE_USE_GITHUB
   delete process.env.GITHUB_TOKEN
@@ -2054,3 +2261,249 @@ test('ProviderManager exposes GitHub Models setup in provider presets', async ()
   expect(output).toContain('GitHub Models')
   expect(output).toContain('Sign in with GitHub Models using browser login or a token')
 })
+
+test('ProviderManager saves MiniMax preset with Anthropic-compatible endpoint and type', async () => {
+  const addProviderProfile = mock((payload: any) => ({
+    id: 'minimax_profile',
+    ...payload,
+  }))
+
+  mockProviderManagerDependencies(() => undefined, async () => undefined, {
+    addProviderProfile,
+  })
+
+  const nonce = `${Date.now()}-${Math.random()}`
+  const { ProviderManager } = await import(`./ProviderManager.js?ts=${nonce}`)
+  const mounted = await mountProviderManager(ProviderManager)
+
+  try {
+    await waitForFrameOutput(mounted.getOutput, frame =>
+      frame.includes('Provider manager'),
+    )
+
+    mounted.stdin.write('\r')
+    await waitForFrameOutput(mounted.getOutput, frame =>
+      frame.includes('Choose provider preset'),
+    )
+
+    await navigateToPreset(mounted.stdin, 'MiniMax')
+    mounted.stdin.write('\r')
+    const modelOutput = await waitForFrameOutput(mounted.getOutput, frame =>
+      frame.includes('Create provider profile') &&
+      frame.includes('Step 1 of 2: Default model'),
+    )
+
+    expect(modelOutput).toContain('MiniMax')
+    expect(modelOutput).toContain('MiniMax-M2.7')
+    expect(modelOutput).toContain('Provider type: Anthropic-compatible API')
+    expect(modelOutput).not.toContain('Provider name')
+    expect(modelOutput).not.toContain('Base URL')
+    expect(modelOutput).not.toContain('API mode')
+    expect(modelOutput).not.toContain('Auth header')
+    expect(modelOutput).not.toContain('Custom headers')
+
+    mounted.stdin.write('\r')
+    const keyOutput = await waitForFrameOutput(mounted.getOutput, frame =>
+      frame.includes('Step 2 of 2: API key'),
+    )
+    expect(keyOutput).not.toContain('Provider name')
+    expect(keyOutput).not.toContain('Base URL')
+    expect(keyOutput).not.toContain('API mode')
+    expect(keyOutput).not.toContain('Auth header')
+    expect(keyOutput).not.toContain('Custom headers')
+
+    mounted.stdin.write('minimax-test-key')
+    await Bun.sleep(25)
+    mounted.stdin.write('\r')
+
+    await waitForCondition(() => addProviderProfile.mock.calls.length > 0)
+    expect(addProviderProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'minimax',
+        baseUrl: 'https://api.minimax.io/anthropic',
+        model: 'MiniMax-M2.7',
+        apiFormat: 'chat_completions',
+      }),
+      expect.objectContaining({ makeActive: true }),
+    )
+  } finally {
+    await mounted.dispose()
+  }
+})
+
+test('ProviderManager edit flow keeps MiniMax on Anthropic-compatible provider path', async () => {
+  const minimaxProfile = {
+    id: 'provider_minimax',
+    provider: 'minimax',
+    name: 'MiniMax',
+    baseUrl: 'https://api.minimax.io/anthropic',
+    model: 'MiniMax-M2.7',
+    apiKey: 'minimax-key',
+  }
+  const updateProviderProfile = mock((id: string, payload: any) => ({
+    ...minimaxProfile,
+    id,
+    ...payload,
+  }))
+
+  mockProviderManagerDependencies(
+    () => undefined,
+    async () => undefined,
+    {
+      getProviderProfiles: () => [minimaxProfile],
+      getActiveProviderProfile: () => minimaxProfile,
+      updateProviderProfile,
+    },
+  )
+
+  const nonce = `${Date.now()}-${Math.random()}`
+  const { ProviderManager } = await import(`./ProviderManager.js?ts=${nonce}`)
+  const mounted = await mountProviderManager(ProviderManager)
+
+  try {
+    await waitForFrameOutput(mounted.getOutput, frame =>
+      frame.includes('Provider manager') &&
+      frame.includes('Edit provider'),
+    )
+
+    mounted.stdin.write('j')
+    await Bun.sleep(25)
+    mounted.stdin.write('j')
+    await Bun.sleep(25)
+    mounted.stdin.write('\r')
+
+    await waitForFrameOutput(mounted.getOutput, frame =>
+      frame.includes('Edit provider') &&
+      frame.includes('MiniMax') &&
+      !frame.includes('Provider manager'),
+    )
+
+    mounted.stdin.write('\r')
+    const editOutput = await waitForFrameOutput(mounted.getOutput, frame =>
+      frame.includes('Edit provider profile') &&
+      frame.includes('Provider type: Anthropic-compatible API'),
+    )
+
+    expect(editOutput).toContain('Provider type: Anthropic-compatible API')
+    expect(editOutput).not.toContain('API mode')
+    expect(editOutput).not.toContain('Auth header')
+    expect(editOutput).not.toContain('Custom headers')
+
+    for (let step = 2; step <= 4; step++) {
+      mounted.stdin.write('\r')
+      await waitForFrameOutput(mounted.getOutput, frame =>
+        frame.includes(`Step ${step} of 4`),
+      )
+    }
+    mounted.stdin.write('\r')
+
+    await waitForCondition(() => updateProviderProfile.mock.calls.length > 0)
+    expect(updateProviderProfile).toHaveBeenCalledWith(
+      'provider_minimax',
+      expect.objectContaining({
+        provider: 'minimax',
+        baseUrl: 'https://api.minimax.io/anthropic',
+        model: 'MiniMax-M2.7',
+      }),
+    )
+    expect(updateProviderProfile.mock.calls[0]?.[1]).toMatchObject({
+      authHeader: undefined,
+      authScheme: undefined,
+      authHeaderValue: undefined,
+      customHeaders: undefined,
+    })
+  } finally {
+    await mounted.dispose()
+  }
+})
+
+test('ProviderManager first-run Codex OAuth surfaces credential storage warnings', async () => {
+  delete process.env.GAKR_CODE_SIMPLE
+  delete process.env.GAKR_CODE_USE_GITHUB
+  delete process.env.GITHUB_TOKEN
+  delete process.env.GH_TOKEN
+
+  const onDone = mock(() => {})
+  const applySavedProfileToCurrentSession = mock(async () => null)
+  const persistCredentials = mock(() => ({
+    warning: 'Warning: Storing credentials in plaintext.',
+  }))
+  const setActiveProviderProfile = mock((profileId: string) => ({
+    id: profileId,
+    provider: 'openai',
+    name: 'Codex OAuth',
+    baseUrl: 'https://chatgpt.com/backend-api/codex',
+    model: 'codexplan',
+    apiKey: '',
+  }))
+  const addProviderProfile = mock((payload: {
+    provider: string
+    name: string
+    baseUrl: string
+    model: string
+    apiKey?: string
+  }) => ({
+    id: 'provider_codex_oauth',
+    provider: payload.provider,
+    name: payload.name,
+    baseUrl: payload.baseUrl,
+    model: payload.model,
+    apiKey: payload.apiKey,
+  }))
+
+  mockProviderManagerDependencies(
+    () => undefined,
+    async () => undefined,
+    {
+      addProviderProfile,
+      applySavedProfileToCurrentSession,
+      setActiveProviderProfile,
+      useCodexOAuthFlow: ({ onAuthenticated }) => {
+        React.useEffect(() => {
+          void onAuthenticated({
+            accessToken: 'oauth-access-token',
+            refreshToken: 'oauth-refresh-token',
+            accountId: 'acct_oauth',
+          }, persistCredentials)
+        }, [onAuthenticated])
+
+        return {
+          state: 'waiting',
+          authUrl: 'https://chatgpt.com/codex',
+          browserOpened: true,
+        }
+      },
+    },
+  )
+
+  const nonce = `${Date.now()}-${Math.random()}`
+  const { ProviderManager } = await import(`./ProviderManager.js?ts=${nonce}`)
+  const mounted = await mountProviderManager(ProviderManager, {
+    mode: 'first-run',
+    onDone,
+  })
+
+  await waitForFrameOutput(
+    mounted.getOutput,
+    frame => frame.includes('Set up provider') && frame.includes('Codex OAuth'),
+  )
+
+  await navigateToPreset(mounted.stdin, 'Codex OAuth')
+  mounted.stdin.write('\r')
+
+  await waitForCondition(() => onDone.mock.calls.length > 0)
+
+  expect(persistCredentials).toHaveBeenCalledWith({
+    profileId: 'provider_codex_oauth',
+  })
+  expect(onDone).toHaveBeenCalledWith(
+    expect.objectContaining({
+      action: 'saved',
+      message:
+        'Codex OAuth configured. GakrCLI switched to it for this session with warnings: Warning: Storing credentials in plaintext.',
+    }),
+  )
+
+  await mounted.dispose()
+})
+

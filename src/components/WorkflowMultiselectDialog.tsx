@@ -18,10 +18,10 @@ type Props = {
 };
 const WORKFLOWS: WorkflowOption[] = [{
   value: 'gakrcli' as const,
-  label: '@GakrCLI - Tag @gakrcli in issues and PR comments'
+  label: '@GakrCLI Code - Tag @gakrcli in issues and PR comments'
 }, {
   value: 'gakrcli-review' as const,
-  label: 'GakrCLI Review - Automated code review on new PRs'
+  label: 'GakrCLI Code Review - Automated code review on new PRs'
 }];
 function renderInputGuide(exitState: ExitState): React.ReactNode {
   if (exitState.pending) {

@@ -20,16 +20,16 @@ import { errorMessage } from '../../utils/errors.js';
 import { logMCPDebug } from '../../utils/log.js';
 import { capitalize } from '../../utils/stringUtils.js';
 import { ConfigurableShortcutHint } from '../ConfigurableShortcutHint.js';
-import { Select } from '../CustomSelect/index.js';
+import { Select, type OptionWithDescription } from '../CustomSelect/index.js';
 import { Byline } from '../design-system/Byline.js';
 import { KeyboardShortcutHint } from '../design-system/KeyboardShortcutHint.js';
 import { Spinner } from '../Spinner.js';
 import TextInput from '../TextInput.js';
 import { CapabilitiesSection } from './CapabilitiesSection.js';
-import type { gakrcliAIServerInfo, HTTPServerInfo, SSEServerInfo } from './types.js';
+import type { GakrCLIAIServerInfo, HTTPServerInfo, SSEServerInfo } from './types.js';
 import { handleReconnectError, handleReconnectResult } from './utils/reconnectHelpers.js';
 type Props = {
-  server: SSEServerInfo | HTTPServerInfo | gakrcliAIServerInfo;
+  server: SSEServerInfo | HTTPServerInfo | GakrCLIAIServerInfo;
   serverToolsCount: number;
   onViewTools: () => void;
   onCancel: () => void;
@@ -58,11 +58,11 @@ export function MCPRemoteServerMenu({
   const [authorizationUrl, setAuthorizationUrl] = React.useState<string | null>(null);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const authAbortControllerRef = useRef<AbortController | null>(null);
-  const [isgakrcliAIAuthenticating, setIsgakrcliAIAuthenticating] = useState(false);
-  const [gakrcliAIAuthUrl, setgakrcliAIAuthUrl] = useState<string | null>(null);
-  const [isgakrcliAIClearingAuth, setIsgakrcliAIClearingAuth] = useState(false);
-  const [gakrcliAIClearAuthUrl, setgakrcliAIClearAuthUrl] = useState<string | null>(null);
-  const [gakrcliAIClearAuthBrowserOpened, setgakrcliAIClearAuthBrowserOpened] = useState(false);
+  const [isGakrCLIAIAuthenticating, setIsGakrCLIAIAuthenticating] = useState(false);
+  const [gakrcliAIAuthUrl, setGakrCLIAIAuthUrl] = useState<string | null>(null);
+  const [isGakrCLIAIClearingAuth, setIsGakrCLIAIClearingAuth] = useState(false);
+  const [gakrcliAIClearAuthUrl, setGakrCLIAIClearAuthUrl] = useState<string | null>(null);
+  const [gakrcliAIClearAuthBrowserOpened, setGakrCLIAIClearAuthBrowserOpened] = useState(false);
   const [urlCopied, setUrlCopied] = useState(false);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const unmountedRef = useRef(false);
@@ -89,9 +89,9 @@ export function MCPRemoteServerMenu({
   // 2. It's connected and has tools (meaning it's working via some auth mechanism)
   const isEffectivelyAuthenticated = server.isAuthenticated || server.client.type === 'connected' && serverToolsCount > 0;
   const reconnectMcpServer = useMcpReconnect();
-  const handlegakrcliAIAuthComplete = React.useCallback(async () => {
-    setIsgakrcliAIAuthenticating(false);
-    setgakrcliAIAuthUrl(null);
+  const handleGakrCLIAIAuthComplete = React.useCallback(async () => {
+    setIsGakrCLIAIAuthenticating(false);
+    setGakrCLIAIAuthUrl(null);
     setIsReconnecting(true);
     try {
       const result = await reconnectMcpServer(server.name);
@@ -102,7 +102,7 @@ export function MCPRemoteServerMenu({
       if (success) {
         onComplete?.(`Authentication successful. Connected to ${server.name}.`);
       } else if (result.client.type === 'needs-auth') {
-        onComplete?.('Authentication successful, but server still requires authentication. You may need to manually restart Gakr.');
+        onComplete?.('Authentication successful, but server still requires authentication. You may need to manually restart GakrCLI.');
       } else {
         onComplete?.('Authentication successful, but server reconnection failed. You may need to manually restart GakrCLI for the changes to take effect.');
       }
@@ -115,7 +115,7 @@ export function MCPRemoteServerMenu({
       setIsReconnecting(false);
     }
   }, [reconnectMcpServer, server.name, onComplete]);
-  const handlegakrcliAIClearAuthComplete = React.useCallback(async () => {
+  const handleGakrCLIAIClearAuthComplete = React.useCallback(async () => {
     await clearServerCache(server.name, {
       ...server.config,
       scope: server.scope
@@ -141,9 +141,9 @@ export function MCPRemoteServerMenu({
     });
     logEvent('tengu_gakrcliai_mcp_clear_auth_completed', {});
     onComplete?.(`Disconnected from ${server.name}.`);
-    setIsgakrcliAIClearingAuth(false);
-    setgakrcliAIClearAuthUrl(null);
-    setgakrcliAIClearAuthBrowserOpened(false);
+    setIsGakrCLIAIClearingAuth(false);
+    setGakrCLIAIClearAuthUrl(null);
+    setGakrCLIAIClearAuthBrowserOpened(false);
   }, [server.name, server.config, server.scope, setAppState, onComplete]);
 
   // Escape to cancel authentication flow
@@ -159,36 +159,36 @@ export function MCPRemoteServerMenu({
 
   // Escape to cancel GakrCLI AI authentication
   useKeybinding('confirm:no', () => {
-    setIsgakrcliAIAuthenticating(false);
-    setgakrcliAIAuthUrl(null);
+    setIsGakrCLIAIAuthenticating(false);
+    setGakrCLIAIAuthUrl(null);
   }, {
     context: 'Confirmation',
-    isActive: isgakrcliAIAuthenticating
+    isActive: isGakrCLIAIAuthenticating
   });
 
   // Escape to cancel GakrCLI AI clear auth
   useKeybinding('confirm:no', () => {
-    setIsgakrcliAIClearingAuth(false);
-    setgakrcliAIClearAuthUrl(null);
-    setgakrcliAIClearAuthBrowserOpened(false);
+    setIsGakrCLIAIClearingAuth(false);
+    setGakrCLIAIClearAuthUrl(null);
+    setGakrCLIAIClearAuthBrowserOpened(false);
   }, {
     context: 'Confirmation',
-    isActive: isgakrcliAIClearingAuth
+    isActive: isGakrCLIAIClearingAuth
   });
 
   // Return key handling for authentication flows and 'c' to copy URL
   useInput((input, key) => {
-    if (key.return && isgakrcliAIAuthenticating) {
-      void handlegakrcliAIAuthComplete();
+    if (key.return && isGakrCLIAIAuthenticating) {
+      void handleGakrCLIAIAuthComplete();
     }
-    if (key.return && isgakrcliAIClearingAuth) {
+    if (key.return && isGakrCLIAIClearingAuth) {
       if (gakrcliAIClearAuthBrowserOpened) {
-        void handlegakrcliAIClearAuthComplete();
+        void handleGakrCLIAIClearAuthComplete();
       } else {
         // First Enter: open the browser
         const connectorsUrl = `${getOauthConfig().GAKR_AI_ORIGIN}/settings/connectors`;
-        setgakrcliAIClearAuthUrl(connectorsUrl);
-        setgakrcliAIClearAuthBrowserOpened(true);
+        setGakrCLIAIClearAuthUrl(connectorsUrl);
+        setGakrCLIAIClearAuthBrowserOpened(true);
         void openBrowser(connectorsUrl);
       }
     }
@@ -212,7 +212,7 @@ export function MCPRemoteServerMenu({
   // Count MCP prompts for this server (skills are shown in /skills, not here)
   const serverCommandsCount = filterMcpPromptsByServer(mcp.commands, server.name).length;
   const toggleMcpServer = useMcpToggleEnabled();
-  const handlegakrcliAIAuth = React.useCallback(async () => {
+  const handleGakrCLIAIAuth = React.useCallback(async () => {
     const gakrcliAiBaseUrl = getOauthConfig().GAKR_AI_ORIGIN;
     const accountInfo = getOauthAccountInfo();
     const orgUuid = accountInfo?.organizationUuid;
@@ -227,13 +227,13 @@ export function MCPRemoteServerMenu({
       // Fall back to settings/connectors if we don't have the required IDs
       authUrl = `${gakrcliAiBaseUrl}/settings/connectors`;
     }
-    setgakrcliAIAuthUrl(authUrl);
-    setIsgakrcliAIAuthenticating(true);
+    setGakrCLIAIAuthUrl(authUrl);
+    setIsGakrCLIAIAuthenticating(true);
     logEvent('tengu_gakrcliai_mcp_auth_started', {});
     await openBrowser(authUrl);
   }, [server.config]);
-  const handlegakrcliAIClearAuth = React.useCallback(() => {
-    setIsgakrcliAIClearingAuth(true);
+  const handleGakrCLIAIClearAuth = React.useCallback(() => {
+    setIsGakrCLIAIClearingAuth(true);
     logEvent('tengu_gakrcliai_mcp_clear_auth_started', {});
   }, []);
   const handleToggleEnabled = React.useCallback(async () => {
@@ -281,7 +281,7 @@ export function MCPRemoteServerMenu({
           const message = isEffectivelyAuthenticated ? `Authentication successful. Reconnected to ${server.name}.` : `Authentication successful. Connected to ${server.name}.`;
           onComplete?.(message);
         } else if (result_0.client.type === 'needs-auth') {
-          onComplete?.('Authentication successful, but server still requires authentication. You may need to manually restart Gakr.');
+          onComplete?.('Authentication successful, but server still requires authentication. You may need to manually restart GakrCLI.');
         } else {
           // result.client.type === 'failed'
           logMCPDebug(server.name, `Reconnection failed after authentication`);
@@ -382,7 +382,7 @@ export function MCPRemoteServerMenu({
         </Box>
       </Box>;
   }
-  if (isgakrcliAIAuthenticating) {
+  if (isGakrCLIAIAuthenticating) {
     return <Box flexDirection="column" gap={1} padding={1}>
         <Text color="gakrcli">Authenticating with {server.name}…</Text>
         <Box>
@@ -411,7 +411,7 @@ export function MCPRemoteServerMenu({
         </Box>
       </Box>;
   }
-  if (isgakrcliAIClearingAuth) {
+  if (isGakrCLIAIClearingAuth) {
     return <Box flexDirection="column" gap={1} padding={1}>
         <Text color="gakrcli">Clear authentication for {server.name}</Text>
         {gakrcliAIClearAuthBrowserOpened ? <>
@@ -441,7 +441,7 @@ export function MCPRemoteServerMenu({
             </Box>
           </> : <>
             <Text>
-              This will open gakr.ai in the browser. Find the MCP server in
+              This will open gakrcli.ai in the browser. Find the MCP server in
               the list and click &quot;Disconnect&quot;.
             </Text>
             <Box marginLeft={3} flexDirection="column">
@@ -467,7 +467,7 @@ export function MCPRemoteServerMenu({
         <Text dimColor>This may take a few moments.</Text>
       </Box>;
   }
-  const menuOptions = [];
+  const menuOptions: OptionWithDescription<string>[] = [];
 
   // If server is disabled, show Enable first as the primary action
   if (server.client.type === 'disabled') {
@@ -595,10 +595,10 @@ export function MCPRemoteServerMenu({
               await handleClearAuth();
               break;
             case 'gakrcliai-auth':
-              await handlegakrcliAIAuth();
+              await handleGakrCLIAIAuth();
               break;
             case 'gakrcliai-clear-auth':
-              handlegakrcliAIClearAuth();
+              handleGakrCLIAIClearAuth();
               break;
             case 'reconnectMcpServer':
               setIsReconnecting(true);

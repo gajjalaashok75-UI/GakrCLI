@@ -6,6 +6,11 @@ import {
   detectProviderFromEnv,
 } from './providerAutoDetect.ts'
 
+type FetchImpl = (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+) => Promise<Response>
+
 // Hermetic env scan: always report "no Codex auth on disk" so tests don't
 // depend on the dev machine's ~/.codex/auth.json state.
 function scan(env: Record<string, string | undefined>) {
@@ -119,6 +124,13 @@ describe('detectProviderFromEnv — priority order', () => {
     })
   })
 
+  test('FIREWORKS_API_KEY detected', () => {
+    expect(scan({ FIREWORKS_API_KEY: 'fw-key' })).toEqual({
+      kind: 'fireworks',
+      source: 'FIREWORKS_API_KEY set',
+    })
+  })
+
   test('empty-string values are ignored', () => {
     expect(
       scan({
@@ -136,13 +148,13 @@ describe('detectProviderFromEnv — priority order', () => {
 
 describe('detectLocalService', () => {
   test('returns Ollama when its /api/tags responds ok', async () => {
-    const fetchImpl = (async (input: URL | RequestInfo) => {
+    const fetchImpl = asFetch(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : (input as URL).toString()
       if (url.includes(':11434')) {
         return new Response('{"models":[]}', { status: 200 })
       }
       return new Response('', { status: 404 })
-    }) as typeof fetch
+    })
 
     const result = await detectLocalService({
       env: {},
@@ -154,7 +166,7 @@ describe('detectLocalService', () => {
   })
 
   test('Ollama wins over LM Studio even when both are reachable', async () => {
-    const fetchImpl = (async () => new Response('{}', { status: 200 })) as typeof fetch
+    const fetchImpl = asFetch(async () => new Response('{}', { status: 200 }))
     const result = await detectLocalService({
       env: {},
       fetchImpl,
@@ -164,13 +176,13 @@ describe('detectLocalService', () => {
   })
 
   test('falls back to LM Studio when Ollama is unreachable', async () => {
-    const fetchImpl = (async (input: URL | RequestInfo) => {
+    const fetchImpl = asFetch(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : (input as URL).toString()
       if (url.includes(':1234')) {
         return new Response('{"data":[]}', { status: 200 })
       }
       return new Response('', { status: 404 })
-    }) as typeof fetch
+    })
 
     const result = await detectLocalService({
       env: {},
@@ -182,8 +194,7 @@ describe('detectLocalService', () => {
   })
 
   test('returns null when no local services respond', async () => {
-    const fetchImpl = (async () =>
-      new Response('', { status: 500 })) as typeof fetch
+    const fetchImpl = asFetch(async () => new Response('', { status: 500 }))
     const result = await detectLocalService({
       env: {},
       fetchImpl,
@@ -194,11 +205,11 @@ describe('detectLocalService', () => {
 
   test('honors OLLAMA_BASE_URL override', async () => {
     const probedUrls: string[] = []
-    const fetchImpl = (async (input: URL | RequestInfo) => {
+    const fetchImpl = asFetch(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : (input as URL).toString()
       probedUrls.push(url)
       return new Response('{"models":[]}', { status: 200 })
-    }) as typeof fetch
+    })
 
     const result = await detectLocalService({
       env: { OLLAMA_BASE_URL: 'http://10.0.0.5:11434' },
@@ -210,7 +221,7 @@ describe('detectLocalService', () => {
   })
 
   test('probe timeout does not throw — returns null', async () => {
-    const fetchImpl = (async (_input: URL | RequestInfo, init?: RequestInit) => {
+    const fetchImpl = asFetch(async (_input: RequestInfo | URL, init?: RequestInit) => {
       // Respect the caller's abort signal so the race with timeoutMs is fair.
       return new Promise<Response>((_resolve, reject) => {
         const onAbort = () => reject(new Error('aborted'))
@@ -220,7 +231,7 @@ describe('detectLocalService', () => {
           _resolve(new Response('ok'))
         }, 500)
       })
-    }) as typeof fetch
+    })
 
     const result = await detectLocalService({
       env: {},
@@ -231,9 +242,9 @@ describe('detectLocalService', () => {
   })
 
   test('network errors do not throw', async () => {
-    const fetchImpl = (async () => {
+    const fetchImpl = asFetch(async (): Promise<Response> => {
       throw new Error('ECONNREFUSED')
-    }) as typeof fetch
+    })
 
     const result = await detectLocalService({
       env: {},
@@ -247,10 +258,10 @@ describe('detectLocalService', () => {
 describe('detectBestProvider — orchestrator', () => {
   test('env match short-circuits the local probe', async () => {
     let probeCalled = false
-    const fetchImpl = (async () => {
+    const fetchImpl = asFetch(async () => {
       probeCalled = true
       return new Response('{}', { status: 200 })
-    }) as typeof fetch
+    })
 
     const result = await detectBestProvider({
       env: { ANTHROPIC_API_KEY: 'sk-ant' },
@@ -263,7 +274,7 @@ describe('detectBestProvider — orchestrator', () => {
   })
 
   test('env miss falls through to local-service probe', async () => {
-    const fetchImpl = (async () => new Response('{}', { status: 200 })) as typeof fetch
+    const fetchImpl = asFetch(async () => new Response('{}', { status: 200 }))
     const result = await detectBestProvider({
       env: {},
       fetchImpl,
@@ -273,27 +284,28 @@ describe('detectBestProvider — orchestrator', () => {
     expect(result?.kind).toBe('ollama')
   })
 
-  test('skipLocal prevents network probes and returns null when env is empty', async () => {
+  test('skipLocal + OPENGATEWAY_API_KEY falls back to opengateway without probing', async () => {
     let probeCalled = false
-    const fetchImpl = (async () => {
+    const fetchImpl = asFetch(async () => {
       probeCalled = true
       return new Response('{}', { status: 200 })
-    }) as typeof fetch
+    })
 
     const result = await detectBestProvider({
-      env: {},
+      env: { OPENGATEWAY_API_KEY: 'ogw_live_test_0000000000000000' },
       fetchImpl,
       skipLocal: true,
       hasCodexAuth: () => false,
     })
-    expect(result).toBeNull()
+    expect(result?.kind).toBe('gakr-gakr-opengateway')
+    expect(result?.model).toBe('mimo-v2.5-pro')
     expect(probeCalled).toBe(false)
   })
 
-  test('completely empty environment returns null when nothing local is reachable', async () => {
-    const fetchImpl = (async () => {
+  test('completely empty environment returns null (opengateway needs an API key)', async () => {
+    const fetchImpl = asFetch(async (): Promise<Response> => {
       throw new Error('nothing reachable')
-    }) as typeof fetch
+    })
 
     const result = await detectBestProvider({
       env: {},
@@ -301,6 +313,63 @@ describe('detectBestProvider — orchestrator', () => {
       timeoutMs: 100,
       hasCodexAuth: () => false,
     })
+    // As of 2026-05-22 opengateway requires a key; with no credentials in env
+    // we no longer auto-select it — the caller surfaces a setup prompt instead.
+    expect(result).toBeNull()
+  })
+
+  test('OPENGATEWAY_BASE_URL env overrides the opengateway fallback base URL', async () => {
+    const fetchImpl = asFetch(async (): Promise<Response> => {
+      throw new Error('nothing reachable')
+    })
+
+    const result = await detectBestProvider({
+      env: {
+        OPENGATEWAY_API_KEY: 'ogw_live_test_0000000000000000',
+        OPENGATEWAY_BASE_URL: 'http://localhost:8181/v1/xiaomi-mimo',
+      },
+      fetchImpl,
+      timeoutMs: 100,
+      hasCodexAuth: () => false,
+    })
+    expect(result?.kind).toBe('gakr-gakr-opengateway')
+    expect(result?.baseUrl).toBe('http://localhost:8181/v1/xiaomi-mimo')
+  })
+
+  test('OPENGATEWAY_BASE_URL normalizes hosted legacy Xiaomi route to smart route', async () => {
+    const fetchImpl = asFetch(async (): Promise<Response> => {
+      throw new Error('nothing reachable')
+    })
+
+    const result = await detectBestProvider({
+      env: {
+        OPENGATEWAY_API_KEY: 'ogw_live_test_0000000000000000',
+        OPENGATEWAY_BASE_URL: 'https://opengateway.gakr-gakr.com/v1/xiaomi-mimo',
+      },
+      fetchImpl,
+      timeoutMs: 100,
+      hasCodexAuth: () => false,
+    })
+    expect(result?.kind).toBe('gakr-gakr-opengateway')
+    expect(result?.baseUrl).toBe('https://opengateway.gakr-gakr.com/v1')
+  })
+
+  test('skipOpengatewayFallback returns null when nothing else is detected', async () => {
+    const fetchImpl = asFetch(async (): Promise<Response> => {
+      throw new Error('nothing reachable')
+    })
+
+    const result = await detectBestProvider({
+      env: {},
+      fetchImpl,
+      timeoutMs: 100,
+      hasCodexAuth: () => false,
+      skipOpengatewayFallback: true,
+    })
     expect(result).toBeNull()
   })
 })
+
+function asFetch(fetchImpl: FetchImpl): typeof fetch {
+  return fetchImpl as unknown as typeof fetch
+}

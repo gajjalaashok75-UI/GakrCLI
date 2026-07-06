@@ -203,6 +203,7 @@ describe('buildAuthHeadersForPreset direct assertions', () => {
       authHeader: 'X-Subscription-Token',
       authScheme: '',
     })
+    // Bare token, no leading space, no "Bearer" prefix
     expect(result).toEqual({ 'X-Subscription-Token': 'brv-test-123' })
   })
 
@@ -227,6 +228,7 @@ describe('buildAuthHeadersForPreset direct assertions', () => {
       queryParam: 'q',
       authQueryParam: 'key',
     })
+    // User overrode → still emit the header
     expect(result).toEqual({ 'X-Custom-Auth': 'Bearer gck-test-123' })
   })
 })

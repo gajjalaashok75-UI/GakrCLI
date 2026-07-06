@@ -25,7 +25,7 @@ export interface McpToolInfo {
 /** JSON-RPC 2.0 request (MCP protocol) */
 export interface JsonRpcRequest {
   jsonrpc: '2.0';
-  id?: string | number;
+  id: string | number;
   method: string;
   params?: Record<string, unknown>;
 }
@@ -33,7 +33,7 @@ export interface JsonRpcRequest {
 /** JSON-RPC 2.0 response (MCP protocol) */
 export interface JsonRpcResponse {
   jsonrpc: '2.0';
-  id?: string | number;
+  id: string | number;
   result?: unknown;
   error?: { code: number; message: string; data?: unknown };
 }
@@ -42,12 +42,8 @@ export interface JsonRpcResponse {
 export interface IdeLockfile {
   pid: number;
   port: number;
-  authToken: string;
   token: string;
-  workspaceFolders: string[];
   workspaceFolder: string;
-  ideName: string;
-  transport: 'sse';
   createdAt: string;
 }
 

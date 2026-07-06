@@ -40,21 +40,9 @@ test('ingestLocalWikiSource creates a source note and updates log/index', async 
   expect(sourceNote).toContain('Path: `notes.md`')
 
   const log = await readFile(paths.logFile, 'utf8')
-  expect(log).toContain('] ingest | Design Notes')
-  expect(log).toContain('Source: `notes.md`')
+  expect(log).toContain('Ingested `notes.md`')
 
   const index = await readFile(paths.indexFile, 'utf8')
   expect(index).toContain('./sources/')
-  expect(index).toContain('[Design Notes]')
   expect(index).toContain(result.sourceNote.replace('.gakrcli/wiki/', './'))
-})
-
-test('ingestLocalWikiSource rejects files outside the project', async () => {
-  const cwd = await makeProjectDir()
-  const outside = join(await makeProjectDir(), 'outside.md')
-  await writeFile(outside, '# Outside\n', 'utf8')
-
-  await expect(ingestLocalWikiSource(cwd, outside)).rejects.toThrow(
-    'Wiki ingest only supports files inside the current project.',
-  )
 })

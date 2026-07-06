@@ -18,7 +18,7 @@ import { getOrganizationUUID } from '../services/oauth/client.js';
 import { AppStateProvider } from '../state/AppState.js';
 import type { Message, SystemMessage } from '../types/message.js';
 import type { PermissionMode } from '../types/permissions.js';
-import { checkAndRefreshOAuthTokenIfNeeded, getgakrcliAIOAuthTokens } from './auth.js';
+import { checkAndRefreshOAuthTokenIfNeeded, getGakrCLIAIOAuthTokens } from './auth.js';
 import { checkGithubAppInstalled } from './background/remote/preconditions.js';
 import { deserializeMessages, type TeleportRemoteResponse } from './conversationRecovery.js';
 import { getCwd } from './cwd.js';
@@ -95,7 +95,7 @@ type TitleAndBranch = {
 };
 
 /**
- * Generates a title and branch name for a coding session using GakrCLI Haiku
+ * Generates a title and branch name for a coding session using claude haiku
  * @param description The description/prompt for the session
  * @returns Promise<TitleAndBranch> The generated title and branch name
  */
@@ -433,12 +433,12 @@ export async function teleportResumeCodeSession(sessionId: string, onProgress?: 
   }
   logForDebugging(`Resuming code session ID: ${sessionId}`);
   try {
-    const accessToken = getgakrcliAIOAuthTokens()?.accessToken;
+    const accessToken = getGakrCLIAIOAuthTokens()?.accessToken;
     if (!accessToken) {
       logEvent('tengu_teleport_resume_error', {
         error_type: 'no_access_token' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
       });
-      throw new Error('GakrCLI web sessions require authentication with a Gakr.ai account. API key authentication is not sufficient. Please run /login to authenticate, or check your authentication status with /status.');
+      throw new Error('GakrCLI Code web sessions require authentication with a GakrCLI.ai account. API key authentication is not sufficient. Please run /login to authenticate, or check your authentication status with /status.');
     }
 
     // Get organization UUID
@@ -533,7 +533,7 @@ async function handleTeleportPrerequisites(root: Root, errorsToIgnore?: Set<Tele
 }
 
 /**
- * Creates a remote Gakr.ai session with error handling and UI feedback.
+ * Creates a remote GakrCLI.ai session with error handling and UI feedback.
  * Shows prerequisite error dialog in the existing root if needed.
  * @param root The existing Ink root to render dialogs into
  * @param description The description/prompt for the new session (null for no initial prompt)
@@ -608,7 +608,7 @@ export async function teleportFromSessionsAPI(sessionId: string, orgUUID: string
       logEvent('tengu_teleport_error_session_not_found_404', {
         sessionId: sessionId as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
       });
-      throw new TeleportOperationError(`${sessionId} not found.`, `${sessionId} not found.\n${chalk.dim('Run /status in GakrCLI to check your account.')}`);
+      throw new TeleportOperationError(`${sessionId} not found.`, `${sessionId} not found.\n${chalk.dim('Run /status in GakrCLI Code to check your account.')}`);
     }
     logError(err);
     throw new Error(`Failed to fetch session from Sessions API: ${err.message}`);
@@ -633,7 +633,7 @@ export type PollRemoteSessionResponse = {
 export async function pollRemoteSessionEvents(sessionId: string, afterId: string | null = null, opts?: {
   skipMetadata?: boolean;
 }): Promise<PollRemoteSessionResponse> {
-  const accessToken = getgakrcliAIOAuthTokens()?.accessToken;
+  const accessToken = getGakrCLIAIOAuthTokens()?.accessToken;
   if (!accessToken) {
     throw new Error('No access token for polling');
   }
@@ -715,7 +715,7 @@ export async function pollRemoteSessionEvents(sessionId: string, afterId: string
 }
 
 /**
- * Creates a remote Gakr.ai session using the Sessions API.
+ * Creates a remote GakrCLI.ai session using the Sessions API.
  *
  * Two source modes:
  * - GitHub (default): backend clones from the repo's origin URL. Requires a
@@ -800,7 +800,7 @@ export async function teleportToRemote(options: {
   try {
     // Check authentication
     await checkAndRefreshOAuthTokenIfNeeded();
-    const accessToken = getgakrcliAIOAuthTokens()?.accessToken;
+    const accessToken = getGakrCLIAIOAuthTokens()?.accessToken;
     if (!accessToken) {
       logError(new Error('No access token found for remote session creation'));
       return null;
@@ -1010,7 +1010,7 @@ export async function teleportToRemote(options: {
       if (!bundle.success) {
         logError(new Error(`Bundle upload failed: ${bundle.error}`));
         // Only steer users to GitHub setup when there's a remote to clone from.
-        const setup = repoInfo ? '. Please setup GitHub on https://gakr.ai/code' : '';
+        const setup = repoInfo ? '. Please setup GitHub on https://gakrcli.ai/code' : '';
         let msg: string;
         switch (bundle.failReason) {
           case 'empty_repo':
@@ -1198,7 +1198,7 @@ export async function teleportToRemote(options: {
  * reaper collects it.
  */
 export async function archiveRemoteSession(sessionId: string): Promise<void> {
-  const accessToken = getgakrcliAIOAuthTokens()?.accessToken;
+  const accessToken = getGakrCLIAIOAuthTokens()?.accessToken;
   if (!accessToken) return;
   const orgUUID = await getOrganizationUUID();
   if (!orgUUID) return;

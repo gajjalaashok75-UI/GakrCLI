@@ -285,7 +285,7 @@ function worktreePathFor(repoRoot: string, slug: string): string {
 async function getOrCreateWorktree(
   repoRoot: string,
   slug: string,
-  options?: { prNumber?: number },
+  options?: { prNumber?: number; baseRef?: string },
 ): Promise<WorktreeCreateResult> {
   const worktreePath = worktreePathFor(repoRoot, slug)
   const worktreeBranch = worktreeBranchName(slug)
@@ -335,6 +335,12 @@ async function getOrCreateWorktree(
         )
       }
       baseBranch = 'FETCH_HEAD'
+    } else if (options?.baseRef) {
+      // Caller pinned an explicit base (e.g. agent isolation passes the parent
+      // session's HEAD so the worktree mirrors the parent's committed state
+      // rather than origin/<defaultBranch>). Use it verbatim; the rev-parse
+      // below resolves it to a SHA.
+      baseBranch = options.baseRef
     } else {
       // If origin/<branch> already exists locally, skip fetch. In large repos
       // (210k files, 16M objects) fetch burns ~6-8s on a local commit-graph
@@ -961,7 +967,10 @@ export async function cleanupWorktree(): Promise<void> {
  * global session state (currentWorktreeSession, process.chdir, project config).
  * Falls back to hook-based creation if not in a git repository.
  */
-export async function createAgentWorktree(slug: string): Promise<{
+export async function createAgentWorktree(
+  slug: string,
+  options?: { cwd?: string },
+): Promise<{
   worktreePath: string
   worktreeBranch?: string
   headCommit?: string
@@ -969,6 +978,11 @@ export async function createAgentWorktree(slug: string): Promise<{
   hookBased?: boolean
 }> {
   validateWorktreeSlug(slug)
+
+  // Resolve the parent session's working directory once. Defaults to the
+  // ambient session cwd; callers (and tests) may pin it explicitly so both the
+  // canonical-root and parent-HEAD lookups below stay consistent.
+  const sessionCwd = options?.cwd ?? getCwd()
 
   // Try hook-based worktree creation first (allows user-configured VCS)
   if (hasWorktreeCreateHook()) {
@@ -985,7 +999,7 @@ export async function createAgentWorktree(slug: string): Promise<{
   // the main repo's .gakrcli/worktrees/ even when spawned from inside a session
   // worktree — otherwise they nest at <worktree>/.gakrcli/worktrees/ and the
   // periodic cleanup (which scans the canonical root) never finds them.
-  const gitRoot = findCanonicalGitRoot(getCwd())
+  const gitRoot = findCanonicalGitRoot(sessionCwd)
   if (!gitRoot) {
     throw new Error(
       'Cannot create agent worktree: not in a git repository and no WorktreeCreate hooks are configured. ' +
@@ -993,8 +1007,26 @@ export async function createAgentWorktree(slug: string): Promise<{
     )
   }
 
+  // Base the agent worktree on the parent session's current HEAD so the
+  // isolated agent sees the same committed project state the parent is working
+  // on — not origin/<defaultBranch>, which may be an older tree missing files
+  // that only exist on the active branch (#1586). Resolve from the session cwd
+  // (not the canonical root) so a session on a feature branch is honored. Fall
+  // back to the default origin-based behavior if HEAD can't be resolved (e.g. a
+  // repo with no commits yet).
+  const { stdout: headStdout, code: headCode } =
+    await execFileNoThrowWithCwd(gitExe(), ['rev-parse', 'HEAD'], {
+      cwd: sessionCwd,
+    })
+  const parentHeadRef =
+    headCode === 0 && headStdout.trim() ? headStdout.trim() : undefined
+
   const { worktreePath, worktreeBranch, headCommit, existed } =
-    await getOrCreateWorktree(gitRoot, slug)
+    await getOrCreateWorktree(
+      gitRoot,
+      slug,
+      parentHeadRef ? { baseRef: parentHeadRef } : undefined,
+    )
 
   if (!existed) {
     logForDebugging(
@@ -1238,7 +1270,7 @@ export async function hasWorktreeChanges(
 
 /**
  * Fast-path handler for --worktree --tmux.
- * Creates the worktree and execs into tmux running gakrcli inside.
+ * Creates the worktree and execs into tmux running GakrCLI inside.
  * This is called early in cli.tsx before loading the full CLI.
  */
 export async function execIntoTmuxWorktree(args: string[]): Promise<{
@@ -1332,8 +1364,7 @@ export async function execIntoTmuxWorktree(args: string[]): Promise<{
       }
     }
     repoName = basename(findCanonicalGitRoot(getCwd()) ?? getCwd())
-    // biome-ignore lint/suspicious/noConsole: intentional console output
-    console.log(`Using worktree via hook: ${worktreeDir}`)
+    logForDebugging(`Using worktree via hook: ${worktreeDir}`)
   } else {
     // Get main git repo root (resolves through worktrees)
     const repoRoot = findCanonicalGitRoot(getCwd())
@@ -1355,8 +1386,7 @@ export async function execIntoTmuxWorktree(args: string[]): Promise<{
         prNumber !== null ? { prNumber } : undefined,
       )
       if (!result.existed) {
-        // biome-ignore lint/suspicious/noConsole: intentional console output
-        console.log(
+        logForDebugging(
           `Created worktree: ${worktreeDir} (based on ${result.baseBranch})`,
         )
         await performPostCreationSetup(repoRoot, worktreeDir)
@@ -1403,8 +1433,8 @@ export async function execIntoTmuxWorktree(args: string[]): Promise<{
     }
   }
 
-  // Check if tmux prefix conflicts with gakrcli keybindings
-  // gakrcli binds: ctrl+b (task:background), ctrl+c, ctrl+d, ctrl+t, ctrl+o, ctrl+r, ctrl+s, ctrl+g, ctrl+e
+  // Check if tmux prefix conflicts with GakrCLI keybindings
+  // GakrCLI binds: ctrl+b (task:background), ctrl+c, ctrl+d, ctrl+t, ctrl+o, ctrl+r, ctrl+s, ctrl+g, ctrl+e
   const gakrcliBindings = [
     'C-b',
     'C-c',
@@ -1418,7 +1448,7 @@ export async function execIntoTmuxWorktree(args: string[]): Promise<{
   ]
   const prefixConflicts = gakrcliBindings.includes(tmuxPrefix)
 
-  // Set env vars for the inner gakrcli to display tmux info in welcome message
+  // Set env vars for the inner GakrCLI to display tmux info in welcome message
   const tmuxEnv = {
     ...process.env,
     GAKR_CODE_TMUX_SESSION: tmuxSessionName,
@@ -1456,13 +1486,13 @@ export async function execIntoTmuxWorktree(args: string[]): Promise<{
     )
   }
 
-  // For ants in gakr-cli-internal, set up dev panes (watch + start)
+  // For ants in gakrcli-cli-internal, set up dev panes (watch + start)
   const isAnt = process.env.USER_TYPE === 'ant'
-  const isGakrCliInternal = repoName === 'gakr-cli-internal'
-  const shouldSetupDevPanes = isAnt && isGakrCliInternal && !sessionExists
+  const isGakrCLICliInternal = repoName === 'gakrcli-cli-internal'
+  const shouldSetupDevPanes = isAnt && isGakrCLICliInternal && !sessionExists
 
   if (shouldSetupDevPanes) {
-    // Create detached session with gakrcli in first pane
+    // Create detached session with GakrCLI in first pane
     spawnSync(
       'tmux',
       [
@@ -1501,7 +1531,7 @@ export async function execIntoTmuxWorktree(args: string[]): Promise<{
       cwd: worktreeDir,
     })
 
-    // Select the first pane (gakrcli)
+    // Select the first pane (GakrCLI)
     spawnSync('tmux', ['select-pane', '-t', `${tmuxSessionName}:0.0`], {
       cwd: worktreeDir,
     })

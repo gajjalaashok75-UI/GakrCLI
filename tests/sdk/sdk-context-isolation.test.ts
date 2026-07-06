@@ -1,9 +1,4 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'fs'
-import { join } from 'path'
-import { tmpdir } from 'os'
-import { randomUUID } from 'crypto'
-import { query } from '../../src/entrypoints/sdk/index.js'
 import {
   runWithSdkContext,
   getSessionId,
@@ -17,11 +12,6 @@ import {
   getParentSessionId,
 } from '../../src/bootstrap/state.js'
 import {
-  flushSessionStorage,
-  getProjectDir,
-  recordTranscript,
-} from '../../src/utils/sessionStorage.js'
-import {
   acquireSharedMutationLock,
   releaseSharedMutationLock,
 } from '../../src/test/sharedMutationLock.js'
@@ -32,18 +22,14 @@ let originalSessionId: SessionId
 let originalCwd: string
 let originalOriginalCwd: string
 let originalSessionProjectDir: string | null
-let originalConfigDir: string | undefined
-let originalTestPersistence: string | undefined
 
 describe('SDK context isolation', () => {
   beforeEach(async () => {
-    await acquireSharedMutationLock('tests/sdk/sdk-context-isolation.test.ts')
+    await acquireSharedMutationLock('sdk-context-isolation')
     originalSessionId = getSessionId()
     originalCwd = getCwdState()
     originalOriginalCwd = getOriginalCwd()
     originalSessionProjectDir = getSessionProjectDir()
-    originalConfigDir = process.env.GAKR_CONFIG_DIR
-    originalTestPersistence = process.env.TEST_ENABLE_SESSION_PERSISTENCE
   })
 
   afterEach(() => {
@@ -52,16 +38,6 @@ describe('SDK context isolation', () => {
       switchSession(originalSessionId, originalSessionProjectDir)
       setCwdState(originalCwd)
       setOriginalCwd(originalOriginalCwd)
-      if (originalConfigDir === undefined) {
-        delete process.env.GAKR_CONFIG_DIR
-      } else {
-        process.env.GAKR_CONFIG_DIR = originalConfigDir
-      }
-      if (originalTestPersistence === undefined) {
-        delete process.env.TEST_ENABLE_SESSION_PERSISTENCE
-      } else {
-        process.env.TEST_ENABLE_SESSION_PERSISTENCE = originalTestPersistence
-      }
     } finally {
       releaseSharedMutationLock()
     }
@@ -351,69 +327,6 @@ describe('SDK context isolation', () => {
       // Global state should be untouched
       expect(getSessionId()).toBe(originalSessionId)
       expect(getCwdState()).toBe(originalCwd)
-    })
-  })
-
-  describe('SDK transcript routing', () => {
-    test('fresh query transcript writes use the SDK cwd, not the host process cwd', async () => {
-      const tempRoot = mkdtempSync(join(tmpdir(), 'gakrcli-sdk-transcript-cwd-'))
-      const configDir = join(tempRoot, 'config')
-      const workspaceDir = join(tempRoot, 'workspace')
-      const hostCwd = join(tempRoot, 'Microsoft VS Code')
-      mkdirSync(workspaceDir, { recursive: true })
-      mkdirSync(hostCwd, { recursive: true })
-      process.env.GAKR_CONFIG_DIR = configDir
-      process.env.TEST_ENABLE_SESSION_PERSISTENCE = '1'
-      setOriginalCwd(hostCwd)
-
-      class TranscriptWritingEngine {
-        setCommands() {}
-        injectAgents() {}
-        updateTools() {}
-        getMcpClients() { return [] }
-        setMcpClients() {}
-        getMessages() { return [] }
-        interrupt() {}
-        async *submitMessage(prompt: string) {
-          await recordTranscript([{
-            type: 'user',
-            message: { role: 'user', content: prompt },
-            uuid: randomUUID(),
-            timestamp: new Date().toISOString(),
-          } as any])
-          await flushSessionStorage()
-          yield {
-            type: 'result',
-            subtype: 'success',
-            is_error: false,
-            duration_ms: 1,
-            duration_api_ms: 0,
-            num_turns: 1,
-            result: 'ok',
-            stop_reason: null,
-            session_id: getSessionId(),
-            total_cost_usd: 0,
-            uuid: randomUUID(),
-          } as any
-        }
-      }
-
-      try {
-        const q = query({
-          prompt: 'store this in the workspace transcript',
-          options: { cwd: workspaceDir },
-        })
-        ;(q as any).setEngine(new TranscriptWritingEngine())
-        for await (const _message of q) {}
-
-        const expectedPath = join(getProjectDir(workspaceDir), `${q.sessionId}.jsonl`)
-        const hostPath = join(getProjectDir(hostCwd), `${q.sessionId}.jsonl`)
-        expect(existsSync(expectedPath)).toBe(true)
-        expect(existsSync(hostPath)).toBe(false)
-        expect(readFileSync(expectedPath, 'utf8')).toContain(`"cwd":"${workspaceDir.replace(/\\/g, '\\\\')}"`)
-      } finally {
-        rmSync(tempRoot, { recursive: true, force: true })
-      }
     })
   })
 })

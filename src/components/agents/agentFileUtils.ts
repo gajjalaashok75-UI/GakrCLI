@@ -10,7 +10,7 @@ import {
 } from '../../tools/AgentTool/loadAgentsDir.js'
 import { getCwd } from '../../utils/cwd.js'
 import type { EffortValue } from '../../utils/effort.js'
-import { getGakrcliConfigHomeDir } from '../../utils/envUtils.js'
+import { getGakrCLIConfigHomeDir } from '../../utils/envUtils.js'
 import { getErrnoCode } from '../../utils/errors.js'
 import { AGENT_PATHS } from './types.js'
 
@@ -31,6 +31,11 @@ export function formatAgentAsMarkdown(
   // - Backslashes: \ -> \\
   // - Double quotes: " -> \"
   // - Newlines: \n -> \\n (so yaml reads it as literal backslash-n, not newline)
+  // Defensive fail-closed: upstream callers (LLM-generated metadata, manually
+  // edited agent files) have produced non-string values here in the past,
+  // which crashed agent creation with `whenToUse.replace is not a function`.
+  // Stringifying junk like `[object Object]` or `"42"` would silently save
+  // garbage; write an empty description instead so the bad value is visible.
   const whenToUseStr = typeof whenToUse === 'string' ? whenToUse : ''
   const escapedWhenToUse = whenToUseStr
     .replace(/\\/g, '\\\\') // Escape backslashes first
@@ -63,15 +68,11 @@ function getAgentDirectoryPath(location: SettingSource): string {
     case 'flagSettings':
       throw new Error(`Cannot get directory path for ${location} agents`)
     case 'userSettings':
-      return join(getGakrcliConfigHomeDir(), AGENT_PATHS.AGENTS_DIR)
+      return join(getGakrCLIConfigHomeDir(), AGENT_PATHS.AGENTS_DIR)
     case 'projectSettings':
       return join(getCwd(), AGENT_PATHS.FOLDER_NAME, AGENT_PATHS.AGENTS_DIR)
     case 'policySettings':
-      return join(
-        getManagedFilePath(),
-        AGENT_PATHS.FOLDER_NAME,
-        AGENT_PATHS.AGENTS_DIR,
-      )
+      return join(getManagedFilePath(), '.gakrcli', AGENT_PATHS.AGENTS_DIR)
     case 'localSettings':
       return join(getCwd(), AGENT_PATHS.FOLDER_NAME, AGENT_PATHS.AGENTS_DIR)
   }

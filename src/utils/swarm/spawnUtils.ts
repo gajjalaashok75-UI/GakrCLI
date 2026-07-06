@@ -46,6 +46,8 @@ export function buildInheritedCliFlags(options?: {
   // Plan mode takes precedence over bypass permissions for safety
   if (planModeRequired) {
     // Don't inherit bypass permissions when plan mode is required
+  } else if (permissionMode === 'fullAccess') {
+    flags.push('--permission-mode fullAccess')
   } else if (
     permissionMode === 'bypassPermissions' ||
     getSessionBypassPermissionsMode()
@@ -53,6 +55,8 @@ export function buildInheritedCliFlags(options?: {
     flags.push('--dangerously-skip-permissions')
   } else if (permissionMode === 'acceptEdits') {
     flags.push('--permission-mode acceptEdits')
+  } else if (permissionMode === 'auto') {
+    flags.push('--permission-mode auto')
   }
 
   // Propagate --model if explicitly set via CLI
@@ -101,20 +105,20 @@ const TEAMMATE_ENV_VARS = [
   'GAKR_CODE_USE_FOUNDRY',
   'GAKR_CODE_USE_GITHUB',
   'GAKR_CODE_USE_GEMINI',
-  'GAKR_CODE_USE_NVIDIA',
+  'GAKR_CODE_USE_MISTRAL',
   'GAKR_CODE_USE_OPENAI',
   'GITHUB_TOKEN',
   'GH_TOKEN',
   'OPENAI_API_KEY',
   'OPENAI_BASE_URL',
   'OPENAI_MODEL',
-  'NVIDIA_API_KEY',
-  'NVIDIA_BASE_URL',
-  'NVIDIA_MODEL',
   'GEMINI_API_KEY',
   'GEMINI_BASE_URL',
   'GEMINI_MODEL',
   'GOOGLE_API_KEY',
+  'MISTRAL_API_KEY',
+  'MISTRAL_MODEL',
+  'MISTRAL_BASE_URL',
   // Custom API endpoint
   'ANTHROPIC_BASE_URL',
   // Config directory override
@@ -148,13 +152,15 @@ const TEAMMATE_ENV_VARS = [
 
 /**
  * Builds the `env KEY=VALUE ...` string for teammate spawn commands.
- * Always includes gakrcliCODE=1 and GAKR_CODE_EXPERIMENTAL_AGENT_TEAMS=1,
+ * Always includes GAKRCLICODE=1 and GAKR_CODE_EXPERIMENTAL_AGENT_TEAMS=1,
  * plus any provider/config env vars that are set in the current process.
  */
 export function buildInheritedEnvVars(): string {
   const envVars = [
-    'gakrcliCODE=1',
+    'GAKRCLICODE=1',
     'GAKR_CODE_EXPERIMENTAL_AGENT_TEAMS=1',
+    // Teammates should inherit the leader-selected provider route instead of
+    // replaying persisted ~/.gakrcli or settings.env provider defaults.
     'GAKR_CODE_PROVIDER_MANAGED_BY_HOST=1',
   ]
 

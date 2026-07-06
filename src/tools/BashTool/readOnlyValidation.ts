@@ -15,7 +15,6 @@ import {
   DOCKER_READ_ONLY_COMMANDS,
   EXTERNAL_READONLY_COMMANDS,
   type FlagArgType,
-  GH_READ_ONLY_COMMANDS,
   GIT_READ_ONLY_COMMANDS,
   PYRIGHT_READ_ONLY_COMMANDS,
   RIPGREP_READ_ONLY_COMMANDS,
@@ -1136,68 +1135,6 @@ const COMMAND_ALLOWLIST: Record<string, CommandConfig> = {
   ...DOCKER_READ_ONLY_COMMANDS,
 }
 
-// gh commands are ant-only since they make network requests, which goes against
-// the read-only validation principle of no network access
-const ANT_ONLY_COMMAND_ALLOWLIST: Record<string, CommandConfig> = {
-  // All gh read-only commands from shared validation map
-  ...GH_READ_ONLY_COMMANDS,
-  // aki — Anthropic internal knowledge-base search CLI.
-  // Network read-only (same policy as gh). --audit-csv omitted: writes to disk.
-  aki: {
-    safeFlags: {
-      '-h': 'none',
-      '--help': 'none',
-      '-k': 'none',
-      '--keyword': 'none',
-      '-s': 'none',
-      '--semantic': 'none',
-      '--no-adaptive': 'none',
-      '-n': 'number',
-      '--limit': 'number',
-      '-o': 'number',
-      '--offset': 'number',
-      '--source': 'string',
-      '--exclude-source': 'string',
-      '-a': 'string',
-      '--after': 'string',
-      '-b': 'string',
-      '--before': 'string',
-      '--collection': 'string',
-      '--drive': 'string',
-      '--folder': 'string',
-      '--descendants': 'none',
-      '-m': 'string',
-      '--meta': 'string',
-      '-t': 'string',
-      '--threshold': 'string',
-      '--kw-weight': 'string',
-      '--sem-weight': 'string',
-      '-j': 'none',
-      '--json': 'none',
-      '-c': 'none',
-      '--chunk': 'none',
-      '--preview': 'none',
-      '-d': 'none',
-      '--full-doc': 'none',
-      '-v': 'none',
-      '--verbose': 'none',
-      '--stats': 'none',
-      '-S': 'number',
-      '--summarize': 'number',
-      '--explain': 'none',
-      '--examine': 'string',
-      '--url': 'string',
-      '--multi-turn': 'number',
-      '--multi-turn-model': 'string',
-      '--multi-turn-context': 'string',
-      '--no-rerank': 'none',
-      '--audit': 'none',
-      '--local': 'none',
-      '--staging': 'none',
-    },
-  },
-}
-
 function getCommandAllowlist(): Record<string, CommandConfig> {
   let allowlist: Record<string, CommandConfig> = COMMAND_ALLOWLIST
   // On Windows, xargs can be used as a data-to-code bridge: if a file contains
@@ -1207,9 +1144,6 @@ function getCommandAllowlist(): Record<string, CommandConfig> {
   if (getPlatform() === 'windows') {
     const { xargs: _, ...rest } = allowlist
     allowlist = rest
-  }
-  if (process.env.USER_TYPE === 'ant') {
-    return { ...allowlist, ...ANT_ONLY_COMMAND_ALLOWLIST }
   }
   return allowlist
 }
@@ -1538,6 +1472,13 @@ const READONLY_COMMAND_REGEXES = new Set([
   /^node --version$/,
   /^python --version$/,
   /^python3 --version$/,
+  // Package-manager / compiler version queries. Exact-anchored (no trailing
+  // args) for the same defense-in-depth reason as node above: a bare version
+  // flag is read-only, but permitting suffixes could let a tool that parses
+  // flags in an unexpected order run a task (e.g. `npm <flag> run <script>`).
+  /^npm (?:-v|--version)$/,
+  /^bun (?:-v|--version)$/,
+  /^tsc (?:-v|--version)$/,
 
   // Misc. safe commands
   // tree command moved to COMMAND_ALLOWLIST for proper flag validation (blocks -o/--output)

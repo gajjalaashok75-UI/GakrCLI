@@ -11,7 +11,12 @@ import { MCPServerDesktopImportDialog } from '../../components/MCPServerDesktopI
 import { render } from '../../ink.js';
 import { KeybindingSetup } from '../../keybindings/KeybindingProviderSetup.js';
 import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from '../../services/analytics/index.js';
-import { clearMcpClientConfig, clearServerTokensFromSecureStorage, readClientSecret, saveMcpClientSecret } from '../../services/mcp/auth.js';
+import {
+  clearMcpClientConfig,
+  clearServerTokensFromSecureStorage,
+  readClientSecret,
+  saveMcpClientSecret,
+} from '../../services/mcp/auth.js'
 import { doctorAllServers, doctorServer, type McpDoctorReport, type McpDoctorScopeFilter } from '../../services/mcp/doctor.js';
 import { connectToServer, getMcpServerConnectionBatchSize } from '../../services/mcp/client.js';
 import { addMcpConfig, getAllMcpConfigs, getMcpConfigByName, getMcpConfigsByScope, removeMcpConfig } from '../../services/mcp/config.js';
@@ -419,9 +424,9 @@ export async function mcpAddFromDesktopHandler(options: {
       source: 'desktop' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
     });
     const {
-      readgakrcliDesktopMcpServers
+      readGakrCLIDesktopMcpServers
     } = await import('../../utils/gakrcliDesktop.js');
-    const servers = await readgakrcliDesktopMcpServers();
+    const servers = await readGakrCLIDesktopMcpServers();
     if (Object.keys(servers).length === 0) {
       cliOk('No MCP servers found in GakrCLI Desktop configuration or configuration file does not exist.');
     }
@@ -450,5 +455,5 @@ export async function mcpResetChoicesHandler(): Promise<void> {
     disabledMcpjsonServers: [],
     enableAllProjectMcpServers: false
   }));
-  cliOk('All project-scoped (.mcp.json) server approvals and rejections have been reset.\n' + 'You will be prompted for approval next time you start Gakr.');
+  cliOk('All project-scoped (.mcp.json) server approvals and rejections have been reset.\n' + 'You will be prompted for approval next time you start GakrCLI.');
 }

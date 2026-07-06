@@ -6,9 +6,12 @@ import { z } from 'zod/v4';
 import type { Tool } from '../../Tool.js';
 import { buildTool, type ToolDef } from '../../Tool.js';
 import { lazySchema } from '../../utils/lazySchema.js';
+
 const NAME = 'TestingPermission';
+
 const inputSchema = lazySchema(() => z.strictObject({}));
 type InputSchema = ReturnType<typeof inputSchema>;
+
 export const TestingPermissionTool: Tool<InputSchema, string> = buildTool({
   name: NAME,
   maxResultSizeChars: 100_000,
@@ -25,7 +28,7 @@ export const TestingPermissionTool: Tool<InputSchema, string> = buildTool({
     return 'TestingPermission';
   },
   isEnabled() {
-    return "production" === 'test';
+    return process.env.NODE_ENV === 'test';
   },
   isConcurrencySafe() {
     return true;
@@ -37,7 +40,7 @@ export const TestingPermissionTool: Tool<InputSchema, string> = buildTool({
     // This tool always requires permission
     return {
       behavior: 'ask' as const,
-      message: `Run test?`
+      message: `Run test?`,
     };
   },
   renderToolUseMessage() {
@@ -60,14 +63,14 @@ export const TestingPermissionTool: Tool<InputSchema, string> = buildTool({
   },
   async call() {
     return {
-      data: `${NAME} executed successfully`
+      data: `${NAME} executed successfully`,
     };
   },
   mapToolResultToToolResultBlockParam(result, toolUseID) {
     return {
       type: 'tool_result',
       content: String(result),
-      tool_use_id: toolUseID
+      tool_use_id: toolUseID,
     };
-  }
+  },
 } satisfies ToolDef<InputSchema, string>);

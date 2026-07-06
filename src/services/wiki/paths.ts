@@ -1,19 +1,20 @@
 import { join } from 'path'
 import type { WikiPaths } from './types.js'
 
-export const GAKRCLI_DIRNAME = '.gakrcli'
+export const GAKR_DIRNAME = '.gakrcli'
 export const WIKI_DIRNAME = 'wiki'
 
 export function getWikiPaths(cwd: string): WikiPaths {
-  const root = join(cwd, GAKRCLI_DIRNAME, WIKI_DIRNAME)
+  const root = join(cwd, GAKR_DIRNAME, WIKI_DIRNAME)
 
   return {
     root,
-    rawDir: join(root, 'raw'),
     pagesDir: join(root, 'pages'),
     sourcesDir: join(root, 'sources'),
     schemaFile: join(root, 'schema.md'),
     indexFile: join(root, 'index.md'),
     logFile: join(root, 'log.md'),
+    conventionsFile: join(root, 'pages', 'conventions.md'),
+    conventionsCacheFile: join(cwd, GAKR_DIRNAME, '.conventions-cache.json'),
   }
 }
