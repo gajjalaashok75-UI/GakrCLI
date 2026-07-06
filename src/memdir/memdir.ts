@@ -23,6 +23,7 @@ import { getGakrCLIWorkspaceDir, isEnvTruthy } from '../utils/envUtils.js'
 import { formatFileSize } from '../utils/format.js'
 import { getProjectDir } from '../utils/sessionStorage.js'
 import { getInitialSettings } from '../utils/settings/settings.js'
+import { isMemoryWriteApprovalRequired } from '../utils/governancePolicy.js'
 import {
   MEMORY_FRONTMATTER_EXAMPLE,
   TRUSTING_RECALL_SECTION,

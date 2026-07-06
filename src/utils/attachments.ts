@@ -2953,12 +2953,14 @@ async function getLSPDiagnosticAttachments(
       `LSP Diagnostics: Found ${diagnosticSets.length} pending diagnostic set(s)`,
     )
 
-    // Convert each diagnostic set to an attachment
-    const attachments: Attachment[] = diagnosticSets.map(({ files }) => ({
-      type: 'diagnostics' as const,
-      files,
-      isNew: true,
-    }))
+    // Convert each diagnostic set to an attachment, filtering out empty sets
+    const attachments: Attachment[] = diagnosticSets
+      .map(({ files }) => ({
+        type: 'diagnostics' as const,
+        files: files.filter(file => file.diagnostics.length > 0),
+        isNew: true,
+      }))
+      .filter(attachment => attachment.files.length > 0)
 
     // Clear delivered diagnostics from registry to prevent memory leak
     // Follows same pattern as removeDeliveredAsyncHooks

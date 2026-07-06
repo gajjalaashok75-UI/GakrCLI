@@ -19,6 +19,7 @@ import { errorMessage as getErrorMessage, ShellError } from '../../utils/errors.
 import { truncate } from '../../utils/format.js';
 import { lazySchema } from '../../utils/lazySchema.js';
 import { logError } from '../../utils/log.js';
+import { findForbiddenCommitMessagePattern, getForbiddenCommitMessagePatterns, isGeneratedCommitAttributionBlocked } from '../../utils/governancePolicy.js';
 import type { PermissionResult } from '../../utils/permissions/PermissionResult.js';
 import { getPlatform } from '../../utils/platform.js';
 import { maybeRecordPluginHint } from '../../utils/plugins/hintRecommendation.js';

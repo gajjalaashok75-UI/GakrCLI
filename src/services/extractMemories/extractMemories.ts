@@ -56,6 +56,8 @@ import {
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../analytics/growthbook.js'
 import { logEvent } from '../analytics/index.js'
 import { sanitizeToolNameForAnalytics } from '../analytics/metadata.js'
+import { isExpectedSideTaskAbortReason } from '../../utils/abortReasons.js'
+import { isMemoryWriteApprovalRequired } from '../../utils/governancePolicy.js'
 import {
   buildExtractAutoOnlyPrompt,
   buildExtractCombinedPrompt,

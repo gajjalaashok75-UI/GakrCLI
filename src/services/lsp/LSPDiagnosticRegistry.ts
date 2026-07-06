@@ -543,6 +543,10 @@ function limitDiagnosticFiles(
   return { files: limitedFiles, droppedCount, deliveredCount }
 }
 
+function countDiagnostics(files: DiagnosticFile[]): number {
+  return files.reduce((total, file) => total + file.diagnostics.length, 0)
+}
+
 function trackDeliveredDiagnostics(files: DiagnosticFile[]): void {
   for (const file of files) {
     const normalizedUri = normalizeDiagnosticUri(file.uri)
@@ -710,10 +714,12 @@ export function checkForLSPDiagnostics(): Array<{
     }
   }
 
-  // Return empty if no diagnostics to deliver (all filtered by deduplication)
-  if (deliveredFiles.length === 0) {
+  const finalDiagnosticCount = countDiagnostics(deliveredFiles)
+
+  // Return empty if no diagnostics remain after deduplication/filtering.
+  if (deliveredFiles.length === 0 || finalDiagnosticCount === 0) {
     logForDebugging(
-      `LSP Diagnostics: No new diagnostics to deliver (all filtered by deduplication)`,
+      `LSP Diagnostics: No new diagnostics to deliver after filtering, deduplication, and volume limiting`,
     )
     return []
   }
@@ -731,7 +737,7 @@ export function checkForLSPDiagnostics(): Array<{
   }
 
   logForDebugging(
-    `LSP Diagnostics: Delivering ${deliveredFiles.length} file(s) with ${deliveredCount} diagnostic(s) from ${serverNames.length} server(s)`,
+    `LSP Diagnostics: Delivering ${deliveredFiles.length} file(s) with ${finalDiagnosticCount} diagnostic(s) from ${serverNames.length} server(s)`,
   )
 
   // Return single result with all deduplicated diagnostics

@@ -3,6 +3,7 @@ import {
   getAttributionTexts,
   getEnhancedPRAttribution,
 } from '../utils/attribution.js'
+import { getForbiddenCommitMessagePatterns } from '../utils/governancePolicy.js'
 import { getDefaultBranch } from '../utils/git.js'
 import { executeShellCommandsInPrompt } from '../utils/promptShellExecution.js'
 import { getUndercoverInstructions, isUndercover } from '../utils/undercover.js'

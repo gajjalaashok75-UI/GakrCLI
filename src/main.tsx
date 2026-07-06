@@ -48,6 +48,7 @@ import { createSyntheticOutputTool, isSyntheticOutputToolEnabled } from './tools
 import { getTools } from './tools.js';
 import { canUserConfigureAdvisor, getInitialAdvisorSetting, isAdvisorEnabled, isValidAdvisorModel, modelSupportsAdvisor } from './utils/advisor.js';
 import { isAgentSwarmsEnabled } from './utils/agentSwarmsEnabled.js';
+import { registerTaskReportCommand } from './cli/commands/taskReport.js';
 import { count, uniq } from './utils/array.js';
 import { getSubscriptionType, isGakrCLIAISubscriber, prefetchAwsCredentialsAndBedRockInfoIfSafe, prefetchGcpCredentialsIfSafe, validateForceLoginOrg } from './utils/auth.js';
 import { checkHasTrustDialogAccepted, getGlobalConfig, getRemoteControlAtStartup, isAutoUpdaterDisabled, saveGlobalConfig } from './utils/config.js';
@@ -4153,6 +4154,38 @@ async function run(): Promise<CommanderCommand> {
     await agentsHandler();
     process.exit(0);
   });
+
+  const runSkillsCommanderAction = async (action: (handlers: typeof import('./cli/handlers/skills.js')) => Promise<void>) => {
+    const [skillsHandlers, {
+      runSkillsCliAction
+    }] = await Promise.all([import('./cli/handlers/skills.js'), import('./cli/handlers/skillsCli.js')]);
+    await runSkillsCliAction(() => action(skillsHandlers));
+    process.exit(process.exitCode ?? 0);
+  };
+  const skillsCmd = program.command('skills').description('List, inspect, validate, and manage GakrCLI skills').configureHelp(createSortedHelpConfig());
+  skillsCmd.command('list').description('List configured skills').option('--json', 'Output as JSON').action(async (options: {
+    json?: boolean;
+  }) => runSkillsCommanderAction(({ skillsListHandler }) => skillsListHandler(options)));
+  skillsCmd.command('show <name>').description('Show details for a configured skill').action(async (name: string) => {
+    await runSkillsCommanderAction(({ skillsShowHandler }) => skillsShowHandler(name));
+  });
+  skillsCmd.command('validate <path>').description('Validate a local skill directory').action(async (path: string) => {
+    await runSkillsCommanderAction(({ skillsValidateHandler }) => skillsValidateHandler(path));
+  });
+  skillsCmd.command('install <idOrUrlOrPath>').description('Install a skill from the registry, URL, or local path').option('--registry <urlOrPath>', 'Registry JSON URL/path for registry ID installs').option('--sha256 <hash>', 'Expected SHA-256 digest for direct HTTP(S) URL installs').option('--global', 'Install to the user-global skills directory').option('--force', 'Overwrite an existing installed skill').action(async (idOrUrlOrPath: string, options: {
+    registry?: string;
+    sha256?: string;
+    global?: boolean;
+    force?: boolean;
+  }) => {
+    await runSkillsCommanderAction(({ skillsInstallHandler }) => skillsInstallHandler(idOrUrlOrPath, options));
+  });
+  skillsCmd.command('remove <name>').description('Remove a local project skill').option('--global', 'Remove from the user-global skills directory').action(async (name: string, options: {
+    global?: boolean;
+  }) => {
+    await runSkillsCommanderAction(({ skillsRemoveHandler }) => skillsRemoveHandler(name, options));
+  });
+
   if (feature('TRANSCRIPT_CLASSIFIER')) {
     // Skip when tengu_auto_mode_config.enabled === 'disabled' (circuit breaker).
     // Reads from disk cache — GrowthBook isn't initialized at registration time.
@@ -4219,47 +4252,7 @@ async function run(): Promise<CommanderCommand> {
     .description(
       'Generate a deterministic JSON task report for a session',
     )
-    .option('--json', 'Print JSON output')
-    .option('--transcript <file>', 'Path to a session JSONL transcript')
-    .option(
-      '--session <id>',
-      'Session ID to report (defaults to latest session in the current project)',
-    )
-    .option('--out <file>', 'Write the report to a file')
-    .action(async (options: {
-      json?: boolean;
-      transcript?: string;
-      session?: string;
-      out?: string;
-    }) => {
-      const {
-        taskReportHandler,
-        printTaskReportError,
-      } = await import('./cli/handlers/taskReport.js');
-      try {
-        if (options.json !== true) {
-          throw new Error(
-            'Task reports currently support JSON output only. Pass --json.',
-          );
-        }
-        if (options.transcript && options.session) {
-          throw new Error(
-            'Pass either --transcript <file> or --session <id>, not both.',
-          );
-        }
-        await taskReportHandler({
-          format: 'json',
-          transcriptPath: options.transcript ?? null,
-          sessionId: options.session ?? null,
-          outFile: options.out ?? null,
-          cwd: process.cwd(),
-        });
-        process.exit(0);
-      } catch (error) {
-        await printTaskReportError(error);
-        process.exit(1);
-      }
-    });
+  registerTaskReportCommand(program);
 
   // Doctor command - check installation health
   program.command('doctor').description('Check the health of your GakrCLI auto-updater. Note: The workspace trust dialog is skipped and stdio servers from .mcp.json are spawned for health checks. Only use this command in directories you trust.').action(async () => {
