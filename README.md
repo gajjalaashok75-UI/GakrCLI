@@ -14,10 +14,6 @@ GakrCLI is an AI coding agent for the command line and for embedded hosts such a
 
 The published npm package is `@gakr-gakr/gakrcli`. The executable command is `gakrcli`.
 
-## Star History
-
-[![Star History Chart](https://api.star-history.com/chart?repos=gakr-gakr/gakrcli&type=date&legend=top-left)](https://www.star-history.com/?repos=gakr-gakr%2Fgakrcli&type=date&legend=top-left)
-
 ## Why GakrCLI
 
 - Use one CLI across cloud APIs and local model backends
