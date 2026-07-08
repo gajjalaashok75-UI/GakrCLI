@@ -135,12 +135,19 @@ function isBgSessionsEnabled(options: CliEntrypointOptions): boolean {
 }
 
 const SKILLS_LEADING_BOOLEAN_FLAGS = new Set([
+  '--bare',
+  '--dangerously-skip-permissions',
+  '--disable-slash-commands',
+  '--fork-session',
+  '--init',
+  '--init-only',
+  '--maintenance',
+  '--mcp-debug',
+  '--no-session-persistence',
   '--preview',
-  '--print',
+  '--replay-user-messages',
   '--verbose',
   '-v',
-  '--model',
-  '-m',
 ])
 
 const SKILLS_LEADING_OPTIONAL_VALUE_FLAGS = new Set([
@@ -165,6 +172,28 @@ const SKILLS_LEADING_MULTI_VALUE_FLAGS = new Set([
   '--plugin-dir',
   '--provider-env-file',
   '--tools',
+])
+
+const SKILLS_LEADING_VALUE_FLAGS = new Set([
+  '--agent',
+  '--append-system-prompt',
+  '--debug-file',
+  '--effort',
+  '--fallback-model',
+  '--input-format',
+  '--max-budget-usd',
+  '--model',
+  '--output-format',
+  '--permission-mode',
+  '--provider',
+  '--resume-session-at',
+  '--session-id',
+  '--settings',
+  '--system-prompt',
+  '--thinking',
+  '-m',
+  '-n',
+  '--name',
 ])
 
 type SkillsCliParseResult = {
@@ -214,17 +243,47 @@ function getSkillsCliArgs(args: string[]): SkillsCliParseResult | undefined {
     const multiValueEqualsFlag = Array.from(SKILLS_LEADING_MULTI_VALUE_FLAGS)
       .find(flag => arg?.startsWith(`${flag}=`))
     if (multiValueEqualsFlag) {
+      const value = arg.slice(`${multiValueEqualsFlag}=`.length)
+      if (!value) {
+        return undefined
+      }
+      if (multiValueEqualsFlag === '--add-dir') {
+        additionalDirectories.push(value)
+      }
+      continue
+    }
+    if (
+      SKILLS_LEADING_VALUE_FLAGS.has(arg) &&
+      args[index + 1] &&
+      !args[index + 1]!.startsWith('-')
+    ) {
+      index += 1
+      continue
+    }
+    if (
+      Array.from(SKILLS_LEADING_VALUE_FLAGS).some(flag =>
+        arg?.startsWith(`${flag}=`),
+      )
+    ) {
       continue
     }
     if (SKILLS_LEADING_OPTIONAL_VALUE_FLAGS.has(arg)) {
-      index += 1
-      const value = args[index]
-      if (value === 'skills') {
-        return undefined
+      sawPromptModeFlag = true
+      if (
+        args[index + 1] &&
+        args[index + 1] !== 'skills' &&
+        !args[index + 1]!.startsWith('-')
+      ) {
+        index += 1
       }
-      if (value && !value.startsWith('-')) {
-        sawPromptModeFlag = true
-      }
+      continue
+    }
+    if (
+      Array.from(SKILLS_LEADING_OPTIONAL_VALUE_FLAGS).some(flag =>
+        arg?.startsWith(`${flag}=`),
+      )
+    ) {
+      sawPromptModeFlag = true
       continue
     }
     return undefined
@@ -243,6 +302,23 @@ export async function main(
   const reapplyExplicitProviderInputs = () => {
     reapplyProviderEnvFileValues()
     reapplyProviderFlagValues()
+  }
+
+  // Fast-path for `--daemon-worker=<kind>` (internal — supervisor spawns this).
+  // Must come before other checks: spawned per-worker, so perf-sensitive.
+  // No enableConfigs(), no analytics sinks at this layer — workers are lean.
+  if (args[0] === '--daemon-worker' || args[0]?.startsWith('--daemon-worker=')) {
+    if (!feature('DAEMON')) {
+      console.error(
+        'Error: --daemon-worker requires DAEMON feature to be enabled.',
+      )
+      process.exitCode = 1
+      return
+    }
+    const kind = args[0] === '--daemon-worker' ? args[1] : args[0].split('=')[1]
+    const { runDaemonWorker } = await import('../daemon/workerRegistry.js')
+    await runDaemonWorker(kind)
+    return
   }
 
   // Fast-path for --version/-v: zero module loading needed
@@ -342,15 +418,6 @@ export async function main(
   }
   reapplyExplicitProviderInputs()
 
-  const { applyStartupEnvFromProfile } = await importers.providerProfile()
-  await applyStartupEnvFromProfile({
-    processEnv: process.env,
-    onValidationError: message => {
-      console.error(message)
-    },
-  })
-  reapplyExplicitProviderInputs()
-
   // Local skills management must stay available even when provider startup
   // configuration is broken, so users can inspect/fix skills from scripts.
   const skillsCliArgs = getSkillsCliArgs(args)
@@ -364,6 +431,15 @@ export async function main(
     await runSkillsCli(skillsCliArgs.args)
     return
   }
+
+  const { applyStartupEnvFromProfile } = await importers.providerProfile()
+  await applyStartupEnvFromProfile({
+    processEnv: process.env,
+    onValidationError: message => {
+      console.error(message)
+    },
+  })
+  reapplyExplicitProviderInputs()
 
   // Pane/window teammates are launched as fresh CLI processes. If the parent
   // selected a configured agentModels key, apply that route before provider
@@ -436,9 +512,12 @@ export async function main(
   const { eagerParseCliFlag } = await importers.cliArgs()
   const earlyModelFlag = eagerParseCliFlag('--model')
 
-  // Print the gradient startup screen before the Ink UI loads
-  const { printStartupScreen } = await importers.startupScreen()
-  printStartupScreen(earlyModelFlag)
+  // Print the gradient startup screen before the Ink UI loads.
+  // Skills management commands are script-friendly and avoid the banner.
+  if (args[0] !== 'skills') {
+    const { printStartupScreen } = await importers.startupScreen()
+    printStartupScreen(earlyModelFlag)
+  }
 
   // For all other paths, load the startup profiler
   const {

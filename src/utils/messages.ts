@@ -846,6 +846,26 @@ export function normalizeMessages(messages: Message[]): NormalizedMessage[] {
   return messages.flatMap(message => {
     switch (message.type) {
       case 'assistant': {
+        if (typeof message.message.content === 'string') {
+          isNewChain = isNewChain || true
+          const uuid = isNewChain ? deriveUUID(message.uuid, 0) : message.uuid
+          return [
+            {
+              ...message,
+              uuid,
+              message: {
+                ...message.message,
+                content: [{ type: 'text', text: message.message.content }],
+              },
+              isMeta: message.isMeta,
+              isVirtual: message.isVirtual,
+              requestId: message.requestId,
+              error: message.error,
+              isApiErrorMessage: message.isApiErrorMessage,
+              advisorModel: message.advisorModel,
+            } as NormalizedAssistantMessage,
+          ]
+        }
         isNewChain = isNewChain || message.message.content.length > 1
         return message.message.content.map((_, index) => {
           const uuid = isNewChain
@@ -1926,6 +1946,10 @@ export function stripToolReferenceBlocksFromUserMessage(
 export function stripCallerFieldFromAssistantMessage(
   message: AssistantMessage,
 ): AssistantMessage {
+  // String content has no tool_use blocks to strip caller from
+  if (typeof message.message.content === 'string') {
+    return message
+  }
   const hasCallerField = message.message.content.some(
     block =>
       block.type === 'tool_use' && 'caller' in block && block.caller !== null,
@@ -2439,6 +2463,19 @@ export function normalizeMessagesForAPI(
           // like 'caller' from tool_use blocks, as these are only valid with the
           // tool search beta header
           const toolSearchEnabled = isToolSearchEnabledOptimistic()
+
+          // Handle string content by wrapping in a text block
+          if (typeof message.message.content === 'string') {
+            result.push({
+              ...message,
+              message: {
+                ...message.message,
+                content: [{ type: 'text', text: message.message.content }],
+              },
+            })
+            return
+          }
+
           const normalizedMessage: AssistantMessage = {
             ...message,
             message: {
