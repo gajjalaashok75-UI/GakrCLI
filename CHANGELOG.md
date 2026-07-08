@@ -5,6 +5,23 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.8] - 2026-07-08
+
+### Added
+- **scripts/build.ts**: Added `CCR_REMOTE_SETUP` feature flag for self-hosted RCS setup command.
+- **src/entrypoints/cli.tsx**: Added `SKILLS_LEADING_VALUE_FLAGS` set (18 flags including `--model`, `--provider`, `--session-id`, `--effort`) for proper skills CLI argument parsing.
+- **src/entrypoints/cli.tsx**: Added missing boolean flags (`--bare`, `--dangerously-skip-permissions`, `--disable-slash-commands`, `--fork-session`, `--init`, `--init-only`, `--maintenance`, `--mcp-debug`, `--no-session-persistence`, `--replay-user-messages`) to `SKILLS_LEADING_BOOLEAN_FLAGS`.
+- **.gitignore**: Added `remote-control-changes.md` to ignore list.
+
+### Fixed
+- **src/entrypoints/cli.tsx**: Moved skills CLI check before profile validation so `gakrcli skills` works even when provider config is broken.
+- **src/entrypoints/cli.tsx**: Fixed `getSkillsCliArgs()` — proper value flag skipping, `=` variant handling for multi-value flags with value extraction, correct optional value flag logic (set `sawPromptModeFlag` before index increment, check for `'skills'` before consuming value, added `=` variant handler).
+- **src/entrypoints/cli.tsx**: Wrapped `printStartupScreen()` in `if (args[0] !== 'skills')` guard so script-friendly skills output avoids the gradient banner.
+- **src/utils/messages.ts**: Added string content handling in `normalizeMessages()`, `stripCallerFieldFromAssistantMessage()`, and `normalizeMessagesForAPI()` to prevent `.map()` crash when `message.message.content` is a string.
+
+### Changed
+- **src/entrypoints/cli.tsx**: Moved `--model`, `-m` from `SKILLS_LEADING_BOOLEAN_FLAGS` to `SKILLS_LEADING_VALUE_FLAGS` (they take values, not booleans).
+
 ## [0.5.8] - 2026-07-06
 
 ### Added

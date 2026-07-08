@@ -38,6 +38,7 @@ const featureFlags: Record<string, boolean> = {
   KAIROS: false,                  // Persistent assistant/session mode (cloud backend)
   BRIDGE_MODE: false,             // Remote desktop bridge via CCR infrastructure
   DAEMON: false,                  // Background daemon process (stubbed in open build)
+  CCR_REMOTE_SETUP: false,        // PATCHED: Enable remote setup command
   AGENT_TRIGGERS: false,          // Scheduled remote agent triggers
   ABLATION_BASELINE: false,       // A/B testing harness for eval experiments
   CONTEXT_COLLAPSE: true,        // Context collapsing optimization
