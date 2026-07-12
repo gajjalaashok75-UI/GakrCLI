@@ -1,5 +1,6 @@
 import { feature } from 'bun:bundle'
 
 export function isBuddyEnabled(): boolean {
-  return feature('BUDDY')
+  if (feature('BUDDY')) return true
+  return false
 }
