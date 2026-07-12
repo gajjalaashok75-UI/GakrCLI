@@ -56,6 +56,68 @@ export type ModelOption = {
   label: string
   description: string
   descriptionForModel?: string
+  /**
+   * When set, selecting this option also activates the named provider profile
+   * before switching the main-loop model. Encoded into `value` as a
+   * `SWITCH_PROFILE_VALUE_PREFIX`-prefixed string so the picker's `value`
+   * channel stays a plain string; consumers must call `parseSwitchProfileValue`
+   * on `value` (or read `switchToProfileId` directly) before treating it as a
+   * model setting. Used to surface inactive `providerProfiles` from the
+   * `/model` picker (issue #1119).
+   */
+  switchToProfileId?: string
+}
+
+/**
+ * Prefix encoded into `ModelOption.value` for options that, when selected,
+ * should activate a different provider profile before applying the model.
+ * Format: `${SWITCH_PROFILE_VALUE_PREFIX}<profileId>:<model>`. Two profiles can
+ * legally expose the same model string under different base URLs, so the
+ * profile id is part of the value to keep options unique.
+ */
+export const SWITCH_PROFILE_VALUE_PREFIX = '__switch_profile__:'
+
+export type ParsedSwitchProfileValue = {
+  profileId: string
+  model: string
+}
+
+export function parseSwitchProfileValue(
+  value: ModelSetting,
+): ParsedSwitchProfileValue | null {
+  if (typeof value !== 'string' || !value.startsWith(SWITCH_PROFILE_VALUE_PREFIX)) {
+    return null
+  }
+  const tail = value.slice(SWITCH_PROFILE_VALUE_PREFIX.length)
+  const sep = tail.indexOf(':')
+  if (sep <= 0 || sep === tail.length - 1) {
+    return null
+  }
+  return {
+    profileId: tail.slice(0, sep),
+    model: tail.slice(sep + 1),
+  }
+}
+
+export function encodeSwitchProfileValue(profileId: string, model: string): string {
+  return `${SWITCH_PROFILE_VALUE_PREFIX}${profileId}:${model}`
+}
+
+/**
+ * Resolve the cross-profile switch marker (`switchToProfileId`) for a selected
+ * picker value from the PRESENTED options list — the authority for whether the
+ * selection is a genuine profile switch (#1119/#1164). Only a single option
+ * with that value is authoritative: if two options share the value (a literal
+ * custom model id colliding with an encoded switch value), the Select cannot
+ * tell them apart, so the selection is ambiguous and resolves to `undefined`
+ * rather than letting the literal borrow another option's marker.
+ */
+export function resolveSelectedSwitchProfileId(
+  options: ReadonlyArray<Pick<ModelOption, 'value' | 'switchToProfileId'>>,
+  selectedValue: ModelSetting,
+): string | undefined {
+  const matches = options.filter(option => option.value === selectedValue)
+  return matches.length === 1 ? matches[0]!.switchToProfileId : undefined
 }
 
 function getScopedAdditionalModelOptions(): ModelOption[] {

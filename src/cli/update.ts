@@ -27,6 +27,15 @@ import { getPackageManager } from 'src/utils/nativeInstaller/packageManagers.js'
 import { writeToStdout } from 'src/utils/process.js'
 import { gte } from 'src/utils/semver.js'
 import { getInitialSettings } from 'src/utils/settings/settings.js'
+import { hasNativeDistribution } from 'src/utils/nativeDistribution.js'
+
+export function getGlobalUpdateFailureHint(
+  nativeDistributionAvailable: boolean = hasNativeDistribution(),
+): string {
+  return nativeDistributionAvailable
+    ? 'Or consider using native installation with: gakrcli install\n'
+    : `Or update manually with:\n  npm install -g ${MACRO.PACKAGE_URL}@latest\n`
+}
 
 export async function update() {
   // Block updates for third-party providers using upstream Anthropic builds.
