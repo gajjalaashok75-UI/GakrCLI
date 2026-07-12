@@ -525,39 +525,39 @@ export function activate(context: vscode.ExtensionContext) {
   webviewManager.onMessage('set_model', async (message) => {
     const msg = message as unknown as { model: string };
     output.info(`[Webview→CLI] set_model: ${msg.model}`);
-    if (processManager) {
-      processManager.write({
-        type: 'control_request',
-        request_id: `set-model-${Date.now()}`,
-        request: { subtype: 'set_model', model: msg.model },
-      });
-    }
+    const pm = await ensureProcess();
+    if (!pm) return;
+    pm.write({
+      type: 'control_request',
+      request_id: `set-model-${Date.now()}`,
+      request: { subtype: 'set_model', model: msg.model },
+    });
   });
 
   // Handle set_effort_level from webview
   webviewManager.onMessage('set_effort_level', async (message) => {
     const msg = message as unknown as { level: string };
     output.info(`[Webview→CLI] set_effort_level: ${msg.level}`);
-    if (processManager) {
-      processManager.write({
-        type: 'control_request',
-        request_id: `set-effort-${Date.now()}`,
-        request: { subtype: 'set_max_thinking_tokens', max_thinking_tokens: effortToTokens(msg.level) },
-      });
-    }
+    const pm = await ensureProcess();
+    if (!pm) return;
+    pm.write({
+      type: 'control_request',
+      request_id: `set-effort-${Date.now()}`,
+      request: { subtype: 'set_max_thinking_tokens', max_thinking_tokens: effortToTokens(msg.level) },
+    });
   });
 
   // Handle toggle_fast_mode from webview
   webviewManager.onMessage('toggle_fast_mode', async (message) => {
     const msg = message as unknown as { enabled: boolean };
     output.info(`[Webview→CLI] toggle_fast_mode: ${msg.enabled}`);
-    if (processManager) {
-      processManager.write({
-        type: 'control_request',
-        request_id: `fast-mode-${Date.now()}`,
-        request: { subtype: 'apply_flag_settings', settings: { fastMode: msg.enabled } },
-      });
-    }
+    const pm = await ensureProcess();
+    if (!pm) return;
+    pm.write({
+      type: 'control_request',
+      request_id: `fast-mode-${Date.now()}`,
+      request: { subtype: 'apply_flag_settings', settings: { fastMode: msg.enabled } },
+    });
   });
 
   // Handle interrupt/stop
@@ -908,6 +908,21 @@ export function activate(context: vscode.ExtensionContext) {
       baseUrl: msg.baseUrl,
       model: msg.model,
     });
+
+    // The running CLI process (if any) was spawned with the *old* provider's
+    // env vars. Provider/credential changes only take effect for a freshly
+    // spawned process, so dispose the current one — ensureProcess() will
+    // respawn with the new env on the next message, picking up the change.
+    // (Mirrors the existing onDidChangeWorkspaceFolders restart pattern.)
+    if (processManager) {
+      output.info('[GakrCLI] Provider changed, restarting CLI process to apply new credentials');
+      processManager.dispose();
+      processManager = undefined;
+      currentSessionId = undefined;
+      crashRestartCount = 0;
+      webviewManager!.broadcast({ type: 'process_state', state: 'stopped' });
+    }
+
     // Broadcast updated state to all panels
     const providers = authManager.getAvailableProviders();
     const current = authManager.getCurrentProvider();

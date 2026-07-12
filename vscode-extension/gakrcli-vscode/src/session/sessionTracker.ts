@@ -66,7 +66,20 @@ export class SessionTracker implements vscode.Disposable {
     if (!folders || folders.length === 0) {
       return undefined;
     }
-    return folders[0].uri.fsPath.replace(/\//g, '-');
+    // IMPORTANT: on Windows, fsPath uses backslashes (e.g. c:\Users\me\proj).
+    // The previous `.replace(/\//g, '-')` only matched forward slashes, so on
+    // Windows this returned the path virtually untouched. path.join() then
+    // treated the leftover backslashes as real separators, producing a wrong/
+    // nested directory instead of the CLI's actual flattened session folder —
+    // so the extension could never find sessions created by `gakrcli` in a
+    // terminal. Replace BOTH separators on every platform.
+    //
+    // NOTE: this assumes gakrcli's own convention doesn't also strip the
+    // Windows drive-letter colon (e.g. "c:" -> "c" or "-c-"). If sessions
+    // still don't show up on Windows after this fix, check the actual
+    // directory names under ~/.gakrcli/workspace/projects/ and adjust this
+    // to match exactly.
+    return folders[0].uri.fsPath.replace(/[\\/]/g, '-');
   }
 
   /** Scan all JSONL files in the current workspace's project directory. */

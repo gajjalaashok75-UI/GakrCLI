@@ -9,7 +9,7 @@ export class SettingsSync {
   }
 
   get selectedProvider(): string {
-    return this.config.get<string>('selectedProvider', 'anthropic');
+    return this.config.get<string>('selectedProvider', 'auto');
   }
 
   get selectedModel(): string | undefined {

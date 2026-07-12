@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react';
 import { ModeSelector, type PermissionModeValue } from './ModeSelector';
-import { vscode } from '../../vscode';
 
 // Colors matching GakrCLI's permission mode badges.
 const MODE_CONFIG: Record<PermissionModeValue, { label: string; color: string }> = {
@@ -21,8 +20,12 @@ export function PermissionModeIndicator({ currentMode, onModeChange }: Permissio
   const cfg = MODE_CONFIG[currentMode] ?? MODE_CONFIG.default;
 
   const handleSelectMode = useCallback((mode: PermissionModeValue) => {
+    // NOTE: onModeChange (ChatPanel.handleModeChange) already sends
+    // `vscode.postMessage({ type: 'set_permission_mode', mode })` to the host.
+    // This component must NOT send it again — doing so caused every mode
+    // change to be applied twice on the host (visible in logs as
+    // "Mode changed: X → Y" immediately followed by a no-op "Y → Y").
     onModeChange(mode);
-    vscode.postMessage({ type: 'set_permission_mode', mode });
   }, [onModeChange]);
 
   return (

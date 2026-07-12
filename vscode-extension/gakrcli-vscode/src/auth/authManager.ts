@@ -42,6 +42,17 @@ export interface ProviderValidationResult {
 // Sourced from gakrcli CLI's PREFERRED_PROVIDER_ORDER + VALID_PROVIDERS
 
 const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
+  // --- Auto: no override, use GakrCLI's own already-authenticated login ---
+  // This MUST stay first: getCurrentProvider()/buildProcessEnv() below key off
+  // PROVIDER_DEFINITIONS[0] as the fallback when settings.selectedProvider is
+  // unset, so it needs to be the "no override" entry, not a specific provider.
+  {
+    id: 'auto',
+    label: 'Default (use GakrCLI login)',
+    requiresApiKey: false,
+    requiresBaseUrl: false,
+    supportsModel: true,
+  },
   // --- First-party / native transport ---
   {
     id: 'anthropic',
@@ -316,7 +327,7 @@ export class AuthManager {
     return {
       id: def.id,
       label: def.label,
-      env: this._buildEnvForProvider(def, apiKey, baseUrl),
+      env: def.id === 'auto' ? {} : this._buildEnvForProvider(def, apiKey, baseUrl),
       model,
     };
   }
@@ -334,6 +345,17 @@ export class AuthManager {
     const env: Record<string, string> = {};
     for (const { name, value } of this.settings.environmentVariables) {
       env[name] = value;
+    }
+
+    // 'auto' means "don't override" — the spawned CLI process should use
+    // whatever it's already logged into (via `gakrcli` in a terminal, its own
+    // config/keychain, etc). Previously this function always injected at
+    // least a `GAKR_CODE_USE_<PROVIDER>=1` flag for the resolved provider
+    // (even with no API key configured), which forced the CLI into that
+    // provider's mode and silently ignored its existing login. Only inject
+    // provider env vars when the user has explicitly picked a real provider.
+    if (def.id === 'auto') {
+      return env;
     }
 
     // Merge provider-specific env vars (provider takes precedence for its own keys)
