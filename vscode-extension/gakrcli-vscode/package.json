@@ -506,6 +506,9 @@
 			"description": "untusted workspaces are not supported"
 		}
 	},
+	"overrides": {
+		"open": "10.2.0"
+	},
 	"scripts": {
 		"build": "npm run build:extension && npm run build:webview",
 		"build:extension": "node esbuild.config.mjs",

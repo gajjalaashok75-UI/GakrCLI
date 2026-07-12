@@ -8,6 +8,7 @@ const STORAGE_KEY = 'gakrcli.permissionRules.alwaysAllow';
 
 export class PermissionRules {
   private readonly rules = new Set<string>();
+  private readonly context: vscode.ExtensionContext;
 
   constructor(context: vscode.ExtensionContext) {
     this.context = context;
