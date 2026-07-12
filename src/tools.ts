@@ -66,6 +66,7 @@ const getSendMessageTool = () =>
 import { AskUserQuestionTool } from './tools/AskUserQuestionTool/AskUserQuestionTool.js'
 import { LSPTool } from './tools/LSPTool/LSPTool.js'
 import { ListMcpResourcesTool } from './tools/ListMcpResourcesTool/ListMcpResourcesTool.js'
+import { RepoMapTool } from './tools/RepoMapTool/RepoMapTool.js'
 import { ReadMcpResourceTool } from './tools/ReadMcpResourceTool/ReadMcpResourceTool.js'
 import { ToolSearchTool } from './tools/ToolSearchTool/ToolSearchTool.js'
 import { SearchExtraToolsTool } from './tools/SearchExtraToolsTool/SearchExtraToolsTool.js'
@@ -218,6 +219,7 @@ export function getAllBaseTools(): Tools {
     WebFetchTool,
     TodoWriteTool,
     WebSearchTool,
+    RepoMapTool,
     ImageSearchTool,
     VideoSearchTool,
     TaskStopTool,
