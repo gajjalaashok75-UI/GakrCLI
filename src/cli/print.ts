@@ -389,6 +389,17 @@ The user cannot receive your response until the team is completely shut down.
 
 Shut down your team and prepare your final response for the user.`
 
+/**
+ * Filter out synthetic model-option entries that encode a cross-provider-profile
+ * switch (`switchToProfileId`). These are UI-only affordances surfaced by the
+ * interactive `/model` picker for issue #1119's inactive-profile entries and
+ * must never reach the SDK `initialize.models` response — they are not real,
+ * selectable model ids. Exported so the exclusion is unit-testable.
+ */
+export function selectSdkModelOptions(options: ModelOption[]): ModelOption[] {
+  return options.filter(option => option.switchToProfileId === undefined)
+}
+
 // Track message UUIDs received during the current session runtime
 const MAX_RECEIVED_UUIDS = 10_000
 const receivedMessageUuids = new Set<UUID>()
