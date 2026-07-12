@@ -1585,11 +1585,27 @@ async function checkAndRefreshOAuthTokenIfNeededImpl(
 }
 
 export function isGakrCLIAISubscriber(): boolean {
+  const override = getTrustedSubscriptionType()
+  if (override === 'free') {
+    return false
+  }
+  if (override) {
+    return true
+  }
+
   if (!isAnthropicAuthEnabled()) {
     return true
   }
 
   return shouldUseGakrCLIAIAuth(getGakrCLIAIOAuthTokens()?.scopes)
+}
+
+function getTrustedSubscriptionType(): SubscriptionType | null {
+  const candidate = getSettingsForSource('userSettings')?.subscriptionType
+  if (candidate) {
+    return candidate as SubscriptionType
+  }
+  return null
 }
 
 /**
@@ -1686,6 +1702,11 @@ export function getSubscriptionType(): SubscriptionType | null {
   // Check for mock subscription type first (ANT-only testing)
   if (shouldUseMockSubscription()) {
     return getMockSubscriptionType()
+  }
+
+  const override = getTrustedSubscriptionType()
+  if (override) {
+    return override
   }
 
   if (!isAnthropicAuthEnabled()) {

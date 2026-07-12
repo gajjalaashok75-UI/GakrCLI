@@ -18,6 +18,7 @@ export const EFFORT_LEVELS = [
   'high',
   'xhigh',
   'max',
+  'ultracode',
 ] as const satisfies readonly EffortLevel[]
 
 export const OPENAI_EFFORT_LEVELS = [

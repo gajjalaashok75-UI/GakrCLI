@@ -3,6 +3,7 @@ import {
   logEvent,
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
 } from 'src/services/analytics/index.js'
+import { getFileExtensionForAnalytics } from 'src/services/analytics/metadata.js'
 import {
   toolMatchesName,
   type Tools,
@@ -78,6 +79,7 @@ import {
   getDefaultHaikuModel,
   getDefaultOpusModel,
 } from './model/model.js'
+import { getAPIProvider } from './model/providers.js'
 import type { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js'
 import { getSkillToolCommands, getMcpSkillCommands } from '../commands.js'
 import type { Command } from '../types/command.js'
@@ -117,6 +119,7 @@ import {
   createChildAbortController,
 } from './abortController.js'
 import { isAbortError } from './errors.js'
+import { getEffortEnvOverride, modelSupportsXHighEffort } from './effort.js'
 import {
   getFileModificationTimeAsync,
   isFileWithinReadSizeLimit,
@@ -703,6 +706,9 @@ export type Attachment =
   | {
       type: 'ultrathink_effort'
       level: 'high'
+    }
+  | {
+      type: 'ultracode_mode'
     }
   | {
       type: 'deferred_tools_delta'
@@ -4088,4 +4094,80 @@ function isFileReadDenied(
     'deny',
   )
   return denyRule !== null
+}
+
+// Read a changed/watched image file for a background diff attachment.
+//
+// Contract: this path DEGRADES on any failure — returning null skips the
+// attachment rather than interrupting the turn. That deliberately includes
+// ImageProcessorUnavailableError (no image processor installed): a background
+// attachment must never abort the conversation over a missing optional package.
+// The explicit FileReadTool path is the opposite — it lets that error surface so
+// the user sees the install hint when they directly read an image.
+export async function tryReadEditedImageAttachment(
+  normalizedPath: string,
+  // Injectable for tests so the degrade path (and its sanitized telemetry) can
+  // be exercised for a specific error type without a real file.
+  deps: {
+    read?: typeof readImageWithTokenBudget
+    log?: typeof logError
+    track?: typeof logEvent
+  } = {},
+): Promise<{
+  type: 'edited_image_file'
+  filename: string
+  content: Awaited<ReturnType<typeof readImageWithTokenBudget>>
+} | null> {
+  const read = deps.read ?? readImageWithTokenBudget
+  const log = deps.log ?? logError
+  const track = deps.track ?? logEvent
+  try {
+    const data = await read(normalizedPath)
+    return {
+      type: 'edited_image_file' as const,
+      filename: normalizedPath,
+      content: data,
+    }
+  } catch (compressionError) {
+    // Log only the error TYPE, never the raw error: readImageWithTokenBudget can
+    // throw path-bearing messages/stacks (e.g. "Image file is empty: <path>"),
+    // and logError persists message/stack, which would leak local file paths.
+    const errorName =
+      compressionError instanceof Error ? compressionError.name : 'UnknownError'
+    log(new Error(`watched-file image attachment skipped (${errorName})`))
+    // Likewise only the file extension goes to analytics — never the path.
+    const analyticsExt = getFileExtensionForAnalytics(normalizedPath)
+    track('tengu_watched_file_compression_failed', {
+      ...(analyticsExt !== undefined && { ext: analyticsExt }),
+    })
+    return null
+  }
+}
+
+// Exported for focused testing of the first-party / provider-override gating.
+export function getUltracodePermissionAttachment(toolUseContext: ToolUseContext): Attachment[] {
+  const effortValue = toolUseContext.getAppState().effortValue
+  const envOverride = getEffortEnvOverride()
+  // Mirror resolveAppliedEffort's precedence so the permission tracks the effort
+  // the API actually runs with: a set GAKR_CODE_EFFORT_LEVEL wins over app
+  // state, and `null` (auto/unset) clears it. Otherwise `/effort ultracode` with
+  // GAKR_CODE_EFFORT_LEVEL=high would still leak ultracode_mode for a turn the
+  // API runs at high.
+  const effectiveEffort =
+    envOverride === null ? undefined : (envOverride ?? effortValue)
+  const isUltracode = effectiveEffort === 'ultracode'
+  if (
+    !isUltracode ||
+    getAPIProvider() !== 'firstParty' ||
+    // A per-agent providerOverride routes the actual request through a
+    // third-party shim (runAgent.ts sets it; query.ts forwards it to
+    // getAnthropicClient()), so the process-wide first-party check above is not
+    // enough. Suppress the first-party-only ultracode permission reminder
+    // whenever an override is in effect so it cannot leak into routed calls.
+    Boolean(toolUseContext.options.providerOverride) ||
+    !modelSupportsXHighEffort(toolUseContext.options.mainLoopModel)
+  ) {
+    return []
+  }
+  return [{ type: 'ultracode_mode' }]
 }

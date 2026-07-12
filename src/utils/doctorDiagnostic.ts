@@ -14,6 +14,7 @@ import { getCwd } from './cwd.js'
 import { getGakrCLIConfigHomeDir, isEnvTruthy } from './envUtils.js'
 import { execFileNoThrow } from './execFileNoThrow.js'
 import { getFsImplementation } from './fsOperations.js'
+import { hasNativeDistribution } from './nativeDistribution.js'
 import {
   getDetectedLocalInstallDir,
   getShellType,
@@ -52,6 +53,41 @@ function getCliBinaryName(): string {
 
 function getNativeDataDirName(): string {
   return getCliBinaryName()
+}
+
+function getNpmUpdateCommand(): string {
+  return `npm install -g ${MACRO.PACKAGE_URL}@latest`
+}
+
+export function getNativeInstallUnavailableFix(
+  fallback:
+    | 'local-config'
+    | 'local-overlap'
+    | 'global-permissions'
+    | 'native-config',
+  nativeDistributionAvailable: boolean = hasNativeDistribution(),
+): string {
+  if (nativeDistributionAvailable) {
+    switch (fallback) {
+      case 'native-config':
+        return `Run ${getCliBinaryName()} install to update configuration`
+      case 'global-permissions':
+        return `Do one of: (1) Re-install node without sudo, or (2) Use \`${getCliBinaryName()} install\` for native installation`
+      default:
+        return `Consider using native installation: ${getCliBinaryName()} install`
+    }
+  }
+
+  switch (fallback) {
+    case 'local-config':
+      return `Run ${getCliBinaryName()} update to refresh the install method, or update manually with: ${getNpmUpdateCommand()}`
+    case 'local-overlap':
+      return `Use the local install at ~/.gakrcli/local/${getCliBinaryName()}, remove it, or update the global npm package with: ${getNpmUpdateCommand()}`
+    case 'global-permissions':
+      return `Do one of: (1) Re-install node without sudo, or (2) Update manually with: ${getNpmUpdateCommand()}`
+    case 'native-config':
+      return `This build has no native binary; set installMethod to 'global' or reinstall with: ${getNpmUpdateCommand()}`
+  }
 }
 
 export type InstallationType =
