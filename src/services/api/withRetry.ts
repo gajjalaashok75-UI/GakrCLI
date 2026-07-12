@@ -45,7 +45,7 @@ import {
   checkMockRateLimitError,
   isMockRateLimitError,
 } from '../rateLimitMocking.js'
-import { REPEATED_529_ERROR_MESSAGE } from './errors.js'
+import { REPEATED_529_ERROR_MESSAGE, isOpenCodeGoQuotaError } from './errors.js'
 import { extractConnectionErrorDetails } from './errorUtils.js'
 import {
   extractOpenAICategoryMarker,
@@ -274,7 +274,16 @@ export async function* withRetry<T>(
         `API error (attempt ${attempt}/${maxRetries + 1}): ${error instanceof APIError ? `${error.status} ${error.message}` : errorMessage(error)}`,
         { level: 'error' },
       )
-        if (isQuotaExhausted(error)) {
+      // OpenCode Go quota exhaustion is terminal and carries a specific,
+      // actionable assistant message (subscribe / reset timing). Throw here -
+      // before the fast-mode 429 fallback below - so fast mode can't retry or
+      // cooldown a quota-exhausted subscription. Wrapping the original
+      // APIError preserves the OpenCode Go message via
+      // getAssistantMessageFromError instead of the generic guidance.
+      if (isOpenCodeGoQuotaError(error)) {
+        throw new CannotRetryError(error, retryContext)
+      }
+      if (isQuotaExhausted(error)) {
           throw new CannotRetryError(
             new Error(
               'API quota exhausted or not enabled.\n' +
@@ -430,7 +439,7 @@ export async function* withRetry<T>(
 
       if (
         !handledCloudAuthError &&
-        (!(error instanceof APIError) || !shouldRetry(error))
+        (!(error instanceof APIError) || !shouldRetry(error, persistent))
       ) {
         throw new CannotRetryError(error, retryContext)
       }
@@ -783,15 +792,22 @@ function handleGcpCredentialError(error: unknown): boolean {
   return false
 }
 
-function shouldRetry(error: APIError): boolean {
+function shouldRetry(error: APIError, persistentRetryEnabled: boolean): boolean {
   // Never retry mock errors - they're from /mock-limits command for testing
   if (isMockRateLimitError(error)) {
     return false
   }
 
+  // OpenCode Go subscription quota exhaustion is terminal — retrying burns
+  // the same 429 and confuses the user with repeated "mysterious stop"
+  // failures. getAssistantMessageFromError surfaces the actionable message.
+  if (isOpenCodeGoQuotaError(error)) {
+    return false
+  }
+
   // Persistent mode: 429/529 always retryable, bypass subscriber gates and
   // x-should-retry header.
-  if (isPersistentRetryEnabled() && isTransientCapacityError(error)) {
+  if (persistentRetryEnabled && isTransientCapacityError(error)) {
     return true
   }
 
@@ -866,11 +882,11 @@ function shouldRetry(error: APIError): boolean {
   // Retry on lock timeouts.
   if (error.status === 409) return true
 
-  // Retry on rate limits, but not for GakrCLIAI Subscription users
-  // Enterprise users can retry because they typically use PAYG instead of rate limits
+  // Retry on rate limits, but not for quota exhaustion (handled by
+  // isQuotaExhausted and isOpenCodeGoQuotaError above).
   if (error.status === 429) {
     if (isQuotaExhausted(error)) return false
-    return !isGakrCLIAISubscriber() || isEnterpriseSubscriber()
+    return true
   }
 
   // Clear API key cache on 401 and allow retry.
@@ -983,6 +999,7 @@ export function parseOpenAIDuration(s: string): number | null {
   return total > 0 ? total : null
 }
 
+export { shouldRetry }
 export function getRateLimitResetDelayMs(error: APIError): number | null {
   const provider = getAPIProvider()
 

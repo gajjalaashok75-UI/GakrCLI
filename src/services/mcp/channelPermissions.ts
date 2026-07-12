@@ -25,6 +25,7 @@
 
 import { jsonStringify } from '../../utils/slowOperations.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../analytics/growthbook.js'
+import { jsonRedactor, redactSensitiveInfo } from '../../utils/redaction.js'
 
 /**
  * GrowthBook runtime gate — separate from the channels gate (tengu_harbor)
@@ -151,6 +152,181 @@ export function shortRequestId(toolUseID: string): string {
   return candidate
 }
 
+// ---------------------------------------------------------------------------
+//                        Redaction utilities
+// ---------------------------------------------------------------------------
+
+const SENSITIVE_FIELD_SUBSTRINGS = [
+  'token',
+  'apikey',
+  'secret',
+  'password',
+  'authorization',
+  'cookie',
+  'credential',
+  'bearer',
+  'privatekey',
+] as const
+
+const AUTH_WHOLE_WORDS = new Set(['auth', 'xauth'])
+
+const X_API_KEY_PATTERN =
+  /(["']?x-api-key["']?\s*[:=]\s*["']?)[^"',\n&#;]+/gi
+
+const GENERIC_CREDENTIAL_ENV_PATTERN =
+  /(?<![A-Za-z0-9_-])((?:[A-Za-z0-9_]*_)?(?:API[_-]?KEY|SECRET|TOKEN|PASSWORD)\s*[=:]\s*)["']?[^"',\n&#;]+["']?/gi
+
+const GENERIC_HEADER_FIELD_PATTERN =
+  /(["']?(?:x-api-key|x[-_]?auth|authorization|auth|bearer|api[-_]?key|token|access[-_]?token|refresh[-_]?token|secret|password|cookie|set[-_]?cookie|id[-_]?token|exchanged[-_]?api[-_]?key|trusted[-_]?device[-_]?token|private[-_]?key)["']?\s*[:=]\s*["']?)(?:bearer\s+)?([^"',\n&#;]+)/gi
+
+const SENSITIVE_URL_QUERY_PARAM_TOKENS = [
+  'api_key',
+  'apikey',
+  'key',
+  'token',
+  'access_token',
+  'refresh_token',
+  'signature',
+  'sig',
+  'secret',
+  'password',
+  'passwd',
+  'pwd',
+  'auth',
+  'authorization',
+  'cookie',
+  'set-cookie',
+] as const
+
+function shouldRedactUrlQueryParam(name: string): boolean {
+  const lower = name.toLowerCase()
+  return SENSITIVE_URL_QUERY_PARAM_TOKENS.some((token) =>
+    lower.includes(token),
+  )
+}
+
+function redactSensitiveQuerySegments(query: string): string {
+  return query.replace(
+    /(^|[&;])([^&=;]+)(?:=([^&;]*))?/g,
+    (match, delim, rawKey) => {
+      let key: string
+      try {
+        key = decodeURIComponent(rawKey)
+      } catch {
+        key = rawKey
+      }
+      if (shouldRedactUrlQueryParam(key)) {
+        return `${delim}${rawKey}=redacted`
+      }
+      return match
+    },
+  )
+}
+
+function redactUrlForDisplay(rawUrl: string): string {
+  try {
+    const parsed = new URL(rawUrl)
+    if (parsed.username) {
+      parsed.username = 'redacted'
+    }
+    if (parsed.password) {
+      parsed.password = 'redacted'
+    }
+
+    const hashIdx = rawUrl.indexOf('#')
+    const qsStart = rawUrl.indexOf('?')
+    if (qsStart !== -1 && (hashIdx === -1 || qsStart < hashIdx)) {
+      const rawQuery =
+        hashIdx === -1
+          ? rawUrl.slice(qsStart + 1)
+          : rawUrl.slice(qsStart + 1, hashIdx)
+      parsed.search = redactSensitiveQuerySegments(rawQuery)
+    }
+
+    parsed.hash = ''
+    return parsed.toString()
+  } catch {
+    return rawUrl
+  }
+}
+
+function redactSensitiveInfo(text: string): string {
+  let redacted = text
+
+  // x-api-key header values
+  redacted = redacted.replace(X_API_KEY_PATTERN, '$1[REDACTED_API_KEY]')
+
+  // Generic *_API_KEY / *_SECRET / *_TOKEN / *_PASSWORD env vars
+  redacted = redacted.replace(
+    GENERIC_CREDENTIAL_ENV_PATTERN,
+    '$1[REDACTED]',
+  )
+
+  // Catch-all: any of the standard credential field names with a value
+  redacted = redacted.replace(
+    GENERIC_HEADER_FIELD_PATTERN,
+    (match, prefix, value) => {
+      if (value === '[REDACTED]') return match
+      return `${prefix}[REDACTED]`
+    },
+  )
+
+  // Redact sensitive query params in https?:// URLs embedded in text
+  redacted = redacted.replace(
+    /(?:https?:)?\/\/[^\s"',)}>]+/gi,
+    (url) => redactUrlForDisplay(url),
+  )
+
+  // Post-processing: absorb &<text> or ;<text> segments trailing a
+  // redacted placeholder — catches "&horse=battery" after
+  // DATABASE_PASSWORD=[REDACTED]
+  redacted = redacted.replace(
+    /(\[REDACTED(?:_[A-Z_]+)?\])([&;][^\s"'&;]+)*/g,
+    '$1',
+  )
+
+  return redacted
+}
+
+function jsonRedactor(key: string, value: unknown): unknown {
+  const normalizedKey = key.toLowerCase().replace(/[-_]/g, '')
+
+  const EXCLUDED_KEYS = [
+    'inputtokens',
+    'outputtokens',
+    'tokens',
+    'cachereadinputtokens',
+    'cachecreationinputtokens',
+    'maxtokens',
+    'tokensremaining',
+    'tokencount',
+    'totaltokens',
+    'prompttokens',
+    'completiontokens',
+  ]
+  if (EXCLUDED_KEYS.includes(normalizedKey)) {
+    if (typeof value === 'number') return value
+    return '[REDACTED]'
+  }
+
+  if (AUTH_WHOLE_WORDS.has(normalizedKey)) {
+    return '[REDACTED]'
+  }
+
+  if (SENSITIVE_FIELD_SUBSTRINGS.some((s) => normalizedKey.includes(s))) {
+    return '[REDACTED]'
+  }
+
+  if (typeof value === 'string') {
+    const urlRedacted = /^(?:https?:)?\/\//i.test(value)
+      ? redactUrlForDisplay(value)
+      : value
+    return redactSensitiveInfo(urlRedacted)
+  }
+
+  return value
+}
+
 /**
  * Truncate tool input to a phone-sized JSON preview. 200 chars is
  * roughly 3 lines on a narrow phone screen. Full input is in the local
@@ -159,8 +335,12 @@ export function shortRequestId(toolUseID: string): string {
  */
 export function truncateForPreview(input: unknown): string {
   try {
-    const s = jsonStringify(input)
-    return s.length > 200 ? s.slice(0, 200) + '…' : s
+    const structurallyRedacted = JSON.parse(
+      JSON.stringify(input, jsonRedactor),
+    )
+    const s = jsonStringify(structurallyRedacted)
+    const redacted = redactSensitiveInfo(s)
+    return redacted.length > 200 ? redacted.slice(0, 200) + '…' : redacted
   } catch {
     return '(unserializable)'
   }
@@ -179,17 +359,18 @@ export function filterPermissionRelayClients<
     type: string
     name: string
     capabilities?: { experimental?: Record<string, unknown> }
+    config?: { pluginSource?: string }
   },
 >(
   clients: readonly T[],
-  isInAllowlist: (name: string) => boolean,
+  isInAllowlist: (name: string, pluginSource?: string) => boolean,
 ): (T & { type: 'connected' })[] {
   return clients.filter(
     (c): c is T & { type: 'connected' } =>
       c.type === 'connected' &&
-      isInAllowlist(c.name) &&
-      c.capabilities?.experimental?.['gakrcli/channel'] !== undefined &&
-      c.capabilities?.experimental?.['gakrcli/channel/permission'] !== undefined,
+      isInAllowlist(c.name, c.config?.pluginSource) &&
+      Boolean(c.capabilities?.experimental?.['gakrcli/channel']) &&
+      Boolean(c.capabilities?.experimental?.['gakrcli/channel/permission']),
   )
 }
 

@@ -6,6 +6,7 @@ import { shouldEnableGakrCLIInChromeSkill } from './gakrcliInChromeAccess.js'
 import { registerKeybindingsSkill } from './keybindings.js'
 import { registerLoremIpsumSkill } from './loremIpsum.js'
 import { registerLoopSkill } from './loop.js'
+import { registerPdfSkill } from './pdf.js'
 import { registerRememberSkill } from './remember.js'
 import { registerSimplifySkill } from './simplify.js'
 import { registerSkillifySkill } from './skillify.js'
@@ -37,6 +38,7 @@ export function initBundledSkills(): void {
   registerBatchSkill()
   registerStuckSkill()
   registerUltracodeSkill()
+  registerPdfSkill()
   registerLoopSkill()
   registerCronListSkill()
   registerCronDeleteSkill()
