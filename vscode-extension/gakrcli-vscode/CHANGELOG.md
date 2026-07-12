@@ -4,6 +4,15 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ## [Unreleased]
 
+### Fixed (2026-07-12)
+
+- **`processManager` hoisted to module scope so `deactivate()` can kill the CLI process**: `processManager` was declared with `let` inside `activate()`, but `deactivate()` referenced it as a separate top-level function — a runtime `ReferenceError` that skipped process cleanup and left orphaned `gakrcli` child processes running after extension deactivation (e.g. on window reload or VS Code close). Hoisted to module scope so both `activate()` and `deactivate()` share the same binding.
+- **`permissionHandler.currentMode` → `permissionHandler.getMode()`**: Fixed `TypeError` at init-time by calling the method instead of accessing a non-existent property.
+- **`workspaceFolder` class property declared in `McpIdeServer`**: The constructor was assigning `this.workspaceFolder` without a prior declaration — TypeScript allows this but the intent was clearly a proper class field.
+- **`context` class property declared in `PermissionRules`**: Same pattern — constructor assignment without declaration, now a proper `private readonly` field.
+- **`initStartTime` declared and initialized in `ProcessManager`**: The field was read (as `Date.now()`) in `sendInitialize()` but never declared — produced `NaN` in periodic "still waiting for init" diagnostic logs, making them useless. Now properly declared and set.
+- **Removed dead `sessionId` assignment in `ProcessManager.handleMessage()`**: The two ternary expressions always produced `undefined`, and `InitializeResponse` carries no `session_id`. Cleaned up to avoid confusion.
+
 ### Fixed (2026-06-22)
 
 - **Fixed Windows spawn stdin piping by spawning node directly**: On Windows, `shell: true` + `cmd.exe /c` wrapping passes args unsafely and breaks stdin piping through 3+ process layers. Added `resolveWindowsCliPath()` which finds the npm-installed `gakrcli.js` via `APPDATA`/`LOCALAPPDATA` and spawns `process.execPath` (node) directly — bypassing cmd.exe entirely. This fixes the initialize handshake: the extension can now send `control_request { subtype: 'initialize' }` to the CLI and get a response in <10s instead of hanging until the 300s timeout. On non-Windows, no shell is used (executable is directly in PATH as a symlink). The `bin/gakrcli` heap relaunch (`spawnSync` of itself with `--max-old-space-size`) is suppressed via `GAKR_DISABLE_HEAP_RELAUNCH=1` to avoid an extra process layer that could interfere with the extension's own lifecycle.
