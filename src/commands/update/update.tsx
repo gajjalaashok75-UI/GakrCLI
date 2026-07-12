@@ -6,14 +6,42 @@ import {
   getLatestVersion,
   installGlobalPackage,
 } from '../../utils/autoUpdater.js'
-import type { ReleaseChannel } from '../../utils/config.js'
+import {
+  getGlobalConfig,
+  type InstallMethod,
+  type ReleaseChannel,
+} from '../../utils/config.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { errorMessage } from '../../utils/errors.js'
 import { detectGlobalPackageManager } from '../../utils/globalPackageManager.js'
 import { installOrUpdateGakrCLIPackage } from '../../utils/localInstaller.js'
-import { installLatest as installLatestNative } from '../../utils/nativeInstaller/index.js'
+import {
+  installLatest as installLatestNative,
+  removeInstalledSymlink,
+} from '../../utils/nativeInstaller/index.js'
+import { hasNativeDistribution } from '../../utils/nativeDistribution.js'
+import { shouldRemoveInstalledSymlinkForNpmUpdate } from '../../utils/autoUpdaterRouting.js'
 import type { PackageManager } from '../../utils/nativeInstaller/packageManagers.js'
 import { resolveUpdateStrategy } from '../../utils/updateStrategy.js'
+import { shouldRemoveInstalledSymlinkForNpmUpdate } from '../../utils/autoUpdaterRouting.js'
+
+export async function removeStaleNativeLauncherForNpmUpdate(deps: {
+  getConfig?: () => { installMethod?: InstallMethod }
+  hasNativeDistribution?: () => boolean
+  removeInstalledSymlink?: () => Promise<void>
+} = {}): Promise<boolean> {
+  const config = (deps.getConfig ?? getGlobalConfig)()
+  if (
+    shouldRemoveInstalledSymlinkForNpmUpdate(
+      config.installMethod,
+      (deps.hasNativeDistribution ?? hasNativeDistribution)(),
+    )
+  ) {
+    await (deps.removeInstalledSymlink ?? removeInstalledSymlink)()
+    return true
+  }
+  return false
+}
 
 const PACKAGE_URL = MACRO.PACKAGE_URL
 const CURRENT_VERSION = MACRO.DISPLAY_VERSION
