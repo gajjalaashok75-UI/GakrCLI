@@ -1,7 +1,9 @@
 import type { SettingsJson } from '../../utils/settings/types.js'
+import type { PermissionMode } from '../../utils/permissions/PermissionMode.js'
+import { getAgentModel } from '../../utils/model/agent.js'
+import { isModelAlias } from '../../utils/model/aliases.js'
 
-/**
- * Provider override resolved from agent routing config.
+/** Provider override resolved from agent routing config.
  * When present, the API client should use these instead of global env vars.
  */
 export interface ProviderOverride {
@@ -147,6 +149,27 @@ export function resolveAgentModelProvider(
 
   const trimmedModelName = modelName.trim()
   return toAgentRoute(trimmedModelName, settings.agentModels[trimmedModelName])
+}
+
+/**
+ * Given a resolved model value from agent routing, resolve `permissionMode`
+ * and `"inherit"` / aliases into the actual model string the caller should use.
+ *
+ * `model` came from an agentModels entry that has no cross-provider override
+ * (model-only route), so it's always the active provider. `"inherit"` and
+ * registered model aliases are resolved against the parent model; anything else
+ * is sent literally and failing with a provider "model not found". A real model id
+ * (a configured agentModels key for the active provider) passes through as-is.
+ */
+export function resolveModelOnlyModel(
+  model: string,
+  parentModel: string,
+  permissionMode?: PermissionMode,
+): string {
+  if (model === 'inherit' || isModelAlias(model)) {
+    return getAgentModel(model, parentModel, undefined, permissionMode)
+  }
+  return model
 }
 
 export function resolveAgentRunModelRouting({
