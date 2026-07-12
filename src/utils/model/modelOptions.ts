@@ -42,6 +42,7 @@ import {
   getActiveOpenAIModelOptionsCache,
   getActiveProviderProfile,
   getProfileModelOptions,
+  getProviderProfiles,
 } from '../providerProfiles.js'
 import { getCachedOllamaModelOptions, isOllamaProvider } from './ollamaModels.js'
 import { getCachedNvidiaNimModelOptions, isNvidiaNimProvider } from './nvidiaNimModels.js'
@@ -479,8 +480,43 @@ function getCopilotModelOptions(): ModelOption[] {
 }
 
 function getModelOptionsBase(fastMode = false): ModelOption[] {
+  // When a provider profile's env is applied, collect its models so they
+  // can be appended to the picker options below.
+  // We check PROFILE_ENV_APPLIED to avoid the ?? profiles[0] fallback in
+  // getActiveProviderProfile which would affect users with inactive profiles.
+  //
+  // Hoisted above the local OpenAI-compatible early returns (Ollama and the
+  // route-catalog scope) because users with a local profile active still need
+  // the unified `/model` switcher to surface every other configured profile —
+  // otherwise they have to round-trip through `/provider` (issue #1119).
+  const profileEnvApplied = process.env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED === '1'
+  const profileModelOptions: ModelOption[] = []
+  let activeProfileId: string | undefined
+  if (profileEnvApplied) {
+    const activeProfile = getActiveProviderProfile()
+    if (activeProfile) {
+      activeProfileId = activeProfile.id
+      const models = getProfileModelOptions(activeProfile)
+      profileModelOptions.push(...models)
+    }
+  }
+
+  // Inactive provider profile options. Surfaces each configured-but-inactive
+  // provider profile's models in the picker so users can switch active provider
+  // + model from `/model` instead of having to round-trip through `/provider`
+  // (issue #1119). Only built when the active profile env is applied so we
+  // don't expose this affordance to users who haven't opted into the
+  // multi-profile workflow.
+  const inactiveProfileOptions: ModelOption[] = profileEnvApplied
+    ? getInactiveProviderProfileOptions(activeProfileId)
+    : []
+
   if (getAPIProvider() === 'github') {
-    return [getDefaultOptionForUser(fastMode), ...getCopilotModelOptions()]
+    return [
+      getDefaultOptionForUser(fastMode),
+      ...getCopilotModelOptions(),
+      ...inactiveProfileOptions,
+    ]
   }
 
   // When using Ollama, show models from the Ollama server instead of GakrCLI models
@@ -488,7 +524,7 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
     const defaultOption = getDefaultOptionForUser(fastMode)
     const ollamaModels = getCachedOllamaModelOptions()
     if (ollamaModels.length > 0) {
-      return [defaultOption, ...ollamaModels]
+      return [defaultOption, ...ollamaModels, ...inactiveProfileOptions]
     }
     // Fallback: if models not yet fetched, show current model instead of GakrCLI models
     const currentModel = getUserSpecifiedModelSetting() ?? getInitialMainLoopModel()
@@ -500,9 +536,10 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
           label: currentModel,
           description: 'Currently configured Ollama model',
         },
+        ...inactiveProfileOptions,
       ]
     }
-    return [defaultOption]
+    return [defaultOption, ...inactiveProfileOptions]
   }
 
   // When using NVIDIA NIM, show models from the NVIDIA catalog
@@ -510,9 +547,9 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
     const defaultOption = getDefaultOptionForUser(fastMode)
     const nvidiaModels = getCachedNvidiaNimModelOptions()
     if (nvidiaModels.length > 0) {
-      return [defaultOption, ...nvidiaModels]
+      return [defaultOption, ...nvidiaModels, ...inactiveProfileOptions]
     }
-    return [defaultOption]
+    return [defaultOption, ...inactiveProfileOptions]
   }
 
   // When using MiniMax, show models from the MiniMax catalog
@@ -520,9 +557,9 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
     const defaultOption = getDefaultOptionForUser(fastMode)
     const minimaxModels = getCachedMiniMaxModelOptions()
     if (minimaxModels.length > 0) {
-      return [defaultOption, ...minimaxModels]
+      return [defaultOption, ...minimaxModels, ...inactiveProfileOptions]
     }
-    return [defaultOption]
+    return [defaultOption, ...inactiveProfileOptions]
   }
 
   // When using Xiaomi MiMo, show models from the MiMo catalog
@@ -530,9 +567,9 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
     const defaultOption = getDefaultOptionForUser(fastMode)
     const xiaomiMimoModels = getCachedXiaomiMimoModelOptions()
     if (xiaomiMimoModels.length > 0) {
-      return [defaultOption, ...xiaomiMimoModels]
+      return [defaultOption, ...xiaomiMimoModels, ...inactiveProfileOptions]
     }
-    return [defaultOption]
+    return [defaultOption, ...inactiveProfileOptions]
   }
 
   if (process.env.USER_TYPE === 'ant') {
@@ -550,6 +587,7 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
       getSonnet46Option(),
       getSonnet46_1MOption(),
       getHaiku45Option(),
+      ...inactiveProfileOptions,
     ]
   }
 
@@ -567,6 +605,7 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
       }
 
       premiumOptions.push(MaxHaiku45Option)
+      premiumOptions.push(...inactiveProfileOptions)
       return premiumOptions
     }
 
@@ -586,9 +625,13 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
     }
 
     standardOptions.push(MaxHaiku45Option)
+    standardOptions.push(...inactiveProfileOptions)
     return standardOptions
   }
 
+  // Local OpenAI-compatible / route-catalog scope. Inactive-profile options are
+  // appended here too so the unified `/model` switcher still surfaces every
+  // other configured profile while a local/route profile is active (#1119).
   const activeRouteCatalogOptions = getActiveOpenAIRouteCatalogOptions()
   const openAIModelOptionsScope = getAdditionalModelOptionsCacheScope()
   const activeProfile = getActiveProviderProfile()
@@ -611,21 +654,8 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
         sourceOptions,
         activeRouteCatalogOptions,
       ),
+      ...inactiveProfileOptions,
     ]
-  }
-
-  // When a provider profile's env is applied, collect its models so they
-  // can be appended to the standard picker options below.
-  // We check PROFILE_ENV_APPLIED to avoid the ?? profiles[0] fallback in
-  // getActiveProviderProfile which would affect users with inactive profiles.
-  const profileEnvApplied = process.env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED === '1'
-  const profileModelOptions: ModelOption[] = []
-  if (profileEnvApplied) {
-    const activeProfile = getActiveProviderProfile()
-    if (activeProfile) {
-      const models = getProfileModelOptions(activeProfile)
-      profileModelOptions.push(...models)
-    }
   }
 
   // PAYG 1P API: Default (Sonnet) + Sonnet 1M + Opus 4.8 + Opus 4.7 + Opus 4.6 + Opus 1M + Haiku
@@ -646,6 +676,7 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
     }
     payg1POptions.push(getHaiku45Option())
     payg1POptions.push(...profileModelOptions)
+    payg1POptions.push(...inactiveProfileOptions)
     return payg1POptions
   }
 
@@ -689,7 +720,42 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
     payg3pOptions.push(getHaikuOption())
   }
   payg3pOptions.push(...profileModelOptions)
+  payg3pOptions.push(...inactiveProfileOptions)
   return payg3pOptions
+}
+
+/**
+ * Build picker options for each provider profile that is NOT currently active.
+ * Selecting one of these activates the profile (swapping `OPENAI_BASE_URL` /
+ * `OPENAI_API_KEY` / etc. via `setActiveProviderProfile`) and then sets the
+ * main-loop model to the chosen entry — the equivalent of `/provider` followed
+ * by `/model`, but in one step. See issue #1119.
+ */
+export function getInactiveProviderProfileOptions(
+  activeProfileId: string | undefined,
+): ModelOption[] {
+  const profiles = getProviderProfiles()
+  const options: ModelOption[] = []
+  for (const profile of profiles) {
+    if (profile.id === activeProfileId) {
+      continue
+    }
+    const baseOptions = getProfileModelOptions(profile)
+    for (const baseOption of baseOptions) {
+      const modelValue =
+        typeof baseOption.value === 'string' ? baseOption.value : ''
+      if (!modelValue) {
+        continue
+      }
+      options.push({
+        value: encodeSwitchProfileValue(profile.id, modelValue),
+        label: `${modelValue} · ${profile.name}`,
+        description: `Switch to ${profile.name} (${profile.baseUrl})`,
+        switchToProfileId: profile.id,
+      })
+    }
+  }
+  return options
 }
 
 // @[MODEL LAUNCH]: Add the new model ID to the appropriate family pattern below
@@ -982,10 +1048,23 @@ function filterModelOptionsByAllowlist(options: ModelOption[]): ModelOption[] {
   const settings = getSettings_DEPRECATED() || {}
   const filtered = !settings.availableModels
     ? options // No restrictions
-    : options.filter(
-    opt =>
-      opt.value === null || (opt.value !== null && isModelAllowed(opt.value)),
-  )
+    : options.filter(opt => {
+        if (opt.value === null) {
+          return true
+        }
+        // Cross-profile options carry an encoded
+        // `__switch_profile__:<id>:<model>` value; evaluate the allowlist
+        // against the decoded target model so an allowed model is not dropped
+        // just because of the switch wrapper. Only decode genuine switch
+        // options — identified by the `switchToProfileId` marker, not the raw
+        // string prefix — so a normal custom model id that happens to start with
+        // `__switch_profile__:` is checked verbatim rather than mis-parsed.
+        const effectiveModel =
+          opt.switchToProfileId !== undefined
+            ? parseSwitchProfileValue(opt.value)?.model ?? opt.value
+            : opt.value
+        return isModelAllowed(effectiveModel)
+      })
 
   // Select state uses option values as identity keys. If two entries share the
   // same value (e.g. provider-specific aliases collapsing to one model ID),

@@ -45,6 +45,21 @@ import {
 import { sleep } from './sleep.js'
 import { isInITerm2 } from './swarm/backends/detection.js'
 
+export const _testDeps = {
+  getPlatform: () => getPlatform(),
+  getInitialSettings: () => getInitialSettings(),
+  execFileNoThrowWithCwd: (
+    exe: string,
+    args: string[],
+    opts?: Parameters<typeof execFileNoThrowWithCwd>[2],
+  ) => execFileNoThrowWithCwd(exe, args, opts),
+  mkdir: (path: string, opts?: Parameters<typeof mkdir>[1]) => mkdir(path, opts),
+  readWorktreeHeadSha: (path: string) => readWorktreeHeadSha(path),
+  resolveGitDir: (path: string) => resolveGitDir(path),
+  resolveRef: (gitDir: string, ref: string) => resolveRef(gitDir, ref),
+  getDefaultBranch: () => getDefaultBranch(),
+}
+
 const VALID_WORKTREE_SLUG_SEGMENT = /^[a-zA-Z0-9._-]+$/
 const MAX_WORKTREE_SLUG_LENGTH = 64
 
@@ -274,6 +289,38 @@ export function buildRevParseFailureMessage(
 
 function worktreePathFor(repoRoot: string, slug: string): string {
   return join(worktreesDir(repoRoot), flattenSlug(slug))
+}
+
+async function autoConfigureLongPathsForWorktrees(repoRoot: string): Promise<void> {
+  if (_testDeps.getPlatform() !== 'windows') {
+    return
+  }
+
+  const settings = _testDeps.getInitialSettings().worktree
+  if (settings?.autoConfigureLongPaths === false) {
+    return
+  }
+
+  const { code, stderr } = await _testDeps.execFileNoThrowWithCwd(
+    gitExe(),
+    ['config', '--local', 'core.longpaths', 'true'],
+    { cwd: repoRoot },
+  )
+  if (code !== 0) {
+    logForDebugging(
+      `Could not enable Git long-path support before creating worktree: ${stderr.trim() || `exit code ${code}`}`,
+      { level: 'warn' },
+    )
+  }
+}
+
+export function buildWorktreeCreationFailureMessage(stderr: string): string {
+  const detail = stderr.trim() || 'no error detail'
+  const longPathHint =
+    _testDeps.getPlatform() === 'windows' && /filename too long/i.test(stderr)
+      ? ' Git rejected a long path; run `git config --local core.longpaths true` in the main repository and retry.'
+      : ''
+  return `Failed to create worktree: ${detail}${longPathHint}`
 }
 
 /**
@@ -1610,4 +1657,10 @@ export async function execIntoTmuxWorktree(args: string[]): Promise<{
   }
 
   return { handled: true }
+}
+
+/** @internal */
+export const _test = {
+  autoConfigureLongPathsForWorktrees,
+  getOrCreateWorktree,
 }

@@ -459,7 +459,16 @@ export const SettingsSchema = lazySchema(() =>
           'and feed errors back for self-repair.',
         ),
       worktree: z
-        .object({
+        .preprocess((val: any) => {
+          if (val && typeof val === 'object') {
+            const copy = { ...val }
+            if ('enableGitLongPaths' in val && !('autoConfigureLongPaths' in val)) {
+              copy.autoConfigureLongPaths = val.enableGitLongPaths
+            }
+            return copy
+          }
+          return val
+        }, z.object({
           symlinkDirectories: z
             .array(z.string())
             .optional()
@@ -475,7 +484,18 @@ export const SettingsSchema = lazySchema(() =>
               'Directories to include when creating worktrees, via git sparse-checkout (cone mode). ' +
                 'Dramatically faster in large monorepos — only the listed paths are written to disk.',
             ),
-        })
+          autoConfigureLongPaths: z
+            .boolean()
+            .optional()
+            .describe(
+              'On Windows, enable Git long-path support (core.longpaths=true) before ' +
+                'creating worktrees. Defaults to true when unset.',
+            ),
+          enableGitLongPaths: z
+            .boolean()
+            .optional()
+            .describe('Deprecated alias for autoConfigureLongPaths.'),
+        }))
         .optional()
         .describe('Git worktree configuration for --worktree flag.'),
       // Whether to disable all hooks and statusLine
