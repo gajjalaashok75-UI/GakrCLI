@@ -32,6 +32,7 @@ import { MemoryUsageIndicator } from '../MemoryUsageIndicator.js';
 import { SentryErrorBoundary } from '../SentryErrorBoundary.js';
 import { TokenWarning } from '../TokenWarning.js';
 import { SandboxPromptFooterHint } from './SandboxPromptFooterHint.js';
+import { getEffortNotificationText } from '../EffortIndicator.js';
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const VoiceIndicator: typeof import('./VoiceIndicator.js').VoiceIndicator = feature('VOICE_MODE') ? require('./VoiceIndicator.js').VoiceIndicator : () => null;
@@ -277,6 +278,32 @@ function NotificationContent({
   const isBriefOnly = feature('KAIROS') || feature('KAIROS_BRIEF') ?
   // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
   useAppState(s_1 => s_1.isBriefOnly) : false;
+  const viewingAgentTaskId = feature('KAIROS') || feature('KAIROS_BRIEF') ?
+  // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
+  useAppState(s_2 => s_2.viewingAgentTaskId) : undefined;
+  const briefOwnsGap = isBriefOnly && !viewingAgentTaskId;
+  const { status: ideStatus_0 } = useIdeConnectionStatus(mcpClients);
+  const shouldShowEffortFallback = !briefOwnsGap && !(ideStatus_0 === "connected" && (ideSelection?.filePath || ideSelection?.text && ideSelection.lineCount > 0));
+  const effortValue = useAppState(s_3 => s_3.effortValue);
+  const effortNotificationText = shouldShowEffortFallback ? getEffortNotificationText(effortValue, mainLoopModel) : undefined;
+  let notificationNode: ReactNode = null;
+  if (notifications.current) {
+    if ('jsx' in notifications.current) {
+      const notificationJsx = notifications.current.jsx;
+      if (notificationJsx !== null && notificationJsx !== undefined && notificationJsx !== '' && typeof notificationJsx !== 'boolean') {
+        notificationNode = <Text wrap="truncate" key={notifications.current.key}>
+          {notificationJsx}
+        </Text>;
+      }
+    } else if (notifications.current.text) {
+      notificationNode = <Text color={notifications.current.color} dimColor={!notifications.current.color} wrap="truncate">
+        {notifications.current.text}
+      </Text>;
+    }
+  }
+  const effortFallbackNode = effortNotificationText ? <Text dimColor wrap="truncate" key="effort-fallback">
+        {effortNotificationText}
+      </Text> : null;
 
   // When voice is actively recording or processing, replace all
   // notifications with just the voice indicator.
@@ -285,11 +312,7 @@ function NotificationContent({
   }
   return <>
       <IdeStatusIndicator ideSelection={ideSelection} mcpClients={mcpClients} />
-      {notifications.current && ('jsx' in notifications.current ? <Text wrap="truncate" key={notifications.current.key}>
-            {notifications.current.jsx}
-          </Text> : <Text color={notifications.current.color} dimColor={!notifications.current.color} wrap="truncate">
-            {notifications.current.text}
-          </Text>)}
+      {notificationNode ?? effortFallbackNode}
       {isInOverageMode && !isTeamOrEnterprise && <Box>
           <Text dimColor wrap="truncate">
             Now using extra usage
