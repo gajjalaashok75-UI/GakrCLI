@@ -337,6 +337,27 @@ function getOpenAIDiscoveryRequestOptions(routeId?: string | null): {
   }
 }
 
+export type FastModeReconcileResult = 'on' | 'off' | 'unchanged'
+
+export function reconcileFastModeForSwitch(
+  targetModel: string | null,
+  isFastModeOn: boolean,
+): FastModeReconcileResult {
+  if (!isFastModeEnabled()) return 'unchanged'
+  clearFastModeCooldown()
+  if (!isFastModeSupportedByModel(targetModel) && isFastModeOn) {
+    return 'off'
+  }
+  if (
+    isFastModeSupportedByModel(targetModel) &&
+    isFastModeAvailable() &&
+    isFastModeOn
+  ) {
+    return 'on'
+  }
+  return 'unchanged'
+}
+
 export function shouldAutoRefreshRouteCatalog(options: {
   catalog: ModelCatalogConfig
   hasCachedModels: boolean
