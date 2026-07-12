@@ -3,7 +3,8 @@ import { appendFileSync } from 'fs';
 import React from 'react';
 import { logEvent } from 'src/services/analytics/index.js';
 import { gracefulShutdown, gracefulShutdownSync } from 'src/utils/gracefulShutdown.js';
-import { type ChannelEntry, getAllowedChannels, setAllowedChannels, setHasDevChannels, setSessionTrustAccepted, setStatsStore } from './bootstrap/state.js';
+import { type ChannelEntry, getAllowedChannels, setSessionTrustAccepted, setStatsStore } from './bootstrap/state.js';
+import { registerDevChannels } from './utils/devChannelRegistration.js';
 import type { Command } from './commands.js';
 import { createStatsStore, type StatsStore } from './context/stats.js';
 import { getSystemContext } from './context.js';
@@ -300,11 +301,7 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
       // (hasNonDev check); the allowlist bypass it also grants is moot
       // since the gate blocks upstream.
       if (!isChannelsEnabled() || !getGakrCLIAIOAuthTokens()?.accessToken) {
-        setAllowedChannels([...getAllowedChannels(), ...devChannels.map(c => ({
-          ...c,
-          dev: true
-        }))]);
-        setHasDevChannels(true);
+        registerDevChannels(devChannels)
       } else {
         const {
           DevChannelsDialog
@@ -312,11 +309,7 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
         await showSetupDialog(root, done => <DevChannelsDialog channels={devChannels} onAccept={() => {
           // Mark dev entries per-entry so the allowlist bypass doesn't leak
           // to --channels entries when both flags are passed.
-          setAllowedChannels([...getAllowedChannels(), ...devChannels.map(c => ({
-            ...c,
-            dev: true
-          }))]);
-          setHasDevChannels(true);
+          registerDevChannels(devChannels)
           void done();
         }} />);
       }
