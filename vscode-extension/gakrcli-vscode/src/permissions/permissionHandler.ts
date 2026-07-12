@@ -107,6 +107,14 @@ export class PermissionHandler implements vscode.Disposable {
       }
     }
 
+    if (mode === this.currentMode) {
+      // No-op: already in this mode. Avoids redundant broadcast/log churn
+      // when a mode-change message arrives twice for the same target mode
+      // (e.g. a duplicate send from the webview, or the CLI confirming a
+      // mode change that was already applied locally).
+      return;
+    }
+
     this.output.appendLine(`[PermissionHandler] Mode changed: ${this.currentMode} → ${mode}`);
     this.currentMode = mode;
   }

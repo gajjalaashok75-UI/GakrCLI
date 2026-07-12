@@ -138,8 +138,8 @@
 				},
 				"gakrcli.selectedProvider": {
 					"type": "string",
-					"default": "anthropic",
-					"description": "The selected AI provider for GakrCLI."
+					"default": "auto",
+					"description": "The selected AI provider for GakrCLI. 'auto' means: don't override — use whatever gakrcli is already logged into via its own config (e.g. after running `gakrcli` and logging in from a terminal)."
 				},
 				"gakrcli.apiKey": {
 					"type": "string",
