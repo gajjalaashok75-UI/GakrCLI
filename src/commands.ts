@@ -42,6 +42,7 @@ import cacheProbe from './commands/cache-probe/index.js'
 import cacheStats from './commands/cacheStats/index.js'
 import clearContextWindow from './commands/clear-context-window/index.js'
 import replay from './commands/replay/index.js'
+import repomap from './commands/repomap/index.js'
 import setContextWindow from './commands/set-context-window/index.js'
 import mcp from './commands/mcp/index.js'
 import mobile from './commands/mobile/index.js'
@@ -402,6 +403,7 @@ const COMMANDS = memoize((): Command[] => [
   pr_comments,
   releaseNotes,
   replay,
+  repomap,
   reloadPlugins,
   rename,
   requestSize,
