@@ -160,6 +160,13 @@ export class ProcessManager {
   /** Timestamp (Date.now) when spawn() was called, for diagnostic timing. */
   private spawnStartTime: number = 0;
 
+  /**
+   * Timestamp (Date.now) when the initialize handshake was sent, for the
+   * periodic "still waiting for init" diagnostic log in sendInitialize().
+   * (Was previously read but never declared/set — produced `NaN` in the logs.)
+   */
+  private initStartTime: number = 0;
+
   // Callbacks
   private messageCallbacks: MessageCallback[] = [];
   private errorCallbacks: ErrorCallback[] = [];
@@ -475,6 +482,7 @@ export class ProcessManager {
       this.pendingInitReject = reject;
 
       this.initRequestId = this.generateRequestId();
+      this.initStartTime = Date.now();
 
       const initRequest = {
         type: 'control_request',
@@ -536,9 +544,9 @@ export class ProcessManager {
         if (response.subtype === 'success') {
           const initResponse = response.response as unknown as InitializeResponse;
           this._initializeResponse = initResponse;
-          this._sessionId = (initResponse as Record<string, unknown>).pid
-            ? undefined
-            : undefined;
+          // Note: InitializeResponse carries no session_id (only `pid`).
+          // The real session id is picked up below in the general branch
+          // of handleMessage() from later messages that carry `session_id`.
           this.setState(ProcessState.Ready);
           this.startKeepAlive();
           this.pendingInitResolve(initResponse);

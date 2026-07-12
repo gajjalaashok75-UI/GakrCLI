@@ -107,6 +107,7 @@ export class McpIdeServer implements vscode.Disposable {
   private token: string = '';
   private port: number = 0;
   private disposables: vscode.Disposable[] = [];
+  private workspaceFolder: string;
 
   constructor(workspaceFolder: string) {
     this.workspaceFolder = workspaceFolder;

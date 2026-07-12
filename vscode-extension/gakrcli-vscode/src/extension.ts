@@ -29,6 +29,13 @@ const SPAWN_POLL_TIMEOUT_MS = 300_000;
 let webviewManager: WebviewManager | undefined;
 let diffManagerInstance: DiffManager | undefined;
 let permissionHandlerInstance: PermissionHandler | undefined;
+// Module-scoped so deactivate() (a separate top-level function) can see and
+// kill the running CLI process. This was previously declared with `let`
+// inside activate(), which meant deactivate() referenced an out-of-scope
+// variable — a ReferenceError at runtime that skipped process cleanup and
+// left orphaned `gakrcli` child processes running after the extension
+// deactivated (e.g. on window reload or VS Code close).
+let processManager: ProcessManager | undefined;
 
 /** Get the active DiffManager instance (available after activation). */
 export function getDiffManager(): DiffManager | undefined {
@@ -174,8 +181,9 @@ export function activate(context: vscode.ExtensionContext) {
 
   // ==========================================
   // ProcessManager — spawned on first user message
+  // (module-scoped `processManager` declared above, so deactivate() can
+  // clean it up too — see comment at top of file)
   // ==========================================
-  let processManager: ProcessManager | undefined;
   let isSpawning = false;
   let crashRestartCount = 0;
   let lastCrashTime = 0;
@@ -441,7 +449,7 @@ export function activate(context: vscode.ExtensionContext) {
         const models = Array.isArray(initData.models) ? initData.models : [];
         const fastModeState = initData.fast_mode_state ?? { enabled: false, canToggle: true };
         const account = initData.account as Record<string, unknown> | undefined;
-        const permMode = initData.permission_mode ?? initData.permissionMode ?? permissionHandler.currentMode;
+        const permMode = initData.permission_mode ?? initData.permissionMode ?? permissionHandler.getMode();
         webviewManager!.broadcast({
           type: 'cli_output',
           data: {
