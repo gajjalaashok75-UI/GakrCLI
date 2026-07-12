@@ -18,6 +18,12 @@ const EDITOR_OVERRIDES: Record<string, string> = {
   subl: 'subl --wait', // Sublime Text: wait for file to be closed
 }
 
+export function resolveEditorCommand(editor: string): string {
+  return Object.hasOwn(EDITOR_OVERRIDES, editor)
+    ? EDITOR_OVERRIDES[editor]!
+    : editor
+}
+
 function isGuiEditor(editor: string): boolean {
   return classifyGuiEditor(editor) !== undefined
 }
