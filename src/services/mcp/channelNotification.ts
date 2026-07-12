@@ -161,15 +161,41 @@ export type ChannelGateResult =
 export function findChannelEntry(
   serverName: string,
   channels: readonly ChannelEntry[],
+  pluginSource?: string,
 ): ChannelEntry | undefined {
   // split unconditionally — for a bare name like 'slack', parts is ['slack']
   // and the plugin-kind branch correctly never matches (parts[0] !== 'plugin').
   const parts = serverName.split(':')
-  return channels.find(c =>
+  const candidates = channels.filter(c =>
     c.kind === 'server'
       ? serverName === c.name
       : parts[0] === 'plugin' && parts[1] === c.name,
   )
+  if (candidates.length <= 1) {
+    return candidates[0]
+  }
+
+  const pickBest = (opts: ChannelEntry[]) => opts.find(c => c.dev) || opts[0]
+
+  // First check: when exactly one kind: 'server' candidate exists, return it
+  const serverCandidates = candidates.filter(c => c.kind === 'server')
+  if (serverCandidates.length === 1) {
+    return serverCandidates[0]
+  }
+  // Multiple same-name entries — disambiguate by runtime marketplace.
+  if (parts[0] === 'plugin' && pluginSource) {
+    const runtimeMarketplace = parsePluginIdentifier(pluginSource).marketplace
+    if (runtimeMarketplace) {
+      const exacts = candidates.filter(
+        c => c.kind === 'plugin' && c.marketplace === runtimeMarketplace,
+      )
+      if (exacts.length > 0) return pickBest(exacts)
+      return undefined
+    }
+  }
+  // No disambiguator available — preserve prior first-match behavior so
+  // the downstream marketplace check still surfaces the issue, but prefer dev entries.
+  return pickBest(candidates)
 }
 
 /**
@@ -247,7 +273,7 @@ export function gateChannelServer(
   // User-level session opt-in. A server must be explicitly listed in
   // --channels to push inbound this session — protects against a trusted
   // server surprise-adding the capability.
-  const entry = findChannelEntry(serverName, getAllowedChannels())
+  const entry = findChannelEntry(serverName, getAllowedChannels(), pluginSource)
   if (!entry) {
     return {
       action: 'skip',

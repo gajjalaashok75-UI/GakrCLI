@@ -48,11 +48,19 @@ import {
   shouldUseFirstPartyAnthropicAuth,
   type ProviderOverride,
 } from './authRouting.js'
+import { AnthropicVertex } from './vertexClient.js'
+import { importOptionalRuntimeModule } from '../../utils/optionalRuntimeModule.js'
 
-const importRuntimeModule = new Function(
-  'specifier',
-  'return import(specifier)',
-) as (specifier: string) => Promise<any>
+type OptionalRuntimeImporter = typeof importOptionalRuntimeModule
+
+let importOptionalRuntimeModuleForClient: OptionalRuntimeImporter =
+  importOptionalRuntimeModule
+
+export function _setOptionalRuntimeModuleImporterForTesting(
+  importer?: OptionalRuntimeImporter,
+): void {
+  importOptionalRuntimeModuleForClient = importer ?? importOptionalRuntimeModule
+}
 
 /**
  * Environment variables for different client types:
@@ -482,7 +490,15 @@ export async function getAnthropicClient({
     }) as unknown as Anthropic
   }
   if (isEnvTruthy(process.env.GAKR_CODE_USE_BEDROCK)) {
-    const { BedrockClient } = await import('./bedrockClient.js')
+    // Loaded via the runtime importer (not a static `import()`), so esbuild
+    // stays blind to it and does NOT inline @anthropic-ai/bedrock-sdk — which
+    // statically imports @aws-sdk/client-bedrock-runtime. Inlining would hoist
+    // that AWS import into the CLI bundle and require it at startup for every
+    // user. Keeping it lazy means only Bedrock users install the SDK (which
+    // pulls @aws-sdk transitively).
+    const { AnthropicBedrock } = await importOptionalRuntimeModuleForClient<
+      typeof import('@anthropic-ai/bedrock-sdk')
+    >('@anthropic-ai/bedrock-sdk', 'AWS Bedrock')
     // Use region override for small fast model if specified
     const awsRegion =
       model === getSmallFastModel() &&
@@ -521,14 +537,14 @@ export async function getAnthropicClient({
     }
     // we have always been lying about the return type - this doesn't support batching or models
     // Cast: the overloads demand a statically-known credential shape; ours is runtime-conditional.
-    return new BedrockClient(
-      bedrockArgs as ConstructorParameters<typeof BedrockClient>[0],
+    return new AnthropicBedrock(
+      bedrockArgs as ConstructorParameters<typeof AnthropicBedrock>[0],
     ) as unknown as Anthropic
   }
   if (isEnvTruthy(process.env.GAKR_CODE_USE_FOUNDRY)) {
-    const { AnthropicFoundry } = await importRuntimeModule(
-      '@anthropic-ai/foundry-sdk',
-    )
+    const { AnthropicFoundry } = await importOptionalRuntimeModuleForClient<
+      typeof import('@anthropic-ai/foundry-sdk')
+    >('@anthropic-ai/foundry-sdk', 'Azure Foundry')
     // Determine Azure AD token provider based on configuration
     // SDK reads ANTHROPIC_FOUNDRY_API_KEY by default
     let azureADTokenProvider: (() => Promise<string>) | undefined
@@ -541,7 +557,10 @@ export async function getAnthropicClient({
         const {
           DefaultAzureCredential: AzureCredential,
           getBearerTokenProvider,
-        } = await importRuntimeModule('@azure/identity')
+        } =
+          await importOptionalRuntimeModuleForClient<
+            typeof import('@azure/identity')
+          >('@azure/identity', 'Azure Foundry authentication')
         azureADTokenProvider = getBearerTokenProvider(
           new AzureCredential(),
           'https://cognitiveservices.azure.com/.default',
@@ -564,10 +583,9 @@ export async function getAnthropicClient({
       await refreshGcpCredentialsIfNeeded()
     }
 
-    const [{ AnthropicVertex }, { GoogleAuth }] = await Promise.all([
-      importRuntimeModule('@anthropic-ai/vertex-sdk'),
-      importRuntimeModule('google-auth-library'),
-    ])
+    // AnthropicVertex is statically imported from ./vertexClient.js — no dynamic
+    // import of @anthropic-ai/vertex-sdk needed.
+
     // TODO: Cache either GoogleAuth instance or AuthClient to improve performance
     // Currently we create a new GoogleAuth instance for every getAnthropicClient() call
     // This could cause repeated authentication flows and metadata server checks
@@ -602,33 +620,42 @@ export async function getAnthropicClient({
       process.env['GOOGLE_APPLICATION_CREDENTIALS'] ||
       process.env['google_application_credentials']
 
-    const googleAuth = isEnvTruthy(process.env.GAKR_CODE_SKIP_VERTEX_AUTH)
-      ? ({
-          // Mock GoogleAuth for testing/proxy scenarios
-          getClient: () => ({
-            getRequestHeaders: () => ({}),
-          }),
-        } as {
-          getClient: () => {
-            getRequestHeaders: () => Record<string, string>
-          }
-        })
-      : new GoogleAuth({
-          scopes: ['https://www.googleapis.com/auth/cloud-platform'],
-          // Only use ANTHROPIC_VERTEX_PROJECT_ID as last resort fallback
-          // This prevents the 12-second metadata server timeout when:
-          // - No project env vars are set AND
-          // - No credential keyfile is specified AND
-          // - ADC file exists but lacks project_id field
-          //
-          // Risk: If auth project != API target project, this could cause billing/audit issues
-          // Mitigation: Users can set GOOGLE_CLOUD_PROJECT to override
-          ...(hasProjectEnvVar || hasKeyFile
-            ? {}
-            : {
-                projectId: process.env.ANTHROPIC_VERTEX_PROJECT_ID,
-              }),
-        })
+    let googleAuth: {
+      getClient: () => { getRequestHeaders: () => Record<string, string> }
+    }
+    if (isEnvTruthy(process.env.GAKR_CODE_SKIP_VERTEX_AUTH)) {
+      // Mock GoogleAuth for testing/proxy scenarios. This path intentionally
+      // does NOT load google-auth-library — proxy/test runs must work even when
+      // the optional package is absent (it is only needed for real auth below).
+      googleAuth = {
+        getClient: () => ({
+          getRequestHeaders: () => ({}),
+        }),
+      }
+    } else {
+      const { GoogleAuth } = await importOptionalRuntimeModuleForClient<
+        typeof import('google-auth-library')
+      >('google-auth-library', 'Vertex AI (GCP) authentication')
+      // The real GoogleAuth (async getClient) is wider than the minimal shape
+      // declared above and shared with the mock; AnthropicVertex accepts it at
+      // runtime, so narrow it back to the shared shape here.
+      googleAuth = new GoogleAuth({
+        scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+        // Only use ANTHROPIC_VERTEX_PROJECT_ID as last resort fallback
+        // This prevents the 12-second metadata server timeout when:
+        // - No project env vars are set AND
+        // - No credential keyfile is specified AND
+        // - ADC file exists but lacks project_id field
+        //
+        // Risk: If auth project != API target project, this could cause billing/audit issues
+        // Mitigation: Users can set GOOGLE_CLOUD_PROJECT to override
+        ...(hasProjectEnvVar || hasKeyFile
+          ? {}
+          : {
+              projectId: process.env.ANTHROPIC_VERTEX_PROJECT_ID,
+            }),
+      })
+    }
 
     const vertexArgs = {
       ...ARGS,
