@@ -4,6 +4,32 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ## [Unreleased]
 
+### Fixed (2026-07-13)
+
+- **`settings_refresh` / `get_context_usage` host handlers now fetch real model/effort/context-usage data**: Added `sendSettingsState()` which queries the CLI's `get_settings` and `get_context_usage` control requests and broadcasts the result as a `settings_state` message. Previously both message types had NO handler on the host side, so the context-usage indicator in the webview stayed in its permanent "pending" placeholder state.
+
+- **`DiffManager` auto-approves file edits in `acceptEdits`/`bypassPermissions`/`dontAsk` modes**: The `DiffManager` now accepts an optional `getPermissionMode` callback. When the mode is `acceptEdits`, `bypassPermissions`, or `dontAsk`, edits are applied directly to disk and approved without opening the interactive diff viewer. Previously these permission modes had zero effect on actual file edit/write tool calls — every single one still required manually clicking Accept in a VS Code diff tab, making these modes appear broken.
+
+- **Webview streaming state now stays alive while tool calls are pending**: The CLI sends complete `assistant` message objects (not incremental stream deltas) in production. The webview's `useChat` hook now tracks `tool_use` blocks inside these messages and keeps `isStreaming` active while any tool calls remain unresolved. Previously only the (dead, in practice) streaming code path populated `activeToolUseIdsRef`, so the spinner was cleared after the first message chunk (e.g. a thinking block), even when that same message contained pending tool calls.
+
+### Added (2026-07-13)
+
+- **`SettingsRefreshMessage` type added to `WebviewToHostMessage` union**: Declared the `settings_refresh` message type so the webview can type-check its post-message payload when requesting a settings/context-usage refresh after each completed turn.
+
+## [Unreleased]
+
+### Added (2026-07-13)
+
+- **`RefreshRuntimeMessage` + `refresh_runtime` host handler**: The header Refresh button now actually restarts the CLI process. `webview/types.ts` declares the message shape; `activate()` handles it via a shared `spawnAndResume()` helper (also used by `resume_session`). If an active conversation exists, the same session is resumed via `--resume`; otherwise it's a clean restart. This eliminates the previous no-op where clicking Refresh had no effect.
+
+### Fixed (2026-07-13)
+
+- **`mcp_refresh_status` now queries real MCP server state instead of always returning empty**: Previously the handler always sent `servers: []`, so the MCP manager UI always displayed "No MCP servers configured." It now sends a `mcp_status` control request to a running CLI process, maps the returned `McpServerStatus` shape into the webview's expected `McpServerInfo` shape (including `type: 'streamable-http'` normalization), and falls back to `[]` only when no process is running or the request fails.
+- **`mcp_add_server` no longer drops all other configured servers**: `mcp_set_servers` is a full-replace operation. The handler now fetches the current full server list via `mcp_status` first and merges the new entry into it before sending, so adding one server no longer causes every other server to be marked as removed.
+- **MCP message handlers use `ensureProcess()` instead of raw `if (processManager)` checks**: `resume_session`, `refresh_runtime`, `mcp_reconnect`, `mcp_toggle`, `mcp_remove_server`, `plugin_refresh`, and `plugin_toggle` all now await `ensureProcess()` (which spawns if needed) before writing control requests, matching the lifecycle of other host handlers and preventing silent drops when the process isn't yet running.
+
+## [Unreleased]
+
 ### Fixed (2026-07-12)
 
 - **`processManager` hoisted to module scope so `deactivate()` can kill the CLI process**: `processManager` was declared with `let` inside `activate()`, but `deactivate()` referenced it as a separate top-level function — a runtime `ReferenceError` that skipped process cleanup and left orphaned `gakrcli` child processes running after extension deactivation (e.g. on window reload or VS Code close). Hoisted to module scope so both `activate()` and `deactivate()` share the same binding.

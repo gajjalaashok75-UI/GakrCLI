@@ -14,6 +14,7 @@ import { TerminalManager } from './commands/terminalManager';
 import { CheckpointManager } from './checkpoint/checkpointManager';
 import type { RewindFilesResponse } from './checkpoint/checkpointManager';
 import { AuthManager } from './auth/authManager';
+import { checkAuthStatus } from './auth/authStatusCheck';
 import { SettingsSync } from './settings/settingsSync';
 import { resolveCliExecutable } from './settings/cliExecutable';
 import { McpIdeServer } from './mcp/mcpIdeServer';
@@ -53,7 +54,7 @@ export function activate(context: vscode.ExtensionContext) {
     createDiffContentProviders();
   context.subscriptions.push(...diffProviderDisposables);
 
-  const diffManager = new DiffManager(original, proposed, output);
+  const diffManager = new DiffManager(original, proposed, output, () => permissionHandler.getMode());
   context.subscriptions.push(diffManager);
   diffManagerInstance = diffManager;
 
@@ -339,6 +340,11 @@ export function activate(context: vscode.ExtensionContext) {
       if (msgObj.type === 'system' && msgObj.subtype === 'ai-title' && typeof msgObj.title === 'string' && typeof msgObj.session_id === 'string') {
         sessionTracker.updateSessionTitle(msgObj.session_id, msgObj.title);
       }
+      // custom-title (from /rename): same as above, so a manual rename shows
+      // up immediately instead of waiting for the file-watcher's re-parse.
+      if (msgObj.type === 'system' && msgObj.subtype === 'custom-title' && typeof msgObj.title === 'string' && typeof msgObj.session_id === 'string') {
+        sessionTracker.updateSessionTitle(msgObj.session_id, msgObj.title);
+      }
 
       // --- Checkpoint tracking (Story 10) ---
       if (msgObj.type === 'assistant' && typeof msgObj.uuid === 'string' && typeof msgObj.session_id === 'string') {
@@ -464,6 +470,40 @@ export function activate(context: vscode.ExtensionContext) {
           },
           } as never);
         output.info(`[GakrCLI] Broadcast init with ${models.length} models, permissionMode=${permMode}, account.provider=${(account as Record<string, unknown>)?.apiProvider ?? 'unknown'}`);
+
+        // Check real login status (only meaningful in 'auto' mode, where we
+        // rely on gakrcli's own login rather than extension-configured
+        // credentials). Fire-and-forget: never blocks spawning, and fails
+        // silently if the check itself is inconclusive — see
+        // src/auth/authStatusCheck.ts for why this can't be 100% certain
+        // without a confirmed example of `gakrcli auth status --json`'s
+        // real output shape.
+        if (settingsSync.selectedProvider === 'auto') {
+          checkAuthStatus(executable, workspaceFolder.uri.fsPath).then((authStatus) => {
+            if (authStatus.loggedIn === false) {
+              output.warn('[GakrCLI] Not logged in (gakrcli auth status reports logged out)');
+              vscode.window.showWarningMessage(
+                'GakrCLI is not logged in. Open a terminal, run `gakrcli`, and log in — then reload this window.',
+                'Open Terminal',
+              ).then((choice) => {
+                if (choice === 'Open Terminal') {
+                  vscode.commands.executeCommand('workbench.action.terminal.new');
+                }
+              });
+              webviewManager!.broadcast({
+                type: 'cli_output',
+                data: {
+                  type: 'system',
+                  subtype: 'not_logged_in_warning',
+                  message: 'GakrCLI is not logged in. Run `gakrcli` in a terminal and log in, then reload this panel.',
+                },
+              } as never);
+            } else if (authStatus.loggedIn === true) {
+              output.info(`[GakrCLI] Login confirmed${authStatus.email ? ` (${authStatus.email})` : ''}${authStatus.apiProvider ? ` — provider: ${authStatus.apiProvider}` : ''}${authStatus.authMethod ? ` (${authStatus.authMethod})` : ''}`);
+            }
+            // undefined: inconclusive, say nothing (see authStatusCheck.ts)
+          });
+        }
       }
       return processManager;
     } catch (err) {
@@ -606,10 +646,22 @@ export function activate(context: vscode.ExtensionContext) {
     webviewManager!.sendToPanel(panelId, payload as never);
   });
 
-  // Handle resume session
-  webviewManager.onMessage('resume_session', async (message) => {
-    output.info(`[Webview] resume_session: ${message.sessionId}`);
-    // Kill existing process and spawn with --resume
+  // Shared by 'resume_session' (explicit pick from the session list) and
+  // 'refresh_runtime' (the header Refresh button — restart the CLI process,
+  // resuming the current conversation if one is in progress). Extracted so
+  // both paths spawn/wire the process identically instead of drifting apart.
+  //
+  // `reloadHistoryInWebview`: resume_session is switching the *visible*
+  // conversation to a different, explicitly-picked session, so it clears the
+  // chat and reloads that session's transcript. refresh_runtime is just
+  // restarting the process behind the *same* conversation the user is
+  // already looking at — the webview's transcript is already correct, so
+  // reloading it would only risk a visible flicker or (if the last message
+  // hadn't been flushed to disk yet) transiently showing stale content.
+  const spawnAndResume = async (
+    sessionId: string | undefined,
+    { reloadHistoryInWebview }: { reloadHistoryInWebview: boolean },
+  ): Promise<void> => {
     if (processManager) {
       processManager.dispose();
       processManager = undefined;
@@ -635,28 +687,30 @@ export function activate(context: vscode.ExtensionContext) {
       env[name] = value;
     }
 
-    // Clear old messages and load session history into webview
-    webviewManager!.broadcast({ type: 'clearMessages' } as never);
-
-    const historyMessages = await sessionTracker.loadSessionMessages(message.sessionId);
-    if (historyMessages.length > 0) {
-      webviewManager!.broadcast({
-        type: 'session_history',
-        messages: historyMessages,
-      } as never);
+    if (reloadHistoryInWebview && sessionId) {
+      webviewManager!.broadcast({ type: 'clearMessages' } as never);
+      const historyMessages = await sessionTracker.loadSessionMessages(sessionId);
+      if (historyMessages.length > 0) {
+        webviewManager!.broadcast({
+          type: 'session_history',
+          messages: historyMessages,
+        } as never);
+      }
     }
 
     isSpawning = true;
     statusBarManager.setStarting(true);
     webviewManager!.broadcast({ type: 'process_state', state: 'starting' });
-    output.info('[GakrCLI] Spawning CLI process...');
+    output.info(sessionId
+      ? `[GakrCLI] Spawning CLI process (resuming session ${sessionId})...`
+      : '[GakrCLI] Spawning CLI process...');
 
     processManager = new ProcessManager({
       cwd: workspaceFolder.uri.fsPath,
       executable,
       model: model !== 'default' ? model : undefined,
       permissionMode,
-      sessionId: message.sessionId,
+      sessionId,
       env,
     });
 
@@ -725,20 +779,42 @@ export function activate(context: vscode.ExtensionContext) {
       await processManager.spawn();
       isSpawning = false;
       statusBarManager.setStarting(false);
-      const session = sessionTracker.getSession(message.sessionId);
-      webviewManager!.broadcast({
-        type: 'sessionResumed',
-        sessionId: message.sessionId,
-        title: session?.title || 'Resumed Session',
-      } as never);
+      if (sessionId) {
+        const session = sessionTracker.getSession(sessionId);
+        webviewManager!.broadcast({
+          type: 'sessionResumed',
+          sessionId,
+          title: session?.title || 'Resumed Session',
+        } as never);
+      }
     } catch (err) {
       isSpawning = false;
       statusBarManager.setStarting(false);
       const msg = err instanceof Error ? err.message : String(err);
-      output.error(`[GakrCLI] Failed to resume: ${msg}`);
-      vscode.window.showErrorMessage(`GakrCLI failed to resume session: ${msg}`);
+      output.error(`[GakrCLI] Failed to ${sessionId ? 'resume' : 'restart'}: ${msg}`);
+      vscode.window.showErrorMessage(`GakrCLI failed to ${sessionId ? 'resume session' : 'restart'}: ${msg}`);
       webviewManager!.broadcast({ type: 'process_state', state: 'crashed' });
     }
+  };
+
+  // Handle resume session
+  webviewManager.onMessage('resume_session', async (message) => {
+    output.info(`[Webview] resume_session: ${message.sessionId}`);
+    await spawnAndResume(message.sessionId, { reloadHistoryInWebview: true });
+  });
+
+  // Handle refresh_runtime (header Refresh button): stop and restart the CLI
+  // process. Previously this message had NO handler at all on the host side
+  // — the button posted 'refresh_runtime' into the void and nothing
+  // happened, regardless of when it was clicked. Now: if a conversation is
+  // already in progress (we know its session id), restart and resume that
+  // exact conversation via --resume, so nothing is lost. If there's no
+  // active session yet (fresh panel, nothing sent), it's just a clean
+  // restart of the process.
+  webviewManager.onMessage('refresh_runtime', async () => {
+    const sessionId = currentSessionId ?? processManager?.sessionId;
+    output.info(`[Webview] refresh_runtime${sessionId ? ` (resuming session ${sessionId})` : ' (fresh restart)'}`);
+    await spawnAndResume(sessionId, { reloadHistoryInWebview: false });
   });
 
   // Handle delete session
@@ -881,6 +957,54 @@ export function activate(context: vscode.ExtensionContext) {
     } as never);
   });
 
+  // Fetches model/effort (get_settings) and real context-window usage
+  // (get_context_usage) from the CLI and reports them back as a
+  // 'settings_state' broadcast — the shape the webview already knows how to
+  // read (see useChat.ts's `data.type === 'settings_state'` handler). Both
+  // 'settings_refresh' (sent by the webview after every completed turn) and
+  // 'get_context_usage' (declared in the message types but never wired to
+  // anything) previously had NO handler at all on the host side, so the
+  // context-usage indicator never received real data and stayed in its
+  // permanent "pending" placeholder state.
+  const sendSettingsState = async (panelId: string | undefined) => {
+    if (!processManager) return;
+    let current: Record<string, unknown> = {};
+    let contextUsage: Record<string, unknown> | undefined;
+    try {
+      const settingsResponse = await processManager.sendControlRequest({ subtype: 'get_settings' });
+      const applied = (settingsResponse as Record<string, unknown> | undefined)?.applied as
+        | { model?: string; effort?: string }
+        | undefined;
+      if (applied) {
+        current = { model: applied.model, effort: applied.effort };
+      }
+    } catch (err) {
+      output.warn(`[GakrCLI] get_settings failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    try {
+      const usageResponse = await processManager.sendControlRequest({ subtype: 'get_context_usage' });
+      if (usageResponse) {
+        contextUsage = usageResponse;
+      }
+    } catch (err) {
+      output.warn(`[GakrCLI] get_context_usage failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    const payload = { type: 'settings_state', current, runtime: {}, contextUsage } as never;
+    if (panelId) {
+      webviewManager!.sendToPanel(panelId, payload);
+    } else {
+      webviewManager!.broadcast(payload);
+    }
+  };
+
+  webviewManager.onMessage('settings_refresh', async (_message, panelId) => {
+    await sendSettingsState(panelId);
+  });
+
+  webviewManager.onMessage('get_context_usage', async (_message, panelId) => {
+    await sendSettingsState(panelId);
+  });
+
   webviewManager.onMessage('set_provider', async (message) => {
     const msg = message as unknown as {
       providerId: string;
@@ -946,11 +1070,46 @@ export function activate(context: vscode.ExtensionContext) {
   // MCP handlers (Story 12)
   // ==========================================
 
+  // Maps a McpServerStatus (host/CLI shape) into the shape the webview's
+  // McpServerManager component expects.
+  const toWebviewMcpServerInfo = (s: Record<string, unknown>): Record<string, unknown> => {
+    const config = (s.config ?? {}) as Record<string, unknown>;
+    const rawType = typeof config.type === 'string' ? config.type : 'stdio';
+    return {
+      name: s.name,
+      status: s.status,
+      type: rawType === 'http' ? 'streamable-http' : rawType,
+      url: config.url,
+      command: config.command,
+      args: config.args,
+      tools: s.tools,
+      error: s.error,
+    };
+  };
+
   webviewManager.onMessage('mcp_refresh_status', async (_message, panelId) => {
     const meta = mcpIdeServer.getServerMetadata();
+    // Previously this always sent `servers: []`, so the MCP manager UI
+    // showed "No MCP servers configured" no matter what was actually set up.
+    // Query the CLI's real status (mcp_status control request — same data
+    // the SDK's listMcpServers()/getRuntimeState() expose) when a process is
+    // running; if not, just report an empty list honestly rather than fake
+    // data.
+    let servers: Record<string, unknown>[] = [];
+    if (processManager) {
+      try {
+        const response = await processManager.sendControlRequest({ subtype: 'mcp_status' });
+        const mcpServers = (response as Record<string, unknown> | undefined)?.mcpServers;
+        if (Array.isArray(mcpServers)) {
+          servers = mcpServers.map((s) => toWebviewMcpServerInfo(s as Record<string, unknown>));
+        }
+      } catch (err) {
+        output.warn(`[GakrCLI] mcp_status request failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
     webviewManager!.sendToPanel(panelId, {
       type: 'mcp_servers_state',
-      servers: [],
+      servers,
       ideServer: {
         running: mcpIdeServer.isRunning(),
         port: meta?.port ?? null,
@@ -962,49 +1121,70 @@ export function activate(context: vscode.ExtensionContext) {
   webviewManager.onMessage('mcp_reconnect', async (message) => {
     const msg = message as unknown as { serverName: string };
     output.info(`[Webview] mcp_reconnect: ${msg.serverName}`);
-    if (processManager) {
-      processManager.write({
-        type: 'control_request',
-        request_id: `mcp-reconnect-${Date.now()}`,
-        request: { subtype: 'mcp_reconnect', serverName: msg.serverName },
-      });
-    }
+    const pm = await ensureProcess();
+    if (!pm) return;
+    pm.write({
+      type: 'control_request',
+      request_id: `mcp-reconnect-${Date.now()}`,
+      request: { subtype: 'mcp_reconnect', serverName: msg.serverName },
+    });
   });
 
   webviewManager.onMessage('mcp_toggle', async (message) => {
     const msg = message as unknown as { serverName: string; enabled: boolean };
     output.info(`[Webview] mcp_toggle: ${msg.serverName} enabled=${msg.enabled}`);
-    if (processManager) {
-      processManager.write({
-        type: 'control_request',
-        request_id: `mcp-toggle-${Date.now()}`,
-        request: { subtype: 'mcp_toggle', serverName: msg.serverName, enabled: msg.enabled },
-      });
-    }
+    const pm = await ensureProcess();
+    if (!pm) return;
+    pm.write({
+      type: 'control_request',
+      request_id: `mcp-toggle-${Date.now()}`,
+      request: { subtype: 'mcp_toggle', serverName: msg.serverName, enabled: msg.enabled },
+    });
   });
 
   webviewManager.onMessage('mcp_add_server', async (message) => {
     const msg = message as unknown as { name: string; config: Record<string, unknown> };
     output.info(`[Webview] mcp_add_server: ${msg.name}`);
-    if (processManager) {
-      processManager.write({
-        type: 'control_request',
-        request_id: `mcp-add-${Date.now()}`,
-        request: { subtype: 'mcp_set_servers', servers: { [msg.name]: msg.config } },
-      });
+    const pm = await ensureProcess();
+    if (!pm) return;
+    // IMPORTANT: mcp_set_servers is a full-replace operation (its response
+    // shape — { added, removed, errors } — is a diff against whatever's
+    // passed in). Sending only the one new server here previously meant
+    // every *other* already-configured MCP server would be reported as
+    // removed and dropped. Fetch the current full set first and merge the
+    // new entry into it before sending.
+    const servers: Record<string, unknown> = {};
+    try {
+      const statusResponse = await pm.sendControlRequest({ subtype: 'mcp_status' });
+      const mcpServers = (statusResponse as Record<string, unknown> | undefined)?.mcpServers;
+      if (Array.isArray(mcpServers)) {
+        for (const s of mcpServers as Array<Record<string, unknown>>) {
+          if (typeof s.name === 'string' && s.config) {
+            servers[s.name] = s.config;
+          }
+        }
+      }
+    } catch (err) {
+      output.warn(`[GakrCLI] Could not fetch existing MCP servers before add, proceeding with just the new one: ${err instanceof Error ? err.message : String(err)}`);
     }
+    servers[msg.name] = msg.config;
+    pm.write({
+      type: 'control_request',
+      request_id: `mcp-add-${Date.now()}`,
+      request: { subtype: 'mcp_set_servers', servers },
+    });
   });
 
   webviewManager.onMessage('mcp_remove_server', async (message) => {
     const msg = message as unknown as { serverName: string };
     output.info(`[Webview] mcp_remove_server: ${msg.serverName}`);
-    if (processManager) {
-      processManager.write({
-        type: 'control_request',
-        request_id: `mcp-remove-${Date.now()}`,
-        request: { subtype: 'mcp_toggle', serverName: msg.serverName, enabled: false },
-      });
-    }
+    const pm = await ensureProcess();
+    if (!pm) return;
+    pm.write({
+      type: 'control_request',
+      request_id: `mcp-remove-${Date.now()}`,
+      request: { subtype: 'mcp_toggle', serverName: msg.serverName, enabled: false },
+    });
   });
 
   // Handle workspace folder changes — restart CLI with new cwd
@@ -1193,21 +1373,21 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Plugin webview message handlers
   webviewManager.onMessage('plugin_refresh', async () => {
-    if (processManager) {
-      processManager.write({
-        type: 'control_request',
-        request_id: `plugin-state-${Date.now()}`,
-        request: { subtype: 'get_settings' },
-      });
-    }
+    const pm = await ensureProcess();
+    if (!pm) return;
+    pm.write({
+      type: 'control_request',
+      request_id: `plugin-state-${Date.now()}`,
+      request: { subtype: 'get_settings' },
+    });
   });
 
   webviewManager.onMessage('plugin_toggle', async (message) => {
     const msg = message as unknown as { name: string; enabled: boolean };
-    if (processManager) {
-      processManager.write(buildToggleRequest(msg.name, msg.enabled) as unknown as Record<string, unknown>);
-      processManager.write(buildReloadRequest() as unknown as Record<string, unknown>);
-    }
+    const pm = await ensureProcess();
+    if (!pm) return;
+    pm.write(buildToggleRequest(msg.name, msg.enabled) as unknown as Record<string, unknown>);
+    pm.write(buildReloadRequest() as unknown as Record<string, unknown>);
   });
 
   webviewManager.onMessage('plugin_install', async (message) => {
