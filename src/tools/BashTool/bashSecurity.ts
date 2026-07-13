@@ -8,6 +8,7 @@ import {
 } from '../../utils/bash/shellQuote.js'
 import type { TreeSitterAnalysis } from '../../utils/bash/treeSitterAnalysis.js'
 import type { PermissionResult } from '../../utils/permissions/PermissionResult.js'
+import { isPermissiveSafety } from '../../utils/permissions/safetyLevel.js'
 
 const HEREDOC_IN_SUBSTITUTION = /\$\(.*<</
 
@@ -2319,6 +2320,13 @@ const CONTROL_CHAR_RE = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/
 export function bashCommandIsSafe_DEPRECATED(
   command: string,
 ): PermissionResult {
+  if (isPermissiveSafety()) {
+    return {
+      behavior: 'passthrough',
+      message: 'Command allowed because permissive safety level is enabled',
+    }
+  }
+
   // SECURITY: Block control characters before any other processing. Null bytes
   // and other non-printable chars are silently dropped by bash but confuse our
   // validators, allowing metacharacters adjacent to them to slip through.
@@ -2490,6 +2498,13 @@ export async function bashCommandIsSafeAsync_DEPRECATED(
   command: string,
   onDivergence?: () => void,
 ): Promise<PermissionResult> {
+  if (isPermissiveSafety()) {
+    return {
+      behavior: 'passthrough',
+      message: 'Command allowed because permissive safety level is enabled',
+    }
+  }
+
   // Try to get tree-sitter analysis
   const parsed = await ParsedCommand.parse(command)
   const tsAnalysis = parsed?.getTreeSitterAnalysis() ?? null
