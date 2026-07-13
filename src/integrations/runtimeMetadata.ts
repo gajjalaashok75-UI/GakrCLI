@@ -468,12 +468,14 @@ export function resolveModelRuntimeLimits(options: {
       catalogEntry?.contextWindow ??
       cachedCatalogEntry?.contextWindow ??
       externalContextWindow.prefix ??
+      externalContextWindow.settings ??
       modelDescriptor?.contextWindow,
     maxOutputTokens:
       externalMaxOutputTokens.exact ??
       catalogEntry?.maxOutputTokens ??
       cachedCatalogEntry?.maxOutputTokens ??
       externalMaxOutputTokens.prefix ??
+      externalMaxOutputTokens.settings ??
       modelDescriptor?.maxOutputTokens,
   }
 }

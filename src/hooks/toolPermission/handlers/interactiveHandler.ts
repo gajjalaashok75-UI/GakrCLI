@@ -67,7 +67,37 @@ function handleInteractivePermission(
     channelCallbacks,
   } = params
 
-  const { resolve: resolveOnce, isResolved, claim } = createResolveOnce(resolve)
+  // Suspend the watchdog for the dialog window so human think-time isn't counted
+  // toward the idle/hard-max timeout. Scoped here, not around the whole
+  // resolution, so non-human async work (e.g. the classifier) stays watched.
+  // Idempotent: resume runs from both claim() and the resolveOnce safety net,
+  // but the QueryActivity resume fn must be called at most once.
+  const rawResume = ctx.toolUseContext.queryActivity?.beginUserInteraction?.()
+  let watchdogResumed = false
+  const resumeWatchdog = () => {
+    if (watchdogResumed) return
+    watchdogResumed = true
+    rawResume?.()
+  }
+  let removeExternalAbortListener = () => {}
+  try {
+    const resolveOnceHandle = createResolveOnce(
+      (decision: PermissionDecision) => {
+        // Idempotent safety net; the claim() wrapper below normally resumes first.
+        resumeWatchdog()
+        removeExternalAbortListener()
+        resolve(decision)
+      },
+    )
+    const { resolve: resolveOnce, isResolved } = resolveOnceHandle
+    // Resume on claim, not resolveOnce: post-decision work (handleUserAllow →
+    // persistPermissions) then runs watched, and a throw there can't strand the
+    // watchdog suspended.
+    const claim = () => {
+      const claimed = resolveOnceHandle.claim()
+      if (claimed) resumeWatchdog()
+      return claimed
+    }
   let userInteracted = false
   let checkmarkTransitionTimer: ReturnType<typeof setTimeout> | undefined
   // Hoisted so onDismissCheckmark (Esc during checkmark window) can also
@@ -88,6 +118,33 @@ function handleInteractivePermission(
       ctx.updateQueueItem({ classifierCheckInProgress: false })
     }
   }
+
+  // Aborts that bypass the dialog callbacks (bridge interrupt, backgrounding)
+  // must mirror the local paths' cleanup — cancel the remote bridge prompt and
+  // drop the channel entry — then dequeue/cancel so the awaiter unblocks
+  // immediately instead of idling for a full timeout. Declared after
+  // bridgeRequestId/channelUnsubscribe so the immediate-abort branch can read
+  // them; runtime aborts see their latest values via closure.
+  const abortSignal = ctx.toolUseContext.abortController.signal
+  const onExternalAbort = () => {
+    if (!claim()) return
+    if (bridgeCallbacks && bridgeRequestId) {
+      bridgeCallbacks.cancelRequest(bridgeRequestId)
+    }
+    channelUnsubscribe?.()
+    ctx.removeFromQueue()
+    resolveOnce(ctx.cancelAndAbort(undefined, true))
+  }
+  if (abortSignal.aborted) {
+    // Already aborted: cancel and stop setup so we never enqueue a stale prompt.
+    onExternalAbort()
+    return
+  }
+  abortSignal.addEventListener('abort', onExternalAbort, { once: true })
+  // Detach on a normal resolution so a resolved prompt doesn't retain a closure
+  // on the abort signal.
+  removeExternalAbortListener = () =>
+    abortSignal.removeEventListener('abort', onExternalAbort)
 
   ctx.pushToQueue({
     assistantMessage: ctx.assistantMessage,
@@ -527,6 +584,14 @@ function handleInteractivePermission(
         level: 'error',
       })
     })
+    }
+  } catch (setupError) {
+    // Clean up partial setup before rethrowing (all idempotent / no-op if not
+    // yet done).
+    removeExternalAbortListener()
+    ctx.removeFromQueue()
+    resumeWatchdog()
+    throw setupError
   }
 }
 

@@ -5,6 +5,16 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.8] - 2026-07-13
+
+### Fixed
+- **src/hooks/toolPermission/handlers/interactiveHandler.ts**: Added missing `onExternalAbort` handler and closing braces for try/catch structure, fixing watchdog suspension tests (24/24 pass).
+- **src/utils/plugins/schemas.ts**: Added `isOfficialGitUrl()` for exact git URL host matching, preventing impersonation via substring matching (20/20 pass).
+- **src/integrations/runtimeMetadata.ts**: Added `.settings` field to `resolveModelRuntimeLimits()` precedence chain so settings `modelLimits` override env defaults (10/10 pass).
+- **src/tools/BashTool/bashSecurity.ts**: Added `isPermissiveSafety()` early return in `bashCommandIsSafe_DEPRECATED` and `bashCommandIsSafeAsync_DEPRECATED` for permissive mode support (6/6 pass).
+- **src/tools/PowerShellTool/commandSemantics.ts**: Replaced simplified stub with full reference implementation (wrapper command resolution, env utility, diagnostic semantics, package script resolving) (86/86 pass).
+- **src/tools/PowerShellTool/pathValidation.ts**: Changed `CMDLET_PATH_CONFIG` to use `Object.create(null)` to prevent prototype chain pollution from `constructor`/`__proto__` cmdlet names (6/6 pass).
+
 ## [0.5.8] - 2026-07-08
 
 ### Added
