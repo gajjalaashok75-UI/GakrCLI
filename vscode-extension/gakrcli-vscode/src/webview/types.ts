@@ -56,6 +56,17 @@ export interface ResumeSessionMessage {
   sessionId: string;
 }
 
+/**
+ * User clicked the header Refresh button: stop and restart the CLI process.
+ * If a conversation is already in progress, the host resumes that same
+ * session (via --resume) rather than losing it; otherwise it's a clean
+ * restart. Was previously posted by ChatHeader.tsx but never declared here
+ * or handled on the host side — the button did nothing at all.
+ */
+export interface RefreshRuntimeMessage {
+  type: 'refresh_runtime';
+}
+
 /** User changes the AI model */
 export interface SetModelMessage {
   type: 'set_model';
@@ -71,6 +82,17 @@ export interface SetPermissionModeMessage {
 /** User requests context usage info */
 export interface GetContextUsageMessage {
   type: 'get_context_usage';
+}
+
+/**
+ * Sent by the webview after every completed turn to ask the host to
+ * re-fetch model/effort/context-usage state and report it back as
+ * 'settings_state'. Was previously posted with no corresponding type
+ * declaration or host-side handler at all — the entire refresh pipeline
+ * behind the context-usage indicator was dead.
+ */
+export interface SettingsRefreshMessage {
+  type: 'settings_refresh';
 }
 
 /** User copies text to clipboard */
@@ -257,9 +279,11 @@ export type WebviewToHostMessage =
   | ElicitationCancelMessage
   | NewConversationMessage
   | ResumeSessionMessage
+  | RefreshRuntimeMessage
   | SetModelMessage
   | SetPermissionModeMessage
   | GetContextUsageMessage
+  | SettingsRefreshMessage
   | CopyToClipboardMessage
   | CopyMessageMessage
   | OpenFileMessage

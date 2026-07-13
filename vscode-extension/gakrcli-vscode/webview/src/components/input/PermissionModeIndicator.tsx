@@ -51,6 +51,7 @@ export function PermissionModeIndicator({ currentMode, onModeChange }: Permissio
         <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" style={{ opacity: 0.8 }}>
           <path d="M8 1l6 2.5v4C14 11 11.5 14 8 15 4.5 14 2 11 2 7.5v-4L8 1z"/>
         </svg>
+        <span style={{ opacity: 0.75, fontWeight: 400 }}>Permission:</span>
         <span>{cfg.label}</span>
         <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor" style={{ opacity: 0.6 }}>
           <path d="M1 2.5l3 3 3-3" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round"/>

@@ -58,6 +58,17 @@ export class DiffManager implements vscode.Disposable {
     private readonly originalProvider: DiffContentProvider,
     private readonly proposedProvider: DiffContentProvider,
     private readonly outputChannel: vscode.OutputChannel,
+    /**
+     * Returns the currently active permission mode. Used so that
+     * acceptEdits/bypassPermissions/dontAsk auto-approve file edits instead
+     * of always opening the interactive diff editor and waiting for a
+     * manual Accept click — previously this class had NO awareness of
+     * permission mode at all, so "Accept Edits" mode had zero effect on
+     * actual file edit/write tool calls (every single one still required
+     * manually clicking Accept in a VS Code diff tab, which is easy to miss
+     * and looks like the mode setting is being ignored).
+     */
+    private readonly getPermissionMode?: () => string,
   ) {
     // Listen for tab close events to clean up if user manually closes a diff
     this.disposables.push(
@@ -101,6 +112,32 @@ export class DiffManager implements vscode.Disposable {
     }
 
     const normalizedPath = path.resolve(filePath);
+
+    // acceptEdits/bypassPermissions/dontAsk auto-approve file edits (per the
+    // documented mode behavior — see permissions.md's checkAutoApprove
+    // table). Previously this class never checked permission mode at all,
+    // so these modes had no effect here: every edit still opened the
+    // interactive diff editor and blocked waiting for a manual Accept click.
+    const mode = this.getPermissionMode?.();
+    if (mode === 'acceptEdits' || mode === 'bypassPermissions' || mode === 'dontAsk') {
+      try {
+        const originalContent = await this.readOriginalContent(normalizedPath);
+        const proposedContent = this.computeProposedContent(request.tool_name, input, originalContent);
+        await this.writeFile(normalizedPath, proposedContent);
+        await this.autoSaveFile(normalizedPath);
+        this.sendAllowResponse(requestId, request.tool_use_id, input, transport);
+        this.outputChannel.appendLine(
+          `[DiffManager] Auto-approved edit for ${normalizedPath} (mode=${mode})`,
+        );
+        return;
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        this.outputChannel.appendLine(
+          `[DiffManager] Error auto-approving edit (mode=${mode}), falling back to interactive diff: ${errorMsg}`,
+        );
+        // Fall through to the normal interactive diff flow below.
+      }
+    }
 
     // If there's already a pending diff for this file, queue the new request
     if (this.pendingDiffs.has(normalizedPath)) {

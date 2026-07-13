@@ -354,9 +354,39 @@ export function useChat() {
       return [...prev, chatMsg];
     });
     resultTargetAssistantIdRef.current = resolvedAssistantId;
+
+    // Track any tool_use blocks in this message so the "still waiting on
+    // tools" check below (and in handleUserMessage's tool_result handling)
+    // knows more work is coming. This CLI sends complete `assistant` message
+    // objects rather than incremental stream_event deltas (confirmed: real
+    // logs show dozens of full "type":"assistant" messages and zero
+    // stream_event/message_start entries), so this is the actual live path —
+    // previously only the (dead, in practice) streaming code path populated
+    // activeToolUseIdsRef, so this always saw an empty set and cleared
+    // isStreaming right after the first message chunk (e.g. a thinking
+    // block), even when that same message contained a tool_use meaning the
+    // agent was about to keep working.
+    for (const block of blocks) {
+      if (isToolUseBlock(block.block) && typeof (block.block as { id?: unknown }).id === 'string') {
+        activeToolUseIdsRef.current.add((block.block as { id: string }).id);
+      }
+    }
+
     if (!streamingUuidRef.current && activeToolUseIdsRef.current.size === 0) {
       setIsStreaming(false);
       setToolActivity(null);
+    } else if (activeToolUseIdsRef.current.size > 0) {
+      // More tool calls are pending — keep the spinner alive and give it a
+      // concrete label instead of letting it look finished.
+      setIsStreaming(true);
+      const lastToolUse = [...blocks].reverse().find((b) => isToolUseBlock(b.block));
+      if (lastToolUse) {
+        const toolBlock = lastToolUse.block as { name?: string; input?: Record<string, unknown> };
+        setToolActivity({
+          toolName: toolBlock.name || 'Tool',
+          description: formatToolActivity(toolBlock.name || 'Tool', undefined, toolBlock.input),
+        });
+      }
     }
   }, []);
 
@@ -690,6 +720,11 @@ export function useChat() {
                 break;
               case 'files_persisted':
                 addSystemMessage(formatFilesPersistedMessage(msgAny), `files-${Date.now()}`);
+                break;
+              case 'not_logged_in_warning':
+                if (typeof msgAny.message === 'string') {
+                  addSystemMessage(msgAny.message, `not-logged-in-${Date.now()}`);
+                }
                 break;
               // Other system events are handled by the extension host.
               default:

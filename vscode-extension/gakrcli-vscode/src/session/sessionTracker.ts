@@ -66,20 +66,14 @@ export class SessionTracker implements vscode.Disposable {
     if (!folders || folders.length === 0) {
       return undefined;
     }
-    // IMPORTANT: on Windows, fsPath uses backslashes (e.g. c:\Users\me\proj).
-    // The previous `.replace(/\//g, '-')` only matched forward slashes, so on
-    // Windows this returned the path virtually untouched. path.join() then
-    // treated the leftover backslashes as real separators, producing a wrong/
-    // nested directory instead of the CLI's actual flattened session folder —
-    // so the extension could never find sessions created by `gakrcli` in a
-    // terminal. Replace BOTH separators on every platform.
-    //
-    // NOTE: this assumes gakrcli's own convention doesn't also strip the
-    // Windows drive-letter colon (e.g. "c:" -> "c" or "-c-"). If sessions
-    // still don't show up on Windows after this fix, check the actual
-    // directory names under ~/.gakrcli/workspace/projects/ and adjust this
-    // to match exactly.
-    return folders[0].uri.fsPath.replace(/[\\/]/g, '-');
+    // Confirmed against gakrcli's own docs (storage/session-storage.md):
+    // "C:\Users\gajja\Documents\data-science\Gakrcli" sanitizes to
+    // "C--Users-gajja-Documents-data-science-Gakrcli" — i.e. each of ':',
+    // '\', and '/' individually becomes its own '-' (hence the double dash
+    // right after the drive letter: ':' and '\' each contribute one '-').
+    // My previous fix only handled '\' and '/', missing ':' — this one
+    // matches the documented convention exactly.
+    return folders[0].uri.fsPath.replace(/[\\/:]/g, '-');
   }
 
   /** Scan all JSONL files in the current workspace's project directory. */
@@ -106,7 +100,8 @@ export class SessionTracker implements vscode.Disposable {
     const filename = path.basename(filePath, '.jsonl');
     const projectDir = path.basename(path.dirname(filePath));
 
-    let title = '';
+    let customTitle = '';
+    let aiTitle = '';
     let fallbackTitle = '';
     let model = '';
     let firstTimestamp: Date | undefined;
@@ -194,13 +189,21 @@ export class SessionTracker implements vscode.Disposable {
           }
         }
 
-        // ai-title system message overrides any fallback title
-        if (
-          entry.type === 'system' &&
-          entry.subtype === 'ai-title' &&
-          typeof (entry as Record<string, unknown>).title === 'string'
-        ) {
-          title = (entry as Record<string, unknown>).title as string;
+        // ai-title / custom-title system messages.
+        // gakrcli's own docs (storage/session-storage.md) list both
+        // `custom-title` (user-set via /rename) and `ai-title` (auto-generated)
+        // as session-metadata subtypes, re-appended at EOF. This extension
+        // previously only handled `ai-title` — a session explicitly renamed
+        // via `/rename` in a terminal would never show that name here.
+        // Tracked separately (rather than one shared `title` var, last-wins)
+        // so a user's explicit rename always takes priority below, regardless
+        // of which entry happens to appear later in the file.
+        if (entry.type === 'system' && typeof (entry as Record<string, unknown>).title === 'string') {
+          if (entry.subtype === 'custom-title') {
+            customTitle = (entry as Record<string, unknown>).title as string;
+          } else if (entry.subtype === 'ai-title') {
+            aiTitle = (entry as Record<string, unknown>).title as string;
+          }
         }
       }
     } catch (err) {
@@ -214,7 +217,7 @@ export class SessionTracker implements vscode.Disposable {
 
     this.sessions.set(filename, {
       id: filename,
-      title: title || fallbackTitle || 'Untitled Session',
+      title: customTitle || aiTitle || fallbackTitle || 'Untitled Session',
       model: model || 'unknown',
       timestamp: lastTimestamp || firstTimestamp,
       createdAt: firstTimestamp,
