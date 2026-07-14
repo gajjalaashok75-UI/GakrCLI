@@ -6,6 +6,8 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ### Fixed (2026-07-14)
 
+- **Permission system fixes**: `elicitation_response` from webview now routes through `PermissionHandler.handleAskUserQuestionResponse()` instead of writing raw form values to CLI — fixes `invalid_union` error on AskUserQuestion submissions. Removed native VS Code dialog fallback (`showNativePermissionDialog`/`showNativeElicitationDialog`) that caused double prompts. `setMode()` forwards `set_permission_mode` to CLI so `hasPermissionsToUseTool` respects the correct mode across all permission levels. `diffHandler` accepts `getPermissionMode` callback and auto-approves file edits in `acceptEdits` mode. Webview `permission_response` now includes optional `reason` field — user-entered denial reason text is passed through to CLI as the deny message, matching CLI behavior.
+
 - **14 TypeScript compilation errors resolved**: Fixed `preferredLocation` TS 5.5 closure-narrowing bug (getter/setter pattern), `as Record<string, unknown>` casts missing `unknown` bridge (tagged unions), `permissionHandler` `q: Record<string, unknown>` map callback type mismatch, missing `ShowElicitationMessage` type in `HostToWebviewMessage` union, `MessageHandler<never>` cast incompatibility in generic handlers across `webviewBridge` and `webviewManager`.
 
 - **Duplicate VS Code command definitions removed**: `gakrcli.acceptProposedDiff`, `gakrcli.rejectProposedDiff`, and `gakrcli.insertAtMentioned` each had duplicate entries in `package.json` commands array. Removed the 3 duplicate definitions.
@@ -19,6 +21,10 @@ All notable changes to GakrCLI VS Code are documented here.
 - **`DiffManager` auto-approves file edits in `acceptEdits`/`bypassPermissions`/`dontAsk` modes**: The `DiffManager` now accepts an optional `getPermissionMode` callback. When the mode is `acceptEdits`, `bypassPermissions`, or `dontAsk`, edits are applied directly to disk and approved without opening the interactive diff viewer. Previously these permission modes had zero effect on actual file edit/write tool calls — every single one still required manually clicking Accept in a VS Code diff tab, making these modes appear broken.
 
 - **Webview streaming state now stays alive while tool calls are pending**: The CLI sends complete `assistant` message objects (not incremental stream deltas) in production. The webview's `useChat` hook now tracks `tool_use` blocks inside these messages and keeps `isStreaming` active while any tool calls remain unresolved. Previously only the (dead, in practice) streaming code path populated `activeToolUseIdsRef`, so the spinner was cleared after the first message chunk (e.g. a thinking block), even when that same message contained pending tool calls.
+
+### Added (2026-07-14)
+
+- **PermissionDialog redesigned to match CLI UX**: Risk level now shows as a small capsule badge (not full banner). Tool input parsed by type — Write shows File+Content, Bash shows Command+Description, Edit shows File+Replace+With. Four vertical options (Allow Once / Allow for Session / Enable Full Access / Deny) with optional reason text input for denial. ModeSelector descriptions expanded to clarify which tools each mode affects. Webview tracks `currentMode` state and displays mode context in PermissionDialog.
 
 ### Added (2026-07-13)
 

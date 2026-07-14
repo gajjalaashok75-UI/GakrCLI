@@ -11,6 +11,7 @@ import type { TeleportState, ElicitationState } from './types/interactions';
 function App() {
   const { currentRequest, pendingCount, respond } = usePermissions();
   const [showSurvey, setShowSurvey] = useState(false);
+  const [currentMode, setCurrentMode] = useState<string>('default');
   const [teleportState, setTeleportState] = useState<TeleportState>({
     isVisible: false,
     info: null,
@@ -25,6 +26,11 @@ function App() {
     const handler = (event: MessageEvent) => {
       const data = event.data;
       if (!data || typeof data !== 'object') return;
+
+      if (data.type === 'permission_mode_changed') {
+        setCurrentMode(data.mode as string);
+        return;
+      }
 
       if (data.type === 'show_teleport') {
         setTeleportState({
@@ -83,7 +89,8 @@ function App() {
           pendingCount={pendingCount}
           onAllow={(id) => respond(id, true)}
           onAlwaysAllow={(id) => respond(id, true, true)}
-          onDeny={(id) => respond(id, false)}
+          onDeny={(id, reason) => respond(id, false, false, reason)}
+          currentMode={currentMode as 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'dontAsk'}
         />
       )}
 

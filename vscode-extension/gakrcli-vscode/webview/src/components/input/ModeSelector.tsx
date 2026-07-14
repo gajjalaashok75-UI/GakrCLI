@@ -17,31 +17,31 @@ const MODE_OPTIONS: ModeOption[] = [
   {
     value: 'default',
     label: 'Default',
-    description: 'Ask before each tool use',
+    description: 'Ask before each tool use — recommended for normal work. Every tool requires explicit approval.',
     color: 'var(--vscode-charts-blue, #4fc3f7)',
   },
   {
     value: 'plan',
     label: 'Plan',
-    description: 'Review plan before execution',
+    description: 'Review plan before execution — the agent proposes changes, you approve the plan before tools run.',
     color: 'var(--vscode-charts-purple, #ce93d8)',
   },
   {
     value: 'acceptEdits',
     label: 'Accept Edits',
-    description: 'Auto-approve file edits',
+    description: 'Auto-approve file edits (Write, Edit, FileEdit) — still ask for Bash, Read, Grep and other tools.',
     color: 'var(--vscode-charts-yellow, #fff176)',
   },
   {
     value: 'bypassPermissions',
     label: 'Bypass',
-    description: 'Skip all permission checks (danger)',
+    description: 'Skip ALL permission checks (dangerous) — all tools run without approval. Enable via gakrcli.allowDangerouslySkipPermissions.',
     color: 'var(--vscode-charts-red, #ef9a9a)',
   },
   {
     value: 'dontAsk',
     label: "Don't Ask",
-    description: 'Auto-approve everything',
+    description: 'Auto-approve everything — all tools auto-approved, same as CLI dontAsk mode.',
     color: 'var(--vscode-charts-orange, #ffcc80)',
   },
 ];

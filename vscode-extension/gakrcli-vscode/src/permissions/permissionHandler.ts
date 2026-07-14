@@ -38,8 +38,15 @@ interface PendingRequest {
 
 interface ElicitationRequest {
   requestId: string;
-  questions: unknown[];
-  toolUseId: string;
+  rawQuestions: unknown[];
+  toolUseId: string | undefined;
+}
+
+interface ElicitationQuestion {
+  question: string;
+  label?: string;
+  multiSelect?: boolean;
+  options?: Array<{ label: string; description?: string }>;
 }
 
 export class PermissionHandler implements vscode.Disposable {
@@ -61,6 +68,7 @@ export class PermissionHandler implements vscode.Disposable {
           message.requestId,
           message.allowed,
           message.alwaysAllow ?? false,
+          message.reason,
         );
       }),
     );
@@ -117,6 +125,18 @@ export class PermissionHandler implements vscode.Disposable {
 
     this.output.appendLine(`[PermissionHandler] Mode changed: ${this.currentMode} → ${mode}`);
     this.currentMode = mode;
+
+    // Propagate the mode change to the CLI so its hasPermissionsToUseTool
+    // respects the same mode (affects acceptEdits, dontAsk, bypassPermissions).
+    // Without this, the CLI stays in 'default' mode and sends can_use_tool
+    // for everything, bypassing its own fast-path auto-approvals.
+    this.writeToStdin?.({
+      type: 'control_request',
+      request: {
+        subtype: 'set_permission_mode',
+        mode,
+      },
+    });
   }
 
   /**
@@ -154,7 +174,7 @@ export class PermissionHandler implements vscode.Disposable {
 
       this.elicitationRequests.set(requestId, {
         requestId,
-        questions: questions as unknown[],
+        rawQuestions: questions as unknown[],
         toolUseId: request.tool_use_id,
       });
 
@@ -194,7 +214,7 @@ export class PermissionHandler implements vscode.Disposable {
       });
     });
 
-    // Send permission_request to webview
+    // Broadcast permission_request to webview (webview UI may or may not render it)
     this.webviewManager.broadcast({
       type: 'permission_request',
       requestId,
@@ -250,7 +270,7 @@ export class PermissionHandler implements vscode.Disposable {
         response: {
           behavior: 'allow',
           updatedInput: {
-            questions: pending.questions,
+            questions: pending.rawQuestions,
             answers: flatAnswers,
           },
           toolUseID: pending.toolUseId,
@@ -320,6 +340,7 @@ export class PermissionHandler implements vscode.Disposable {
     requestId: string,
     allowed: boolean,
     alwaysAllow: boolean,
+    reason?: string,
   ): void {
     const pending = this.pendingRequests.get(requestId);
     if (!pending) {
@@ -349,7 +370,9 @@ export class PermissionHandler implements vscode.Disposable {
     } else {
       result = {
         behavior: 'deny',
-        message: 'User denied permission',
+        message: reason
+          ? `User denied permission: ${reason}`
+          : 'User denied permission',
         toolUseID: pending.request.tool_use_id,
         decisionClassification: 'user_reject',
       };
@@ -384,6 +407,13 @@ export class PermissionHandler implements vscode.Disposable {
     if (dangerousTools.some((t) => toolName.includes(t))) return 'high';
     if (editTools.some((t) => toolName.includes(t))) return 'medium';
     return 'low';
+  }
+
+  /** Retrieve a stored elicitation request (AskUserQuestion) by requestId */
+  getPendingElicitation(requestId: string): { rawQuestions: unknown[]; toolUseId: string | undefined } | undefined {
+    const pending = this.elicitationRequests.get(requestId);
+    if (!pending) return undefined;
+    return { rawQuestions: pending.rawQuestions, toolUseId: pending.toolUseId };
   }
 
   dispose(): void {

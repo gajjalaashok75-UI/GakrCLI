@@ -174,6 +174,15 @@ export class ProcessManager {
   private stderrCallbacks: StderrCallback[] = [];
   private stateCallbacks: StateCallback[] = [];
 
+  /**
+   * Queue of handler registrations that arrived before the ControlRouter
+   * was created. Flushed into the router once it exists.
+   */
+  private pendingHandlerRegistrations: Array<{
+    subtype: string;
+    handler: ControlRequestHandler;
+  }> = [];
+
   constructor(options: ProcessManagerOptions) {
     this.options = options;
   }
@@ -255,6 +264,9 @@ export class ProcessManager {
 
       // Create router that writes through transport
       this.router = new ControlRouter((msg) => this.transport?.write(msg));
+
+      // Flush any handler registrations that arrived before the router existed
+      this.flushPendingHandlers();
 
       // Handle parsed messages from stdout
       this.transport.onMessage((msg) => this.handleMessage(msg as StdoutMessage));
@@ -355,7 +367,20 @@ export class ProcessManager {
     subtype: string,
     handler: ControlRequestHandler,
   ): void {
-    this.router?.registerHandler(subtype, handler);
+    if (this.router) {
+      this.router.registerHandler(subtype, handler);
+    } else {
+      // Router not yet created — queue for later
+      this.pendingHandlerRegistrations.push({ subtype, handler });
+    }
+  }
+
+  /** Flush queued handler registrations into the newly-created router. */
+  private flushPendingHandlers(): void {
+    for (const { subtype, handler } of this.pendingHandlerRegistrations) {
+      this.router?.registerHandler(subtype, handler);
+    }
+    this.pendingHandlerRegistrations = [];
   }
 
   /**
@@ -420,6 +445,8 @@ export class ProcessManager {
       'stream-json',
       '--print',
       '--verbose',
+      '--permission-prompt-tool',
+      'stdio',
     ];
 
     if (this.options.model) {

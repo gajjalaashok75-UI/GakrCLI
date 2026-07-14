@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **vscode-extension/gakrcli-vscode**: Resolved 14 TypeScript compilation errors (TS 5.5 closure-narrowing, tagged union casts, permissionHandler type mismatches, missing `ShowElicitationMessage` type, generic handler cast incompatibilities); removed 3 duplicate command definitions in `package.json`; `gakrcli.focus` no longer broadcasts meaningless empty `at_mention_inserted` payload.
 
+### Fixed
+- **vscode-extension/gakrcli-vscode — Permission system fixes**: `elicitation_response` now routes through `PermissionHandler.handleAskUserQuestionResponse()` to wrap values in `{behavior, updatedInput}` — fixes `invalid_union` on AskUserQuestion. Removed native VS Code dialog fallback that caused double prompts. Mode changes (`set_permission_mode`) are forwarded to CLI so `hasPermissionsToUseTool` respects correct mode. `diffHandler` accepts `getPermissionMode` callback and auto-approves file edits in `acceptEdits` mode without interactive diff viewer. Webview permission response now includes user-entered reason text for denials, passed through to CLI as deny message.
+
+### Changed
+- **vscode-extension/gakrcli-vscode — PermissionDialog redesigned to match CLI UX**: Risk level shown as small capsule badge (not full banner). Tool input parsed by type — Write shows File+Content, Bash shows Command+Description, Edit shows File+Replace+With. Four vertical options (Allow Once / Allow for Session / Enable Full Access / Deny) with optional reason text input for denial. Mode descriptions in ModeSelector expanded to clarify which tools each mode affects.
+
 ## [0.5.8] - 2026-07-13
 
 ### Fixed
