@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - **Sponsored tips feature**: Removed `sponsoredTips.ts` stub and all references — `getSponsoredTipsFrequency`/`isSponsoredSlotEligible`/`recordSponsoredTipShown`/`getSessionsSinceLastSponsored` from tipScheduler, tipHistory, and tipRegistry; `sponsoredTipsHistory` field from config.ts.
 
+### Fixed
+- **vscode-extension/gakrcli-vscode**: Resolved 14 TypeScript compilation errors (TS 5.5 closure-narrowing, tagged union casts, permissionHandler type mismatches, missing `ShowElicitationMessage` type, generic handler cast incompatibilities); removed 3 duplicate command definitions in `package.json`; `gakrcli.focus` no longer broadcasts meaningless empty `at_mention_inserted` payload.
+
 ## [0.5.8] - 2026-07-13
 
 ### Fixed

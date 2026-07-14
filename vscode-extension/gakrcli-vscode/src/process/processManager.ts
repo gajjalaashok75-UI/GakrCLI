@@ -594,8 +594,8 @@ export class ProcessManager {
     }
 
     // Extract session_id from messages that carry it
-    if ('session_id' in message && typeof (message as Record<string, unknown>).session_id === 'string') {
-      this._sessionId = (message as Record<string, unknown>).session_id as string;
+    if ('session_id' in message && typeof (message as unknown as Record<string, unknown>).session_id === 'string') {
+      this._sessionId = (message as unknown as Record<string, unknown>).session_id as string;
     }
 
     // Forward all other messages to listeners

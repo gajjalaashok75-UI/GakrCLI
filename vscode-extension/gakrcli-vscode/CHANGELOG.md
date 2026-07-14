@@ -4,6 +4,14 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ## [Unreleased]
 
+### Fixed (2026-07-14)
+
+- **14 TypeScript compilation errors resolved**: Fixed `preferredLocation` TS 5.5 closure-narrowing bug (getter/setter pattern), `as Record<string, unknown>` casts missing `unknown` bridge (tagged unions), `permissionHandler` `q: Record<string, unknown>` map callback type mismatch, missing `ShowElicitationMessage` type in `HostToWebviewMessage` union, `MessageHandler<never>` cast incompatibility in generic handlers across `webviewBridge` and `webviewManager`.
+
+- **Duplicate VS Code command definitions removed**: `gakrcli.acceptProposedDiff`, `gakrcli.rejectProposedDiff`, and `gakrcli.insertAtMentioned` each had duplicate entries in `package.json` commands array. Removed the 3 duplicate definitions.
+
+- **`gakrcli.focus` no longer broadcasts empty `at_mention_inserted`**: When the text editor has no active selection, the "focus" command was sending `{ type: 'at_mention_inserted', text: '' }` — a meaningless payload. Now it simply opens (and focuses) the webview without broadcasting.
+
 ### Fixed (2026-07-13)
 
 - **`settings_refresh` / `get_context_usage` host handlers now fetch real model/effort/context-usage data**: Added `sendSettingsState()` which queries the CLI's `get_settings` and `get_context_usage` control requests and broadcasts the result as a `settings_state` message. Previously both message types had NO handler on the host side, so the context-usage indicator in the webview stayed in its permanent "pending" placeholder state.

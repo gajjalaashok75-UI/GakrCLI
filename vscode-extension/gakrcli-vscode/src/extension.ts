@@ -141,7 +141,9 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   // Track preferred location (sidebar vs panel)
-  let preferredLocation: 'sidebar' | 'panel' = 'panel';
+  let _preferredLocation: 'sidebar' | 'panel' = 'panel';
+  const preferredLocation = (): 'sidebar' | 'panel' => _preferredLocation;
+  const setPreferredLocation = (v: 'sidebar' | 'panel'): void => { _preferredLocation = v; };
 
   // Status bar manager (idle / pending-permission / completed-while-hidden)
   const statusBarManager = new StatusBarManager();
@@ -176,7 +178,7 @@ export function activate(context: vscode.ExtensionContext) {
   const atMentionProvider = new AtMentionProvider();
   context.subscriptions.push(atMentionProvider);
 
-  if (preferredLocation === 'sidebar' && supportsSecondarySidebar) {
+  if (preferredLocation() === 'sidebar' && supportsSecondarySidebar) {
     statusBarManager.show();
   }
 
@@ -294,7 +296,7 @@ export function activate(context: vscode.ExtensionContext) {
     processManager.registerControlHandler(
       'elicitation',
       async (request, signal, requestId) => {
-        const req = request as Record<string, unknown>;
+        const req = request as unknown as Record<string, unknown>;
         webviewManager!.broadcast({
           type: 'show_elicitation',
           requestId,
@@ -316,9 +318,9 @@ export function activate(context: vscode.ExtensionContext) {
       webviewManager!.broadcast({ type: 'cli_output', data: msg });
 
       // StatusBar: set pending permission on permission_request, clear on response
-      const msgObj = msg as Record<string, unknown>;
+      const msgObj = msg as unknown as Record<string, unknown>;
       if (msgObj.type === 'control_request') {
-        const req = msgObj.request as Record<string, unknown> | undefined;
+        const req = msgObj.request as unknown as Record<string, unknown> | undefined;
         if (req?.subtype === 'can_use_tool') {
           statusBarManager.setPendingPermission(true);
         }
@@ -432,9 +434,9 @@ export function activate(context: vscode.ExtensionContext) {
       statusBarManager.setStarting(false);
       if (response) {
         // The response might be the InitializeResponse directly, or nested under .response
-        const resp = response as Record<string, unknown>;
+        const resp = response as unknown as Record<string, unknown>;
         const initData = (resp.response && typeof resp.response === 'object')
-          ? resp.response as Record<string, unknown>  // double-nested: response.response
+          ? resp.response as unknown as Record<string, unknown>  // double-nested: response.response
           : resp;                                      // direct: response itself
 
         output.info(`[GakrCLI] Connected! Init response keys: ${Object.keys(initData).join(', ')}`);
@@ -738,9 +740,9 @@ export function activate(context: vscode.ExtensionContext) {
       webviewManager!.broadcast({ type: 'cli_output', data: msg });
 
       // StatusBar: set pending permission on permission_request, clear on response
-      const msgObj = msg as Record<string, unknown>;
+      const msgObj = msg as unknown as Record<string, unknown>;
       if (msgObj.type === 'control_request') {
-        const req = msgObj.request as Record<string, unknown> | undefined;
+        const req = msgObj.request as unknown as Record<string, unknown> | undefined;
         if (req?.subtype === 'can_use_tool') {
           statusBarManager.setPendingPermission(true);
         }
@@ -1211,7 +1213,7 @@ export function activate(context: vscode.ExtensionContext) {
       'gakrcli.editor.open',
       async (sessionId?: string, prompt?: string, viewColumn?: vscode.ViewColumn) => {
         if (viewColumn !== vscode.ViewColumn.Active) {
-          preferredLocation = 'panel';
+          setPreferredLocation('panel');
         }
         const { startedInNewColumn } = webviewManager!.createPanel(
           sessionId, prompt, viewColumn,
@@ -1236,7 +1238,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Open (remembers last location)
   context.subscriptions.push(
     vscode.commands.registerCommand('gakrcli.editor.openLast', async () => {
-      if (preferredLocation === 'sidebar') {
+      if (preferredLocation() === 'sidebar') {
         await vscode.commands.executeCommand('gakrcli.sidebar.open');
         return;
       }
@@ -1247,7 +1249,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Open in Side Bar
   context.subscriptions.push(
     vscode.commands.registerCommand('gakrcli.sidebar.open', async () => {
-      preferredLocation = 'sidebar';
+      setPreferredLocation('sidebar');
       if (!supportsSecondarySidebar) {
         await vscode.commands.executeCommand('gakrcliSidebar.focus');
         return;
@@ -1281,27 +1283,11 @@ export function activate(context: vscode.ExtensionContext) {
     }),
   );
 
-  // Focus input
+  // Focus input — open webview if closed, then focus the prompt
   context.subscriptions.push(
     vscode.commands.registerCommand('gakrcli.focus', async () => {
       if (!webviewManager!.hasVisibleWebview()) {
         await vscode.commands.executeCommand('gakrcli.editor.openLast');
-      }
-      const editor = vscode.window.activeTextEditor;
-      if (editor) {
-        const doc = editor.document;
-        const relativePath = vscode.workspace.asRelativePath(doc.fileName);
-        const selection = editor.selection;
-        if (!selection.isEmpty) {
-          const startLine = selection.start.line + 1;
-          const endLine = selection.end.line + 1;
-          const mention = startLine !== endLine
-            ? `@${relativePath}#${startLine}-${endLine}`
-            : `@${relativePath}#${startLine}`;
-          webviewManager!.broadcast({ type: 'at_mention_inserted', text: mention });
-        } else {
-          webviewManager!.broadcast({ type: 'at_mention_inserted', text: '' });
-        }
       }
     }),
   );

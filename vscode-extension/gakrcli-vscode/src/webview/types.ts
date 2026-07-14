@@ -376,6 +376,19 @@ export interface ElicitationRequestMessage {
   responseFormat: unknown;
 }
 
+/** Structured elicitation from AskUserQuestion tool — shows field form in webview */
+export interface ShowElicitationMessage {
+  type: 'show_elicitation';
+  requestId: string;
+  message: string;
+  fields: Array<{
+    name: string;
+    label: string;
+    required: boolean;
+    type: { type: string; options: Array<{ value: string; label: string; description: string }> };
+  }>;
+}
+
 /** Session state changed (for multi-panel badge updates) */
 export interface SessionStateMessage {
   type: 'session_state';
@@ -532,6 +545,7 @@ export type HostToWebviewMessage =
   | PermissionRequestMessage
   | CancelRequestMessage
   | ElicitationRequestMessage
+  | ShowElicitationMessage
   | SessionStateMessage
   | ContextUsageMessage
   | ThemeChangedMessage
