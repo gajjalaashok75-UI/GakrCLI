@@ -84,12 +84,13 @@ export function usePermissions() {
 
   // Respond to the current request and remove it from the queue
   const respond = useCallback(
-    (requestId: string, allowed: boolean, alwaysAllow?: boolean) => {
+    (requestId: string, allowed: boolean, alwaysAllow?: boolean, reason?: string) => {
       vscode.postMessage({
         type: 'permission_response',
         requestId,
         allowed,
         alwaysAllow: alwaysAllow ?? false,
+        reason,
       });
       setQueue((prev) => prev.filter((r) => r.requestId !== requestId));
     },

@@ -17,6 +17,7 @@ import { AuthManager } from './auth/authManager';
 import { checkAuthStatus } from './auth/authStatusCheck';
 import { SettingsSync } from './settings/settingsSync';
 import { resolveCliExecutable } from './settings/cliExecutable';
+import type { HostToWebviewMessage } from './webview/types';
 import { McpIdeServer } from './mcp/mcpIdeServer';
 import { normalizePluginState, buildToggleRequest, buildInstallCommand, buildReloadRequest } from './plugins/pluginBridge';
 import { WorktreeManager } from './worktree/worktreeManager';
@@ -280,6 +281,7 @@ export function activate(context: vscode.ExtensionContext) {
         () => processManager?.ndjsonTransport,
         output,
         permissionHandler,
+        () => permissionHandler?.getMode() ?? 'default',
       ),
     );
 
@@ -724,6 +726,7 @@ export function activate(context: vscode.ExtensionContext) {
         () => processManager?.ndjsonTransport,
         output,
         permissionHandler,
+        () => permissionHandler?.getMode() ?? 'default',
       ),
     );
     processManager.registerControlHandler(
@@ -1473,10 +1476,50 @@ export function activate(context: vscode.ExtensionContext) {
     statusBarManager.setPendingPermission(false);
   });
 
+  // Handle getQuestions from webview — responds with stored elicitation questions
+  webviewManager.onMessage('getQuestions', async (message, panelId) => {
+    const msg = message as unknown as { requestId: string };
+    const pending = permissionHandler.getPendingElicitation(msg.requestId);
+    if (pending) {
+      const fields = (pending.rawQuestions as Array<Record<string, unknown>>).map((q) => ({
+        name: q.question as string,
+        label: (q.label as string) ?? (q.question as string),
+        required: true,
+        type: {
+          type: q.multiSelect ? 'multiselect' : 'select',
+          options: ((q.options as Array<Record<string, string>>) ?? []).map(
+            (o: Record<string, string>) => ({
+              value: o.label,
+              label: o.label,
+              description: o.description ?? '',
+            }),
+          ),
+        },
+      }));
+      webviewManager!.sendToPanel(panelId, {
+        type: 'show_elicitation',
+        requestId: msg.requestId,
+        message: 'GakrCLI needs your input',
+        fields,
+      } as unknown as HostToWebviewMessage);
+    }
+  });
+
   // Handle elicitation response from webview → forward to CLI
   webviewManager.onMessage('elicitation_response', async (message) => {
     const msg = message as unknown as { requestId: string; values: Record<string, unknown> };
     output.info(`[Webview→CLI] elicitation_response: ${msg.requestId}`);
+
+    // Check if this is an AskUserQuestion elicitation (from PermissionHandler)
+    // The PermissionHandler expects the response wrapped in {behavior, updatedInput, ...}
+    if (permissionHandler?.handleAskUserQuestionResponse(
+      msg.requestId,
+      msg.values as Record<string, string[]>,
+    )) {
+      return; // PermissionHandler sent the properly-wrapped control_response
+    }
+
+    // Generic elicitation (e.g., MCP tool confirmations) — forward values directly
     if (processManager) {
       processManager.write({
         type: 'control_response',

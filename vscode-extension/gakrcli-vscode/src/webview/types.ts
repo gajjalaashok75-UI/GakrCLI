@@ -268,6 +268,12 @@ export interface PlanReviewSubmitMessage { type: 'plan_review_submit'; requestId
 export interface TeleportAcceptMessage { type: 'teleport_accept'; remoteSessionId: string; }
 export interface TeleportRejectMessage { type: 'teleport_reject'; remoteSessionId: string; }
 
+/** Webview requests stored elicitation questions for a given requestId */
+export interface GetQuestionsMessage {
+  type: 'getQuestions';
+  requestId: string;
+}
+
 /** All messages the webview can send to the extension host */
 export type WebviewToHostMessage =
   | ReadyMessage
@@ -323,7 +329,8 @@ export type WebviewToHostMessage =
   | PlanReviewSubmitMessage
   | TeleportAcceptMessage
   | TeleportRejectMessage
-  | ToggleFastModeMessage;
+  | ToggleFastModeMessage
+  | GetQuestionsMessage;
 
 // ============================================================
 // Extension Host -> Webview messages
