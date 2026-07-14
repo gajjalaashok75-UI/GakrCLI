@@ -29,6 +29,13 @@ export const COMMON_EXTERNALS: string[] = [
   // highlight.js registers 190+ language grammars at require time (~50MB).
   // Keeping it external avoids bloating the CLI bundle.
   'highlight.js',
+  // web-tree-sitter ships a WASM file alongside its JS and resolves the
+  // path via require.resolve at runtime; bundling would freeze the build
+  // host's absolute path, so keep it external.
+  'web-tree-sitter',
+  // tree-sitter-wasms ships per-language .wasm files resolved via
+  // require.resolve at runtime — same bundling concern as web-tree-sitter.
+  'tree-sitter-wasms',
   // Orama search engine
   '@orama/orama',
   '@orama/plugin-data-persistence',
@@ -152,4 +159,9 @@ export const INTENTIONALLY_BUNDLED: string[] = [
   'vscode-languageserver-protocol',
   // File watching
   'chokidar',
+  // Graph algorithms (repo map PageRank)
+  'graphology',
+  'graphology-metrics',
+  // Tokenizer for repo map token budgeting
+  'js-tiktoken',
 ]

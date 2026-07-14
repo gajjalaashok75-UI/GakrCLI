@@ -53,7 +53,6 @@ import {
   formatCreditAmount,
   getCachedReferrerReward,
 } from '../api/referral.js'
-import { sponsoredTips } from './sponsoredTips.js'
 import { getSessionsSinceLastShown } from './tipHistory.js'
 import type { Tip, TipContext } from './types.js'
 
@@ -648,7 +647,7 @@ export async function getRelevantTips(context?: TipContext): Promise<Tip[]> {
   // Otherwise, filter built-in tips as before and combine with custom + sponsored.
   // The scheduler enforces the sponsored frequency cap; this just returns
   // everything currently eligible.
-  const tips = [...externalTips, ...internalOnlyTips, ...sponsoredTips]
+  const tips = [...externalTips, ...internalOnlyTips]
   const isRelevant = await Promise.all(tips.map(_ => _.isRelevant(context)))
   const filtered = tips
     .filter((_, index) => isRelevant[index])

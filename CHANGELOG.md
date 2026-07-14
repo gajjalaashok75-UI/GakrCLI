@@ -5,6 +5,14 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.8] - 2026-07-14
+
+### Fixed
+- **scripts/externals.ts**: Added `web-tree-sitter` and `tree-sitter-wasms` to COMMON_EXTERNALS (WASM runtime path resolution), and `graphology`, `graphology-metrics`, `js-tiktoken` to INTENTIONALLY_BUNDLED (build externals validation passes).
+
+### Removed
+- **Sponsored tips feature**: Removed `sponsoredTips.ts` stub and all references — `getSponsoredTipsFrequency`/`isSponsoredSlotEligible`/`recordSponsoredTipShown`/`getSessionsSinceLastSponsored` from tipScheduler, tipHistory, and tipRegistry; `sponsoredTipsHistory` field from config.ts.
+
 ## [0.5.8] - 2026-07-13
 
 ### Fixed
