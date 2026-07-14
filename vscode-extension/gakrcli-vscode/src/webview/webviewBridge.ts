@@ -52,14 +52,14 @@ export class WebviewBridge implements vscode.Disposable {
     handler: MessageHandler<T>,
   ): vscode.Disposable {
     const handlers = this.handlers.get(type) || [];
-    handlers.push(handler as MessageHandler<never>);
+    handlers.push(handler as unknown as MessageHandler<never>);
     this.handlers.set(type, handlers);
 
     return {
       dispose: () => {
         const current = this.handlers.get(type);
         if (current) {
-          const index = current.indexOf(handler as MessageHandler<never>);
+          const index = current.indexOf(handler as unknown as MessageHandler<never>);
           if (index >= 0) {
             current.splice(index, 1);
           }

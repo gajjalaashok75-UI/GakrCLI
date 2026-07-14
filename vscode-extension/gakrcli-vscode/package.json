@@ -248,24 +248,12 @@
 				"title": "GakrCLI: Insert @-Mention Reference"
 			},
 			{
+				"command": "gakrcli.insertAtMentioned",
+				"title": "GakrCLI: Insert @-Mention from Context"
+			},
+			{
 				"command": "gakrcli.installPlugin",
 				"title": "GakrCLI: Install Plugin"
-			},
-			{
-				"command": "gakrcli.acceptProposedDiff",
-				"title": "GakrCLI: Accept Proposed Changes",
-				"enablement": "gakrcli.viewingProposedDiff",
-				"icon": "$(check)"
-			},
-			{
-				"command": "gakrcli.rejectProposedDiff",
-				"title": "GakrCLI: Reject Proposed Changes",
-				"enablement": "gakrcli.viewingProposedDiff",
-				"icon": "$(discard)"
-			},
-			{
-				"command": "gakrcli.insertAtMentioned",
-				"title": "GakrCLI: Insert At-Mentioned"
 			},
 			{
 				"command": "gakrcli.showLogs",

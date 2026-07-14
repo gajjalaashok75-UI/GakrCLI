@@ -133,21 +133,24 @@ export class PermissionHandler implements vscode.Disposable {
     // AskUserQuestion → route to clarification dialog (show_elicitation)
     if (tool_name === 'AskUserQuestion') {
       const questions = (request.input?.questions as unknown[]) ?? [];
-      const fields = questions.map((q: Record<string, unknown>) => ({
-        name: q.question as string,
-        label: (q.label as string) ?? (q.question as string),
-        required: true,
-        type: {
-          type: q.multiSelect ? 'multiselect' : 'select',
-          options: ((q.options as Record<string, string>[]) ?? []).map(
-            (o: Record<string, string>) => ({
-              value: o.label,
-              label: o.label,
-              description: o.description ?? '',
-            }),
-          ),
-        },
-      }));
+      const fields = questions.map((q: unknown) => {
+        const qObj = q as Record<string, unknown>;
+        return {
+          name: qObj.question as string,
+          label: (qObj.label as string) ?? (qObj.question as string),
+          required: true,
+          type: {
+            type: qObj.multiSelect ? 'multiselect' : 'select',
+            options: ((qObj.options as Record<string, string>[]) ?? []).map(
+              (o: Record<string, string>) => ({
+                value: o.label,
+                label: o.label,
+                description: o.description ?? '',
+              }),
+            ),
+          },
+        };
+      });
 
       this.elicitationRequests.set(requestId, {
         requestId,
