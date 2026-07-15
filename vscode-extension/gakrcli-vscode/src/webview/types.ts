@@ -77,7 +77,7 @@ export interface SetModelMessage {
 /** User changes permission mode */
 export interface SetPermissionModeMessage {
   type: 'set_permission_mode';
-  mode: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk';
+  mode: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'fullAccess';
 }
 
 /** User requests context usage info */

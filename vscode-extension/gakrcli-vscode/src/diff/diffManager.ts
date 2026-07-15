@@ -113,13 +113,13 @@ export class DiffManager implements vscode.Disposable {
 
     const normalizedPath = path.resolve(filePath);
 
-    // acceptEdits/bypassPermissions/dontAsk auto-approve file edits (per the
+    // acceptEdits/bypassPermissions/fullAccess auto-approve file edits (per the
     // documented mode behavior — see permissions.md's checkAutoApprove
     // table). Previously this class never checked permission mode at all,
     // so these modes had no effect here: every edit still opened the
     // interactive diff editor and blocked waiting for a manual Accept click.
     const mode = this.getPermissionMode?.();
-    if (mode === 'acceptEdits' || mode === 'bypassPermissions' || mode === 'dontAsk') {
+    if (mode === 'acceptEdits' || mode === 'bypassPermissions' || mode === 'fullAccess') {
       try {
         const originalContent = await this.readOriginalContent(normalizedPath);
         const proposedContent = this.computeProposedContent(request.tool_name, input, originalContent);

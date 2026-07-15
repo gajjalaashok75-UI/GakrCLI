@@ -90,7 +90,12 @@ function App() {
           onAllow={(id) => respond(id, true)}
           onAlwaysAllow={(id) => respond(id, true, true)}
           onDeny={(id, reason) => respond(id, false, false, reason)}
-          currentMode={currentMode as 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'dontAsk'}
+          onFullAccess={(id) => {
+            // "Yes, and enable Full Access" — allow once + switch to bypassPermissions
+            respond(id, true);
+            vscode.postMessage({ type: 'set_permission_mode', mode: 'bypassPermissions' });
+          }}
+          currentMode={currentMode as 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'fullAccess'}
         />
       )}
 

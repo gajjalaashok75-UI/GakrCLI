@@ -6,7 +6,7 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ### Fixed (2026-07-15)
 
-- **`dontAsk` mode now correctly auto-approves tools**: CLI's `dontAsk` mode converts 'ask' → 'deny' (headless safety mode), which contradicted the extension's "auto-approve everything" intent. When forwarding `dontAsk` to the CLI, the extension now sends `bypassPermissions` instead so both sides agree on auto-approval. ModeSelector description also updated to remove the inaccurate "same as CLI dontAsk mode" claim.
+- **Mode list synced to CLI exactly**: Replaced `dontAsk` (not a CLI mode) with `Full Access` (CLI mode). Mode descriptions now match CLI verbatim — "Standard behavior; prompts for dangerous operations" (Default), "Auto-accept file edit operations in the workspace" (Accept Edits), "Analysis only; tool execution is blocked" (Plan), "Skip normal permission prompts while preserving hard safety prompts" (Bypass), "Skip normal permission prompts and hard safety-check prompts" (Full Access).
 
 ### Fixed (2026-07-14)
 

@@ -127,14 +127,14 @@ export class PermissionHandler implements vscode.Disposable {
     this.currentMode = mode;
 
     // Propagate the mode change to the CLI so its hasPermissionsToUseTool
-    // respects the same mode (affects acceptEdits, dontAsk, bypassPermissions).
+    // respects the same mode (affects acceptEdits, bypassPermissions, fullAccess).
     // Without this, the CLI stays in 'default' mode and sends can_use_tool
     // for everything, bypassing its own fast-path auto-approvals.
     //
-    // Remap: the CLI's 'dontAsk' converts 'ask' → 'deny' (headless safety mode),
-    // while the extension's 'dontAsk' means "auto-approve everything". Forward
-    // bypassPermissions instead so both sides agree on auto-approval.
-    const cliMode = mode === 'dontAsk' ? 'bypassPermissions' : mode;
+    // Remap: the CLI's 'fullAccess' mode skips both normal permission prompts
+    // and hard safety-check prompts. Forward as-is so CLI handles it correctly.
+    // 'dontAsk' is intentionally omitted — it is NOT a CLI mode in GakrCLI.
+    const cliMode = mode === 'fullAccess' ? 'fullAccess' : mode;
     this.writeToStdin?.({
       type: 'control_request',
       request: {
@@ -310,12 +310,13 @@ export class PermissionHandler implements vscode.Disposable {
       };
     }
 
-    // dontAsk mode: auto-allow everything
-    if (this.currentMode === 'dontAsk') {
+    // fullAccess mode: auto-allow everything (skip normal prompts and hard safety checks)
+    if (this.currentMode === 'fullAccess') {
       return {
         behavior: 'allow',
         updatedInput: request.input,
         toolUseID: request.tool_use_id,
+        decisionClassification: 'user_permanent' as const,
       };
     }
 
