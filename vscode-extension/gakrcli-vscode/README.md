@@ -154,7 +154,7 @@ Change modes via the footer dropdown or the initial `gakrcli.initialPermissionMo
 
 ## Configuration
 
-See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for the full settings reference, or browse `gakrcli.*` settings in VS Code's Settings UI.
+See [Configuration Reference](https://github.com/gajjalaashok75-UI/gakrcli-vscode/blob/main/docs/CONFIGURATION.md) for the full settings reference, or browse `gakrcli.*` settings in VS Code's Settings UI.
 
 Key settings: `gakrcli.selectedModel`, `gakrcli.initialPermissionMode`, `gakrcli.preferredLocation`, `gakrcli.autosave`, `gakrcli.environmentVariables`, `gakrcli.apiKey`, `gakrcli.baseUrl`.
 
@@ -174,19 +174,19 @@ Any LLM provider               ← OpenAI / Anthropic / Gemini / Ollama / …
 
 The extension is deliberately thin — all provider logic, tool execution, MCP, and slash-commands live in the CLI. Upgrading the brain means `npm install -g @gitlawb/gakrcli@latest` with no VS Code reinstall.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for details.
+See [Architecture](https://github.com/gajjalaashok75-UI/gakrcli-vscode/blob/main/docs/ARCHITECTURE.md) for details.
 
 ---
 
 ## Documentation
 
-- [Installation Guide](docs/INSTALLATION.md)
-- [Usage Guide](docs/USAGE.md)
-- [Permission System](docs/PERMISSIONS.md)
-- [Configuration Reference](docs/CONFIGURATION.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Development Guide](docs/DEVELOPMENT.md)
-- [Publishing Guide](docs/PUBLISHING.md)
+- [Installation Guide](https://github.com/gajjalaashok75-UI/gakrcli-vscode/blob/main/docs/INSTALLATION.md)
+- [Usage Guide](https://github.com/gajjalaashok75-UI/gakrcli-vscode/blob/main/docs/USAGE.md)
+- [Permission System](https://github.com/gajjalaashok75-UI/gakrcli-vscode/blob/main/docs/PERMISSIONS.md)
+- [Configuration Reference](https://github.com/gajjalaashok75-UI/gakrcli-vscode/blob/main/docs/CONFIGURATION.md)
+- [Architecture](https://github.com/gajjalaashok75-UI/gakrcli-vscode/blob/main/docs/ARCHITECTURE.md)
+- [Development Guide](https://github.com/gajjalaashok75-UI/gakrcli-vscode/blob/main/docs/DEVELOPMENT.md)
+- [Publishing Guide](https://github.com/gajjalaashok75-UI/gakrcli-vscode/blob/main/docs/PUBLISHING.md)
 
 ---
 
