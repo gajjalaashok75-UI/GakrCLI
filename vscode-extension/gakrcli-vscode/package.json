@@ -2,7 +2,7 @@
 	"name": "gakrcli-vscode",
 	"displayName": "GakrCLI VS Code",
 	"description": "GakrCLI VS Code: AI coding assistant powered by any LLM",
-	"version": "0.2.5",
+	"version": "1.0.0",
 	"publisher": "gakr-gakr",
 	"license": "MIT",
 	"repository": {
@@ -88,7 +88,7 @@
 						"acceptEdits",
 						"plan",
 						"bypassPermissions",
-						"dontAsk"
+						"fullAccess"
 					],
 					"default": "default",
 					"description": "Initial permission mode for new conversations."

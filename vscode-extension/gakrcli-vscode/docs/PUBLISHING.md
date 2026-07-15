@@ -1,70 +1,115 @@
-# GakrCLI VS Code Publishing Checklist
+# Publishing Guide
 
-This checklist is for publishing GakrCLI VS Code 0.2.4.
+## Prerequisites
 
-## Versions
+- [VS Code Extension Manager](https://code.visualstudio.com/api/working-with-extensions/publishing-extension) (`vsce`)
+- Publisher account on [VS Code Marketplace](https://marketplace.visualstudio.com/manage)
+- Logged in via `vsce` (uses `vsce login <publisher>` or personal access token)
 
-- `package.json` version: `0.2.4`
-- root GakrCLI dependency: `@gakr-gakr/gakrcli@^0.5.7`
-- root GakrCLI package version: `0.5.7`
-
-Publish order matters: publish `@gakr-gakr/gakrcli@0.5.7` to npm first, then refresh this extension lockfile and package the VSIX. npm cannot resolve `@gakr-gakr/gakrcli@^0.5.7` until that root package version exists on the registry.
-
-## Preflight
-
-From the repository root:
+## Quick Start
 
 ```bash
-bun.cmd run build
+# 1. Build
+npm run build
+
+# 2. Package (creates .vsix)
+npm run package
+
+# 3. Publish to marketplace
+npx @vscode/vsce publish
 ```
 
-From `vscode-extension/gakrcli-vscode/webview`:
+## Step-by-Step
+
+### 1. Build
 
 ```bash
-npm.cmd run build
+npm run build
 ```
 
-From `vscode-extension/gakrcli-vscode`:
+This builds both the extension host (`esbuild`) and webview UI (`vite`). Verify the build succeeds without errors.
+
+### 2. Package
 
 ```bash
-npm.cmd install --package-lock-only --ignore-scripts
-npm.cmd test
-npm.cmd run build:extension
-npx.cmd @vscode/vsce package
-npx.cmd @vscode/vsce ls --tree
+npm run package
 ```
 
-Typecheck is intentionally not part of the required publishing gate for this release because the repository has known broader TypeScript debt outside the validated publication path.
+This runs `npx @vscode/vsce package --no-dependencies` and creates `gakrcli-vscode-<version>.vsix`.
 
-## Secret And Leakage Checks
+**Note**: `--no-dependencies` is used because the SDK dependency is bundled at build time, not installed separately.
 
-Before publishing, confirm:
-
-- No `.env` files are inside the VSIX.
-- No `.gakrcli` or `.gakrcli-profile.json` files are inside the VSIX.
-- No source maps are inside the VSIX.
-- No local `.vsix` files are inside the VSIX.
-- No workspace transcripts, logs, or cache directories are inside the VSIX.
-- Docs are excluded by `.vscodeignore`.
-
-Useful commands:
+### 3. Verify the VSIX
 
 ```bash
-npx.cmd @vscode/vsce ls --tree
-rg -n "sk-|ghp_|AIza|BEGIN .*PRIVATE KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|GITHUB_TOKEN" .
+# Check contents
+unzip -l gakrcli-vscode-1.0.0.vsix
+
+# Install locally to test
+code --install-extension gakrcli-vscode-1.0.0.vsix
 ```
 
-The `rg` command is a heuristic. It can match documentation placeholders; investigate real-looking secrets before packaging.
-
-## Publish
+### 4. Publish
 
 ```bash
-npx.cmd @vscode/vsce login gakr-gakr
-npx.cmd @vscode/vsce publish
+# Publish to marketplace
+npx @vscode/vsce publish
 ```
 
-For local install testing:
+### 5. Create a GitHub Release
 
 ```bash
-code --install-extension gakrcli-vscode-0.2.4.vsix
+# Create release and upload VSIX
+gh release create v1.0.0 gakrcli-vscode-1.0.0.vsix \
+  --title "v1.0.0" \
+  --notes "Release notes here"
 ```
+
+## Version Bumping
+
+Update the `version` field in `package.json` before publishing. Follow [semver](https://semver.org/):
+
+- **Patch** (`1.0.0` → `1.0.1`): Bug fixes
+- **Minor** (`1.0.0` → `1.1.0`): New features, backward compatible
+- **Major** (`1.0.0` → `2.0.0`): Breaking changes
+
+## CI/CD Publishing
+
+### GitHub Actions
+
+The repository includes a publish workflow. On tag push (`v*`), it:
+
+1. Builds the extension
+2. Packages the `.vsix`
+3. Publishes to VS Code Marketplace
+4. Creates a GitHub Release with the `.vsix` attached
+
+## Troubleshooting
+
+### "Extension not found" after install
+
+Ensure the CLI is installed: `npm install -g @gitlawb/gakrcli`. The extension requires the CLI.
+
+### Marketplace publish fails
+
+- Check you're logged in: `vsce verify-pat`
+- Verify the publisher name matches `package.json`'s `publisher` field
+- Check for marketplace naming conflicts
+
+### VSIX size concerns
+
+The `.vsix` includes the bundled webview (JS + CSS). If size is a concern:
+- Enable chunk splitting in `webview/vite.config.ts`
+- Tree-shake unused dependencies
+- Review `.vscodeignore` for excluded files
+
+## Security Checklist
+
+Before publishing, verify:
+
+- [ ] No hardcoded API keys, tokens, or secrets
+- [ ] No credentials in source code
+- [ ] `.env` files excluded from packaging (`.vscodeignore`)
+- [ ] No local paths or machine-specific configuration
+- [ ] All dependencies are from trusted sources
+- [ ] `npm audit` shows no critical vulnerabilities

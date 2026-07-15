@@ -9,3 +9,15 @@ Type your message in the input field and press Enter. GakrCLI can help you:
 - Run terminal commands
 
 Use **@** to mention specific files or folders for context. You can also highlight text in your editor first, then open GakrCLI to ask about your selection.
+
+### Permission Modes
+
+GakrCLI has 5 permission modes that control which actions the AI can take:
+
+- **Default** — Prompts before dangerous operations
+- **Accept Edits** — Auto-accepts file edits
+- **Plan** — Analysis only, no tool execution
+- **Bypass** — Skips normal prompts (safe checks remain)
+- **Full Access** — Skips all prompts
+
+Change modes from the footer dropdown in the chat panel.
