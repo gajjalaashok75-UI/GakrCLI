@@ -4,6 +4,11 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ## [Unreleased]
 
+### Fixed (2026-07-15)
+
+- **PermissionRules no longer persist across VS Code sessions**: `PermissionRules` was storing always-allow rules in `workspaceState`, causing tool permissions (Write, Edit, etc.) set in a previous VS Code session to silently carry over and auto-approve in new sessions even with `default` permission mode. Now rules are in-memory only — each extension restart starts fresh, matching the documented "for the current session" contract.
+- **`PermissionResponseMessage` type missing `reason` field**: Added `reason?: string` to the webview message type, fixing a TypeScript compilation error introduced when the deny-reason-input feature was wired through all extension layers.
+
 ### Fixed (2026-07-14)
 
 - **Permission system fixes**: `elicitation_response` from webview now routes through `PermissionHandler.handleAskUserQuestionResponse()` instead of writing raw form values to CLI — fixes `invalid_union` error on AskUserQuestion submissions. Removed native VS Code dialog fallback (`showNativePermissionDialog`/`showNativeElicitationDialog`) that caused double prompts. `setMode()` forwards `set_permission_mode` to CLI so `hasPermissionsToUseTool` respects the correct mode across all permission levels. `diffHandler` accepts `getPermissionMode` callback and auto-approves file edits in `acceptEdits` mode. Webview `permission_response` now includes optional `reason` field — user-entered denial reason text is passed through to CLI as the deny message, matching CLI behavior.

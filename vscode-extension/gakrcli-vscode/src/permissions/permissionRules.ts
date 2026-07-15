@@ -1,21 +1,24 @@
 // src/permissions/permissionRules.ts
-// Simple store that tracks "always allow" rules for the current session,
-// persisted to VS Code workspace state.
+// Simple in-memory store that tracks "always allow" rules for the
+// current session only. Rules are NOT persisted to workspace state —
+// each extension restart starts with a clean slate, matching the
+// documented "for the current session" contract.
+//
+// Previously rules were persisted to workspaceState, which caused
+// always-allow choices from previous sessions to silently carry over
+// and auto-approve tools (Write, Edit, etc.) in new sessions even
+// when the permission mode was set to 'default' — a fixture that
+// violated user expectations and the mode's documented behavior.
 
 import * as vscode from 'vscode';
 
-const STORAGE_KEY = 'gakrcli.permissionRules.alwaysAllow';
-
 export class PermissionRules {
   private readonly rules = new Set<string>();
-  private readonly context: vscode.ExtensionContext;
 
-  constructor(context: vscode.ExtensionContext) {
-    this.context = context;
-    const stored = context.workspaceState.get<string[]>(STORAGE_KEY, []);
-    for (const rule of stored) {
-      this.rules.add(rule);
-    }
+  constructor(_context: vscode.ExtensionContext) {
+    // Rules are in-memory only. No workspace state loading means every
+    // extension restart starts fresh — "Always Allow for Session" truly
+    // means for this session.
   }
 
   has(toolName: string): boolean {
@@ -24,12 +27,10 @@ export class PermissionRules {
 
   add(toolName: string): void {
     this.rules.add(toolName);
-    this.persist();
   }
 
   remove(toolName: string): void {
     this.rules.delete(toolName);
-    this.persist();
   }
 
   getAll(): string[] {
@@ -38,10 +39,5 @@ export class PermissionRules {
 
   clear(): void {
     this.rules.clear();
-    this.persist();
-  }
-
-  private persist(): void {
-    this.context.workspaceState.update(STORAGE_KEY, Array.from(this.rules));
   }
 }
