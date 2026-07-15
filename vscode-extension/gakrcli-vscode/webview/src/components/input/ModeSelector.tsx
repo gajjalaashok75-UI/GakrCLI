@@ -41,7 +41,7 @@ const MODE_OPTIONS: ModeOption[] = [
   {
     value: 'dontAsk',
     label: "Don't Ask",
-    description: 'Auto-approve everything — all tools auto-approved, same as CLI dontAsk mode.',
+    description: 'Auto-approve every tool without asking — use with caution. All tools run without permission prompts.',
     color: 'var(--vscode-charts-orange, #ffcc80)',
   },
 ];

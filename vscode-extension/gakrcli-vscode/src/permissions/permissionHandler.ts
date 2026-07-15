@@ -130,11 +130,16 @@ export class PermissionHandler implements vscode.Disposable {
     // respects the same mode (affects acceptEdits, dontAsk, bypassPermissions).
     // Without this, the CLI stays in 'default' mode and sends can_use_tool
     // for everything, bypassing its own fast-path auto-approvals.
+    //
+    // Remap: the CLI's 'dontAsk' converts 'ask' → 'deny' (headless safety mode),
+    // while the extension's 'dontAsk' means "auto-approve everything". Forward
+    // bypassPermissions instead so both sides agree on auto-approval.
+    const cliMode = mode === 'dontAsk' ? 'bypassPermissions' : mode;
     this.writeToStdin?.({
       type: 'control_request',
       request: {
         subtype: 'set_permission_mode',
-        mode,
+        mode: cliMode,
       },
     });
   }

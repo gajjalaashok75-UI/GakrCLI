@@ -4,6 +4,10 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ## [Unreleased]
 
+### Fixed (2026-07-15)
+
+- **`dontAsk` mode now correctly auto-approves tools**: CLI's `dontAsk` mode converts 'ask' → 'deny' (headless safety mode), which contradicted the extension's "auto-approve everything" intent. When forwarding `dontAsk` to the CLI, the extension now sends `bypassPermissions` instead so both sides agree on auto-approval. ModeSelector description also updated to remove the inaccurate "same as CLI dontAsk mode" claim.
+
 ### Fixed (2026-07-14)
 
 - **Permission system fixes**: `elicitation_response` from webview now routes through `PermissionHandler.handleAskUserQuestionResponse()` instead of writing raw form values to CLI — fixes `invalid_union` error on AskUserQuestion submissions. Removed native VS Code dialog fallback (`showNativePermissionDialog`/`showNativeElicitationDialog`) that caused double prompts. `setMode()` forwards `set_permission_mode` to CLI so `hasPermissionsToUseTool` respects the correct mode across all permission levels. `diffHandler` accepts `getPermissionMode` callback and auto-approves file edits in `acceptEdits` mode. Webview `permission_response` now includes optional `reason` field — user-entered denial reason text is passed through to CLI as the deny message, matching CLI behavior.
