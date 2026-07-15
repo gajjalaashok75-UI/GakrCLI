@@ -6,6 +6,8 @@ All notable changes to GakrCLI VS Code are documented here.
 
 ### Fixed (2026-07-15)
 
+- **PermissionRules now truly session-scoped — removed workspaceState persistence**: Always-allow rules stored in `workspaceState` silently carried over to new VS Code sessions, causing Write/Edit/Bash to auto-approve even in `default` permission mode. Rules are now in-memory only — each extension restart starts fresh, restoring the "ask before each tool use" contract of `default` mode.
+
 - **Mode list synced to CLI exactly**: Replaced `dontAsk` (not a CLI mode) with `Full Access` (CLI mode). Mode descriptions now match CLI verbatim — "Standard behavior; prompts for dangerous operations" (Default), "Auto-accept file edit operations in the workspace" (Accept Edits), "Analysis only; tool execution is blocked" (Plan), "Skip normal permission prompts while preserving hard safety prompts" (Bypass), "Skip normal permission prompts and hard safety-check prompts" (Full Access).
 
 ### Fixed (2026-07-14)
