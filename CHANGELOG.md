@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **vscode-extension/gakrcli-vscode — PermissionDialog redesigned to match CLI UX**: Risk level shown as small capsule badge (not full banner). Tool input parsed by type — Write shows File+Content, Bash shows Command+Description, Edit shows File+Replace+With. Four vertical options (Allow Once / Allow for Session / Enable Full Access / Deny) with optional reason text input for denial. Mode descriptions in ModeSelector expanded to clarify which tools each mode affects.
 
+### Fixed
+- **vscode-extension/gakrcli-vscode — `dontAsk` mode now correctly auto-approves tools**: CLI's `dontAsk` mode converts 'ask' → 'deny' (headless safety), which contradicted the extension's "auto-approve everything" intent. When forwarding `dontAsk` to the CLI, the extension now sends `bypassPermissions` so both sides agree on auto-approval. ModeSelector description updated to remove misleading "same as CLI dontAsk mode" claim.
+
 ## [0.5.8] - 2026-07-13
 
 ### Fixed
