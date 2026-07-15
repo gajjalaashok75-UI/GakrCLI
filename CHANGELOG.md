@@ -5,7 +5,11 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.8] - 2026-07-14
+## [0.5.8] - 2026-07-15
+
+### Fixed
+- **vscode-extension/gakrcli-vscode — PermissionRules persistence removed**: Always-allow rules were stored in `workspaceState` and carried across VS Code sessions, causing Write/Edit/Bash tools to auto-approve in new sessions even with `default` permission mode. Now rules are in-memory only — each extension restart starts fresh, restoring the "ask before each tool use" contract of `default` mode.
+- **vscode-extension/gakrcli-vscode — `PermissionResponseMessage.reason` type**: Fixed a TypeScript compilation error (TS2339: `Property 'reason' does not exist on type 'PermissionResponseMessage'`) introduced when deny reason input was wired through all extension layers in the previous commit.
 
 ### Fixed
 - **scripts/externals.ts**: Added `web-tree-sitter` and `tree-sitter-wasms` to COMMON_EXTERNALS (WASM runtime path resolution), and `graphology`, `graphology-metrics`, `js-tiktoken` to INTENTIONALLY_BUNDLED (build externals validation passes).

@@ -36,6 +36,7 @@ export interface PermissionResponseMessage {
   requestId: string;
   allowed: boolean;
   alwaysAllow?: boolean;
+  reason?: string;
 }
 
 /** User responds to an elicitation request */
