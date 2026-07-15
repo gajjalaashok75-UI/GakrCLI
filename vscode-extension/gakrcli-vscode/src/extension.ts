@@ -250,7 +250,7 @@ export function activate(context: vscode.ExtensionContext) {
     const permissionMode = (handlerMode !== 'default'
       ? handlerMode
       : config.get<string>('initialPermissionMode')) as
-      | 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions' | 'dontAsk' | undefined;
+      | 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions' | 'fullAccess' | undefined;
 
     // Use AuthManager to build env vars (merges provider env + user env vars)
     const env = authManager.buildProcessEnv();
@@ -681,7 +681,7 @@ export function activate(context: vscode.ExtensionContext) {
     const executable = resolveCliExecutable(config);
     const model = config.get<string>('selectedModel');
     const permissionMode = config.get<string>('initialPermissionMode') as
-      | 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions' | 'dontAsk' | undefined;
+      | 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions' | 'fullAccess' | undefined;
 
     const envVarSettings = config.get<Array<{ name: string; value: string }>>(
       'environmentVariables', [],

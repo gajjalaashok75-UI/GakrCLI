@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 
-export type PermissionModeValue = 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk';
+export type PermissionModeValue = 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'fullAccess';
 
 interface ModeOption {
   value: PermissionModeValue;
@@ -17,32 +17,32 @@ const MODE_OPTIONS: ModeOption[] = [
   {
     value: 'default',
     label: 'Default',
-    description: 'Ask before each tool use — recommended for normal work. Every tool requires explicit approval.',
+    description: 'Standard behavior; prompts for dangerous operations.',
     color: 'var(--vscode-charts-blue, #4fc3f7)',
   },
   {
     value: 'plan',
     label: 'Plan',
-    description: 'Review plan before execution — the agent proposes changes, you approve the plan before tools run.',
+    description: 'Analysis only; tool execution is blocked.',
     color: 'var(--vscode-charts-purple, #ce93d8)',
   },
   {
     value: 'acceptEdits',
     label: 'Accept Edits',
-    description: 'Auto-approve file edits (Write, Edit, FileEdit) — still ask for Bash, Read, Grep and other tools.',
+    description: 'Auto-accept file edit operations in the workspace.',
     color: 'var(--vscode-charts-yellow, #fff176)',
   },
   {
     value: 'bypassPermissions',
     label: 'Bypass',
-    description: 'Skip ALL permission checks (dangerous) — all tools run without approval. Enable via gakrcli.allowDangerouslySkipPermissions.',
+    description: 'Skip normal permission prompts while preserving hard safety prompts.',
     color: 'var(--vscode-charts-red, #ef9a9a)',
   },
   {
-    value: 'dontAsk',
-    label: "Don't Ask",
-    description: 'Auto-approve every tool without asking — use with caution. All tools run without permission prompts.',
-    color: 'var(--vscode-charts-orange, #ffcc80)',
+    value: 'fullAccess',
+    label: 'Full Access',
+    description: 'Skip normal permission prompts and hard safety-check prompts.',
+    color: 'var(--vscode-terminal-ansiRed, #f48771)',
   },
 ];
 

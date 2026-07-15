@@ -26,7 +26,7 @@ export type PermissionMode =
   | 'acceptEdits'
   | 'bypassPermissions'
   | 'plan'
-  | 'dontAsk';
+  | 'fullAccess';
 
 export type PermissionBehavior = 'allow' | 'deny' | 'ask';
 

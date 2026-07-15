@@ -7,7 +7,7 @@ const MODE_CONFIG: Record<PermissionModeValue, { label: string; color: string }>
   plan:              { label: 'Plan',          color: 'var(--vscode-charts-purple, #ce93d8)' },
   acceptEdits:       { label: 'Accept Edits', color: 'var(--vscode-charts-yellow, #fff176)' },
   bypassPermissions: { label: 'Bypass',       color: 'var(--vscode-charts-red, #ef9a9a)' },
-  dontAsk:           { label: "Don't Ask",    color: 'var(--vscode-charts-orange, #ffcc80)' },
+  fullAccess:        { label: 'Full Access',    color: 'var(--vscode-terminal-ansiRed, #f48771)' },
 };
 
 interface PermissionModeIndicatorProps {

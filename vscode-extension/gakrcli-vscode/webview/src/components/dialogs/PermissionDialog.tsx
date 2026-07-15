@@ -1,9 +1,14 @@
 // webview/src/components/dialogs/PermissionDialog.tsx
-// Permission dialog matching CLI design:
+// Permission dialog matching CLI design exactly:
 // - Risk badge as a capsule
 // - Parsed tool input by type (Write→file_path+content, Bash→command)
-// - 4 vertical options: Allow Once / Allow Session / Full Access / Deny
-// - Custom user feedback input field
+// - CLI-matching options: Yes / Yes for Session / Full Access (conditional) / No with reason / No
+// - Custom user feedback input field for deny with reason
+//
+// CLI reference: permissionOptions.tsx — getFilePermissionOptions() shows:
+//  Yes (accept-once), Yes for session (accept-session),
+//  Full Access (accept-full-access, conditional on bypassAvailable),
+//  No with reason (reject+withReason, shows input), No (reject)
 
 import { useState } from 'react';
 import type { PermissionRequest } from '../../utils/permissionRequests';
@@ -15,6 +20,7 @@ interface PermissionDialogProps {
   onAllow: (requestId: string) => void;
   onAlwaysAllow: (requestId: string) => void;
   onDeny: (requestId: string, reason?: string) => void;
+  onFullAccess?: (requestId: string) => void;
   currentMode?: PermissionModeValue;
 }
 
@@ -115,32 +121,42 @@ export function PermissionDialog({
 
   // Feedback input states (like CLI's "tell GakrCLI what to do next")
   const [feedback, setFeedback] = useState('');
-  const [showFeedbackInput, setShowFeedbackInput] = useState<'allow' | 'session' | 'fullAccess' | 'deny' | null>(null);
+  const [showDenyWithReason, setShowDenyWithReason] = useState(false);
 
-  const handleSelect = (action: 'allow' | 'session' | 'fullAccess' | 'deny') => {
-    // For deny with reason, show input first
-    if (action === 'deny') {
-      if (!showFeedbackInput) {
-        setShowFeedbackInput('deny');
+  const handleSelect = (action: 'allow' | 'session' | 'fullAccess' | 'denyWithReason' | 'deny') => {
+    if (action === 'denyWithReason') {
+      // "No, provide reason" — input always shows on first click
+      if (!showDenyWithReason) {
+        setShowDenyWithReason(true);
         return;
       }
+      // Submit with reason
       onDeny(request.requestId, feedback || undefined);
-      setShowFeedbackInput(null);
+      setShowDenyWithReason(false);
       setFeedback('');
       return;
     }
 
-    // For allow actions, pass the feedback if provided
+    if (action === 'deny') {
+      // "No" — deny without reason (like CLI's plain reject)
+      onDeny(request.requestId, undefined);
+      setShowDenyWithReason(false);
+      setFeedback('');
+      return;
+    }
+
+    // Allow actions
     if (action === 'allow') {
       onAllow(request.requestId);
     } else if (action === 'session') {
       onAlwaysAllow(request.requestId);
     } else if (action === 'fullAccess') {
-      // Full access = allow once + mode change (handled by CLI)
+      // "Yes, and enable Full Access" — allow once + mode change
       onAllow(request.requestId);
+      onFullAccess?.(request.requestId);
     }
 
-    setShowFeedbackInput(null);
+    setShowDenyWithReason(false);
     setFeedback('');
   };
 
@@ -319,42 +335,42 @@ export function PermissionDialog({
           flexDirection: 'column',
           gap: 4,
         }}>
-          {/* Option 1: Allow Once */}
+          {/* Option 1: Yes (Allow Once) — matches CLI "Yes" accept-once */}
           <OptionButton
-            label="Allow Once"
+            label="Yes"
             shortcut="Enter"
             color="var(--vscode-charts-green, #4ec9b0)"
-            active={showFeedbackInput === 'allow'}
+            active={false}
             onClick={() => handleSelect('allow')}
           />
 
-          {/* Option 2: Allow for Session */}
+          {/* Option 2: Yes for Session — matches CLI "Yes, allow all edits during this session" */}
           <OptionButton
-            label="Allow for This Session"
+            label="Yes, allow all during this session"
             shortcut="S"
             color="var(--vscode-charts-blue, #4fc3f7)"
-            active={showFeedbackInput === 'session'}
+            active={false}
             onClick={() => handleSelect('session')}
           />
 
-          {/* Option 3: Full Access (if available) */}
+          {/* Option 3: Full Access — matches CLI "Yes, and enable Full Access for this session" */}
           <OptionButton
-            label="Enable Full Access for Session"
+            label="Yes, and enable Full Access for this session"
             shortcut="F"
             color="var(--vscode-terminal-ansiRed, #f48771)"
-            active={showFeedbackInput === 'fullAccess'}
+            active={false}
             onClick={() => handleSelect('fullAccess')}
           />
 
-          {/* Option 4: Deny */}
+          {/* Option 4: No with reason — matches CLI "No, provide reason" (reject+withReason) */}
           <OptionButton
-            label={showFeedbackInput === 'deny' ? 'No, provide reason' : 'Deny'}
-            shortcut="D"
+            label="No, provide reason"
+            shortcut="R"
             color="var(--vscode-errorForeground, #f48771)"
-            active={showFeedbackInput === 'deny'}
-            onClick={() => handleSelect('deny')}
+            active={showDenyWithReason}
+            onClick={() => handleSelect('denyWithReason')}
           >
-            {showFeedbackInput === 'deny' && (
+            {showDenyWithReason && (
               <div style={{ marginTop: 6 }}>
                 <input
                   autoFocus
@@ -364,10 +380,10 @@ export function PermissionDialog({
                   onChange={(e) => setFeedback(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
-                      handleSelect('deny');
+                      handleSelect('denyWithReason');
                     }
                     if (e.key === 'Escape') {
-                      setShowFeedbackInput(null);
+                      setShowDenyWithReason(false);
                       setFeedback('');
                     }
                   }}
@@ -390,6 +406,15 @@ export function PermissionDialog({
               </div>
             )}
           </OptionButton>
+
+          {/* Option 5: No (deny without reason) — matches CLI "No" reject */}
+          <OptionButton
+            label="No"
+            shortcut="D"
+            color="var(--vscode-errorForeground, #f48771)"
+            active={false}
+            onClick={() => handleSelect('deny')}
+          />
         </div>
       </div>
     </div>
