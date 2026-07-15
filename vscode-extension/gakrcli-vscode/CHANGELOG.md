@@ -2,13 +2,17 @@
 
 All notable changes to GakrCLI VS Code are documented here.
 
-## [Unreleased]
+## [1.0.0] - 2026-07-15
 
 ### Fixed (2026-07-15)
 
 - **PermissionRules now truly session-scoped — removed workspaceState persistence**: Always-allow rules stored in `workspaceState` silently carried over to new VS Code sessions, causing Write/Edit/Bash to auto-approve even in `default` permission mode. Rules are now in-memory only — each extension restart starts fresh, restoring the "ask before each tool use" contract of `default` mode.
 
 - **Mode list synced to CLI exactly**: Replaced `dontAsk` (not a CLI mode) with `Full Access` (CLI mode). Mode descriptions now match CLI verbatim — "Standard behavior; prompts for dangerous operations" (Default), "Auto-accept file edit operations in the workspace" (Accept Edits), "Analysis only; tool execution is blocked" (Plan), "Skip normal permission prompts while preserving hard safety prompts" (Bypass), "Skip normal permission prompts and hard safety-check prompts" (Full Access).
+
+- **PermissionDialog options matched to CLI**: Five options matching CLI exactly — "Yes" (allow once), "Yes, allow all during this session", "Yes, and enable Full Access for this session", "No, provide reason" (with inline input), "No" (deny). Full Access button now changes mode to `fullAccess` for the session.
+
+- **`gakrcli.initialPermissionMode` enum updated**: Replaced deprecated `dontAsk` value with `fullAccess` to match CLI's 5-mode set.
 
 ### Fixed (2026-07-14)
 
@@ -48,7 +52,7 @@ All notable changes to GakrCLI VS Code are documented here.
 - **`mcp_add_server` no longer drops all other configured servers**: `mcp_set_servers` is a full-replace operation. The handler now fetches the current full server list via `mcp_status` first and merges the new entry into it before sending, so adding one server no longer causes every other server to be marked as removed.
 - **MCP message handlers use `ensureProcess()` instead of raw `if (processManager)` checks**: `resume_session`, `refresh_runtime`, `mcp_reconnect`, `mcp_toggle`, `mcp_remove_server`, `plugin_refresh`, and `plugin_toggle` all now await `ensureProcess()` (which spawns if needed) before writing control requests, matching the lifecycle of other host handlers and preventing silent drops when the process isn't yet running.
 
-## [Unreleased]
+## [1.0.0] - 2026-07-15
 
 ### Fixed (2026-07-12)
 

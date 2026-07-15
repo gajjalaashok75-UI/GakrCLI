@@ -23,6 +23,10 @@ import { normalizePluginState, buildToggleRequest, buildInstallCommand, buildRel
 import { WorktreeManager } from './worktree/worktreeManager';
 import { parseGakrCLIUri } from './uriHandler';
 import { AtMentionProvider } from './mentions/atMentionProvider';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execAsync = promisify(exec);
 
 /** Timeout for waiting on an in-flight spawn poll cycle. */
 // Timeout for the isSpawning polling loop — matches INIT_TIMEOUT_MS in ProcessManager
@@ -182,6 +186,34 @@ export function activate(context: vscode.ExtensionContext) {
   if (preferredLocation() === 'sidebar' && supportsSecondarySidebar) {
     statusBarManager.show();
   }
+
+  // ==========================================
+  // CLI install check (non-blocking)
+  // Shows a notification with install instructions if the gakrcli binary
+  // is not found on the system PATH. Runs after activation so it doesn't
+  // block extension startup.
+  // ==========================================
+  (async () => {
+    const executable = resolveCliExecutable(vscode.workspace.getConfiguration('gakrcli'));
+    try {
+      await execAsync(`${executable} --version`, { timeout: 10000 });
+      output.info(`[GakrCLI] CLI binary found: ${executable}`);
+    } catch {
+      output.warn('[GakrCLI] CLI binary not found on PATH');
+      const selection = await vscode.window.showWarningMessage(
+        'GakrCLI requires the CLI. Install it with: npm install -g @gitlawb/gakrcli',
+        'Install GakrCLI',
+        'Show Walkthrough',
+      );
+      if (selection === 'Install GakrCLI') {
+        const term = vscode.window.createTerminal('GakrCLI Install');
+        term.sendText('npm install -g @gitlawb/gakrcli');
+        term.show();
+      } else if (selection === 'Show Walkthrough') {
+        vscode.commands.executeCommand('gakrcli.openWalkthrough');
+      }
+    }
+  })();
 
   // ==========================================
   // ProcessManager — spawned on first user message
