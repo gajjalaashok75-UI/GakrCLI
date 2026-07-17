@@ -49,6 +49,7 @@ export function ChatPanel() {
     todos,
     retryInfo,
     contextUsage,
+    subAgentSessions,
     availableModels,
     sendMessage,
     editMessage,
@@ -80,6 +81,7 @@ export function ChatPanel() {
   const [showMcpManager, setShowMcpManager] = useState(false);
   const [showPluginManager, setShowPluginManager] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showThinking, setShowThinking] = useState(false);
   const [onboardingDismissed] = useState(() => {
     return !!localStorage.getItem('gakrcli.onboarding.dismissed');
   });
@@ -186,7 +188,9 @@ export function ChatPanel() {
         messages={messages}
         isStreaming={isStreaming}
         processState={processState}
+        showThinking={showThinking}
         onEditMessage={editMessage}
+        subAgentSessions={subAgentSessions}
       />
 
       {/* Onboarding checklist */}
@@ -305,7 +309,7 @@ export function ChatPanel() {
       {/* Dialogs */}
       <McpServerManager isOpen={showMcpManager} onClose={() => setShowMcpManager(false)} />
       <PluginManager isOpen={showPluginManager} onClose={() => setShowPluginManager(false)} />
-      <SettingsDialog isOpen={showSettings} onClose={() => setShowSettings(false)} />
+      <SettingsDialog isOpen={showSettings} onClose={() => setShowSettings(false)} showThinking={showThinking} onToggleThinking={() => setShowThinking((p) => !p)} />
     </div>
   );
 }

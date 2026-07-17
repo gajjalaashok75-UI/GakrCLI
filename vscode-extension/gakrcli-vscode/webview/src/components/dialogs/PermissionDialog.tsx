@@ -11,7 +11,7 @@
 //  No with reason (reject+withReason, shows input), No (reject)
 
 import { useState } from 'react';
-import type { PermissionRequest } from '../../utils/permissionRequests';
+import type { PermissionRequest } from '../../hooks/usePermissions';
 import type { PermissionModeValue } from '../input/ModeSelector';
 
 interface PermissionDialogProps {
@@ -112,6 +112,7 @@ export function PermissionDialog({
   pendingCount,
   onAllow,
   onAlwaysAllow,
+  onFullAccess,
   onDeny,
   currentMode,
 }: PermissionDialogProps) {

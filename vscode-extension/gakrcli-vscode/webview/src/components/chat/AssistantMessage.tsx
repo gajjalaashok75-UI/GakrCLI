@@ -6,12 +6,13 @@ import { ContentBlockRouter } from '../blocks/ContentBlockRouter';
 import type { ContentBlock } from '../../types/blocks';
 import { MessageActions } from './MessageActions';
 import { formatTurnCompletion } from '../../utils/turnCompletion';
-import { isThinkingBlock } from '../../utils/messageVisibility';
 import { getPairedToolResult, isPairedToolResult } from '../../utils/toolBlockPairs';
+import { isThinkingBlock } from '../../utils/messageVisibility';
 import { formatToolResultContent } from '../../utils/toolDisplay';
 
 interface AssistantMessageProps {
   message: ChatMessage;
+  showThinking?: boolean;
   isLatest?: boolean;
   isStreaming?: boolean;
   showActions?: boolean;
@@ -22,6 +23,7 @@ interface AssistantMessageProps {
 
 export function AssistantMessage({
   message,
+  showThinking = true,
   isLatest = false,
   isStreaming = false,
   showActions = false,
@@ -65,6 +67,7 @@ export function AssistantMessage({
             blockIndex={blockIndex}
             renderableBlock={renderableBlock}
             isMessageStreaming={message.isStreaming}
+            showThinking={showThinking}
           />
         ))}
       </div>
@@ -110,13 +113,15 @@ interface BlockRendererProps {
   blockIndex: number;
   renderableBlock: RenderableBlock;
   isMessageStreaming: boolean;
+  showThinking: boolean;
 }
 
-function BlockRenderer({ blocks, blockIndex, renderableBlock, isMessageStreaming: _isMessageStreaming }: BlockRendererProps) {
+function BlockRenderer({ blocks, blockIndex, renderableBlock, isMessageStreaming: _isMessageStreaming, showThinking }: BlockRendererProps) {
   const { block, isStreaming } = renderableBlock;
   const blockType = (block as { type: string }).type;
 
-  if (isThinkingBlock(block)) {
+  // Hide thinking blocks when showThinking is disabled
+  if (!showThinking && isThinkingBlock(block)) {
     return null;
   }
 
@@ -155,6 +160,8 @@ function BlockRenderer({ blocks, blockIndex, renderableBlock, isMessageStreaming
         />
       );
 
+    case 'thinking':
+    case 'redacted_thinking':
     case 'image':
     case 'document':
     case 'search_result':

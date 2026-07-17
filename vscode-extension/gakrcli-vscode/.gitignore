@@ -1,5 +1,7 @@
 
 terminallog.md
+chat-log.md
+terminal-log.md
 *.vsix
 webview/node_modules/
 webview/dist/

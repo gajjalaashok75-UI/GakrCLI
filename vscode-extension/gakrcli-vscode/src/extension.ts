@@ -43,6 +43,11 @@ let permissionHandlerInstance: PermissionHandler | undefined;
 // deactivated (e.g. on window reload or VS Code close).
 let processManager: ProcessManager | undefined;
 
+/** Cached models from the most recent CLI init response, so provider_state
+ *  and settings_state messages can include the model list. Cleared when the
+ *  provider is switched (CLI gets killed) and re-populated on the next init. */
+let cachedModels: unknown[] | undefined;
+
 /** Get the active DiffManager instance (available after activation). */
 export function getDiffManager(): DiffManager | undefined {
   return diffManagerInstance;
@@ -201,13 +206,13 @@ export function activate(context: vscode.ExtensionContext) {
     } catch {
       output.warn('[GakrCLI] CLI binary not found on PATH');
       const selection = await vscode.window.showWarningMessage(
-        'GakrCLI requires the CLI. Install it with: npm install -g @gitlawb/gakrcli',
+        'GakrCLI requires the CLI. Install it with: npm install -g @gakr-gakr/gakrcli',
         'Install GakrCLI',
         'Show Walkthrough',
       );
       if (selection === 'Install GakrCLI') {
         const term = vscode.window.createTerminal('GakrCLI Install');
-        term.sendText('npm install -g @gitlawb/gakrcli');
+        term.sendText('npm install -g @gakr-gakr/gakrcli');
         term.show();
       } else if (selection === 'Show Walkthrough') {
         vscode.commands.executeCommand('gakrcli.openWalkthrough');
@@ -489,6 +494,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         // Broadcast a synthetic system/init — ALWAYS broadcast so webview gets models + fast_mode_state
         const models = Array.isArray(initData.models) ? initData.models : [];
+        cachedModels = models;
         const fastModeState = initData.fast_mode_state ?? { enabled: false, canToggle: true };
         const account = initData.account as Record<string, unknown> | undefined;
         const permMode = initData.permission_mode ?? initData.permissionMode ?? permissionHandler.getMode();
@@ -991,6 +997,7 @@ export function activate(context: vscode.ExtensionContext) {
       currentProviderId: current.id,
       currentModel: current.model,
       currentBaseUrl: settingsSync.baseUrl,
+      models: cachedModels,
     } as never);
   });
 
@@ -1026,7 +1033,7 @@ export function activate(context: vscode.ExtensionContext) {
     } catch (err) {
       output.warn(`[GakrCLI] get_context_usage failed: ${err instanceof Error ? err.message : String(err)}`);
     }
-    const payload = { type: 'settings_state', current, runtime: {}, contextUsage } as never;
+    const payload = { type: 'settings_state', current, runtime: {}, contextUsage, models: cachedModels } as never;
     if (panelId) {
       webviewManager!.sendToPanel(panelId, payload);
     } else {
@@ -1060,6 +1067,7 @@ export function activate(context: vscode.ExtensionContext) {
         providers: authManager.getAvailableProviders(),
         currentProviderId: settingsSync.selectedProvider,
         error: validation.errors.join('; '),
+        models: cachedModels,
       } as never);
       return;
     }
@@ -1081,6 +1089,7 @@ export function activate(context: vscode.ExtensionContext) {
       processManager = undefined;
       currentSessionId = undefined;
       crashRestartCount = 0;
+      cachedModels = undefined;
       webviewManager!.broadcast({ type: 'process_state', state: 'stopped' });
     }
 
@@ -1100,6 +1109,7 @@ export function activate(context: vscode.ExtensionContext) {
       currentProviderId: current.id,
       currentModel: current.model,
       currentBaseUrl: settingsSync.baseUrl,
+      models: cachedModels ?? [],
     } as never);
   });
 

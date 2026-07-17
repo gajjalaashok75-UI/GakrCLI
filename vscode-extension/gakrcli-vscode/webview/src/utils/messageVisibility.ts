@@ -34,7 +34,7 @@ export function hasVisibleAssistantBlocks(messages: ChatMessage[]): boolean {
 }
 
 export function shouldShowThinkingIndicator(messages: ChatMessage[], isStreaming: boolean): boolean {
-  return isStreaming && (hasActiveThinkingBlock(messages) || !hasVisibleAssistantBlocks(messages));
+  return isStreaming;
 }
 
 function findLatestStreamingAssistant(messages: ChatMessage[]): ChatMessage | null {

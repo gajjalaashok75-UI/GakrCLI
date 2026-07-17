@@ -95,3 +95,21 @@ export interface ChatState {
   model: string | null;
   error: string | null;
 }
+
+// ============================================================================
+// Sub-agent session types
+// ============================================================================
+
+/** Tracks state of a sub-agent session (forked Agent tool call) */
+export interface SubAgentSession {
+  toolUseId: string;
+  taskId: string;
+  agentType: string;
+  description: string;
+  prompt: string;
+  status: 'running' | 'completed' | 'error';
+  messages: ChatMessage[];
+  lastToolName?: string;
+  toolUses?: number;
+  durationMs?: number;
+}
