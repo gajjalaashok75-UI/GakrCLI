@@ -25,7 +25,7 @@ type SessionEvent = {
 /**
  * Create a session on a bridge environment via POST /v1/sessions.
  *
- * Used by both `gakrcli remote-control` (empty session so the user has somewhere to
+ * Used by both `claude remote-control` (empty session so the user has somewhere to
  * type immediately) and `/remote-control` (session pre-populated with conversation
  * history).
  *
@@ -60,6 +60,7 @@ export async function createBridgeSession({
   const { getDefaultBranch } = await import('../utils/git.js')
   const { getMainLoopModel } = await import('../utils/model/model.js')
   const { default: axios } = await import('axios')
+  const { isSelfHostedBridge } = await import('./bridgeConfig.js')
 
   const accessToken =
     getAccessToken?.() ?? getGakrCLIAIOAuthTokens()?.accessToken
@@ -68,7 +69,11 @@ export async function createBridgeSession({
     return null
   }
 
-  const orgUUID = await getOrganizationUUID()
+  // Self-hosted bridges don't require a claude.ai org UUID — the local server
+  // doesn't validate it. Use a placeholder to avoid blocking session creation.
+  const orgUUID = isSelfHostedBridge()
+    ? 'self-hosted'
+    : await getOrganizationUUID()
   if (!orgUUID) {
     logForDebugging('[bridge] No org UUID for session creation')
     return null
@@ -94,7 +99,7 @@ export async function createBridgeSession({
         git_info: {
           type: 'github',
           repo: `${owner}/${name}`,
-          branches: [`gakrcli/${branch || 'task'}`],
+          branches: [`claude/${branch || 'task'}`],
         },
       }
     } else {
@@ -114,7 +119,7 @@ export async function createBridgeSession({
             git_info: {
               type: 'github',
               repo: `${owner}/${name}`,
-              branches: [`gakrcli/${branch || 'task'}`],
+              branches: [`claude/${branch || 'task'}`],
             },
           }
         }
@@ -196,6 +201,7 @@ export async function getBridgeSession(
   const { getOauthConfig } = await import('../constants/oauth.js')
   const { getOAuthHeaders } = await import('../utils/teleport/api.js')
   const { default: axios } = await import('axios')
+  const { isSelfHostedBridge } = await import('./bridgeConfig.js')
 
   const accessToken =
     opts?.getAccessToken?.() ?? getGakrCLIAIOAuthTokens()?.accessToken
@@ -204,7 +210,9 @@ export async function getBridgeSession(
     return null
   }
 
-  const orgUUID = await getOrganizationUUID()
+  const orgUUID = isSelfHostedBridge()
+    ? 'self-hosted'
+    : await getOrganizationUUID()
   if (!orgUUID) {
     logForDebugging('[bridge] No org UUID for session fetch')
     return null
@@ -217,39 +225,25 @@ export async function getBridgeSession(
   }
 
   const url = `${opts?.baseUrl ?? getOauthConfig().BASE_API_URL}/v1/sessions/${sessionId}`
-  const timeoutMs = 10_000
   logForDebugging(`[bridge] Fetching session ${sessionId}`)
 
   let response
   try {
     response = await axios.get<{ environment_id?: string; title?: string }>(
       url,
-      { headers, timeout: timeoutMs, validateStatus: s => s < 500 },
+      { headers, timeout: 10_000, validateStatus: s => s < 500 },
     )
   } catch (err: unknown) {
-    if (axios.isAxiosError(err)) {
-      const status = err.response?.status ?? 'no-response'
-      const code = err.code ?? 'unknown-code'
-      const requestUrl = err.config?.url ?? url
-      const method = err.config?.method?.toUpperCase() ?? 'GET'
-      const message = err.message ?? errorMessage(err)
-      const timeout = err.config?.timeout ?? timeoutMs
-
-      logForDebugging(
-        `[bridge] Session fetch request failed: status=${status} code=${code} method=${method} url=${requestUrl} timeout=${timeout} message=${message}`,
-      )
-    } else {
-      logForDebugging(
-        `[bridge] Session fetch request failed: url=${url} timeout=${timeoutMs} message=${errorMessage(err)}`,
-      )
-    }
+    logForDebugging(
+      `[bridge] Session fetch request failed: ${errorMessage(err)}`,
+    )
     return null
   }
 
   if (response.status !== 200) {
     const detail = extractErrorDetail(response.data)
     logForDebugging(
-      `[bridge] Session fetch failed with status ${response.status} url=${url}${detail ? `: ${detail}` : ''}`,
+      `[bridge] Session fetch failed with status ${response.status}${detail ? `: ${detail}` : ''}`,
     )
     return null
   }
@@ -261,7 +255,7 @@ export async function getBridgeSession(
  * Archive a bridge session via POST /v1/sessions/{id}/archive.
  *
  * The CCR server never auto-archives sessions — archival is always an
- * explicit client action. Both `gakrcli remote-control` (standalone bridge) and the
+ * explicit client action. Both `claude remote-control` (standalone bridge) and the
  * always-on `/remote-control` REPL bridge call this during shutdown to archive any
  * sessions that are still alive.
  *
@@ -287,6 +281,7 @@ export async function archiveBridgeSession(
   const { getOauthConfig } = await import('../constants/oauth.js')
   const { getOAuthHeaders } = await import('../utils/teleport/api.js')
   const { default: axios } = await import('axios')
+  const { isSelfHostedBridge } = await import('./bridgeConfig.js')
 
   const accessToken =
     opts?.getAccessToken?.() ?? getGakrCLIAIOAuthTokens()?.accessToken
@@ -295,7 +290,9 @@ export async function archiveBridgeSession(
     return
   }
 
-  const orgUUID = await getOrganizationUUID()
+  const orgUUID = isSelfHostedBridge()
+    ? 'self-hosted'
+    : await getOrganizationUUID()
   if (!orgUUID) {
     logForDebugging('[bridge] No org UUID for session archive')
     return
@@ -334,7 +331,7 @@ export async function archiveBridgeSession(
  * Update the title of a bridge session via PATCH /v1/sessions/{id}.
  *
  * Called when the user renames a session via /rename while a bridge
- * connection is active, so the title stays in sync on gakrcli.ai/code.
+ * connection is active, so the title stays in sync on claude.ai/code.
  *
  * Errors are swallowed — title sync is best-effort.
  */
@@ -348,6 +345,7 @@ export async function updateBridgeSessionTitle(
   const { getOauthConfig } = await import('../constants/oauth.js')
   const { getOAuthHeaders } = await import('../utils/teleport/api.js')
   const { default: axios } = await import('axios')
+  const { isSelfHostedBridge } = await import('./bridgeConfig.js')
 
   const accessToken =
     opts?.getAccessToken?.() ?? getGakrCLIAIOAuthTokens()?.accessToken
@@ -356,7 +354,9 @@ export async function updateBridgeSessionTitle(
     return
   }
 
-  const orgUUID = await getOrganizationUUID()
+  const orgUUID = isSelfHostedBridge()
+    ? 'self-hosted'
+    : await getOrganizationUUID()
   if (!orgUUID) {
     logForDebugging('[bridge] No org UUID for session title update')
     return
