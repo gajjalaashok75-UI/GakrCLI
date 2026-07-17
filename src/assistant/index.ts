@@ -125,6 +125,14 @@ export function getAssistantSystemPromptAddendum(): string {
 }
 
 /**
+ * Whether remote assistant sessions are supported in this build.
+ * Returns false for the open/local build.
+ */
+export function supportsRemoteAssistantSessions(): boolean {
+  return false
+}
+
+/**
  * How assistant mode was activated. Used for diagnostics/analytics.
  * - 'daemon': via --assistant flag (Agent SDK daemon)
  * - 'gate': via GrowthBook gate check
