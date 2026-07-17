@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { vscode } from '../vscode';
 import { useStream } from './useStream';
-import type { ChatMessage, SessionCost, TodoItem } from '../types/chat';
+import type { ChatMessage, SessionCost, TodoItem, SubAgentSession } from '../types/chat';
 import type {
   SDKMessage,
   StreamEvent,
@@ -21,6 +21,7 @@ import {
   mergeExistingToolResults,
   normalizeRenderableBlocks,
   normalizeTextContentBlock,
+  preserveThinkingBlocks,
   stripInternalTextWrappers,
 } from '../utils/chatMessageTransforms';
 import {
@@ -150,6 +151,9 @@ export function useChat() {
   const compactSystemMessageIdRef = useRef<string | null>(null);
   const isCompactingRef = useRef(false);
 
+  const [subAgentSessions, setSubAgentSessions] = useState<Record<string, SubAgentSession>>({});
+  const subAgentSessionsRef = useRef<Record<string, SubAgentSession>>({});
+
   const handleUserMessage = useCallback((msg: UserMessage) => {
     const id = msg.uuid || `user-${Date.now()}`;
     const toolResults = extractToolResultBlocks(msg.message.content);
@@ -174,6 +178,8 @@ export function useChat() {
     }
 
     resultTargetAssistantIdRef.current = null;
+    // Show streaming indicator from message send through to final result
+    setIsStreaming(true);
     const chatMsg: ChatMessage = {
       id,
       role: 'user',
@@ -315,42 +321,65 @@ export function useChat() {
       setTodos(nextTodos);
     }
     let resolvedAssistantId = msg.uuid;
+    let wasNewMessage = false;
     setMessages((prev) => {
       const existingIndex = msg.uuid ? prev.findIndex((m) => m.id === msg.uuid) : -1;
       if (existingIndex >= 0) {
         resolvedAssistantId = msg.uuid;
         return prev.map((m, index) =>
           index === existingIndex
-            ? { ...m, ...chatMsg, blocks: mergeExistingToolResults(blocks, m.blocks ?? []) }
+            ? {
+                ...m,
+                ...chatMsg,
+                blocks: preserveThinkingBlocks(
+                  mergeExistingToolResults(blocks, m.blocks ?? []),
+                  m.blocks ?? [],
+                ),
+              }
             : m,
         );
       }
 
       const finalSignature = blocksSignature(blocks);
       const finalSoftSignature = blocksSoftSignature(blocks);
-      for (let index = prev.length - 1, checked = 0; index >= 0 && checked < 8; index--) {
-        const candidate = prev[index];
-        if (!candidate || candidate.role !== 'assistant') continue;
-        checked++;
-        const candidateBlocks = candidate.blocks ?? [];
-        if (
-          blocksSignature(candidateBlocks) === finalSignature ||
-          (finalSoftSignature && blocksSoftSignature(candidateBlocks) === finalSoftSignature)
-        ) {
-          resolvedAssistantId = candidate.id;
-          return prev.map((m, msgIndex) =>
-            msgIndex === index
-              ? {
-                  ...m,
-                  blocks: mergeExistingToolResults(blocks, candidateBlocks),
-                  isStreaming: false,
-                  model: chatMsg.model ?? m.model,
-                }
-              : m,
-          );
+
+      // Skip signature matching when ALL blocks are thinking-only — the
+      // signature is too generic (identical across turns) and would cause
+      // cross-message overwrites. UUID matching (above) already handles
+      // same-turn updates correctly.
+      const isThinkingOnly = blocks.length > 0 && blocks.every(
+        (b) => b.block.type === 'thinking' || b.block.type === 'redacted_thinking',
+      );
+
+      if (!isThinkingOnly) {
+        for (let index = prev.length - 1, checked = 0; index >= 0 && checked < 8; index--) {
+          const candidate = prev[index];
+          if (!candidate || candidate.role !== 'assistant') continue;
+          checked++;
+          const candidateBlocks = candidate.blocks ?? [];
+          if (
+            blocksSignature(candidateBlocks) === finalSignature ||
+            (finalSoftSignature && blocksSoftSignature(candidateBlocks) === finalSoftSignature)
+          ) {
+            resolvedAssistantId = candidate.id;
+            return prev.map((m, msgIndex) =>
+              msgIndex === index
+                ? {
+                    ...m,
+                    blocks: preserveThinkingBlocks(
+                      mergeExistingToolResults(blocks, candidateBlocks),
+                      candidateBlocks,
+                    ),
+                    isStreaming: false,
+                    model: chatMsg.model ?? m.model,
+                  }
+                : m,
+            );
+          }
         }
       }
 
+      wasNewMessage = true;
       return [...prev, chatMsg];
     });
     resultTargetAssistantIdRef.current = resolvedAssistantId;
@@ -372,10 +401,11 @@ export function useChat() {
       }
     }
 
-    if (!streamingUuidRef.current && activeToolUseIdsRef.current.size === 0) {
-      setIsStreaming(false);
-      setToolActivity(null);
-    } else if (activeToolUseIdsRef.current.size > 0) {
+    if (wasNewMessage) {
+      // New assistant message appended (e.g. first thinking block of a turn)
+      setIsStreaming(true);
+    }
+    if (activeToolUseIdsRef.current.size > 0) {
       // More tool calls are pending — keep the spinner alive and give it a
       // concrete label instead of letting it look finished.
       setIsStreaming(true);
@@ -721,6 +751,66 @@ export function useChat() {
               case 'files_persisted':
                 addSystemMessage(formatFilesPersistedMessage(msgAny), `files-${Date.now()}`);
                 break;
+              case 'task_started': {
+                const toolUseId = msgAny.tool_use_id as string;
+                const taskId = msgAny.task_id as string;
+                const description = (msgAny.description as string) || '';
+                const taskType = (msgAny.task_type as string) || '';
+                const prompt = (msgAny.prompt as string) || '';
+                const session: SubAgentSession = {
+                  toolUseId,
+                  taskId,
+                  agentType: taskType,
+                  description,
+                  prompt,
+                  status: 'running',
+                  messages: [],
+                };
+                subAgentSessionsRef.current[toolUseId] = session;
+                setSubAgentSessions((prev) => ({
+                  ...prev,
+                  [toolUseId]: session,
+                }));
+                break;
+              }
+              case 'task_progress': {
+                const tpToolUseId = msgAny.tool_use_id as string;
+                const existingSession = subAgentSessionsRef.current[tpToolUseId];
+                if (existingSession) {
+                  const lastToolName = msgAny.last_tool_name as string | undefined;
+                  const updated = {
+                    ...existingSession,
+                    description: (msgAny.description as string) || existingSession.description,
+                    lastToolName,
+                    toolUses: lastToolName ? (existingSession.toolUses ?? 0) + 1 : (existingSession.toolUses ?? 0),
+                  };
+                  subAgentSessionsRef.current[tpToolUseId] = updated;
+                  setSubAgentSessions((prev) => ({
+                    ...prev,
+                    [tpToolUseId]: updated,
+                  }));
+                }
+                break;
+              }
+              case 'task_notification': {
+                const tnToolUseId = msgAny.tool_use_id as string;
+                const currentSession = subAgentSessionsRef.current[tnToolUseId];
+                if (currentSession) {
+                  const status = (msgAny.status as string) === 'completed' ? 'completed' as const : 'error' as const;
+                  const durationMs = msgAny.duration_ms as number | undefined;
+                  const updated: SubAgentSession = {
+                    ...currentSession,
+                    status,
+                    durationMs: durationMs ?? currentSession.durationMs,
+                  };
+                  subAgentSessionsRef.current[tnToolUseId] = updated;
+                  setSubAgentSessions((prev) => ({
+                    ...prev,
+                    [tnToolUseId]: updated,
+                  }));
+                }
+                break;
+              }
               case 'not_logged_in_warning':
                 if (typeof msgAny.message === 'string') {
                   addSystemMessage(msgAny.message, `not-logged-in-${Date.now()}`);
@@ -761,6 +851,8 @@ export function useChat() {
           compactSystemMessageIdRef.current = null;
           isCompactingRef.current = false;
           setTodos([]);
+          setSubAgentSessions({});
+          subAgentSessionsRef.current = {};
           resetStream();
         }
 
@@ -958,6 +1050,8 @@ export function useChat() {
     compactSystemMessageIdRef.current = null;
     isCompactingRef.current = false;
     setTodos([]);
+    setSubAgentSessions({});
+    subAgentSessionsRef.current = {};
     setContextUsage(createPendingContextUsage(model));
     resetStream();
   }, [model, resetStream]);
@@ -1024,6 +1118,7 @@ export function useChat() {
     todos,
     retryInfo,
     contextUsage,
+    subAgentSessions,
     sendMessage,
     editMessage,
     clearMessages,

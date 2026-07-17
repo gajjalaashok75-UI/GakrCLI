@@ -1,6 +1,6 @@
 # Architecture
 
-GakrCLI VS Code is a **thin UI wrapper** around the [GakrCLI CLI](https://www.npmjs.com/package/@gitlawb/gakrcli). The CLI handles all intelligence; the extension provides VS Code-native UI.
+GakrCLI VS Code is a **thin UI wrapper** around the [GakrCLI CLI](https://www.npmjs.com/package/@gakr-gakr/gakrcli). The CLI handles all intelligence; the extension provides VS Code-native UI.
 
 ## High-Level Overview
 

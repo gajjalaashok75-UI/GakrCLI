@@ -8,11 +8,10 @@ import { DocumentBlockRenderer } from './DocumentBlockRenderer';
 import { SearchResultBlock } from './SearchResultBlock';
 import { WebSearchResultBlock } from './WebSearchResultBlock';
 import { ServerToolUseBlock } from './ServerToolUseBlock';
-import { isThinkingBlock } from '../../utils/messageVisibility';
 
 interface ContentBlockRouterProps {
   block: ContentBlock;
-  showThinkingSummaries: boolean;
+  showThinkingSummaries?: boolean;
 }
 
 /**
@@ -23,12 +22,8 @@ interface ContentBlockRouterProps {
  */
 export const ContentBlockRouter: React.FC<ContentBlockRouterProps> = ({
   block,
-  showThinkingSummaries,
+  showThinkingSummaries = false,
 }) => {
-  if (isThinkingBlock(block)) {
-    return null;
-  }
-  
   switch (block.type) {
     case 'thinking':
       return (

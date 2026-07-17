@@ -239,6 +239,48 @@ export interface SystemApiRetryMessage {
   session_id: string;
 }
 
+/** Sub-agent task started */
+export interface SystemTaskStartedMessage {
+  type: 'system';
+  subtype: 'task_started';
+  task_id: string;
+  tool_use_id: string;
+  description: string;
+  task_type: string;
+  prompt: string;
+  uuid: string;
+  session_id: string;
+}
+
+/** Sub-agent task progress update */
+export interface SystemTaskProgressMessage {
+  type: 'system';
+  subtype: 'task_progress';
+  task_id: string;
+  tool_use_id: string;
+  description: string;
+  usage?: { input_tokens: number; output_tokens: number };
+  last_tool_name?: string;
+  uuid: string;
+  session_id: string;
+}
+
+/** Sub-agent task completion notification */
+export interface SystemTaskNotificationMessage {
+  type: 'system';
+  subtype: 'task_notification';
+  task_id: string;
+  tool_use_id: string;
+  status: 'completed' | 'error' | 'cancelled';
+  output_file?: string;
+  summary?: string;
+  usage?: { input_tokens: number; output_tokens: number };
+  duration_ms?: number;
+  error?: string;
+  uuid: string;
+  session_id: string;
+}
+
 export interface ModelUsage {
   inputTokens: number;
   outputTokens: number;
@@ -280,4 +322,7 @@ export type SDKMessage =
   | ResultMessage
   | SystemInitMessage
   | SystemApiRetryMessage
-  | SystemStatusMessage;
+  | SystemStatusMessage
+  | SystemTaskStartedMessage
+  | SystemTaskProgressMessage
+  | SystemTaskNotificationMessage;

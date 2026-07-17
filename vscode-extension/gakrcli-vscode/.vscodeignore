@@ -27,6 +27,8 @@ package-lock.json
 dist/sdk.mjs
 **/*.vsix
 *.vsix
+chat-log.md
+terminal-log.md
 node_modules/**/.env
 node_modules/**/.env.*
 node_modules/**/.github/**

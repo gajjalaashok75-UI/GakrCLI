@@ -1990,3 +1990,358 @@ details[open] .thinking-toggle {
   background: transparent !important;
   padding: 0 !important;
 }
+
+/* ============================================================
+   Sub-agent block
+   ============================================================ */
+
+@keyframes subAgentGlow {
+  0%, 100% {
+    border-color: color-mix(in srgb, var(--app-glass-cyan) 40%, var(--app-glass-border) 60%);
+    box-shadow:
+      0 0 6px color-mix(in srgb, var(--app-glass-cyan) 20%, transparent),
+      inset 0 1px 0 color-mix(in srgb, var(--app-glass-highlight) 48%, transparent);
+  }
+  50% {
+    border-color: color-mix(in srgb, var(--app-glass-cyan) 70%, var(--app-glass-border) 30%);
+    box-shadow:
+      0 0 14px color-mix(in srgb, var(--app-glass-cyan) 40%, transparent),
+      inset 0 1px 0 color-mix(in srgb, var(--app-glass-highlight) 48%, transparent);
+  }
+}
+
+@keyframes statusDotPulse {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+.sub-agent-block {
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 38%, transparent);
+  border-radius: 6px;
+  margin: 4px 12px 8px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--app-glass-sky) 3%, transparent), transparent 58%),
+    color-mix(in srgb, var(--app-tool-background) 88%, rgba(0,0,0,0.22));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--app-glass-highlight) 48%, transparent);
+  overflow: hidden;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.sub-agent-running {
+  animation: subAgentGlow 2s ease-in-out infinite;
+}
+
+.sub-agent-completed {
+  border-color: color-mix(in srgb, var(--app-glass-mint) 20%, var(--app-glass-border) 80%);
+}
+
+.sub-agent-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+  gap: 8px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--app-glass-mint) 4%, transparent), transparent 72%),
+    color-mix(in srgb, var(--app-glass-surface-raised) 72%, rgba(0,0,0,0.2));
+  min-height: 30px;
+}
+
+.sub-agent-header:hover {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--app-glass-sky) 8%, transparent), transparent 72%),
+    color-mix(in srgb, var(--app-list-hover-background) 74%, rgba(0,0,0,0.18));
+}
+
+.sub-agent-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.sub-agent-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sub-agent-status-dot.running {
+  background: var(--app-glass-cyan);
+  animation: statusDotPulse 1.5s ease-in-out infinite;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--app-glass-cyan) 50%, transparent);
+}
+
+.sub-agent-status-dot.completed {
+  background: color-mix(in srgb, var(--app-glass-mint) 70%, transparent);
+}
+
+.sub-agent-header-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sub-agent-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--app-primary-foreground);
+  line-height: 1.3;
+}
+
+.sub-agent-description {
+  font-size: 11px;
+  color: var(--app-secondary-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.sub-agent-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.sub-agent-badge {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.badge-running {
+  background: color-mix(in srgb, var(--app-glass-cyan) 18%, transparent);
+  color: var(--app-glass-cyan);
+}
+
+.badge-completed {
+  background: color-mix(in srgb, var(--app-glass-mint) 15%, transparent);
+  color: color-mix(in srgb, var(--app-glass-mint) 80%, white);
+}
+
+.sub-agent-duration {
+  font-size: 11px;
+  color: var(--app-secondary-foreground);
+  white-space: nowrap;
+}
+
+.sub-agent-chevron {
+  font-size: 12px;
+  color: var(--app-secondary-foreground);
+  transition: transform 0.2s;
+  display: inline-block;
+}
+
+.sub-agent-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+/* Content area with fixed height and scroll */
+.sub-agent-content {
+  border-top: 1px solid color-mix(in srgb, var(--app-glass-border) 52%, transparent);
+  padding: 6px 10px 10px;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+/* Instruction block — collapsible, shows 2 lines by default */
+.sub-agent-instruction {
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--app-glass-surface) 24%, transparent);
+  border: 1px solid color-mix(in srgb, var(--app-glass-border) 20%, transparent);
+}
+
+.sub-agent-instruction-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sub-agent-instruction-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--app-secondary-foreground);
+}
+
+.sub-agent-instruction-text {
+  font-size: 12px;
+  color: var(--app-secondary-foreground);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  margin: 4px 0 0;
+  overflow-y: auto;
+  transition: max-height 0.2s;
+}
+
+.sub-agent-instruction-text.collapsed {
+  max-height: 2.8em;
+  overflow: hidden;
+}
+
+.sub-agent-instruction-text.expanded {
+  max-height: 300px;
+}
+
+.sub-agent-toggle-btn {
+  font-size: 10px;
+  color: var(--app-glass-cyan);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 0 0;
+  margin: 0;
+  text-decoration: none;
+}
+
+.sub-agent-toggle-btn:hover {
+  text-decoration: underline;
+}
+
+/* Messages inside sub-agent */
+.sub-agent-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sub-agent-msg {
+  padding: 2px 0;
+}
+
+.sub-agent-msg-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sub-agent-msg-text {
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  color: var(--app-secondary-foreground);
+}
+
+/* Wrapper for ToolCallBlock inside sub-agent */
+.sub-agent-tool-wrapper {
+  margin: 0;
+}
+
+/* Text block inside sub-agent */
+.sub-agent-block-text {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--app-secondary-foreground);
+  padding: 2px 4px;
+}
+
+/* Thinking inside sub-agent */
+.sub-agent-thinking-details {
+  margin: 1px 0;
+}
+
+.sub-agent-thinking-summary {
+  font-size: 11px;
+  color: var(--app-secondary-foreground);
+  cursor: pointer;
+  user-select: none;
+  padding: 2px 4px;
+}
+
+.sub-agent-thinking-content {
+  font-size: 11px;
+  color: var(--app-secondary-foreground);
+  white-space: pre-wrap;
+  padding: 4px 8px;
+  margin-top: 2px;
+  border-left: 2px solid color-mix(in srgb, var(--app-glass-border) 40%, transparent);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Final result block — collapsible */
+.sub-agent-final-result {
+  margin-top: 4px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--app-glass-mint) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--app-glass-mint) 14%, transparent);
+}
+
+.sub-agent-final-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sub-agent-final-result-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: color-mix(in srgb, var(--app-glass-mint) 80%, white);
+}
+
+.sub-agent-final-result-text {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--app-secondary-foreground);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-top: 4px;
+  overflow-y: auto;
+  transition: max-height 0.2s;
+}
+
+.sub-agent-final-result-text.collapsed {
+  max-height: 2.8em;
+  overflow: hidden;
+}
+
+.sub-agent-final-result-text.expanded {
+  max-height: 300px;
+}
+
+/* Running indicator */
+.sub-agent-running-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--app-glass-cyan);
+  padding: 6px 0 2px;
+}
+
+.running-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--app-glass-cyan);
+  animation: statusDotPulse 1s ease-in-out infinite;
+}
+
+/* Done text */
+.sub-agent-done-text {
+  font-size: 11px;
+  color: var(--app-secondary-foreground);
+  padding: 4px 0 0;
+}

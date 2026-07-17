@@ -13,8 +13,8 @@ export function extractUserVisibleText(content: UserMessage['message']['content'
     .filter((block): block is { type: 'text'; text: string } =>
       typeof block === 'object' &&
       block !== null &&
-      (block as Record<string, unknown>).type === 'text' &&
-      typeof (block as Record<string, unknown>).text === 'string',
+      (block as unknown as Record<string, unknown>).type === 'text' &&
+      typeof (block as unknown as Record<string, unknown>).text === 'string',
     )
     .map((block) => block.text)
     .join('\n')
@@ -29,18 +29,21 @@ export function extractToolResultBlocks(content: UserMessage['message']['content
   }
 
   return content
-    .filter((block): block is Record<string, unknown> =>
+    .filter((block) =>
       typeof block === 'object' &&
       block !== null &&
-      (block as Record<string, unknown>).type === 'tool_result' &&
-      typeof (block as Record<string, unknown>).tool_use_id === 'string',
+      (block as unknown as Record<string, unknown>).type === 'tool_result' &&
+      typeof (block as unknown as Record<string, unknown>).tool_use_id === 'string',
     )
-    .map((block) => ({
-      type: 'tool_result' as const,
-      tool_use_id: block.tool_use_id as string,
-      content: normalizeToolResultContent(block.content),
-      is_error: Boolean(block.is_error),
-    }));
+    .map((block) => {
+      const b = block as unknown as Record<string, unknown>;
+      return {
+        type: 'tool_result' as const,
+        tool_use_id: b.tool_use_id as string,
+        content: normalizeToolResultContent(b.content),
+        is_error: Boolean(b.is_error),
+      };
+    });
 }
 
 export function attachToolResults(messages: ChatMessage[], results: ToolResultBlock[]): ChatMessage[] {
@@ -59,12 +62,55 @@ export function mergeExistingToolResults(
   }, finalBlocks);
 }
 
+/**
+ * Preserve existing thinking/redacted_thinking blocks from old state when
+ * the new blocks don't include any. The CLI sends assistant messages as
+ * complete replacements — thinking blocks that arrive first get overwritten
+ * when the actual content (text/tool_use) arrives. This function keeps them.
+ */
+export function preserveThinkingBlocks(
+  newBlocks: Array<{ block: ContentBlock; index: number; isStreaming: boolean }>,
+  oldBlocks: Array<{ block: unknown; index: number; isStreaming: boolean }>,
+): Array<{ block: ContentBlock; index: number; isStreaming: boolean }> {
+  const oldThinkingBlocks = oldBlocks.filter(
+    (b) => blockTypeEquals(b.block, 'thinking') || blockTypeEquals(b.block, 'redacted_thinking'),
+  );
+  if (oldThinkingBlocks.length === 0) return newBlocks;
+
+  const newHasThinking = newBlocks.some(
+    (b) => b.block.type === 'thinking' || b.block.type === 'redacted_thinking',
+  );
+  if (newHasThinking) return newBlocks;
+
+  // Re-index old thinking blocks to come first, offset the new blocks
+  const reindexedThinking = oldThinkingBlocks.map((b, i) => ({
+    block: b.block as ContentBlock,
+    index: i,
+    isStreaming: false,
+  }));
+  const offset = oldThinkingBlocks.length;
+  const reindexedNew = newBlocks.map((b) => ({
+    ...b,
+    index: b.index + offset,
+  }));
+
+  return [...reindexedThinking, ...reindexedNew];
+}
+
+function blockTypeEquals(block: unknown, type: string): boolean {
+  return (
+    typeof block === 'object' &&
+    block !== null &&
+    (block as Record<string, unknown>).type === type
+  );
+}
+
 export function isToolUseBlock(block: unknown): boolean {
   return Boolean(
     block &&
     typeof block === 'object' &&
-    ((block as Record<string, unknown>).type === 'tool_use' ||
-      (block as Record<string, unknown>).type === 'server_tool_use'),
+    ((block as unknown as Record<string, unknown>).type === 'tool_use' ||
+      (block as unknown as Record<string, unknown>).type === 'server_tool_use'),
   );
 }
 
@@ -216,15 +262,15 @@ function isMatchingToolUse(block: unknown, toolUseId: string): boolean {
   if (!isToolUseBlock(block)) {
     return false;
   }
-  return (block as Record<string, unknown>).id === toolUseId;
+  return (block as unknown as Record<string, unknown>).id === toolUseId;
 }
 
 function isToolResultBlock(block: unknown): block is ToolResultBlock {
   return Boolean(
     block &&
     typeof block === 'object' &&
-    (block as Record<string, unknown>).type === 'tool_result' &&
-    typeof (block as Record<string, unknown>).tool_use_id === 'string',
+    (block as unknown as Record<string, unknown>).type === 'tool_result' &&
+    typeof (block as unknown as Record<string, unknown>).tool_use_id === 'string',
   );
 }
 
@@ -234,8 +280,11 @@ function normalizeBlockForSignature(block: unknown): unknown {
   }
 
   const record = block as Record<string, unknown>;
-  if (record.type === 'thinking' || record.type === 'redacted_thinking') {
-    return null;
+  if (record.type === 'thinking') {
+    return { type: 'thinking' };
+  }
+  if (record.type === 'redacted_thinking') {
+    return { type: 'redacted_thinking' };
   }
 
   if (record.type === 'text' && typeof record.text === 'string') {
@@ -270,11 +319,13 @@ function normalizeBlockForSoftSignature(block: unknown): unknown {
   }
 
   const record = block as Record<string, unknown>;
-  if (
-    record.type === 'thinking' ||
-    record.type === 'redacted_thinking' ||
-    record.type === 'tool_result'
-  ) {
+  if (record.type === 'thinking') {
+    return { type: 'thinking' };
+  }
+  if (record.type === 'redacted_thinking') {
+    return { type: 'redacted_thinking' };
+  }
+  if (record.type === 'tool_result') {
     return null;
   }
 

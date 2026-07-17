@@ -4,9 +4,9 @@
 
 - **VS Code** 1.94.0 or later
 - **Node.js** 18.x or later
-- **GakrCLI CLI** (`npm install -g @gitlawb/gakrcli`)
+- **GakrCLI CLI** (`npm install -g @gakr-gakr/gakrcli`)
 
-The extension is a UI wrapper around the [GakrCLI CLI](https://www.npmjs.com/package/@gitlawb/gakrcli). The CLI must be installed separately — it handles all provider communication, tool execution, and AI orchestration.
+The extension is a UI wrapper around the [GakrCLI CLI](https://www.npmjs.com/package/@gakr-gakr/gakrcli). The CLI must be installed separately — it handles all provider communication, tool execution, and AI orchestration.
 
 ## Install from VS Code Marketplace
 
@@ -34,7 +34,7 @@ code --install-extension gakrcli-vscode-1.0.0.vsix
 ### 1. Install the CLI
 
 ```bash
-npm install -g @gitlawb/gakrcli
+npm install -g @gakr-gakr/gakrcli
 ```
 
 ### 2. Configure an AI provider
@@ -72,10 +72,10 @@ Open GakrCLI and type a prompt. If the CLI is properly installed and a provider 
 
 ### "GakrCLI CLI not found"
 
-Ensure `@gitlawb/gakrcli` is installed globally:
+Ensure `@gakr-gakr/gakrcli` is installed globally:
 
 ```bash
-npm install -g @gitlawb/gakrcli
+npm install -g @gakr-gakr/gakrcli
 gakrcli --version
 ```
 

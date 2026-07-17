@@ -88,7 +88,7 @@ The repository includes a publish workflow. On tag push (`v*`), it:
 
 ### "Extension not found" after install
 
-Ensure the CLI is installed: `npm install -g @gitlawb/gakrcli`. The extension requires the CLI.
+Ensure the CLI is installed: `npm install -g @gakr-gakr/gakrcli`. The extension requires the CLI.
 
 ### Marketplace publish fails
 

@@ -18,7 +18,7 @@ OpenAI · Anthropic · Google Gemini · DeepSeek · Ollama · AWS Bedrock · Ver
 
 ## What is GakrCLI?
 
-GakrCLI is a **full-featured VS Code extension** that wraps the open-source [GakrCLI CLI](https://www.npmjs.com/package/@gitlawb/gakrcli) — an AI coding assistant that works with any LLM provider. The CLI handles all intelligence (tool use, provider routing, MCP, slash commands); the extension gives you a first-class editor experience: streaming chat panel, native diff viewer, @-mentions, session history, and more.
+GakrCLI is a **full-featured VS Code extension** that wraps the open-source [GakrCLI CLI](https://www.npmjs.com/package/@gakr-gakr/gakrcli) — an AI coding assistant that works with any LLM provider. The CLI handles all intelligence (tool use, provider routing, MCP, slash commands); the extension gives you a first-class editor experience: streaming chat panel, native diff viewer, @-mentions, session history, and more.
 
 Unlike assistants locked to a single provider, GakrCLI lets you **bring your own model** — or switch between them mid-session.
 
@@ -68,7 +68,7 @@ Switch providers on the fly via `/provider`, the provider badge, or environment 
 ### Prerequisites
 
 ```bash
-npm install -g @gitlawb/gakrcli
+npm install -g @gakr-gakr/gakrcli
 ```
 
 The CLI is required — the extension is a UI wrapper around it.
@@ -172,7 +172,7 @@ GakrCLI CLI (child process)    ← Intelligence: tools, providers, MCP, plugins
 Any LLM provider               ← OpenAI / Anthropic / Gemini / Ollama / …
 ```
 
-The extension is deliberately thin — all provider logic, tool execution, MCP, and slash-commands live in the CLI. Upgrading the brain means `npm install -g @gitlawb/gakrcli@latest` with no VS Code reinstall.
+The extension is deliberately thin — all provider logic, tool execution, MCP, and slash-commands live in the CLI. Upgrading the brain means `npm install -g @gakr-gakr/gakrcli@latest` with no VS Code reinstall.
 
 See [Architecture](https://github.com/gajjalaashok75-UI/gakrcli-vscode/blob/main/docs/ARCHITECTURE.md) for details.
 

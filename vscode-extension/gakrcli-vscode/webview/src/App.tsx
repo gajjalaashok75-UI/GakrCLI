@@ -6,7 +6,7 @@ import { TeleportDialog } from './components/dialogs/TeleportDialog';
 import { ElicitationDialog } from './components/dialogs/ElicitationDialog';
 import { usePermissions } from './hooks/usePermissions';
 import { vscode } from './vscode';
-import type { TeleportState, ElicitationState } from './types/interactions';
+import type { TeleportState, ElicitationField, ElicitationState } from './types/interactions';
 
 function App() {
   const { currentRequest, pendingCount, respond } = usePermissions();
@@ -52,7 +52,7 @@ function App() {
           request: {
             requestId: data.requestId as string,
             message: data.message as string,
-            fields: (data.fields as unknown[]) ?? [],
+            fields: data.fields as ElicitationField[],
           },
         });
         return;

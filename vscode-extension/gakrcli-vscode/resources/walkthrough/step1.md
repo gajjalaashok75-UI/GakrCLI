@@ -7,7 +7,7 @@ GakrCLI can read your files, make edits, run terminal commands, and help you nav
 GakrCLI requires the **GakrCLI CLI** to be installed. Open a terminal and run:
 
 ```bash
-npm install -g @gitlawb/gakrcli
+npm install -g @gakr-gakr/gakrcli
 ```
 
 > The VS Code extension is a UI wrapper — all AI intelligence lives in the CLI.
