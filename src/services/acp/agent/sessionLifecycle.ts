@@ -14,6 +14,7 @@ import type {
   NewSessionResponse,
 } from '@agentclientprotocol/sdk'
 import type { Message } from '../../../types/message.js'
+import type { SessionModelState } from './sessionTypes.js'
 import { deserializeMessages } from '../../../utils/conversationRecovery.js'
 import { getLastSessionLog } from '../../../utils/sessionStorage.js'
 import type { PermissionMode } from '../../../types/permissions.js'
@@ -78,7 +79,7 @@ async function getOrCreateSession(
         // populated (standard clients gate supportsModelSelection on this field).
         models: existingSession.models,
         configOptions: existingSession.configOptions,
-      }
+      } as NewSessionResponse & { models: SessionModelState }
     }
 
     await this.teardownSession(params.sessionId)
@@ -137,7 +138,7 @@ async function getOrCreateSession(
     // createSession already returns models; pass it through. Same reason as above.
     models: response.models,
     configOptions: response.configOptions,
-  }
+  } as NewSessionResponse & { models: SessionModelState }
 }
 
 // ── teardownSession ──────────────────────────────────────────────
@@ -216,9 +217,12 @@ function applySessionMode(
 
     session.modes = { ...session.modes, currentModeId: modeId }
     // Sync mode to appState so the permission pipeline sees the correct mode
-    session.appState.toolPermissionContext = {
-      ...session.appState.toolPermissionContext,
-      mode: modeId as PermissionMode,
+    session.appState = {
+      ...session.appState,
+      toolPermissionContext: {
+        ...session.appState.toolPermissionContext,
+        mode: modeId as PermissionMode,
+      },
     }
   }
 }

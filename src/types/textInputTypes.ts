@@ -359,6 +359,20 @@ export type QueuedCommand = {
    * unified the queue but lost the isolation the dual-queue accidentally had).
    */
   agentId?: AgentId
+  /**
+   * Autonomy metadata attached to commands created by the autonomy subsystem
+   * (proactive ticks, scheduled tasks, managed flows, etc.).
+   */
+  autonomy?: {
+    runId: string
+    rootDir?: string
+    trigger: string
+    sourceId?: string
+    sourceLabel?: string
+    flowId?: string
+    flowStepId?: string
+    flowStepName?: string
+  }
 }
 
 /**

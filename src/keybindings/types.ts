@@ -19,6 +19,7 @@ export type KeybindingContextName =
   | 'ModelPicker'
   | 'Select'
   | 'Plugin'
+  | 'EffortPanel'
 
 export type KeybindingAction =
   | 'app:interrupt'

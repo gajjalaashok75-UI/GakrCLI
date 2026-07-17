@@ -1,7 +1,7 @@
 import {
-  getGakrCLIAiBaseUrl,
-  getRemoteSessionUrl,
+  getGakrCLIAiBaseUrl
 } from '../constants/product.js'
+import { isSelfHostedBridge, getBridgeBaseUrl } from './bridgeConfig.js'
 import { stringWidth } from '../ink/stringWidth.js'
 import { formatDuration, truncateToWidth } from '../utils/format.js'
 import { getGraphemeSegmenter } from '../utils/intl.js'
@@ -40,7 +40,10 @@ export function buildBridgeConnectUrl(
   environmentId: string,
   ingressUrl?: string,
 ): string {
-  const baseUrl = getGakrCLIAiBaseUrl(undefined, ingressUrl)
+  // Self-hosted: use the configured server URL directly
+  const baseUrl = isSelfHostedBridge()
+    ? getBridgeBaseUrl()
+    : getGakrCLIAiBaseUrl(undefined, ingressUrl)
   return `${baseUrl}/code?bridge=${environmentId}`
 }
 
@@ -54,7 +57,11 @@ export function buildBridgeSessionUrl(
   environmentId: string,
   ingressUrl?: string,
 ): string {
-  return `${getRemoteSessionUrl(sessionId, ingressUrl)}?bridge=${environmentId}`
+  // Self-hosted: use the configured server URL directly
+  const baseUrl = isSelfHostedBridge()
+    ? getBridgeBaseUrl()
+    : getGakrCLIAiBaseUrl(undefined, ingressUrl)
+  return `${baseUrl}/code/${sessionId}?bridge=${environmentId}`
 }
 
 /** Compute the glimmer index for a reverse-sweep shimmer animation. */

@@ -1,6 +1,6 @@
 import { stat, readFile } from 'fs/promises'
 import { z } from 'zod/v4'
-import type { ToolResultBlockParam } from 'src/Tool.js'
+import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
 import { buildTool } from 'src/Tool.js'
 import { lazySchema } from 'src/utils/lazySchema.js'
 import {

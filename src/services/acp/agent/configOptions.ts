@@ -1,8 +1,8 @@
 import type {
   SessionModeState,
-  SessionModelState,
   SessionConfigOption,
 } from '@agentclientprotocol/sdk'
+import type { SessionModelState } from './sessionTypes.js'
 
 export function buildConfigOptions(
   modes: SessionModeState,

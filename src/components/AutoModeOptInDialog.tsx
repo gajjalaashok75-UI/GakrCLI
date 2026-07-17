@@ -26,7 +26,7 @@ export function AutoModeOptInDialog(t0: Props) {
     t1 = [];
     $[0] = t1;
   } else {
-    t1 = $[0];
+    t1 = $[0] as [];
   }
   React.useEffect(_temp, t1);
   let t2;

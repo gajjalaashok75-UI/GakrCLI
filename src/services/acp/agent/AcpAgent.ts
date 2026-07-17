@@ -39,8 +39,6 @@ import {
   type CloseSessionResponse,
   type SetSessionModeRequest,
   type SetSessionModeResponse,
-  type SetSessionModelRequest,
-  type SetSessionModelResponse,
   type SetSessionConfigOptionRequest,
   type SetSessionConfigOptionResponse,
   type ClientCapabilities,
@@ -207,7 +205,12 @@ export class AcpAgent implements Agent {
       dir: requestedCwd,
     })
 
-    const sessions = []
+    const sessions: Array<{
+      sessionId: string
+      cwd: string
+      title?: string
+      updatedAt: string
+    }> = []
     for (const candidate of candidates) {
       if (!candidate.cwd) continue
       // Per session-list.mdx: "Only sessions with a matching cwd are
@@ -359,11 +362,11 @@ export class AcpAgent implements Agent {
     return {}
   }
 
-  // ── setSessionModel ─────────────────────────────────────────────
+  // ── setSessionModel (UNSTABLE) ──────────────────────────────────
 
   async unstable_setSessionModel(
-    params: SetSessionModelRequest,
-  ): Promise<SetSessionModelResponse> {
+    params: { sessionId: string; modelId: string },
+  ): Promise<Record<string, never>> {
     const session = this.sessions.get(params.sessionId)
     if (!session) {
       throw new Error('Session not found')
