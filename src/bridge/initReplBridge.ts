@@ -25,6 +25,7 @@ import {
   waitForPolicyLimitsToLoad,
 } from '../services/policyLimits/index.js'
 import type { Message } from '../types/message.js'
+import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/index.js'
 import {
   checkAndRefreshOAuthTokenIfNeeded,
   getGakrCLIAIOAuthTokens,
@@ -53,6 +54,7 @@ import {
   getBridgeAccessToken,
   getBridgeBaseUrl,
   getBridgeTokenOverride,
+  isSelfHostedBridge,
 } from './bridgeConfig.js'
 import {
   checkBridgeMinVersion,
@@ -288,11 +290,13 @@ export async function initReplBridge(
           msg.isMeta ||
           msg.toolUseResult ||
           msg.isCompactSummary ||
-          (msg.origin && msg.origin.kind !== 'human') ||
+          (msg.origin && (msg.origin as { kind?: string }).kind !== 'human') ||
           isSyntheticMessage(msg)
         )
           continue
-        const rawContent = getContentText(msg.message.content)
+        const rawContent = getContentText(
+          msg.message!.content as string | ContentBlockParam[],
+        )
         if (!rawContent) continue
         const derived = deriveTitle(rawContent)
         if (!derived) continue
@@ -383,19 +387,24 @@ export async function initReplBridge(
     // Also re-latches if v1 env-lost resets the transport's done flag past 3.
     return userMessageCount >= 3
   }
-
+  
   // Note: the open-source flag shim resolves from the local feature-flags
   // file and takes no refresh-window argument.
   const initialHistoryCap = getFeatureValue_CACHED_WITH_REFRESH(
     'tengu_bridge_initial_history_cap',
     200,
+    5 * 60 * 1000,
   )
 
   // Fetch orgUUID before the v1/v2 branch — both paths need it. v1 for
   // environment registration; v2 for archive (which lives at the compat
   // /v1/sessions/{id}/archive, not /v1/code/sessions). Without it, v2
   // archive 404s and sessions stay alive in CCR after /exit.
-  const orgUUID = await getOrganizationUUID()
+  // Self-hosted bridges skip this check — the local server doesn't require
+  // org-based auth.
+  const orgUUID = isSelfHostedBridge()
+    ? 'self-hosted'
+    : await getOrganizationUUID()
   if (!orgUUID) {
     logBridgeSkip('no_org_uuid', '[bridge:repl] Skipping: no org UUID')
     onStateChange?.('failed', '/login')

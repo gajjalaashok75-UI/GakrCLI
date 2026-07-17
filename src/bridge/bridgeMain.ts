@@ -202,6 +202,7 @@ export async function runBridgeLoop(
   async function heartbeatActiveWorkItems(): Promise<
     'ok' | 'auth_failed' | 'fatal' | 'failed'
   > {
+    rcLog(`heartbeat: checking ${activeSessions.size} active session(s)`)
     let anySuccess = false
     let anyFatal = false
     const authFailedSessions: string[] = []
@@ -446,6 +447,11 @@ export async function runBridgeLoop(
   ): (status: SessionDoneStatus) => void {
     return (rawStatus: SessionDoneStatus): void => {
       const workId = sessionWorkIds.get(sessionId)
+      rcLog(
+        `session done: sessionId=${sessionId} workId=${workId ?? 'none'} status=${rawStatus}` +
+          ` wasTimedOut=${timedOutSessions.has(sessionId)} duration=${Math.round((Date.now() - startTime) / 1000)}s` +
+          ` stderr=${handle.lastStderr.length > 0 ? handle.lastStderr.join('\\n').slice(0, 500) : '(none)'}`,
+      )
       activeSessions.delete(sessionId)
       sessionStartTimes.delete(sessionId)
       sessionWorkIds.delete(sessionId)
@@ -604,6 +610,9 @@ export async function runBridgeLoop(
     const pollConfig = getPollIntervalConfig()
 
     try {
+      rcLog(
+        `poll: envId=${environmentId} activeSessions=${activeSessions.size}`,
+      )
       const work = await api.pollForWork(
         environmentId,
         environmentSecret,
@@ -858,6 +867,9 @@ export async function runBridgeLoop(
           break
         case 'session': {
           const sessionId = work.data.id
+          rcLog(
+            `work received: type=session sessionId=${sessionId} workId=${work.id}`,
+          )
           try {
             validateBridgeId(sessionId, 'session_id')
           } catch {
@@ -1023,6 +1035,12 @@ export async function runBridgeLoop(
           // the onFirstUserMessage callback can close over it.
           const compatSessionId = toCompatSessionId(sessionId)
 
+          rcLog(
+            `spawning session: sessionId=${sessionId} sdkUrl=${sdkUrl}` +
+              ` useCcrV2=${useCcrV2} workerEpoch=${workerEpoch}` +
+              ` dir=${sessionDir}` +
+              ` accessToken=${secret.session_ingress_token ? secret.session_ingress_token.slice(0, 8) + '...' : 'NONE'}`,
+          )
           const spawnResult = safeSpawn(
             spawner,
             {
@@ -1266,6 +1284,11 @@ export async function runBridgeLoop(
       }
 
       const errMsg = describeAxiosError(err)
+      rcLog(
+        `poll error: ${errMsg}` +
+          ` isConn=${isConnectionError(err)} isServer=${isServerError(err)}` +
+          ` activeSessions=${activeSessions.size}`,
+      )
 
       if (isConnectionError(err) || isServerError(err)) {
         const now = Date.now()
@@ -1946,7 +1969,7 @@ NOTES
   - You must be logged in with a GakrCLI account that has a subscription
   - Run \`gakrcli\` first in the directory to accept the workspace trust dialog
 ${serverNote}`
-  // biome-ignore lint/suspicious/noConsole: intentional help output
+// biome-ignore lint/suspicious/noConsole: intentional help output
   console.log(help)
 }
 
@@ -2084,7 +2107,7 @@ export async function bridgeMain(args: string[]): Promise<void> {
   // The bridge bypasses main.tsx (which renders the interactive TrustDialog via showSetupScreens),
   // so we must verify trust was previously established by a normal `gakrcli` session.
   if (!checkHasTrustDialogAccepted()) {
-    // biome-ignore lint/suspicious/noConsole:: intentional console output
+    // biome-ignore lint/suspicious/noConsole:intentional console output
     console.error(
       `Error: Workspace not trusted. Please run \`gakrcli\` in ${dir} first to review and accept the workspace trust dialog.`,
     )
@@ -2101,7 +2124,7 @@ export async function bridgeMain(args: string[]): Promise<void> {
 
   const bridgeToken = getBridgeAccessToken()
   if (!bridgeToken) {
-    // biome-ignore lint/suspicious/noConsole:: intentional console output
+        // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.error(BRIDGE_LOGIN_ERROR)
     // eslint-disable-next-line custom-rules/no-process-exit
     process.exit(1)
@@ -2120,7 +2143,7 @@ export async function bridgeMain(args: string[]): Promise<void> {
       input: process.stdin,
       output: process.stdout,
     })
-    // biome-ignore lint/suspicious/noConsole:: intentional console output
+        // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.log(
       '\nRemote Control lets you access this CLI session from the web (gakrcli.ai/code)\nor the GakrCLI app, so you can pick up where you left off on any device.\n\nYou can disconnect remote access anytime by running /remote-control again.\n',
     )
@@ -2152,7 +2175,7 @@ export async function bridgeMain(args: string[]): Promise<void> {
     )
     const found = await readBridgePointerAcrossWorktrees(dir)
     if (!found) {
-      // biome-ignore lint/suspicious/noConsole: intentional error output
+          // biome-ignore lint/suspicious/noConsole:: intentional error output
       console.error(
         `Error: No recent session found in this directory or its worktrees. Run \`gakrcli remote-control\` to start a new one.`,
       )
@@ -2163,7 +2186,7 @@ export async function bridgeMain(args: string[]): Promise<void> {
     const ageMin = Math.round(pointer.ageMs / 60_000)
     const ageStr = ageMin < 60 ? `${ageMin}m` : `${Math.round(ageMin / 60)}h`
     const fromWt = pointerDir !== dir ? ` from worktree ${pointerDir}` : ''
-    // biome-ignore lint/suspicious/noConsole: intentional info output
+        // biome-ignore lint/suspicious/noConsole:: intentional info output
     console.error(
       `Resuming session ${pointer.sessionId} (${ageStr} ago)${fromWt}\u2026`,
     )
@@ -2194,8 +2217,9 @@ export async function bridgeMain(args: string[]): Promise<void> {
 
   // Session ingress URL for WebSocket connections. In production this is the
   // same as baseUrl (Envoy routes /v1/session_ingress/* to session-ingress).
-  // Locally, session-ingress may run on a different port, so
-  // GAKR_BRIDGE_SESSION_INGRESS_URL can override the default.
+  // Locally, session-ingress runs on a different port (9413) than the
+  // contain-provide-api (8211), so GAKR_BRIDGE_SESSION_INGRESS_URL must be
+  // set explicitly. Ant-only, matching GAKR_BRIDGE_BASE_URL.
   const sessionIngressUrl =
     process.env.GAKR_BRIDGE_SESSION_INGRESS_URL || baseUrl
 
@@ -2325,7 +2349,6 @@ export async function bridgeMain(args: string[]): Promise<void> {
   // Only reachable via explicit --spawn=worktree (default is same-dir);
   // saved worktree pref was already guarded above.
   if (spawnMode === 'worktree' && !worktreeAvailable) {
-    // biome-ignore lint/suspicious/noConsole: intentional error output
     console.error(
       `Error: Worktree mode requires a git repository or WorktreeCreate hooks configured. Use --spawn=session for single-session mode.`,
     )
@@ -2360,7 +2383,6 @@ export async function bridgeMain(args: string[]): Promise<void> {
     try {
       validateBridgeId(resumeSessionId, 'sessionId')
     } catch {
-      // biome-ignore lint/suspicious/noConsole: intentional error output
       console.error(
         `Error: Invalid session ID "${resumeSessionId}". Session IDs must not contain unsafe characters.`,
       )
@@ -2386,7 +2408,6 @@ export async function bridgeMain(args: string[]): Promise<void> {
         const { clearBridgePointer } = await import('./bridgePointer.js')
         await clearBridgePointer(resumePointerDir)
       }
-      // biome-ignore lint/suspicious/noConsole: intentional error output
       console.error(
         `Error: Session ${resumeSessionId} not found. It may have been archived or expired, or your login may have lapsed (run \`gakrcli /login\`).`,
       )
@@ -2398,7 +2419,6 @@ export async function bridgeMain(args: string[]): Promise<void> {
         const { clearBridgePointer } = await import('./bridgePointer.js')
         await clearBridgePointer(resumePointerDir)
       }
-      // biome-ignore lint/suspicious/noConsole: intentional error output
       console.error(
         `Error: Session ${resumeSessionId} has no environment_id. It may never have been attached to a bridge.`,
       )
@@ -2421,7 +2441,7 @@ export async function bridgeMain(args: string[]): Promise<void> {
     verbose,
     sandbox,
     bridgeId,
-    workerType: 'gakrcli_code',
+    workerType: 'gakrcli',
     environmentId: randomUUID(),
     reuseEnvironmentId,
     apiBaseUrl: baseUrl,
@@ -2452,7 +2472,6 @@ export async function bridgeMain(args: string[]): Promise<void> {
       status: err instanceof BridgeFatalError ? err.status : undefined,
     })
     // Registration failures are fatal — print a clean message instead of a stack trace.
-    // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.error(
       err instanceof BridgeFatalError && err.status === 404
         ? 'Remote Control environments are not available for your account.'
@@ -2477,7 +2496,6 @@ export async function bridgeMain(args: string[]): Promise<void> {
           `Bridge resume env mismatch: requested ${reuseEnvironmentId}, backend returned ${environmentId}. Falling back to fresh session.`,
         ),
       )
-      // biome-ignore lint/suspicious/noConsole: intentional warning output
       console.warn(
         `Warning: Could not resume session ${resumeSessionId} — its environment has expired. Creating a fresh session instead.`,
       )
@@ -2528,7 +2546,6 @@ export async function bridgeMain(args: string[]): Promise<void> {
           const { clearBridgePointer } = await import('./bridgePointer.js')
           await clearBridgePointer(resumePointerDir)
         }
-        // biome-ignore lint/suspicious/noConsole: intentional error output
         console.error(
           isFatal
             ? `Error: ${errorMessage(err)}`
@@ -2879,7 +2896,7 @@ export async function runBridgeHeadless(
     verbose: false,
     sandbox: opts.sandbox,
     bridgeId,
-    workerType: 'gakrcli_code',
+    workerType: 'gakrcli',
     environmentId: randomUUID(),
     apiBaseUrl: baseUrl,
     sessionIngressUrl,

@@ -219,6 +219,8 @@ export type CommandBase = {
   isSensitive?: boolean // If true, args are redacted from the conversation history
   /** Defaults to `name`. Only override when the displayed name differs (e.g. plugin prefix stripping). */
   userFacingName?: () => string
+  /** If true, this command is safe to pass through a "bridge" that connects the IDE to the CLI. */
+  bridgeSafe?: boolean
 }
 
 export type Command = CommandBase &

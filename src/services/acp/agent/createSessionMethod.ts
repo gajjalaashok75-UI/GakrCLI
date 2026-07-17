@@ -8,9 +8,9 @@ import type {
   NewSessionRequest,
   NewSessionResponse,
   SessionModeState,
-  SessionModelState,
 } from '@agentclientprotocol/sdk'
 import type { Message } from '../../../types/message.js'
+import type { SessionModelState } from './sessionTypes.js'
 import { QueryEngine } from '../../../QueryEngine.js'
 import type { QueryEngineConfig } from '../../../QueryEngine.js'
 import type { Tools } from '../../../Tool.js'
@@ -293,7 +293,7 @@ async function createSession(
       modes,
       models,
       configOptions,
-    }
+    } as NewSessionResponse & { models: SessionModelState }
   } finally {
     if (processCwdChanged) {
       process.chdir(previousProcessCwd)

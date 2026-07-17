@@ -69,7 +69,7 @@ export function BridgeDialog(t0) {
         return;
       }
       qrToString(displayUrl, {
-        type: "utf8",
+        type: "utf-8",
         errorCorrectionLevel: "L",
         small: true
       }).then(setQrText).catch(() => setQrText(""));

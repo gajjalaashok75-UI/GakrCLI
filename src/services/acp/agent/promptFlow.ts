@@ -47,7 +47,9 @@ async function prompt(
   // PromptRequest, echo it back as `userMessageId` to confirm receipt.
   // We do not self-generate when omitted — the spec makes that optional and
   // staying quiet avoids surfacing IDs the client didn't ask to track.
-  const userMessageId = params.messageId ?? undefined
+  // Per message-id.mdx RFD: messageId is a non-standard PromptRequest extension
+  // carried by some ACP clients via _meta or as a direct property.
+  const userMessageId = (params as { messageId?: string }).messageId ?? undefined
 
   // Extract text/image content from the prompt
   const promptInput = promptToQueryInput(params.prompt)
@@ -86,7 +88,7 @@ async function prompt(
     // Reset the query engine's abort controller for a fresh query.
     // After a previous interrupt(), the internal controller is stuck in
     // aborted state — without this, submitMessage() fails immediately.
-    session.queryEngine.resetAbortController()
+    ;(session.queryEngine as { resetAbortController: () => void }).resetAbortController()
     // Switch global session state so recordTranscript writes to the correct
     // session file. Without this, multi-session scenarios (or creating a new
     // session after another) write transcript data to the wrong file.
@@ -98,7 +100,7 @@ async function prompt(
       params.sessionId,
       sdkMessages,
       getConnection(this),
-      session.queryEngine.getAbortSignal(),
+      (session.queryEngine as { getAbortSignal: () => AbortSignal }).getAbortSignal(),
       session.toolUseCache,
       readClientCapabilities(this),
       session.cwd,

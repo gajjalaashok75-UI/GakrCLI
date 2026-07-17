@@ -34,7 +34,7 @@ const {
 
 describe('EFFORT_LEVELS', () => {
   test('contains the five canonical levels', () => {
-    expect(EFFORT_LEVELS).toEqual(['low', 'medium', 'high', 'xhigh', 'max'])
+    expect(EFFORT_LEVELS).toEqual(['low', 'medium', 'high', 'xhigh', 'max', 'ultracode'])
   })
 })
 
@@ -325,26 +325,26 @@ describe('modelSupportsMaxEffort', () => {
   })
 })
 
-// ─── modelSupportsXhighEffort ──────────────────────────────────────────
+// ─── modelSupportsXHighEffort ──────────────────────────────────────────
 
-describe('modelSupportsXhighEffort', () => {
+describe('modelSupportsXHighEffort', () => {
   test('returns true for opus-4-7', async () => {
-    const { modelSupportsXhighEffort } = await import('src/utils/effort.js')
-    expect(modelSupportsXhighEffort('claude-opus-4-7-20250918')).toBe(true)
+    const { modelSupportsXHighEffort } = await import('src/utils/effort.js')
+    expect(modelSupportsXHighEffort('claude-opus-4-7-20250918')).toBe(true)
   })
 
   test('returns true for sonnet models', async () => {
-    const { modelSupportsXhighEffort } = await import('src/utils/effort.js')
-    expect(modelSupportsXhighEffort('claude-sonnet-4-6-20250514')).toBe(true)
+    const { modelSupportsXHighEffort } = await import('src/utils/effort.js')
+    expect(modelSupportsXHighEffort('claude-sonnet-4-6-20250514')).toBe(true)
   })
 
   test('returns true for haiku models', async () => {
-    const { modelSupportsXhighEffort } = await import('src/utils/effort.js')
-    expect(modelSupportsXhighEffort('claude-haiku-4-5-20251001')).toBe(true)
+    const { modelSupportsXHighEffort } = await import('src/utils/effort.js')
+    expect(modelSupportsXHighEffort('claude-haiku-4-5-20251001')).toBe(true)
   })
 
   test('returns true for unknown models', async () => {
-    const { modelSupportsXhighEffort } = await import('src/utils/effort.js')
-    expect(modelSupportsXhighEffort('some-random-model')).toBe(true)
+    const { modelSupportsXHighEffort } = await import('src/utils/effort.js')
+    expect(modelSupportsXHighEffort('some-random-model')).toBe(true)
   })
 })
