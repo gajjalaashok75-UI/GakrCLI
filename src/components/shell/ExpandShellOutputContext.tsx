@@ -1,4 +1,3 @@
-import { c as _c } from "react-compiler-runtime";
 import * as React from 'react';
 import { useContext } from 'react';
 
@@ -10,26 +9,15 @@ import { useContext } from 'react';
  * a boolean context that child components can check to modify their behavior.
  */
 const ExpandShellOutputContext = React.createContext(false);
-export function ExpandShellOutputProvider(t0) {
-  const $ = _c(2);
-  const {
-    children
-  } = t0;
-  let t1;
-  if ($[0] !== children) {
-    t1 = <ExpandShellOutputContext.Provider value={true}>{children}</ExpandShellOutputContext.Provider>;
-    $[0] = children;
-    $[1] = t1;
-  } else {
-    t1 = $[1];
-  }
-  return t1;
+
+export function ExpandShellOutputProvider({ children }: { children: React.ReactNode }): React.ReactNode {
+  return <ExpandShellOutputContext.Provider value={true}>{children}</ExpandShellOutputContext.Provider>;
 }
 
 /**
  * Returns true if this component is rendered inside an ExpandShellOutputProvider,
  * indicating the shell output should be shown in full rather than truncated.
  */
-export function useExpandShellOutput() {
+export function useExpandShellOutput(): boolean {
   return useContext(ExpandShellOutputContext);
 }
