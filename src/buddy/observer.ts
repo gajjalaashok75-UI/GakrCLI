@@ -32,10 +32,10 @@ function pickDeterministic<T>(items: readonly T[], seed: string): T {
   return items[hashString(seed) % items.length]!
 }
 
-export async function fireCompanionObserver(
+export function fireCompanionObserver(
   messages: Message[],
   onReaction: (reaction: string | undefined) => void,
-): Promise<void> {
+): void {
   const companion = getCompanion()
   if (!companion || getGlobalConfig().companionMuted) return
 

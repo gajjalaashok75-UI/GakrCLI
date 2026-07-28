@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **src/entrypoints/sdk/toolTypes.ts**: Replaced empty stub `export type {}` with `SdkToolDefinition` type (name, description, inputSchema, index signature) — matches claude-code-main reference.
 
+### Fixed
+- **src/bootstrap/state.ts**: Changed `initialMainLoopModel` type from `ModelSetting` to `ModelSetting | null` to match actual initial value. Added `eslint-disable-next-line` for bootstrap-isolation rule on `require()` call (matching existing pattern).
+- **src/buddy/prompt.ts**: Removed unnecessary `!` non-null assertions on `msg.attachment` — type narrows correctly via discriminated union.
+- **src/buddy/observer.ts**: Removed misleading `async` from `fireCompanionObserver` (no `await` in body) and corrected return type from `Promise<void>` to `void`.
+- **src/cli/handlers/auth.ts**: Removed unnecessary `as { valid: false; message: string }` casts on `orgResult` — `OrgValidationResult` is a proper discriminated union. Fixed indentation regression in second validation block.
+
 ## [0.5.8] - 2026-07-14
 
 ### Fixed
