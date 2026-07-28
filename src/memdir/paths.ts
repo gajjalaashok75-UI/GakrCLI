@@ -6,6 +6,7 @@ import {
   getProjectRoot,
 } from '../bootstrap/state.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
+import { getEnabledSettingSources } from '../utils/settings/constants.js'
 import {
   getGakrCLIConfigHomeDir,
   getProjectsDir,
@@ -15,7 +16,6 @@ import {
 import { findCanonicalGitRoot } from '../utils/git.js'
 import { sanitizePath } from '../utils/path.js'
 import {
-  getInitialSettings,
   getSettingsForSource,
 } from '../utils/settings/settings.js'
 
@@ -48,9 +48,19 @@ export function isAutoMemoryEnabled(): boolean {
   ) {
     return false
   }
-  const settings = getInitialSettings()
-  if (settings.autoMemoryEnabled !== undefined) {
-    return settings.autoMemoryEnabled
+  // Evaluate the opt-out across the raw per-source settings. Source precedence
+  // collapses same-key values, so a lower-priority `false` would otherwise be
+  // overwritten by a higher-priority `true`. `memory.autoWrite` and
+  // `autoMemoryEnabled` are equivalent; a single `false` in any source wins, so
+  // a parent-scope opt-out cannot be re-enabled by a narrower scope (#1326).
+  for (const source of getEnabledSettingSources()) {
+    const sourceSettings = getSettingsForSource(source)
+    if (
+      sourceSettings?.autoMemoryEnabled === false ||
+      sourceSettings?.memory?.autoWrite === false
+    ) {
+      return false
+    }
   }
   return true
 }
