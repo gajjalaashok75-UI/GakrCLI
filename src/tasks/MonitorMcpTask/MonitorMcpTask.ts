@@ -1,28 +1,33 @@
-// MonitorMcpTask — task registry entry for the 'monitor_mcp' type.
-//
-// Architecture: MonitorTool spawns shell processes as LocalShellTask
-// (type: 'local_bash', kind: 'monitor'). The 'monitor_mcp' type exists
-// in TaskType for forward-compatibility with MCP-based monitoring (not
-// yet implemented). This module satisfies the import from tasks.ts and
-// provides killMonitorMcpTasksForAgent for agent-scoped cleanup of
-// monitor-kind shell tasks.
+// Background task entry for MCP resource monitoring.
+// Tracks a long-running subscription to an MCP server resource so the
+// otherwise-invisible stream is visible in the footer pill and Shift+Down
+// dialog. Follows the DreamTask pattern: pure UI surfacing via the existing
+// task registry.
 
 import type { AppState } from '../../state/AppState.js'
 import type { SetAppState, Task, TaskStateBase } from '../../Task.js'
+import { createTaskStateBase, generateTaskId } from '../../Task.js'
 import type { AgentId } from '../../types/ids.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { dequeueAllMatching } from '../../utils/messageQueueManager.js'
 import { evictTaskOutput } from '../../utils/task/diskOutput.js'
-import { updateTaskState } from '../../utils/task/framework.js'
-import { isLocalShellTask } from '../LocalShellTask/guards.js'
-import { killTask } from '../LocalShellTask/killShellTasks.js'
+import { registerTask, updateTaskState } from '../../utils/task/framework.js'
 
 export type MonitorMcpTaskState = TaskStateBase & {
   type: 'monitor_mcp'
+  /** The MCP server name being monitored. */
+  serverName: string
+  /** The resource URI being subscribed to. */
+  resourceUri: string
+  /** The shell command used to drive monitoring (if any). */
+  command?: string
+  /** Agent that spawned this task. Used to kill orphaned tasks on agent exit. */
   agentId?: AgentId
+  /** Abort controller to cancel the subscription. */
+  abortController?: AbortController
 }
 
-function isMonitorMcpTask(task: unknown): task is MonitorMcpTaskState {
+export function isMonitorMcpTask(task: unknown): task is MonitorMcpTaskState {
   return (
     typeof task === 'object' &&
     task !== null &&
@@ -31,45 +36,88 @@ function isMonitorMcpTask(task: unknown): task is MonitorMcpTaskState {
   )
 }
 
-export const MonitorMcpTask: Task = {
-  name: 'MonitorMcpTask',
-  type: 'monitor_mcp',
-  async kill(taskId, setAppState) {
-    updateTaskState<MonitorMcpTaskState>(taskId, setAppState, task => {
-      if (task.status !== 'running') {
-        return task
-      }
-
-      return {
-        ...task,
-        status: 'killed',
-        notified: true,
-        endTime: Date.now(),
-      }
-    })
-    void evictTaskOutput(taskId)
+export function registerMonitorMcpTask(
+  setAppState: SetAppState,
+  opts: {
+    description: string
+    serverName: string
+    resourceUri: string
+    command?: string
+    toolUseId?: string
+    agentId?: AgentId
+    abortController?: AbortController
   },
+): string {
+  const id = generateTaskId('monitor_mcp')
+  const task: MonitorMcpTaskState = {
+    ...createTaskStateBase(id, 'monitor_mcp', opts.description, opts.toolUseId),
+    type: 'monitor_mcp',
+    status: 'running',
+    serverName: opts.serverName,
+    resourceUri: opts.resourceUri,
+    command: opts.command,
+    agentId: opts.agentId,
+    abortController: opts.abortController,
+  }
+  registerTask(task, setAppState)
+  return id
 }
 
-/**
- * Stop a running monitor_mcp task. Convenience wrapper used by the
- * background tasks dialog ('x' shortcut and detail-view kill button).
- */
+export function completeMonitorMcpTask(
+  taskId: string,
+  setAppState: SetAppState,
+): void {
+  updateTaskState<MonitorMcpTaskState>(taskId, setAppState, task => ({
+    ...task,
+    status: 'completed',
+    endTime: Date.now(),
+    notified: true,
+    abortController: undefined,
+  }))
+
+  void evictTaskOutput(taskId)
+}
+
+export function failMonitorMcpTask(
+  taskId: string,
+  setAppState: SetAppState,
+): void {
+  updateTaskState<MonitorMcpTaskState>(taskId, setAppState, task => ({
+    ...task,
+    status: 'failed',
+    endTime: Date.now(),
+    notified: true,
+    abortController: undefined,
+  }))
+
+  void evictTaskOutput(taskId)
+}
+
 export function killMonitorMcp(
   taskId: string,
   setAppState: SetAppState,
 ): void {
-  void MonitorMcpTask.kill(taskId, setAppState)
+  updateTaskState<MonitorMcpTaskState>(taskId, setAppState, task => {
+    if (task.status !== 'running') return task
+
+    task.abortController?.abort()
+
+    return {
+      ...task,
+      status: 'killed',
+      endTime: Date.now(),
+      notified: true,
+      abortController: undefined,
+    }
+  })
+
+  void evictTaskOutput(taskId)
 }
 
 /**
- * Kill all monitor tasks owned by a given agent.
- *
- * MonitorTool spawns tasks as local_bash with kind='monitor'. When an agent
- * exits, killShellTasksForAgent already handles those. This function provides
- * additional cleanup for any monitor_mcp-typed tasks and also kills any
- * local_bash tasks with kind='monitor' that might have been missed (belt and
- * suspenders). Finally, it purges queued notifications for the dead agent.
+ * Kill all running monitor_mcp tasks spawned by a given agent.
+ * Called from runAgent.ts finally block so subscriptions don't outlive
+ * the agent that started them.
  */
 export function killMonitorMcpTasksForAgent(
   agentId: AgentId,
@@ -77,37 +125,29 @@ export function killMonitorMcpTasksForAgent(
   setAppState: SetAppState,
 ): void {
   const tasks = getAppState().tasks ?? {}
-
   for (const [taskId, task] of Object.entries(tasks)) {
-    // Kill monitor_mcp tasks for this agent
     if (
       isMonitorMcpTask(task) &&
       task.agentId === agentId &&
       task.status === 'running'
     ) {
       logForDebugging(
-        `killMonitorMcpTasksForAgent: killing monitor_mcp task ${taskId} (agent ${agentId} exiting)`,
+        `killMonitorMcpTasksForAgent: killing orphaned monitor task ${taskId} (agent ${agentId} exiting)`,
       )
-      void MonitorMcpTask.kill(taskId, setAppState)
-    }
-
-    // Also kill local_bash tasks with kind='monitor' for this agent
-    // (killShellTasksForAgent already does this, but being explicit
-    // guards against ordering issues)
-    if (
-      isLocalShellTask(task) &&
-      task.kind === 'monitor' &&
-      task.agentId === agentId &&
-      task.status === 'running'
-    ) {
-      logForDebugging(
-        `killMonitorMcpTasksForAgent: killing monitor shell task ${taskId} (agent ${agentId} exiting)`,
-      )
-      killTask(taskId, setAppState)
+      killMonitorMcp(taskId, setAppState)
     }
   }
-
   // Purge any queued notifications addressed to this agent — its query loop
   // has exited and won't drain them.
   dequeueAllMatching(cmd => cmd.agentId === agentId)
+}
+
+export const MonitorMcpTask: Task = {
+  name: 'MonitorMcpTask',
+  type: 'monitor_mcp',
+
+  async kill(taskId, setAppState) {
+    killMonitorMcp(taskId, setAppState)
+  },
+  
 }

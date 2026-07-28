@@ -10,12 +10,12 @@
  */
 
 import { isTerminalTaskStatus, type SetAppState, type Task, type TaskStateBase } from '../../Task.js';
-import type { Message } from '../../types/message.js';
+import type { Message, MessageOrigin } from '../../types/message.js';
 import { logForDebugging } from '../../utils/debug.js';
 import { createUserMessage } from '../../utils/messages.js';
 import { killInProcessTeammate } from '../../utils/swarm/spawnInProcess.js';
 import { updateTaskState } from '../../utils/task/framework.js';
-import type { InProcessTeammateTaskState } from './types.js';
+import type { InProcessTeammateTaskState, PendingTeammateUserMessage } from './types.js';
 import { appendCappedMessage, isInProcessTeammateTask } from './types.js';
 
 /**
@@ -26,7 +26,7 @@ export const InProcessTeammateTask: Task = {
   type: 'in_process_teammate',
   async kill(taskId, setAppState) {
     killInProcessTeammate(taskId, setAppState);
-  }
+  },
 };
 
 /**
@@ -37,9 +37,10 @@ export function requestTeammateShutdown(taskId: string, setAppState: SetAppState
     if (task.status !== 'running' || task.shutdownRequested) {
       return task;
     }
+
     return {
       ...task,
-      shutdownRequested: true
+      shutdownRequested: true,
     };
   });
 }
@@ -53,9 +54,10 @@ export function appendTeammateMessage(taskId: string, message: Message, setAppSt
     if (task.status !== 'running') {
       return task;
     }
+
     return {
       ...task,
-      messages: appendCappedMessage(task.messages, message)
+      messages: appendCappedMessage(task.messages, message),
     };
   });
 }
@@ -65,7 +67,19 @@ export function appendTeammateMessage(taskId: string, message: Message, setAppSt
  * Used when viewing a teammate's transcript to send typed messages to them.
  * Also adds the message to task.messages so it appears immediately in the transcript.
  */
-export function injectUserMessageToTeammate(taskId: string, message: string, setAppState: SetAppState): void {
+export function injectUserMessageToTeammate(
+  taskId: string,
+  message: string,
+  options:
+    | {
+        autonomyRunId?: string;
+        autonomyRootDir?: string;
+        origin?: MessageOrigin;
+      }
+    | undefined,
+  setAppState: SetAppState,
+): boolean {
+  let injected = false;
   updateTaskState<InProcessTeammateTaskState>(taskId, setAppState, task => {
     // Allow message injection when teammate is running or idle (waiting for input)
     // Only reject if teammate is in a terminal state
@@ -73,14 +87,34 @@ export function injectUserMessageToTeammate(taskId: string, message: string, set
       logForDebugging(`Dropping message for teammate task ${taskId}: task status is "${task.status}"`);
       return task;
     }
+
+    injected = true;
+
+    const pendingMessage: PendingTeammateUserMessage = { message };
+    if (options?.autonomyRunId !== undefined) {
+      pendingMessage.autonomyRunId = options.autonomyRunId;
+    }
+    if (options?.autonomyRootDir !== undefined) {
+      pendingMessage.autonomyRootDir = options.autonomyRootDir;
+    }
+    if (options?.origin !== undefined) {
+      pendingMessage.origin = options.origin;
+    }
+
+    const userMessageArgs: Parameters<typeof createUserMessage>[0] = {
+      content: message,
+    };
+    if (options?.origin !== undefined) {
+      userMessageArgs.origin = options.origin;
+    }
+
     return {
       ...task,
-      pendingUserMessages: [...task.pendingUserMessages, message],
-      messages: appendCappedMessage(task.messages, createUserMessage({
-        content: message
-      }))
+      pendingUserMessages: [...task.pendingUserMessages, pendingMessage],
+      messages: appendCappedMessage(task.messages, createUserMessage(userMessageArgs)),
     };
   });
+  return injected;
 }
 
 /**
@@ -89,7 +123,10 @@ export function injectUserMessageToTeammate(taskId: string, message: string, set
  * with the same agentId exist.
  * Returns undefined if not found.
  */
-export function findTeammateTaskByAgentId(agentId: string, tasks: Record<string, TaskStateBase>): InProcessTeammateTaskState | undefined {
+export function findTeammateTaskByAgentId(
+  agentId: string,
+  tasks: Record<string, TaskStateBase>,
+): InProcessTeammateTaskState | undefined {
   let fallback: InProcessTeammateTaskState | undefined;
   for (const task of Object.values(tasks)) {
     if (isInProcessTeammateTask(task) && task.identity.agentId === agentId) {
@@ -121,5 +158,7 @@ export function getAllInProcessTeammateTasks(tasks: Record<string, TaskStateBase
  * array, so all three must agree on sort order.
  */
 export function getRunningTeammatesSorted(tasks: Record<string, TaskStateBase>): InProcessTeammateTaskState[] {
-  return getAllInProcessTeammateTasks(tasks).filter(t => t.status === 'running').sort((a, b) => a.identity.agentName.localeCompare(b.identity.agentName));
+  return getAllInProcessTeammateTasks(tasks)
+    .filter(t => t.status === 'running')
+    .sort((a, b) => a.identity.agentName.localeCompare(b.identity.agentName));
 }
