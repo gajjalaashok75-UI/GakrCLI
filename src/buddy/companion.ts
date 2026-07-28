@@ -2,6 +2,7 @@ import { getGlobalConfig } from '../utils/config.js'
 import {
   type Companion,
   type CompanionBones,
+  type CompanionSoul,
   EYES,
   HATS,
   RARITIES,
@@ -117,27 +118,7 @@ export function rollWithSeed(seed: string): Roll {
 }
 
 export function generateSeed(): string {
-  const buf = new Uint32Array(4)
-  crypto.getRandomValues(buf)
-  return Array.from(buf).map(n => n.toString(36)).join('')
-}
-
-/**
- * Infer species and rarity from a legacy pre-seed companion's personality text.
- * Old companions stored "A {rarity} {species} of ..." as their personality string.
- * Returns empty object if companion already has a seed (no inference needed).
- */
-export function inferLegacyCompanionBones(
-  stored: { seed?: string; personality?: string },
-): Partial<Pick<CompanionBones, 'species' | 'rarity'>> {
-  if (stored.seed) return {}
-  if (!stored.personality) return {}
-
-  const lower = stored.personality.toLowerCase()
-  const species = SPECIES.find(s => lower.includes(s.toLowerCase()))
-  const rarity = RARITIES.find(r => lower.includes(r.toLowerCase()))
-  if (!species || !rarity) return {}
-  return { species, rarity }
+  return `rehatch-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
 export function companionUserId(): string {
@@ -145,13 +126,36 @@ export function companionUserId(): string {
   return config.oauthAccount?.accountUuid ?? config.userID ?? 'anon'
 }
 
-// Regenerate bones from userId, merge with stored soul. Bones never persist
-// so species renames and SPECIES-array edits can't break stored companions,
-// and editing config.companion can't fake a rarity.
+const WORD_BOUNDARY = '[^a-z0-9]+'
+
+function hasWord(text: string, word: string): boolean {
+  return new RegExp(`(^|${WORD_BOUNDARY})${word}($|${WORD_BOUNDARY})`).test(
+    text,
+  )
+}
+
+export function inferLegacyCompanionBones(
+  stored: CompanionSoul,
+): Partial<Pick<CompanionBones, 'species' | 'rarity'>> {
+  if (stored.seed) return {}
+  const text = `${stored.name} ${stored.personality}`.toLowerCase()
+  const inferred: Partial<Pick<CompanionBones, 'species' | 'rarity'>> = {}
+  const species = SPECIES.find(species => hasWord(text, species))
+  const rarity = RARITIES.find(rarity => hasWord(text, rarity))
+  if (species) inferred.species = species
+  if (rarity) inferred.rarity = rarity
+  return inferred
+}
+
+// Regenerate bones from seed or userId, merge with stored soul.
 export function getCompanion(): Companion | undefined {
   const stored = getGlobalConfig().companion
   if (!stored) return undefined
-  const { bones } = roll(companionUserId())
-  // bones last so stale bones fields in old-format configs get overridden
-  return { ...stored, ...bones }
+  const seed = stored.seed ?? companionUserId()
+  const { bones } = rollWithSeed(seed)
+  const legacyBones = inferLegacyCompanionBones(stored)
+  // Seeded companions use regenerated bones. Legacy seedless companions may
+  // have species/rarity embedded in their generated soul text; keep that
+  // visible identity coherent when the userId-derived roll drifts.
+  return { ...stored, ...bones, ...legacyBones }
 }

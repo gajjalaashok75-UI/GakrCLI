@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **src/buddy/observer.ts**: Removed misleading `async` from `fireCompanionObserver` (no `await` in body) and corrected return type from `Promise<void>` to `void`.
 - **src/cli/handlers/auth.ts**: Removed unnecessary `as { valid: false; message: string }` casts on `orgResult` — `OrgValidationResult` is a proper discriminated union. Fixed indentation regression in second validation block.
 
+### Changed
+- **src/buddy**: React compiler removal in `CompanionSprite.tsx` and `useBuddyNotification.tsx` — replaced `_c()` memoization with hand-written React. Migrated buddy-internal feature flag checks from `isBuddyEnabled()` wrapper to direct `feature('BUDDY')` calls. Added `seed?: string` to `CompanionSoul` type. Simplified `generateSeed()` to `rehatch-${Date.now()}-${Math.random()}` pattern.
+
 ## [0.5.8] - 2026-07-14
 
 ### Fixed
