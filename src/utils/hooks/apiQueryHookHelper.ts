@@ -104,11 +104,14 @@ export function createApiQueryHook<TResult>(
           querySource: config.name,
           mcpTools: [],
           agentId: context.toolUseContext.agentId,
+          langfuseTrace: context.toolUseContext.langfuseTrace,
         },
       })
 
       // Parse response
-      const content = extractTextContent(response.message.content).trim()
+      const content = extractTextContent(
+        Array.isArray(response.message.content) ? response.message.content : [],
+      ).trim()
 
       try {
         const result = config.parseResponse(content, context)
@@ -117,7 +120,7 @@ export function createApiQueryHook<TResult>(
             type: 'success',
             queryName: config.name,
             result,
-            messageId: response.message.id,
+            messageId: response.message.id ?? '',
             model,
             uuid,
           },
