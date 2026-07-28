@@ -7,6 +7,7 @@ import type {
   SDKStatusMessage,
   SDKSystemMessage,
   SDKToolProgressMessage,
+  SDKUserMessage,
 } from '../entrypoints/agentSdkTypes.js'
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
 import type { UUID } from 'crypto'
@@ -175,28 +176,29 @@ export function convertSDKMessage(
 ): ConvertedMessage {
   switch (msg.type) {
     case 'assistant':
-      return { type: 'message', message: convertAssistantMessage(msg) }
+      return {
+        type: 'message',
+        message: convertAssistantMessage(msg as SDKAssistantMessage),
+      }
 
     case 'user': {
-      const content = msg.message?.content
+      const userMsg = msg as SDKUserMessage
+      const content = userMsg.message?.content
       // Tool result messages from the remote server need to be converted so
       // they render and collapse like local tool results. Detect via content
       // shape (tool_result blocks) — parent_tool_use_id is NOT reliable: the
       // agent-side normalizeMessage() hardcodes it to null for top-level
       // tool results, so it can't distinguish tool results from prompt echoes.
-      // The generated SDK wire type erases content blocks to `unknown[]`;
-      // probe/forward them as ContentBlockParam[] like the pre-SDK-types code did.
       const isToolResult =
-        Array.isArray(content) &&
-        content.some(b => (b as { type?: unknown }).type === 'tool_result')
+        Array.isArray(content) && content.some(b => (b as { type?: unknown }).type === 'tool_result')
       if (opts?.convertToolResults && isToolResult) {
         return {
           type: 'message',
           message: createUserMessage({
             content: content as ContentBlockParam[],
-            toolUseResult: msg.tool_use_result,
-            uuid: msg.uuid,
-            timestamp: msg.timestamp,
+            toolUseResult: userMsg.tool_use_result,
+            uuid: userMsg.uuid,
+            timestamp: userMsg.timestamp,
           }),
         }
       }
@@ -208,11 +210,10 @@ export function convertSDKMessage(
           return {
             type: 'message',
             message: createUserMessage({
-              // Same wire-type erasure as above (`unknown[]` from the SDK).
-              content: content as string | ContentBlockParam[],
-              toolUseResult: msg.tool_use_result,
-              uuid: msg.uuid,
-              timestamp: msg.timestamp,
+              content: content as ContentBlockParam[],
+              toolUseResult: userMsg.tool_use_result,
+              uuid: userMsg.uuid,
+              timestamp: userMsg.timestamp,
             }),
           }
         }
@@ -223,40 +224,53 @@ export function convertSDKMessage(
     }
 
     case 'stream_event':
-      return { type: 'stream_event', event: convertStreamEvent(msg) }
+      return {
+        type: 'stream_event',
+        event: convertStreamEvent(msg as SDKPartialAssistantMessage),
+      }
 
     case 'result':
       // Only show result messages for errors. Success results are noise
       // in multi-turn sessions (isLoading=false is sufficient signal).
-      if (msg.subtype !== 'success') {
-        return { type: 'message', message: convertResultMessage(msg) }
+      if ((msg as SDKResultMessage).subtype !== 'success') {
+        return {
+          type: 'message',
+          message: convertResultMessage(msg as SDKResultMessage),
+        }
       }
       return { type: 'ignored' }
 
-    case 'system':
-      if (msg.subtype === 'init') {
-        return { type: 'message', message: convertInitMessage(msg) }
+    case 'system': {
+      const sysMsg = msg as SDKSystemMessage
+      if (sysMsg.subtype === 'init') {
+        return { type: 'message', message: convertInitMessage(sysMsg) }
       }
-      if (msg.subtype === 'status') {
-        const statusMsg = convertStatusMessage(msg)
+      if (sysMsg.subtype === 'status') {
+        const statusMsg = convertStatusMessage(msg as SDKStatusMessage)
         return statusMsg
           ? { type: 'message', message: statusMsg }
           : { type: 'ignored' }
       }
-      if (msg.subtype === 'compact_boundary') {
+      if (sysMsg.subtype === 'compact_boundary') {
         return {
           type: 'message',
-          message: convertCompactBoundaryMessage(msg),
+          message: convertCompactBoundaryMessage(
+            msg as SDKCompactBoundaryMessage,
+          ),
         }
       }
       // hook_response and other subtypes
       logForDebugging(
-        `[sdkMessageAdapter] Ignoring system message subtype: ${msg.subtype}`,
+        `[sdkMessageAdapter] Ignoring system message subtype: ${sysMsg.subtype}`,
       )
       return { type: 'ignored' }
+    }
 
     case 'tool_progress':
-      return { type: 'message', message: convertToolProgressMessage(msg) }
+      return {
+        type: 'message',
+        message: convertToolProgressMessage(msg as SDKToolProgressMessage),
+      }
 
     case 'auth_status':
       // Auth status is handled separately, not converted to a display message
@@ -271,6 +285,11 @@ export function convertSDKMessage(
     case 'rate_limit_event':
       // Rate limit events are SDK-only events, not displayed in REPL
       logForDebugging('[sdkMessageAdapter] Ignoring rate_limit_event message')
+      return { type: 'ignored' }
+
+    case 'task_state':
+      // Bridge-only task snapshots are consumed by the web panel, not REPL UIs.
+      logForDebugging('[sdkMessageAdapter] Ignoring task_state message')
       return { type: 'ignored' }
 
     default: {

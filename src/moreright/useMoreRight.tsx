@@ -6,6 +6,7 @@
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type M = any;
+
 export function useMoreRight(_args: {
   enabled: boolean;
   setMessages: (action: M[] | ((prev: M[]) => M[])) => void;
@@ -20,6 +21,6 @@ export function useMoreRight(_args: {
   return {
     onBeforeQuery: async () => true,
     onTurnComplete: async () => {},
-    render: () => null
+    render: () => null,
   };
 }
