@@ -58,7 +58,6 @@ const featureFlags: Record<string, boolean> = {
   KAIROS_PUSH_NOTIFICATION: false,// Push notification support (KAIROS sub-feature)
   OVERFLOW_TEST_TOOL: false,      // Overflow testing tool (test-only, not for production)
   TERMINAL_PANEL: false,          // Terminal panel capture tool (IDE integration)
-  CCR_REMOTE_SETUP: false,        // CCR remote setup command (requires bridge mode)
   TORCH: false,                   // Torch command (requires external infra)
   MCP_SKILLS: true,               // Dynamic MCP skill discovery via skill:// resources
 
@@ -140,6 +139,9 @@ const featureFlags: Record<string, boolean> = {
   GOAL: true,                          // Goal tracking tool & command
   POOR: true,                          // 穷鬼模式，跳过 extract_memories/prompt_suggestion 减少消耗
   ULTRAPLAN: true,                     // Ultraplan multi-phase planning system
+  EXPERIMENTAL_SEARCH_EXTRA_TOOLS: false, // Extra tool search in attachment messages (experimental)
+  SKIP_DETECTION_WHEN_AUTOUPDATES_DISABLED: false, // Skip auto-update checks when updates disabled
+  REPO_MAP: false,                     // Repomap context in codebase-aware prompts
   LOCAL_MEMORY: false,                 // Local memory recall tool & command
   LOCAL_VAULT: false,                  // Local vault HTTP fetch tool & command
 }
