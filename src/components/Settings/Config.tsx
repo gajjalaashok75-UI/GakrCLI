@@ -459,7 +459,57 @@ export function Config({
       });
     }
   }] : []),
-  ...(isFileCheckpointingAvailable ? [{
+    ...(feature('POOR')
+      ? [
+          {
+            id: 'poorMode',
+            label: 'Poor mode (save tokens)',
+            value: (() => {
+              const PoorMode =
+                require('../../commands/poor/poorMode.js') as typeof import('../../commands/poor/poorMode.js');
+              return PoorMode.isPoorModeActive();
+            })(),
+            type: 'boolean' as const,
+            onChange(enabled: boolean) {
+              const PoorMode =
+                require('../../commands/poor/poorMode.js') as typeof import('../../commands/poor/poorMode.js');
+              PoorMode.setPoorMode(enabled);
+              setAppState(prev => ({
+                ...prev,
+                promptSuggestionEnabled: !enabled,
+              }));
+            },
+          },
+        ]
+      : []),
+    // Speculation toggle (ant-only)
+    ...(process.env.USER_TYPE === 'ant'
+      ? [
+          {
+            id: 'speculationEnabled',
+            label: 'Speculative execution',
+            value: globalConfig.speculationEnabled ?? true,
+            type: 'boolean' as const,
+            onChange(enabled: boolean) {
+              saveGlobalConfig(current => {
+                if (current.speculationEnabled === enabled) return current;
+                return {
+                  ...current,
+                  speculationEnabled: enabled,
+                };
+              });
+              setGlobalConfig({
+                ...getGlobalConfig(),
+                speculationEnabled: enabled,
+              });
+              logEvent('tengu_speculation_setting_changed', {
+                enabled,
+              });
+            },
+          },
+        ]
+      : []),
+    ...(isFileCheckpointingAvailable ? [{
     id: 'fileCheckpointingEnabled',
     label: 'Rewind code (checkpoints)',
     value: globalConfig.fileCheckpointingEnabled,
