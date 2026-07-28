@@ -108,50 +108,117 @@ export function useScheduledTasks({
     // forward isMeta, so their messages remain visible in the
     // transcript. This is acceptable since normal mode is not the
     // primary use case for scheduled tasks.
-    const enqueueForLead = (prompt: string) =>
-      enqueuePendingNotification({
-        value: prompt,
-        mode: 'prompt',
-        priority: 'later',
-        isMeta: true,
-        // Threaded through to cc_workload= in the billing-header
-        // attribution block so the API can serve cron-initiated requests
-        // at lower QoS when capacity is tight. No human is actively
-        // waiting on this response.
+    let disposed = false
+    const enqueueForLead = async (prompt: string) => {
+      const command = await createAutonomyQueuedPrompt({
+        basePrompt: prompt,
+        trigger: 'scheduled-task',
+        currentDir: getCwd(),
         workload: WORKLOAD_CRON,
+        shouldCreate: () => !disposed,
       })
+      if (!command) {
+        return
+      }
+      if (disposed) {
+        await markAutonomyRunCancelled(
+          command.autonomy!.runId,
+          command.autonomy!.rootDir,
+        )
+        return
+      }
+      enqueuePendingNotification(command)
+    }
 
     const scheduler = createCronScheduler({
       // Missed-task surfacing (onFire fallback). Teammate crons are always
       // session-only (durable:false) so they never appear in the missed list,
       // which is populated from disk at scheduler startup — this path only
       // handles team-lead durable crons.
-      onFire: enqueueForLead,
+      onFire: prompt => {
+        void enqueueForLead(prompt).catch(error =>
+          logForDebugging(
+            `[ScheduledTasks] failed to enqueue missed task prompt: ${error}`,
+            { level: 'error' },
+          ),
+        )
+      },
       // Normal fires receive the full CronTask so we can route by agentId.
       onFireTask: task => {
-        if (task.agentId) {
-          const teammate = findTeammateTaskByAgentId(
-            task.agentId,
-            store.getState().tasks,
-          )
-          if (teammate && !isTerminalTaskStatus(teammate.status)) {
-            injectUserMessageToTeammate(teammate.id, task.prompt, setAppState)
+        void (async () => {
+          if (task.agentId) {
+            const teammate = findTeammateTaskByAgentId(
+              task.agentId,
+              store.getState().tasks,
+            )
+            if (teammate && !isTerminalTaskStatus(teammate.status)) {
+              const command = await createScheduledTaskQueuedCommand(task, {
+                shouldCreate: () => !disposed,
+              })
+              if (!command) {
+                return
+              }
+              if (disposed) {
+                await markAutonomyRunCancelled(
+                  command.autonomy!.runId,
+                  command.autonomy!.rootDir,
+                )
+                return
+              }
+              const injected = injectUserMessageToTeammate(
+                teammate.id,
+                command.value as string,
+                {
+                  autonomyRunId: command.autonomy?.runId,
+                  autonomyRootDir: command.autonomy?.rootDir,
+                  origin: command.origin,
+                },
+                setAppState,
+              )
+              if (!injected && command.autonomy?.runId) {
+                await markAutonomyRunFailed(
+                  command.autonomy.runId,
+                  `Teammate ${task.agentId} exited before the scheduled message could be delivered.`,
+                  command.autonomy.rootDir,
+                )
+              }
+              return
+            }
+            // Teammate is gone — clean up the orphaned cron so it doesn't keep
+            // firing into nowhere every tick. One-shots would auto-delete on
+            // fire anyway, but recurring crons would loop until auto-expiry.
+            logForDebugging(
+              `[ScheduledTasks] teammate ${task.agentId} gone, removing orphaned cron ${task.id}`,
+            )
+            void removeCronTasks([task.id])
             return
           }
-          // Teammate is gone — clean up the orphaned cron so it doesn't keep
-          // firing into nowhere every tick. One-shots would auto-delete on
-          // fire anyway, but recurring crons would loop until auto-expiry.
-          logForDebugging(
-            `[ScheduledTasks] teammate ${task.agentId} gone, removing orphaned cron ${task.id}`,
+
+          const command = await createScheduledTaskQueuedCommand(task, {
+            shouldCreate: () => !disposed,
+          })
+          if (!command) {
+            return
+          }
+          if (disposed) {
+            await markAutonomyRunCancelled(
+              command.autonomy!.runId,
+              command.autonomy!.rootDir,
+            )
+            return
+          }
+
+          const msg = createScheduledTaskFireMessage(
+            `Running scheduled task (${formatCronFireTime(new Date())})`,
           )
-          void removeCronTasks([task.id])
-          return
-        }
-        const msg = createScheduledTaskFireMessage(
-          `Running scheduled task (${formatCronFireTime(new Date())})`,
+          setMessages(prev => [...prev, msg])
+          enqueuePendingNotification(command)
+        })().catch(error =>
+          logForDebugging(
+            `[ScheduledTasks] failed to enqueue task ${task.id}: ${error}`,
+            { level: 'error' },
+          ),
         )
-        setMessages(prev => [...prev, msg])
-        enqueueForLead(task.prompt)
       },
       isLoading: () => isLoadingRef.current,
       assistantMode,
@@ -159,7 +226,10 @@ export function useScheduledTasks({
       isKilled: () => !isKairosCronEnabled(),
     })
     scheduler.start()
-    return () => scheduler.stop()
+    return () => {
+      disposed = true
+      scheduler.stop()
+    }
     // assistantMode is stable for the session lifetime; store/setAppState are
     // stable refs from useSyncExternalStore; setMessages is a stable useCallback.
     // eslint-disable-next-line react-hooks/exhaustive-deps
