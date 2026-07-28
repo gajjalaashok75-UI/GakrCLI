@@ -6,4 +6,7 @@
  * spawns nothing. No import-time side effects.
  */
 
-export class DangerousBackend {}
+export {}
+export const DangerousBackend: new (
+  ...args: unknown[]
+) => Record<string, unknown> = class {} as never

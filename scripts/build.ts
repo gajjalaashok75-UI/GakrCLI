@@ -541,6 +541,7 @@ sdkResult = await Bun.build({
           '@smithy/core',
           '@aws-sdk/credential-provider-node',
           '@mendable/firecrawl-js',
+          'react',
         ]
         for (const mod of missingModules) {
           const escaped = mod.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')

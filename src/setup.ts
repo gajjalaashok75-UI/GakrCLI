@@ -20,6 +20,7 @@ import {
 } from './bootstrap/state.js'
 import { getCommands } from './commands.js'
 import { initSessionMemory } from './services/SessionMemory/sessionMemory.js'
+import { initSkillLearning } from './services/skillLearning/runtimeObserver.js'
 import { asSessionId } from './types/ids.js'
 import { isAgentSwarmsEnabled } from './utils/agentSwarmsEnabled.js'
 import { checkAndRestoreTerminalBackup } from './utils/appleTerminalBackup.js'
@@ -69,8 +70,7 @@ export async function setup(
 
   // Check for Node.js version < 18
   const nodeVersion = process.version.match(/^v(\d+)\./)?.[1]
-  if (!nodeVersion || parseInt(nodeVersion) < 18) {
-    // biome-ignore lint/suspicious/noConsole:: intentional console output
+  if (!nodeVersion || parseInt(nodeVersion, 10) < 18) {
     console.error(
       chalk.bold.red(
         'Error: GakrCLI requires Node.js version 18 or higher.',
@@ -120,14 +120,12 @@ export async function setup(
     if (isAgentSwarmsEnabled()) {
       const restoredIterm2Backup = await checkAndRestoreITerm2Backup()
       if (restoredIterm2Backup.status === 'restored') {
-        // biome-ignore lint/suspicious/noConsole:: intentional console output
         console.log(
           chalk.yellow(
             'Detected an interrupted iTerm2 setup. Your original settings have been restored. You may need to restart iTerm2 for the changes to take effect.',
           ),
         )
       } else if (restoredIterm2Backup.status === 'failed') {
-        // biome-ignore lint/suspicious/noConsole:: intentional console output
         console.error(
           chalk.red(
             `Failed to restore iTerm2 settings. Please manually restore your original settings with: defaults import com.googlecode.iterm2 ${restoredIterm2Backup.backupPath}.`,
@@ -140,14 +138,12 @@ export async function setup(
     try {
       const restoredTerminalBackup = await checkAndRestoreTerminalBackup()
       if (restoredTerminalBackup.status === 'restored') {
-        // biome-ignore lint/suspicious/noConsole:: intentional console output
         console.log(
           chalk.yellow(
             'Detected an interrupted Terminal.app setup. Your original settings have been restored. You may need to restart Terminal.app for the changes to take effect.',
           ),
         )
       } else if (restoredTerminalBackup.status === 'failed') {
-        // biome-ignore lint/suspicious/noConsole:: intentional console output
         console.error(
           chalk.red(
             `Failed to restore Terminal.app settings. Please manually restore your original settings with: defaults import com.apple.Terminal ${restoredTerminalBackup.backupPath}.`,
@@ -255,14 +251,12 @@ export async function setup(
         worktreeSession.worktreePath,
       )
       if (tmuxResult.created) {
-        // biome-ignore lint/suspicious/noConsole:: intentional console output
         console.log(
           chalk.green(
             `Created tmux session: ${chalk.bold(tmuxSessionName)}\nTo attach: ${chalk.bold(`tmux attach -t ${tmuxSessionName}`)}`,
           ),
         )
       } else {
-        // biome-ignore lint/suspicious/noConsole:: intentional console output
         console.error(
           chalk.yellow(
             `Warning: Failed to create tmux session: ${tmuxResult.error}`,
@@ -283,7 +277,7 @@ export async function setup(
     clearMemoryFileCaches()
     // Settings cache was populated in init() (via applySafeConfigEnvironmentVariables)
     // and again at captureHooksConfigSnapshot() above, both from the original dir's
-    // .gakrcli/settings.json. Re-read from the worktree and re-capture hooks.
+    // .claude/settings.json. Re-read from the worktree and re-capture hooks.
     updateHooksConfigSnapshot()
   }
 
@@ -295,6 +289,7 @@ export async function setup(
   // raced ahead and memoized an empty bundledSkills list.
   if (!isBareMode()) {
     initSessionMemory() // Synchronous - registers hook, gate check happens lazily
+    initSkillLearning() // Synchronous - registers hook, gate check happens lazily
     if (feature('CONTEXT_COLLAPSE')) {
       /* eslint-disable @typescript-eslint/no-require-imports */
       ;(
@@ -337,6 +332,19 @@ export async function setup(
   // overhead. NOT an early-return: the --dangerously-skip-permissions safety
   // gate, tengu_started beacon, and apiKeyHelper prefetch below must still run.
   if (!isBareMode()) {
+    if (process.env.USER_TYPE === 'ant') {
+      // Prime repo classification cache for auto-undercover mode. Default is
+      // undercover ON until proven internal; if this resolves to internal, clear
+      // the prompt cache so the next turn picks up the OFF state.
+      void import('./utils/commitAttribution.js').then(async m => {
+        if (await m.isInternalModelRepo()) {
+          const { clearSystemPromptSections } = await import(
+            './constants/systemPromptSections.js'
+          )
+          clearSystemPromptSections()
+        }
+      })
+    }
     if (feature('COMMIT_ATTRIBUTION')) {
       // Dynamic import to enable dead code elimination (module contains excluded strings).
       // Defer to next tick so the git subprocess spawn runs after first render
@@ -397,13 +405,66 @@ export async function setup(
       process.env.IS_SANDBOX !== '1' &&
       !isEnvTruthy(process.env.GAKR_CODE_BUBBLEWRAP)
     ) {
-      // biome-ignore lint/suspicious/noConsole:: intentional console output
-      console.error(
-        `--dangerously-skip-permissions cannot be used with root/sudo privileges for security reasons`,
-      )
-      process.exit(1)
+      // Root + bypass = every tool call executes without review at uid 0.
+      // Interactive TTY: warn and require explicit "y" to proceed.
+      // Non-interactive (pipe, ACP, CI, no TTY): cannot prompt, must abort.
+      if (process.stdin.isTTY) {
+        console.error(
+          chalk.bold.red(
+            'WARNING: Running as root/sudo with bypass permissions mode is dangerous.',
+          ),
+        )
+        console.error(
+          chalk.yellow(
+            'Bypass mode skips ALL permission checks. Combined with root, any command (rm -rf /, chmod, dd) executes without review.',
+          ),
+        )
+        const readline = await import('readline')
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        })
+        const answer = await new Promise<string>(resolve => {
+          rl.question('\nI understand the risks. Continue? [y/N] ', resolve)
+        })
+        rl.close()
+        if (answer.trim().toLowerCase() !== 'y') {
+          console.error('Aborted.')
+          process.exit(1)
+        }
+      } else {
+        console.error(
+          `--dangerously-skip-permissions cannot be used with root/sudo privileges for security reasons`,
+        )
+        process.exit(1)
+      }
     }
 
+    if (
+      process.env.USER_TYPE === 'ant' &&
+      // Skip for Desktop's local agent mode — same trust model as CCR/BYOC
+      // (trusted Anthropic-managed launcher intentionally pre-approving everything).
+      // Precedent: permissionSetup.ts:861, applySettingsChange.ts:55 (PR #19116)
+      process.env.GAKR_CODE_ENTRYPOINT !== 'local-agent' &&
+      // Same for CCD (Claude Code in Desktop) — apps#29127 passes the flag
+      // unconditionally to unlock mid-session bypass switching
+      process.env.GAKR_CODE_ENTRYPOINT !== 'gakrcli-desktop'
+    ) {
+      // Only await if permission mode is set to bypass
+      const [isDocker, hasInternet] = await Promise.all([
+        envDynamic.getIsDocker(),
+        env.hasInternetAccess(),
+      ])
+      const isBubblewrap = envDynamic.getIsBubblewrapSandbox()
+      const isSandbox = process.env.IS_SANDBOX === '1'
+      const isSandboxed = isDocker || isBubblewrap || isSandbox
+      if (!isSandboxed || hasInternet) {
+        console.error(
+          `--dangerously-skip-permissions can only be used in Docker/sandbox containers with no internet access but got Docker: ${isDocker}, Bubblewrap: ${isBubblewrap}, IS_SANDBOX: ${isSandbox}, hasInternet: ${hasInternet}`,
+        )
+        process.exit(1)
+      }
+    }
   }
 
   if (process.env.NODE_ENV === 'test') {
