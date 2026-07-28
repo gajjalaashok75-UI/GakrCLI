@@ -390,7 +390,7 @@ function openTunnel(
     // responds with its own "HTTP/1.1 200" over the tunnel; we just pipe it.
     const head =
       `${connectLine}\r\n` + `Proxy-Authorization: ${authHeader}\r\n` + `\r\n`
-    ws.send(encodeChunk(Buffer.from(head, 'utf8')))
+    ws.send(encodeChunk(new Uint8Array(Buffer.from(head, 'utf8'))) as any)
     // Flush anything that arrived while the WS handshake was in flight —
     // trailing bytes from the CONNECT packet and any data() callbacks that
     // fired before onopen.
@@ -438,15 +438,15 @@ function openTunnel(
 
 function sendKeepalive(ws: WebSocketLike): void {
   if (ws.readyState === WebSocket.OPEN) {
-    ws.send(encodeChunk(new Uint8Array(0)))
+    ws.send(encodeChunk(new Uint8Array(0)) as any)
   }
 }
 
 function forwardToWs(ws: WebSocketLike, data: Buffer): void {
   if (ws.readyState !== WebSocket.OPEN) return
   for (let off = 0; off < data.length; off += MAX_CHUNK_BYTES) {
-    const slice = data.subarray(off, off + MAX_CHUNK_BYTES)
-    ws.send(encodeChunk(slice))
+    const slice = new Uint8Array(data.subarray(off, off + MAX_CHUNK_BYTES))
+    ws.send(encodeChunk(slice) as any)
   }
 }
 
