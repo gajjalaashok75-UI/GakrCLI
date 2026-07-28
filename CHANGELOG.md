@@ -5,6 +5,11 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.9] - 2026-07-28
+
+### Changed
+- **src/entrypoints/sdk/toolTypes.ts**: Replaced empty stub `export type {}` with `SdkToolDefinition` type (name, description, inputSchema, index signature) — matches claude-code-main reference.
+
 ## [0.5.8] - 2026-07-14
 
 ### Fixed

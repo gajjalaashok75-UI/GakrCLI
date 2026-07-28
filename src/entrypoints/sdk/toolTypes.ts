@@ -1,2 +1,9 @@
-// Stub — SDK tool types not included in source snapshot
-export type {}
+/**
+ * Stub: SDK Tool Types.
+ */
+export type SdkToolDefinition = {
+  name: string
+  description: string
+  inputSchema: Record<string, unknown>
+  [key: string]: unknown
+}
