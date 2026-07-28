@@ -134,7 +134,7 @@ export function killWorkflowTask(
 /**
  * Skip the current agent step within a running workflow.
  * Called from BackgroundTasksDialog via the feature-gated
- * `skipWorkflowAgent` binding.
+ * `skipWorkflowAgent` binding: skipWorkflowAgent(taskId, agentId, setAppState).
  */
 export function skipWorkflowAgent(
   taskId: string,
@@ -160,7 +160,7 @@ export function skipWorkflowAgent(
 /**
  * Retry the current agent step within a running workflow.
  * Called from BackgroundTasksDialog via the feature-gated
- * `retryWorkflowAgent` binding.
+ * `retryWorkflowAgent` binding: retryWorkflowAgent(taskId, agentId, setAppState).
  */
 export function retryWorkflowAgent(
   taskId: string,
