@@ -1,4 +1,3 @@
-import { c as _c } from "react-compiler-runtime";
 import { diffWordsWithSpace, type StructuredPatchHunk } from 'diff';
 import * as React from 'react';
 import { useMemo } from 'react';
@@ -70,6 +69,7 @@ interface DiffPart {
   removed?: boolean;
   value: string;
 }
+
 type Props = {
   patch: StructuredPatchHunk;
   dim: boolean;
@@ -78,50 +78,24 @@ type Props = {
 
 // Threshold for when we show a full-line diff instead of word-level diffing
 const CHANGE_THRESHOLD = 0.4;
-export function StructuredDiffFallback(t0) {
-  const $ = _c(10);
-  const {
-    patch,
-    dim,
-    width
-  } = t0;
+
+export function StructuredDiffFallback({ patch, dim, width }: Props): React.ReactNode {
   const [theme] = useTheme();
-  let t1;
-  if ($[0] !== dim || $[1] !== patch.lines || $[2] !== patch.oldStart || $[3] !== theme || $[4] !== width) {
-    t1 = formatDiff(patch.lines, patch.oldStart, width, dim, theme);
-    $[0] = dim;
-    $[1] = patch.lines;
-    $[2] = patch.oldStart;
-    $[3] = theme;
-    $[4] = width;
-    $[5] = t1;
-  } else {
-    t1 = $[5];
-  }
-  const diff = t1;
-  let t2;
-  if ($[6] !== diff) {
-    t2 = diff.map(_temp);
-    $[6] = diff;
-    $[7] = t2;
-  } else {
-    t2 = $[7];
-  }
-  let t3;
-  if ($[8] !== t2) {
-    t3 = <Box flexDirection="column" flexGrow={1}>{t2}</Box>;
-    $[8] = t2;
-    $[9] = t3;
-  } else {
-    t3 = $[9];
-  }
-  return t3;
+  const diff = useMemo(
+    () => formatDiff(patch.lines, patch.oldStart, width, dim, theme),
+    [patch.lines, patch.oldStart, width, dim, theme],
+  );
+
+  return (
+    <Box flexDirection="column" flexGrow={1}>
+      {diff.map((node, i) => (
+        <Box key={i}>{node}</Box>
+      ))}
+    </Box>
+  );
 }
 
 // Transform lines to line objects with type information
-function _temp(node, i) {
-  return <Box key={i}>{node}</Box>;
-}
 export function transformLinesToObjects(lines: string[]): LineObject[] {
   return lines.map(code => {
     if (code.startsWith('+')) {
@@ -129,7 +103,7 @@ export function transformLinesToObjects(lines: string[]): LineObject[] {
         code: code.slice(1),
         i: 0,
         type: 'add',
-        originalCode: code.slice(1)
+        originalCode: code.slice(1),
       };
     }
     if (code.startsWith('-')) {
@@ -137,14 +111,14 @@ export function transformLinesToObjects(lines: string[]): LineObject[] {
         code: code.slice(1),
         i: 0,
         type: 'remove',
-        originalCode: code.slice(1)
+        originalCode: code.slice(1),
       };
     }
     return {
       code: code.slice(1),
       i: 0,
       type: 'nochange',
-      originalCode: code.slice(1)
+      originalCode: code.slice(1),
     };
   });
 }
@@ -153,6 +127,7 @@ export function transformLinesToObjects(lines: string[]): LineObject[] {
 export function processAdjacentLines(lineObjects: LineObject[]): LineObject[] {
   const processedLines: LineObject[] = [];
   let i = 0;
+
   while (i < lineObjects.length) {
     const current = lineObjects[i];
     if (!current) {
@@ -193,6 +168,7 @@ export function processAdjacentLines(lineObjects: LineObject[]): LineObject[] {
         for (let k = 0; k < pairCount; k++) {
           const removeLine = removeLines[k];
           const addLine = addLines[k];
+
           if (removeLine && addLine) {
             removeLine.wordDiff = true;
             addLine.wordDiff = true;
@@ -208,6 +184,7 @@ export function processAdjacentLines(lineObjects: LineObject[]): LineObject[] {
 
         // Then add all add lines (both paired and unpaired)
         processedLines.push(...addLines.filter(Boolean));
+
         i = j; // Skip all the lines we've processed
       } else {
         // No matching add lines, just add the current remove line
@@ -220,6 +197,7 @@ export function processAdjacentLines(lineObjects: LineObject[]): LineObject[] {
       i++;
     }
   }
+
   return processedLines;
 }
 
@@ -227,32 +205,37 @@ export function processAdjacentLines(lineObjects: LineObject[]): LineObject[] {
 export function calculateWordDiffs(oldText: string, newText: string): DiffPart[] {
   // Use diffWordsWithSpace instead of diffWords to preserve whitespace
   // This ensures spaces between tokens like > and { are preserved
-  const result = diffWordsWithSpace(oldText, newText, {
-    ignoreCase: false
-  });
+  const result = diffWordsWithSpace(oldText, newText, { ignoreCase: false });
+
   return result;
 }
 
 // Process word-level diffs with manual wrapping support
-function generateWordDiffElements(item: DiffLine, width: number, maxWidth: number, dim: boolean, overrideTheme?: ThemeName): React.ReactNode[] | null {
-  const {
-    type,
-    i,
-    wordDiff,
-    matchedLine,
-    originalCode
-  } = item;
+function generateWordDiffElements(
+  item: DiffLine,
+  width: number,
+  maxWidth: number,
+  dim: boolean,
+  overrideTheme?: ThemeName,
+): React.ReactNode[] | null {
+  const { type, i, wordDiff, matchedLine, originalCode } = item;
+
   if (!wordDiff || !matchedLine) {
     return null; // This function only handles word-level diff rendering
   }
+
   const removedLineText = type === 'remove' ? originalCode : matchedLine.originalCode;
   const addedLineText = type === 'remove' ? matchedLine.originalCode : originalCode;
+
   const wordDiffs = calculateWordDiffs(removedLineText, addedLineText);
 
   // Check if we should use word-level diffing
   const totalLength = removedLineText.length + addedLineText.length;
-  const changedLength = wordDiffs.filter(part => part.added || part.removed).reduce((sum, part) => sum + part.value.length, 0);
+  const changedLength = wordDiffs
+    .filter(part => part.added || part.removed)
+    .reduce((sum, part) => sum + part.value.length, 0);
   const changeRatio = changedLength / totalLength;
+
   if (changeRatio > CHANGE_THRESHOLD || dim) {
     return null; // Fall back to standard rendering for major changes
   }
@@ -263,16 +246,15 @@ function generateWordDiffElements(item: DiffLine, width: number, maxWidth: numbe
   const availableContentWidth = Math.max(1, width - maxWidth - 1 - diffPrefixWidth);
 
   // Manually wrap the word diff parts with better space efficiency
-  const wrappedLines: {
-    content: React.ReactNode[];
-    contentWidth: number;
-  }[] = [];
+  const wrappedLines: { content: React.ReactNode[]; contentWidth: number }[] = [];
   let currentLine: React.ReactNode[] = [];
   let currentLineWidth = 0;
+
   wordDiffs.forEach((part, partIndex) => {
     // Determine if this part should be shown for this line type
     let shouldShow = false;
     let partBgColor: 'diffAddedWord' | 'diffRemovedWord' | undefined;
+
     if (type === 'add') {
       if (part.added) {
         shouldShow = true;
@@ -288,11 +270,13 @@ function generateWordDiffElements(item: DiffLine, width: number, maxWidth: numbe
         shouldShow = true;
       }
     }
+
     if (!shouldShow) return;
 
     // Use wrapText to wrap this individual part if it's long
     const partWrapped = wrapText(part.value, availableContentWidth, 'wrap');
     const partLines = partWrapped.split('\n');
+
     partLines.forEach((partLine, lineIdx) => {
       if (!partLine) return;
 
@@ -301,38 +285,40 @@ function generateWordDiffElements(item: DiffLine, width: number, maxWidth: numbe
         if (currentLine.length > 0) {
           wrappedLines.push({
             content: [...currentLine],
-            contentWidth: currentLineWidth
+            contentWidth: currentLineWidth,
           });
           currentLine = [];
           currentLineWidth = 0;
         }
       }
-      currentLine.push(<Text key={`part-${partIndex}-${lineIdx}`} backgroundColor={partBgColor}>
+
+      currentLine.push(
+        <Text key={`part-${partIndex}-${lineIdx}`} backgroundColor={partBgColor}>
           {partLine}
-        </Text>);
+        </Text>,
+      );
+
       currentLineWidth += stringWidth(partLine);
     });
   });
+
   if (currentLine.length > 0) {
-    wrappedLines.push({
-      content: currentLine,
-      contentWidth: currentLineWidth
-    });
+    wrappedLines.push({ content: currentLine, contentWidth: currentLineWidth });
   }
 
   // Render each wrapped line as a separate Text element
-  return wrappedLines.map(({
-    content,
-    contentWidth
-  }, lineIndex) => {
+  return wrappedLines.map(({ content, contentWidth }, lineIndex) => {
     const key = `${type}-${i}-${lineIndex}`;
-    const lineBgColor = type === 'add' ? dim ? 'diffAddedDimmed' : 'diffAdded' : dim ? 'diffRemovedDimmed' : 'diffRemoved';
+    const lineBgColor =
+      type === 'add' ? (dim ? 'diffAddedDimmed' : 'diffAdded') : dim ? 'diffRemovedDimmed' : 'diffRemoved';
     const lineNum = lineIndex === 0 ? i : undefined;
     const lineNumStr = (lineNum !== undefined ? lineNum.toString().padStart(maxWidth) : ' '.repeat(maxWidth)) + ' ';
     // Calculate padding to fill the entire terminal width
     const usedWidth = lineNumStr.length + diffPrefixWidth + contentWidth;
     const padding = Math.max(0, width - usedWidth);
-    return <Box key={key} flexDirection="row">
+
+    return (
+      <Box key={key} flexDirection="row">
         <NoSelect fromLeftEdge>
           <Text color={overrideTheme ? 'text' : undefined} backgroundColor={lineBgColor} dimColor={dim}>
             {lineNumStr}
@@ -343,10 +329,18 @@ function generateWordDiffElements(item: DiffLine, width: number, maxWidth: numbe
           {content}
           {' '.repeat(padding)}
         </Text>
-      </Box>;
+      </Box>
+    );
   });
 }
-function formatDiff(lines: string[], startingLineNumber: number, width: number, dim: boolean, overrideTheme?: ThemeName): React.ReactNode[] {
+
+function formatDiff(
+  lines: string[],
+  startingLineNumber: number,
+  width: number,
+  dim: boolean,
+  overrideTheme?: ThemeName,
+): React.ReactNode[] {
   // Ensure width is at least 1 to prevent rendering issues with very narrow terminals
   const safeWidth = Math.max(1, Math.floor(width));
 
@@ -360,20 +354,12 @@ function formatDiff(lines: string[], startingLineNumber: number, width: number, 
   const ls = numberDiffLines(processedLines, startingLineNumber);
 
   // Find max line number width for alignment
-  const maxLineNumber = Math.max(...ls.map(({
-    i
-  }) => i), 0);
+  const maxLineNumber = Math.max(...ls.map(({ i }) => i), 0);
   const maxWidth = Math.max(maxLineNumber.toString().length + 1, 0);
 
   // Step 4: Render formatting
   return ls.flatMap((item): React.ReactNode[] => {
-    const {
-      type,
-      code,
-      i,
-      wordDiff,
-      matchedLine
-    } = item;
+    const { type, code, i, wordDiff, matchedLine } = item;
 
     // Handle word-level diffing for add/remove pairs
     if (wordDiff && matchedLine) {
@@ -392,6 +378,7 @@ function formatDiff(lines: string[], startingLineNumber: number, width: number, 
     const availableContentWidth = Math.max(1, safeWidth - maxWidth - 1 - diffPrefixWidth); // -1 for space after line number
     const wrappedText = wrapText(code, availableContentWidth, 'wrap');
     const wrappedLines = wrappedText.split('\n');
+
     return wrappedLines.map((line, lineIndex) => {
       const key = `${type}-${i}-${lineIndex}`;
       const lineNum = lineIndex === 0 ? i : undefined;
@@ -400,48 +387,58 @@ function formatDiff(lines: string[], startingLineNumber: number, width: number, 
       // Calculate padding to fill the entire terminal width
       const contentWidth = lineNumStr.length + 1 + stringWidth(line); // lineNum + sigil + code
       const padding = Math.max(0, safeWidth - contentWidth);
-      const bgColor = type === 'add' ? dim ? 'diffAddedDimmed' : 'diffAdded' : type === 'remove' ? dim ? 'diffRemovedDimmed' : 'diffRemoved' : undefined;
+
+      const bgColor =
+        type === 'add'
+          ? dim
+            ? 'diffAddedDimmed'
+            : 'diffAdded'
+          : type === 'remove'
+            ? dim
+              ? 'diffRemovedDimmed'
+              : 'diffRemoved'
+            : undefined;
 
       // Gutter (line number + sigil) is wrapped in <NoSelect> so fullscreen
       // text selection yields clean code. bgColor carries across both boxes
       // so the visual continuity (solid red/green bar) is unchanged.
-      return <Box key={key} flexDirection="row">
+      return (
+        <Box key={key} flexDirection="row">
           <NoSelect fromLeftEdge>
-            {/* Line numbers always dim (mirrors color-diff addLineNumber) so
-                the gutter recedes; the +/- sigil keeps full intensity. */}
-            <Text color={overrideTheme ? 'text' : undefined} backgroundColor={bgColor} dimColor={true}>
+            <Text
+              color={overrideTheme ? 'text' : undefined}
+              backgroundColor={bgColor}
+              dimColor={dim || type === 'nochange'}
+            >
               {lineNumStr}
-              <Text dimColor={dim || type === 'nochange'}>{sigil}</Text>
+              {sigil}
             </Text>
           </NoSelect>
           <Text color={overrideTheme ? 'text' : undefined} backgroundColor={bgColor} dimColor={dim}>
             {line}
             {' '.repeat(padding)}
           </Text>
-        </Box>;
+        </Box>
+      );
     });
   });
 }
+
 export function numberDiffLines(diff: LineObject[], startLine: number): DiffLine[] {
   let i = startLine;
   const result: DiffLine[] = [];
   const queue = [...diff];
+
   while (queue.length > 0) {
     const current = queue.shift()!;
-    const {
-      code,
-      type,
-      originalCode,
-      wordDiff,
-      matchedLine
-    } = current;
+    const { code, type, originalCode, wordDiff, matchedLine } = current;
     const line = {
       code,
       type,
       i,
       originalCode,
       wordDiff,
-      matchedLine
+      matchedLine,
     };
 
     // Update counters based on change type
@@ -454,35 +451,29 @@ export function numberDiffLines(diff: LineObject[], startLine: number): DiffLine
         i++;
         result.push(line);
         break;
-      case 'remove':
-        {
+      case 'remove': {
+        result.push(line);
+        let numRemoved = 0;
+        while (queue[0]?.type === 'remove') {
+          i++;
+          const current = queue.shift()!;
+          const { code, type, originalCode, wordDiff, matchedLine } = current;
+          const line = {
+            code,
+            type,
+            i,
+            originalCode,
+            wordDiff,
+            matchedLine,
+          };
           result.push(line);
-          let numRemoved = 0;
-          while (queue[0]?.type === 'remove') {
-            i++;
-            const current = queue.shift()!;
-            const {
-              code,
-              type,
-              originalCode,
-              wordDiff,
-              matchedLine
-            } = current;
-            const line = {
-              code,
-              type,
-              i,
-              originalCode,
-              wordDiff,
-              matchedLine
-            };
-            result.push(line);
-            numRemoved++;
-          }
-          i -= numRemoved;
-          break;
+          numRemoved++;
         }
+        i -= numRemoved;
+        break;
+      }
     }
   }
+
   return result;
 }
