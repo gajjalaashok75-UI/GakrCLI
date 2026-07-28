@@ -24,11 +24,15 @@ export const KEYBINDING_CONTEXTS = [
   // New contexts for keybindings migration
   'Attachments',
   'Footer',
+  'FormField',
   'MessageSelector',
+  'MessageActions',
   'DiffDialog',
   'ModelPicker',
   'Select',
   'Plugin',
+  'Scroll',
+  'EffortPanel',
 ] as const
 
 /**
@@ -56,6 +60,10 @@ export const KEYBINDING_CONTEXT_DESCRIPTIONS: Record<
   ModelPicker: 'When the model picker is open',
   Select: 'When a select/list component is focused',
   Plugin: 'When the plugin dialog is open',
+  Scroll: 'When scrollable content is focused',
+  EffortPanel: 'When the effort panel is open',
+  FormField: 'When navigating form fields (login/setup panels)',
+  MessageActions: 'When message action buttons are focused',
 }
 
 /**
@@ -154,9 +162,19 @@ export const KEYBINDING_ACTIONS = [
   'modelPicker:decreaseEffort',
   'modelPicker:increaseEffort',
   'modelPicker:refresh',
+  'modelPicker:toggle1M',
+  // Effort panel actions (slash /effort without args)
+  'effortPanel:decrease',
+  'effortPanel:increase',
+  'effortPanel:home',
+  'effortPanel:end',
+  'effortPanel:confirm',
+  'effortPanel:cancel',
   // Select component actions (distinct from confirm: to avoid collisions)
   'select:next',
   'select:previous',
+  'select:previousValue',
+  'select:nextValue',
   'select:accept',
   'select:cancel',
   // Plugin dialog actions

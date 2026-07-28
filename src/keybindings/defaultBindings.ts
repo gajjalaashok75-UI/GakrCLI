@@ -117,6 +117,9 @@ export const DEFAULT_BINDINGS: KeybindingBlock[] = [
       j: 'select:next',
       'ctrl+p': 'select:previous',
       'ctrl+n': 'select:next',
+      // Cycle enum values left/right (same as left/right arrow in handleKeyDown)
+      left: 'select:previousValue',
+      right: 'select:nextValue',
       // Toggle/activate the selected setting (space only — enter saves & closes)
       space: 'select:accept',
       // Save and close the config panel
@@ -145,6 +148,16 @@ export const DEFAULT_BINDINGS: KeybindingBlock[] = [
       'ctrl+e': 'confirm:toggleExplanation',
       // Toggle permission debug info
       'ctrl+d': 'permission:toggleDebug',
+    },
+  },
+  {
+    context: 'FormField',
+    bindings: {
+      // Form field vertical navigation (login/setup panels)
+      tab: 'tabs:next',
+      'shift+tab': 'tabs:previous',
+      up: 'tabs:previous',
+      down: 'tabs:next',
     },
   },
   {
@@ -312,6 +325,7 @@ export const DEFAULT_BINDINGS: KeybindingBlock[] = [
     bindings: {
       left: 'modelPicker:decreaseEffort',
       right: 'modelPicker:increaseEffort',
+      space: 'modelPicker:toggle1M',
       r: 'modelPicker:refresh',
     },
   },
