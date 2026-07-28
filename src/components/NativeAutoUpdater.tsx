@@ -7,8 +7,10 @@ import { useInterval } from 'usehooks-ts';
 import { useUpdateNotification } from '../hooks/useUpdateNotification.js';
 import { Box, Text } from '../ink.js';
 import type { AutoUpdaterResult } from '../utils/autoUpdater.js';
+import { getMaxVersion, getMaxVersionMessage } from '../utils/autoUpdater.js';
 import { isAutoUpdaterDisabled } from '../utils/config.js';
 import { installLatest } from '../utils/nativeInstaller/index.js';
+import { gt } from '../utils/semver.js';
 import { getInitialSettings } from '../utils/settings/settings.js';
 
 /**
@@ -38,6 +40,7 @@ function getErrorType(errorMessage: string): string {
   }
   return 'unknown';
 }
+
 type Props = {
   isUpdating: boolean;
   onChangeIsUpdating: (isUpdating: boolean) => void;
@@ -61,12 +64,13 @@ export function NativeAutoUpdater({
   onAutoUpdaterResult,
   autoUpdaterResult,
   showSuccessMessage,
-  verbose
+  verbose,
 }: Props): React.ReactNode {
   const [versions, setVersions] = useState<{
     current?: string | null;
     latest?: string | null;
   }>({});
+  const [maxVersionIssue, setMaxVersionIssue] = useState<string | null>(null);
   const updateSemver = useUpdateNotification(autoUpdaterResult?.version);
   const channel = getInitialSettings()?.autoUpdatesChannel ?? 'latest';
 
@@ -76,19 +80,35 @@ export function NativeAutoUpdater({
   // repeated downloads on remount — the upstream trigger for #22413).
   const isUpdatingRef = useRef(isUpdating);
   isUpdatingRef.current = isUpdating;
+
   const checkForUpdates = React.useCallback(async () => {
     if (isUpdatingRef.current) {
       return;
     }
+
+    if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') {
+      logForDebugging('NativeAutoUpdater: Skipping update check in test/dev environment');
+      return;
+    }
+
     if (isAutoUpdaterDisabled()) {
       return;
     }
+
     onChangeIsUpdating(true);
     const startTime = Date.now();
 
     // Log the start of an auto-update check for funnel analysis
     logEvent('tengu_native_auto_updater_start', {});
+
     try {
+      // Check if current version is above the max allowed version
+      const maxVersion = await getMaxVersion();
+      if (maxVersion && gt(MACRO.VERSION, maxVersion)) {
+        const msg = await getMaxVersionMessage();
+        setMaxVersionIssue(msg ?? 'affects your version');
+      }
+
       const result = await installLatest(channel);
       const currentVersion = MACRO.VERSION;
       const latencyMs = Date.now() - startTime;
@@ -96,34 +116,34 @@ export function NativeAutoUpdater({
       // Handle lock contention gracefully - just return without treating as error
       if (result.lockFailed) {
         logEvent('tengu_native_auto_updater_lock_contention', {
-          latency_ms: latencyMs
+          latency_ms: latencyMs,
         });
         return; // Silently skip this update check, will try again later
       }
 
       // Update versions for display
-      setVersions({
-        current: currentVersion,
-        latest: result.latestVersion
-      });
+      setVersions({ current: currentVersion, latest: result.latestVersion });
+
       if (result.wasUpdated) {
         logEvent('tengu_native_auto_updater_success', {
-          latency_ms: latencyMs
+          latency_ms: latencyMs,
         });
+
         onAutoUpdaterResult({
           version: result.latestVersion,
-          status: 'success'
+          status: 'success',
         });
       } else {
         // Already up to date
         logEvent('tengu_native_auto_updater_up_to_date', {
-          latency_ms: latencyMs
+          latency_ms: latencyMs,
         });
       }
     } catch (error) {
       const latencyMs = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : String(error);
       logError(error);
+
       const errorType = getErrorType(errorMessage);
       logEvent('tengu_native_auto_updater_fail', {
         latency_ms: latencyMs,
@@ -133,11 +153,12 @@ export function NativeAutoUpdater({
         error_permission: errorType === 'permission_denied',
         error_disk_full: errorType === 'disk_full',
         error_npm: errorType === 'npm_error',
-        error_network: errorType === 'network_error'
+        error_network: errorType === 'network_error',
       });
+
       onAutoUpdaterResult({
         version: null,
-        status: 'install_failed'
+        status: 'install_failed',
       });
     } finally {
       onChangeIsUpdating(false);
@@ -146,7 +167,6 @@ export function NativeAutoUpdater({
     // instead so the guard is always current without changing callback
     // identity (which would re-trigger the initial-check useEffect below).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    // biome-ignore lint/correctness/useExhaustiveDependencies: isUpdating read via ref
   }, [onAutoUpdaterResult, channel]);
 
   // Initial check
@@ -156,26 +176,51 @@ export function NativeAutoUpdater({
 
   // Check every 30 minutes
   useInterval(checkForUpdates, 30 * 60 * 1000);
+
+  const hasUpdateResult = !!autoUpdaterResult?.version;
+  const hasVersionInfo = !!versions.current && !!versions.latest;
   // Show the component when:
+  // - warning banner needed (above max version), or
   // - there's an update result to display (success/error), or
   // - actively checking and we have version info to show
-  const shouldRender = shouldRenderNativeAutoUpdater(autoUpdaterResult, isUpdating, versions);
+  const shouldRender = !!maxVersionIssue || hasUpdateResult || (isUpdating && hasVersionInfo);
+
   if (!shouldRender) {
     return null;
   }
-  return <Box flexDirection="row" gap={1}>
-      {verbose && <Text dimColor wrap="truncate">
+
+  return (
+    <Box flexDirection="row" gap={1}>
+      {verbose && (
+        <Text dimColor wrap="truncate">
           current: {versions.current} &middot; {channel}: {versions.latest}
-        </Text>}
-      {isUpdating ? <Box>
+        </Text>
+      )}
+      {isUpdating ? (
+        <Box>
           <Text dimColor wrap="truncate">
             Checking for updates
           </Text>
-        </Box> : autoUpdaterResult?.status === 'success' && showSuccessMessage && updateSemver && <Text color="success" wrap="truncate">
+        </Box>
+      ) : (
+        autoUpdaterResult?.status === 'success' &&
+        showSuccessMessage &&
+        updateSemver && (
+          <Text color="success" wrap="truncate">
             ✓ Update installed · Restart to update
-          </Text>}
-      {autoUpdaterResult?.status === 'install_failed' && <Text color="error" wrap="truncate">
+          </Text>
+        )
+      )}
+      {autoUpdaterResult?.status === 'install_failed' && (
+        <Text color="error" wrap="truncate">
           ✗ Auto-update failed &middot; Try <Text bold>/status</Text>
-        </Text>}
-    </Box>;
+        </Text>
+      )}
+      {maxVersionIssue && process.env.USER_TYPE === 'ant' && (
+        <Text color="warning">
+          ⚠ Known issue: {maxVersionIssue} &middot; Run <Text bold>gakrcli rollback --safe</Text> to downgrade
+        </Text>
+      )}
+    </Box>
+  );
 }

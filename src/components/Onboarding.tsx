@@ -1,6 +1,8 @@
-import { c as _c } from "react-compiler-runtime";
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from 'src/services/analytics/index.js';
+import {
+  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+  logEvent,
+} from 'src/services/analytics/index.js';
 import { setupTerminal, shouldOfferTerminalSetup } from '../commands/terminalSetup/terminalSetup.js';
 import { PRODUCT_DISPLAY_NAME } from '../constants/product.js';
 import { useExitOnCtrlCDWithKeybindings } from '../hooks/useExitOnCtrlCDWithKeybindings.js';
@@ -20,51 +22,67 @@ import { WelcomeV2 } from './LogoV2/WelcomeV2.js';
 import { PressEnterToContinue } from './PressEnterToContinue.js';
 import { ThemePicker } from './ThemePicker.js';
 import { OrderedList } from './ui/OrderedList.js';
+
 type StepId = 'preflight' | 'theme' | 'oauth' | 'api-key' | 'security' | 'terminal-setup';
+
 interface OnboardingStep {
   id: StepId;
   component: React.ReactNode;
 }
+
 type Props = {
   onDone(): void;
 };
-export function Onboarding({
-  onDone
-}: Props): React.ReactNode {
+
+export function Onboarding({ onDone }: Props): React.ReactNode {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [skipOAuth, setSkipOAuth] = useState(false);
   const [oauthEnabled] = useState(() => isAnthropicAuthEnabled());
   const [theme, setTheme] = useTheme();
+
   useEffect(() => {
     logEvent('tengu_began_setup', {
-      oauthEnabled
+      oauthEnabled,
     });
   }, [oauthEnabled]);
+
   function goToNextStep() {
     if (currentStepIndex < steps.length - 1) {
       const nextIndex = currentStepIndex + 1;
       setCurrentStepIndex(nextIndex);
+
       logEvent('tengu_onboarding_step', {
         oauthEnabled,
-        stepId: steps[nextIndex]?.id as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
+        stepId: steps[nextIndex]?.id as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       });
     } else {
       onDone();
     }
   }
+
   function handleThemeSelection(newTheme: ThemeSetting) {
     setTheme(newTheme);
     goToNextStep();
   }
+
   const exitState = useExitOnCtrlCDWithKeybindings();
 
   // Define all onboarding steps
-  const themeStep = <Box marginX={1}>
-      <ThemePicker onThemeSelect={handleThemeSelection} showIntroText={true} helpText="To change this later, run /theme" hideEscToCancel={true} skipExitHandling={true} // Skip exit handling as Onboarding already handles it
-    />
-    </Box>;
-  const securityStep = <Box flexDirection="column" gap={1} paddingLeft={1}>
-      <Text bold>Security notes:</Text>
+  const themeStep = (
+    <Box marginX={1}>
+      <ThemePicker
+        onThemeSelect={handleThemeSelection}
+        showIntroText={true}
+        helpText="To change this later, run /theme"
+        hideEscToCancel={true}
+        skipExitHandling={true} // Skip exit handling as Onboarding already handles it
+      />
+    </Box>
+  );
+
+  const securityStep = (
+    <Box flexDirection="column" gap={1} paddingLeft={1}>
+      <Text bold>Before you start, keep in mind:</Text>
       <Box flexDirection="column" width={70}>
         {/**
          * OrderedList misnumbers items when rendering conditionally,
@@ -72,35 +90,37 @@ export function Onboarding({
          */}
         <OrderedList>
           <OrderedList.Item>
-            <Text>{PRODUCT_DISPLAY_NAME} can make mistakes</Text>
+            <Text>Always review changes before accepting</Text>
             <Text dimColor wrap="wrap">
-              You should always review {PRODUCT_DISPLAY_NAME}&apos;s responses,
-              especially when
+              {PRODUCT_DISPLAY_NAME}&apos;s can make mistakes — especially when running commands
               <Newline />
-              running code.
+              or editing files. You stay in control of every action.
               <Newline />
             </Text>
           </OrderedList.Item>
           <OrderedList.Item>
-            <Text>
-              Due to prompt injection risks, only use it with code you trust
-            </Text>
+            <Text>Only use {PRODUCT_DISPLAY_NAME}&apos;s on projects you trust</Text>
             <Text dimColor wrap="wrap">
-              Repository files and tool output can contain instructions that try
-              to steer {PRODUCT_DISPLAY_NAME} toward unsafe tool use.
+              Untrusted code could contain prompt injection attacks.
+              <Newline />
+              {PRODUCT_DISPLAY_NAME} will follow instructions in your code, so only use it on projects
+              you trust.
+              <Newline />
             </Text>
           </OrderedList.Item>
         </OrderedList>
       </Box>
       <PressEnterToContinue />
-    </Box>;
-  const preflightStep = <PreflightStep onSuccess={goToNextStep} />;
+    </Box>
+  );
+
+  const _preflightStep = <PreflightStep onSuccess={goToNextStep} />;
   // Create the steps array - determine which steps to include based on reAuth and oauthEnabled
   const apiKeyNeedingApproval = useMemo(() => {
     // Add API key step if needed
     // On homespace, ANTHROPIC_API_KEY is preserved in process.env for child
     // processes but ignored by GakrCLI Code itself (see auth.ts).
-    if (!process.env.ANTHROPIC_API_KEY || isRunningOnHomespace() || !isAnthropicAuthEnabled()) {
+    if (!process.env.ANTHROPIC_API_KEY || isRunningOnHomespace()) {
       return '';
     }
     const customApiKeyTruncated = normalizeApiKeyForConfig(process.env.ANTHROPIC_API_KEY);
@@ -108,74 +128,90 @@ export function Onboarding({
       return customApiKeyTruncated;
     }
   }, []);
+
   function handleApiKeyDone(approved: boolean) {
     if (approved) {
       setSkipOAuth(true);
     }
     goToNextStep();
   }
+
   const steps: OnboardingStep[] = [];
   if (oauthEnabled) {
     steps.push({
       id: 'preflight',
-      component: preflightStep
+      component: _preflightStep
     });
   }
-  steps.push({
-    id: 'theme',
-    component: themeStep
-  });
+  steps.push({ id: 'theme', component: themeStep });
+
   if (apiKeyNeedingApproval) {
     steps.push({
       id: 'api-key',
-      component: <ApproveApiKey customApiKeyTruncated={apiKeyNeedingApproval} onDone={handleApiKeyDone} />
+      component: <ApproveApiKey customApiKeyTruncated={apiKeyNeedingApproval} onDone={handleApiKeyDone} />,
     });
   }
+
   if (oauthEnabled) {
     steps.push({
       id: 'oauth',
-      component: <SkippableStep skip={skipOAuth} onSkip={goToNextStep}>
+      component: (
+        <SkippableStep skip={skipOAuth} onSkip={goToNextStep}>
           <ConsoleOAuthFlow onDone={goToNextStep} />
         </SkippableStep>
+      ),
     });
   }
-  steps.push({
-    id: 'security',
-    component: securityStep
-  });
+
+  steps.push({ id: 'security', component: securityStep });
+
   if (shouldOfferTerminalSetup()) {
     steps.push({
       id: 'terminal-setup',
-      component: <Box flexDirection="column" gap={1} paddingLeft={1}>
-          <Text bold>Use {PRODUCT_DISPLAY_NAME}&apos;s terminal setup?</Text>
+      component: (
+        <Box flexDirection="column" gap={1} paddingLeft={1}>
+          <Text bold>Use  {PRODUCT_DISPLAY_NAME}&apos;s terminal setup?</Text>
           <Box flexDirection="column" width={70} gap={1}>
             <Text>
               For the optimal coding experience, enable the recommended settings
               <Newline />
               for your terminal:{' '}
-              {env.terminal === 'Apple_Terminal' ? 'Option+Enter for newlines and visual bell' : 'Shift+Enter for newlines'}
+              {env.terminal === 'Apple_Terminal'
+                ? 'Option+Enter for newlines and visual bell'
+                : 'Shift+Enter for newlines'}
             </Text>
-            <Select options={[{
-            label: 'Yes, use recommended settings',
-            value: 'install'
-          }, {
-            label: 'No, maybe later with /terminal-setup',
-            value: 'no'
-          }]} onChange={value => {
-            if (value === 'install') {
-              // Errors already logged in setupTerminal, just swallow and proceed
-              void setupTerminal(theme).catch(() => {}).finally(goToNextStep);
-            } else {
-              goToNextStep();
-            }
-          }} onCancel={() => goToNextStep()} />
+            <Select
+              options={[
+                {
+                  label: 'Yes, use recommended settings',
+                  value: 'install',
+                },
+                {
+                  label: 'No, maybe later with /terminal-setup',
+                  value: 'no',
+                },
+              ]}
+              onChange={value => {
+                if (value === 'install') {
+                  // Errors already logged in setupTerminal, just swallow and proceed
+                  void setupTerminal(theme)
+                    .catch(() => {})
+                    .finally(goToNextStep);
+                } else {
+                  goToNextStep();
+                }
+              }}
+              onCancel={() => goToNextStep()}
+            />
             <Text dimColor>
               {exitState.pending ? <>Press {exitState.keyName} again to exit</> : <>Enter to confirm · Esc to skip</>}
             </Text>
           </Box>
         </Box>
+      ),
     });
   }
+
   const currentStep = steps[currentStepIndex];
 
   // Handle Enter on security step and Escape on terminal-setup step
@@ -187,56 +223,60 @@ export function Onboarding({
       goToNextStep();
     }
   }, [currentStepIndex, steps.length, oauthEnabled, onDone]);
+
   const handleTerminalSetupSkip = useCallback(() => {
     goToNextStep();
   }, [currentStepIndex, steps.length, oauthEnabled, onDone]);
-  useKeybindings({
-    'confirm:yes': handleSecurityContinue
-  }, {
-    context: 'Confirmation',
-    isActive: currentStep?.id === 'security'
-  });
-  useKeybindings({
-    'confirm:no': handleTerminalSetupSkip
-  }, {
-    context: 'Confirmation',
-    isActive: currentStep?.id === 'terminal-setup'
-  });
-  return <Box flexDirection="column">
+
+  useKeybindings(
+    {
+      'confirm:yes': handleSecurityContinue,
+    },
+    {
+      context: 'Confirmation',
+      isActive: currentStep?.id === 'security',
+    },
+  );
+
+  useKeybindings(
+    {
+      'confirm:no': handleTerminalSetupSkip,
+    },
+    {
+      context: 'Confirmation',
+      isActive: currentStep?.id === 'terminal-setup',
+    },
+  );
+
+  return (
+    <Box flexDirection="column">
       <WelcomeV2 />
       <Box flexDirection="column" marginTop={1}>
         {currentStep?.component}
-        {exitState.pending && <Box padding={1}>
+        {exitState.pending && (
+          <Box padding={1}>
             <Text dimColor>Press {exitState.keyName} again to exit</Text>
-          </Box>}
+          </Box>
+        )}
       </Box>
-    </Box>;
+    </Box>
+  );
 }
-export function SkippableStep(t0) {
-  const $ = _c(4);
-  const {
-    skip,
-    onSkip,
-    children
-  } = t0;
-  let t1;
-  let t2;
-  if ($[0] !== onSkip || $[1] !== skip) {
-    t1 = () => {
-      if (skip) {
-        onSkip();
-      }
-    };
-    t2 = [skip, onSkip];
-    $[0] = onSkip;
-    $[1] = skip;
-    $[2] = t1;
-    $[3] = t2;
-  } else {
-    t1 = $[2];
-    t2 = $[3];
-  }
-  useEffect(t1, t2);
+
+export function SkippableStep({
+  skip,
+  onSkip,
+  children,
+}: {
+  skip: boolean;
+  onSkip(): void;
+  children: React.ReactNode;
+}): React.ReactNode {
+  useEffect(() => {
+    if (skip) {
+      onSkip();
+    }
+  }, [skip, onSkip]);
   if (skip) {
     return null;
   }

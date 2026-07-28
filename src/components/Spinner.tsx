@@ -1,5 +1,4 @@
-import { c as _c } from "react-compiler-runtime";
-// biome-ignore-all assist/source/organizeImports: internal-only import markers must not be reordered
+// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
 import { Box, Text } from '../ink.js';
 import * as React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -25,6 +24,7 @@ import { getDefaultCharacters, type SpinnerMode } from './Spinner/index.js';
 import { SpinnerAnimationRow } from './Spinner/SpinnerAnimationRow.js';
 import { useSettings } from '../hooks/useSettings.js';
 import { isInProcessTeammateTask } from '../tasks/InProcessTeammateTask/types.js';
+import { isLocalAgentTask } from '../tasks/LocalAgentTask/LocalAgentTask.js';
 import { isBackgroundTask } from '../tasks/types.js';
 import { getAllInProcessTeammateTasks } from '../tasks/InProcessTeammateTask/InProcessTeammateTask.js';
 import { getEffortSuffix } from '../utils/effort.js';
@@ -33,14 +33,18 @@ import { getViewedTeammateTask } from '../state/selectors.js';
 import { TEARDROP_ASTERISK } from '../constants/figures.js';
 import figures from 'figures';
 import { getCurrentTurnTokenBudget, getTurnOutputTokens } from '../bootstrap/state.js';
+
 import { TeammateSpinnerTree } from './Spinner/TeammateSpinnerTree.js';
 import { useAnimationFrame } from '../ink.js';
 import { getGlobalConfig } from '../utils/config.js';
 import type { Color } from '../ink/styles.js';
 import { resolveLogoSpinnerColors } from './StartupScreen.palettes.js';
 export type { SpinnerMode } from './Spinner/index.js';
+
 const DEFAULT_CHARACTERS = getDefaultCharacters();
+
 const SPINNER_FRAMES = [...DEFAULT_CHARACTERS, ...[...DEFAULT_CHARACTERS].reverse()];
+
 type Props = {
   mode: SpinnerMode;
   loadingStartTimeRef: React.RefObject<number>;
@@ -48,6 +52,15 @@ type Props = {
   pauseStartTimeRef: React.RefObject<number | null>;
   spinnerTip?: string;
   responseLengthRef: React.RefObject<number>;
+  apiMetricsRef?: React.RefObject<
+    Array<{
+      ttftMs: number;
+      firstTokenTime: number;
+      lastTokenTime: number;
+      responseLengthBaseline: number;
+      endResponseLength: number;
+    }>
+  >;
   overrideColor?: keyof Theme | Color | null;
   overrideShimmerColor?: keyof Theme | Color | null;
   overrideMessage?: string | null;
@@ -67,8 +80,7 @@ export function SpinnerWithVerb(props: Props): React.ReactNode {
   // (see isBriefOnly={viewedTeammateTask ? false : isBriefOnly}). That
   // prop isn't threaded here, so replicate the gate from the store —
   // teammate view needs the real spinner (which shows teammate status).
-  const viewingAgentTaskId = useAppState(s_0 => s_0.viewingAgentTaskId);
-  // Hoisted to mount-time — this component re-renders at animation framerate.
+  const viewingAgentTaskId = useAppState(s => s.viewingAgentTaskId);
   const briefEnvEnabled = feature('KAIROS') || feature('KAIROS_BRIEF') ?
   // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
   useMemo(() => isEnvTruthy(process.env.GAKR_CODE_BRIEF), []) : false;
@@ -76,11 +88,19 @@ export function SpinnerWithVerb(props: Props): React.ReactNode {
   // Runtime gate mirrors isBriefEnabled() but inlined — importing from
   // BriefTool.ts would leak tool-name strings into external builds. Single
   // spinner instance → hooks stay unconditional (two subs, negligible).
-  if ((feature('KAIROS') || feature('KAIROS_BRIEF')) && (getKairosActive() || getUserMsgOptIn() && (briefEnvEnabled || getFeatureValue_CACHED_MAY_BE_STALE('tengu_kairos_brief', false))) && isBriefOnly && !viewingAgentTaskId) {
+  if (
+    (feature('KAIROS') || feature('KAIROS_BRIEF')) &&
+    (getKairosActive() ||
+      (getUserMsgOptIn() && (briefEnvEnabled || getFeatureValue_CACHED_MAY_BE_STALE('tengu_kairos_brief', false)))) &&
+    isBriefOnly &&
+    !viewingAgentTaskId
+  ) {
     return <BriefSpinner mode={props.mode} overrideMessage={props.overrideMessage} />;
   }
+
   return <SpinnerWithVerbInner {...props} />;
 }
+
 function SpinnerWithVerbInner({
   mode,
   loadingStartTimeRef,
@@ -94,7 +114,7 @@ function SpinnerWithVerbInner({
   spinnerSuffix,
   verbose,
   hasActiveTools = false,
-  leaderIsIdle = false
+  leaderIsIdle = false,
 }: Props): React.ReactNode {
   const settings = useSettings();
   const reducedMotion = settings.prefersReducedMotion ?? false;
@@ -106,29 +126,26 @@ function SpinnerWithVerbInner({
   // elapsed-time timer) are computed inside the child.
 
   const tasks = useAppState(s => s.tasks);
-  const viewingAgentTaskId = useAppState(s_0 => s_0.viewingAgentTaskId);
-  const expandedView = useAppState(s_1 => s_1.expandedView);
+  const viewingAgentTaskId = useAppState(s => s.viewingAgentTaskId);
+  const expandedView = useAppState(s => s.expandedView);
   const showExpandedTodos = expandedView === 'tasks';
   const showSpinnerTree = expandedView === 'teammates';
-  const selectedIPAgentIndex = useAppState(s_2 => s_2.selectedIPAgentIndex);
-  const viewSelectionMode = useAppState(s_3 => s_3.viewSelectionMode);
+  const selectedIPAgentIndex = useAppState(s => s.selectedIPAgentIndex);
+  const viewSelectionMode = useAppState(s => s.viewSelectionMode);
   // Get foregrounded teammate (if viewing a teammate's transcript)
-  const foregroundedTeammate = viewingAgentTaskId ? getViewedTeammateTask({
-    viewingAgentTaskId,
-    tasks
-  }) : undefined;
-  const {
-    columns
-  } = useTerminalSize();
+  const foregroundedTeammate = viewingAgentTaskId ? getViewedTeammateTask({ viewingAgentTaskId, tasks }) : undefined;
+  const { columns } = useTerminalSize();
   const tasksV2 = useTasksV2();
 
   // Track thinking status: 'thinking' | number (duration in ms) | null
   // Shows each state for minimum 2s to avoid UI jank
   const [thinkingStatus, setThinkingStatus] = useState<'thinking' | number | null>(null);
   const thinkingStartRef = useRef<number | null>(null);
+
   useEffect(() => {
     let showDurationTimer: ReturnType<typeof setTimeout> | null = null;
     let clearStatusTimer: ReturnType<typeof setTimeout> | null = null;
+
     if (mode === 'thinking') {
       // Started thinking
       if (thinkingStartRef.current === null) {
@@ -140,6 +157,7 @@ function SpinnerWithVerbInner({
       const duration = Date.now() - thinkingStartRef.current;
       const elapsed = Date.now() - thinkingStartRef.current;
       const remainingThinkingTime = Math.max(0, 2000 - elapsed);
+
       thinkingStartRef.current = null;
 
       // Show "thinking..." for remaining time if < 2s elapsed, then show duration
@@ -148,12 +166,14 @@ function SpinnerWithVerbInner({
         // Clear after 2s
         clearStatusTimer = setTimeout(setThinkingStatus, 2000, null);
       };
+
       if (remainingThinkingTime > 0) {
         showDurationTimer = setTimeout(showDuration, remainingThinkingTime);
       } else {
         showDuration();
       }
     }
+
     return () => {
       if (showDurationTimer) clearTimeout(showDurationTimer);
       if (clearStatusTimer) clearTimeout(clearStatusTimer);
@@ -169,7 +189,11 @@ function SpinnerWithVerbInner({
 
   // Leader's own verb (always the leader's, regardless of who is foregrounded)
   const leaderVerb = overrideMessage ?? currentTodo?.activeForm ?? currentTodo?.subject ?? randomVerb;
-  const effectiveVerb = foregroundedTeammate && !foregroundedTeammate.isIdle ? foregroundedTeammate.spinnerVerb ?? randomVerb : leaderVerb;
+
+  const effectiveVerb =
+    foregroundedTeammate && !foregroundedTeammate.isIdle
+      ? (foregroundedTeammate.spinnerVerb ?? randomVerb)
+      : leaderVerb;
   const message = effectiveVerb + '…';
 
   // Track CLI activity when spinner is active
@@ -180,23 +204,31 @@ function SpinnerWithVerbInner({
       activityManager.endCLIActivity(operationId);
     };
   }, [mode]);
-  const effortValue = useAppState(s_4 => s_4.effortValue);
+
+  const effortValue = useAppState(s => s.effortValue);
   const effortSuffix = getEffortSuffix(getMainLoopModel(), effortValue);
 
   // Check if any running in-process teammates exist (needed for both modes)
   const runningTeammates = getAllInProcessTeammateTasks(tasks).filter(t => t.status === 'running');
   const hasRunningTeammates = runningTeammates.length > 0;
-  const allIdle = hasRunningTeammates && runningTeammates.every(t_0 => t_0.isIdle);
+  const allIdle = hasRunningTeammates && runningTeammates.every(t => t.isIdle);
 
-  // Gather aggregate token stats from all running swarm teammates
-  // In spinner-tree mode, skip aggregation (teammates have their own lines in the tree)
+  // Gather aggregate token stats from all running agents.
+  // In spinner-tree mode, skip in-process teammates (they have their own
+  // per-teammate lines in the tree) but still count local-agent tasks
+  // (background agents) which have no dedicated tree rows.
   let teammateTokens = 0;
-  if (!showSpinnerTree) {
-    for (const task_0 of Object.values(tasks)) {
-      if (isInProcessTeammateTask(task_0) && task_0.status === 'running') {
-        if (task_0.progress?.tokenCount) {
-          teammateTokens += task_0.progress.tokenCount;
-        }
+  for (const task of Object.values(tasks)) {
+    if (task.status !== 'running') continue;
+    if (isInProcessTeammateTask(task)) {
+      if (!showSpinnerTree && task.progress?.tokenCount) {
+        teammateTokens += task.progress.tokenCount;
+      }
+      continue;
+    }
+    if (isLocalAgentTask(task)) {
+      if (task.progress?.tokenCount) {
+        teammateTokens += task.progress.tokenCount;
       }
     }
   }
@@ -204,7 +236,10 @@ function SpinnerWithVerbInner({
   // Stale read of the refs for showBtwTip below — we're off the 50ms clock
   // so this only updates when props/app state change, which is sufficient for
   // a coarse 30s threshold.
-  const elapsedSnapshot = pauseStartTimeRef.current !== null ? pauseStartTimeRef.current - loadingStartTimeRef.current - totalPausedMsRef.current : Date.now() - loadingStartTimeRef.current - totalPausedMsRef.current;
+  const elapsedSnapshot =
+    pauseStartTimeRef.current !== null
+      ? pauseStartTimeRef.current - loadingStartTimeRef.current - totalPausedMsRef.current
+      : Date.now() - loadingStartTimeRef.current - totalPausedMsRef.current;
 
   // Leader token count for TeammateSpinnerTree — read raw (non-animated) from
   // the ref. The tree is only shown when teammates are running; teammate
@@ -216,30 +251,57 @@ function SpinnerWithVerbInner({
   const messageColor = overrideColor ?? defaultColor;
   const shimmerColor = overrideShimmerColor ?? defaultShimmerColor;
 
+  // TTFT display is gated to internal builds — apiMetricsRef was removed from
+  // props during a refactor, so skip this until it's re-threaded.
+  const _ttftText: string | null = null;
+
   // When leader is idle but teammates are running (and we're viewing the leader),
   // show a static dim idle display instead of the animated spinner — otherwise
   // useStalledAnimation detects no new tokens after 3s and turns the spinner red.
   if (leaderIsIdle && hasRunningTeammates && !foregroundedTeammate) {
-    return <Box flexDirection="column" width="100%" alignItems="flex-start">
+    return (
+      <Box flexDirection="column" width="100%" alignItems="flex-start">
         <Box flexDirection="row" flexWrap="nowrap" marginTop={1} width="100%">
           <Text dimColor>
             {TEARDROP_ASTERISK} Idle
             {!allIdle && ' · teammates running'}
           </Text>
         </Box>
-        {showSpinnerTree && <TeammateSpinnerTree selectedIndex={selectedIPAgentIndex} isInSelectionMode={viewSelectionMode === 'selecting-agent'} allIdle={allIdle} leaderTokenCount={leaderTokenCount} leaderIdleText="Idle" />}
-      </Box>;
+        {showSpinnerTree && (
+          <TeammateSpinnerTree
+            selectedIndex={selectedIPAgentIndex}
+            isInSelectionMode={viewSelectionMode === 'selecting-agent'}
+            allIdle={allIdle}
+            leaderTokenCount={leaderTokenCount}
+            leaderIdleText="Idle"
+          />
+        )}
+      </Box>
+    );
   }
 
   // When viewing an idle teammate, show static idle display instead of animated spinner
   if (foregroundedTeammate?.isIdle) {
-    const idleText = allIdle ? `${TEARDROP_ASTERISK} Worked for ${formatDuration(Date.now() - foregroundedTeammate.startTime)}` : `${TEARDROP_ASTERISK} Idle`;
-    return <Box flexDirection="column" width="100%" alignItems="flex-start">
+    const idleText = allIdle
+      ? `${TEARDROP_ASTERISK} Worked for ${formatDuration(Date.now() - foregroundedTeammate.startTime)}`
+      : `${TEARDROP_ASTERISK} Idle`;
+    return (
+      <Box flexDirection="column" width="100%" alignItems="flex-start">
         <Box flexDirection="row" flexWrap="nowrap" marginTop={1} width="100%">
           <Text dimColor>{idleText}</Text>
         </Box>
-        {showSpinnerTree && hasRunningTeammates && <TeammateSpinnerTree selectedIndex={selectedIPAgentIndex} isInSelectionMode={viewSelectionMode === 'selecting-agent'} allIdle={allIdle} leaderVerb={leaderIsIdle ? undefined : leaderVerb} leaderIdleText={leaderIsIdle ? 'Idle' : undefined} leaderTokenCount={leaderTokenCount} />}
-      </Box>;
+        {showSpinnerTree && hasRunningTeammates && (
+          <TeammateSpinnerTree
+            selectedIndex={selectedIPAgentIndex}
+            isInSelectionMode={viewSelectionMode === 'selecting-agent'}
+            allIdle={allIdle}
+            leaderVerb={leaderIsIdle ? undefined : leaderVerb}
+            leaderIdleText={leaderIsIdle ? 'Idle' : undefined}
+            leaderTokenCount={leaderTokenCount}
+          />
+        )}
+      </Box>
+    );
   }
 
   // Time-based tip overrides: coarse thresholds so a stale ref read (we're
@@ -249,7 +311,14 @@ function SpinnerWithVerbInner({
   const tipsEnabled = settings.spinnerTipsEnabled !== false;
   const showClearTip = tipsEnabled && elapsedSnapshot > 1_800_000;
   const showBtwTip = tipsEnabled && elapsedSnapshot > 30_000 && !getGlobalConfig().btwUseCount;
-  const effectiveTip = contextTipsActive ? undefined : showClearTip && !nextTask ? 'Use /clear to start fresh when switching topics and free up context' : showBtwTip && !nextTask ? "Use /btw to ask a quick side question without interrupting GakrCLI's current work" : spinnerTip;
+
+  const effectiveTip = contextTipsActive
+    ? undefined
+    : showClearTip && !nextTask
+      ? 'Use /clear to start fresh when switching topics and free up context'
+      : showBtwTip && !nextTask
+        ? "Use /btw to ask a quick side question without interrupting Gakr's current work"
+        : spinnerTip;
 
   // Budget text (internal-only) — shown above the tip line
   let budgetText: string | null = null;
@@ -260,37 +329,73 @@ function SpinnerWithVerbInner({
       if (tokens >= budget) {
         budgetText = `Target: ${formatNumber(tokens)} used (${formatNumber(budget)} min ${figures.tick})`;
       } else {
-        const pct = Math.round(tokens / budget * 100);
+        const pct = Math.round((tokens / budget) * 100);
         const remaining = budget - tokens;
         const rate = elapsedSnapshot > 5000 && tokens >= 2000 ? tokens / elapsedSnapshot : 0;
-        const eta = rate > 0 ? ` \u00B7 ~${formatDuration(remaining / rate, {
-          mostSignificantOnly: true
-        })}` : '';
+        const eta = rate > 0 ? ` \u00B7 ~${formatDuration(remaining / rate, { mostSignificantOnly: true })}` : '';
         budgetText = `Target: ${formatNumber(tokens)} / ${formatNumber(budget)} (${pct}%)${eta}`;
       }
     }
   }
-  return <Box flexDirection="column" width="100%" alignItems="flex-start">
-      <SpinnerAnimationRow mode={mode} reducedMotion={reducedMotion} hasActiveTools={hasActiveTools} responseLengthRef={responseLengthRef} message={message} messageColor={messageColor} shimmerColor={shimmerColor} overrideColor={overrideColor} loadingStartTimeRef={loadingStartTimeRef} totalPausedMsRef={totalPausedMsRef} pauseStartTimeRef={pauseStartTimeRef} spinnerSuffix={spinnerSuffix} verbose={verbose} columns={columns} hasRunningTeammates={hasRunningTeammates} teammateTokens={teammateTokens} foregroundedTeammate={foregroundedTeammate} leaderIsIdle={leaderIsIdle} thinkingStatus={thinkingStatus} effortSuffix={effortSuffix} />
-      {showSpinnerTree && hasRunningTeammates ? <TeammateSpinnerTree selectedIndex={selectedIPAgentIndex} isInSelectionMode={viewSelectionMode === 'selecting-agent'} allIdle={allIdle} leaderVerb={leaderIsIdle ? undefined : leaderVerb} leaderIdleText={leaderIsIdle ? 'Idle' : undefined} leaderTokenCount={leaderTokenCount} /> : showExpandedTodos && tasksV2 && tasksV2.length > 0 ? <Box width="100%" flexDirection="column">
+
+  return (
+    <Box flexDirection="column" width="100%" alignItems="flex-start">
+      <SpinnerAnimationRow
+        mode={mode}
+        reducedMotion={reducedMotion}
+        hasActiveTools={hasActiveTools}
+        responseLengthRef={responseLengthRef}
+        message={message}
+        messageColor={messageColor}
+        shimmerColor={shimmerColor}
+        overrideColor={overrideColor}
+        loadingStartTimeRef={loadingStartTimeRef}
+        totalPausedMsRef={totalPausedMsRef}
+        pauseStartTimeRef={pauseStartTimeRef}
+        spinnerSuffix={spinnerSuffix}
+        verbose={verbose}
+        columns={columns}
+        hasRunningTeammates={hasRunningTeammates}
+        teammateTokens={teammateTokens}
+        foregroundedTeammate={foregroundedTeammate}
+        leaderIsIdle={leaderIsIdle}
+        thinkingStatus={thinkingStatus}
+        effortSuffix={effortSuffix}
+      />
+      {showSpinnerTree && hasRunningTeammates ? (
+        <TeammateSpinnerTree
+          selectedIndex={selectedIPAgentIndex}
+          isInSelectionMode={viewSelectionMode === 'selecting-agent'}
+          allIdle={allIdle}
+          leaderVerb={leaderIsIdle ? undefined : leaderVerb}
+          leaderIdleText={leaderIsIdle ? 'Idle' : undefined}
+          leaderTokenCount={leaderTokenCount}
+        />
+      ) : showExpandedTodos && tasksV2 && tasksV2.length > 0 ? (
+        <Box width="100%" flexDirection="column">
           <MessageResponse>
             <TaskListV2 tasks={tasksV2} />
           </MessageResponse>
-        </Box> : nextTask || effectiveTip || budgetText ?
-    // IMPORTANT: we need this width="100%" to avoid an Ink bug where the
-    // tip gets duplicated over and over while the spinner is running if
-    // the terminal is very small. TODO: fix this in Ink.
-    <Box width="100%" flexDirection="column">
-          {budgetText && <MessageResponse>
+        </Box>
+      ) : nextTask || effectiveTip || budgetText ? (
+        // IMPORTANT: we need this width="100%" to avoid an Ink bug where the
+        // tip gets duplicated over and over while the spinner is running if
+        // the terminal is very small. TODO: fix this in Ink.
+        <Box width="100%" flexDirection="column">
+          {budgetText && (
+            <MessageResponse>
               <Text dimColor>{budgetText}</Text>
-            </MessageResponse>}
-          {(nextTask || effectiveTip) && <MessageResponse>
-              <Text dimColor>
-                {nextTask ? `Next: ${nextTask.subject}` : `Tip: ${effectiveTip}`}
-              </Text>
-            </MessageResponse>}
-        </Box> : null}
-    </Box>;
+            </MessageResponse>
+          )}
+          {(nextTask || effectiveTip) && (
+            <MessageResponse>
+              <Text dimColor>{nextTask ? `Next: ${nextTask.subject}` : `Tip: ${effectiveTip}`}</Text>
+            </MessageResponse>
+          )}
+        </Box>
+      ) : null}
+    </Box>
+  );
 }
 
 // Brief/assistant mode spinner: single status line. PromptInput drops its
@@ -306,247 +411,136 @@ type BriefSpinnerProps = {
   mode: SpinnerMode;
   overrideMessage?: string | null;
 };
-function BriefSpinner(t0) {
-  const $ = _c(31);
-  const {
-    mode,
-    overrideMessage
-  } = t0;
+
+function BriefSpinner({ mode, overrideMessage }: BriefSpinnerProps): React.ReactNode {
   const settings = useSettings();
   const reducedMotion = settings.prefersReducedMotion ?? false;
-  const [randomVerb] = useState(_temp4);
+  const [randomVerb] = useState(() => sample(getSpinnerVerbs()) ?? 'Working');
   const verb = overrideMessage ?? randomVerb;
-  const connStatus = useAppState(_temp5);
-  const logoSpinnerColors = resolveLogoSpinnerColors(getGlobalConfig().logoColor);
-  let t1;
-  let t2;
-  if ($[0] !== mode) {
-    t1 = () => {
-      const operationId = "spinner-" + mode;
-      activityManager.startCLIActivity(operationId);
-      return () => {
-        activityManager.endCLIActivity(operationId);
-      };
+  const connStatus = useAppState(s => s.remoteConnectionStatus);
+
+  // Track CLI activity so OS/IDE "busy" indicators fire in brief mode too
+  useEffect(() => {
+    const operationId = 'spinner-' + mode;
+    activityManager.startCLIActivity(operationId);
+    return () => {
+      activityManager.endCLIActivity(operationId);
     };
-    t2 = [mode];
-    $[0] = mode;
-    $[1] = t1;
-    $[2] = t2;
-  } else {
-    t1 = $[1];
-    t2 = $[2];
-  }
-  useEffect(t1, t2);
+  }, [mode]);
+
+  // Drive both dot cycle and shimmer from the shared clock. The viewport
+  // ref is unused — the spinner unmounts on turn end so viewport-based
+  // pausing isn't needed.
   const [, time] = useAnimationFrame(reducedMotion ? null : 120);
-  const runningCount = useAppState(_temp6);
-  const showConnWarning = connStatus === "reconnecting" || connStatus === "disconnected";
-  const connText = connStatus === "reconnecting" ? "Reconnecting" : "Disconnected";
+
+  // Local tasks + remote tasks are mutually exclusive (viewer mode has an
+  // empty local AppState.tasks; local mode has remoteBackgroundTaskCount=0).
+  // Summing avoids a mode branch.
+  const runningCount = useAppState(s => count(Object.values(s.tasks), isBackgroundTask) + s.remoteBackgroundTaskCount);
+
+  // Connection trouble overrides the verb — `gakrcli assistant` is a pure viewer,
+  // nothing useful is happening while the WS is down.
+  const showConnWarning = connStatus === 'reconnecting' || connStatus === 'disconnected';
+  const connText = connStatus === 'reconnecting' ? 'Reconnecting' : 'Disconnected';
+
+  // Dots padded to a fixed 3 columns so the right-aligned count doesn't
+  // jitter as the cycle advances.
   const dotFrame = Math.floor(time / 300) % 3;
-  let t3;
-  if ($[3] !== dotFrame || $[4] !== reducedMotion) {
-    t3 = reducedMotion ? "\u2026  " : ".".repeat(dotFrame + 1).padEnd(3);
-    $[3] = dotFrame;
-    $[4] = reducedMotion;
-    $[5] = t3;
-  } else {
-    t3 = $[5];
-  }
-  const dots = t3;
-  let t4;
-  if ($[6] !== verb) {
-    t4 = stringWidth(verb);
-    $[6] = verb;
-    $[7] = t4;
-  } else {
-    t4 = $[7];
-  }
-  const verbWidth = t4;
-  let t5;
-  if ($[8] !== reducedMotion || $[9] !== showConnWarning || $[10] !== time || $[11] !== verb || $[12] !== verbWidth) {
-    const glimmerIndex = reducedMotion || showConnWarning ? -100 : computeGlimmerIndex(Math.floor(time / SHIMMER_INTERVAL_MS), verbWidth);
-    t5 = computeShimmerSegments(verb, glimmerIndex);
-    $[8] = reducedMotion;
-    $[9] = showConnWarning;
-    $[10] = time;
-    $[11] = verb;
-    $[12] = verbWidth;
-    $[13] = t5;
-  } else {
-    t5 = $[13];
-  }
-  const {
-    before,
-    shimmer,
-    after
-  } = t5;
-  const {
-    columns
-  } = useTerminalSize();
-  const rightText = runningCount > 0 ? `${runningCount} in background` : "";
-  let t6;
-  if ($[14] !== connText || $[15] !== showConnWarning || $[16] !== verbWidth) {
-    t6 = showConnWarning ? stringWidth(connText) : verbWidth;
-    $[14] = connText;
-    $[15] = showConnWarning;
-    $[16] = verbWidth;
-    $[17] = t6;
-  } else {
-    t6 = $[17];
-  }
-  const leftWidth = t6 + 3;
+  const dots = reducedMotion ? '…  ' : '.'.repeat(dotFrame + 1).padEnd(3);
+
+  // Shimmer: reverse-sweep highlight across the verb. Skip for connection
+  // warnings (shimmer reads as "working"; Reconnecting/Disconnected is not).
+  const verbWidth = useMemo(() => stringWidth(verb), [verb]);
+  const glimmerIndex =
+    reducedMotion || showConnWarning ? -100 : computeGlimmerIndex(Math.floor(time / SHIMMER_INTERVAL_MS), verbWidth);
+  const { before, shimmer, after } = computeShimmerSegments(verb, glimmerIndex);
+
+  const { columns } = useTerminalSize();
+  const rightText = runningCount > 0 ? `${runningCount} in background` : '';
+  // Manual right-align via space padding — flexGrow spacers inside
+  // FullscreenLayout's `main` slot don't resolve a width and caused the
+  // diff engine to miss dot-frame updates.
+  const leftWidth = (showConnWarning ? stringWidth(connText) : verbWidth) + 3;
   const pad = Math.max(1, columns - 2 - leftWidth - stringWidth(rightText));
-  let t7;
-  if ($[18] !== after || $[19] !== before || $[20] !== connText || $[21] !== dots || $[22] !== shimmer || $[23] !== showConnWarning) {
-    t7 = showConnWarning ? <Text color="error">{connText + dots}</Text> : <>{before ? <Text dimColor={true}>{before}</Text> : null}{shimmer ? <Text>{shimmer}</Text> : null}{after ? <Text dimColor={true}>{after}</Text> : null}<Text dimColor={true}>{dots}</Text></>;
-    $[18] = after;
-    $[19] = before;
-    $[20] = connText;
-    $[21] = dots;
-    $[22] = logoSpinnerColors.accent;
-    $[23] = shimmer;
-    $[24] = showConnWarning;
-    $[25] = t7;
-  } else {
-    t7 = $[25];
-  }
-  let t8;
-  if ($[26] !== pad || $[27] !== rightText) {
-    t8 = rightText ? <><Text>{" ".repeat(pad)}</Text><Text color="subtle">{rightText}</Text></> : null;
-    $[26] = pad;
-    $[27] = rightText;
-    $[28] = t8;
-  } else {
-    t8 = $[28];
-  }
-  let t9;
-  if ($[29] !== t7 || $[30] !== t8) {
-    t9 = <Box flexDirection="row" width="100%" marginTop={1} paddingLeft={2}>{t7}{t8}</Box>;
-    $[29] = t7;
-    $[30] = t8;
-    $[31] = t9;
-  } else {
-    t9 = $[31];
-  }
-  return t9;
+
+  return (
+    <Box flexDirection="row" width="100%" marginTop={1} paddingLeft={2}>
+      {showConnWarning ? (
+        <Text color="error">{connText + dots}</Text>
+      ) : (
+        <>
+          {before ? <Text dimColor>{before}</Text> : null}
+          {shimmer ? <Text>{shimmer}</Text> : null}
+          {after ? <Text dimColor>{after}</Text> : null}
+          <Text dimColor>{dots}</Text>
+        </>
+      )}
+      {rightText ? (
+        <>
+          <Text>{' '.repeat(pad)}</Text>
+          <Text color="subtle">{rightText}</Text>
+        </>
+      ) : null}
+    </Box>
+  );
 }
 
 // Idle placeholder for brief mode. Same 2-row [blank, content] footprint
 // as BriefSpinner so the input bar never jumps when toggling between
 // working/idle/disconnected. See BriefSpinner's comment for the
 // Notifications overlay coupling.
-function _temp6(s_0: AppState) {
-  return count(Object.values(s_0.tasks), isBackgroundTask) + s_0.remoteBackgroundTaskCount;
-}
-function _temp5(s: AppState) {
-  return s.remoteConnectionStatus;
-}
-function _temp4() {
-  return sample(getSpinnerVerbs()) ?? "Working";
-}
-export function BriefIdleStatus() {
-  const $ = _c(9);
-  const connStatus = useAppState(_temp7);
-  const runningCount = useAppState(_temp8);
-  const {
-    columns
-  } = useTerminalSize();
-  const showConnWarning = connStatus === "reconnecting" || connStatus === "disconnected";
-  const connText = connStatus === "reconnecting" ? "Reconnecting\u2026" : "Disconnected";
-  const leftText = showConnWarning ? connText : "";
-  const rightText = runningCount > 0 ? `${runningCount} in background` : "";
-  if (!leftText && !rightText) {
-    let t0;
-    if ($[0] === Symbol.for("react.memo_cache_sentinel")) {
-      t0 = <Box height={2} />;
-      $[0] = t0;
-    } else {
-      t0 = $[0];
-    }
-    return t0;
-  }
+export function BriefIdleStatus(): React.ReactNode {
+  const connStatus = useAppState(s => s.remoteConnectionStatus);
+  const runningCount = useAppState(s => count(Object.values(s.tasks), isBackgroundTask) + s.remoteBackgroundTaskCount);
+  const { columns } = useTerminalSize();
+
+  const showConnWarning = connStatus === 'reconnecting' || connStatus === 'disconnected';
+  const connText = connStatus === 'reconnecting' ? 'Reconnecting…' : 'Disconnected';
+  const leftText = showConnWarning ? connText : '';
+  const rightText = runningCount > 0 ? `${runningCount} in background` : '';
+
+  if (!leftText && !rightText) return <Box height={2} />;
+
   const pad = Math.max(1, columns - 2 - stringWidth(leftText) - stringWidth(rightText));
-  let t0;
-  if ($[1] !== leftText) {
-    t0 = leftText ? <Text color="error">{leftText}</Text> : null;
-    $[1] = leftText;
-    $[2] = t0;
-  } else {
-    t0 = $[2];
-  }
-  let t1;
-  if ($[3] !== pad || $[4] !== rightText) {
-    t1 = rightText ? <><Text>{" ".repeat(pad)}</Text><Text color="subtle">{rightText}</Text></> : null;
-    $[3] = pad;
-    $[4] = rightText;
-    $[5] = t1;
-  } else {
-    t1 = $[5];
-  }
-  let t2;
-  if ($[6] !== t0 || $[7] !== t1) {
-    t2 = <Box marginTop={1} paddingLeft={2}><Text>{t0}{t1}</Text></Box>;
-    $[6] = t0;
-    $[7] = t1;
-    $[8] = t2;
-  } else {
-    t2 = $[8];
-  }
-  return t2;
+  return (
+    <Box marginTop={1} paddingLeft={2}>
+      <Text>
+        {leftText ? <Text color="error">{leftText}</Text> : null}
+        {rightText ? (
+          <>
+            <Text>{' '.repeat(pad)}</Text>
+            <Text color="subtle">{rightText}</Text>
+          </>
+        ) : null}
+      </Text>
+    </Box>
+  );
 }
-function _temp8(s_0: AppState) {
-  return count(Object.values(s_0.tasks), isBackgroundTask) + s_0.remoteBackgroundTaskCount;
-}
-function _temp7(s: AppState) {
-  return s.remoteConnectionStatus;
-}
-export function Spinner() {
-  const $ = _c(11);
+
+export function Spinner(): React.ReactNode {
   const settings = useSettings();
   const reducedMotion = settings.prefersReducedMotion ?? false;
   const [ref, time] = useAnimationFrame(reducedMotion ? null : 120);
-  const spinnerColor = resolveLogoSpinnerColors(getGlobalConfig().logoColor).accent;
+
+  // Reduced motion: static dot instead of animated spinner
   if (reducedMotion) {
-    let t0;
-    if ($[0] !== spinnerColor) {
-      t0 = <Text color={spinnerColor}>●</Text>;
-      $[0] = spinnerColor;
-      $[1] = t0;
-    } else {
-      t0 = $[1];
-    }
-    let t1;
-    if ($[2] !== ref || $[3] !== t0) {
-      t1 = <Box ref={ref} flexWrap="wrap" height={1} width={2}>{t0}</Box>;
-      $[2] = ref;
-      $[3] = t0;
-      $[4] = t1;
-    } else {
-      t1 = $[4];
-    }
-    return t1;
+    return (
+      <Box ref={ref} flexWrap="wrap" height={1} width={2}>
+        <Text color="text">●</Text>
+      </Box>
+    );
   }
+
+  // Derive frame from synced time - all spinners animate together
   const frame = Math.floor(time / 120) % SPINNER_FRAMES.length;
-  const t0 = SPINNER_FRAMES[frame];
-  let t1;
-  if ($[5] !== spinnerColor || $[6] !== t0) {
-    t1 = <Text color={spinnerColor}>{t0}</Text>;
-    $[5] = spinnerColor;
-    $[6] = t0;
-    $[7] = t1;
-  } else {
-    t1 = $[7];
-  }
-  let t2;
-  if ($[8] !== ref || $[9] !== t1) {
-    t2 = <Box ref={ref} flexWrap="wrap" height={1} width={2}>{t1}</Box>;
-    $[8] = ref;
-    $[9] = t1;
-    $[10] = t2;
-  } else {
-    t2 = $[10];
-  }
-  return t2;
+
+  return (
+    <Box ref={ref} flexWrap="wrap" height={1} width={2}>
+      <Text color="text">{SPINNER_FRAMES[frame]}</Text>
+    </Box>
+  );
 }
+
 function findNextPendingTask(tasks: Task[] | undefined): Task | undefined {
   if (!tasks) {
     return undefined;

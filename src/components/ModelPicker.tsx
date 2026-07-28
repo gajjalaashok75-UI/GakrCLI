@@ -1,14 +1,14 @@
-import { c as _c } from "react-compiler-runtime";
 import capitalize from 'lodash-es/capitalize.js';
 import * as React from 'react';
 import { useCallback, useMemo, useState } from 'react';
+import { has1mContext } from '../utils/context.js';
 import { useExitOnCtrlCDWithKeybindings } from 'src/hooks/useExitOnCtrlCDWithKeybindings.js';
 import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from 'src/services/analytics/index.js';
 import { FAST_MODE_MODEL_DISPLAY, isFastModeAvailable, isFastModeCooldown, isFastModeEnabled } from 'src/utils/fastMode.js';
 import { Box, Text } from '../ink.js';
 import { useKeybindings } from '../keybindings/useKeybinding.js';
 import { useAppState, useSetAppState } from '../state/AppState.js';
-import { convertEffortValueToLevel, type EffortLevel, getAvailableEffortLevels, getDefaultEffortForModel, modelSupportsEffort, modelSupportsMaxEffort, resolvePickerEffortPersistence, toPersistableEffort } from '../utils/effort.js';
+import { convertEffortValueToLevel, type EffortLevel, getAvailableEffortLevels, getDefaultEffortForModel, modelSupportsEffort, modelSupportsMaxEffort, modelSupportsXHighEffort, resolvePickerEffortPersistence, toPersistableEffort } from '../utils/effort.js';
 import { isModelAllowed } from '../utils/model/modelAllowlist.js';
 import { getDefaultMainLoopModel, type ModelSetting, modelDisplayString, parseUserSpecifiedModel } from '../utils/model/model.js';
 import { getModelOptions, type ModelOption } from '../utils/model/modelOptions.js';
@@ -43,6 +43,7 @@ export type Props = {
   discoveryState?: ModelPickerDiscoveryState;
   onRefresh?: () => void;
 };
+
 const NO_PREFERENCE = '__NO_PREFERENCE__';
 function mapDiscoveryToneToColor(tone: ModelPickerDiscoveryState['tone']): 'error' | 'warning' | 'success' | 'subtle' {
   switch (tone) {
@@ -57,408 +58,314 @@ function mapDiscoveryToneToColor(tone: ModelPickerDiscoveryState['tone']): 'erro
       return 'subtle';
   }
 }
-export function ModelPicker(t0) {
-  const $ = _c(83);
-  const {
-    initial,
-    sessionModel,
-    onSelect,
-    onCancel,
-    isStandaloneCommand,
-    showFastModeNotice,
-    headerText,
-    skipSettingsWrite,
-    optionsOverride,
-    discoveryState,
-    onRefresh
-  } = t0;
+export function ModelPicker({
+  initial,
+  sessionModel,
+  onSelect,
+  onCancel,
+  isStandaloneCommand,
+  showFastModeNotice,
+  headerText,
+  skipSettingsWrite,
+  optionsOverride,
+  discoveryState,
+  onRefresh
+}: Props): React.ReactNode {
   const setAppState = useSetAppState();
   const exitState = useExitOnCtrlCDWithKeybindings();
+  const maxVisible = 10;
+
   const initialValue = initial === null ? NO_PREFERENCE : initial;
-  const [focusedValue, setFocusedValue] = useState(initialValue);
-  const isFastMode = useAppState(_temp);
+  const [focusedValue, setFocusedValue] = useState<string | undefined>(initialValue);
+
+  const isFastMode = useAppState(s => (isFastModeEnabled() ? s.fastMode : false));
+
+  const [marked1MValues, setMarked1MValues] = useState<Set<string>>(
+    () => new Set(has1mContext(initialValue) ? [initialValue.replace(/\[1m\]/i, '')] : []),
+  );
+
+  const handleToggle1M = useCallback(() => {
+    if (!focusedValue || focusedValue === NO_PREFERENCE) return;
+    // Key on the base value so lookups in handleSelect / is1MMarked match the
+    // initializer — predefined 1M options arrive with a `[1m]` suffix in
+    // `focusedValue`, which would diverge from the base-value key set.
+    const baseKey = focusedValue.replace(/\[1m\]/i, '');
+    setMarked1MValues(prev => {
+      const next = new Set(prev);
+      if (next.has(baseKey)) {
+        next.delete(baseKey);
+      } else {
+        next.add(baseKey);
+      }
+      return next;
+    });
+  }, [focusedValue]);
+
   const [hasToggledEffort, setHasToggledEffort] = useState(false);
-  const effortValue = useAppState(_temp2);
-  let t1;
-  if ($[0] !== effortValue) {
-    t1 = effortValue !== undefined ? convertEffortValueToLevel(effortValue) : undefined;
-    $[0] = effortValue;
-    $[1] = t1;
-  } else {
-    t1 = $[1];
-  }
-  const [effort, setEffort] = useState(t1);
-  const t2 = isFastMode ?? false;
-  let t3;
-  if ($[2] !== t2) {
-    t3 = getModelOptions(t2);
-    $[2] = t2;
-    $[3] = t3;
-  } else {
-    t3 = $[3];
-  }
-  const modelOptions = optionsOverride ?? t3;
-  let t4;
-  bb0: {
-    if (initial !== null && isModelAllowed(initial) && !modelOptions.some(opt => opt.value === initial)) {
-      let t5;
-      if ($[4] !== initial) {
-        t5 = modelDisplayString(initial);
-        $[4] = initial;
-        $[5] = t5;
-      } else {
-        t5 = $[5];
-      }
-      let t6;
-      if ($[6] !== initial || $[7] !== t5) {
-        t6 = {
+  const effortValue = useAppState(s => s.effortValue);
+  const [effort, setEffort] = useState<EffortLevel | undefined>(
+    effortValue !== undefined ? convertEffortValueToLevel(effortValue) : undefined,
+  );
+
+  // Memoize all derived values to prevent re-renders
+  // When optionsOverride is provided (e.g., from /model command with
+  // provider-discovered models), it takes precedence over the default
+  // getModelOptions() so provider-specific models appear in the picker.
+  const defaultModelOptions = useMemo(() => getModelOptions(isFastMode ?? false), [isFastMode]);
+  const modelOptions = useMemo(
+    () => optionsOverride ?? defaultModelOptions,
+    [optionsOverride, defaultModelOptions],
+  );
+
+  // Ensure the initial value is in the options list
+  // This handles edge cases where the user's current model (e.g., 'haiku' for 3P users)
+  // is not in the base options but should still be selectable and shown as selected
+  const optionsWithInitial = useMemo(() => {
+    if (initial !== null && !modelOptions.some(opt => opt.value === initial)) {
+      return [
+        ...modelOptions,
+        {
           value: initial,
-          label: t5,
-          description: "Current model"
-        };
-        $[6] = initial;
-        $[7] = t5;
-        $[8] = t6;
-      } else {
-        t6 = $[8];
-      }
-      let t7;
-      if ($[9] !== modelOptions || $[10] !== t6) {
-        t7 = [...modelOptions, t6];
-        $[9] = modelOptions;
-        $[10] = t6;
-        $[11] = t7;
-      } else {
-        t7 = $[11];
-      }
-      t4 = t7;
-      break bb0;
+          label: modelDisplayString(initial),
+          description: 'Current model',
+        },
+      ];
     }
-    t4 = modelOptions;
-  }
-  const optionsWithInitial = t4;
-  let t5;
-  if ($[12] !== optionsWithInitial) {
-    t5 = optionsWithInitial.map(_temp3);
-    $[12] = optionsWithInitial;
-    $[13] = t5;
-  } else {
-    t5 = $[13];
-  }
-  const selectOptions = t5;
-  let t6;
-  if ($[14] !== initialValue || $[15] !== selectOptions) {
-    t6 = selectOptions.some(_ => _.value === initialValue) ? initialValue : selectOptions[0]?.value ?? undefined;
-    $[14] = initialValue;
-    $[15] = selectOptions;
-    $[16] = t6;
-  } else {
-    t6 = $[16];
-  }
-  const initialFocusValue = t6;
-  const visibleCount = Math.min(10, selectOptions.length);
+    return modelOptions;
+  }, [modelOptions, initial]);
+
+  const selectOptions = useMemo(
+    () =>
+      optionsWithInitial.map(opt => ({
+        ...opt,
+        value: opt.value === null ? NO_PREFERENCE : opt.value,
+      })),
+    [optionsWithInitial],
+  );
+  const initialFocusValue = useMemo(
+    () => (selectOptions.some(_ => _.value === initialValue) ? initialValue : (selectOptions[0]?.value ?? undefined)),
+    [selectOptions, initialValue],
+  );
+  const visibleCount = Math.min(maxVisible, selectOptions.length);
   const hiddenCount = Math.max(0, selectOptions.length - visibleCount);
-  let t7;
-  if ($[17] !== focusedValue || $[18] !== selectOptions) {
-    t7 = selectOptions.find(opt_1 => opt_1.value === focusedValue)?.label;
-    $[17] = focusedValue;
-    $[18] = selectOptions;
-    $[19] = t7;
-  } else {
-    t7 = $[19];
-  }
-  const focusedModelName = t7;
-  let focusedSupportsEffort;
-  let t8;
-  if ($[20] !== focusedValue) {
-    const focusedModel = resolveOptionModel(focusedValue);
-    focusedSupportsEffort = focusedModel ? modelSupportsEffort(focusedModel) : false;
-    t8 = focusedModel ? modelSupportsMaxEffort(focusedModel) : false;
-    $[20] = focusedValue;
-    $[21] = focusedSupportsEffort;
-    $[22] = t8;
-  } else {
-    focusedSupportsEffort = $[21];
-    t8 = $[22];
-  }
-  const focusedSupportsMax = t8;
-  const focusedAvailableLevels: EffortLevel[] = (() => {
-    const focusedModel = resolveOptionModel(focusedValue);
-    return focusedModel ? getAvailableEffortLevels(focusedModel) : [];
-  })();
-  let t9;
-  if ($[23] !== focusedValue) {
-    t9 = getDefaultEffortLevelForOption(focusedValue);
-    $[23] = focusedValue;
-    $[24] = t9;
-  } else {
-    t9 = $[24];
-  }
-  const focusedDefaultEffort = t9;
-  const displayEffort = focusedAvailableLevels.includes(effort) ? effort : "high";
-  let t10;
-  if ($[25] !== effortValue || $[26] !== hasToggledEffort) {
-    t10 = value => {
+
+  const focusedModelName = selectOptions.find(opt => opt.value === focusedValue)?.label;
+  const focusedModel = resolveOptionModel(focusedValue);
+  const is1MMarked =
+    focusedValue !== undefined &&
+    focusedValue !== NO_PREFERENCE &&
+    marked1MValues.has(focusedValue.replace(/\[1m\]/i, ''));
+  const focusedSupportsEffort = focusedModel ? modelSupportsEffort(focusedModel) : false;
+  const focusedSupportsXhigh = focusedModel ? modelSupportsXHighEffort(focusedModel) : false;
+  const focusedSupportsMax = focusedModel ? modelSupportsMaxEffort(focusedModel) : false;
+  const focusedDefaultEffort = getDefaultEffortLevelForOption(focusedValue);
+  // Clamp display when selected effort isn't supported by the focused model.
+  // resolveAppliedEffort() does the same downgrade at API-send time.
+  const displayEffort =
+    effort === 'max' && !focusedSupportsMax
+      ? focusedSupportsXhigh
+        ? 'xhigh'
+        : 'high'
+      : effort === 'xhigh' && !focusedSupportsXhigh
+        ? 'high'
+        : effort;
+
+  const handleFocus = useCallback(
+    (value: string) => {
       setFocusedValue(value);
       if (!hasToggledEffort && effortValue === undefined) {
         setEffort(getDefaultEffortLevelForOption(value));
       }
-    };
-    $[25] = effortValue;
-    $[26] = hasToggledEffort;
-    $[27] = t10;
-  } else {
-    t10 = $[27];
-  }
-  const handleFocus = t10;
-  let t11;
-  if ($[28] !== focusedDefaultEffort || $[29] !== focusedSupportsEffort || $[30] !== focusedSupportsMax || $[31] !== focusedAvailableLevels) {
-    t11 = direction => {
-      if (!focusedSupportsEffort) {
-        return;
-      }
-      setEffort(prev => cycleEffortLevel(prev ?? focusedDefaultEffort, direction, focusedAvailableLevels));
+    },
+    [hasToggledEffort, effortValue],
+  );
+
+  // Effort level cycling keybindings
+  const handleCycleEffort = useCallback(
+    (direction: 'left' | 'right') => {
+      if (!focusedSupportsEffort) return;
+      setEffort(prev =>
+        cycleEffortLevel(prev ?? focusedDefaultEffort, direction, focusedSupportsXhigh, focusedSupportsMax),
+      );
       setHasToggledEffort(true);
-    };
-    $[28] = focusedDefaultEffort;
-    $[29] = focusedSupportsEffort;
-    $[30] = focusedSupportsMax;
-    $[31] = focusedAvailableLevels;
-    $[32] = t11;
-  } else {
-    t11 = $[32];
-  }
-  const handleCycleEffort = t11;
-  const t12 = {
-    "modelPicker:decreaseEffort": () => handleCycleEffort("left"),
-    "modelPicker:increaseEffort": () => handleCycleEffort("right"),
-    ...(onRefresh ? {
-      "modelPicker:refresh": () => onRefresh()
-    } : {})
-  };
-  let t13;
-  if ($[34] === Symbol.for("react.memo_cache_sentinel")) {
-    t13 = {
-      context: "ModelPicker"
-    };
-    $[34] = t13;
-  } else {
-    t13 = $[34];
-  }
-  useKeybindings(t12, t13);
-  let t14;
-  if ($[35] !== effort || $[36] !== hasToggledEffort || $[37] !== onSelect || $[38] !== setAppState || $[39] !== skipSettingsWrite || $[46] !== focusedAvailableLevels || $[47] !== focusedDefaultEffort) {
-    t14 = function handleSelect(value_0) {
-      const selectedModel = resolveOptionModel(value_0);
-      if (value_0 !== NO_PREFERENCE && selectedModel && !isModelAllowed(selectedModel)) {
-        onSelect(value_0 === NO_PREFERENCE ? null : value_0, undefined);
-        return;
+    },
+    [focusedSupportsEffort, focusedSupportsXhigh, focusedSupportsMax, focusedDefaultEffort],
+  );
+
+  useKeybindings(
+    {
+      'modelPicker:decreaseEffort': () => handleCycleEffort('left'),
+      'modelPicker:increaseEffort': () => handleCycleEffort('right'),
+      'modelPicker:toggle1M': () => handleToggle1M(),
+    },
+    { context: 'ModelPicker' },
+  );
+
+  function handleSelect(value: string): void {
+    logEvent('tengu_model_command_menu_effort', {
+      effort: effort as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+    });
+    if (!skipSettingsWrite) {
+      // Prior comes from userSettings on disk — NOT merged settings (which
+      // includes project/policy layers that must not leak into the user's
+      // global ~/.gakrcli/settings.json), and NOT AppState.effortValue (which
+      // includes session-ephemeral sources like --effort CLI flag).
+      // See resolvePickerEffortPersistence JSDoc.
+      const effortLevel = resolvePickerEffortPersistence(
+        effort,
+        getDefaultEffortLevelForOption(value),
+        getSettingsForSource('userSettings')?.effortLevel,
+        hasToggledEffort,
+      );
+      const persistable = toPersistableEffort(effortLevel);
+      if (persistable !== undefined) {
+        updateSettingsForSource('userSettings', { effortLevel: persistable });
       }
-      // Clamp effort to a value in the focused model's available levels so
-      // emitted/persisted values are always valid for the picked model
-      // (e.g. toggled 'xhigh' then picked a model that doesn't support it).
-      const clampedEffort = focusedAvailableLevels.includes(effort) ? effort : focusedDefaultEffort;
-      logEvent("tengu_model_command_menu_effort", {
-        effort: clampedEffort as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-      });
-      if (!skipSettingsWrite) {
-        const effortLevel = resolvePickerEffortPersistence(clampedEffort, getDefaultEffortLevelForOption(value_0), getSettingsForSource("userSettings")?.effortLevel, hasToggledEffort);
-        const persistable = toPersistableEffort(effortLevel);
-        if (persistable !== undefined) {
-          updateSettingsForSource("userSettings", {
-            effortLevel: persistable
-          });
-        }
-        setAppState(prev_0 => ({
-          ...prev_0,
-          effortValue: effortLevel
-        }));
-      }
-      const selectedEffort = hasToggledEffort && selectedModel && modelSupportsEffort(selectedModel) ? clampedEffort : undefined;
-      if (value_0 === NO_PREFERENCE) {
-        onSelect(null, selectedEffort);
-        return;
-      }
-      onSelect(value_0, selectedEffort);
-    };
-    $[35] = effort;
-    $[36] = hasToggledEffort;
-    $[37] = onSelect;
-    $[38] = setAppState;
-    $[39] = skipSettingsWrite;
-    $[46] = focusedAvailableLevels;
-    $[47] = focusedDefaultEffort;
-    $[40] = t14;
-  } else {
-    t14 = $[40];
+      setAppState(prev => ({ ...prev, effortValue: effortLevel }));
+    }
+
+    const selectedModel = resolveOptionModel(value);
+    const selectedEffort = hasToggledEffort && selectedModel && modelSupportsEffort(selectedModel) ? effort : undefined;
+    if (value === NO_PREFERENCE) {
+      onSelect(null, selectedEffort);
+      return;
+    }
+    // Apply or strip [1m] suffix based on user toggle. marked1MValues is keyed
+    // on the base value (see initializer + handleToggle1M), so look up with the
+    // base form — not `value`, which may carry a `[1m]` suffix from predefined
+    // 1M options and would never match.
+    const baseValue = value.replace(/\[1m\]/i, '');
+    const wants1M = marked1MValues.has(baseValue);
+    const finalValue = wants1M ? `${baseValue}[1m]` : baseValue;
+    onSelect(finalValue, selectedEffort);
   }
-  const handleSelect = t14;
-  let t15;
-  if ($[41] === Symbol.for("react.memo_cache_sentinel")) {
-    t15 = <Text color="remember" bold={true}>Select model</Text>;
-    $[41] = t15;
-  } else {
-    t15 = $[41];
-  }
-  const t16 = headerText ?? "Switch between GakrCLI models. Applies to this session and future GakrCLI sessions. For other/previous model names, specify with --model.";
-  let t17;
-  if ($[42] !== t16) {
-    t17 = <Text dimColor={true}>{t16}</Text>;
-    $[42] = t16;
-    $[43] = t17;
-  } else {
-    t17 = $[43];
-  }
-  let t18;
-  if ($[44] !== sessionModel) {
-    t18 = sessionModel && <Text dimColor={true}>Currently using {modelDisplayString(sessionModel)} for this session (set by plan mode). Selecting a model will undo this.</Text>;
-    $[44] = sessionModel;
-    $[45] = t18;
-  } else {
-    t18 = $[45];
-  }
-  const refreshHint = onRefresh ? <ConfigurableShortcutHint action="modelPicker:refresh" context="ModelPicker" fallback="r" description="refresh models" /> : null;
-  const discoveryLine = discoveryState ? <Text color={mapDiscoveryToneToColor(discoveryState.tone)}>{discoveryState.message}{refreshHint ? <Text color="subtle"> {" "}· {refreshHint}</Text> : null}</Text> : refreshHint ? <Text dimColor={true}>{refreshHint}</Text> : null;
-  const t19 = <Box marginBottom={1} flexDirection="column">{t15}{t17}{t18}{discoveryLine}</Box>;
-  const t20 = onCancel ?? _temp4;
-  let t21;
-  if ($[49] !== handleFocus || $[50] !== handleSelect || $[51] !== initialFocusValue || $[52] !== initialValue || $[53] !== selectOptions || $[54] !== t20 || $[55] !== visibleCount) {
-    t21 = <Box flexDirection="column"><Select defaultValue={initialValue} defaultFocusValue={initialFocusValue} options={selectOptions} onChange={handleSelect} onFocus={handleFocus} onCancel={t20} visibleOptionCount={visibleCount} /></Box>;
-    $[49] = handleFocus;
-    $[50] = handleSelect;
-    $[51] = initialFocusValue;
-    $[52] = initialValue;
-    $[53] = selectOptions;
-    $[54] = t20;
-    $[55] = visibleCount;
-    $[56] = t21;
-  } else {
-    t21 = $[56];
-  }
-  let t22;
-  if ($[57] !== hiddenCount) {
-    t22 = hiddenCount > 0 && <Box paddingLeft={3}><Text dimColor={true}>and {hiddenCount} more…</Text></Box>;
-    $[57] = hiddenCount;
-    $[58] = t22;
-  } else {
-    t22 = $[58];
-  }
-  let t23;
-  if ($[59] !== t21 || $[60] !== t22) {
-    t23 = <Box flexDirection="column" marginBottom={1}>{t21}{t22}</Box>;
-    $[59] = t21;
-    $[60] = t22;
-    $[61] = t23;
-  } else {
-    t23 = $[61];
-  }
-  let t24;
-  if ($[62] !== displayEffort || $[63] !== focusedDefaultEffort || $[64] !== focusedModelName || $[65] !== focusedSupportsEffort) {
-    t24 = <Box marginBottom={1} flexDirection="column">{focusedSupportsEffort ? <Text dimColor={true}><EffortLevelIndicator effort={displayEffort} />{" "}{capitalize(displayEffort)} effort{displayEffort === focusedDefaultEffort ? " (default)" : ""}{" "}<Text color="subtle">← → to adjust</Text></Text> : <Text color="subtle"><EffortLevelIndicator effort={undefined} /> Effort not supported{focusedModelName ? ` for ${focusedModelName}` : ""}</Text>}</Box>;
-    $[62] = displayEffort;
-    $[63] = focusedDefaultEffort;
-    $[64] = focusedModelName;
-    $[65] = focusedSupportsEffort;
-    $[66] = t24;
-  } else {
-    t24 = $[66];
-  }
-  let t25;
-  if ($[67] !== showFastModeNotice) {
-    t25 = isFastModeEnabled() ? showFastModeNotice ? <Box marginBottom={1}><Text dimColor={true}>Fast mode is <Text bold={true}>ON</Text> and available with{" "}{FAST_MODE_MODEL_DISPLAY} only (/fast). Switching to other models turn off fast mode.</Text></Box> : isFastModeAvailable() && !isFastModeCooldown() ? <Box marginBottom={1}><Text dimColor={true}>Use <Text bold={true}>/fast</Text> to turn on Fast mode ({FAST_MODE_MODEL_DISPLAY} only).</Text></Box> : null : null;
-    $[67] = showFastModeNotice;
-    $[68] = t25;
-  } else {
-    t25 = $[68];
-  }
-  let t26;
-  if ($[69] !== t19 || $[70] !== t23 || $[71] !== t24 || $[72] !== t25) {
-    t26 = <Box flexDirection="column">{t19}{t23}{t24}{t25}</Box>;
-    $[69] = t19;
-    $[70] = t23;
-    $[71] = t24;
-    $[72] = t25;
-    $[73] = t26;
-  } else {
-    t26 = $[73];
-  }
-  let t27;
-  if ($[74] !== exitState || $[75] !== isStandaloneCommand || $[76] !== refreshHint) {
-    t27 = isStandaloneCommand && <Text dimColor={true} italic={true}>{exitState.pending ? <>Press {exitState.keyName} again to exit</> : <Byline><KeyboardShortcutHint shortcut="Enter" action="confirm" />{refreshHint}<ConfigurableShortcutHint action="select:cancel" context="Select" fallback="Esc" description="exit" /></Byline>}</Text>;
-    $[74] = exitState;
-    $[75] = isStandaloneCommand;
-    $[76] = refreshHint;
-    $[82] = t27;
-  } else {
-    t27 = $[82];
-  }
-  let t28;
-  if ($[77] !== t26 || $[78] !== t27) {
-    t28 = <Box flexDirection="column">{t26}{t27}</Box>;
-    $[77] = t26;
-    $[78] = t27;
-    $[79] = t28;
-  } else {
-    t28 = $[79];
-  }
-  const content = t28;
+
+  const content = (
+    <Box flexDirection="column">
+      <Box flexDirection="column">
+        <Box marginBottom={1} flexDirection="column">
+          <Text color="remember" bold>
+            Select model
+          </Text>
+          <Text dimColor>
+            {headerText ??
+              'Choose a model for this and future sessions. Use ← → to adjust effort, Space to toggle 1M context.'}
+          </Text>
+          {sessionModel && (
+            <Text dimColor>
+              Currently using {modelDisplayString(sessionModel)} for this session (set by plan mode). Selecting a model
+              will undo this.
+            </Text>
+          )}
+        </Box>
+
+        <Box flexDirection="column" marginBottom={1}>
+          <Box flexDirection="column">
+            <Select
+              defaultValue={initialValue}
+              defaultFocusValue={initialFocusValue}
+              options={selectOptions}
+              onChange={handleSelect}
+              onFocus={handleFocus}
+              onCancel={onCancel ?? (() => {})}
+              visibleOptionCount={visibleCount}
+            />
+          </Box>
+          {hiddenCount > 0 && (
+            <Box paddingLeft={3}>
+              <Text dimColor>and {hiddenCount} more…</Text>
+            </Box>
+          )}
+        </Box>
+
+        <Box marginBottom={1} flexDirection="column">
+          {focusedSupportsEffort ? (
+            <Text dimColor>
+              <EffortLevelIndicator effort={displayEffort} /> {capitalize(displayEffort)} effort
+              {displayEffort === focusedDefaultEffort ? ` (default)` : ``} <Text color="subtle">← → to adjust</Text>
+            </Text>
+          ) : (
+            <Text color="subtle">
+              <EffortLevelIndicator effort={undefined} /> Effort not supported
+              {focusedModelName ? ` for ${focusedModelName}` : ''}
+            </Text>
+          )}
+          {is1MMarked ? (
+            <Text dimColor>
+              <EffortLevelIndicator effort={'high'} /> 1M context on
+              <Text color="subtle"> · Space to toggle</Text>
+            </Text>
+          ) : (
+            <Text color="subtle">
+              <EffortLevelIndicator effort={undefined} /> 1M context off
+              {focusedModelName ? ` for ${focusedModelName}` : ''}
+              <Text color="subtle"> · Space to toggle</Text>
+            </Text>
+          )}
+        </Box>
+
+        {isFastModeEnabled() ? (
+          showFastModeNotice ? (
+            <Box marginBottom={1}>
+              <Text dimColor>
+                Fast mode is <Text bold>ON</Text> and available with {FAST_MODE_MODEL_DISPLAY} only (/fast). Switching
+                to other models turn off fast mode.
+              </Text>
+            </Box>
+          ) : isFastModeAvailable() && !isFastModeCooldown() ? (
+            <Box marginBottom={1}>
+              <Text dimColor>
+                Use <Text bold>/fast</Text> to turn on Fast mode ({FAST_MODE_MODEL_DISPLAY} only).
+              </Text>
+            </Box>
+          ) : null
+        ) : null}
+      </Box>
+
+      {isStandaloneCommand && (
+        <Text dimColor italic>
+          {exitState.pending ? (
+            <>Press {exitState.keyName} again to exit</>
+          ) : (
+            <Byline>
+              <KeyboardShortcutHint shortcut="Enter" action="confirm" />
+              <ConfigurableShortcutHint action="select:cancel" context="Select" fallback="Esc" description="exit" />
+            </Byline>
+          )}
+        </Text>
+      )}
+    </Box>
+  );
+
   if (!isStandaloneCommand) {
     return content;
   }
-  let t29;
-  if ($[80] !== content) {
-    t29 = <Pane color="permission">{content}</Pane>;
-    $[80] = content;
-    $[81] = t29;
-  } else {
-    t29 = $[81];
-  }
-  return t29;
+
+  return <Pane color="permission">{content}</Pane>;
 }
-function _temp4() {}
-function _temp3(opt_0) {
-  return {
-    ...opt_0,
-    value: opt_0.value === null ? NO_PREFERENCE : opt_0.value
-  };
-}
-function _temp2(s_0) {
-  return s_0.effortValue;
-}
-function _temp(s) {
-  return isFastModeEnabled() ? s.fastMode : false;
-}
+
 function resolveOptionModel(value?: string): string | undefined {
   if (!value) return undefined;
   return value === NO_PREFERENCE ? getDefaultMainLoopModel() : parseUserSpecifiedModel(value);
 }
-function EffortLevelIndicator(t0) {
-  const $ = _c(5);
-  const {
-    effort
-  } = t0;
-  const t1 = effort ? "gakrcli" : "subtle";
-  const t2 = effort ?? "low";
-  let t3;
-  if ($[0] !== t2) {
-    t3 = effortLevelToSymbol(t2);
-    $[0] = t2;
-    $[1] = t3;
-  } else {
-    t3 = $[1];
-  }
-  let t4;
-  if ($[2] !== t1 || $[3] !== t3) {
-    t4 = <Text color={t1}>{t3}</Text>;
-    $[2] = t1;
-    $[3] = t3;
-    $[4] = t4;
-  } else {
-    t4 = $[4];
-  }
-  return t4;
+
+function EffortLevelIndicator({ effort }: { effort?: EffortLevel }): React.ReactNode {
+  return <Text color={effort ? 'gakrcli' : 'subtle'}>{effortLevelToSymbol(effort ?? 'low')}</Text>;
 }
-function cycleEffortLevel(current: EffortLevel, direction: 'left' | 'right', levels: EffortLevel[]): EffortLevel {
+
+function cycleEffortLevel(
+  current: EffortLevel,
+  direction: 'left' | 'right',
+  includeXhigh: boolean,
+  includeMax: boolean,
+): EffortLevel {
+  const levels: EffortLevel[] = [
+    'low',
+    'medium',
+    'high',
+    ...(includeXhigh ? (['xhigh'] as const) : []),
+    ...(includeMax ? (['max'] as const) : []),
+  ];
   // If the current level isn't in the cycle (e.g. 'max' after switching to a
   // non-max model), clamp to 'high'.
   const idx = levels.indexOf(current);
@@ -469,6 +376,7 @@ function cycleEffortLevel(current: EffortLevel, direction: 'left' | 'right', lev
     return levels[(currentIndex - 1 + levels.length) % levels.length]!;
   }
 }
+
 function getDefaultEffortLevelForOption(value?: string): EffortLevel {
   const resolved = resolveOptionModel(value) ?? getDefaultMainLoopModel();
   const defaultValue = getDefaultEffortForModel(resolved);

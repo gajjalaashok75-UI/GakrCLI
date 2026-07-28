@@ -1,13 +1,28 @@
 import { feature } from 'bun:bundle';
 import * as React from 'react';
-import { memo, useCallback, useEffect, useRef } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { logEvent } from 'src/services/analytics/index.js';
 import { useAppState, useSetAppState } from 'src/state/AppState.js';
 import type { PermissionMode } from 'src/utils/permissions/PermissionMode.js';
-import { getIsRemoteMode, getKairosActive, getMainThreadAgentType, getOriginalCwd, getSdkBetas, getSessionId } from '../bootstrap/state.js';
+import {
+  getIsRemoteMode,
+  getKairosActive,
+  getMainThreadAgentType,
+  getOriginalCwd,
+  getSdkBetas,
+  getSessionId,
+} from '../bootstrap/state.js';
 import { DEFAULT_OUTPUT_STYLE_NAME } from '../constants/outputStyles.js';
 import { useNotifications } from '../context/notifications.js';
-import { getTotalAPIDuration, getTotalCost, getTotalDuration, getTotalInputTokens, getTotalLinesAdded, getTotalLinesRemoved, getTotalOutputTokens } from '../cost-tracker.js';
+import {
+  getTotalAPIDuration,
+  getTotalCost,
+  getTotalDuration,
+  getTotalInputTokens,
+  getTotalLinesAdded,
+  getTotalLinesRemoved,
+  getTotalOutputTokens,
+} from '../cost-tracker.js';
 import { useMainLoopModel } from '../hooks/useMainLoopModel.js';
 import { type ReadonlySettings, useSettings } from '../hooks/useSettings.js';
 import { Ansi, Box, Text } from '../ink.js';
@@ -27,11 +42,175 @@ import { getCurrentSessionTitle } from '../utils/sessionStorage.js';
 import { doesMostRecentAssistantMessageExceed200k, getCurrentUsage, getUnreportedSessionUsage, type SessionUsage } from '../utils/tokens.js';
 import { getCurrentWorktreeSession } from '../utils/worktree.js';
 import { isVimModeEnabled } from './PromptInput/utils.js';
+import { computeHitRate, tokenSignature } from '../utils/cacheStats.js';
+import { onResponse as cacheOnResponse, getCacheStatsState, initCacheStatsState } from '../utils/cacheStatsState.js';
+import { BuiltinStatusLine } from './BuiltinStatusLine.js';
+import { formatTokens } from 'src/utils/format.js';
+
+// ---------------------------------------------------------------------------
+// CachePill — cache hit-rate + 1-hour TTL countdown pill
+// ---------------------------------------------------------------------------
+
+const CACHE_TTL_MS = 60 * 60 * 1000; // 60 minutes
+
+function padTwo(n: number): string {
+  return String(Math.floor(n)).padStart(2, '0');
+}
+
+function formatCountdown(remainingMs: number): string {
+  if (remainingMs <= 0) return 'exp';
+  const mins = Math.floor(remainingMs / 60_000);
+  const secs = Math.floor((remainingMs % 60_000) / 1000);
+  return `${padTwo(mins)}:${padTwo(secs)}`;
+}
+
+type CachePillProps = {
+  messages: Message[];
+};
+
+function CachePill({ messages }: CachePillProps): React.ReactNode {
+  const [now, setNow] = useState(() => Date.now());
+  const [isFlashOn, setIsFlashOn] = useState(true);
+
+  const usage = getCurrentUsage(messages);
+
+  // Feed new responses into the in-memory singleton
+  const prevSigRef = useRef<string | null>(null);
+  if (usage !== null) {
+    const sig = tokenSignature(usage);
+    if (sig !== prevSigRef.current) {
+      prevSigRef.current = sig;
+      cacheOnResponse(usage);
+    }
+  }
+
+  const cacheState = getCacheStatsState();
+  const { lastResetAt, lastHitRate } = cacheState;
+
+  // Derived timing
+  const elapsed = lastResetAt !== null ? now - lastResetAt : null;
+  const remaining = elapsed !== null ? CACHE_TTL_MS - elapsed : null;
+  const elapsedMin = elapsed !== null ? elapsed / 60_000 : null;
+  const isExpired = remaining !== null && remaining <= 0;
+
+  // 1-second countdown ticker
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // 500ms flash in last 5 minutes
+  const inFlashZone = elapsedMin !== null && elapsedMin >= 55 && !isExpired;
+  useEffect(() => {
+    if (!inFlashZone) {
+      setIsFlashOn(true);
+      return;
+    }
+    const id = setInterval(() => setIsFlashOn(v => !v), 500);
+    return () => clearInterval(id);
+  }, [inFlashZone]);
+
+  // Load persisted fallback once on mount
+  const initDoneRef = useRef(false);
+  useEffect(() => {
+    if (initDoneRef.current) return;
+    initDoneRef.current = true;
+    const sid = getSessionId();
+    void initCacheStatsState(sid);
+  }, []);
+
+  const displayHitRate = usage !== null ? computeHitRate(usage) : lastHitRate;
+
+  // No data yet — show placeholder
+  if (displayHitRate === null && lastResetAt === null) {
+    return <Text dimColor>{' Cache --% --:--'}</Text>;
+  }
+
+  const countdownText = remaining !== null ? formatCountdown(remaining) : '--:--';
+  const hitRateText = displayHitRate !== null ? `${displayHitRate}%` : '--%';
+
+  // Timer color by elapsed bucket — using theme keys
+  type TimerThemeKey = 'success' | 'warning' | 'error' | 'inactive';
+  let timerColor: TimerThemeKey;
+  if (isExpired || elapsedMin === null) {
+    timerColor = 'inactive';
+  } else if (elapsedMin < 20) {
+    timerColor = 'success';
+  } else if (elapsedMin < 40) {
+    timerColor = 'warning';
+  } else {
+    timerColor = 'error';
+  }
+
+  // Hit-rate color — using theme keys
+  const hitRateColor: 'success' | 'inactive' = displayHitRate !== null && displayHitRate >= 50 ? 'success' : 'inactive';
+
+  return (
+    <Text>
+      <Text dimColor>{' Cache '}</Text>
+      <Text color={hitRateColor}>{hitRateText}</Text>
+      <Text color={timerColor} dimColor={inFlashZone && !isFlashOn}>
+        {' '}
+        {countdownText}
+      </Text>
+    </Text>
+  );
+}
+
+function GoalPill(): React.ReactNode {
+  if (!feature('GOAL')) return null;
+  const { getGoal, formatGoalStatusLabel } =
+    require('../services/goal/goalState.js') as typeof import('../services/goal/goalState.js');
+  const goal = getGoal();
+  if (!goal) return null;
+
+  const truncatedObj = goal.objective.length > 30 ? `${goal.objective.slice(0, 27)}…` : goal.objective;
+  const budget =
+    goal.tokenBudget !== null
+      ? `${formatTokens(goal.tokensUsed)}/${formatTokens(goal.tokenBudget)}`
+      : formatTokens(goal.tokensUsed);
+  const statusLabel = formatGoalStatusLabel(goal.status);
+
+  let statusNode: React.ReactNode;
+  switch (goal.status) {
+    case 'active':
+      statusNode = <Text color="ansi:green">{statusLabel}</Text>;
+      break;
+    case 'paused':
+    case 'budget_limited':
+    case 'usage_limited':
+      statusNode = <Text color="ansi:yellow">{statusLabel}</Text>;
+      break;
+    case 'blocked':
+      statusNode = <Text color="ansi:red">{statusLabel}</Text>;
+      break;
+    case 'complete':
+      statusNode = <Text color="ansi:cyan">{statusLabel}</Text>;
+      break;
+    default:
+      statusNode = <Text>{statusLabel}</Text>;
+  }
+
+  return (
+    <Text>
+      {statusNode}
+      <Text dimColor>{' · '}</Text>
+      <Text dimColor>{truncatedObj}</Text>
+      <Text dimColor>{' · '}</Text>
+      <Text>{budget}</Text>
+    </Text>
+  );
+}
+
 export function statusLineShouldDisplay(settings: ReadonlySettings): boolean {
   // Assistant mode: statusline fields (model, permission mode, cwd) reflect the
   // REPL/daemon process, not what the agent child is actually running. Hide it.
   if (feature('KAIROS') && getKairosActive()) return false;
-  return settings?.statusLine !== undefined;
+  // Show the status line when explicitly enabled, or when a statusLine command
+  // is configured (backward compatibility for users who set statusLine.command
+  // without toggling statusLineEnabled). Only hide when explicitly disabled.
+  if (settings?.statusLineEnabled === false) return false;
+  return settings?.statusLineEnabled === true || !!settings?.statusLine?.command;
 }
 
 export function resolveStatusLineTokenTotals(
@@ -58,59 +237,67 @@ export function resolveStatusLineTokenTotals(
   };
 }
 
-export function buildStatusLineCommandInput(permissionMode: PermissionMode, exceeds200kTokens: boolean, settings: ReadonlySettings, messages: Message[], addedDirs: string[], mainLoopModel: ModelName, vimMode?: VimMode): StatusLineCommandInput {
+export function buildStatusLineCommandInput(
+  permissionMode: PermissionMode,
+  exceeds200kTokens: boolean,
+  settings: ReadonlySettings,
+  messages: Message[],
+  addedDirs: string[],
+  mainLoopModel: ModelName,
+  vimMode?: VimMode,
+): StatusLineCommandInput {
   const agentType = getMainThreadAgentType();
   const worktreeSession = getCurrentWorktreeSession();
   const runtimeModel = getRuntimeMainLoopModel({
     permissionMode,
     mainLoopModel,
-    exceeds200kTokens
+    exceeds200kTokens,
   });
   const outputStyleName = settings?.outputStyle || DEFAULT_OUTPUT_STYLE_NAME;
+
   const currentUsage = getCurrentUsage(messages);
   const contextWindowSize = getContextWindowForModel(runtimeModel, getSdkBetas());
   const contextPercentages = calculateContextPercentages(currentUsage, contextWindowSize);
+
   const sessionId = getSessionId();
   const sessionName = getCurrentSessionTitle(sessionId);
   const rawUtil = getRawUtilization();
-  const rateLimits: StatusLineCommandInput['rate_limits'] = {
+  const rateLimits: NonNullable<StatusLineCommandInput['rate_limits']> = {
     ...(rawUtil.five_hour && {
       five_hour: {
         used_percentage: rawUtil.five_hour.utilization * 100,
-        resets_at: rawUtil.five_hour.resets_at
-      }
+        resets_at: rawUtil.five_hour.resets_at,
+      },
     }),
     ...(rawUtil.seven_day && {
       seven_day: {
         used_percentage: rawUtil.seven_day.utilization * 100,
-        resets_at: rawUtil.seven_day.resets_at
-      }
-    })
+        resets_at: rawUtil.seven_day.resets_at,
+      },
+    }),
   };
   return {
     ...createBaseHookInput(),
-    ...(sessionName && {
-      session_name: sessionName
-    }),
+    ...(sessionName && { session_name: sessionName }),
     model: {
       id: runtimeModel,
-      display_name: renderModelName(runtimeModel)
+      display_name: renderModelName(runtimeModel),
     },
     workspace: {
       current_dir: getCwd(),
       project_dir: getOriginalCwd(),
-      added_dirs: addedDirs
+      added_dirs: addedDirs,
     },
     version: MACRO.VERSION,
     output_style: {
-      name: outputStyleName
+      name: outputStyleName,
     },
     cost: {
       total_cost_usd: getTotalCost(),
       total_duration_ms: getTotalDuration(),
       total_api_duration_ms: getTotalAPIDuration(),
       total_lines_added: getTotalLinesAdded(),
-      total_lines_removed: getTotalLinesRemoved()
+      total_lines_removed: getTotalLinesRemoved(),
     },
     context_window: (() => {
       const resolvedTokenTotals = resolveStatusLineTokenTotals(
@@ -119,33 +306,33 @@ export function buildStatusLineCommandInput(permissionMode: PermissionMode, exce
         getUnreportedSessionUsage(messages),
       );
       return {
-        total_input_tokens: resolvedTokenTotals.totalInputTokens,
-        total_output_tokens: resolvedTokenTotals.totalOutputTokens,
-        total_tokens_are_estimated: resolvedTokenTotals.totalTokensAreEstimated,
-        context_window_size: contextWindowSize,
-        current_usage: currentUsage,
-        used_percentage: contextPercentages.used,
-        remaining_percentage: contextPercentages.remaining,
-      };
+      total_input_tokens: resolvedTokenTotals.totalInputTokens,
+      total_output_tokens: resolvedTokenTotals.totalOutputTokens,
+      total_tokens_are_estimated: resolvedTokenTotals.totalTokensAreEstimated,
+      context_window_size: contextWindowSize,
+      current_usage: currentUsage,
+      used_percentage: contextPercentages.used,
+      remaining_percentage: contextPercentages.remaining,
+    };
     })(),
     exceeds_200k_tokens: exceeds200kTokens,
     ...((rateLimits.five_hour || rateLimits.seven_day) && {
-      rate_limits: rateLimits
+      rate_limits: rateLimits,
     }),
     ...(isVimModeEnabled() && {
       vim: {
-        mode: vimMode ?? 'INSERT'
-      }
+        mode: vimMode ?? 'INSERT',
+      },
     }),
     ...(agentType && {
       agent: {
-        name: agentType
-      }
+        name: agentType,
+      },
     }),
     ...(getIsRemoteMode() && {
       remote: {
-        session_id: getSessionId()
-      }
+        session_id: getSessionId(),
+      },
     }),
     ...(worktreeSession && {
       worktree: {
@@ -153,11 +340,12 @@ export function buildStatusLineCommandInput(permissionMode: PermissionMode, exce
         path: worktreeSession.worktreePath,
         branch: worktreeSession.worktreeBranch,
         original_cwd: worktreeSession.originalCwd,
-        original_branch: worktreeSession.originalBranch
-      }
-    })
+        original_branch: worktreeSession.originalBranch,
+      },
+    }),
   };
 }
+
 type Props = {
   // messages stays behind a ref (read only in the debounced callback);
   // lastAssistantMessageId is the actual re-render trigger.
@@ -165,23 +353,19 @@ type Props = {
   lastAssistantMessageId: string | null;
   vimMode?: VimMode;
 };
+
 export function getLastAssistantMessageId(messages: Message[]): string | null {
   return getLastAssistantMessage(messages)?.uuid ?? null;
 }
-function StatusLineInner({
-  messagesRef,
-  lastAssistantMessageId,
-  vimMode
-}: Props): React.ReactNode {
+
+function StatusLineInner({ messagesRef, lastAssistantMessageId, vimMode }: Props): React.ReactNode {
   const abortControllerRef = useRef<AbortController | undefined>(undefined);
   const permissionMode = useAppState(s => s.toolPermissionContext.mode);
   const additionalWorkingDirectories = useAppState(s => s.toolPermissionContext.additionalWorkingDirectories);
   const statusLineText = useAppState(s => s.statusLineText);
   const setAppState = useSetAppState();
   const settings = useSettings();
-  const {
-    addNotification
-  } = useNotifications();
+  const { addNotification } = useNotifications();
   // AppState-sourced model — same source as API requests. getMainLoopModel()
   // re-reads settings.json on every call, so another session's /model write
   // would leak into this session's statusline (anthropics/gakrcli-code#37596).
@@ -211,7 +395,7 @@ function StatusLineInner({
     exceeds200kTokens: false,
     permissionMode,
     vimMode,
-    mainLoopModel
+    mainLoopModel,
   });
 
   // Debounce timer ref
@@ -224,11 +408,22 @@ function StatusLineInner({
   const doUpdate = useCallback(async () => {
     // Cancel any in-flight requests
     abortControllerRef.current?.abort();
+
     const controller = new AbortController();
     abortControllerRef.current = controller;
+
     const msgs = messagesRef.current;
+
     const logResult = logNextResultRef.current;
     logNextResultRef.current = false;
+
+    // Skip the shell command path entirely when no command is configured.
+    // The top row (BuiltinStatusLine + CachePill) renders unconditionally, so
+    // there's nothing to update here when settings.statusLine is missing.
+    if (!settingsRef.current?.statusLine?.command) {
+      return;
+    }
+
     try {
       let exceeds200kTokens = previousStateRef.current.exceeds200kTokens;
 
@@ -239,15 +434,22 @@ function StatusLineInner({
         previousStateRef.current.messageId = currentMessageId;
         previousStateRef.current.exceeds200kTokens = exceeds200kTokens;
       }
-      const statusInput = buildStatusLineCommandInput(permissionModeRef.current, exceeds200kTokens, settingsRef.current, msgs, Array.from(addedDirsRef.current.keys()), mainLoopModelRef.current, vimModeRef.current);
+
+      const statusInput = buildStatusLineCommandInput(
+        permissionModeRef.current,
+        exceeds200kTokens,
+        settingsRef.current,
+        msgs,
+        Array.from(addedDirsRef.current.keys()),
+        mainLoopModelRef.current,
+        vimModeRef.current,
+      );
+
       const text = await executeStatusLineCommand(statusInput, controller.signal, undefined, logResult);
       if (!controller.signal.aborted) {
         setAppState(prev => {
           if (prev.statusLineText === text) return prev;
-          return {
-            ...prev,
-            statusLineText: text
-          };
+          return { ...prev, statusLineText: text };
         });
       }
     } catch {
@@ -260,15 +462,25 @@ function StatusLineInner({
     if (debounceTimerRef.current !== undefined) {
       clearTimeout(debounceTimerRef.current);
     }
-    debounceTimerRef.current = setTimeout((ref, doUpdate) => {
-      ref.current = undefined;
-      void doUpdate();
-    }, 300, debounceTimerRef, doUpdate);
+    debounceTimerRef.current = setTimeout(
+      (ref, doUpdate) => {
+        ref.current = undefined;
+        void doUpdate();
+      },
+      300,
+      debounceTimerRef,
+      doUpdate,
+    );
   }, [doUpdate]);
 
   // Only trigger update when assistant message, permission mode, vim mode, or model actually changes
   useEffect(() => {
-    if (lastAssistantMessageId !== previousStateRef.current.messageId || permissionMode !== previousStateRef.current.permissionMode || vimMode !== previousStateRef.current.vimMode || mainLoopModel !== previousStateRef.current.mainLoopModel) {
+    if (
+      lastAssistantMessageId !== previousStateRef.current.messageId ||
+      permissionMode !== previousStateRef.current.permissionMode ||
+      vimMode !== previousStateRef.current.vimMode ||
+      mainLoopModel !== previousStateRef.current.mainLoopModel
+    ) {
       // Don't update messageId here — let doUpdate handle it so
       // exceeds200kTokens is recalculated with the latest messages
       previousStateRef.current.permissionMode = permissionMode;
@@ -296,13 +508,11 @@ function StatusLineInner({
     if (statusLine) {
       logEvent('tengu_status_line_mount', {
         command_length: statusLine.command.length,
-        padding: statusLine.padding
+        padding: statusLine.padding,
       });
       // Log if status line is configured but disabled by disableAllHooks
       if (settings.disableAllHooks === true) {
-        logForDebugging('Status line is configured but disableAllHooks is true', {
-          level: 'warn'
-        });
+        logForDebugging('Status line is configured but disableAllHooks is true', { level: 'warn' });
       }
       // executeStatusLineCommand (hooks.ts) returns undefined when trust is
       // blocked — statusLineText stays undefined forever, user sees nothing,
@@ -312,20 +522,18 @@ function StatusLineInner({
           key: 'statusline-trust-blocked',
           text: 'statusline skipped · restart to fix',
           color: 'warning',
-          priority: 'low'
+          priority: 'low',
         });
-        logForDebugging('Status line command skipped: workspace trust not accepted', {
-          level: 'warn'
-        });
+        logForDebugging('Status line command skipped: workspace trust not accepted', { level: 'warn' });
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   }, []); // Only run once on mount - settings stable for initial logging
 
   // Initial update on mount + cleanup on unmount
   useEffect(() => {
     void doUpdate();
+
     return () => {
       abortControllerRef.current?.abort();
       if (debounceTimerRef.current !== undefined) {
@@ -333,21 +541,76 @@ function StatusLineInner({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   }, []); // Only run once on mount, not when doUpdate changes
 
   // Get padding from settings or default to 0
   const paddingX = settings?.statusLine?.padding ?? 0;
 
-  // StatusLine must have stable height in fullscreen — the footer is
-  // flexShrink:0 so a 0→1 row change when the command finishes steals
-  // a row from ScrollBox and shifts content. Reserve the row while loading
-  // (same trick as PromptInputFooterLeftSide).
-  return <Box paddingX={paddingX} gap={2}>
-      {statusLineText ? <Text dimColor wrap="truncate">
+  // ---- Top row data: feed BuiltinStatusLine (model + ctx + 5h + 7d + cost) ---
+  const builtinRuntimeModel = getRuntimeMainLoopModel({
+    permissionMode,
+    mainLoopModel,
+    exceeds200kTokens: previousStateRef.current.exceeds200kTokens,
+  });
+  const builtinContextWindowSize = getContextWindowForModel(builtinRuntimeModel, getSdkBetas());
+  const builtinCurrentUsage = getCurrentUsage(messagesRef.current);
+  const builtinUsedTokens = builtinCurrentUsage
+    ? builtinCurrentUsage.input_tokens +
+      builtinCurrentUsage.cache_creation_input_tokens +
+      builtinCurrentUsage.cache_read_input_tokens
+    : 0;
+  const builtinContextPct = builtinCurrentUsage
+    ? Math.round(calculateContextPercentages(builtinCurrentUsage, builtinContextWindowSize).used ?? 0)
+    : 0;
+  const builtinRawUtil = getRawUtilization();
+  const builtinRateLimits = {
+    ...(builtinRawUtil.five_hour && {
+      five_hour: {
+        utilization: builtinRawUtil.five_hour.utilization,
+        resets_at: builtinRawUtil.five_hour.resets_at,
+      },
+    }),
+    ...(builtinRawUtil.seven_day && {
+      seven_day: {
+        utilization: builtinRawUtil.seven_day.utilization,
+        resets_at: builtinRawUtil.seven_day.resets_at,
+      },
+    }),
+  };
+
+  // BuiltinStatusLine + CachePill: only when statusLineEnabled is explicitly true.
+  // Shell command output: only when a statusLine.command is configured.
+  // These are independent — a user can have one, both, or neither.
+  const showBuiltin = settings?.statusLineEnabled === true;
+  const hasShellCommand = !!settings?.statusLine?.command;
+
+  return (
+    <Box flexDirection="column" paddingX={paddingX}>
+      {/* Top: built-in fork status (model | ctx | 5h | 7d | cost) + Cache pill */}
+      {showBuiltin && (
+        <Box gap={2}>
+          <BuiltinStatusLine
+            modelName={renderModelName(builtinRuntimeModel)}
+            contextUsedPct={builtinContextPct}
+            usedTokens={builtinUsedTokens}
+            contextWindowSize={builtinContextWindowSize}
+            totalCostUsd={getTotalCost()}
+            rateLimits={builtinRateLimits}
+          />
+          <GoalPill />
+          <CachePill messages={messagesRef.current} />
+        </Box>
+      )}
+      {/* Bottom: user-configured /statusline shell stdout (reserves row in fullscreen) */}
+      {statusLineText ? (
+        <Text dimColor wrap="truncate">
           <Ansi>{statusLineText}</Ansi>
-        </Text> : isFullscreenEnvEnabled() ? <Text> </Text> : null}
-    </Box>;
+        </Text>
+      ) : hasShellCommand && isFullscreenEnvEnabled() ? (
+        <Text> </Text>
+      ) : null}
+    </Box>
+  );
 }
 
 // Parent (PromptInputFooter) re-renders on every setMessages, but StatusLine's

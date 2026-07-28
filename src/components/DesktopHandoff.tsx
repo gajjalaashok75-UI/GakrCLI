@@ -1,4 +1,3 @@
-import { c as _c } from "react-compiler-runtime";
 import React, { useEffect, useState } from 'react';
 import type { CommandResultDisplay } from '../commands.js';
 // eslint-disable-next-line custom-rules/prefer-use-keybindings -- raw input for "any key" dismiss and y/n prompt
@@ -9,7 +8,9 @@ import { errorMessage } from '../utils/errors.js';
 import { gracefulShutdown } from '../utils/gracefulShutdown.js';
 import { flushSessionStorage } from '../utils/sessionStorage.js';
 import { LoadingState } from './design-system/LoadingState.js';
+
 const DESKTOP_DOCS_URL = 'https://clau.de/desktop';
+
 export function getDownloadUrl(): string {
   switch (process.platform) {
     case 'win32':
@@ -18,175 +19,113 @@ export function getDownloadUrl(): string {
       return 'https://gakrcli.ai/api/desktop/darwin/universal/dmg/latest/redirect';
   }
 }
+
 type DesktopHandoffState = 'checking' | 'prompt-download' | 'flushing' | 'opening' | 'success' | 'error';
+
 type Props = {
-  onDone: (result?: string, options?: {
-    display?: CommandResultDisplay;
-  }) => void;
+  onDone: (result?: string, options?: { display?: CommandResultDisplay }) => void;
 };
-export function DesktopHandoff(t0) {
-  const $ = _c(20);
-  const {
-    onDone
-  } = t0;
-  const [state, setState] = useState("checking");
+
+export function DesktopHandoff({ onDone }: Props): React.ReactNode {
+  const [state, setState] = useState<DesktopHandoffState>('checking');
   const [error, setError] = useState<string | null>(null);
-  const [downloadMessage, setDownloadMessage] = useState("");
-  let t1;
-  if ($[0] !== error || $[1] !== onDone || $[2] !== state) {
-    t1 = input => {
-      if (state === "error") {
-        onDone(error ?? "Unknown error", {
-          display: "system"
-        });
+  const [downloadMessage, setDownloadMessage] = useState<string>('');
+
+  // Handle keyboard input for error and prompt-download states
+  useInput(input => {
+    if (state === 'error') {
+      onDone(error ?? 'Unknown error', { display: 'system' });
+      return;
+    }
+    if (state === 'prompt-download') {
+      if (input === 'y' || input === 'Y') {
+        openBrowser(getDownloadUrl()).catch(() => {});
+        onDone(
+          `Starting download. Re-run /desktop once you\u2019ve installed the app.\nLearn more at ${DESKTOP_DOCS_URL}`,
+          { display: 'system' },
+        );
+      } else if (input === 'n' || input === 'N') {
+        onDone(`The desktop app is required for /desktop. Learn more at ${DESKTOP_DOCS_URL}`, { display: 'system' });
+      }
+    }
+  });
+
+  useEffect(() => {
+    async function performHandoff(): Promise<void> {
+      // Check Desktop install status
+      setState('checking');
+      const installStatus = await getDesktopInstallStatus();
+
+      if (installStatus.status === 'not-installed') {
+        setDownloadMessage('gakrcli Desktop is not installed.');
+        setState('prompt-download');
         return;
       }
-      if (state === "prompt-download") {
-        if (input === "y" || input === "Y") {
-          openBrowser(getDownloadUrl()).catch(_temp);
-          onDone(`Starting download. Re-run /desktop once you\u2019ve installed the app.\nLearn more at ${DESKTOP_DOCS_URL}`, {
-            display: "system"
-          });
-        } else {
-          if (input === "n" || input === "N") {
-            onDone(`The desktop app is required for /desktop. Learn more at ${DESKTOP_DOCS_URL}`, {
-              display: "system"
-            });
-          }
-        }
+
+      if (installStatus.status === 'version-too-old') {
+        setDownloadMessage(`gakrcli Desktop needs to be updated (found v${installStatus.version}, need v1.1.2396+).`);
+        setState('prompt-download');
+        return;
       }
-    };
-    $[0] = error;
-    $[1] = onDone;
-    $[2] = state;
-    $[3] = t1;
-  } else {
-    t1 = $[3];
-  }
-  useInput(t1);
-  let t2;
-  let t3;
-  if ($[4] !== onDone) {
-    t2 = () => {
-      const performHandoff = async function performHandoff() {
-        setState("checking");
-        const installStatus = await getDesktopInstallStatus();
-        if (installStatus.status === "not-installed") {
-          setDownloadMessage("GakrCLI Desktop is not installed.");
-          setState("prompt-download");
-          return;
-        }
-        if (installStatus.status === "version-too-old") {
-          setDownloadMessage(`GakrCLI Desktop needs to be updated (found v${installStatus.version}, need v1.1.2396+).`);
-          setState("prompt-download");
-          return;
-        }
-        setState("flushing");
-        await flushSessionStorage();
-        setState("opening");
-        const result = await openCurrentSessionInDesktop();
-        if (!result.success) {
-          setError(result.error ?? "Failed to open GakrCLI Desktop");
-          setState("error");
-          return;
-        }
-        setState("success");
-        setTimeout(_temp2, 500, onDone);
-      };
-      performHandoff().catch(err => {
-        setError(errorMessage(err));
-        setState("error");
-      });
-    };
-    t3 = [onDone];
-    $[4] = onDone;
-    $[5] = t2;
-    $[6] = t3;
-  } else {
-    t2 = $[5];
-    t3 = $[6];
-  }
-  useEffect(t2, t3);
-  if (state === "error") {
-    let t4;
-    if ($[7] !== error) {
-      t4 = <Text color="error">Error: {error}</Text>;
-      $[7] = error;
-      $[8] = t4;
-    } else {
-      t4 = $[8];
+
+      // Flush session storage to ensure transcript is fully written
+      setState('flushing');
+      await flushSessionStorage();
+
+      // Open the deep link (uses gakrcli-dev:// in dev mode)
+      setState('opening');
+      const result = await openCurrentSessionInDesktop();
+
+      if (!result.success) {
+        setError(result.error ?? 'Failed to open gakrcli Desktop');
+        setState('error');
+        return;
+      }
+
+      // Success - exit the CLI
+      setState('success');
+
+      // Give the user a moment to see the success message
+      setTimeout(
+        async (onDone: Props['onDone']) => {
+          onDone('Session transferred to gakrcli Desktop', { display: 'system' });
+          await gracefulShutdown(0, 'other');
+        },
+        500,
+        onDone,
+      );
     }
-    let t5;
-    if ($[9] === Symbol.for("react.memo_cache_sentinel")) {
-      t5 = <Text dimColor={true}>Press any key to continue…</Text>;
-      $[9] = t5;
-    } else {
-      t5 = $[9];
-    }
-    let t6;
-    if ($[10] !== t4) {
-      t6 = <Box flexDirection="column" paddingX={2}>{t4}{t5}</Box>;
-      $[10] = t4;
-      $[11] = t6;
-    } else {
-      t6 = $[11];
-    }
-    return t6;
+
+    performHandoff().catch(err => {
+      setError(errorMessage(err));
+      setState('error');
+    });
+  }, [onDone]);
+
+  if (state === 'error') {
+    return (
+      <Box flexDirection="column" paddingX={2}>
+        <Text color="error">Error: {error}</Text>
+        <Text dimColor>Press any key to continue…</Text>
+      </Box>
+    );
   }
-  if (state === "prompt-download") {
-    let t4;
-    if ($[12] !== downloadMessage) {
-      t4 = <Text>{downloadMessage}</Text>;
-      $[12] = downloadMessage;
-      $[13] = t4;
-    } else {
-      t4 = $[13];
-    }
-    let t5;
-    if ($[14] === Symbol.for("react.memo_cache_sentinel")) {
-      t5 = <Text>Download now? (y/n)</Text>;
-      $[14] = t5;
-    } else {
-      t5 = $[14];
-    }
-    let t6;
-    if ($[15] !== t4) {
-      t6 = <Box flexDirection="column" paddingX={2}>{t4}{t5}</Box>;
-      $[15] = t4;
-      $[16] = t6;
-    } else {
-      t6 = $[16];
-    }
-    return t6;
+
+  if (state === 'prompt-download') {
+    return (
+      <Box flexDirection="column" paddingX={2}>
+        <Text>{downloadMessage}</Text>
+        <Text>Download now? (y/n)</Text>
+      </Box>
+    );
   }
-  let t4;
-  if ($[17] === Symbol.for("react.memo_cache_sentinel")) {
-    t4 = {
-      checking: "Checking for GakrCLI Desktop\u2026",
-      flushing: "Saving session\u2026",
-      opening: "Opening GakrCLI Desktop\u2026",
-      success: "Opening in GakrCLI Desktop\u2026"
-    };
-    $[17] = t4;
-  } else {
-    t4 = $[17];
-  }
-  const messages = t4;
-  const t5 = messages[state];
-  let t6;
-  if ($[18] !== t5) {
-    t6 = <LoadingState message={t5} />;
-    $[18] = t5;
-    $[19] = t6;
-  } else {
-    t6 = $[19];
-  }
-  return t6;
+
+  const messages: Record<Exclude<DesktopHandoffState, 'error' | 'prompt-download'>, string> = {
+    checking: 'Checking for gakrcli Desktop…',
+    flushing: 'Saving session…',
+    opening: 'Opening gakrcli Desktop…',
+    success: 'Opening in gakrcli Desktop…',
+  };
+
+  return <LoadingState message={messages[state]} />;
 }
-async function _temp2(onDone_0) {
-  onDone_0("Session transferred to GakrCLI Desktop", {
-    display: "system"
-  });
-  await gracefulShutdown(0, "other");
-}
-function _temp() {}
