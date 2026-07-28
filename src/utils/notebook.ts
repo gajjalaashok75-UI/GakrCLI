@@ -25,7 +25,8 @@ function isLargeOutputs(
   let size = 0
   for (const o of outputs) {
     if (!o) continue
-    size += (o.text?.length ?? 0) + (o.image?.image_data.length ?? 0)
+    const imageLen = 'image' in o && o.image ? o.image.image_data.length : 0
+    size += (o.text?.length ?? 0) + imageLen
     if (size > LARGE_OUTPUT_THRESHOLD) return true
   }
   return false
@@ -139,7 +140,7 @@ function cellOutputToToolResult(output: NotebookCellSourceOutput) {
       type: 'text',
     })
   }
-  if (output.image) {
+  if ('image' in output && output.image) {
     outputs.push({
       type: 'image',
       source: {
@@ -171,13 +172,13 @@ export async function readNotebook(
   const notebook = jsonParse(content) as NotebookContent
   const language = notebook.metadata.language_info?.name ?? 'python'
   if (cellId) {
-    const cell = notebook.cells.find(c => c.id === cellId)
+    const cell = notebook.cells.find((c: NotebookCell) => c.id === cellId)
     if (!cell) {
       throw new Error(`Cell with ID "${cellId}" not found in notebook`)
     }
     return [processCell(cell, notebook.cells.indexOf(cell), language, true)]
   }
-  return notebook.cells.map((cell, index) =>
+  return notebook.cells.map((cell: NotebookCell, index: number) =>
     processCell(cell, index, language, false),
   )
 }

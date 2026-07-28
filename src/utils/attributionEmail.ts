@@ -1,19 +1,19 @@
 const MODEL_EMAIL_MAP: Array<{ keywords: string[]; email: string }> = [
-  { keywords: ['gakrcli'], email: 'noreply@anthropic.com' },
+  { keywords: ['gakrcli'], email: 'noreply@gakrcli.com' },
   // Could not find their official emails/avatars, using our own emails for now.
   // GitHub orgs cannot be co-authors.
   {
     keywords: ['gpt', 'dall-e', 'o1-', 'o3-', 'o4-'],
     email: 'openai@gakrcli-code-best.win',
   },
-  { keywords: ['gemini'], email: 'google-gemini@gakrcli-code-best.win' },
-  { keywords: ['grok'], email: 'xai-org@gakrcli-code-best.win' },
-  { keywords: ['glm'], email: 'zai-org@gakrcli-code-best.win' },
-  { keywords: ['deepseek'], email: 'deepseek-ai@gakrcli-code-best.win' },
-  { keywords: ['qwen'], email: 'QwenLM@gakrcli-code-best.win' },
-  { keywords: ['minimax'], email: 'MiniMax-AI@gakrcli-code-best.win' },
-  { keywords: ['mimo'], email: 'XiaomiMiMo@gakrcli-code-best.win' },
-  { keywords: ['kimi'], email: 'MoonshotAI@gakrcli-code-best.win' },
+  { keywords: ['gemini'], email: 'google-gemini@gakrcli.win' },
+  { keywords: ['grok'], email: 'xai-org@gakrcli.win' },
+  { keywords: ['glm'], email: 'zai-org@gakrcli.win' },
+  { keywords: ['deepseek'], email: 'deepseek-ai@gakrcli.win' },
+  { keywords: ['qwen'], email: 'QwenLM@gakrcli.win' },
+  { keywords: ['minimax'], email: 'MiniMax-AI@gakrcli.win' },
+  { keywords: ['mimo'], email: 'XiaomiMiMo@gakrcli.win' },
+  { keywords: ['kimi'], email: 'MoonshotAI@gakrcli.win' },
 ]
 
 export function getAttributionEmail(modelName: string): string {

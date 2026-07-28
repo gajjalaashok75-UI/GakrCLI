@@ -1,21 +1,22 @@
-export const OUTPUTS_SUBDIR = 'outputs'
+export const FILE_COUNT_LIMIT = 10000
+export const OUTPUTS_SUBDIR = '.gakrcli/outputs'
+export const DEFAULT_UPLOAD_CONCURRENCY = 5
 
-export type PersistedFile = {
-  filename: string
-  file_id?: string
-}
-
-export type FailedPersistence = {
+export interface FailedPersistence {
   filename: string
   error: string
 }
 
-export type FilesPersistedEventData = {
+export interface PersistedFile {
+  filename: string
+  file_id: string
+}
+
+export interface FilesPersistedEventData {
   files: PersistedFile[]
   failed: FailedPersistence[]
 }
 
-export type TurnStartTime = number
-
-export const DEFAULT_UPLOAD_CONCURRENCY = 5
-export const FILE_COUNT_LIMIT = 100
+export interface TurnStartTime {
+  turnStartTime: number
+}

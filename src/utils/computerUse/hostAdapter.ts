@@ -1,6 +1,7 @@
 import type {
   ComputerUseHostAdapter,
   Logger,
+  LoggerDetail,
 } from '@ant/computer-use-mcp/types'
 import { format } from 'util'
 import { logForDebugging } from '../debug.js'
@@ -11,20 +12,56 @@ import { getChicagoEnabled, getChicagoSubGates } from './gates.js'
 import { requireComputerUseSwift } from './swiftLoader.js'
 
 class DebugLogger implements Logger {
-  silly(message: string, ...args: unknown[]): void {
-    logForDebugging(format(message, ...args), { level: 'debug' })
+  silly(message: string, detail?: LoggerDetail): void {
+    logForDebugging(format(message, detail ?? ''), { level: 'debug' })
   }
-  debug(message: string, ...args: unknown[]): void {
-    logForDebugging(format(message, ...args), { level: 'debug' })
+  debug(message: string, detail?: LoggerDetail): void {
+    logForDebugging(format(message, detail ?? ''), { level: 'debug' })
   }
-  info(message: string, ...args: unknown[]): void {
-    logForDebugging(format(message, ...args), { level: 'info' })
+  info(message: string, detail?: LoggerDetail): void {
+    logForDebugging(format(message, detail ?? ''), { level: 'info' })
   }
-  warn(message: string, ...args: unknown[]): void {
-    logForDebugging(format(message, ...args), { level: 'warn' })
+  warn(message: string, detail?: LoggerDetail): void {
+    logForDebugging(format(message, detail ?? ''), { level: 'warn' })
   }
-  error(message: string, ...args: unknown[]): void {
-    logForDebugging(format(message, ...args), { level: 'error' })
+  error(message: string, detail?: LoggerDetail): void {
+    logForDebugging(format(message, detail ?? ''), { level: 'error' })
+  }
+}
+
+// ---------------------------------------------------------------------------
+// JXA-based TCC permission probes (fallback when native .node module absent)
+// ---------------------------------------------------------------------------
+
+/** Probe accessibility by asking System Events for a process list. */
+function checkAccessibilityJXA(): boolean {
+  try {
+    const result = Bun.spawnSync({
+      cmd: [
+        'osascript',
+        '-e',
+        'tell application "System Events" to get name of every process whose background only is false',
+      ],
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
+    return result.exitCode === 0
+  } catch {
+    return false
+  }
+}
+
+/** Probe screen recording by attempting a 1x1 screencapture. */
+function checkScreenRecordingJXA(): boolean {
+  try {
+    const result = Bun.spawnSync({
+      cmd: ['screencapture', '-x', '-R', '0,0,1,1', '/dev/null'],
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
+    return result.exitCode === 0
+  } catch {
+    return false
   }
 }
 
@@ -52,12 +89,21 @@ export function getComputerUseHostAdapter(): ComputerUseHostAdapter {
             getHideBeforeActionEnabled: () => getChicagoSubGates().hideBeforeAction,
           }),
     ensureOsPermissions: async () => {
-      if (process.platform !== 'darwin') {
-        return { granted: true }
-      }
+      if (process.platform !== 'darwin') return { granted: true }
       const cu = requireComputerUseSwift()
-      const accessibility = cu.tcc.checkAccessibility()
-      const screenRecording = cu.tcc.checkScreenRecording()
+      const tcc = (cu as any).tcc
+      // Native Swift .node module provides tcc.checkAccessibility/checkScreenRecording.
+      // When absent (decompiled/reverse-engineered build), fall back to JXA probes.
+      if (tcc) {
+        const accessibility = tcc.checkAccessibility()
+        const screenRecording = tcc.checkScreenRecording()
+        return accessibility && screenRecording
+          ? { granted: true }
+          : { granted: false, accessibility, screenRecording }
+      }
+      // JXA fallback: try to query System Events (accessibility) and screencapture (screen recording).
+      const accessibility = checkAccessibilityJXA()
+      const screenRecording = checkScreenRecordingJXA()
       return accessibility && screenRecording
         ? { granted: true }
         : { granted: false, accessibility, screenRecording }

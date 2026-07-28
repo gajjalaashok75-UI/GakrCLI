@@ -22,7 +22,9 @@ export async function returnValue<A>(
 }
 
 type QueuedGenerator<A> = {
+  // biome-ignore lint/suspicious/noConfusingVoidType: void matches AsyncGenerator<A, void> return type
   done: boolean | void
+  // biome-ignore lint/suspicious/noConfusingVoidType: void matches AsyncGenerator<A, void> yield type
   value: A | void
   generator: AsyncGenerator<A, void>
   promise: Promise<QueuedGenerator<A>>
@@ -61,7 +63,7 @@ export async function* all<A>(
       promises.add(next(generator))
       // TODO: Clean this up
       if (value !== undefined) {
-        yield value
+        yield value as Awaited<A>
       }
     } else if (waiting.length > 0) {
       // Start a new generator when one finishes
