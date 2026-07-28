@@ -44,6 +44,10 @@ export function hasVoiceAuth(): boolean {
 }
 
 /**
+ * Full runtime check for Anthropic voice_stream backend.
+ * Returns true when both auth + GrowthBook kill-switch pass.
+ */
+/**
  * Full runtime check: auth + GrowthBook kill-switch. Callers: `/voice`
  * (voice.ts, voice/index.ts), ConfigTool, VoiceModeNotice — command-time
  * paths where a fresh keychain read is acceptable. For React render
@@ -51,4 +55,13 @@ export function hasVoiceAuth(): boolean {
  */
 export function isVoiceModeEnabled(): boolean {
   return hasVoiceAuth() && isVoiceGrowthBookEnabled()
+}
+
+/**
+ * Check if voice mode can be activated with any STT backend.
+ * Always returns true when VOICE_MODE feature flag is on and GrowthBook
+ * kill-switch is off — the Doubao backend does not require Anthropic auth.
+ */
+export function isVoiceAvailable(): boolean {
+  return isVoiceGrowthBookEnabled()
 }
