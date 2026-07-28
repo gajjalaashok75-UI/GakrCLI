@@ -14,6 +14,13 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../../services/analytics/index.js'
+import {
+  createTrace,
+  endTrace,
+  isLangfuseEnabled,
+} from '../../services/langfuse/index.js'
+import { getSessionId } from '../../bootstrap/state.js'
+import { getAPIProvider } from '../../utils/model/providers.js'
 import { jsonParse } from '../../utils/slowOperations.js'
 import { asSystemPrompt } from '../../utils/systemPromptType.js'
 
@@ -68,11 +75,11 @@ When a user describes what they want an agent to do, you will:
       assistant: "Now let me use the test-runner agent to run the tests"
     </example>
     - <example>
-      Context: User is creating an agent for GakrCLI Code product questions.
-      user: "How do I configure GakrCLI Code hooks?"
-      assistant: "I'm going to use the ${AGENT_TOOL_NAME} tool to launch the gakrcli-code-guide agent to answer the question"
+      Context: User is creating an agent to respond to the word "hello" with a friendly jok.
+      user: "Hello"
+      assistant: "I'm going to use the ${AGENT_TOOL_NAME} tool to launch the greeting-responder agent to respond with a friendly joke"
       <commentary>
-      Since the user is asking how to use GakrCLI Code, use the gakrcli-code-guide agent.
+      Since the user is greeting, use the greeting-responder agent to respond with a friendly joke. 
       </commentary>
     </example>
   - If the user mentioned or implied that the agent should be used proactively, you should include examples of this.
@@ -146,6 +153,15 @@ export async function generateAgent(
     ? AGENT_CREATION_SYSTEM_PROMPT + AGENT_MEMORY_INSTRUCTIONS
     : AGENT_CREATION_SYSTEM_PROMPT
 
+  const langfuseTrace = isLangfuseEnabled()
+    ? createTrace({
+        sessionId: getSessionId(),
+        model,
+        provider: getAPIProvider(),
+        name: 'agent-creation',
+      })
+    : null
+
   const response = await queryModelWithoutStreaming({
     messages: normalizeMessagesForAPI(messagesWithContext),
     systemPrompt: asSystemPrompt([systemPrompt]),
@@ -161,10 +177,15 @@ export async function generateAgent(
       hasAppendSystemPrompt: false,
       querySource: 'agent_creation',
       mcpTools: [],
+      langfuseTrace,
     },
   })
 
-  const textBlocks = response.message.content.filter(
+  endTrace(langfuseTrace)
+
+  const textBlocks = (
+    Array.isArray(response.message.content) ? response.message.content : []
+  ).filter(
     (block): block is ContentBlock & { type: 'text' } => block.type === 'text',
   )
   const responseText = textBlocks.map(block => block.text).join('\n')
