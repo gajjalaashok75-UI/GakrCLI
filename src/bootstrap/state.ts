@@ -63,7 +63,7 @@ type State = {
   cwd: string
   modelUsage: { [modelName: string]: ModelUsage }
   mainLoopModelOverride: ModelSetting | undefined
-  initialMainLoopModel: ModelSetting
+  initialMainLoopModel: ModelSetting | null
   modelStrings: ModelStrings | null
   isInteractive: boolean
   kairosActive: boolean
@@ -1692,12 +1692,36 @@ export function getReplBridgeHandle(): null {
   return null
 }
 
-// Stub counters for git operation metrics (OTel counters wired in closed-source build)
+// Stub counters for OTel metrics (wired in closed-source build)
+export function getSessionCounter(): { add(value: number): void } | null {
+  return null
+}
+
+export function getLocCounter(): { add(value: number, attributes?: Record<string, unknown>): void } | null {
+  return null
+}
+
 export function getCommitCounter(): { add(value: number): void } | null {
   return null
 }
 
 export function getPrCounter(): { add(value: number): void } | null {
+  return null
+}
+
+export function getCostCounter(): { add(value: number, attributes?: Record<string, unknown>): void } | null {
+  return null
+}
+
+export function getTokenCounter(): { add(value: number, attributes?: Record<string, unknown>): void } | null {
+  return null
+}
+
+export function getCodeEditToolDecisionCounter(): { add(value: number, attributes?: Record<string, string>): void } | null {
+  return null
+}
+
+export function getActiveTimeCounter(): { add(value: number, attributes?: Record<string, string>): void } | null {
   return null
 }
 
@@ -1714,6 +1738,7 @@ export function getReplayIndexBuilder(): ReplayIndexBuilder {
   let entry = STATE.replayIndexBuilders.get(sessionId)
   if (!entry) {
     // Lazy import to avoid circular dependencies
+    // eslint-disable-next-line custom-rules/bootstrap-isolation
     const { ReplayIndexBuilder } =
       require('src/utils/replayIndexBuilder.js') as typeof import('src/utils/replayIndexBuilder.js')
     entry = {
