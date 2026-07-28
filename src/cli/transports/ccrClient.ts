@@ -130,7 +130,7 @@ export function createStreamAccumulator(): StreamAccumulatorState {
 
 function scopeKey(m: {
   session_id: string
-  parent_tool_use_id: string | null
+  parent_tool_use_id?: string | null
 }): string {
   return `${m.session_id}:${m.parent_tool_use_id ?? ''}`
 }
@@ -540,6 +540,7 @@ export class CCRClient {
         external_metadata: {
           pending_action: null,
           task_summary: null,
+          automation_state: null,
         },
       },
       'PUT worker (init)',
@@ -801,7 +802,14 @@ export class CCRClient {
     }
     await this.flushStreamEventBuffer()
     if (message.type === 'assistant') {
-      clearStreamAccumulatorForMessage(this.streamTextAccumulator, message)
+      clearStreamAccumulatorForMessage(
+        this.streamTextAccumulator,
+        message as {
+          session_id: string
+          parent_tool_use_id: string | null
+          message: { id: string }
+        },
+      )
     }
     await this.eventUploader.enqueue(this.toClientEvent(message))
   }
