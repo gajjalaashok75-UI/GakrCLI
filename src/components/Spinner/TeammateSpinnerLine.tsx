@@ -13,6 +13,7 @@ import { summarizeRecentActivities } from '../../utils/collapseReadSearch.js';
 import { formatDuration, formatNumber, truncateToWidth } from '../../utils/format.js';
 import { toInkColor } from '../../utils/ink.js';
 import { TEAMMATE_SELECT_HINT } from './teammateSelectHint.js';
+
 type Props = {
   teammate: InProcessTeammateTaskState;
   isLast: boolean;
@@ -28,6 +29,7 @@ type Props = {
  */
 function getMessagePreview(messages: InProcessTeammateTaskState['messages']): string[] {
   if (!messages?.length) return [];
+
   const allLines: string[] = [];
   const maxLineLength = 80;
 
@@ -35,20 +37,27 @@ function getMessagePreview(messages: InProcessTeammateTaskState['messages']): st
   for (let i = messages.length - 1; i >= 0 && allLines.length < 3; i--) {
     const msg = messages[i];
     // Only process messages that have content (user/assistant messages)
-    if (!msg || msg.type !== 'user' && msg.type !== 'assistant' || !msg.message?.content?.length) {
+    if (!msg || (msg.type !== 'user' && msg.type !== 'assistant') || !msg.message?.content?.length) {
       continue;
     }
     const content = msg.message.content;
+
     for (const block of content) {
       if (allLines.length >= 3) break;
       if (!block || typeof block !== 'object') continue;
+
       if ('type' in block && block.type === 'tool_use' && 'name' in block) {
         // Try to show meaningful info from tool input
-        const input = 'input' in block ? block.input as Record<string, unknown> : null;
+        const input = 'input' in block ? (block.input as Record<string, unknown>) : null;
         let toolLine = `Using ${block.name}…`;
         if (input) {
           // Look for common descriptive fields
-          const desc = input.description as string | undefined || input.prompt as string | undefined || input.command as string | undefined || input.query as string | undefined || input.pattern as string | undefined;
+          const desc =
+            (input.description as string | undefined) ||
+            (input.prompt as string | undefined) ||
+            (input.command as string | undefined) ||
+            (input.query as string | undefined) ||
+            (input.pattern as string | undefined);
           if (desc) {
             toolLine = desc.split('\n')[0] ?? toolLine;
           }
@@ -69,22 +78,21 @@ function getMessagePreview(messages: InProcessTeammateTaskState['messages']): st
   // Reverse so oldest of the 3 is first (reading order)
   return allLines.reverse();
 }
+
 export function TeammateSpinnerLine({
   teammate,
   isLast,
   isSelected,
   isForegrounded,
   allIdle,
-  showPreview
+  showPreview,
 }: Props): React.ReactNode {
   const [randomVerb] = useState(() => teammate.spinnerVerb ?? sample(getSpinnerVerbs()));
   const [pastTenseVerb] = useState(() => teammate.pastTenseVerb ?? sample(TURN_COMPLETION_VERBS));
   const isHighlighted = isSelected || isForegrounded;
-  const treeChar = isHighlighted ? isLast ? '╘═' : '╞═' : isLast ? '└─' : '├─';
+  const treeChar = isHighlighted ? (isLast ? '╘═' : '╞═') : isLast ? '└─' : '├─';
   const nameColor = toInkColor(teammate.identity.color);
-  const {
-    columns
-  } = useTerminalSize();
+  const { columns } = useTerminalSize();
 
   // Track when teammate became idle (for "Idle for X..." display)
   const idleStartRef = useRef<number | null>(null);
@@ -109,13 +117,18 @@ export function TeammateSpinnerLine({
   // Freeze the duration when we first detect all idle
   // Use the teammate's actual work time (since task started) for the past-tense display
   if (allIdle && frozenDurationRef.current === null) {
-    frozenDurationRef.current = formatDuration(Math.max(0, Date.now() - teammate.startTime - (teammate.totalPausedMs ?? 0)));
+    frozenDurationRef.current = formatDuration(
+      Math.max(0, Date.now() - teammate.startTime - (teammate.totalPausedMs ?? 0)),
+    );
   }
 
   // Use frozen work duration when all idle, otherwise use idle elapsed time
-  const displayTime = allIdle ? frozenDurationRef.current ?? (() => {
-    throw new Error(`frozenDurationRef is null for idle teammate ${teammate.identity.agentName}`);
-  })() : idleElapsedTime;
+  const displayTime = allIdle
+    ? (frozenDurationRef.current ??
+      (() => {
+        throw new Error(`frozenDurationRef is null for idle teammate ${teammate.identity.agentName}`);
+      })())
+    : idleElapsedTime;
 
   // Layout: paddingLeft(3) + pointer(1) + space(1) + treeChar(2) + space(1) = 8 fixed chars
   // Then optionally: @name + ": " OR just ": "
@@ -148,12 +161,16 @@ export function TeammateSpinnerLine({
 
   // Progressive hiding: view hint → select hint → stats
   // Stats always visible (dimmed when not selected); hints only when highlighted/selected
-  const showViewHint = isSelected && !isForegrounded && availableForActivity > viewHintWidth + statsWidth + minActivityWidth + 5;
-  const showSelectHint = isHighlighted && availableForActivity > selectHintWidth + (showViewHint ? viewHintWidth : 0) + statsWidth + minActivityWidth + 5;
+  const showViewHint =
+    isSelected && !isForegrounded && availableForActivity > viewHintWidth + statsWidth + minActivityWidth + 5;
+  const showSelectHint =
+    isHighlighted &&
+    availableForActivity > selectHintWidth + (showViewHint ? viewHintWidth : 0) + statsWidth + minActivityWidth + 5;
   const showStats = availableForActivity > statsWidth + minActivityWidth + 5;
 
   // Activity text gets remaining space
-  const extrasCost = (showStats ? statsWidth : 0) + (showSelectHint ? selectHintWidth : 0) + (showViewHint ? viewHintWidth : 0);
+  const extrasCost =
+    (showStats ? statsWidth : 0) + (showSelectHint ? selectHintWidth : 0) + (showViewHint ? viewHintWidth : 0);
   const activityMaxWidth = Math.max(minActivityWidth, availableForActivity - extrasCost - 1);
 
   // Format the activity text for active teammates, rolling up search/read ops
@@ -178,9 +195,11 @@ export function TeammateSpinnerLine({
     }
     if (teammate.isIdle) {
       if (allIdle) {
-        return <Text dimColor>
+        return (
+          <Text dimColor>
             {pastTenseVerb} for {displayTime}
-          </Text>;
+          </Text>
+        );
       }
       return <Text dimColor>Idle for {idleElapsedTime}</Text>;
     }
@@ -189,9 +208,7 @@ export function TeammateSpinnerLine({
     if (isHighlighted) {
       return null;
     }
-    return <Text dimColor>
-        {activityText?.endsWith('…') ? activityText : `${activityText}…`}
-      </Text>;
+    return <Text dimColor>{activityText?.endsWith('…') ? activityText : `${activityText}…`}</Text>;
   };
 
   // Get preview lines if enabled
@@ -199,7 +216,9 @@ export function TeammateSpinnerLine({
 
   // Tree continuation character for preview lines
   const previewTreeChar = isLast ? '   ' : '│  ';
-  return <Box flexDirection="column">
+
+  return (
+    <Box flexDirection="column">
       <Box paddingLeft={3}>
         {/* Selection indicator: pointer when selected, otherwise space */}
         <Text color={isSelected ? 'suggestion' : undefined} bold={isSelected}>
@@ -207,26 +226,28 @@ export function TeammateSpinnerLine({
         </Text>
         <Text dimColor={!isSelected}>{treeChar} </Text>
         {/* Agent name: hidden on very narrow screens */}
-        {showName && <Text color={isSelected ? 'suggestion' : nameColor}>
-            @{teammate.identity.agentName}
-          </Text>}
+        {showName && <Text color={isSelected ? 'suggestion' : nameColor}>@{teammate.identity.agentName}</Text>}
         {showName && <Text dimColor={!isSelected}>: </Text>}
         {renderStatus()}
         {/* Stats: only shown when selected and terminal is wide enough */}
-        {showStats && <Text dimColor>
+        {showStats && (
+          <Text dimColor>
             {' '}
-            · {toolUseCount} tool {toolUseCount === 1 ? 'use' : 'uses'} ·{' '}
-            {formatNumber(tokenCount)} tokens
-          </Text>}
+            · {toolUseCount} tool {toolUseCount === 1 ? 'use' : 'uses'} · {formatNumber(tokenCount)} tokens
+          </Text>
+        )}
         {/* Hints: select hint when highlighted, view hint when selected but not foregrounded */}
         {showSelectHint && <Text dimColor> · {TEAMMATE_SELECT_HINT}</Text>}
         {showViewHint && <Text dimColor> · enter to view</Text>}
       </Box>
       {/* Preview lines */}
-      {previewLines.map((line, idx) => <Box key={idx} paddingLeft={3}>
+      {previewLines.map((line, idx) => (
+        <Box key={idx} paddingLeft={3}>
           <Text dimColor> </Text>
           <Text dimColor>{previewTreeChar} </Text>
           <Text dimColor>{line}</Text>
-        </Box>)}
-    </Box>;
+        </Box>
+      ))}
+    </Box>
+  );
 }
