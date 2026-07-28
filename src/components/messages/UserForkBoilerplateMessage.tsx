@@ -1,28 +1,34 @@
-import type { TextBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
-import * as React from 'react'
+/**
+ * UserForkBoilerplateMessage — render the fork/subagent boilerplate directive.
+ */
+import type { TextBlockParam } from '@anthropic-ai/sdk/resources/index.mjs';
+import * as React from 'react';
 import { Box, Text } from '../../ink.js'
-import { FORK_DIRECTIVE_PREFIX } from '../../constants/xml.js'
+import { FORK_BOILERPLATE_TAG, FORK_DIRECTIVE_PREFIX } from '../../constants/xml.js';
+import { extractTag } from '../../utils/messages.js';
+import { UserPromptMessage } from './UserPromptMessage.js';
 
 type Props = {
-  addMargin: boolean
-  param: TextBlockParam
-}
+  addMargin: boolean;
+  param: TextBlockParam;
+  isTranscriptMode?: boolean;
+  timestamp?: string;
+};
 
-// A fork-boilerplate user message carries the verbose forked-worker instruction
-// block (buildChildMessage in forkSubagent.ts) followed by `Your directive: …`.
-// Dumping the whole rules block into the transcript is noise; render a compact
-// marker with just the directive.
-export function UserForkBoilerplateMessage({ addMargin, param }: Props) {
-  const text = param.text ?? ''
-  const prefixIdx = text.indexOf(FORK_DIRECTIVE_PREFIX)
-  const directive =
-    prefixIdx === -1
-      ? ''
-      : text.slice(prefixIdx + FORK_DIRECTIVE_PREFIX.length).trim()
+export function UserForkBoilerplateMessage({ param, addMargin, isTranscriptMode, timestamp }: Props): React.ReactNode {
+  if (!extractTag(param.text, FORK_BOILERPLATE_TAG)) return null;
+  const closeTag = `</${FORK_BOILERPLATE_TAG}>`;
+  const afterTag = param.text.slice(param.text.indexOf(closeTag) + closeTag.length).trimStart();
+  const userPrompt = afterTag.startsWith(FORK_DIRECTIVE_PREFIX)
+    ? afterTag.slice(FORK_DIRECTIVE_PREFIX.length)
+    : afterTag;
+
   return (
-    <Box flexDirection="row" marginTop={addMargin ? 1 : 0}>
-      <Text dimColor={true}>⑂ forked worker</Text>
-      {directive ? <Text color="text">{`: ${directive}`}</Text> : null}
-    </Box>
-  )
+    <UserPromptMessage
+      addMargin={addMargin}
+      param={{ type: 'text', text: userPrompt }}
+      isTranscriptMode={isTranscriptMode}
+      timestamp={timestamp}
+    />
+  );
 }

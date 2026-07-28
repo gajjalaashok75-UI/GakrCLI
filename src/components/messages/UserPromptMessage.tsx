@@ -10,6 +10,7 @@ import { logError } from '../../utils/log.js';
 import { countCharInString } from '../../utils/stringUtils.js';
 import { MessageActionsSelectedContext } from '../messageActions.js';
 import { HighlightedThinkingText } from './HighlightedThinkingText.js';
+
 type Props = {
   addMargin: boolean;
   param: TextBlockParam;
@@ -28,14 +29,8 @@ type Props = {
 const MAX_DISPLAY_CHARS = 10_000;
 const TRUNCATE_HEAD_CHARS = 2_500;
 const TRUNCATE_TAIL_CHARS = 2_500;
-export function UserPromptMessage({
-  addMargin,
-  param: {
-    text
-  },
-  isTranscriptMode,
-  timestamp
-}: Props): React.ReactNode {
+
+export function UserPromptMessage({ addMargin, param: { text }, isTranscriptMode, timestamp }: Props): React.ReactNode {
   // REPL.tsx passes isBriefOnly={viewedTeammateTask ? false : isBriefOnly}
   // but that prop isn't threaded this deep — replicate the override by
   // reading viewingAgentTaskId directly. Computed here (not in the child)
@@ -43,22 +38,21 @@ export function UserPromptMessage({
   // child renders a label-style layout, and Box backgroundColor paints
   // behind children unconditionally (they can't opt out).
   //
-  // Hooks stay INSIDE feature() ternaries so external builds don't pay
-  // the per-scrollback-message store subscription (useSyncExternalStore
-  // bypasses React.memo). Runtime-gated like isBriefEnabled() but inlined
-  // to avoid pulling BriefTool.ts → prompt.ts tool-name strings into
-  // external builds.
-  const isBriefOnly = feature('KAIROS') || feature('KAIROS_BRIEF') ?
-  // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
-  useAppState(s => s.isBriefOnly) : false;
-  const viewingAgentTaskId = feature('KAIROS') || feature('KAIROS_BRIEF') ?
-  // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
-  useAppState(s_0 => s_0.viewingAgentTaskId) : null;
+  // Hooks must always be called unconditionally to satisfy React rules.
+  // The feature gate is applied to the computed value, not the hook call.
+  const isBriefOnlyState = useAppState(s => s.isBriefOnly);
+  const viewingAgentTaskIdState = useAppState(s => s.viewingAgentTaskId);
   // Hoisted to mount-time — per-message component, re-renders on every scroll.
-  const briefEnvEnabled = feature('KAIROS') || feature('KAIROS_BRIEF') ?
-  // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
-  useMemo(() => isEnvTruthy(process.env.GAKR_CODE_BRIEF), []) : false;
-  const useBriefLayout = feature('KAIROS') || feature('KAIROS_BRIEF') ? (getKairosActive() || getUserMsgOptIn() && (briefEnvEnabled || getFeatureValue_CACHED_MAY_BE_STALE('tengu_kairos_brief', false))) && isBriefOnly && !isTranscriptMode && !viewingAgentTaskId : false;
+  const briefEnvEnabledState = useMemo(() => isEnvTruthy(process.env.GAKR_CODE_BRIEF), []);
+  const useBriefLayout =
+    feature('KAIROS') || feature('KAIROS_BRIEF')
+      ? (getKairosActive() ||
+          (getUserMsgOptIn() &&
+            (briefEnvEnabledState || getFeatureValue_CACHED_MAY_BE_STALE('tengu_kairos_brief', false)))) &&
+        isBriefOnlyState &&
+        !isTranscriptMode &&
+        !viewingAgentTaskIdState
+      : false;
 
   // Truncate before the early return so the hook order is stable.
   const displayText = useMemo(() => {
@@ -68,12 +62,26 @@ export function UserPromptMessage({
     const hiddenLines = countCharInString(text, '\n', TRUNCATE_HEAD_CHARS) - countCharInString(tail, '\n');
     return `${head}\n… +${hiddenLines} lines …\n${tail}`;
   }, [text]);
+
   const isSelected = useContext(MessageActionsSelectedContext);
+
   if (!text) {
     logError(new Error('No content found in user prompt message'));
     return null;
   }
-  return <Box flexDirection="column" marginTop={addMargin ? 1 : 0} backgroundColor={isSelected ? 'messageActionsBackground' : useBriefLayout ? undefined : 'userMessageBackground'} paddingRight={useBriefLayout ? 0 : 1}>
-      <HighlightedThinkingText text={displayText} useBriefLayout={useBriefLayout} timestamp={useBriefLayout ? timestamp : undefined} />
-    </Box>;
+
+  return (
+    <Box
+      flexDirection="column"
+      marginTop={addMargin ? 1 : 0}
+      backgroundColor={isSelected ? 'messageActionsBackground' : useBriefLayout ? undefined : 'userMessageBackground'}
+      paddingRight={useBriefLayout ? 0 : 1}
+    >
+      <HighlightedThinkingText
+        text={displayText}
+        useBriefLayout={useBriefLayout}
+        timestamp={useBriefLayout ? timestamp : undefined}
+      />
+    </Box>
+  );
 }

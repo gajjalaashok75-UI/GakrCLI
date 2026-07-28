@@ -3,6 +3,7 @@ import * as React from 'react';
 import { filterToolProgressMessages, findToolByName, type Tools } from '../../Tool.js';
 import type { GroupedToolUseMessage } from '../../types/message.js';
 import type { buildMessageLookups } from '../../utils/messages.js';
+
 type Props = {
   message: GroupedToolUseMessage;
   tools: Tools;
@@ -10,12 +11,13 @@ type Props = {
   inProgressToolUseIDs: Set<string>;
   shouldAnimate: boolean;
 };
+
 export function GroupedToolUseContent({
   message,
   tools,
   lookups,
   inProgressToolUseIDs,
-  shouldAnimate
+  shouldAnimate,
 }: Props): React.ReactNode {
   const tool = findToolByName(tools, message.toolName);
   if (!tool?.renderGroupedToolUse) {
@@ -23,35 +25,37 @@ export function GroupedToolUseContent({
   }
 
   // Build a map from tool_use_id to result data
-  const resultsByToolUseId = new Map<string, {
-    param: ToolResultBlockParam;
-    output: unknown;
-  }>();
+  const resultsByToolUseId = new Map<string, { param: ToolResultBlockParam; output: unknown }>();
   for (const resultMsg of message.results) {
-    for (const content of resultMsg.message.content) {
+    for (const _content of resultMsg.message?.content ?? []) {
+      const content = _content as unknown as Record<string, unknown>;
       if (content.type === 'tool_result') {
-        resultsByToolUseId.set(content.tool_use_id, {
-          param: content,
-          output: resultMsg.toolUseResult
+        resultsByToolUseId.set(content.tool_use_id as string, {
+          param: content as unknown as ToolResultBlockParam,
+          output: resultMsg.toolUseResult,
         });
       }
     }
   }
+
   const toolUsesData = message.messages.map(msg => {
-    const content = msg.message.content[0];
-    const result = resultsByToolUseId.get(content.id);
+    const _content = (msg.message?.content ?? [])[0] as unknown as Record<string, unknown>;
+    const id = _content.id as string;
+    const result = resultsByToolUseId.get(id);
     return {
-      param: content as ToolUseBlockParam,
-      isResolved: lookups.resolvedToolUseIDs.has(content.id),
-      isError: lookups.erroredToolUseIDs.has(content.id),
-      isInProgress: inProgressToolUseIDs.has(content.id),
-      progressMessages: filterToolProgressMessages(lookups.progressMessagesByToolUseID.get(content.id) ?? []),
-      result
+      param: _content as unknown as ToolUseBlockParam,
+      isResolved: lookups.resolvedToolUseIDs.has(id),
+      isError: lookups.erroredToolUseIDs.has(id),
+      isInProgress: inProgressToolUseIDs.has(id),
+      progressMessages: filterToolProgressMessages(lookups.progressMessagesByToolUseID.get(id) ?? []),
+      result,
     };
   });
+
   const anyInProgress = toolUsesData.some(d => d.isInProgress);
+
   return tool.renderGroupedToolUse(toolUsesData, {
     shouldAnimate: shouldAnimate && anyInProgress,
-    tools
+    tools,
   });
 }
