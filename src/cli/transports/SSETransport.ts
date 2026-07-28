@@ -1,6 +1,7 @@
 import axios, { type AxiosError } from 'axios'
 import type { StdoutMessage } from 'src/entrypoints/sdk/controlTypes.js'
 import { logForDebugging } from '../../utils/debug.js'
+import { rcLog } from '../../bridge/rcDebugLog.js'
 import { logForDiagnosticsNoPII } from '../../utils/diagLogs.js'
 import { errorMessage } from '../../utils/errors.js'
 import { getSessionIngressAuthHeaders } from '../../utils/sessionIngressAuth.js'
@@ -62,11 +63,15 @@ export function parseSSEFrames(buffer: string): {
   const frames: SSEFrame[] = []
   let pos = 0
 
-  // SSE frames are delimited by double newlines
-  let idx: number
-  while ((idx = buffer.indexOf('\n\n', pos)) !== -1) {
-    const rawFrame = buffer.slice(pos, idx)
-    pos = idx + 2
+  // SSE frames are delimited by an empty line. Support LF and CRLF streams.
+  const frameDelimiter = /\r?\n\r?\n/g
+  frameDelimiter.lastIndex = pos
+
+  let delimiterMatch: RegExpExecArray | null
+  while ((delimiterMatch = frameDelimiter.exec(buffer)) !== null) {
+    const frameEnd = delimiterMatch.index
+    const rawFrame = buffer.slice(pos, frameEnd)
+    pos = frameEnd + delimiterMatch[0].length
 
     // Skip empty frames
     if (!rawFrame.trim()) continue
@@ -74,7 +79,11 @@ export function parseSSEFrames(buffer: string): {
     const frame: SSEFrame = {}
     let isComment = false
 
-    for (const line of rawFrame.split('\n')) {
+    for (const rawLine of rawFrame.split('\n')) {
+      // Normalize CRLF lines in mixed-line-ending streams.
+      const line =
+        rawLine[rawLine.length - 1] === '\r' ? rawLine.slice(0, -1) : rawLine
+
       if (line.startsWith(':')) {
         // SSE comment (e.g., `:keepalive`)
         isComment = true
@@ -181,6 +190,7 @@ export class SSETransport implements Transport {
 
   // Liveness detection
   private livenessTimer: NodeJS.Timeout | null = null
+  private lastActivityTime = 0
 
   // POST URL (derived from SSE URL)
   private postUrl: string
@@ -340,6 +350,7 @@ export class SSETransport implements Transport {
     const reader = body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
+    const MAX_BUFFER_BYTES = 1024 * 1024 // 1MB — SSE frames include event/data/id prefixes
 
     try {
       while (true) {
@@ -347,6 +358,14 @@ export class SSETransport implements Transport {
         if (done) break
 
         buffer += decoder.decode(value, STREAM_DECODE_OPTS)
+        if (buffer.length > MAX_BUFFER_BYTES) {
+          logForDebugging(
+            `SSETransport: Buffer exceeded ${MAX_BUFFER_BYTES} bytes — dropping connection`,
+            { level: 'error' },
+          )
+          logForDiagnosticsNoPII('error', 'cli_sse_buffer_overflow')
+          break
+        }
         const { frames, remaining } = parseSSEFrames(buffer)
         buffer = remaining
 
@@ -468,6 +487,12 @@ export class SSETransport implements Transport {
    * Handle connection errors with exponential backoff and time budget.
    */
   private handleConnectionError(): void {
+    rcLog(
+      `SSE handleConnectionError: state=${this.state}` +
+        ` lastSeqNum=${this.getLastSequenceNum()}` +
+        ` reconnectAttempts=${this.reconnectAttempts}` +
+        ` msSinceLastActivity=${this.lastActivityTime > 0 ? Date.now() - this.lastActivityTime : -1}`,
+    )
     this.clearLivenessTimer()
 
     if (this.state === 'closing' || this.state === 'closed') return
@@ -541,6 +566,11 @@ export class SSETransport implements Transport {
    */
   private readonly onLivenessTimeout = (): void => {
     this.livenessTimer = null
+    rcLog(
+      `SSE liveness timeout (${LIVENESS_TIMEOUT_MS}ms)` +
+        ` lastSeqNum=${this.getLastSequenceNum()}` +
+        ` state=${this.state}`,
+    )
     logForDebugging('SSETransport: Liveness timeout, reconnecting', {
       level: 'error',
     })

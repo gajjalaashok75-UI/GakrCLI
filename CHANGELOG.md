@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **src/buddy**: React compiler removal in `CompanionSprite.tsx` and `useBuddyNotification.tsx` — replaced `_c()` memoization with hand-written React. Migrated buddy-internal feature flag checks from `isBuddyEnabled()` wrapper to direct `feature('BUDDY')` calls. Added `seed?: string` to `CompanionSoul` type. Simplified `generateSeed()` to `rehatch-${Date.now()}-${Math.random()}` pattern.
 
+### Changed
+- **src/cli**: Major refactoring and feature wiring across CLI subsystem. `print.ts`: autonomy run / proactive agent lifecycle, cron scheduler refactoring (dedup-claim, input-close-recheck, unified dispatch), UDS inbox drain, SDK event flushing, effort level handling. `structuredIO.ts`: `resolvedToolUseIds` dedup set for duplicate control_response, `injectControlResponse` for bridge integration, `executePermissionRequestHooksForSDK`. `handlers/mcp.tsx`: biome-ignore cleanup, `getMcpClientConfig` for OAuth client_secret detection. `handlers/plugins.ts`: biome-ignore cleanup. `handlers/util.tsx`: react-compiler removal from `DoctorWithPlugins`. `handlers/autoMode.ts`: poor mode model fallback with `skipSystemPromptPrefix`. `transports/`: small fixes in SSE, WebSocket, Hybrid, ccrClient.
+
 ## [0.5.8] - 2026-07-14
 
 ### Fixed
