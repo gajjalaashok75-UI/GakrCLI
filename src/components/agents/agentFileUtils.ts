@@ -72,7 +72,11 @@ function getAgentDirectoryPath(location: SettingSource): string {
     case 'projectSettings':
       return join(getCwd(), AGENT_PATHS.FOLDER_NAME, AGENT_PATHS.AGENTS_DIR)
     case 'policySettings':
-      return join(getManagedFilePath(), '.gakrcli', AGENT_PATHS.AGENTS_DIR)
+      return join(
+        getManagedFilePath(),
+        AGENT_PATHS.FOLDER_NAME,
+        AGENT_PATHS.AGENTS_DIR,
+      )
     case 'localSettings':
       return join(getCwd(), AGENT_PATHS.FOLDER_NAME, AGENT_PATHS.AGENTS_DIR)
   }
