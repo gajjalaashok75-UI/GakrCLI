@@ -1474,6 +1474,225 @@ export const EMPTY_STRING_SET: ReadonlySet<string> = Object.freeze(
 )
 
 /**
+ * Incrementally update MessageLookups when messages are appended, instead of
+ * rebuilding from scratch. Returns `null` when the delta is non-append
+ * (removals or structural changes), which signals the caller to fall back to
+ * buildMessageLookups.
+ */
+export function updateMessageLookupsIncremental(
+  existing: MessageLookups,
+  previousNormalizedCount: number,
+  previousMessageCount: number,
+  normalizedMessages: NormalizedMessage[],
+  messages: Message[],
+): MessageLookups | null {
+  // Safety check: only handle append-only case
+  if (
+    normalizedMessages.length < previousNormalizedCount ||
+    messages.length < previousMessageCount
+  ) {
+    return null
+  }
+
+  // No new messages — nothing to do, UNLESS the trailing message is a
+  // progress tick. REPL.tsx replaces ephemeral progress (Bash/PowerShell/MCP)
+  // in-place to bound the messages array — same length, but the trailing
+  // progress is a fresh tick. Returning `existing` here would leave
+  // progressMessagesByToolUseID stuck on the first tick and elapsed-time
+  // displays (ShellProgressMessage) would freeze. Force a full rebuild so
+  // the fresh tick propagates.
+  if (
+    normalizedMessages.length === previousNormalizedCount &&
+    messages.length === previousMessageCount
+  ) {
+    const lastNormalized = normalizedMessages[normalizedMessages.length - 1]
+    if (lastNormalized && lastNormalized.type === 'progress') {
+      return null
+    }
+    return existing
+  }
+
+  // Process new messages entries (pass 1: assistant tool_use blocks)
+  const newMessageStart = previousMessageCount
+  for (let i = newMessageStart; i < messages.length; i++) {
+    const msg = messages[i]!
+    if (msg.type === 'assistant') {
+      const aMsg = msg as AssistantMessage
+      const _id = aMsg.message.id!
+      if (Array.isArray(aMsg.message.content)) {
+        const newToolUseIDs: string[] = []
+        for (const content of aMsg.message.content) {
+          if (typeof content !== 'string' && content.type === 'tool_use') {
+            const toolUseCont = content as ToolUseBlock
+            newToolUseIDs.push(toolUseCont.id)
+            existing.toolUseByToolUseID.set(toolUseCont.id, content)
+          }
+        }
+        if (newToolUseIDs.length > 0) {
+          existing.siblingToolUseIDs.set(aMsg.message.id!, new Set(newToolUseIDs))
+        }
+      }
+    }
+  }
+
+  // Process new normalizedMessages entries (pass 2: progress, hooks, tool results)
+  const newNormalizedStart = previousNormalizedCount
+  for (let i = newNormalizedStart; i < normalizedMessages.length; i++) {
+    const msg = normalizedMessages[i]!
+
+    if (msg.type === 'progress') {
+      const toolUseID = msg.parentToolUseID as string
+      const existing2 = existing.progressMessagesByToolUseID.get(toolUseID)
+      if (existing2) {
+        existing2.push(msg as ProgressMessage)
+      } else {
+        existing.progressMessagesByToolUseID.set(toolUseID, [
+          msg as ProgressMessage,
+        ])
+      }
+
+      const progressData = msg.data as { type: string; hookEvent: HookEvent }
+      if (progressData.type === 'hook_progress') {
+        const hookEvent = progressData.hookEvent
+        let byHookEvent = existing.inProgressHookCounts.get(toolUseID)
+        if (!byHookEvent) {
+          byHookEvent = new Map()
+          existing.inProgressHookCounts.set(toolUseID, byHookEvent)
+        }
+        byHookEvent.set(hookEvent, (byHookEvent.get(hookEvent) ?? 0) + 1)
+      }
+    }
+
+    if (msg.type === 'user' && Array.isArray(msg.message?.content)) {
+      for (const content of msg.message?.content ?? []) {
+        if (typeof content !== 'string' && content.type === 'tool_result') {
+          const tr = content as ToolResultBlockParam
+          existing.toolResultByToolUseID.set(tr.tool_use_id, msg)
+          existing.resolvedToolUseIDs.add(tr.tool_use_id)
+          if (tr.is_error) {
+            existing.erroredToolUseIDs.add(tr.tool_use_id)
+          }
+        }
+      }
+    }
+
+    if (msg.type === 'assistant' && Array.isArray(msg.message?.content)) {
+      for (const content of msg.message?.content ?? []) {
+        if (typeof content === 'string') continue
+        if (
+          'tool_use_id' in content &&
+          typeof (content as { tool_use_id: string }).tool_use_id === 'string'
+        ) {
+          existing.resolvedToolUseIDs.add(
+            (content as { tool_use_id: string }).tool_use_id,
+          )
+        }
+        if ((content.type as string) === 'advisor_tool_result') {
+          const result = content as {
+            tool_use_id: string
+            content: { type: string }
+          }
+          if (result.content.type === 'advisor_tool_result_error') {
+            existing.erroredToolUseIDs.add(result.tool_use_id)
+          }
+        }
+      }
+    }
+
+    if (isHookAttachmentMessage(msg)) {
+      const toolUseID = msg.attachment.toolUseID
+      const hookEvent = msg.attachment.hookEvent
+      const hookName = (msg.attachment as HookAttachmentWithName).hookName
+      if (hookName !== undefined) {
+        let byHookEvent = existing.resolvedHookCounts.get(toolUseID)
+        if (!byHookEvent) {
+          byHookEvent = new Map()
+          existing.resolvedHookCounts.set(toolUseID, byHookEvent)
+        }
+        byHookEvent.set(hookEvent, (byHookEvent.get(hookEvent) ?? 0) + 1)
+      }
+    }
+  }
+
+  existing.normalizedMessageCount = normalizedMessages.length
+
+  // Mark orphaned server_tool_use / mcp_tool_use blocks as errored.
+  const lastMsg = messages.at(-1)
+  const lastAssistantMsgId =
+    lastMsg?.type === 'assistant' ? lastMsg.message?.id : undefined
+  for (let i = newNormalizedStart; i < normalizedMessages.length; i++) {
+    const msg = normalizedMessages[i]!
+    if (msg.type !== 'assistant') continue
+    const aMsg = msg as AssistantMessage
+    if (aMsg.message.id === lastAssistantMsgId) continue
+    if (!Array.isArray(aMsg.message.content)) continue
+    for (const content of aMsg.message.content) {
+      if (
+        typeof content !== 'string' &&
+        ((content.type as string) === 'server_tool_use' ||
+          (content.type as string) === 'mcp_tool_use') &&
+        !existing.resolvedToolUseIDs.has((content as { id: string }).id)
+      ) {
+        const id = (content as { id: string }).id
+        existing.resolvedToolUseIDs.add(id)
+        existing.erroredToolUseIDs.add(id)
+      }
+    }
+  }
+
+  return existing
+}
+
+/**
+ * Compute a lightweight structural fingerprint for buildMessageLookups caching.
+ * Only captures information that affects lookup results (types, IDs, counts),
+ * not content. Returns an empty string when the arrays are structurally empty.
+ *
+ * O(n) but allocates only a string — much cheaper than the 8 Maps/Sets that
+ * buildMessageLookups creates on every call.
+ */
+export function computeMessageStructureKey(
+  normalizedMessages: NormalizedMessage[],
+  messages: Message[],
+): string {
+  const parts: string[] = [
+    String(normalizedMessages.length),
+    '|',
+    String(messages.length),
+  ]
+  for (const msg of messages) {
+    parts.push(msg.type[0])
+    if (msg.type === 'assistant') {
+      const aMsg = msg as AssistantMessage
+      const content = aMsg.message?.content
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (typeof block !== 'string' && block.type === 'tool_use') {
+            parts.push('t', (block as ToolUseBlock).id)
+          }
+        }
+      }
+    } else if (msg.type === 'user') {
+      const content = (msg as UserMessage).message?.content
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (typeof block !== 'string' && block.type === 'tool_result') {
+            parts.push('r', (block as ToolResultBlockParam).tool_use_id)
+          }
+        }
+      }
+    }
+  }
+  for (const msg of normalizedMessages) {
+    if (msg.type === 'progress') {
+      const pMsg = msg as ProgressMessage
+      parts.push('p', pMsg.parentToolUseID as string, pMsg.uuid)
+    }
+  }
+  return parts.join(',')
+}
+
+/**
  * Build lookups from subagent/skill progress messages so child tool uses
  * render with correct resolved/in-progress/queued state.
  *

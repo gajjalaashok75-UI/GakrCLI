@@ -1,9 +1,12 @@
 import type { AgentColorName } from '../../../tools/AgentTool/agentColorManager.js'
+import type { CustomAgentDefinition } from '../../../tools/AgentTool/loadAgentsDir.js'
+import type { ToolUseContext } from '../../../Tool.js'
 
 /**
  * Types of backends available for teammate execution.
  * - 'tmux': Uses tmux for pane management (works in tmux or standalone)
  * - 'iterm2': Uses iTerm2 native split panes via the it2 CLI
+ * - 'windows-terminal': Uses Windows Terminal panes/tabs via wt.exe
  * - 'in-process': Runs teammate in the same Node.js process with isolated context
  */
 export type BackendType = 'tmux' | 'iterm2' | 'windows-terminal' | 'in-process'
@@ -18,6 +21,7 @@ export type PaneBackendType = 'tmux' | 'iterm2' | 'windows-terminal'
  * Opaque identifier for a pane managed by a backend.
  * For tmux, this is the tmux pane ID (e.g., "%1").
  * For iTerm2, this is the session ID returned by it2.
+ * For Windows Terminal, this is an internal id mapped to the spawned shell PID.
  */
 export type PaneId = string
 
@@ -222,6 +226,12 @@ export type TeammateSpawnConfig = TeammateIdentity & {
   model?: string
   /** True when model came from an explicit Agent tool model argument. */
   modelWasToolSpecified?: boolean
+  /** Optional custom agent type for process-based teammates. */
+  agentType?: string
+  /** Optional resolved custom agent definition for in-process teammates. */
+  agentDefinition?: CustomAgentDefinition
+  /** Short description of the task, used for prompt display. */
+  description?: string
   /** System prompt for this teammate (resolved from workflow config) */
   systemPrompt?: string
   /** How to apply the system prompt: 'replace' or 'append' to default */
@@ -232,6 +242,8 @@ export type TeammateSpawnConfig = TeammateIdentity & {
   useSplitPane?: boolean
   /** Parent session ID (for context linking) */
   parentSessionId: string
+  /** request_id of the API call that spawned this teammate. */
+  invokingRequestId?: string
   /** Tool permissions to grant this teammate */
   permissions?: string[]
   /** Whether this teammate can show permission prompts for unlisted tools.
@@ -305,6 +317,9 @@ export type TeammateExecutor = {
   /** Backend type identifier */
   readonly type: BackendType
 
+  /** Provide AppState/tool context before lifecycle operations that need it. */
+  setContext?(context: ToolUseContext): void
+
   /** Check if this executor is available on the system */
   isAvailable(): Promise<boolean>
 
@@ -331,6 +346,8 @@ export type TeammateExecutor = {
 /**
  * Type guard to check if a backend type uses terminal panes.
  */
-export function isPaneBackend(type: BackendType): type is 'tmux' | 'iterm2' | 'windows-terminal' {
+export function isPaneBackend(
+  type: BackendType,
+): type is 'tmux' | 'iterm2' | 'windows-terminal' {
   return type === 'tmux' || type === 'iterm2' || type === 'windows-terminal'
 }

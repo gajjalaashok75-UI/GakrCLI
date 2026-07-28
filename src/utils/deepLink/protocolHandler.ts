@@ -41,7 +41,6 @@ export async function handleDeepLinkUri(uri: string): Promise<number> {
     action = parseDeepLink(uri)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    // biome-ignore lint/suspicious/noConsole: intentional error output
     console.error(`Deep link error: ${message}`)
     return 1
   }
@@ -64,7 +63,6 @@ export async function handleDeepLinkUri(uri: string): Promise<number> {
     lastFetchMs: lastFetch?.getTime(),
   })
   if (!launched) {
-    // biome-ignore lint/suspicious/noConsole: intentional error output
     console.error(
       'Failed to open a terminal. Make sure a supported terminal emulator is installed.',
     )
@@ -93,7 +91,9 @@ export async function handleUrlSchemeLaunch(): Promise<number | null> {
 
   try {
     const { waitForUrlEvent } = await import('url-handler-napi')
-    const url = waitForUrlEvent(5000)
+    const url = await (
+      waitForUrlEvent as (timeoutMs?: number) => Promise<string | null>
+    )(5000)
     if (!url) {
       return null
     }

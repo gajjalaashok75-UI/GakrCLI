@@ -64,15 +64,15 @@ export async function findModifiedFiles(
   turnStartTime: TurnStartTime,
   outputsDir: string,
 ): Promise<string[]> {
-  // Use recursive flag to get all entries in one call.
-  // readdir's withFileTypes overload returns Dirent<string>[]; ReturnType of
-  // the bare function picks the Buffer overload, so annotate explicitly.
-  let entries: Dirent[]
+  // Use recursive flag to get all entries in one call
+  let entries:
+    | Awaited<ReturnType<typeof fs.readdir>>
+    | { name: string; isFile(): boolean; isSymbolicLink(): boolean }[]
   try {
-    entries = await fs.readdir(outputsDir, {
+    entries = (await fs.readdir(outputsDir, {
       withFileTypes: true,
       recursive: true,
-    })
+    })) as { name: string; isFile(): boolean; isSymbolicLink(): boolean }[]
   } catch {
     // Directory doesn't exist or is not accessible
     return []
@@ -116,7 +116,7 @@ export async function findModifiedFiles(
   // Filter to files modified since turn start
   const modifiedFiles: string[] = []
   for (const result of statResults) {
-    if (result && result.mtimeMs >= turnStartTime) {
+    if (result && result.mtimeMs >= turnStartTime.turnStartTime) {
       modifiedFiles.push(result.filePath)
     }
   }
