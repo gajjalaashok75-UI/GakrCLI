@@ -5,7 +5,6 @@ import type { AgentId } from './ids.js'
 import type { Message } from './message.js'
 import type { QueueOperationMessage } from './messageQueueTypes.js'
 import type { GoalState } from '../services/goal/types.js'
-
 // SerializedMessage distributes over Message's `type` discriminant via
 // Extract so that (a) `m.type === '...'` narrowing and Extract<...> both
 // work on transcript entries, and (b) every SerializedMessage variant stays
@@ -16,7 +15,7 @@ import type { GoalState } from '../services/goal/types.js'
 // each variant's `[key: string]: any` escape hatch keeps property access
 // permissive. 'progress' covers legacy on-disk entries (removed from
 // isTranscriptMessage in PR #24099 but still present in old transcripts).
-type SerializedMessageFields = {
+export type SerializedMessageFields = Message & {
   cwd: string
   userType: string
   entrypoint?: string // GAKR_CODE_ENTRYPOINT — distinguishes cli/sdk-ts/sdk-py/etc.
@@ -74,7 +73,7 @@ export type LogOption = {
   mode?: 'coordinator' | 'normal' // Session mode for coordinator/normal detection
   worktreeSession?: PersistedWorktreeSession | null // Worktree state at session end (null = exited, undefined = never entered)
   contentReplacements?: ContentReplacementRecord[] // Replacement decisions for resume reconstruction
-  goal?: GoalState | null // Last session goal state, if any
+  goal?: GoalState | null // Active goal state at session end (for resume)
 }
 
 export type SummaryMessage = {
@@ -163,6 +162,29 @@ export type ModeEntry = {
   type: 'mode'
   sessionId: UUID
   mode: 'coordinator' | 'normal'
+}
+/**
+ * JSONL entry representing a goal-state checkpoint. Written on every
+ * mutation (set / pause / resume / complete / token update). Readers
+ * use the latest entry by sessionId as the authoritative state.
+ */
+export type GoalMetadataEntry = {
+  type: 'goal'
+  sessionId: UUID
+  state: GoalState
+  timestamp: string
+}
+
+/**
+ * JSONL entry signalling the user explicitly cleared the goal.
+ * Distinct from `complete` (which preserves the achievement). Readers
+ * encountering this entry after a `goal` entry should treat the goal
+ * as absent.
+ */
+export type GoalClearedEntry = {
+  type: 'goal-cleared'
+  sessionId: UUID
+  timestamp: string
 }
 
 /**
@@ -347,6 +369,8 @@ export type Entry =
   | GoalStateEntry
   | ContextCollapseCommitEntry
   | ContextCollapseSnapshotEntry
+  | GoalMetadataEntry
+  | GoalClearedEntry
 
 export function sortLogs(logs: LogOption[]): LogOption[] {
   return logs.sort((a, b) => {

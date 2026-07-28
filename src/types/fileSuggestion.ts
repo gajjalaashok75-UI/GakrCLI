@@ -1,18 +1,13 @@
 /**
- * Input passed (as JSON on stdin) to the user's configured fileSuggestion
- * command. Built in src/hooks/fileSuggestions.ts and consumed by
- * executeFileSuggestionCommand in src/utils/hooks.ts.
+ * `FileSuggestion` 自定义命令通过 stdin 接收的 JSON 负载，
+ * 字段与 `createBaseHookInput()` 一致并附加当前路径前缀 `query`。
  */
-
 export type FileSuggestionCommandInput = {
-  // Base hook input (createBaseHookInput)
-  session_id: string
-  transcript_path: string
-  cwd: string
-  permission_mode?: string
-  agent_id?: string
-  agent_type?: string
-
-  /** The partial path the user has typed so far. */
-  query: string
+  session_id: string // 当前会话 id
+  transcript_path: string // 会话 transcript 文件路径
+  cwd: string // 工作目录
+  permission_mode?: string // 权限模式快照（若有）
+  agent_id?: string // 子代理 id（若在 agent 内触发）
+  agent_type?: string // 子代理类型或主线程类型
+  query: string // 用户当前输入的路径前缀（待补全部分）
 }
