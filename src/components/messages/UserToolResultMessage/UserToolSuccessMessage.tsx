@@ -6,10 +6,15 @@ import { Box, Text, useTheme } from '../../../ink.js';
 import { useAppState } from '../../../state/AppState.js';
 import { filterToolProgressMessages, type Tool, type Tools } from '../../../Tool.js';
 import type { NormalizedUserMessage, ProgressMessage } from '../../../types/message.js';
-import { deleteClassifierApproval, getClassifierApproval, getYoloClassifierApproval } from '../../../utils/classifierApprovals.js';
+import {
+  deleteClassifierApproval,
+  getClassifierApproval,
+  getYoloClassifierApproval,
+} from '../../../utils/classifierApprovals.js';
 import { extractTag, type buildMessageLookups } from '../../../utils/messages.js';
 import { MessageResponse } from '../../MessageResponse.js';
 import { HookProgressMessage } from '../HookProgressMessage.js';
+
 type Props = {
   message: NormalizedUserMessage;
   lookups: ReturnType<typeof buildMessageLookups>;
@@ -21,7 +26,9 @@ type Props = {
   verbose: boolean;
   width: number | string;
   isTranscriptMode?: boolean;
+  shouldCollapseDiffs?: boolean;
 };
+
 export function UserToolSuccessMessage({
   message,
   lookups,
@@ -32,15 +39,13 @@ export function UserToolSuccessMessage({
   tools,
   verbose,
   width,
-  isTranscriptMode
+  isTranscriptMode,
+  shouldCollapseDiffs,
 }: Props): React.ReactNode {
   const [theme] = useTheme();
-  // Hook stays inside feature() ternary so external builds don't pay a
-  // per-scrollback-message store subscription — same pattern as
-  // UserPromptMessage.tsx.
-  const isBriefOnly = feature('KAIROS') || feature('KAIROS_BRIEF') ?
-  // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
-  useAppState(s => s.isBriefOnly) : false;
+  // Always call hook unconditionally; feature gate applied to the value.
+  const isBriefOnlyState = useAppState(s => s.isBriefOnly);
+  const isBriefOnly = feature('KAIROS') || feature('KAIROS_BRIEF') ? isBriefOnlyState : false;
 
   // Capture classifier approval once on mount, then delete from Map to prevent linear growth.
   // useState lazy initializer ensures the value persists across re-renders.
@@ -105,15 +110,20 @@ export function UserToolSuccessMessage({
         </Box> : null;
   }
   const toolResult = parsedOutput?.data ?? message.toolUseResult;
-  const renderedMessage = tool.renderToolResultMessage?.(toolResult as never, filterToolProgressMessages(progressMessagesForMessage), {
-    style,
-    theme,
-    tools,
-    verbose,
-    isTranscriptMode,
-    isBriefOnly,
-    input: lookups.toolUseByToolUseID.get(toolUseID)?.input
-  }) ?? null;
+
+  // Collapse diff display for old messages (verbose/ctrl+o overrides)
+  const effectiveStyle = shouldCollapseDiffs && !verbose ? 'condensed' : style;
+
+  const renderedMessage =
+    tool.renderToolResultMessage?.(toolResult as never, filterToolProgressMessages(progressMessagesForMessage), {
+      style: effectiveStyle,
+      theme,
+      tools,
+      verbose,
+      isTranscriptMode,
+      isBriefOnly,
+      input: lookups.toolUseByToolUseID.get(toolUseID)?.input,
+    }) ?? null;
 
   // Don't render anything if the tool result message is null
   if (renderedMessage === null) {
@@ -125,22 +135,39 @@ export function UserToolSuccessMessage({
   // so MarkdownTable's SAFETY_MARGIN=4 (tuned for the assistant-text 2-col
   // dot gutter) holds — otherwise tables wrap their box-drawing chars.
   const rendersAsAssistantText = tool.userFacingName(undefined) === '';
-  return <Box flexDirection="column">
+
+  return (
+    <Box flexDirection="column">
       <Box flexDirection="column" width={rendersAsAssistantText ? undefined : width}>
         {renderedMessage}
-        {feature('BASH_CLASSIFIER') ? classifierRule && <MessageResponse height={1}>
+        {feature('BASH_CLASSIFIER')
+          ? classifierRule && (
+              <MessageResponse height={1}>
                 <Text dimColor>
                   <Text color="success">{figures.tick}</Text>
                   {' Auto-approved \u00b7 matched '}
                   {`"${classifierRule}"`}
                 </Text>
-              </MessageResponse> : null}
-        {feature('TRANSCRIPT_CLASSIFIER') ? yoloReason && <MessageResponse height={1}>
+              </MessageResponse>
+            )
+          : null}
+        {feature('TRANSCRIPT_CLASSIFIER')
+          ? yoloReason && (
+              <MessageResponse height={1}>
                 <Text dimColor>Allowed by auto mode classifier</Text>
-              </MessageResponse> : null}
+              </MessageResponse>
+            )
+          : null}
       </Box>
       <SentryErrorBoundary>
-        <HookProgressMessage hookEvent="PostToolUse" lookups={lookups} toolUseID={toolUseID} verbose={verbose} isTranscriptMode={isTranscriptMode} />
+        <HookProgressMessage
+          hookEvent="PostToolUse"
+          lookups={lookups}
+          toolUseID={toolUseID}
+          verbose={verbose}
+          isTranscriptMode={isTranscriptMode}
+        />
       </SentryErrorBoundary>
-    </Box>;
+    </Box>
+  );
 }
