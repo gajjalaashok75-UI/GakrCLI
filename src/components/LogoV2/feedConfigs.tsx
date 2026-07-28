@@ -1,6 +1,5 @@
 import figures from 'figures';
 import { homedir } from 'os';
-import * as React from 'react';
 import { Box, Text } from '../../ink.js';
 import type { Step } from '../../projectOnboardingState.js';
 import { formatCreditAmount, getCachedReferrerReward } from '../../services/api/referral.js';
@@ -9,22 +8,26 @@ import { getCwd } from '../../utils/cwd.js';
 import { formatRelativeTimeAgo } from '../../utils/format.js';
 import { getReleaseSectionHeaderTitle, isReleaseSectionHeader } from '../../utils/releaseNotes.js';
 import type { FeedConfig, FeedLine } from './Feed.js';
+
 export function createRecentActivityFeed(activities: LogOption[]): FeedConfig {
   const lines: FeedLine[] = activities.map(log => {
     const time = formatRelativeTimeAgo(log.modified);
     const description = log.summary && log.summary !== 'No prompt' ? log.summary : log.firstPrompt;
+
     return {
       text: description || '',
-      timestamp: time
+      timestamp: time,
     };
   });
+
   return {
     title: 'Recent Sessions',
     lines,
     footer: lines.length > 0 ? '/resume for more' : undefined,
-    emptyMessage: 'No recent sessions'
+    emptyMessage: 'No recent sessions',
   };
 }
+
 export function createWhatsNewFeed(releaseNotes: string[]): FeedConfig {
   const lines: FeedLine[] = releaseNotes.map(note => {
     if (isReleaseSectionHeader(note)) {
@@ -33,55 +36,71 @@ export function createWhatsNewFeed(releaseNotes: string[]): FeedConfig {
       };
     }
     return {
-      text: note
+      text: note,
     };
   });
+
+  const emptyMessage =
+    process.env.USER_TYPE === 'ant'
+      ? 'Unable to fetch latest gakrcli commits'
+      : 'Check the GakrCLI changelog for updates';
+
   return {
-    title: "GakrCLI Updates",
+    title: "What's new , GakrCLI Updates",
     lines,
     footer: lines.length > 0 ? '/release-notes for more' : undefined,
     emptyMessage: 'Check /release-notes for recent updates'
   };
 }
+
 export function createProjectOnboardingFeed(steps: Step[]): FeedConfig {
-  const enabledSteps = steps.filter(({
-    isEnabled
-  }) => isEnabled).sort((a, b) => Number(a.isComplete) - Number(b.isComplete));
-  const lines: FeedLine[] = enabledSteps.map(({
-    text,
-    isComplete
-  }) => {
+  const enabledSteps = steps
+    .filter(({ isEnabled }) => isEnabled)
+    .sort((a, b) => Number(a.isComplete) - Number(b.isComplete));
+
+  const lines: FeedLine[] = enabledSteps.map(({ text, isComplete }) => {
     const checkmark = isComplete ? `${figures.tick} ` : '';
     return {
-      text: `${checkmark}${text}`
+      text: `${checkmark}${text}`,
     };
   });
-  const warningText = getCwd() === homedir() ? 'Note: You have launched gakrcli in your home directory. For the best experience, launch it in a project directory instead.' : undefined;
+
+  const warningText =
+    getCwd() === homedir()
+      ? 'Note: You have launched gakrcli in your home directory. For the best experience, launch it in a project directory instead.'
+      : undefined;
+
   if (warningText) {
     lines.push({
-      text: warningText
+      text: warningText,
     });
   }
+
   return {
     title: 'Tips for getting started',
-    lines
+    lines,
   };
 }
+
 export function createGuestPassesFeed(): FeedConfig {
   const reward = getCachedReferrerReward();
-  const subtitle = reward ? `Share GakrCLI and earn ${formatCreditAmount(reward)} of extra usage` : 'Share GakrCLI with friends';
+  const subtitle = reward
+    ? `Share GakrCLI and earn ${formatCreditAmount(reward)} of extra usage`
+    : 'Share GakrCLI with friends';
   return {
     title: '3 guest passes',
     lines: [],
     customContent: {
-      content: <>
+      content: (
+        <>
           <Box marginY={1}>
             <Text color="gakrcli">[✻] [✻] [✻]</Text>
           </Box>
           <Text dimColor>{subtitle}</Text>
-        </>,
-      width: 48
+        </>
+      ),
+      width: 48,
     },
-    footer: '/passes'
+    footer: '/passes',
   };
 }
