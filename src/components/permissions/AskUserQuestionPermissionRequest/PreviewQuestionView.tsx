@@ -15,6 +15,7 @@ import { PermissionRequestTitle } from '../PermissionRequestTitle.js';
 import { PreviewBox } from './PreviewBox.js';
 import { QuestionNavigationBar } from './QuestionNavigationBar.js';
 import type { QuestionState } from './use-multiple-choice-state.js';
+
 type Props = {
   question: Question;
   questions: Question[];
@@ -54,15 +55,17 @@ export function PreviewQuestionView({
   onTabPrev,
   onTabNext,
   onRespondToGakrCLI,
-  onFinishPlanInterview
+  onFinishPlanInterview,
 }: Props): React.ReactNode {
   const isInPlanMode = useAppState(s => s.toolPermissionContext.mode) === 'plan';
   const [isFooterFocused, setIsFooterFocused] = useState(false);
   const [footerIndex, setFooterIndex] = useState(0);
   const [isInNotesInput, setIsInNotesInput] = useState(false);
   const [cursorOffset, setCursorOffset] = useState(0);
+
   const editor = getExternalEditor();
   const editorName = editor ? toIDEDisplayName(editor) : null;
+
   const questionText = question.question;
   const questionState = questionStates[questionText];
 
@@ -80,59 +83,69 @@ export function PreviewQuestionView({
     const idx = selected ? allOptions.findIndex(opt => opt.label === selected) : -1;
     setFocusedIndex(idx >= 0 ? idx : 0);
   }
+
   const focusedOption = allOptions[focusedIndex];
   const selectedValue = questionState?.selectedValue as string | undefined;
   const notesValue = questionState?.textInputValue || '';
-  const handleSelectOption = useCallback((index: number) => {
-    const option = allOptions[index];
-    if (!option) return;
-    setFocusedIndex(index);
-    onUpdateQuestionState(questionText, {
-      selectedValue: option.label
-    }, false);
-    onAnswer(questionText, option.label);
-  }, [allOptions, questionText, onUpdateQuestionState, onAnswer]);
-  const handleNavigate = useCallback((direction: 'up' | 'down' | number) => {
-    if (isInNotesInput) return;
-    let newIndex: number;
-    if (typeof direction === 'number') {
-      newIndex = direction;
-    } else if (direction === 'up') {
-      newIndex = focusedIndex > 0 ? focusedIndex - 1 : focusedIndex;
-    } else {
-      newIndex = focusedIndex < allOptions.length - 1 ? focusedIndex + 1 : focusedIndex;
-    }
-    if (newIndex >= 0 && newIndex < allOptions.length) {
-      setFocusedIndex(newIndex);
-    }
-  }, [focusedIndex, allOptions.length, isInNotesInput]);
+
+  const handleSelectOption = useCallback(
+    (index: number) => {
+      const option = allOptions[index];
+      if (!option) return;
+
+      setFocusedIndex(index);
+      onUpdateQuestionState(questionText, { selectedValue: option.label }, false);
+
+      onAnswer(questionText, option.label);
+    },
+    [allOptions, questionText, onUpdateQuestionState, onAnswer],
+  );
+
+  const handleNavigate = useCallback(
+    (direction: 'up' | 'down' | number) => {
+      if (isInNotesInput) return;
+
+      let newIndex: number;
+      if (typeof direction === 'number') {
+        newIndex = direction;
+      } else if (direction === 'up') {
+        newIndex = focusedIndex > 0 ? focusedIndex - 1 : focusedIndex;
+      } else {
+        newIndex = focusedIndex < allOptions.length - 1 ? focusedIndex + 1 : focusedIndex;
+      }
+
+      if (newIndex >= 0 && newIndex < allOptions.length) {
+        setFocusedIndex(newIndex);
+      }
+    },
+    [focusedIndex, allOptions.length, isInNotesInput],
+  );
 
   // Handle ctrl+g to open external editor for notes
-  useKeybinding('chat:externalEditor', async () => {
-    const currentValue = questionState?.textInputValue || '';
-    const result = await editPromptInEditor(currentValue);
-    if (result.content !== null && result.content !== currentValue) {
-      onUpdateQuestionState(questionText, {
-        textInputValue: result.content
-      }, false);
-    }
-  }, {
-    context: 'Chat',
-    isActive: isInNotesInput && !!editor
-  });
+  useKeybinding(
+    'chat:externalEditor',
+    async () => {
+      const currentValue = questionState?.textInputValue || '';
+      const result = await editPromptInEditor(currentValue);
+      if (result.content !== null && result.content !== currentValue) {
+        onUpdateQuestionState(questionText, { textInputValue: result.content }, false);
+      }
+    },
+    { context: 'Chat', isActive: isInNotesInput && !!editor },
+  );
 
   // Handle left/right arrow and tab for question navigation.
   // This must be in the child component (not just the parent) because child useInput
   // handlers register first on the event emitter and fire before parent handlers.
   // Without this, the parent's useKeybindings may not fire reliably depending on
   // listener ordering in the event emitter.
-  useKeybindings({
-    'tabs:previous': () => onTabPrev?.(),
-    'tabs:next': () => onTabNext?.()
-  }, {
-    context: 'Tabs',
-    isActive: !isInNotesInput && !isFooterFocused
-  });
+  useKeybindings(
+    {
+      'tabs:previous': () => onTabPrev?.(),
+      'tabs:next': () => onTabNext?.(),
+    },
+    { context: 'Tabs', isActive: !isInNotesInput && !isFooterFocused },
+  );
 
   // Re-submit the answer (plain label) when exiting notes input.
   // Notes are stored in questionStates and collected at submit time via annotations.
@@ -143,98 +156,122 @@ export function PreviewQuestionView({
       onAnswer(questionText, selectedValue);
     }
   }, [selectedValue, questionText, onAnswer, onTextInputFocus]);
+
   const handleDownFromPreview = useCallback(() => {
     setIsFooterFocused(true);
   }, []);
+
   const handleUpFromFooter = useCallback(() => {
     setIsFooterFocused(false);
   }, []);
 
   // Handle keyboard input for option/footer/notes navigation.
   // Always active — the handler routes internally based on isFooterFocused/isInNotesInput.
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (isFooterFocused) {
-      if (e.key === 'up' || e.ctrl && e.key === 'p') {
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (isFooterFocused) {
+        if (e.key === 'up' || (e.ctrl && e.key === 'p')) {
+          e.preventDefault();
+          if (footerIndex === 0) {
+            handleUpFromFooter();
+          } else {
+            setFooterIndex(0);
+          }
+          return;
+        }
+
+        if (e.key === 'down' || (e.ctrl && e.key === 'n')) {
+          e.preventDefault();
+          if (isInPlanMode && footerIndex === 0) {
+            setFooterIndex(1);
+          }
+          return;
+        }
+
+        if (e.key === 'return') {
+          e.preventDefault();
+          if (footerIndex === 0) {
+            onRespondToGakrCLI();
+          } else {
+            onFinishPlanInterview();
+          }
+          return;
+        }
+
+        if (e.key === 'escape') {
+          e.preventDefault();
+          onCancel();
+        }
+        return;
+      }
+
+      if (isInNotesInput) {
+        // In notes input mode, handle escape to exit back to option navigation
+        if (e.key === 'escape') {
+          e.preventDefault();
+          handleNotesExit();
+        }
+        return;
+      }
+
+      // Handle option navigation (vertical)
+      if (e.key === 'up' || (e.ctrl && e.key === 'p')) {
         e.preventDefault();
-        if (footerIndex === 0) {
-          handleUpFromFooter();
+        if (focusedIndex > 0) {
+          handleNavigate('up');
+        }
+      } else if (e.key === 'down' || (e.ctrl && e.key === 'n')) {
+        e.preventDefault();
+        if (focusedIndex === allOptions.length - 1) {
+          // At bottom of options, go to footer
+          handleDownFromPreview();
         } else {
-          setFooterIndex(0);
+          handleNavigate('down');
         }
-        return;
-      }
-      if (e.key === 'down' || e.ctrl && e.key === 'n') {
+      } else if (e.key === 'return') {
         e.preventDefault();
-        if (isInPlanMode && footerIndex === 0) {
-          setFooterIndex(1);
-        }
-        return;
-      }
-      if (e.key === 'return') {
+        handleSelectOption(focusedIndex);
+      } else if (e.key === 'n' && !e.ctrl && !e.meta) {
+        // Press 'n' to focus the notes input
         e.preventDefault();
-        if (footerIndex === 0) {
-          onRespondToGakrCLI();
-        } else {
-          onFinishPlanInterview();
-        }
-        return;
-      }
-      if (e.key === 'escape') {
+        setIsInNotesInput(true);
+        onTextInputFocus(true);
+      } else if (e.key === 'escape') {
         e.preventDefault();
         onCancel();
-      }
-      return;
-    }
-    if (isInNotesInput) {
-      // In notes input mode, handle escape to exit back to option navigation
-      if (e.key === 'escape') {
+      } else if (e.key.length === 1 && e.key >= '1' && e.key <= '9') {
         e.preventDefault();
-        handleNotesExit();
+        const idx = parseInt(e.key, 10) - 1;
+        if (idx < allOptions.length) {
+          handleNavigate(idx);
+        }
       }
-      return;
-    }
+    },
+    [
+      isFooterFocused,
+      footerIndex,
+      isInPlanMode,
+      isInNotesInput,
+      focusedIndex,
+      allOptions.length,
+      handleUpFromFooter,
+      handleDownFromPreview,
+      handleNavigate,
+      handleSelectOption,
+      handleNotesExit,
+      onRespondToGakrCLI,
+      onFinishPlanInterview,
+      onCancel,
+      onTextInputFocus,
+    ],
+  );
 
-    // Handle option navigation (vertical)
-    if (e.key === 'up' || e.ctrl && e.key === 'p') {
-      e.preventDefault();
-      if (focusedIndex > 0) {
-        handleNavigate('up');
-      }
-    } else if (e.key === 'down' || e.ctrl && e.key === 'n') {
-      e.preventDefault();
-      if (focusedIndex === allOptions.length - 1) {
-        // At bottom of options, go to footer
-        handleDownFromPreview();
-      } else {
-        handleNavigate('down');
-      }
-    } else if (e.key === 'return') {
-      e.preventDefault();
-      handleSelectOption(focusedIndex);
-    } else if (e.key === 'n' && !e.ctrl && !e.meta) {
-      // Press 'n' to focus the notes input
-      e.preventDefault();
-      setIsInNotesInput(true);
-      onTextInputFocus(true);
-    } else if (e.key === 'escape') {
-      e.preventDefault();
-      onCancel();
-    } else if (e.key.length === 1 && e.key >= '1' && e.key <= '9') {
-      e.preventDefault();
-      const idx_0 = parseInt(e.key, 10) - 1;
-      if (idx_0 < allOptions.length) {
-        handleNavigate(idx_0);
-      }
-    }
-  }, [isFooterFocused, footerIndex, isInPlanMode, isInNotesInput, focusedIndex, allOptions.length, handleUpFromFooter, handleDownFromPreview, handleNavigate, handleSelectOption, handleNotesExit, onRespondToGakrCLI, onFinishPlanInterview, onCancel, onTextInputFocus]);
   const previewContent = focusedOption?.preview || null;
 
   // The right panel's available width is terminal minus the left panel and gap.
   const LEFT_PANEL_WIDTH = 30;
   const GAP = 4;
-  const {
-    columns
-  } = useTerminalSize();
+  const { columns } = useTerminalSize();
   const previewMaxWidth = columns - LEFT_PANEL_WIDTH - GAP;
 
   // Lines used within the content area that aren't preview content:
@@ -254,10 +291,17 @@ export function PreviewQuestionView({
   const previewMaxLines = useMemo(() => {
     return minContentHeight ? Math.max(1, minContentHeight - PREVIEW_OVERHEAD) : undefined;
   }, [minContentHeight]);
-  return <Box flexDirection="column" marginTop={1} tabIndex={0} autoFocus onKeyDown={handleKeyDown}>
+
+  return (
+    <Box flexDirection="column" marginTop={1} tabIndex={0} autoFocus onKeyDown={handleKeyDown}>
       <Divider color="inactive" />
       <Box flexDirection="column" paddingTop={0}>
-        <QuestionNavigationBar questions={questions} currentQuestionIndex={currentQuestionIndex} answers={answers} hideSubmitTab={hideSubmitTab} />
+        <QuestionNavigationBar
+          questions={questions}
+          currentQuestionIndex={currentQuestionIndex}
+          answers={answers}
+          hideSubmitTab={hideSubmitTab}
+        />
         <PermissionRequestTitle title={question.question} color={'text'} />
 
         <Box flexDirection="column" minHeight={minContentHeight}>
@@ -265,33 +309,54 @@ export function PreviewQuestionView({
           <Box marginTop={1} flexDirection="row" gap={4}>
             {/* Left panel: vertical option list */}
             <Box flexDirection="column" width={30}>
-              {allOptions.map((option_0, index_0) => {
-              const isFocused = focusedIndex === index_0;
-              const isSelected = selectedValue === option_0.label;
-              return <Box key={option_0.label} flexDirection="row">
+              {allOptions.map((option, index) => {
+                const isFocused = focusedIndex === index;
+                const isSelected = selectedValue === option.label;
+
+                return (
+                  <Box key={option.label} flexDirection="row">
                     {isFocused ? <Text color="suggestion">{figures.pointer}</Text> : <Text> </Text>}
-                    <Text dimColor> {index_0 + 1}.</Text>
+                    <Text dimColor> {index + 1}.</Text>
                     <Text color={isSelected ? 'success' : isFocused ? 'suggestion' : undefined} bold={isFocused}>
                       {' '}
-                      {option_0.label}
+                      {option.label}
                     </Text>
                     {isSelected && <Text color="success"> {figures.tick}</Text>}
-                  </Box>;
-            })}
+                  </Box>
+                );
+              })}
             </Box>
 
             {/* Right panel: preview + notes */}
             <Box flexDirection="column" flexGrow={1}>
-              <PreviewBox content={previewContent || 'No preview available'} maxLines={previewMaxLines} minWidth={minContentWidth} maxWidth={previewMaxWidth} />
+              <PreviewBox
+                content={previewContent || 'No preview available'}
+                maxLines={previewMaxLines}
+                minWidth={minContentWidth}
+                maxWidth={previewMaxWidth}
+              />
               <Box marginTop={1} flexDirection="row" gap={1}>
                 <Text color="suggestion">Notes:</Text>
-                {isInNotesInput ? <TextInput value={notesValue} placeholder="Add notes on this design…" onChange={value => {
-                onUpdateQuestionState(questionText, {
-                  textInputValue: value
-                }, false);
-              }} onSubmit={handleNotesExit} onExit={handleNotesExit} focus={true} showCursor={true} columns={60} cursorOffset={cursorOffset} onChangeCursorOffset={setCursorOffset} /> : <Text dimColor italic>
+                {isInNotesInput ? (
+                  <TextInput
+                    value={notesValue}
+                    placeholder="Add notes on this design…"
+                    onChange={value => {
+                      onUpdateQuestionState(questionText, { textInputValue: value }, false);
+                    }}
+                    onSubmit={handleNotesExit}
+                    onExit={handleNotesExit}
+                    focus={true}
+                    showCursor={true}
+                    columns={60}
+                    cursorOffset={cursorOffset}
+                    onChangeCursorOffset={setCursorOffset}
+                  />
+                ) : (
+                  <Text dimColor italic>
                     {notesValue || 'press n to add notes'}
-                  </Text>}
+                  </Text>
+                )}
               </Box>
             </Box>
           </Box>
@@ -300,28 +365,35 @@ export function PreviewQuestionView({
           <Box flexDirection="column" marginTop={1}>
             <Divider color="inactive" />
             <Box flexDirection="row" gap={1}>
-              {isFooterFocused && footerIndex === 0 ? <Text color="suggestion">{figures.pointer}</Text> : <Text> </Text>}
-              <Text color={isFooterFocused && footerIndex === 0 ? 'suggestion' : undefined}>
-                Chat about this
-              </Text>
+              {isFooterFocused && footerIndex === 0 ? (
+                <Text color="suggestion">{figures.pointer}</Text>
+              ) : (
+                <Text> </Text>
+              )}
+              <Text color={isFooterFocused && footerIndex === 0 ? 'suggestion' : undefined}>Chat about this</Text>
             </Box>
-            {isInPlanMode && <Box flexDirection="row" gap={1}>
-                {isFooterFocused && footerIndex === 1 ? <Text color="suggestion">{figures.pointer}</Text> : <Text> </Text>}
+            {isInPlanMode && (
+              <Box flexDirection="row" gap={1}>
+                {isFooterFocused && footerIndex === 1 ? (
+                  <Text color="suggestion">{figures.pointer}</Text>
+                ) : (
+                  <Text> </Text>
+                )}
                 <Text color={isFooterFocused && footerIndex === 1 ? 'suggestion' : undefined}>
                   Skip interview and plan immediately
                 </Text>
-              </Box>}
+              </Box>
+            )}
           </Box>
           <Box marginTop={1}>
             <Text color="inactive" dimColor>
-              Enter to select · {figures.arrowUp}/{figures.arrowDown} to
-              navigate · n to add notes
+              Enter to select · {figures.arrowUp}/{figures.arrowDown} to navigate · n to add notes
               {questions.length > 1 && <> · Tab to switch questions</>}
-              {isInNotesInput && editorName && <> · ctrl+g to edit in {editorName}</>}{' '}
-              · Esc to cancel
+              {isInNotesInput && editorName && <> · ctrl+g to edit in {editorName}</>} · Esc to cancel
             </Text>
           </Box>
         </Box>
       </Box>
-    </Box>;
+    </Box>
+  );
 }
