@@ -1,6 +1,6 @@
-import { c as _c } from "react-compiler-runtime";
 import React, { createContext, useCallback, useContext, useEffect, useMemo } from 'react';
 import { saveCurrentProjectConfig } from '../utils/config.js';
+
 export type StatsStore = {
   increment(name: string, value?: number): void;
   set(name: string, value: number): void;
@@ -8,8 +8,9 @@ export type StatsStore = {
   add(name: string, value: string): void;
   getAll(): Record<string, number>;
 };
+
 function percentile(sorted: number[], p: number): number {
-  const index = p / 100 * (sorted.length - 1);
+  const index = (p / 100) * (sorted.length - 1);
   const lower = Math.floor(index);
   const upper = Math.ceil(index);
   if (lower === upper) {
@@ -17,7 +18,9 @@ function percentile(sorted: number[], p: number): number {
   }
   return sorted[lower]! + (sorted[upper]! - sorted[lower]!) * (index - lower);
 }
+
 const RESERVOIR_SIZE = 1024;
+
 type Histogram = {
   reservoir: number[];
   count: number;
@@ -25,10 +28,12 @@ type Histogram = {
   min: number;
   max: number;
 };
+
 export function createStatsStore(): StatsStore {
   const metrics = new Map<string, number>();
   const histograms = new Map<string, Histogram>();
   const sets = new Map<string, Set<string>>();
+
   return {
     increment(name: string, value = 1) {
       metrics.set(name, (metrics.get(name) ?? 0) + value);
@@ -39,13 +44,7 @@ export function createStatsStore(): StatsStore {
     observe(name: string, value: number) {
       let h = histograms.get(name);
       if (!h) {
-        h = {
-          reservoir: [],
-          count: 0,
-          sum: 0,
-          min: value,
-          max: value
-        };
+        h = { reservoir: [], count: 0, sum: 0, min: value, max: value };
         histograms.set(name, h);
       }
       h.count++;
@@ -76,6 +75,7 @@ export function createStatsStore(): StatsStore {
     },
     getAll() {
       const result: Record<string, number> = Object.fromEntries(metrics);
+
       for (const [name, h] of histograms) {
         if (h.count === 0) {
           continue;
@@ -89,131 +89,65 @@ export function createStatsStore(): StatsStore {
         result[`${name}_p95`] = percentile(sorted, 95);
         result[`${name}_p99`] = percentile(sorted, 99);
       }
+
       for (const [name, s] of sets) {
         result[name] = s.size;
       }
+
       return result;
-    }
+    },
   };
 }
+
 export const StatsContext = createContext<StatsStore | null>(null);
+
 type Props = {
   store?: StatsStore;
   children: React.ReactNode;
 };
-export function StatsProvider(t0) {
-  const $ = _c(7);
-  const {
-    store: externalStore,
-    children
-  } = t0;
-  let t1;
-  if ($[0] === Symbol.for("react.memo_cache_sentinel")) {
-    t1 = createStatsStore();
-    $[0] = t1;
-  } else {
-    t1 = $[0];
-  }
-  const internalStore = t1;
+
+export function StatsProvider({ store: externalStore, children }: Props): React.ReactNode {
+  const internalStore = useMemo(() => createStatsStore(), []);
   const store = externalStore ?? internalStore;
-  let t2;
-  let t3;
-  if ($[1] !== store) {
-    t2 = () => {
-      const flush = () => {
-        const metrics = store.getAll();
-        if (Object.keys(metrics).length > 0) {
-          saveCurrentProjectConfig(current => ({
-            ...current,
-            lastSessionMetrics: metrics
-          }));
-        }
-      };
-      process.on("exit", flush);
-      return () => {
-        process.off("exit", flush);
-      };
+
+  useEffect(() => {
+    const flush = () => {
+      const metrics = store.getAll();
+      if (Object.keys(metrics).length > 0) {
+        saveCurrentProjectConfig(current => ({
+          ...current,
+          lastSessionMetrics: metrics,
+        }));
+      }
     };
-    t3 = [store];
-    $[1] = store;
-    $[2] = t2;
-    $[3] = t3;
-  } else {
-    t2 = $[2];
-    t3 = $[3];
-  }
-  useEffect(t2, t3);
-  let t4;
-  if ($[4] !== children || $[5] !== store) {
-    t4 = <StatsContext.Provider value={store}>{children}</StatsContext.Provider>;
-    $[4] = children;
-    $[5] = store;
-    $[6] = t4;
-  } else {
-    t4 = $[6];
-  }
-  return t4;
+    process.on('exit', flush);
+    return () => {
+      process.off('exit', flush);
+    };
+  }, [store]);
+
+  return <StatsContext.Provider value={store}>{children}</StatsContext.Provider>;
 }
-export function useStats() {
+
+export function useStats(): StatsStore {
   const store = useContext(StatsContext);
   if (!store) {
-    throw new Error("useStats must be used within a StatsProvider");
+    throw new Error('useStats must be used within a StatsProvider');
   }
   return store;
 }
-export function useCounter(name) {
-  const $ = _c(3);
+
+export function useGauge(name: string): (value: number) => void {
   const store = useStats();
-  let t0;
-  if ($[0] !== name || $[1] !== store) {
-    t0 = value => store.increment(name, value);
-    $[0] = name;
-    $[1] = store;
-    $[2] = t0;
-  } else {
-    t0 = $[2];
-  }
-  return t0;
+  return useCallback((value: number) => store.set(name, value), [store, name]);
 }
-export function useGauge(name) {
-  const $ = _c(3);
+
+export function useTimer(name: string): (value: number) => void {
   const store = useStats();
-  let t0;
-  if ($[0] !== name || $[1] !== store) {
-    t0 = value => store.set(name, value);
-    $[0] = name;
-    $[1] = store;
-    $[2] = t0;
-  } else {
-    t0 = $[2];
-  }
-  return t0;
+  return useCallback((value: number) => store.observe(name, value), [store, name]);
 }
-export function useTimer(name) {
-  const $ = _c(3);
+
+export function useSet(name: string): (value: string) => void {
   const store = useStats();
-  let t0;
-  if ($[0] !== name || $[1] !== store) {
-    t0 = value => store.observe(name, value);
-    $[0] = name;
-    $[1] = store;
-    $[2] = t0;
-  } else {
-    t0 = $[2];
-  }
-  return t0;
-}
-export function useSet(name) {
-  const $ = _c(3);
-  const store = useStats();
-  let t0;
-  if ($[0] !== name || $[1] !== store) {
-    t0 = value => store.add(name, value);
-    $[0] = name;
-    $[1] = store;
-    $[2] = t0;
-  } else {
-    t0 = $[2];
-  }
-  return t0;
+  return useCallback((value: string) => store.add(name, value), [store, name]);
 }
