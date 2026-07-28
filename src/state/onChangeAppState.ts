@@ -78,7 +78,6 @@ export function onChangeAppState({
         ? newMode
         : null,
     )
-
     // CCR external_metadata must not receive internal-only mode names
     // (bubble, ungated auto). Externalize first — and skip
     // the CCR notify if the EXTERNAL mode didn't change (e.g.,
@@ -157,6 +156,18 @@ export function onChangeAppState({
       ...current,
       verbose,
     }))
+  }
+
+  // tungstenPanelVisible (ant-only tmux panel sticky toggle)
+  if (process.env.USER_TYPE === 'ant') {
+    if (
+      newState.tungstenPanelVisible !== oldState.tungstenPanelVisible &&
+      newState.tungstenPanelVisible !== undefined &&
+      getGlobalConfig().tungstenPanelVisible !== newState.tungstenPanelVisible
+    ) {
+      const tungstenPanelVisible = newState.tungstenPanelVisible
+      saveGlobalConfig(current => ({ ...current, tungstenPanelVisible }))
+    }
   }
 
   // settings: clear auth-related caches when settings change
