@@ -1,5 +1,4 @@
-import { c as _c } from "react-compiler-runtime";
-import React, { createContext, type RefObject, useContext, useLayoutEffect, useMemo } from 'react';
+import React, { createContext, type RefObject, useCallback, useContext, useLayoutEffect, useMemo } from 'react';
 import type { Key } from '../ink.js';
 import { type ChordResolveResult, getBindingDisplayText, resolveKeyWithChordState } from './resolver.js';
 import type { KeybindingContextName, ParsedBinding, ParsedKeystroke } from './types.js';
@@ -10,6 +9,7 @@ type HandlerRegistration = {
   context: KeybindingContextName;
   handler: () => void;
 };
+
 type KeybindingContextValue = {
   /** Resolve a key input to an action name (with chord support) */
   resolve: (input: string, key: Key, activeContexts: KeybindingContextName[]) => ChordResolveResult;
@@ -41,7 +41,9 @@ type KeybindingContextValue = {
   /** Invoke all handlers for an action (used by ChordInterceptor) */
   invokeAction: (action: string) => boolean;
 };
+
 const KeybindingContext = createContext<KeybindingContextValue | null>(null);
+
 type ProviderProps = {
   bindings: ParsedBinding[];
   /** Ref for immediate access to pending chord (avoids React state delay) */
@@ -56,39 +58,34 @@ type ProviderProps = {
   handlerRegistryRef: RefObject<Map<string, Set<HandlerRegistration>>>;
   children: React.ReactNode;
 };
-export function KeybindingProvider(t0) {
-  const $ = _c(24);
-  const {
-    bindings,
-    pendingChordRef,
-    pendingChord,
-    setPendingChord,
-    activeContexts,
-    registerActiveContext,
-    unregisterActiveContext,
-    handlerRegistryRef,
-    children
-  } = t0;
-  let t1;
-  if ($[0] !== bindings) {
-    t1 = (action, context) => getBindingDisplayText(action, context, bindings);
-    $[0] = bindings;
-    $[1] = t1;
-  } else {
-    t1 = $[1];
-  }
-  const getDisplay = t1;
-  let t2;
-  if ($[2] !== handlerRegistryRef) {
-    t2 = registration => {
+
+export function KeybindingProvider({
+  bindings,
+  pendingChordRef,
+  pendingChord,
+  setPendingChord,
+  activeContexts,
+  registerActiveContext,
+  unregisterActiveContext,
+  handlerRegistryRef,
+  children,
+}: ProviderProps): React.ReactNode {
+  const getDisplay = useCallback(
+    (action: string, context: KeybindingContextName) =>
+      getBindingDisplayText(action, context, bindings),
+    [bindings],
+  );
+
+  const registerHandler = useCallback(
+    (registration: HandlerRegistration): (() => void) => {
       const registry = handlerRegistryRef.current;
       if (!registry) {
-        return _temp;
+        return () => {};
       }
       if (!registry.has(registration.action)) {
         registry.set(registration.action, new Set());
       }
-      registry.get(registration.action).add(registration);
+      registry.get(registration.action)!.add(registration);
       return () => {
         const handlers = registry.get(registration.action);
         if (handlers) {
@@ -98,52 +95,36 @@ export function KeybindingProvider(t0) {
           }
         }
       };
-    };
-    $[2] = handlerRegistryRef;
-    $[3] = t2;
-  } else {
-    t2 = $[3];
-  }
-  const registerHandler = t2;
-  let t3;
-  if ($[4] !== activeContexts || $[5] !== handlerRegistryRef) {
-    t3 = action_0 => {
-      const registry_0 = handlerRegistryRef.current;
-      if (!registry_0) {
-        return false;
-      }
-      const handlers_0 = registry_0.get(action_0);
-      if (!handlers_0 || handlers_0.size === 0) {
-        return false;
-      }
-      for (const registration_0 of handlers_0) {
-        if (activeContexts.has(registration_0.context)) {
-          registration_0.handler();
+    },
+    [handlerRegistryRef],
+  );
+
+  const invokeAction = useCallback(
+    (action: string): boolean => {
+      const registry = handlerRegistryRef.current;
+      if (!registry) return false;
+      const handlers = registry.get(action);
+      if (!handlers || handlers.size === 0) return false;
+      for (const registration of handlers) {
+        if (activeContexts.has(registration.context)) {
+          registration.handler();
           return true;
         }
       }
       return false;
-    };
-    $[4] = activeContexts;
-    $[5] = handlerRegistryRef;
-    $[6] = t3;
-  } else {
-    t3 = $[6];
-  }
-  const invokeAction = t3;
-  let t4;
-  if ($[7] !== bindings || $[8] !== pendingChordRef) {
-    t4 = (input, key, contexts) => resolveKeyWithChordState(input, key, contexts, bindings, pendingChordRef.current);
-    $[7] = bindings;
-    $[8] = pendingChordRef;
-    $[9] = t4;
-  } else {
-    t4 = $[9];
-  }
-  let t5;
-  if ($[10] !== activeContexts || $[11] !== bindings || $[12] !== getDisplay || $[13] !== invokeAction || $[14] !== pendingChord || $[15] !== registerActiveContext || $[16] !== registerHandler || $[17] !== setPendingChord || $[18] !== t4 || $[19] !== unregisterActiveContext) {
-    t5 = {
-      resolve: t4,
+    },
+    [activeContexts, handlerRegistryRef],
+  );
+
+  const resolve = useCallback(
+    (input: string, key: Key, contexts: KeybindingContextName[]): ChordResolveResult =>
+      resolveKeyWithChordState(input, key, contexts, bindings, pendingChordRef.current),
+    [bindings, pendingChordRef],
+  );
+
+  const value = useMemo(
+    () => ({
+      resolve,
       setPendingChord,
       getDisplayText: getDisplay,
       bindings,
@@ -152,39 +133,33 @@ export function KeybindingProvider(t0) {
       registerActiveContext,
       unregisterActiveContext,
       registerHandler,
-      invokeAction
-    };
-    $[10] = activeContexts;
-    $[11] = bindings;
-    $[12] = getDisplay;
-    $[13] = invokeAction;
-    $[14] = pendingChord;
-    $[15] = registerActiveContext;
-    $[16] = registerHandler;
-    $[17] = setPendingChord;
-    $[18] = t4;
-    $[19] = unregisterActiveContext;
-    $[20] = t5;
-  } else {
-    t5 = $[20];
-  }
-  const value = t5;
-  let t6;
-  if ($[21] !== children || $[22] !== value) {
-    t6 = <KeybindingContext.Provider value={value}>{children}</KeybindingContext.Provider>;
-    $[21] = children;
-    $[22] = value;
-    $[23] = t6;
-  } else {
-    t6 = $[23];
-  }
-  return t6;
+      invokeAction,
+    }),
+    [
+      resolve,
+      setPendingChord,
+      getDisplay,
+      bindings,
+      pendingChord,
+      activeContexts,
+      registerActiveContext,
+      unregisterActiveContext,
+      registerHandler,
+      invokeAction,
+    ],
+  );
+
+  return (
+    <KeybindingContext.Provider value={value}>
+      {children}
+    </KeybindingContext.Provider>
+  );
 }
-function _temp() {}
+
 export function useKeybindingContext() {
   const ctx = useContext(KeybindingContext);
   if (!ctx) {
-    throw new Error("useKeybindingContext must be used within KeybindingProvider");
+    throw new Error('useKeybindingContext must be used within KeybindingProvider');
   }
   return ctx;
 }
@@ -212,31 +187,15 @@ export function useOptionalKeybindingContext() {
  * }
  * ```
  */
-export function useRegisterKeybindingContext(context, t0) {
-  const $ = _c(5);
-  const isActive = t0 === undefined ? true : t0;
+export function useRegisterKeybindingContext(context: KeybindingContextName, isActive?: boolean) {
   const keybindingContext = useOptionalKeybindingContext();
-  let t1;
-  let t2;
-  if ($[0] !== context || $[1] !== isActive || $[2] !== keybindingContext) {
-    t1 = () => {
-      if (!keybindingContext || !isActive) {
-        return;
-      }
-      keybindingContext.registerActiveContext(context);
-      return () => {
-        keybindingContext.unregisterActiveContext(context);
-      };
+  const effectiveIsActive = isActive ?? true;
+
+  useLayoutEffect(() => {
+    if (!keybindingContext || !effectiveIsActive) return;
+    keybindingContext.registerActiveContext(context);
+    return () => {
+      keybindingContext.unregisterActiveContext(context);
     };
-    t2 = [context, keybindingContext, isActive];
-    $[0] = context;
-    $[1] = isActive;
-    $[2] = keybindingContext;
-    $[3] = t1;
-    $[4] = t2;
-  } else {
-    t1 = $[3];
-    t2 = $[4];
-  }
-  useLayoutEffect(t1, t2);
+  }, [context, keybindingContext, effectiveIsActive]);
 }

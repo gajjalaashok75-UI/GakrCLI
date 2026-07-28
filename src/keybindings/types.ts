@@ -13,6 +13,7 @@ export type KeybindingContextName =
   | 'Scroll'
   | 'Attachments'
   | 'Footer'
+  | 'FormField'
   | 'MessageSelector'
   | 'MessageActions'
   | 'DiffDialog'
