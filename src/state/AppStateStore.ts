@@ -37,6 +37,7 @@ import type { PermissionMode } from '../utils/permissions/PermissionMode.js'
 import { getInitialSettings } from '../utils/settings/settings.js'
 import type { SettingsJson } from '../utils/settings/types.js'
 import { shouldEnableThinkingByDefault } from '../utils/thinking.js'
+import type { PipeIpcState } from '../utils/pipeTransport.js'
 import type { Store } from './store.js'
 import type { GoalState } from '../services/goal/types.js'
 
@@ -87,6 +88,7 @@ export type FooterItem =
   | 'teams'
   | 'bridge'
   | 'companion'
+  | 'bg_agent'
 
 export type AppState = DeepImmutable<{
   settings: SettingsJson
@@ -99,6 +101,9 @@ export type AppState = DeepImmutable<{
   // Optional - only present when ENABLE_AGENT_SWARMS is true (for dead code elimination)
   showTeammateMessagePreview?: boolean
   selectedIPAgentIndex: number
+  // Selection index for the bottom BackgroundAgentSelector.
+  // -1 = main, 0..N-1 = index into useBackgroundAgentTasks().
+  selectedBgAgentIndex: number
   // CoordinatorTaskPanel selection: -1 = pill, 0 = main, 1..N = agent rows.
   // AppState (not local) so the panel can read it directly without prop-drilling
   // through PromptInput → PromptInputFooter.
@@ -110,6 +115,7 @@ export type AppState = DeepImmutable<{
   footerSelection: FooterItem | null
   toolPermissionContext: ToolPermissionContext
   spinnerTip?: string
+  // Agent name from --agent CLI flag or settings (for logo display)
   // Active main-thread agent name for this session. Initially sourced from
   // --agent/settings; runtime menu changes update it alongside REPL state.
   agent: string | undefined
@@ -158,6 +164,8 @@ export type AppState = DeepImmutable<{
   replBridgeInitialName: string | undefined
   // Always-on bridge: first-time remote dialog pending (set by /remote-control command)
   showRemoteCallout: boolean
+  // Pipe IPC state — added at runtime when feature('PIPE_IPC') is enabled.
+  pipeIpc?: PipeIpcState
 }> & {
   // Unified task state - excluded from DeepImmutable because TaskState contains function types
   tasks: { [taskId: string]: TaskState }
@@ -168,6 +176,7 @@ export type AppState = DeepImmutable<{
   foregroundedTaskId?: string
   // Task ID of in-process teammate whose transcript is being viewed (undefined = leader's view)
   viewingAgentTaskId?: string
+  // Latest companion reaction from buddy_react API (src/buddy/companionReact.ts)
   // Latest companion reaction from the friend observer (src/buddy/observer.ts)
   companionReaction?: string
   // Timestamp of last /buddy pet — CompanionSprite renders hearts while recent
@@ -461,8 +470,13 @@ export type AppStateStore = Store<AppState>
 
 export function getDefaultAppState(): AppState {
   // Determine initial permission mode for teammates spawned with plan_mode_required
+  // Use lazy require to avoid circular dependency with teammate.ts
+  /* eslint-disable @typescript-eslint/no-require-imports */
+  const teammateUtils =
+    require('../utils/teammate.js') as typeof import('../utils/teammate.js')
+  /* eslint-enable @typescript-eslint/no-require-imports */
   const initialMode: PermissionMode =
-    isTeammate() && isPlanModeRequired()
+    teammateUtils.isTeammate() && teammateUtils.isPlanModeRequired()
       ? 'plan'
       : 'default'
 
@@ -478,6 +492,7 @@ export function getDefaultAppState(): AppState {
     isBriefOnly: false,
     showTeammateMessagePreview: false,
     selectedIPAgentIndex: -1,
+    selectedBgAgentIndex: -1,
     coordinatorTaskIndex: -1,
     viewSelectionMode: 'none',
     footerSelection: null,
