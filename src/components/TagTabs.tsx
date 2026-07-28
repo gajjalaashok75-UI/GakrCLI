@@ -15,8 +15,10 @@ const MAX_OVERFLOW_DIGITS = 2; // Assume max 99 hidden tabs for width calculatio
 
 // Computed widths
 const LEFT_ARROW_WIDTH = LEFT_ARROW_PREFIX.length + MAX_OVERFLOW_DIGITS + 1; // "← NN " with gap
-const RIGHT_HINT_WIDTH_WITH_COUNT = RIGHT_HINT_WITH_COUNT_PREFIX.length + MAX_OVERFLOW_DIGITS + RIGHT_HINT_SUFFIX.length; // "→NN (tab to cycle)"
+const RIGHT_HINT_WIDTH_WITH_COUNT =
+  RIGHT_HINT_WITH_COUNT_PREFIX.length + MAX_OVERFLOW_DIGITS + RIGHT_HINT_SUFFIX.length; // "→NN (tab to cycle)"
 const RIGHT_HINT_WIDTH_NO_COUNT = RIGHT_HINT_NO_COUNT.length;
+
 type Props = {
   tabs: string[];
   selectedIndex: number;
@@ -51,12 +53,8 @@ function truncateTag(tag: string, maxWidth: number): string {
   }
   return truncateToWidth(tag, availableForTag);
 }
-export function TagTabs({
-  tabs,
-  selectedIndex,
-  availableWidth,
-  showAllProjects = false
-}: Props): React.ReactNode {
+
+export function TagTabs({ tabs, selectedIndex, availableWidth, showAllProjects = false }: Props): React.ReactNode {
   const resumeLabel = showAllProjects ? 'Resume (All Projects)' : 'Resume';
   const resumeLabelWidth = resumeLabel.length + 1; // +1 for gap
 
@@ -91,6 +89,7 @@ export function TagTabs({
     while (startIndex > 0 || endIndex < tabs.length) {
       const canExpandLeft = startIndex > 0;
       const canExpandRight = endIndex < tabs.length;
+
       if (canExpandLeft) {
         const leftWidth = (tabWidths[startIndex - 1] ?? 0) + 1; // +1 for gap
         if (windowWidth + leftWidth <= effectiveMaxWidth) {
@@ -99,6 +98,7 @@ export function TagTabs({
           continue;
         }
       }
+
       if (canExpandRight) {
         const rightWidth = (tabWidths[endIndex] ?? 0) + 1; // +1 for gap
         if (windowWidth + rightWidth <= effectiveMaxWidth) {
@@ -107,32 +107,50 @@ export function TagTabs({
           continue;
         }
       }
+
       break;
     }
   }
+
   const hiddenLeft = startIndex;
   const hiddenRight = tabs.length - endIndex;
   const visibleTabs = tabs.slice(startIndex, endIndex);
-  const visibleIndices = visibleTabs.map((_, i_0) => startIndex + i_0);
-  return <Box flexDirection="row" gap={1}>
+  const visibleIndices = visibleTabs.map((_, i) => startIndex + i);
+
+  return (
+    <Box flexDirection="row" gap={1}>
       <Text color="suggestion">{resumeLabel}</Text>
-      {hiddenLeft > 0 && <Text dimColor>
+      {hiddenLeft > 0 && (
+        <Text dimColor>
           {LEFT_ARROW_PREFIX}
           {hiddenLeft}
-        </Text>}
-      {visibleTabs.map((tab_0, i_1) => {
-      const actualIndex = visibleIndices[i_1]!;
-      const isSelected = actualIndex === safeSelectedIndex;
-      const displayText = tab_0 === ALL_TAB_LABEL ? tab_0 : `#${truncateTag(tab_0, maxSingleTabWidth - TAB_PADDING)}`;
-      return <Text key={tab_0} backgroundColor={isSelected ? 'suggestion' : undefined} color={isSelected ? 'inverseText' : undefined} bold={isSelected}>
+        </Text>
+      )}
+      {visibleTabs.map((tab, i) => {
+        const actualIndex = visibleIndices[i]!;
+        const isSelected = actualIndex === safeSelectedIndex;
+        const displayText = tab === ALL_TAB_LABEL ? tab : `#${truncateTag(tab, maxSingleTabWidth - TAB_PADDING)}`;
+        return (
+          <Text
+            key={tab}
+            backgroundColor={isSelected ? 'suggestion' : undefined}
+            color={isSelected ? 'inverseText' : undefined}
+            bold={isSelected}
+          >
             {' '}
             {displayText}{' '}
-          </Text>;
-    })}
-      {hiddenRight > 0 ? <Text dimColor>
+          </Text>
+        );
+      })}
+      {hiddenRight > 0 ? (
+        <Text dimColor>
           {RIGHT_HINT_WITH_COUNT_PREFIX}
           {hiddenRight}
           {RIGHT_HINT_SUFFIX}
-        </Text> : <Text dimColor>{RIGHT_HINT_NO_COUNT}</Text>}
-    </Box>;
+        </Text>
+      ) : (
+        <Text dimColor>{RIGHT_HINT_NO_COUNT}</Text>
+      )}
+    </Box>
+  );
 }

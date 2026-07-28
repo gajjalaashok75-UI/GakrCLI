@@ -31,9 +31,11 @@ const LEVEL_BOOST = 1.8;
 // grey. computeLevel returns sqrt(rms/2000), so ambient mic noise
 // typically sits at 0.05-0.15. Speech starts around 0.2+.
 const SILENCE_THRESHOLD = 0.15;
+
 export type Props = BaseTextInputProps & {
   highlights?: TextHighlight[];
 };
+
 export default function TextInput(props: Props): React.ReactNode {
   const [theme] = useTheme();
   const isTerminalFocused = useTerminalFocus();
@@ -69,26 +71,19 @@ export default function TextInput(props: Props): React.ReactNode {
   } else if (isVoiceRecording && !reducedMotion) {
     // Single-bar waveform from the latest audio level
     const smoothed = smoothedRef.current;
-    const raw = audioLevels.length > 0 ? audioLevels[audioLevels.length - 1] ?? 0 : 0;
+    const raw = audioLevels.length > 0 ? (audioLevels[audioLevels.length - 1] ?? 0) : 0;
     const target = Math.min(raw * LEVEL_BOOST, 1);
     smoothed[0] = (smoothed[0] ?? 0) * SMOOTH + target * (1 - SMOOTH);
     const displayLevel = smoothed[0] ?? 0;
     const barIndex = Math.max(1, Math.min(Math.round(displayLevel * (BARS.length - 1)), BARS.length - 1));
     const isSilent = raw < SILENCE_THRESHOLD;
-    const hue = animTime / 1000 * 90 % 360;
-    const {
-      r,
-      g,
-      b
-    } = isSilent ? {
-      r: 128,
-      g: 128,
-      b: 128
-    } : hueToRgb(hue);
+    const hue = ((animTime / 1000) * 90) % 360;
+    const { r, g, b } = isSilent ? { r: 128, g: 128, b: 128 } : hueToRgb(hue);
     invert = () => chalk.rgb(r, g, b)(BARS[barIndex]!);
   } else {
     invert = chalk.inverse;
   }
+
   const textInputState = useTextInput({
     value: props.value,
     onChange: props.onChange,
@@ -115,9 +110,19 @@ export default function TextInput(props: Props): React.ReactNode {
     onOffsetChange: props.onChangeCursorOffset,
     inputFilter: props.inputFilter,
     inlineGhostText: props.inlineGhostText,
-    dim: chalk.dim
+    dim: chalk.dim,
   });
-  return <Box ref={animRef}>
-      <BaseTextInput inputState={textInputState} terminalFocus={isTerminalFocused} highlights={props.highlights} invert={invert} hidePlaceholderText={isVoiceRecording} {...props} />
-    </Box>;
+
+  return (
+    <Box ref={animRef}>
+      <BaseTextInput
+        inputState={textInputState}
+        terminalFocus={isTerminalFocused}
+        highlights={props.highlights}
+        invert={invert}
+        hidePlaceholderText={isVoiceRecording}
+        {...props}
+      />
+    </Box>
+  );
 }

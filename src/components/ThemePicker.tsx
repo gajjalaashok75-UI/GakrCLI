@@ -38,7 +38,7 @@ export type ThemePickerProps = {
   skipExitHandling?: boolean;
   /** Called when the user cancels (presses Escape). If skipExitHandling is true and this is provided, it will be called instead of just saving the preview. */
   onCancel?: () => void;
-}
+};
 
 const DEMO_PATCH: StructuredPatchHunk = {
   oldStart: 1,
@@ -66,57 +66,45 @@ export function ThemePicker({
   hideEscToCancel = false,
   skipExitHandling = false,
   onCancel: onCancelProp,
-}: ThemePickerProps) {
+}: ThemePickerProps): React.ReactNode {
   const [theme] = useTheme();
   const themeSetting = useThemeSetting();
   const { columns } = useTerminalSize();
-  const colorModuleUnavailableReason = React.useMemo(
-    () => getColorModuleUnavailableReason(),
-    [],
-  )
-  const syntaxTheme =
-    colorModuleUnavailableReason === null ? getSyntaxTheme(theme) : null
-  const { setPreviewTheme, savePreview, cancelPreview } = usePreviewTheme()
-  const syntaxHighlightingDisabled = useAppState(
-    (s: AppState) => s.settings.syntaxHighlightingDisabled ?? false
-  );
+  const colorModuleUnavailableReason = getColorModuleUnavailableReason();
+  const syntaxTheme = colorModuleUnavailableReason === null ? getSyntaxTheme(theme) : null;
+  const { setPreviewTheme, savePreview, cancelPreview } = usePreviewTheme();
+  const syntaxHighlightingDisabled = useAppState(s => s.settings.syntaxHighlightingDisabled) ?? false;
   const setAppState = useSetAppState();
+
+  // Register ThemePicker context so its keybindings take precedence over Global
   useRegisterKeybindingContext("ThemePicker", true);
-  const syntaxToggleShortcut = useShortcutDisplay("theme:toggleSyntaxHighlighting", "ThemePicker", "ctrl+t");
 
-  const toggleSyntax = React.useCallback(() => {
-    if (colorModuleUnavailableReason === null) {
-      const newValue = !syntaxHighlightingDisabled
-      updateSettingsForSource("userSettings", {
-        syntaxHighlightingDisabled: newValue
-      });
-      setAppState(prev => ({
-        ...prev,
-        settings: {
-          ...prev.settings,
-          syntaxHighlightingDisabled: newValue
-        }
-      }));
-    }
-  }, [
-    colorModuleUnavailableReason,
-    syntaxHighlightingDisabled,
-    setAppState,
-  ])
+  const syntaxToggleShortcut = useShortcutDisplay('theme:toggleSyntaxHighlighting', 'ThemePicker', 'ctrl+t');
 
-  useKeybinding("theme:toggleSyntaxHighlighting", toggleSyntax, {
-    context: "ThemePicker",
-  })
+  useKeybinding(
+    'theme:toggleSyntaxHighlighting',
+    () => {
+      if (colorModuleUnavailableReason === null) {
+        const newValue = !syntaxHighlightingDisabled;
+        updateSettingsForSource('userSettings', {
+          syntaxHighlightingDisabled: newValue,
+        });
+        setAppState(prev => ({
+          ...prev,
+          settings: { ...prev.settings, syntaxHighlightingDisabled: newValue },
+        }));
+      }
+    },
+    { context: 'ThemePicker' },
+  );
+  // Always call the hook to follow React rules, but conditionally assign the exit handler
+  const exitState = useExitOnCtrlCDWithKeybindings(skipExitHandling ? () => {} : undefined);
 
-  const exitState = useExitOnCtrlCDWithKeybindings(
-    skipExitHandling ? () => {} : undefined,
-  )
-
-  const themeOptions = React.useMemo(
+  const themeOptions: { label: string; value: ThemeSetting }[] = React.useMemo(
     () => [
-      ...(feature("AUTO_THEME")
-        ? [{ label: "Auto (match terminal)", value: "auto" as const }]
-        : []), { 
+    ...(feature('AUTO_THEME') 
+    ? [{ label: 'Auto (match terminal)', value: 'auto' as const }] 
+    : []), { 
         label: "Dark mode",
         value: "dark" as const 
       }, { 
@@ -191,13 +179,37 @@ export function ThemePicker({
   const content = (
     <Box flexDirection="column" gap={1}>
       <Box flexDirection="column" gap={1}>
-        {header}
-        {introBlock}
+        {showIntroText ? (
+          <Text>Let&apos;s get started.</Text>
+        ) : (
+          <Text bold color="permission">
+            Theme
+          </Text>
+        )}
+        <Box flexDirection="column">
+          <Text bold>Choose the text style that looks best with your terminal</Text>
+          {helpText && !showHelpTextBelow && <Text dimColor>{helpText}</Text>}
+        </Box>
         <Select
           options={themeOptions}
-          onFocus={handleRowFocus}
-          onChange={handleSelect}
-          onCancel={handleCancel}
+          onFocus={setting => {
+            setPreviewTheme(setting as ThemeSetting);
+          }}
+          onChange={(setting: string) => {
+            savePreview();
+            onThemeSelect(setting as ThemeSetting);
+          }}
+          onCancel={
+            skipExitHandling
+              ? () => {
+                  cancelPreview();
+                  onCancelProp?.();
+                }
+              : async () => {
+                  cancelPreview();
+                  await gracefulShutdown(0);
+                }
+          }
           visibleOptionCount={themeOptions.length}
           defaultValue={themeSetting}
           defaultFocusValue={themeSetting}
@@ -205,7 +217,6 @@ export function ThemePicker({
       </Box>
       <Box flexDirection="column" width="100%">
         <Box
-          key={theme}
           flexDirection="column"
           borderTop
           borderBottom
@@ -214,8 +225,19 @@ export function ThemePicker({
           borderStyle="dashed"
           borderColor="subtle"
         >
-          <StructuredDiffView
-            patch={DEMO_PATCH}
+          <StructuredDiff
+            patch={{
+              oldStart: 1,
+              newStart: 1,
+              oldLines: 3,
+              newLines: 3,
+              lines: [
+                ' function greet() {',
+                '-  console.log("Hello, World!");',
+                '+  console.log("Hello, Gakr!");',
+                ' }',
+              ],
+            }}
             dim={false}
             filePath="demo.js"
             firstLine={null}
@@ -224,38 +246,47 @@ export function ThemePicker({
         </Box>
         <Text dimColor>
           {' '}
-          {syntaxHint}
+          {colorModuleUnavailableReason === 'env'
+            ? `Syntax highlighting disabled (via GAKR_CODE_SYNTAX_HIGHLIGHT=${process.env.GAKR_CODE_SYNTAX_HIGHLIGHT})`
+            : syntaxHighlightingDisabled
+              ? `Syntax highlighting disabled (${syntaxToggleShortcut} to enable)`
+              : syntaxTheme
+                ? `Syntax theme: ${syntaxTheme.theme}${syntaxTheme.source ? ` (from ${syntaxTheme.source})` : ''} (${syntaxToggleShortcut} to disable)`
+                : `Syntax highlighting enabled (${syntaxToggleShortcut} to disable)`}
         </Text>
       </Box>
     </Box>
-  )
+  );
 
+  // Only wrap in a box when not in onboarding
   if (!showIntroText) {
     return (
       <>
         <Box flexDirection="column">{content}</Box>
-        {showHelpTextBelow && helpText ? (
-          <Box marginLeft={3}>
-            <Text dimColor>{helpText}</Text>
-          </Box>
-        ) : null}
-        {!hideEscToCancel ? (
-          <Box marginTop={1}>
-            <Text dimColor italic>
-              {exitState.pending ? (
-                <>Press {exitState.keyName} again to exit</>
-              ) : (
-                <Byline>
-                  <KeyboardShortcutHint shortcut="Enter" action="select" />
-                  <KeyboardShortcutHint shortcut="Esc" action="cancel" />
-                </Byline>
-              )}
-            </Text>
-          </Box>
-        ) : null}
+        <Box marginTop={1}>
+          {showHelpTextBelow && helpText && (
+            <Box marginLeft={3}>
+              <Text dimColor>{helpText}</Text>
+            </Box>
+          )}
+          {!hideEscToCancel && (
+            <Box>
+              <Text dimColor italic>
+                {exitState.pending ? (
+                  <>Press {exitState.keyName} again to exit</>
+                ) : (
+                  <Byline>
+                    <KeyboardShortcutHint shortcut="Enter" action="select" />
+                    <KeyboardShortcutHint shortcut="Esc" action="cancel" />
+                  </Byline>
+                )}
+              </Text>
+            </Box>
+          )}
+        </Box>
       </>
-    )
+    );
   }
 
-  return content
+  return content;
 }

@@ -1,4 +1,4 @@
-import React from 'react'
+import React from 'react';
 import { Box, Link, Text } from '../ink.js'
 import { Select } from './CustomSelect/index.js'
 import { Dialog } from './design-system/Dialog.js'
@@ -6,8 +6,8 @@ import { getAPIProvider, type APIProvider } from '../utils/model/providers.js'
 import { getCostThresholdProviderLabelForProvider } from './CostThresholdProviderLabel.js'
 
 type Props = {
-  onDone: () => void
-}
+  onDone: () => void;
+};
 
 export function getCostThresholdProviderLabel(
   provider: APIProvider = getAPIProvider(),
@@ -18,10 +18,7 @@ export function getCostThresholdProviderLabel(
 export function CostThresholdDialog({ onDone }: Props): React.ReactNode {
   const providerLabel = getCostThresholdProviderLabel()
   return (
-    <Dialog
-      title={`You've spent $5 on the ${providerLabel} this session.`}
-      onCancel={onDone}
-    >
+    <Dialog title={`You've spent $5 on the ${providerLabel} this session.`} onCancel={onDone}>
       <Box flexDirection="column">
         <Text>Learn more about how to monitor your spending:</Text>
         <Link url="https://code.gakrcli.com/docs/en/costs" />
@@ -36,5 +33,5 @@ export function CostThresholdDialog({ onDone }: Props): React.ReactNode {
         onChange={onDone}
       />
     </Dialog>
-  )
+  );
 }
