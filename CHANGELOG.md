@@ -9,18 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **src/entrypoints/sdk/toolTypes.ts**: Replaced empty stub `export type {}` with `SdkToolDefinition` type (name, description, inputSchema, index signature) — matches claude-code-main reference.
+- **src/buddy**: React compiler removal in `CompanionSprite.tsx` and `useBuddyNotification.tsx` — replaced `_c()` memoization with hand-written React. Migrated buddy-internal feature flag checks from `isBuddyEnabled()` wrapper to direct `feature('BUDDY')` calls. Added `seed?: string` to `CompanionSoul` type. Simplified `generateSeed()` to `rehatch-${Date.now()}-${Math.random()}` pattern.
+- **src/cli**: Major refactoring and feature wiring across CLI subsystem. `print.ts`: autonomy run / proactive agent lifecycle, cron scheduler refactoring (dedup-claim, input-close-recheck, unified dispatch), UDS inbox drain, SDK event flushing, effort level handling. `structuredIO.ts`: `resolvedToolUseIds` dedup set for duplicate control_response, `injectControlResponse` for bridge integration, `executePermissionRequestHooksForSDK`. `handlers/mcp.tsx`: biome-ignore cleanup, `getMcpClientConfig` for OAuth client_secret detection. `handlers/plugins.ts`: biome-ignore cleanup. `handlers/util.tsx`: react-compiler removal from `DoctorWithPlugins`. `handlers/autoMode.ts`: poor mode model fallback with `skipSystemPromptPrefix`. `transports/`: small fixes in SSE, WebSocket, Hybrid, ccrClient.
+- **src/hooks**: React compiler removal across 10+ hooks files (`useGlobalKeybindings`, `useIDEIntegration`, `useLspPluginRecommendation`, `usePluginRecommendationBase`, `useDeprecationWarningNotification`, `useFastModeNotification`, `useIDEStatusIndicator`, `useInstallMessages`, `useLspInitializationNotification`, `useMcpConnectivityStatus`, `useModelMigrationNotifications`, `useNpmDeprecationNotification`, `usePluginAutoupdateNotification`, `usePluginInstallationStatus`, `useSettingsErrors`, `useStartupNotification`, `useCommandKeybindings`, `useDirectConnect`, `useManagePlugins`, `useRemoteSession`, `useReplBridge`, `useSSHSession`, `useScheduledTasks`, `useSwarmPermissionPoller`, `useTeleportResume`, `useTurnDiffs`, `useVoice`, `useVoiceEnabled`, `useVoiceIntegration`, `interactiveHandler`, `permissionLogging`, `useBackgroundTaskNavigation`, `useIdeAtMentioned`, `useIdeLogging`, `useIdeSelection`, `useOfficialMarketplaceNotification`). Added new test file `interactiveHandler.test.ts`. Renamed `usePromptsFromClaudeInChrome` → `usePromptsFromgakrcliInChrome`.
 
 ### Fixed
 - **src/bootstrap/state.ts**: Changed `initialMainLoopModel` type from `ModelSetting` to `ModelSetting | null` to match actual initial value. Added `eslint-disable-next-line` for bootstrap-isolation rule on `require()` call (matching existing pattern).
 - **src/buddy/prompt.ts**: Removed unnecessary `!` non-null assertions on `msg.attachment` — type narrows correctly via discriminated union.
 - **src/buddy/observer.ts**: Removed misleading `async` from `fireCompanionObserver` (no `await` in body) and corrected return type from `Promise<void>` to `void`.
 - **src/cli/handlers/auth.ts**: Removed unnecessary `as { valid: false; message: string }` casts on `orgResult` — `OrgValidationResult` is a proper discriminated union. Fixed indentation regression in second validation block.
-
-### Changed
-- **src/buddy**: React compiler removal in `CompanionSprite.tsx` and `useBuddyNotification.tsx` — replaced `_c()` memoization with hand-written React. Migrated buddy-internal feature flag checks from `isBuddyEnabled()` wrapper to direct `feature('BUDDY')` calls. Added `seed?: string` to `CompanionSoul` type. Simplified `generateSeed()` to `rehatch-${Date.now()}-${Math.random()}` pattern.
-
-### Changed
-- **src/cli**: Major refactoring and feature wiring across CLI subsystem. `print.ts`: autonomy run / proactive agent lifecycle, cron scheduler refactoring (dedup-claim, input-close-recheck, unified dispatch), UDS inbox drain, SDK event flushing, effort level handling. `structuredIO.ts`: `resolvedToolUseIds` dedup set for duplicate control_response, `injectControlResponse` for bridge integration, `executePermissionRequestHooksForSDK`. `handlers/mcp.tsx`: biome-ignore cleanup, `getMcpClientConfig` for OAuth client_secret detection. `handlers/plugins.ts`: biome-ignore cleanup. `handlers/util.tsx`: react-compiler removal from `DoctorWithPlugins`. `handlers/autoMode.ts`: poor mode model fallback with `skipSystemPromptPrefix`. `transports/`: small fixes in SSE, WebSocket, Hybrid, ccrClient.
+- **src/hooks/usePromptsFromgakrcliInChrome.tsx**: Decompiled from react-compiler runtime — removed `_c()`/`$[N]`/`_temp` boilerplate; restored missing notification handler effect that was compiled into a no-op.
+- **src/hooks/useMcpConnectivityStatus.tsx**: Removed 2 unused imports (`* as React`, `logError`).
+- **src/hooks/useBackgroundAgentTasks.ts**: Removed redundant `isBackgroundTask(t)` filter not present in reference.
+- **src/hooks/useRateLimitWarningNotification.tsx**: Fixed trailing space in dependency array.
+- **src/hooks/toolPermission/handlers/interactiveHandler.ts**: Removed dead `removeExternalAbortListener` variable and both call sites; fixed indentation regression.
+- **src/hooks/useReplBridge.tsx**: Wired missing inline guard checks from claude-code-main (bypass permissions mode disabled, auto mode gate, auto mode unavailable reason/notification) — 4 previously-unused imports are now live.
+- **src/hooks/useOfficialMarketplaceNotification.tsx**: Fixed stale `~/.claude.json` reference to `~/.gakrcli.json`.
+- **src/hooks/useManagePlugins.ts**: Fixed indentation in useEffect blocks.
 
 ## [0.5.8] - 2026-07-14
 

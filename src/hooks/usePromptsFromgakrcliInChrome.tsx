@@ -1,7 +1,6 @@
-import { c as _c } from "react-compiler-runtime";
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs';
 import { useEffect, useRef } from 'react';
-import { logError } from 'src/utils/log.js';
+import { logError } from '../utils/log.js';
 import { z } from 'zod/v4';
 import { callIdeRpc } from '../services/mcp/client.js';
 import type { ConnectedMCPServer, MCPServerConnection } from '../services/mcp/types.js';
@@ -34,43 +33,65 @@ export function getGakrCLIInChromePermissionMode(toolPermissionMode: PermissionM
  * A hook that listens for prompt notifications from the GakrCLI for Chrome extension,
  * enqueues them as user prompts, and syncs permission mode changes to the extension.
  */
-export function usePromptsFromGakrCLIInChrome(mcpClients, toolPermissionMode) {
-  const $ = _c(6);
-  useRef(undefined);
-  let t0;
-  if ($[0] !== mcpClients) {
-    t0 = [mcpClients];
-    $[0] = mcpClients;
-    $[1] = t0;
-  } else {
-    t0 = $[1];
-  }
-  useEffect(_temp, t0);
-  let t1;
-  let t2;
-  if ($[2] !== mcpClients || $[3] !== toolPermissionMode) {
-    t1 = () => {
-      const chromeClient = findChromeClient(mcpClients);
-      if (!chromeClient) {
-        return;
-      }
-      const chromeMode = getGakrCLIInChromePermissionMode(toolPermissionMode);
-      callIdeRpc("set_permission_mode", {
-        mode: chromeMode
-      }, chromeClient);
-    };
-    t2 = [mcpClients, toolPermissionMode];
-    $[2] = mcpClients;
-    $[3] = toolPermissionMode;
-    $[4] = t1;
-    $[5] = t2;
-  } else {
-    t1 = $[4];
-    t2 = $[5];
-  }
-  useEffect(t1, t2);
+export function usePromptsFromGakrCLIInChrome(
+  mcpClients: MCPServerConnection[],
+  toolPermissionMode: PermissionMode,
+): void {
+  const mcpClientRef = useRef<ConnectedMCPServer | undefined>(undefined);
+
+  useEffect(() => {
+    if (process.env.USER_TYPE !== 'ant') return;
+
+    const mcpClient = findChromeClient(mcpClients);
+    if (mcpClientRef.current !== mcpClient) {
+      mcpClientRef.current = mcpClient;
+    }
+
+    if (mcpClient) {
+      mcpClient.client.setNotificationHandler(GakrCLIInChromePromptNotificationSchema(), notification => {
+        if (mcpClientRef.current !== mcpClient) return;
+        const { tabId, prompt, image } = notification.params;
+
+        // Process notifications from tabs we're tracking since notifications are broadcasted
+        if (typeof tabId !== 'number' || !isTrackedGakrCLIInChromeTabId(tabId)) return;
+
+        try {
+          if (image) {
+            const contentBlocks: ContentBlockParam[] = [
+              { type: 'text', text: prompt },
+              {
+                type: 'image',
+                source: {
+                  type: image.type,
+                  media_type: image.media_type,
+                  data: image.data,
+                },
+              },
+            ];
+            enqueuePendingNotification({ value: contentBlocks, mode: 'prompt' });
+          } else {
+            enqueuePendingNotification({ value: prompt, mode: 'prompt' });
+          }
+        } catch (error) {
+          logError(error as Error);
+        }
+      });
+    }
+  }, [mcpClients]);
+
+  // Sync permission mode with Chrome extension whenever it changes
+  useEffect(() => {
+    const chromeClient = findChromeClient(mcpClients);
+    if (!chromeClient) return;
+
+    const chromeMode = getGakrCLIInChromePermissionMode(toolPermissionMode);
+    void callIdeRpc('set_permission_mode', { mode: chromeMode }, chromeClient);
+  }, [mcpClients, toolPermissionMode]);
 }
-function _temp() {}
+
 function findChromeClient(clients: MCPServerConnection[]): ConnectedMCPServer | undefined {
-  return clients.find((client): client is ConnectedMCPServer => client.type === 'connected' && client.name === GAKR_IN_CHROME_MCP_SERVER_NAME);
+  return clients.find(
+    (client): client is ConnectedMCPServer =>
+      client.type === 'connected' && client.name === GAKR_IN_CHROME_MCP_SERVER_NAME,
+  );
 }

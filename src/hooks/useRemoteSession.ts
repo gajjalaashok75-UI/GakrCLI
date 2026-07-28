@@ -9,6 +9,7 @@ import {
 } from '../remote/RemoteSessionManager.js'
 import {
   createRemotePermissionQueueItem,
+  createSyntheticAssistantMessage,
   createToolStub,
 } from '../remote/remotePermissionBridge.js'
 import {
@@ -20,6 +21,10 @@ import type { AppState } from '../state/AppStateStore.js'
 import type { Tool } from '../Tool.js'
 import { findToolByName } from '../Tool.js'
 import type { Message as MessageType } from '../types/message.js'
+import type {
+  PermissionAskDecision,
+  PermissionUpdate,
+} from '../types/permissions.js'
 import { logForDebugging } from '../utils/debug.js'
 import { truncateToWidth } from '../utils/format.js'
 import {
@@ -155,9 +160,11 @@ export function useRemoteSession({
     const manager = new RemoteSessionManager(config, {
       onMessage: sdkMessage => {
         const parts = [`type=${sdkMessage.type}`]
-        if ('subtype' in sdkMessage) parts.push(`subtype=${sdkMessage.subtype}`)
+        if ('subtype' in sdkMessage)
+          parts.push(`subtype=${sdkMessage.subtype as string}`)
         if (sdkMessage.type === 'user') {
-          const c = sdkMessage.message?.content
+          const c = (sdkMessage.message as { content?: unknown } | undefined)
+            ?.content
           parts.push(
             // SDK user message content blocks are typed Array<unknown>; they
             // are content-block objects with a `type` discriminant at runtime.
@@ -183,10 +190,10 @@ export function useRemoteSession({
         if (
           sdkMessage.type === 'user' &&
           sdkMessage.uuid &&
-          sentUUIDsRef.current.has(sdkMessage.uuid)
+          sentUUIDsRef.current.has(sdkMessage.uuid as string)
         ) {
           logForDebugging(
-            `[useRemoteSession] Dropping echoed user message ${sdkMessage.uuid}`,
+            `[useRemoteSession] Dropping echoed user message ${sdkMessage.uuid as string}`,
           )
           return
         }
@@ -196,10 +203,11 @@ export function useRemoteSession({
           sdkMessage.subtype === 'init' &&
           onInit
         ) {
+          const slashCommands = sdkMessage.slash_commands as string[]
           logForDebugging(
-            `[useRemoteSession] Init received with ${sdkMessage.slash_commands.length} slash commands`,
+            `[useRemoteSession] Init received with ${slashCommands.length} slash commands`,
           )
-          onInit(sdkMessage.slash_commands)
+          onInit(slashCommands)
         }
 
         // Track remote subagent lifecycle for the "N in background" counter.
@@ -208,12 +216,12 @@ export function useRemoteSession({
         // Return early — these are status signals, not renderable messages.
         if (sdkMessage.type === 'system') {
           if (sdkMessage.subtype === 'task_started') {
-            runningTaskIdsRef.current.add(sdkMessage.task_id)
+            runningTaskIdsRef.current.add(sdkMessage.task_id as string)
             writeTaskCount()
             return
           }
           if (sdkMessage.subtype === 'task_notification') {
-            runningTaskIdsRef.current.delete(sdkMessage.task_id)
+            runningTaskIdsRef.current.delete(sdkMessage.task_id as string)
             writeTaskCount()
             return
           }
@@ -249,7 +257,9 @@ export function useRemoteSession({
         // and inProcessRunner.ts; without this the set grows unbounded for the
         // session lifetime (BQ: CCR cohort shows 5.2x higher RSS slope).
         if (setInProgressToolUseIDs && sdkMessage.type === 'user') {
-          const content = sdkMessage.message?.content
+          const content = (
+            sdkMessage.message as { content?: unknown } | undefined
+          )?.content
           if (Array.isArray(content)) {
             const resultIds: string[] = []
             for (const block of content) {
@@ -294,9 +304,12 @@ export function useRemoteSession({
             setInProgressToolUseIDs &&
             converted.message.type === 'assistant'
           ) {
-            const toolUseIds = converted.message.message.content
+            const contentArr = Array.isArray(converted.message.message?.content)
+              ? converted.message.message.content
+              : []
+            const toolUseIds = contentArr
               .filter(block => block.type === 'tool_use')
-              .map(block => block.id)
+              .map(block => (block as { id: string }).id)
             if (toolUseIds.length > 0) {
               setInProgressToolUseIDs(prev => {
                 const next = new Set(prev)
@@ -341,24 +354,68 @@ export function useRemoteSession({
           findToolByName(toolsRef.current, request.tool_name) ??
           createToolStub(request.tool_name)
 
-        const removeFromQueue = () =>
-          setToolUseConfirmQueue(queue =>
-            queue.filter(item => item.toolUseID !== request.tool_use_id),
-          )
-        const respond = (response: RemotePermissionResponse) => {
-          manager.respondToPermissionRequest(requestId, response)
-        }
-        const toolUseConfirm = createRemotePermissionQueueItem({
+        const syntheticMessage = createSyntheticAssistantMessage(
           request,
           requestId,
+        )
+
+        const permissionResult: PermissionAskDecision = {
+          behavior: 'ask',
+          message:
+            request.description ?? `${request.tool_name} requires permission`,
+          suggestions: request.permission_suggestions as PermissionUpdate[],
+          blockedPath: request.blocked_path,
+        }
+
+        const toolUseConfirm: ToolUseConfirm = {
+          assistantMessage: syntheticMessage,
           tool,
-          respond,
-          removeFromQueue,
-          onAllowResolved: () => {
+          description:
+            request.description ?? `${request.tool_name} requires permission`,
+          input: request.input,
+          toolUseContext: {} as ToolUseConfirm['toolUseContext'],
+          toolUseID: request.tool_use_id,
+          permissionResult,
+          permissionPromptStartTimeMs: Date.now(),
+          onUserInteraction() {
+            // No-op for remote — classifier runs on the container
+          },
+          onAbort() {
+            const response: RemotePermissionResponse = {
+              behavior: 'deny',
+              message: 'User aborted',
+            }
+            manager.respondToPermissionRequest(requestId, response)
+            setToolUseConfirmQueue(queue =>
+              queue.filter(item => item.toolUseID !== request.tool_use_id),
+            )
+          },
+          onAllow(updatedInput, _permissionUpdates, _feedback) {
+            const response: RemotePermissionResponse = {
+              behavior: 'allow',
+              updatedInput,
+            }
+            manager.respondToPermissionRequest(requestId, response)
+            setToolUseConfirmQueue(queue =>
+              queue.filter(item => item.toolUseID !== request.tool_use_id),
+            )
             // Resume loading indicator after approving
             setIsLoading(true)
           },
-        })
+          onReject(feedback?: string) {
+            const response: RemotePermissionResponse = {
+              behavior: 'deny',
+              message: feedback ?? 'User denied permission',
+            }
+            manager.respondToPermissionRequest(requestId, response)
+            setToolUseConfirmQueue(queue =>
+              queue.filter(item => item.toolUseID !== request.tool_use_id),
+            )
+          },
+          async recheckPermission() {
+            // No-op for remote — permission state is on the container
+          },
+        }
 
         setToolUseConfirmQueue(queue => [...queue, toolUseConfirm])
         // Pause loading indicator while waiting for permission

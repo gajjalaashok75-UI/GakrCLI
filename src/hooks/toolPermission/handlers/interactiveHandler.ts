@@ -1,9 +1,11 @@
 import { feature } from 'bun:bundle'
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs'
 import { randomUUID } from 'crypto'
+import { CHANNEL_TAG } from 'src/constants/xml.js'
 import { logForDebugging } from 'src/utils/debug.js'
 import { getAllowedChannels } from '../../../bootstrap/state.js'
 import type { BridgePermissionCallbacks } from '../../../bridge/bridgePermissionCallbacks.js'
+import type { ToolUseConfirm } from '../../../components/permissions/PermissionRequest.js'
 import { getTerminalFocused } from '../../../ink/terminal-focus-state.js'
 import {
   CHANNEL_PERMISSION_REQUEST_METHOD,
@@ -25,6 +27,11 @@ import {
   setYoloClassifierApproval,
 } from '../../../utils/classifierApprovals.js'
 import { errorMessage } from '../../../utils/errors.js'
+import {
+  forgetPipePermissionRequest,
+  notifyPipePermissionCancel,
+  tryRelayPipePermissionRequest,
+} from '../../../utils/pipePermissionRelay.js'
 import type { PermissionDecision } from '../../../utils/permissions/PermissionResult.js'
 import type { PermissionUpdate } from '../../../utils/permissions/PermissionUpdateSchema.js'
 import { hasPermissionsToUseTool } from '../../../utils/permissions/permissions.js'
@@ -38,6 +45,80 @@ type InteractivePermissionParams = {
   awaitAutomatedChecksBeforeDialog: boolean | undefined
   bridgeCallbacks?: BridgePermissionCallbacks
   channelCallbacks?: ChannelPermissionCallbacks
+}
+
+type ChannelContextHint = {
+  sourceServer?: string
+  chatId?: string
+}
+
+function getTextBlocksText(content: unknown): string {
+  if (typeof content === 'string') {
+    return content
+  }
+  if (!Array.isArray(content)) {
+    return ''
+  }
+  return content
+    .filter(
+      (block): block is { type: 'text'; text: string } =>
+        typeof block === 'object' &&
+        block !== null &&
+        (block as { type?: unknown }).type === 'text' &&
+        typeof (block as { text?: unknown }).text === 'string',
+    )
+    .map(block => block.text)
+    .join('\n')
+}
+
+function parseChannelContextHintFromText(
+  text: string,
+): ChannelContextHint | null {
+  const tagMatch = text.match(new RegExp(`<${CHANNEL_TAG}\\b([^>]*)>`))
+  if (!tagMatch?.[1]) {
+    return null
+  }
+
+  const attrs = tagMatch[1]
+  const sourceServer = attrs.match(/\bsource="([^"]+)"/)?.[1]
+  const chatId = attrs.match(/\bchat_id="([^"]+)"/)?.[1]
+
+  if (!sourceServer && !chatId) {
+    return null
+  }
+
+  return { sourceServer, chatId }
+}
+
+export function getLatestChannelContextHint(
+  messages: readonly unknown[],
+): ChannelContextHint | null {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index] as {
+      type?: unknown
+      origin?: { kind?: unknown; server?: unknown }
+      message?: { content?: unknown }
+    }
+
+    if (message?.type !== 'user' || message?.origin?.kind !== 'channel') {
+      continue
+    }
+
+    const text = getTextBlocksText(message.message?.content)
+    const parsed = parseChannelContextHintFromText(text)
+    if (parsed) {
+      return {
+        sourceServer:
+          parsed.sourceServer ||
+          (typeof message.origin.server === 'string'
+            ? message.origin.server
+            : undefined),
+        chatId: parsed.chatId,
+      }
+    }
+  }
+
+  return null
 }
 
 /**
@@ -67,7 +148,7 @@ function handleInteractivePermission(
     channelCallbacks,
   } = params
 
-  // Suspend the watchdog for the dialog window so human think-time isn't counted
+    // Suspend the watchdog for the dialog window so human think-time isn't counted
   // toward the idle/hard-max timeout. Scoped here, not around the whole
   // resolution, so non-human async work (e.g. the classifier) stays watched.
   // Idempotent: resume runs from both claim() and the resolveOnce safety net,
@@ -79,13 +160,11 @@ function handleInteractivePermission(
     watchdogResumed = true
     rawResume?.()
   }
-  let removeExternalAbortListener = () => {}
   try {
     const resolveOnceHandle = createResolveOnce(
       (decision: PermissionDecision) => {
         // Idempotent safety net; the claim() wrapper below normally resumes first.
         resumeWatchdog()
-        removeExternalAbortListener()
         resolve(decision)
       },
     )
@@ -98,20 +177,32 @@ function handleInteractivePermission(
       if (claimed) resumeWatchdog()
       return claimed
     }
-  let userInteracted = false
-  let checkmarkTransitionTimer: ReturnType<typeof setTimeout> | undefined
-  // Hoisted so onDismissCheckmark (Esc during checkmark window) can also
-  // remove the abort listener — not just the timer callback.
-  let checkmarkAbortHandler: (() => void) | undefined
-  const bridgeRequestId = bridgeCallbacks ? randomUUID() : undefined
-  // Hoisted so local/hook/classifier wins can remove the pending channel
-  // entry. No "tell remote to dismiss" equivalent — the text sits in your
-  // phone, and a stale "yes abc123" after local-resolve falls through
-  // tryConsumeReply (entry gone) and gets enqueued as normal chat.
-  let channelUnsubscribe: (() => void) | undefined
+    let userInteracted = false
+    let checkmarkTransitionTimer: ReturnType<typeof setTimeout> | undefined
+    // Hoisted so onDismissCheckmark (Esc during checkmark window) can also
+    // remove the abort listener — not just the timer callback.
+    let checkmarkAbortHandler: (() => void) | undefined
+    const bridgeRequestId = bridgeCallbacks ? randomUUID() : undefined
+    // Hoisted so local/hook/classifier wins can remove the pending channel
+    // entry. No "tell remote to dismiss" equivalent — the text sits in your
+    // phone, and a stale "yes abc123" after local-resolve falls through
+    // tryConsumeReply (entry gone) and gets enqueued as normal chat.
+    let channelUnsubscribe: (() => void) | undefined
 
   const permissionPromptStartTimeMs = Date.now()
   const displayInput = result.updatedInput ?? ctx.input
+  let pipePermissionRequestId: string | null = null
+
+  function forgetPipePermission(reason?: string): void {
+    notifyPipePermissionCancel(pipePermissionRequestId, reason)
+    forgetPipePermissionRequest(pipePermissionRequestId)
+    pipePermissionRequestId = null
+  }
+
+  function forgetPipePermissionSilently(): void {
+    forgetPipePermissionRequest(pipePermissionRequestId)
+    pipePermissionRequestId = null
+  }
 
   function clearClassifierIndicator(): void {
     if (feature('BASH_CLASSIFIER')) {
@@ -119,34 +210,7 @@ function handleInteractivePermission(
     }
   }
 
-  // Aborts that bypass the dialog callbacks (bridge interrupt, backgrounding)
-  // must mirror the local paths' cleanup — cancel the remote bridge prompt and
-  // drop the channel entry — then dequeue/cancel so the awaiter unblocks
-  // immediately instead of idling for a full timeout. Declared after
-  // bridgeRequestId/channelUnsubscribe so the immediate-abort branch can read
-  // them; runtime aborts see their latest values via closure.
-  const abortSignal = ctx.toolUseContext.abortController.signal
-  const onExternalAbort = () => {
-    if (!claim()) return
-    if (bridgeCallbacks && bridgeRequestId) {
-      bridgeCallbacks.cancelRequest(bridgeRequestId)
-    }
-    channelUnsubscribe?.()
-    ctx.removeFromQueue()
-    resolveOnce(ctx.cancelAndAbort(undefined, true))
-  }
-  if (abortSignal.aborted) {
-    // Already aborted: cancel and stop setup so we never enqueue a stale prompt.
-    onExternalAbort()
-    return
-  }
-  abortSignal.addEventListener('abort', onExternalAbort, { once: true })
-  // Detach on a normal resolution so a resolved prompt doesn't retain a closure
-  // on the abort signal.
-  removeExternalAbortListener = () =>
-    abortSignal.removeEventListener('abort', onExternalAbort)
-
-  ctx.pushToQueue({
+  const toolUseConfirm: ToolUseConfirm = {
     assistantMessage: ctx.assistantMessage,
     tool: ctx.tool,
     description,
@@ -193,6 +257,7 @@ function handleInteractivePermission(
     },
     onAbort() {
       if (!claim()) return
+      forgetPipePermission('Permission request was aborted locally in sub.')
       if (bridgeCallbacks && bridgeRequestId) {
         bridgeCallbacks.sendResponse(bridgeRequestId, {
           behavior: 'deny',
@@ -215,6 +280,7 @@ function handleInteractivePermission(
       contentBlocks?: ContentBlockParam[],
     ) {
       if (!claim()) return // atomic check-and-mark before await
+      forgetPipePermission('Permission request was approved locally in sub.')
 
       if (bridgeCallbacks && bridgeRequestId) {
         bridgeCallbacks.sendResponse(bridgeRequestId, {
@@ -239,6 +305,7 @@ function handleInteractivePermission(
     },
     onReject(feedback?: string, contentBlocks?: ContentBlockParam[]) {
       if (!claim()) return
+      forgetPipePermission('Permission request was rejected locally in sub.')
 
       if (bridgeCallbacks && bridgeRequestId) {
         bridgeCallbacks.sendResponse(bridgeRequestId, {
@@ -277,6 +344,7 @@ function handleInteractivePermission(
         // a CCR-initiated mode switch, the very case this callback exists
         // for after useReplBridge started calling it).
         if (!claim()) return
+        forgetPipePermission('Permission request was resolved locally in sub.')
         if (bridgeCallbacks && bridgeRequestId) {
           bridgeCallbacks.cancelRequest(bridgeRequestId)
         }
@@ -286,7 +354,65 @@ function handleInteractivePermission(
         resolveOnce(ctx.buildAllow(freshResult.updatedInput ?? ctx.input))
       }
     },
-  })
+  }
+
+  ctx.pushToQueue(toolUseConfirm)
+  pipePermissionRequestId = tryRelayPipePermissionRequest(
+    toolUseConfirm,
+    response => {
+      if (!claim()) return
+      forgetPipePermissionSilently()
+      clearClassifierChecking(ctx.toolUseID)
+      clearClassifierIndicator()
+      ctx.removeFromQueue()
+      channelUnsubscribe?.()
+      if (bridgeCallbacks && bridgeRequestId) {
+        bridgeCallbacks.cancelRequest(bridgeRequestId)
+      }
+
+      if (response.behavior === 'allow') {
+        void (async () => {
+          if (response.permissionUpdates?.length) {
+            void ctx.persistPermissions(response.permissionUpdates)
+          }
+          ctx.logDecision(
+            {
+              decision: 'accept',
+              source: {
+                type: 'user',
+                permanent: !!response.permissionUpdates?.length,
+              },
+            },
+            { permissionPromptStartTimeMs },
+          )
+          resolveOnce(
+            ctx.buildAllow(response.updatedInput ?? displayInput, {
+              acceptFeedback: response.feedback,
+              contentBlocks: response.contentBlocks,
+            }),
+          )
+        })()
+      } else {
+        ctx.logDecision(
+          {
+            decision: 'reject',
+            source: {
+              type: 'user_reject',
+              hasFeedback: !!response.feedback,
+            },
+          },
+          { permissionPromptStartTimeMs },
+        )
+        resolveOnce(
+          ctx.cancelAndAbort(
+            response.feedback,
+            undefined,
+            response.contentBlocks,
+          ),
+        )
+      }
+    },
+  )
 
   // Race 4: Bridge permission response from CCR (gakrcli.ai)
   // When the bridge is connected, send the permission request to CCR and
@@ -314,6 +440,9 @@ function handleInteractivePermission(
       bridgeRequestId,
       response => {
         if (!claim()) return // Local user/hook/classifier already responded
+        forgetPipePermission(
+          'Permission request was resolved by bridge before pipe response.',
+        )
         signal.removeEventListener('abort', unsubscribe)
         clearClassifierChecking(ctx.toolUseID)
         clearClassifierIndicator()
@@ -394,6 +523,17 @@ function handleInteractivePermission(
         description,
         input_preview: truncateForPreview(displayInput),
       }
+      const channelContext = getLatestChannelContextHint(
+        ctx.toolUseContext.messages,
+      )
+      if (channelContext?.sourceServer || channelContext?.chatId) {
+        params.channel_context = {
+          ...(channelContext.sourceServer && {
+            source_server: channelContext.sourceServer,
+          }),
+          ...(channelContext.chatId && { chat_id: channelContext.chatId }),
+        }
+      }
 
       for (const client of channelClients) {
         if (client.type !== 'connected') continue // refine for TS
@@ -421,6 +561,9 @@ function handleInteractivePermission(
         channelRequestId,
         response => {
           if (!claim()) return // Another racer won
+          forgetPipePermission(
+            'Permission request was resolved by channel before pipe response.',
+          )
           channelUnsubscribe?.() // both: map delete + listener remove
           clearClassifierChecking(ctx.toolUseID)
           clearClassifierIndicator()
@@ -478,6 +621,9 @@ function handleInteractivePermission(
         permissionPromptStartTimeMs,
       )
       if (!hookDecision || !claim()) return
+      forgetPipePermission(
+        'Permission request was resolved by hook before pipe response.',
+      )
       if (bridgeCallbacks && bridgeRequestId) {
         bridgeCallbacks.cancelRequest(bridgeRequestId)
       }
@@ -510,6 +656,9 @@ function handleInteractivePermission(
         },
         onAllow: decisionReason => {
           if (!claim()) return
+          forgetPipePermission(
+            'Permission request was auto-approved before pipe response.',
+          )
           if (bridgeCallbacks && bridgeRequestId) {
             bridgeCallbacks.cancelRequest(bridgeRequestId)
           }
@@ -588,7 +737,6 @@ function handleInteractivePermission(
   } catch (setupError) {
     // Clean up partial setup before rethrowing (all idempotent / no-op if not
     // yet done).
-    removeExternalAbortListener()
     ctx.removeFromQueue()
     resumeWatchdog()
     throw setupError
