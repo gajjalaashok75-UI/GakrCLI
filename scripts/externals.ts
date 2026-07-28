@@ -59,6 +59,8 @@ export const COMMON_EXTERNALS: string[] = [
   // Markdown rendering
   'streamdown',
   'he',
+  // Sentry telemetry
+  '@sentry/node',
 ]
 
 // Additional packages external only in the SDK bundle (TUI + heavy deps)
