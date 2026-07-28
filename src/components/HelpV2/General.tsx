@@ -1,22 +1,40 @@
-import { c as _c } from "react-compiler-runtime";
+import * as React from 'react';
 import { PRODUCT_DISPLAY_NAME } from '../../constants/product.js';
 import { Box, Text } from '../../ink.js';
 import { PromptInputHelpMenu } from '../PromptInput/PromptInputHelpMenu.js';
-export function General() {
-  const $ = _c(2);
-  let t0;
-  if ($[0] === Symbol.for("react.memo_cache_sentinel")) {
-    t0 = <Box><Text>{PRODUCT_DISPLAY_NAME} understands your codebase, makes edits with your permission, and executes commands — right from your terminal.</Text></Box>;
-    $[0] = t0;
-  } else {
-    t0 = $[0];
-  }
-  let t1;
-  if ($[1] === Symbol.for("react.memo_cache_sentinel")) {
-    t1 = <Box flexDirection="column" paddingY={1} gap={1}>{t0}<Box flexDirection="column"><Box><Text bold={true}>Shortcuts</Text></Box><PromptInputHelpMenu gap={2} fixedWidth={true} /></Box></Box>;
-    $[1] = t1;
-  } else {
-    t1 = $[1];
-  }
-  return t1;
+
+export function General(): React.ReactNode {
+  return (
+    <Box flexDirection="column" paddingY={1} gap={1}>
+      <Box flexDirection="column" gap={1}>
+        <Text bold>Getting started</Text>
+        <Box flexDirection="column">
+          <Text>
+            <Text bold>1. </Text>
+            <Text>Ask a question or describe a task — {PRODUCT_DISPLAY_NAME} will explore your code and respond.</Text>
+          </Text>
+          <Text>
+            <Text bold>2. </Text>
+            <Text>When {PRODUCT_DISPLAY_NAME} wants to edit files or run commands, you review and approve each action.</Text>
+          </Text>
+          <Text>
+            <Text bold>3. </Text>
+            <Text>Type </Text>
+            <Text bold>/commit</Text>
+            <Text> to commit changes, </Text>
+            <Text bold>/help</Text>
+            <Text> for commands, or </Text>
+            <Text bold>?</Text>
+            <Text> for shortcuts.</Text>
+          </Text>
+        </Box>
+      </Box>
+      <Box flexDirection="column">
+        <Box>
+          <Text bold>Shortcuts</Text>
+        </Box>
+        <PromptInputHelpMenu gap={2} fixedWidth={true} />
+      </Box>
+    </Box>
+  );
 }
