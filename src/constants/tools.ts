@@ -24,14 +24,16 @@ import { TASK_LIST_TOOL_NAME } from '../tools/TaskListTool/constants.js'
 import { TASK_UPDATE_TOOL_NAME } from '../tools/TaskUpdateTool/constants.js'
 import { TOOL_SEARCH_TOOL_NAME } from '../tools/ToolSearchTool/prompt.js'
 import { SYNTHETIC_OUTPUT_TOOL_NAME } from '../tools/SyntheticOutputTool/SyntheticOutputTool.js'
+import { SLEEP_TOOL_NAME } from '../tools/SleepTool/prompt.js'
+import { LSP_TOOL_NAME } from '../tools/LSPTool/prompt.js'
+import { VERIFY_PLAN_EXECUTION_TOOL_NAME } from '../tools/VerifyPlanExecutionTool/constants.js'
+import { TEAM_CREATE_TOOL_NAME } from '../tools/TeamCreateTool/constants.js'
+import { TEAM_DELETE_TOOL_NAME } from '../tools/TeamDeleteTool/constants.js'
+import { EXECUTE_TOOL_NAME } from '../tools/ExecuteTool/constants.js'
 import { ENTER_WORKTREE_TOOL_NAME } from '../tools/EnterWorktreeTool/constants.js'
 import { EXIT_WORKTREE_TOOL_NAME } from '../tools/ExitWorktreeTool/constants.js'
 import { WORKFLOW_TOOL_NAME } from '../tools/WorkflowTool/constants.js'
-import { LSP_TOOL_NAME } from '../tools/LSPTool/prompt.js'
-import { SLEEP_TOOL_NAME } from '../tools/SleepTool/prompt.js'
 import { SEARCH_EXTRA_TOOLS_TOOL_NAME } from '../tools/SearchExtraToolsTool/constants.js'
-import { EXECUTE_TOOL_NAME } from '../tools/ExecuteTool/constants.js'
-import { VERIFY_PLAN_EXECUTION_TOOL_NAME } from '../tools/VerifyPlanExecutionTool/constants.js'
 import {
   CRON_CREATE_TOOL_NAME,
   CRON_DELETE_TOOL_NAME,
@@ -43,11 +45,19 @@ export const ALL_AGENT_DISALLOWED_TOOLS = new Set([
   TASK_OUTPUT_TOOL_NAME,
   EXIT_PLAN_MODE_V2_TOOL_NAME,
   ENTER_PLAN_MODE_TOOL_NAME,
+  // Allow Agent tool for agents when user is ant (enables nested agents)
+  ...(process.env.USER_TYPE === 'ant' ? [] : [AGENT_TOOL_NAME]),
   ASK_USER_QUESTION_TOOL_NAME,
   TASK_STOP_TOOL_NAME,
-  LOCAL_MEMORY_RECALL_TOOL_NAME,
   // Prevent recursive workflow execution inside subagents.
   ...(feature('WORKFLOW_SCRIPTS') ? [WORKFLOW_TOOL_NAME] : []),
+  // LOCAL-WIRING PR-1: keep local-memory recall on the main thread only.
+  // Cross-session user notes shouldn't be siphoned by spawned subagents.
+  // Layer 2 of the gate (fork path useExactTools) is enforced separately
+  // by filterParentToolsForFork in src/utils/agentToolFilter.ts.
+  LOCAL_MEMORY_RECALL_TOOL_NAME,
+  // LOCAL-WIRING PR-2: vault HTTP fetch is even more sensitive (touches
+  // user secrets). Same two-layer gate applies — keep main thread only.
 ])
 
 export const CUSTOM_AGENT_DISALLOWED_TOOLS = new Set([
@@ -71,6 +81,8 @@ export const ASYNC_AGENT_ALLOWED_TOOLS = new Set([
   SKILL_TOOL_NAME,
   SYNTHETIC_OUTPUT_TOOL_NAME,
   TOOL_SEARCH_TOOL_NAME,
+  SEARCH_EXTRA_TOOLS_TOOL_NAME,
+  EXECUTE_TOOL_NAME,
   ENTER_WORKTREE_TOOL_NAME,
   EXIT_WORKTREE_TOOL_NAME,
 ])
@@ -153,7 +165,10 @@ export const CORE_TOOLS = new Set([
   LSP_TOOL_NAME, // 'LSP'
   // Skills
   SKILL_TOOL_NAME, // 'Skill'
-  // Workflow orchestration
+  // Workflow orchestration — first-class primitive /ultracode directs the
+  // model to call directly. Kept core (not deferred) so it's always visible
+  // and callable without a SearchExtraTools round-trip. Registration itself
+  // is still feature-gated (feature('WORKFLOW_SCRIPTS')) in tools.ts.
   WORKFLOW_TOOL_NAME, // 'Workflow'
   // Scheduling & monitoring
   SLEEP_TOOL_NAME, // 'Sleep'
