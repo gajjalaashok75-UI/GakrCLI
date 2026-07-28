@@ -4,6 +4,9 @@
  * These guards enforce that workspace API key requests only go to Anthropic's
  * API host and that subscription OAuth requests stay on the subscription plane.
  * This prevents credential leakage to third-party hosts.
+ *
+ * Design: ~/.gakrcli/rules/deep-debug/security.md §2 (read-only investigation first,
+ * then minimal guard at earliest detection point).
  */
 
 import { logError } from '../../utils/log.js'

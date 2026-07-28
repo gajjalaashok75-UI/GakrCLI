@@ -17,6 +17,7 @@
  */
 
 import type { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js'
+import type { AnyObjectSchema } from '@modelcontextprotocol/sdk/server/zod-compat.js'
 import { z } from 'zod/v4'
 import { type ChannelEntry, getAllowedChannels } from '../../bootstrap/state.js'
 import { CHANNEL_TAG } from '../../constants/xml.js'
@@ -92,7 +93,33 @@ export type ChannelPermissionRequestParams = {
    *  input is in the local terminal dialog; this is a phone-sized
    *  preview. Server decides whether/how to show it. */
   input_preview: string
+  /** Optional source-channel routing hint for servers that support
+   *  multi-chat routing. Backwards compatible: servers that don't care can
+   *  ignore it and keep their existing fallback behavior. */
+  channel_context?: {
+    source_server?: string
+    chat_id?: string
+  }
 }
+
+export const ChannelPermissionRequestNotificationSchema: () => AnyObjectSchema =
+  lazySchema(() =>
+    z.object({
+      method: z.literal(CHANNEL_PERMISSION_REQUEST_METHOD),
+      params: z.object({
+        request_id: z.string(),
+        tool_name: z.string(),
+        description: z.string(),
+        input_preview: z.string(),
+        channel_context: z
+          .object({
+            source_server: z.string().optional(),
+            chat_id: z.string().optional(),
+          })
+          .optional(),
+      }),
+    }),
+  )
 
 /**
  * Meta keys become XML attribute NAMES — a crafted key like
@@ -230,7 +257,7 @@ export function gateChannelServer(
       reason: 'server did not declare gakrcli/channel capability',
     }
   }
-
+  
   // Overall runtime gate. After capability so normal MCP servers never hit
   // this path. Before auth/policy so the killswitch works regardless of
   // session state.
@@ -300,7 +327,7 @@ export function gateChannelServer(
         reason: `you asked for plugin:${entry.name}@${entry.marketplace} but the installed ${entry.name} plugin is from ${actual ?? 'an unknown source'}`,
       }
     }
-
+    
     // Approved-plugin allowlist. Marketplace gate already verified
     // tag == reality, so this is a pure entry check. entry.dev (per-entry,
     // not the session-wide bit) bypasses — so accepting the dev dialog for

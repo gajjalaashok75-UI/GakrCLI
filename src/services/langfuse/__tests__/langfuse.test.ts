@@ -361,7 +361,7 @@ describe('Langfuse integration', () => {
       const { createTrace } = await import('../tracing.js')
       const span = createTrace({
         sessionId: 's1',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
       })
       expect(span).toBeNull()
@@ -373,7 +373,7 @@ describe('Langfuse integration', () => {
       const { createTrace } = await import('../tracing.js')
       const span = createTrace({
         sessionId: 's1',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
         input: [],
       })
@@ -383,7 +383,7 @@ describe('Langfuse integration', () => {
         expect.objectContaining({
           metadata: expect.objectContaining({
             provider: 'firstParty',
-            model: 'gakrcli-3',
+            model: 'claude-3',
           }),
         }),
         { asType: 'agent' },
@@ -412,12 +412,12 @@ describe('Langfuse integration', () => {
       )
       const span = createTrace({
         sessionId: 's1',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
       })
       mockStartObservation.mockClear()
       recordLLMObservation(span, {
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
         input: [{ role: 'user', content: 'hello' }],
         output: [{ role: 'assistant', content: 'hi' }],
@@ -427,7 +427,7 @@ describe('Langfuse integration', () => {
       expect(mockStartObservation).toHaveBeenCalledWith(
         'ChatAnthropic',
         expect.objectContaining({
-          model: 'gakrcli-3',
+          model: 'claude-3',
         }),
         expect.objectContaining({
           asType: 'generation',
@@ -450,13 +450,13 @@ describe('Langfuse integration', () => {
       )
       const span = createTrace({
         sessionId: 's1',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
       })
       mockStartObservation.mockClear()
       mockRootUpdate.mockClear()
       recordLLMObservation(span, {
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
         input: [],
         output: [],
@@ -487,12 +487,12 @@ describe('Langfuse integration', () => {
       )
       const span = createTrace({
         sessionId: 's1',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
       })
       mockRootUpdate.mockClear()
       recordLLMObservation(span, {
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
         input: [],
         output: [],
@@ -526,7 +526,7 @@ describe('Langfuse integration', () => {
       )
       const span = createTrace({
         sessionId: 's1',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
       })
       mockStartObservation.mockClear()
@@ -561,7 +561,7 @@ describe('Langfuse integration', () => {
       )
       const span = createTrace({
         sessionId: 's1',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
       })
       mockStartObservation.mockClear()
@@ -591,7 +591,7 @@ describe('Langfuse integration', () => {
       )
       const span = createTrace({
         sessionId: 's1',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
       })
       mockRootUpdate.mockClear()
@@ -616,7 +616,7 @@ describe('Langfuse integration', () => {
       )
       const span = createTrace({
         sessionId: 's1',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
       })
       mockRootUpdate.mockClear()
@@ -646,7 +646,7 @@ describe('Langfuse integration', () => {
       const { createTrace, endTrace } = await import('../tracing.js')
       const span = createTrace({
         sessionId: 's1',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
       })
       endTrace(span)
@@ -659,7 +659,7 @@ describe('Langfuse integration', () => {
       const { createTrace, endTrace } = await import('../tracing.js')
       const span = createTrace({
         sessionId: 's1',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
       })
       endTrace(span, 'final output')
@@ -675,7 +675,7 @@ describe('Langfuse integration', () => {
         sessionId: 's1',
         agentType: 'Explore',
         agentId: 'agent-1',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
       })
       expect(span).toBeNull()
@@ -689,7 +689,7 @@ describe('Langfuse integration', () => {
         sessionId: 's1',
         agentType: 'Explore',
         agentId: 'agent-1',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
         input: [{ role: 'user', content: 'search for X' }],
       })
@@ -701,7 +701,7 @@ describe('Langfuse integration', () => {
             agentType: 'Explore',
             agentId: 'agent-1',
             provider: 'firstParty',
-            model: 'gakrcli-3',
+            model: 'claude-3',
           }),
         }),
         { asType: 'agent' },
@@ -721,7 +721,7 @@ describe('Langfuse integration', () => {
         sessionId: 's1',
         agentType: 'Plan',
         agentId: 'agent-2',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
       })
       expect(span).toBeNull()
@@ -735,7 +735,7 @@ describe('Langfuse integration', () => {
       const { createTrace } = await import('../tracing.js')
       const span = createTrace({
         sessionId: 's1',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
         querySource: 'user',
       })
@@ -759,7 +759,7 @@ describe('Langfuse integration', () => {
       const { createTrace } = await import('../tracing.js')
       createTrace({
         sessionId: 's1',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
       })
       const calls = mockStartObservation.mock.calls as unknown[][]
@@ -777,7 +777,7 @@ describe('Langfuse integration', () => {
       const { createTrace } = await import('../tracing.js')
       const span = createTrace({
         sessionId: 's1',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
         username: 'user@example.com',
       })
@@ -796,7 +796,7 @@ describe('Langfuse integration', () => {
       const { createTrace } = await import('../tracing.js')
       const span = createTrace({
         sessionId: 's1',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
       })
       expect(span).not.toBeNull()
@@ -815,7 +815,7 @@ describe('Langfuse integration', () => {
       const { createTrace } = await import('../tracing.js')
       createTrace({
         sessionId: 's1',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
       })
       // Falls back to getCoreUserData().deviceId (mocked as 'test-device-id')
@@ -830,7 +830,7 @@ describe('Langfuse integration', () => {
       const { createTrace } = await import('../tracing.js')
       createTrace({
         sessionId: 's1',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
         username: 'param-user@test.com',
       })
@@ -853,7 +853,7 @@ describe('Langfuse integration', () => {
       // Create parent trace
       const parentSpan = createTrace({
         sessionId: 'shared-session',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
       })
 
@@ -862,7 +862,7 @@ describe('Langfuse integration', () => {
         sessionId: 'shared-session',
         agentType: 'Explore',
         agentId: 'agent-explore-1',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
       })
 
@@ -893,7 +893,7 @@ describe('Langfuse integration', () => {
         sessionId: 's1',
         agentType: 'Explore',
         agentId: 'agent-1',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
       })
       expect(subTrace).not.toBeNull()
@@ -1011,7 +1011,7 @@ describe('Langfuse integration', () => {
       )
       const span = createTrace({
         sessionId: 's1',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
       })
       mockStartObservation.mockClear()
@@ -1023,7 +1023,7 @@ describe('Langfuse integration', () => {
         },
       ]
       recordLLMObservation(span, {
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
         input: messages,
         output: [],
@@ -1049,13 +1049,13 @@ describe('Langfuse integration', () => {
       )
       const span = createTrace({
         sessionId: 's1',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
       })
       mockStartObservation.mockClear()
       const messages = [{ role: 'user', content: 'hello' }]
       recordLLMObservation(span, {
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
         input: messages,
         output: [],
@@ -1081,7 +1081,7 @@ describe('Langfuse integration', () => {
       const { createTrace } = await import('../tracing.js')
       const span = createTrace({
         sessionId: 's1',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
       })
       expect(span).toBeNull()
@@ -1098,7 +1098,7 @@ describe('Langfuse integration', () => {
       )
       const span = createTrace({
         sessionId: 's1',
-        model: 'gakrcli-3',
+        model: 'claude-3',
         provider: 'firstParty',
       })
       // The second call to startObservation (for the generation) will throw

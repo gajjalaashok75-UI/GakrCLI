@@ -17,8 +17,13 @@ import { isTelemetryDisabled } from '../../utils/privacyLevel.js'
  * - Privacy level is no-telemetry or essential-traffic
  */
 export function isAnalyticsDisabled(): boolean {
-  // Open GakrCLI does not send product telemetry.
-  return true
+  return (
+    process.env.NODE_ENV === 'test' ||
+    isEnvTruthy(process.env.GAKR_CODE_USE_BEDROCK) ||
+    isEnvTruthy(process.env.GAKR_CODE_USE_VERTEX) ||
+    isEnvTruthy(process.env.GAKR_CODE_USE_FOUNDRY) ||
+    isTelemetryDisabled()
+  )
 }
 
 /**
