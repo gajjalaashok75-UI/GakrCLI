@@ -139,6 +139,8 @@ export type LocalJSXCommandOnDone = (
     metaMessages?: string[]
     nextInput?: string
     submitNextInput?: boolean
+    /** Override the args shown in the command breadcrumb (e.g. truncated). Full args still reach metaMessages. */
+    displayArgs?: string
   },
 ) => void
 
@@ -191,6 +193,18 @@ export type CommandAvailability =
 
 export type CommandBase = {
   availability?: CommandAvailability[]
+  /**
+   * Allows a local/local-jsx command to execute when it arrives over the
+   * Remote Control bridge. Only use for commands that do not require local
+   * interactive Ink UI and can safely complete headlessly.
+   */
+  bridgeSafe?: boolean
+  /**
+   * Optional per-invocation validation for bridge-delivered slash commands.
+   * Return a user-facing rejection reason when specific arguments are unsafe
+   * to run headlessly over Remote Control.
+   */
+  getBridgeInvocationError?: (args: string) => string | undefined
   description: string
   localizationKey?: LocalizationKey
   hasUserSpecifiedDescription?: boolean
@@ -219,14 +233,12 @@ export type CommandBase = {
   isSensitive?: boolean // If true, args are redacted from the conversation history
   /** Defaults to `name`. Only override when the displayed name differs (e.g. plugin prefix stripping). */
   userFacingName?: () => string
-  /** If true, this command is safe to pass through a "bridge" that connects the IDE to the CLI. */
-  bridgeSafe?: boolean
 }
 
 export type Command = CommandBase &
   (PromptCommand | LocalCommand | LocalJSXCommand)
 
-/** Runtime guard for values that are allowed into command registries. */
+  /** Runtime guard for values that are allowed into command registries. */
 export function isCommand(value: unknown): value is Command {
   if (typeof value !== 'object' || value === null) return false
 

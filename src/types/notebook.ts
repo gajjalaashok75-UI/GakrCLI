@@ -1,61 +1,79 @@
+/** Jupyter / nbformat 单元格类型。 */
 /**
  * Jupyter notebook (.ipynb / nbformat 4.x) types used by NotebookEditTool,
  * src/utils/notebook.ts, and the notebook permission-diff UI.
  */
 
-export type NotebookCellType = 'code' | 'markdown'
+export type NotebookCellType =
+  | 'code' // 可执行代码格
+  | 'markdown' // 文档格
+  | 'raw' // 原始文本格
 
+/** 原始 notebook 中的流式输出单元。 */
 /** Raw nbformat cell output variants (the subset GakrCLI Code reads). */
+export type NotebookStreamCellOutput = {
+  output_type: 'stream' // stdout/stderr 流
+  name?: string // 流名（stdout/stderr）
+  text?: string | string[] // 流片段，可为多段拼接
+}
+
+/** execute_result / display_data 的 data 载荷（节选常用键）。 */
+export type NotebookDisplayData = Record<string, unknown> & {
+  'text/plain'?: string | string[] // 纯文本回退表示
+   [mimeType: string]: unknown // 其他 MIME 桶（如 image/png 等）
+}
+
+/** 原始 notebook 中的执行结果或展示型输出。 */
+export type NotebookRichCellOutput = {
+  output_type: 'execute_result' | 'display_data' // 执行结果或富展示
+  data?: NotebookDisplayData // MIME 桶（含图片/png 等）
+  metadata?: Record<string, unknown>
+  execution_count?: number | null 
+}
+
+/** 原始 notebook 中的错误输出。 */
+export type NotebookErrorCellOutput = {
+  output_type: 'error' // 内核报错
+  ename: string // 异常类型名
+  evalue: string // 异常消息
+  traceback: string[] // 栈跟踪行数组
+}
+
+/** 单元格原始输出联合（解析自 ipynb）。 */
 export type NotebookCellOutput =
-  | {
-      output_type: 'stream'
-      name?: string
-      text: string | string[]
-    }
-  | {
-      output_type: 'execute_result' | 'display_data'
-      data?: {
-        'text/plain'?: string | string[]
-        [mimeType: string]: unknown
-      }
-      metadata?: Record<string, unknown>
-      execution_count?: number | null
-    }
-  | {
-      output_type: 'error'
-      ename: string
-      evalue: string
-      traceback: string[]
-    }
+  | NotebookStreamCellOutput
+  | NotebookRichCellOutput
+  | NotebookErrorCellOutput
 
-/** Raw nbformat cell as stored on disk. */
+/** 解析前的 notebook 单元格（nbformat 子集）。 */
 export type NotebookCell = {
-  cell_type: NotebookCellType
-  /** Present in nbformat >= 4.5. */
-  id?: string
-  source: string | string[]
-  metadata: Record<string, unknown>
-  /** Code cells only. */
-  execution_count?: number | null
-  /** Code cells only. */
-  outputs?: NotebookCellOutput[]
+  id?: string // 单元格 id（nbformat≥4.5 常见）
+  cell_type: NotebookCellType // 单元类型
+  source: string | string[] // 单元源码
+  execution_count?: number | null // 代码格执行计数
+  outputs?: NotebookCellOutput[] // 代码格输出列表
+  metadata?: Record<string, unknown> // 额外元数据（编辑工具会写入）
 }
 
-/** Raw nbformat notebook file content. */
-export type NotebookContent = {
-  cells: NotebookCell[]
-  metadata: {
-    language_info?: { name: string }
-    [key: string]: unknown
+/** Notebook 顶层 metadata 中与语言相关的子集。 */
+export type NotebookMetadata = {
+  language_info?: {
+    name?: string // 默认内核语言名（如 python）
   }
-  nbformat: number
-  nbformat_minor: number
 }
 
-/** Image extracted from a rich cell output (base64, whitespace-stripped). */
+/** 磁盘上的 `.ipynb` 根结构（用于读入与增量编辑）。 */
+export type NotebookContent = {
+  nbformat?: number // 主版本号（缺省按 4 处理）
+  nbformat_minor?: number // 次版本号（影响 id 策略等）
+  cells: NotebookCell[] // 单元序列
+  metadata: NotebookMetadata // 文档级元数据
+}
+
+/** 规范化后的内联图片载荷（送入模型 image block）。 */
 export type NotebookOutputImage = {
-  image_data: string
-  media_type: 'image/png' | 'image/jpeg'
+  image_data: string // base64 无空白
+  media_type: 'image/png' | 'image/jpeg' // MIME 子类型
 }
 
 /** Processed (display-ready) cell output produced by readNotebook(). */
@@ -65,13 +83,12 @@ export type NotebookCellSourceOutput = {
   image?: NotebookOutputImage | undefined
 }
 
-/** Processed cell produced by readNotebook() for tool results. */
+/** 送入模型工具结果的单元摘要结构。 */
 export type NotebookCellSource = {
-  cell_id: string
-  cellType: NotebookCellType
-  source: string
-  /** Set for code cells only. */
-  language?: string
-  execution_count?: number | undefined
-  outputs?: NotebookCellSourceOutput[]
+  cellType: NotebookCellType // 与源 cell 对齐的类型
+  source: string // 拼接后的单元源码字符串
+  execution_count?: number // 代码格保留执行计数
+  cell_id: string // 稳定单元 id（无则生成 cell-{index}）
+  language?: string // 代码格语言 id（非 python 时标注）
+  outputs?: NotebookCellSourceOutput[] // 规范化后的输出列表
 }
