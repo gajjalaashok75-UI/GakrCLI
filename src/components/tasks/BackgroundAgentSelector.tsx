@@ -8,6 +8,7 @@ import { formatTokens } from '../../utils/format.js';
 function AgentRow({ task, selected }: { task: LocalAgentTaskState; selected: boolean }) {
   const elapsed = useElapsedTime(task.startTime, task.status === 'running');
   const tokens = task.progress?.tokenCount ?? 0;
+  const tools = task.progress?.toolUseCount ?? 0;
   const isRunning = task.status === 'running';
   return (
     <Box flexDirection="row" width="100%" justifyContent="space-between">
@@ -19,7 +20,7 @@ function AgentRow({ task, selected }: { task: LocalAgentTaskState; selected: boo
       </Box>
       <Box flexShrink={0}>
         <Text dimColor>
-          {elapsed} · ↓ {formatTokens(tokens)} tokens
+          {elapsed} · ↓ {formatTokens(tokens)} tokens · {tools} tools
         </Text>
       </Box>
     </Box>
