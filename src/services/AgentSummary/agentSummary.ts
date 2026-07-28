@@ -159,7 +159,10 @@ export function startAgentSummarization(
           )
           continue
         }
-        const textBlock = msg.message.content.find(b => b.type === 'text')
+        const contentArr = Array.isArray(msg.message!.content)
+          ? msg.message!.content
+          : []
+        const textBlock = contentArr.find(b => b.type === 'text')
         if (textBlock?.type === 'text' && textBlock.text.trim()) {
           const summaryText = textBlock.text.trim()
           logForDebuggingImpl(

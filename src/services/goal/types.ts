@@ -1,4 +1,13 @@
-export type GoalStatus = 'active' | 'paused' | 'achieved' | 'cleared'
+export type GoalStatus =
+  | 'active'
+  | 'paused'
+  | 'blocked'
+  | 'budget_limited'
+  | 'usage_limited'
+  | 'max_turns'
+  | 'complete'
+  | 'achieved' 
+  | 'cleared'
 
 export type GoalDecision = 'complete' | 'incomplete' | 'malformed' | 'error'
 

@@ -10,6 +10,8 @@ import { BASH_TOOL_NAME } from '../../tools/BashTool/toolName.js'
 import type { AssistantMessage, Message } from '../../types/message.js'
 import { createChildAbortController } from '../../utils/abortController.js'
 import { runToolUse } from './toolExecution.js'
+import { createToolBatchSpan, endToolBatchSpan } from '../langfuse/index.js'
+import type { LangfuseSpan } from '../langfuse/index.js'
 
 type MessageUpdate = {
   message?: Message
@@ -42,13 +44,10 @@ export class StreamingToolExecutor {
   private toolUseContext: ToolUseContext
   private hasErrored = false
   private erroredToolDescription = ''
-  // Child of toolUseContext.abortController. Fires when a Bash tool errors
-  // so sibling subprocesses die immediately instead of running to completion.
-  // Aborting this does NOT abort the parent — query.ts won't end the turn.
   private siblingAbortController: AbortController
   private discarded = false
-  // Signal to wake up getRemainingResults when progress is available
   private progressAvailableResolve?: () => void
+  private turnSpan: LangfuseSpan | null = null
 
   constructor(
     private readonly toolDefinitions: Tools,
@@ -61,33 +60,75 @@ export class StreamingToolExecutor {
     )
   }
 
-  /**
-   * Discards all pending and in-progress tools. Called when streaming fallback
-   * occurs and results from the failed attempt should be abandoned.
-   * Queued tools won't start, and in-progress tools will receive synthetic errors.
-   */
-  discard(): void {
-    if (this.discarded) return
-    this.discarded = true
-    this.siblingAbortController.abort('streaming_fallback')
-    for (const tool of this.tools) {
-      if (tool.status === 'yielded') continue
-      this.toolUseContext.queryLifecycle?.endToolUse(tool.id)
-      markToolUseAsComplete(this.toolUseContext, tool.id)
-      tool.pendingProgress.length = 0
-      tool.status = 'yielded'
-    }
-    this.updateInterruptibleState()
-    if (this.progressAvailableResolve) {
-      this.progressAvailableResolve()
-      this.progressAvailableResolve = undefined
-    }
+/**
+ * Discards all pending and in-progress tools. Called when streaming fallback
+ * occurs and results from the failed attempt should be abandoned.
+ * Queued tools won't start, and in-progress tools will receive synthetic errors.
+ *
+ * This implementation preserves lifecycle correctness while also releasing
+ * references after all tools have been transitioned into a terminal state,
+ * allowing the discarded executor to be garbage-collected safely.
+ */
+discard(): void {
+  // Idempotent: discard may be called multiple times during retry flows.
+  if (this.discarded) return
+
+  this.discarded = true
+
+  // Abort all running tool executions.
+  this.siblingAbortController.abort('streaming_fallback')
+
+  // Mark all non-terminal tools as completed/discarded.
+  for (const tool of this.tools) {
+    if (tool.status === 'yielded') continue
+
+    this.toolUseContext.queryLifecycle?.endToolUse(tool.id)
+    markToolUseAsComplete(this.toolUseContext, tool.id)
+
+    // Drop buffered progress updates.
+    tool.pendingProgress.length = 0
+
+    // Move tool into terminal state so downstream consumers
+    // don't wait forever.
+    tool.status = 'yielded'
   }
+
+  // Recompute executor state after tool transitions.
+  this.updateInterruptibleState()
+
+  // Wake any waiters blocked on progress/results.
+  if (this.progressAvailableResolve) {
+    this.progressAvailableResolve()
+    this.progressAvailableResolve = undefined
+  }
+
+  // Close tracing/span resources.
+  if (this.turnSpan) {
+    endToolBatchSpan(this.turnSpan)
+    this.turnSpan = null
+  }
+
+  // Release retained references to help GC.
+  this.tools.length = 0
+}
 
   /**
    * Add a tool to the execution queue. Will start executing immediately if conditions allow.
    */
   addTool(block: ToolUseBlock, assistantMessage: AssistantMessage): void {
+    // Create turn span on first tool — will be ended in getRemainingResults
+    if (this.tools.length === 0 && this.turnSpan === null) {
+      this.turnSpan = createToolBatchSpan(
+        this.toolUseContext.langfuseTrace ?? null,
+        { toolNames: [block.name], batchIndex: 0 },
+      )
+      if (this.turnSpan) {
+        this.toolUseContext = {
+          ...this.toolUseContext,
+          langfuseBatchSpan: this.turnSpan,
+        }
+      }
+    }
     const toolDefinition = findToolByName(this.toolDefinitions, block.name)
     if (!toolDefinition) {
       this.tools.push({
@@ -360,8 +401,8 @@ export class StreamingToolExecutor {
 
         const isErrorResult =
           update.message.type === 'user' &&
-          Array.isArray(update.message.message.content) &&
-          update.message.message.content.some(
+          Array.isArray(update.message.message!.content) &&
+          update.message.message!.content.some(
             _ => _.type === 'tool_result' && _.is_error === true,
           )
 
@@ -501,6 +542,9 @@ export class StreamingToolExecutor {
     for (const result of this.getCompletedResults()) {
       yield result
     }
+
+    endToolBatchSpan(this.turnSpan)
+    this.turnSpan = null
   }
 
   /**
