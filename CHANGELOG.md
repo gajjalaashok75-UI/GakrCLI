@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **src/bridge/initReplBridge.ts**: Added `export` to `deriveTitle` for test access. Replaced raw `slice(0, N)` truncation with grapheme-aware `truncateTitleToLength()` using `Intl.Segmenter` to prevent splitting surrogate pairs (emojis) at the title boundary. Added `truncateTitleToLength()` function. Added `getGraphemeSegmenter` import from `utils/intl.js`.
 - **src/bridge/initReplBridge.titleTruncation.test.ts**: Wired new test file from reference — 7/7 tests passing (previously 1 failure on surrogate-boundary truncation).
+- **src/tools/TaskOutputTool/TaskOutputTool.tsx**: Added `TASK_OUTPUT_ACTIVITY_INTERVAL_MS` constant (30s). Replaced one-shot `onProgress` call with `reportWaiting()` heartbeat pattern — fires immediately then every 30s via `setInterval`, with try-catch to prevent crash on progress consumer failures, and `clearInterval` cleanup in `finally`.
+- **src/tools/TaskOutputTool/TaskOutputTool.activity.test.ts**: Wired new test file from reference — 4/4 tests passing (previously 2 failures on heartbeat count).
 
 ## [0.6.0] - 2026-07-29
 
