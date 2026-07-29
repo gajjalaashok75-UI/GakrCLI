@@ -40,7 +40,7 @@ const featureFlags: Record<string, boolean> = {
   DAEMON: false,                  // Background daemon process (stubbed in open build)
   CCR_REMOTE_SETUP: false,        // PATCHED: Enable remote setup command
   AGENT_TRIGGERS: false,          // Scheduled remote agent triggers
-  ABLATION_BASELINE: false,       // A/B testing harness for eval experiments
+  ABLATION_BASELINE: true,        // A/B testing harness for eval experiments
   CONTEXT_COLLAPSE: true,        // Context collapsing optimization
   COMMIT_ATTRIBUTION: true,      // Co-Authored-By metadata in git commits
   HISTORY_SNIP: true,             // Model-callable snip tool for context management
@@ -51,68 +51,68 @@ const featureFlags: Record<string, boolean> = {
   WEB_BROWSER_TOOL: false,        // Built-in browser navigation/screenshot (panel UI stubbed)
   CHICAGO_MCP: false,             // Computer-use MCP (native Swift modules stubbed)
   ACP: false,                     // ACP agent protocol (requires @agentclientprotocol/sdk)
-  COWORKER_TYPE_TELEMETRY: false, // Telemetry for agent/coworker type classification
+  COWORKER_TYPE_TELEMETRY: true,  // Telemetry for agent/coworker type classification
   AGENT_TRIGGERS_REMOTE: false,   // Remote agent trigger delivery (requires cloud infra)
   KAIROS_BRIEF: false,            // Brief mode toggle (KAIROS sub-feature)
   KAIROS_GITHUB_WEBHOOKS: false,  // GitHub webhook PR subscription (KAIROS sub-feature)
   KAIROS_PUSH_NOTIFICATION: false,// Push notification support (KAIROS sub-feature)
-  OVERFLOW_TEST_TOOL: false,      // Overflow testing tool (test-only, not for production)
+  OVERFLOW_TEST_TOOL: true,       // Overflow testing tool (test-only, not for production)
   TERMINAL_PANEL: false,          // Terminal panel capture tool (IDE integration)
   TORCH: false,                   // Torch command (requires external infra)
   MCP_SKILLS: true,               // Dynamic MCP skill discovery via skill:// resources
 
   // ── Disabled: internal/experimental/infrastructure features ────────
-  AGENT_MEMORY_SNAPSHOT: false,       // Agent memory snapshot (experimental)
-  ALLOW_TEST_VERSIONS: false,         // Allow test/alpha version checks
-  ANTI_DISTILLATION_CC: false,        // Anti-distillation content checks (Anthropic internal)
-  AUTO_THEME: false,                  // Auto theme detection
-  BASH_CLASSIFIER: false,             // Bash command safety classifier
-  BREAK_CACHE_COMMAND: false,         // /break-cache command
+  AGENT_MEMORY_SNAPSHOT: true,        // Agent memory snapshot (experimental)
+  ALLOW_TEST_VERSIONS: true,          // Allow test/alpha version checks
+  ANTI_DISTILLATION_CC: true,         // Anti-distillation content checks (Anthropic internal)
+  AUTO_THEME: true,                   // Auto theme detection
+  BASH_CLASSIFIER: true,              // Bash command safety classifier
+  BREAK_CACHE_COMMAND: true,          // /break-cache command
   BUILDING_GAKR_APPS: false,          // GakrApps build mode (experimental)
   BYOC_ENVIRONMENT_RUNNER: false,     // BYOC environment runner (requires external infra)
   CCR_AUTO_CONNECT: false,            // CCR auto-connect (requires bridge mode)
   CCR_MIRROR: false,                  // CCR mirror mode (requires bridge mode)
-  COMPACTION_REMINDERS: false,        // Compaction reminder notifications
-  CONNECTOR_TEXT: false,              // Connector text processing
+  COMPACTION_REMINDERS: true,         // Compaction reminder notifications
+  CONNECTOR_TEXT: true,               // Connector text processing
   KNOWLEDGE: true,                    // Knowledge graph slash command
   CONVERSATION_ARC: true,             // Conversation arc analysis (experimental)
-  DIRECT_CONNECT: false,              // Direct connect mode
+  DIRECT_CONNECT: true,               // Direct connect mode
   DOWNLOAD_USER_SETTINGS: false,      // Download settings from cloud
-  FILE_PERSISTENCE: false,            // File persistence (experimental)
-  HARD_FAIL: false,                   // Hard fail on tool errors (debug mode)
-  HOOK_CHAINS: false,                 // Hook chain execution
-  HYBRID_CONTEXT_STRATEGY: false,     // Hybrid context window strategy
+  FILE_PERSISTENCE: true,             // File persistence (experimental)
+  HARD_FAIL: true,                    // Hard fail on tool errors (debug mode)
+  HOOK_CHAINS: true,                  // Hook chain execution
+  HYBRID_CONTEXT_STRATEGY: true,      // Hybrid context window strategy
   IS_LIBC_GLIBC: false,               // Runtime glibc detection
   IS_LIBC_MUSL: false,                // Runtime musl detection
   KAIROS_DREAM: false,                // KAIROS dream mode sub-feature
-  LAN_PIPES: false,                   // LAN pipe IPC (experimental)
+  LAN_PIPES: true,                    // LAN pipe IPC (experimental)
   LODESTONE: false,                   // Lodestone integration (Anthropic internal)
-  MCP_RICH_OUTPUT: false,             // MCP rich output formatting
-  MEMORY_SHAPE_TELEMETRY: false,      // Memory shape telemetry
+  MCP_RICH_OUTPUT: true,              // MCP rich output formatting
+  MEMORY_SHAPE_TELEMETRY: true,       // Memory shape telemetry
   MULTI_TURN_CONTEXT: true,           // Multi-turn context window (experimental)
   NATIVE_CLIENT_ATTESTATION: false,   // Client attestation (native)
   NATIVE_CLIPBOARD_IMAGE: false,      // Native clipboard image support
-  NEW_INIT: false,                    // New init flow (experimental)
-  PIPE_IPC: false,                    // Pipe IPC mechanism
-  POWERSHELL_AUTO_MODE: false,        // PowerShell auto-detection mode
-  REACTIVE_COMPACT: false,            // Reactive compaction strategy
-  REVIEW_ARTIFACT: false,             // Review artifact feature (gated)
+  NEW_INIT: true,                     // New init flow (experimental)
+  PIPE_IPC: true,                     // Pipe IPC mechanism
+  POWERSHELL_AUTO_MODE: true,         // PowerShell auto-detection mode
+  REACTIVE_COMPACT: true,             // Reactive compaction strategy
+  REVIEW_ARTIFACT: false,             // Review artifact feature (gated) — missing bundled/hunter.ts
   RUN_SKILL_GENERATOR: false,         // Skill generator runner
   SELF_HOSTED_RUNNER: false,          // Self-hosted runner (requires external infra)
   SKILL_IMPROVEMENT: false,           // Skill improvement suggestions
   SKILL_LEARNING: false,              // Skill learning system
-  SLOW_OPERATION_LOGGING: false,      // Slow operation debug logging
+  SLOW_OPERATION_LOGGING: true,       // Slow operation debug logging
   SSH_REMOTE: false,                  // SSH remote sessions (SSH agent infra)
-  STREAMLINED_OUTPUT: false,          // Streamlined output mode
+  STREAMLINED_OUTPUT: true,           // Streamlined output mode
   TREE_SITTER_BASH: false,            // Tree-sitter bash parser (native)
   TREE_SITTER_BASH_SHADOW: false,     // Tree-sitter bash shadow parser
-  UNATTENDED_RETRY: false,            // Unattended retry on failure
+  UNATTENDED_RETRY: true,             // Unattended retry on failure
   UPLOAD_USER_SETTINGS: false,        // Upload settings to cloud
 
   // ── Enabled: upstream defaults ──────────────────────────────────────
   COORDINATOR_MODE: true,             // Multi-agent coordinator with worker delegation
   BUILTIN_EXPLORE_PLAN_AGENTS: true,  // Built-in Explore/Plan specialized subagents
-  BUDDY: false,                       // Buddy mode for paired programming
+  BUDDY: true,                        // Buddy mode for paired programming
   MONITOR_TOOL: true,                 // MCP server monitoring/streaming tool
   TEAMMEM: true,                      // Team memory management
   MESSAGE_ACTIONS: true,              // Message action buttons in the UI
@@ -139,8 +139,8 @@ const featureFlags: Record<string, boolean> = {
   GOAL: true,                          // Goal tracking tool & command
   POOR: true,                          // 穷鬼模式，跳过 extract_memories/prompt_suggestion 减少消耗
   ULTRAPLAN: true,                     // Ultraplan multi-phase planning system
-  EXPERIMENTAL_SEARCH_EXTRA_TOOLS: false, // Extra tool search in attachment messages (experimental)
-  SKIP_DETECTION_WHEN_AUTOUPDATES_DISABLED: false, // Skip auto-update checks when updates disabled
+  EXPERIMENTAL_SEARCH_EXTRA_TOOLS: true,  // Extra tool search in attachment messages (experimental)
+  SKIP_DETECTION_WHEN_AUTOUPDATES_DISABLED: true,  // Skip auto-update checks when updates disabled
   REPO_MAP: false,                     // Repomap context in codebase-aware prompts
   LOCAL_MEMORY: false,                 // Local memory recall tool & command
   LOCAL_VAULT: false,                  // Local vault HTTP fetch tool & command
@@ -230,19 +230,7 @@ result = await Bun.build({
         // All internal feature stub modules (daemon, template jobs, environment
         // runner, self-hosted runner) now exist locally with full implementations
         // or reference-matching no-op stubs. No build-time stubs needed.
-        // Resolve react/compiler-runtime to the standalone package
-        build.onResolve({ filter: /^react\/compiler-runtime$/ }, () => ({
-          path: 'react/compiler-runtime',
-          namespace: 'react-compiler-shim',
-        }))
-        build.onLoad(
-          { filter: /.*/, namespace: 'react-compiler-shim' },
-          () => ({
-            contents: `export function c(size) { return new Array(size).fill(Symbol.for('react.memo_cache_sentinel')); }`,
-            loader: 'js',
-          }),
-        )
-
+        // react/compiler-runtime is shipped natively by React 19.2.4+.
         // Resolve native addon and missing snapshot imports to stubs
         for (const mod of [
           'audio-capture-napi',
@@ -251,7 +239,6 @@ result = await Bun.build({
           'modifiers-napi',
           'url-handler-napi',
           'color-diff-napi',
-          '@anthropic-ai/mcpb',
           'asciichart',
           'plist',
           'cacache',

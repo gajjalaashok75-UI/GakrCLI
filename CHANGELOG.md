@@ -5,6 +5,11 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-07-29
+
+### Changed
+- **scripts/build.ts**: Removed `react/compiler-runtime` shim (shipped natively by React 19.2.4+). Removed `@anthropic-ai/mcpb` from native-stub list (real npm package v2.1.2 installed). Enabled 28 feature flags from `false` → `true` (all have complete local implementations): `ABLATION_BASELINE`, `AGENT_MEMORY_SNAPSHOT`, `ALLOW_TEST_VERSIONS`, `ANTI_DISTILLATION_CC`, `AUTO_THEME`, `BASH_CLASSIFIER`, `BREAK_CACHE_COMMAND`, `BUDDY`, `COMPACTION_REMINDERS`, `CONNECTOR_TEXT`, `COWORKER_TYPE_TELEMETRY`, `DIRECT_CONNECT`, `EXPERIMENTAL_SEARCH_EXTRA_TOOLS`, `FILE_PERSISTENCE`, `HARD_FAIL`, `HOOK_CHAINS`, `HYBRID_CONTEXT_STRATEGY`, `LAN_PIPES`, `MCP_RICH_OUTPUT`, `MEMORY_SHAPE_TELEMETRY`, `NEW_INIT`, `OVERFLOW_TEST_TOOL`, `PIPE_IPC`, `POWERSHELL_AUTO_MODE`, `REACTIVE_COMPACT`, `SKIP_DETECTION_WHEN_AUTOUPDATES_DISABLED`, `SLOW_OPERATION_LOGGING`, `STREAMLINED_OUTPUT`, `UNATTENDED_RETRY`. Updated `REVIEW_ARTIFACT` comment noting missing `bundled/hunter.ts` module.
+
 ## [0.5.9] - 2026-07-28
 
 ### Changed
