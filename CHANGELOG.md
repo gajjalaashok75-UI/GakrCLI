@@ -5,6 +5,12 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-07-29
+
+### Fixed
+- **src/bridge/initReplBridge.ts**: Added `export` to `deriveTitle` for test access. Replaced raw `slice(0, N)` truncation with grapheme-aware `truncateTitleToLength()` using `Intl.Segmenter` to prevent splitting surrogate pairs (emojis) at the title boundary. Added `truncateTitleToLength()` function. Added `getGraphemeSegmenter` import from `utils/intl.js`.
+- **src/bridge/initReplBridge.titleTruncation.test.ts**: Wired new test file from reference — 7/7 tests passing (previously 1 failure on surrogate-boundary truncation).
+
 ## [0.6.0] - 2026-07-29
 
 ### Changed
