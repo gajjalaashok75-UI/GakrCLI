@@ -35,6 +35,7 @@ import { createCombinedAbortSignal } from '../utils/combinedAbortSignal.js'
 import { getGlobalConfig, saveGlobalConfig } from '../utils/config.js'
 import { logForDebugging } from '../utils/debug.js'
 import { stripDisplayTagsAllowEmpty } from '../utils/displayTags.js'
+import { getGraphemeSegmenter } from '../utils/intl.js'
 import { errorMessage } from '../utils/errors.js'
 import { getBranch, getRemoteUrl } from '../utils/git.js'
 import { toSDKMessages } from '../utils/messages/mappers.js'
@@ -566,7 +567,7 @@ const TITLE_MAX_LEN = 50
  * is empty (e.g. message was only <local-command-stdout>). Replaced by
  * generateSessionTitle once Haiku resolves (~1-15s).
  */
-function deriveTitle(raw: string): string | undefined {
+export function deriveTitle(raw: string): string | undefined {
   // Strip <ide_opened_file>, <session-start-hook>, etc. — these appear in
   // user messages when IDE/hooks inject context. stripDisplayTagsAllowEmpty
   // returns '' (not the original) so pure-tag messages are skipped.
@@ -577,7 +578,31 @@ function deriveTitle(raw: string): string | undefined {
   // Collapse newlines/tabs — titles are single-line in the gakrcli.ai list.
   const flat = firstSentence.replace(/\s+/g, ' ').trim()
   if (!flat) return undefined
-  return flat.length > TITLE_MAX_LEN
-    ? flat.slice(0, TITLE_MAX_LEN - 1) + '\u2026'
-    : flat
+  return truncateTitleToLength(flat, TITLE_MAX_LEN)
+}
+
+/**
+ * Truncate to at most `maxLen` UTF-16 code units without splitting a grapheme.
+ *
+ * TITLE_MAX_LEN bounds the session-title API field in characters, so the cut
+ * must be measured in code units — not terminal columns. A plain
+ * `slice(0, maxLen - 1)` cuts at an arbitrary code-unit index, so an emoji or
+ * astral-plane character straddling the boundary loses half its surrogate pair
+ * and the lone surrogate is transmitted as U+FFFD once the title is
+ * UTF-8-serialized to the gakrcli.ai backend. Walking graphemes keeps the pair
+ * (and any combining marks) intact while still enforcing the character bound —
+ * a display-width measure would instead truncate wide scripts early and let
+ * zero-width input through unbounded.
+ *
+ * exported for testing
+ */
+export function truncateTitleToLength(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text
+  if (maxLen <= 1) return '…'
+  let result = ''
+  for (const { segment } of getGraphemeSegmenter().segment(text)) {
+    if (result.length + segment.length > maxLen - 1) break
+    result += segment
+  }
+  return result + '…'
 }
