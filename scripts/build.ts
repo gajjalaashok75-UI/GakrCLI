@@ -81,7 +81,7 @@ const featureFlags: Record<string, boolean> = {
   FILE_PERSISTENCE: true,             // File persistence (experimental)
   HARD_FAIL: true,                    // Hard fail on tool errors (debug mode)
   HOOK_CHAINS: true,                  // Hook chain execution
-  HYBRID_CONTEXT_STRATEGY: true,      // Hybrid context window strategy
+  HYBRID_CONTEXT_STRATEGY: false,     // Hybrid context window strategy
   IS_LIBC_GLIBC: false,               // Runtime glibc detection
   IS_LIBC_MUSL: false,                // Runtime musl detection
   KAIROS_DREAM: false,                // KAIROS dream mode sub-feature

@@ -104,8 +104,31 @@ function getMessageChain(
   return { chains, orphans }
 }
 
+const _cache_getMessageTimestampMs = new WeakMap<Message, number>()
+
+function getMessageTimestampMs(message: Message): number {
+  let ts = _cache_getMessageTimestampMs.get(message)
+  if (ts !== undefined) return ts
+
+  // Try the runtime message timestamp (ISO string, set by createUserMessage)
+  if (message.timestamp) {
+    ts = new Date(message.timestamp).getTime()
+    if (!isNaN(ts)) {
+      _cache_getMessageTimestampMs.set(message, ts)
+      return ts
+    }
+  }
+  // Fall back to API response created_at (Unix timestamp in ms)
+  if (message.message?.created_at) {
+    _cache_getMessageTimestampMs.set(message, message.message.created_at)
+    return message.message.created_at
+  }
+  _cache_getMessageTimestampMs.set(message, 0)
+  return 0
+}
+
 function getCacheAge(message: Message): number {
-  const created = message.message?.created_at ?? 0
+  const created = getMessageTimestampMs(message)
   if (created === 0) return 1000
   return (Date.now() - created) / (1000 * 60 * 60)
 }
@@ -260,7 +283,7 @@ export function applyHybridStrategy(
   }
 
   selectedMessages.sort(
-    (a, b) => (a.message?.created_at ?? 0) - (b.message?.created_at ?? 0)
+    (a, b) => getMessageTimestampMs(a) - getMessageTimestampMs(b)
   )
 
   let totalTokens = 0

@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **scripts/build.ts**: Removed `react/compiler-runtime` shim (shipped natively by React 19.2.4+). Removed `@anthropic-ai/mcpb` from native-stub list (real npm package v2.1.2 installed). Enabled 28 feature flags from `false` → `true` (all have complete local implementations): `ABLATION_BASELINE`, `AGENT_MEMORY_SNAPSHOT`, `ALLOW_TEST_VERSIONS`, `ANTI_DISTILLATION_CC`, `AUTO_THEME`, `BASH_CLASSIFIER`, `BREAK_CACHE_COMMAND`, `BUDDY`, `COMPACTION_REMINDERS`, `CONNECTOR_TEXT`, `COWORKER_TYPE_TELEMETRY`, `DIRECT_CONNECT`, `EXPERIMENTAL_SEARCH_EXTRA_TOOLS`, `FILE_PERSISTENCE`, `HARD_FAIL`, `HOOK_CHAINS`, `HYBRID_CONTEXT_STRATEGY`, `LAN_PIPES`, `MCP_RICH_OUTPUT`, `MEMORY_SHAPE_TELEMETRY`, `NEW_INIT`, `OVERFLOW_TEST_TOOL`, `PIPE_IPC`, `POWERSHELL_AUTO_MODE`, `REACTIVE_COMPACT`, `SKIP_DETECTION_WHEN_AUTOUPDATES_DISABLED`, `SLOW_OPERATION_LOGGING`, `STREAMLINED_OUTPUT`, `UNATTENDED_RETRY`. Updated `REVIEW_ARTIFACT` comment noting missing `bundled/hunter.ts` module.
 
+### Fixed
+- **scripts/build.ts**: Disabled `HYBRID_CONTEXT_STRATEGY` flag (false). The implementation uses `message.message?.created_at` which doesn't exist on runtime messages in the GakrCLI codebase, causing the sort comparator to be a no-op and breaking message alternation. Matches upstream OpenClaude where this flag is not defined.
+- **src/utils/hybridContextStrategy.ts**: Added `getMessageTimestampMs()` helper that checks `message.timestamp` (ISO string set on all messages) before falling back to `message.message?.created_at`. Added WeakMap cache for performance. Fix remains in code for when the flag is re-enabled.
+
 ## [0.5.9] - 2026-07-28
 
 ### Changed
