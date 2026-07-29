@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **src/tools/TaskOutputTool/TaskOutputTool.activity.test.ts**: Wired new test file from reference — 4/4 tests passing (previously 2 failures on heartbeat count).
 - **src/services/teamMemorySync/index.ts**: Refactored `readLocalTeamMemory` and `writeRemoteEntriesToLocal` to delegate to dependency-injected versions with bounded concurrency (`mapWithConcurrency`, `TEAM_MEMORY_FILE_IO_CONCURRENCY=8`). Added `collectLocalTeamMemoryFiles`, `readLocalTeamMemoryWithDependencies`, `writeRemoteEntriesToLocalWithDependencies`. Added `TeamMemoryReadDeps`, `TeamMemoryWriteDeps`, `TeamMemoryDirent` types and `defaultReadDeps`/`defaultWriteDeps`. Exported `__test` namespace.
 - **src/services/teamMemorySync/index.test.ts**: Wired new test file from reference — 8/8 tests passing.
+- **src/utils/attachments.ts**: Exported `getUltrathinkEffortAttachment`, added `logActivation` parameter with `GAKR_CODE_DISABLE_ATTACHMENTS`/`GAKR_CODE_SIMPLE` env guards for speculative-path alignment.
+- **src/services/PromptSuggestion/speculation.ts**: Removed `(mode === 'plan' && isBypassPermissionsModeAvailable)` from `canAutoAcceptEdits` check that allowed plan mode with bypass to skip the `speculation_edit_boundary` boundary detection.
+- **src/services/PromptSuggestion/speculation.test.ts**: Wired new test file from reference — 2/2 tests passing.
 
 ## [0.6.0] - 2026-07-29
 

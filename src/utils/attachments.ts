@@ -1473,11 +1473,28 @@ export function getDateChangeAttachments(
   return [{ type: 'date_change', newDate: currentDate }]
 }
 
-function getUltrathinkEffortAttachment(input: string | null): Attachment[] {
-  if (!isUltrathinkEnabled() || !input || !hasUltrathinkKeyword(input)) {
+export function getUltrathinkEffortAttachment(
+  input: string | null,
+  logActivation: boolean = true,
+): Attachment[] {
+  // This helper is also used by speculative paths, which do not call
+  // getAttachments(). Keep their behavior aligned with its global opt-out.
+  if (
+    isEnvTruthy(process.env.GAKR_CODE_DISABLE_ATTACHMENTS) ||
+    isEnvTruthy(process.env.GAKR_CODE_SIMPLE)
+  ) {
     return []
   }
-  logEvent('tengu_ultrathink', {})
+  // Gate the model-facing attachment behind the same rollout flag as the UI.
+  // Without this, the hidden `ultrathink_effort` attachment would still raise
+  // the turn to high effort even when the ULTRATHINK build flag / GrowthBook
+  // rollout is disabled.
+  if (!input || !isUltrathinkEnabled() || !hasUltrathinkKeyword(input)) {
+    return []
+  }
+  if (logActivation) {
+    logEvent('tengu_ultrathink', {})
+  }
   return [{ type: 'ultrathink_effort', level: 'high' }]
 }
 
