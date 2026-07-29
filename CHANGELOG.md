@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **src/bridge/initReplBridge.titleTruncation.test.ts**: Wired new test file from reference — 7/7 tests passing (previously 1 failure on surrogate-boundary truncation).
 - **src/tools/TaskOutputTool/TaskOutputTool.tsx**: Added `TASK_OUTPUT_ACTIVITY_INTERVAL_MS` constant (30s). Replaced one-shot `onProgress` call with `reportWaiting()` heartbeat pattern — fires immediately then every 30s via `setInterval`, with try-catch to prevent crash on progress consumer failures, and `clearInterval` cleanup in `finally`.
 - **src/tools/TaskOutputTool/TaskOutputTool.activity.test.ts**: Wired new test file from reference — 4/4 tests passing (previously 2 failures on heartbeat count).
+- **src/services/teamMemorySync/index.ts**: Refactored `readLocalTeamMemory` and `writeRemoteEntriesToLocal` to delegate to dependency-injected versions with bounded concurrency (`mapWithConcurrency`, `TEAM_MEMORY_FILE_IO_CONCURRENCY=8`). Added `collectLocalTeamMemoryFiles`, `readLocalTeamMemoryWithDependencies`, `writeRemoteEntriesToLocalWithDependencies`. Added `TeamMemoryReadDeps`, `TeamMemoryWriteDeps`, `TeamMemoryDirent` types and `defaultReadDeps`/`defaultWriteDeps`. Exported `__test` namespace.
+- **src/services/teamMemorySync/index.test.ts**: Wired new test file from reference — 8/8 tests passing.
 
 ## [0.6.0] - 2026-07-29
 
