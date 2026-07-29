@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **src/utils/attachments.ts**: Exported `getUltrathinkEffortAttachment`, added `logActivation` parameter with `GAKR_CODE_DISABLE_ATTACHMENTS`/`GAKR_CODE_SIMPLE` env guards for speculative-path alignment.
 - **src/services/PromptSuggestion/speculation.ts**: Removed `(mode === 'plan' && isBypassPermissionsModeAvailable)` from `canAutoAcceptEdits` check that allowed plan mode with bypass to skip the `speculation_edit_boundary` boundary detection.
 - **src/services/PromptSuggestion/speculation.test.ts**: Wired new test file from reference — 2/2 tests passing.
+- **src/services/mcp/envExpansion.ts**: Fixed `:-` default value parsing — replaced `String.split(':-', 2)` with `indexOf`+`slice` so defaults containing `:-` (e.g. `${VAR:-a:-b}`) aren't incorrectly truncated, matching bash behavior.
+- **src/services/mcp/client.ts**: Added `MCP_TOOL_ACTIVITY_INTERVAL_MS` constant (30s). Added `onUrlElicitationRequired` param to `callMCPToolWithUrlElicitationRetry`. Rewrote `call` method progress emission with try-catch guard on all `onProgress` calls, heartbeat `setInterval` with server progress caching and merging, `clearInterval` cleanup on success/failure, and cached progress reset on session-expired/elicitation retry.
+- **src/services/mcp/envExpansion.test.ts**: Wired new test file from reference — 10/10 tests passing.
+- **src/services/mcp/client.activity.test.ts**: Wired new test file from reference — 16/16 tests passing.
 
 ## [0.6.0] - 2026-07-29
 
