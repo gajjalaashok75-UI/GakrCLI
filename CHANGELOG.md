@@ -5,6 +5,14 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.4] - 2026-07-31
+
+### Fixed
+- **src/memdir/memdir.ts**: `truncateEntrypointContent` now measures content in actual UTF-8 bytes (`Buffer.byteLength`) instead of UTF-16 code units — `.length` undercounts multibyte content (CJK/emoji are 3-4 bytes each) by up to ~4x, letting large multibyte MEMORY.md index entries slip past the 25KB byte budget uncapped. Truncation now cuts in byte space (preferring the last newline before the cap) and never slices through a multibyte UTF-8 character (backs up from continuation bytes to the character's first byte so no U+FFFD replacement chars are emitted).
+
+### Added
+- **src/memdir/memdir.entrypointBytes.test.ts**: Regression tests wired from reference covering the byte cap on multibyte content, small-content passthrough, line+byte combined truncation, and multibyte-safe hard cuts. All 29 tests in `src/memdir/` pass.
+
 ## [0.6.3] - 2026-07-31
 
 ### Added
