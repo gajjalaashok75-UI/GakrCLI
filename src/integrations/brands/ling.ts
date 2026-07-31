@@ -1,16 +1,16 @@
 import { defineBrand } from '../define.js'
 
 export default defineBrand({
-  id: 'tencent',
-  label: 'Tencent',
+  id: 'ling',
+  label: 'Ling',
   canonicalVendorId: 'openai',
   defaultCapabilities: {
     supportsVision: false,
     supportsStreaming: true,
     supportsFunctionCalling: true,
-    supportsJsonMode: true,
+    supportsJsonMode: false,
     supportsReasoning: true,
     supportsPreciseTokenCount: false,
   },
-  modelIds: ['tencent/hy3'],
+  modelIds: ['inclusionai/ling-3.0-flash:free'],
 })

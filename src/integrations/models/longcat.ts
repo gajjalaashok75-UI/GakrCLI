@@ -2,21 +2,20 @@ import { defineModel } from '../define.js'
 
 export default [
   defineModel({
-    id: 'tencent/hy3',
-    label: 'Tencent HY3',
-    brandId: 'tencent',
-    vendorId: 'openai',
+    id: 'LongCat-2.0',
+    label: 'LongCat-2.0',
+    brandId: 'longcat',
+    vendorId: 'longcat',
     classification: ['chat', 'reasoning', 'coding'],
-    defaultModel: 'tencent/hy3',
+    defaultModel: 'LongCat-2.0',
     capabilities: {
-      supportsVision: false,
       supportsStreaming: true,
-      supportsFunctionCalling: true,
-      supportsJsonMode: true,
+      supportsFunctionCalling: false,
+      supportsJsonMode: false,
       supportsReasoning: true,
       supportsPreciseTokenCount: false,
     },
-    contextWindow: 262_144,
+    contextWindow: 1_048_576,
     maxOutputTokens: 131_072,
   }),
 ]

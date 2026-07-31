@@ -1,16 +1,15 @@
 import { defineBrand } from '../define.js'
 
 export default defineBrand({
-  id: 'tencent',
-  label: 'Tencent',
-  canonicalVendorId: 'openai',
+  id: 'longcat',
+  label: 'LongCat',
+  canonicalVendorId: 'longcat',
   defaultCapabilities: {
-    supportsVision: false,
     supportsStreaming: true,
-    supportsFunctionCalling: true,
-    supportsJsonMode: true,
+    supportsFunctionCalling: false,
+    supportsJsonMode: false,
     supportsReasoning: true,
     supportsPreciseTokenCount: false,
   },
-  modelIds: ['tencent/hy3'],
+  modelIds: ['LongCat-2.0'],
 })

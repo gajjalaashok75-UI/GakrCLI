@@ -43,6 +43,8 @@ export interface OpenAIShimTransportConfig {
   enableToolStreaming?: boolean
   maxTokensField?: OpenAIShimTokenField
   removeBodyFields?: string[]
+  /** Whether the endpoint accepts image content parts. Defaults to true. */
+  supportsImageInputs?: boolean
   /** Override the endpoint path for this model (e.g., '/responses', '/messages'). */
   endpointPath?: string
 }
@@ -85,6 +87,9 @@ export interface TransportConfig {
   kind: TransportKind
   headers?: Record<string, string>
   openaiShim?: OpenAIShimTransportConfig
+  anthropicProxy?: {
+    supportsCustomHeaders?: boolean
+  }
 }
 
 export interface CatalogTransportOverrides {
