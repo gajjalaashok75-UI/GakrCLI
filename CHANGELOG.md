@@ -5,6 +5,21 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.6] - 2026-08-01
+
+### Added
+- **src/constants/brand.test.ts**: New tests covering wordmark row integrity, width consistency, gradient accent mirroring, and rgb() format for `BRAND_ACCENT_RGB`.
+- **src/constants/outputStyles.ts**: New exported `resolveOutputStyle` helper — safe lookup that returns null for unknown or inherited-Object-prototype names, preventing bare-index resolution of `constructor`, `__proto__`, etc.
+- **src/constants/outputStyles.protoName.test.ts**: New tests covering real style resolution, null for unconfigured names, null for Object.prototype member names, and null for explicitly null entries.
+- **src/constants/promptIdentity.test.ts**: New tests covering immediate-tool-use directive in non-REPL and REPL modes; Claude Code identity assertion updated.
+
+### Changed
+- **src/constants/brand.ts**: `BRAND_NAME` updated to `GAKRCLI`; accent color changed from gakr-gakr orange (`rgb(255,122,26)`) to sky-blue (`rgb(114,198,237)`); `WORDMARK_OPEN` removed and replaced with 6-row ASCII wordmark art; new derived exports `WORDMARK_ACCENT_LEFT` and `WORDMARK_ACCENT_RIGHT` for shimmer/brand accent halves; `WORDMARK_WIDTH` now measures the new single pass.
+- **src/constants/prompts.ts**: Relative `require` paths fixed from `src/tools/…` to `../tools/…`; "Using your tools" section updated to emphasize immediate tool invocation; embedded-search-tools guidance added (ant native-tool hints conditionally suppressed); opus cutoff updated to January 2026; `claude-sonnet-4-6` August 2025 entry added; `numeric_length_anchors` section added.
+
+### Fixed
+- **src/constants/outputStyles.ts**: `getOutputStyleConfig` now delegates to `resolveOutputStyle` instead of bare object indexing, preventing Object.prototype member values from leaking into output style config.
+
 ## [0.6.5] - 2026-07-31
 
 ### Added
