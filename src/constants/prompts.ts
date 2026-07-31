@@ -80,19 +80,19 @@ const proactiveModule =
 const BRIEF_PROACTIVE_SECTION: string | null =
   feature('KAIROS') || feature('KAIROS_BRIEF')
     ? (
-        require('src/tools/BriefTool/prompt.js') as typeof import('src/tools/BriefTool/prompt.js')
+        require('../tools/BriefTool/prompt.js') as typeof import('../tools/BriefTool/prompt.js')
       ).BRIEF_PROACTIVE_SECTION
     : null
 function getBriefToolModule() {
   return feature('KAIROS') || feature('KAIROS_BRIEF')
-    ? (require('src/tools/BriefTool/BriefTool.js') as typeof import('src/tools/BriefTool/BriefTool.js'))
+    ? (require('../tools/BriefTool/BriefTool.js') as typeof import('../tools/BriefTool/BriefTool.js'))
     : null
 }
 const DISCOVER_SKILLS_TOOL_NAME: string | null = feature(
   'EXPERIMENTAL_SKILL_SEARCH',
 )
   ? (
-      require('src/tools/DiscoverSkillsTool/prompt.js') as typeof import('src/tools/DiscoverSkillsTool/prompt.js')
+      require('../tools/DiscoverSkillsTool/prompt.js') as typeof import('../tools/DiscoverSkillsTool/prompt.js')
     ).DISCOVER_SKILLS_TOOL_NAME
   : null
 // Capture the module (not .isSkillSearchEnabled directly) so spyOn() in tests
@@ -274,19 +274,37 @@ function getUsingYourToolsSection(enabledTools: Set<string>): string {
       taskToolName
         ? `Break down and manage your work with the ${taskToolName} tool. These tools are helpful for planning your work and helping the user track your progress. Mark each task as completed as soon as you are done with the task. Do not batch up multiple tasks before marking them as completed.`
         : null,
+      `If you intend to use a tool to accomplish a task or analyze a file, use the tool IMMEDIATELY. Do not output a message explaining what you are going to do and then stop to wait for the user to prompt you again. Always call the tool in the same response.`,
     ].filter(item => item !== null)
     if (items.length === 0) return ''
     return [`# Using your tools`, ...prependBullets(items)].join(`\n`)
   }
-  
+
+  // Ant-native builds alias find/grep to embedded bfs/ugrep and remove the
+  // dedicated Glob/Grep tools, so skip guidance pointing at them.
+  const embedded = hasEmbeddedSearchTools()
+
+  const providedToolSubitems = [
+    `To read files use ${FILE_READ_TOOL_NAME} instead of cat, head, tail, or sed`,
+    `To edit files use ${FILE_EDIT_TOOL_NAME} instead of sed or awk`,
+    `To create files use ${FILE_WRITE_TOOL_NAME} instead of cat with heredoc or echo redirection`,
+    ...(embedded
+      ? []
+      : [
+          `To search for files use ${GLOB_TOOL_NAME} instead of find or ls`,
+          `To search the content of files, use ${GREP_TOOL_NAME} instead of grep or rg`,
+        ]),
+    `Reserve using the ${BASH_TOOL_NAME} exclusively for system commands and terminal operations that require shell execution. If you are unsure and there is a relevant dedicated tool, default to using the dedicated tool and only fallback on using the ${BASH_TOOL_NAME} tool for these if it is absolutely necessary.`,
+  ]
 
   const items = [
-    `Core tools (Read, Edit, Write, Glob, Grep, Bash, Agent, WebFetch, WebSearch, AskUserQuestion, NotebookEdit, TaskCreate, TaskUpdate, TaskList, TaskGet, TodoWrite, Skill, CronCreate, CronDelete, CronList, Config, LSP, MCPTool) can be called directly as needed. Prefer dedicated tools over ${BASH_TOOL_NAME} equivalents (e.g., ${FILE_READ_TOOL_NAME} over cat, ${FILE_EDIT_TOOL_NAME} over sed, ${GLOB_TOOL_NAME} over find, ${GREP_TOOL_NAME} over grep). Reserve ${BASH_TOOL_NAME} for shell operations: package installs, test runners, build commands, git operations.`,
-    `Search before saying unknown — when the user references a file, function, or module you have not seen, search with ${GREP_TOOL_NAME}/${GLOB_TOOL_NAME} first.`,
+    `Do NOT use the ${BASH_TOOL_NAME} to run commands when a relevant dedicated tool is provided. Using dedicated tools allows the user to better understand and review your work. This is CRITICAL to assisting the user:`,
+    providedToolSubitems,
     taskToolName
-      ? `Break down and manage your work with the ${taskToolName} tool. Mark each task as completed as soon as you are done.`
+      ? `Break down and manage your work with the ${taskToolName} tool. These tools are helpful for planning your work and helping the user track your progress. Mark each task as completed as soon as you are done with the task. Do not batch up multiple tasks before marking them as completed.`
       : null,
-      `You can call multiple tools in a single response. If you intend to call multiple tools and there are no dependencies between them, make all independent tool calls in parallel. Maximize use of parallel tool calls where possible to increase efficiency. However, if some tool calls depend on previous calls to inform dependent values, do NOT call these tools in parallel and instead call them sequentially. For instance, if one operation must complete before another starts, run these operations sequentially instead.`,
+    `You can call multiple tools in a single response. If you intend to call multiple tools and there are no dependencies between them, make all independent tool calls in parallel. Maximize use of parallel tool calls where possible to increase efficiency. However, if some tool calls depend on previous calls to inform dependent values, do NOT call these tools in parallel and instead call them sequentially. For instance, if one operation must complete before another starts, run these operations sequentially instead.`,
+    `If you intend to use a tool to accomplish a task or analyze a file, use the tool IMMEDIATELY. Do not output a message explaining what you are going to do and then stop to wait for the user to prompt you again. Always call the tool in the same response.`,
   ].filter(item => item !== null)
 
   return [`# Using your tools`, ...prependBullets(items)].join(`\n`)
@@ -485,7 +503,7 @@ ${CYBER_RISK_INSTRUCTION}`,
     systemPromptSection('ant_model_override', () =>
       getAntModelOverrideSection(),
     ),
-    systemPromptSection(`env_info_simple:${model}`,  () =>
+    systemPromptSection(`env_info_simple:${model}`, () =>
       computeSimpleEnvInfo(model, additionalWorkingDirectories),
     ),
     systemPromptSection('language', () =>
@@ -513,6 +531,17 @@ ${CYBER_RISK_INSTRUCTION}`,
       'summarize_tool_results',
       () => SUMMARIZE_TOOL_RESULTS_SECTION,
     ),
+    // Numeric length anchors — research shows ~1.2% output token reduction vs
+    // qualitative "be concise". Ant-only to measure quality impact first.
+    ...(process.env.USER_TYPE === 'ant'
+      ? [
+          systemPromptSection(
+            'numeric_length_anchors',
+            () =>
+              'Length limits: keep text between tool calls to \u226425 words. Keep final responses to \u2264100 words unless the task requires more detail.',
+          ),
+        ]
+      : []),
     ...(feature('TOKEN_BUDGET')
       ? [
           // Cached unconditionally — the "When the user specifies..." phrasing
@@ -690,10 +719,13 @@ export async function computeSimpleEnvInfo(
 // @[MODEL LAUNCH]: Add a knowledge cutoff date for the new model.
 function getKnowledgeCutoff(modelId: string): string | null {
   const canonical = getCanonicalName(modelId)
-  if (canonical.includes('claude-sonnet-4-6')) {
-    return 'August 2025'
-  } else if (canonical.includes('claude-opus-4-7')) {
+  if (
+    canonical.includes('claude-opus-4-8') ||
+    canonical.includes('claude-opus-4-7')
+  ) {
     return 'January 2026'
+  } else if (canonical.includes('claude-sonnet-4-6')) {
+    return 'August 2025'
   } else if (canonical.includes('claude-opus-4-6')) {
     return 'May 2025'
   } else if (canonical.includes('claude-opus-4-5')) {

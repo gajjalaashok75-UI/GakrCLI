@@ -95,7 +95,7 @@ test('simple mode identity describes GakrCLI instead of Claude Code', async () =
   const prompt = await getSystemPrompt([], 'gpt-4o')
 
   expect(prompt[0]).toContain('GakrCLI')
-  expect(prompt[0]).not.toContain('claude Code')
+  expect(prompt[0]).not.toContain('Claude Code')
   expect(prompt[0]).not.toContain("Anthropic's official CLI for Claude")
 })
 
@@ -112,6 +112,53 @@ test('system prompt model identity updates when model changes mid-session', asyn
   expect(firstText).toContain('You are powered by the model old-test-model.')
   expect(secondText).toContain('You are powered by the model new-test-model.')
   expect(secondText).not.toContain('You are powered by the model old-test-model.')
+})
+
+test('system prompt includes immediate-tool-use directive in non-REPL mode', async () => {
+  const originalReplMode = process.env.GAKR_REPL_MODE
+  const originalCodeRepl = process.env.GAKR_CODE_REPL
+  process.env.GAKR_CODE_REPL = '0'
+
+  try {
+    const prompt = await getSystemPrompt([], 'gpt-4o')
+    const text = prompt.join('\n')
+    expect(text).toContain('If you intend to use a tool to accomplish a task or analyze a file, use the tool IMMEDIATELY. Do not output a message explaining what you are going to do and then stop to wait for the user to prompt you again. Always call the tool in the same response.')
+  } finally {
+    if (originalReplMode === undefined) {
+      delete process.env.GAKR_REPL_MODE
+    } else {
+      process.env.GAKR_REPL_MODE = originalReplMode
+    }
+    if (originalCodeRepl === undefined) {
+      delete process.env.GAKR_CODE_REPL
+    } else {
+      process.env.GAKR_CODE_REPL = originalCodeRepl
+    }
+  }
+})
+
+test('system prompt includes immediate-tool-use directive in REPL mode', async () => {
+  const originalReplMode = process.env.GAKR_REPL_MODE
+  const originalCodeRepl = process.env.GAKR_CODE_REPL
+  delete process.env.GAKR_CODE_REPL
+  process.env.GAKR_REPL_MODE = '1'
+
+  try {
+    const prompt = await getSystemPrompt([], 'gpt-4o')
+    const text = prompt.join('\n')
+    expect(text).toContain('If you intend to use a tool to accomplish a task or analyze a file, use the tool IMMEDIATELY. Do not output a message explaining what you are going to do and then stop to wait for the user to prompt you again. Always call the tool in the same response.')
+  } finally {
+    if (originalReplMode === undefined) {
+      delete process.env.GAKR_REPL_MODE
+    } else {
+      process.env.GAKR_REPL_MODE = originalReplMode
+    }
+    if (originalCodeRepl === undefined) {
+      delete process.env.GAKR_CODE_REPL
+    } else {
+      process.env.GAKR_CODE_REPL = originalCodeRepl
+    }
+  }
 })
 
 test('built-in agent prompts describe GakrCLI instead of Claude Code', () => {
@@ -157,6 +204,6 @@ test('built-in agent prompts describe GakrCLI instead of Claude Code', () => {
   expect(guidePrompt).toContain('GakrCLI')
   expect(guidePrompt).toContain('You are the GakrCLI guide agent.')
   expect(guidePrompt).toContain('**GakrCLI** (the CLI tool)')
-  expect(guidePrompt).not.toContain('You are the Claude Code guide agent.')
-  expect(guidePrompt).not.toContain('**GakrCLI Code** (the CLI tool)')
+  expect(guidePrompt).not.toContain('You are the Claude guide agent.')
+  expect(guidePrompt).not.toContain('**Claude Code** (the CLI tool)')
 })
