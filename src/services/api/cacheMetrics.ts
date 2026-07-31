@@ -63,7 +63,12 @@ export type CacheAwareProvider =
   // local to one branch.
   | 'self-hosted'
   | 'copilot'
-  | 'copilot-gakrcli'
+  | 'copilot-claude'
+
+export type CacheMetricsReliability =
+  | 'reliable'
+  | 'advisory'
+  | 'unsupported'
 
 /** Unified cache metrics for one API response. */
 export type CacheMetrics = {
@@ -224,7 +229,7 @@ function isLocalOrPrivateUrl(url: string): boolean {
 /**
  * Map the canonical APIProvider enum (+ environment hints) into a
  * cache-capability bucket. We separate `copilot` (no cache) from
- * `copilot-gakrcli` (Anthropic shim via Copilot with explicit cache)
+ * `copilot-claude` (Anthropic shim via Copilot with explicit cache)
  * because the two behave very differently even under the same provider
  * flag — see `isGithubNativeAnthropicMode` in utils/model/providers.ts.
  *
@@ -244,7 +249,7 @@ export function resolveCacheProvider(
   hints?: { githubNativeAnthropic?: boolean; openAiBaseUrl?: string },
 ): CacheAwareProvider {
   if (provider === 'github') {
-    return hints?.githubNativeAnthropic ? 'copilot-gakrcli' : 'copilot'
+    return hints?.githubNativeAnthropic ? 'copilot-claude' : 'copilot'
   }
   if (provider === 'firstParty' || provider === 'bedrock' || provider === 'vertex' || provider === 'foundry') {
     return 'anthropic'
@@ -273,18 +278,13 @@ export function resolveCacheProvider(
   return 'openai'
 }
 
-export type CacheMetricsReliability =
-  | 'reliable'
-  | 'advisory'
-  | 'unsupported'
-
 export function getCacheMetricsReliability(
   provider: CacheAwareProvider,
 ): CacheMetricsReliability {
   if (provider === 'copilot' || provider === 'ollama') {
     return 'unsupported'
   }
-  if (provider === 'anthropic' || provider === 'copilot-gakrcli') {
+  if (provider === 'anthropic' || provider === 'copilot-claude') {
     return 'reliable'
   }
   return 'advisory'
@@ -432,7 +432,7 @@ export function extractCacheMetrics(
   const read = asNumber(u.cache_read_input_tokens)
   const created = asNumber(u.cache_creation_input_tokens)
   const fresh = asNumber(u.input_tokens)
-  // Copilot vanilla (no GakrCLI) and Ollama don't expose cache fields at
+  // Copilot vanilla (no Claude) and Ollama don't expose cache fields at
   // all as a provider-identity matter. These are explicit provider
   // selections (via GAKR_CODE_USE_GITHUB and the Ollama base-URL
   // default port), so we can hard-wire `supported: false` and let the

@@ -70,8 +70,13 @@ import {
   shouldUseIntegrationRuntimeLimits,
 } from '../../utils/context.js'
 import { resolveAppliedEffort } from '../../utils/effort.js'
-import { isEnvTruthy } from '../../utils/envUtils.js'
+import { isEnvDefinedFalsy, isEnvTruthy } from '../../utils/envUtils.js'
 import { errorMessage } from '../../utils/errors.js'
+import {
+  getStreamingAbortMessage,
+  isExpectedSideTaskAbortReason,
+  normalizeAbortReason,
+} from '../../utils/abortReasons.js'
 import { computeFingerprintFromMessages } from '../../utils/fingerprint.js'
 import { captureAPIRequest, logError } from '../../utils/log.js'
 import {
@@ -822,6 +827,13 @@ function getNonstreamingFallbackTimeoutMs(): number {
   const override = parseInt(process.env.API_TIMEOUT_MS || '', 10)
   if (override) return override
   return isEnvTruthy(process.env.GAKR_CODE_REMOTE) ? 120_000 : 300_000
+}
+
+class StreamIdleTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`Stream idle timeout - no chunks received for ${timeoutMs / 1000}s`)
+    this.name = 'StreamIdleTimeoutError'
+  }
 }
 
 /**
@@ -1950,9 +1962,15 @@ async function* queryModel(
     // kill hung streams. Without this, a silently dropped connection can hang
     // the session indefinitely since the SDK's request timeout only covers the
     // initial fetch(), not the streaming body.
-    const streamWatchdogEnabled = isEnvTruthy(
-      process.env.GAKR_ENABLE_STREAM_WATCHDOG,
-    )
+    // Enabled by default, matching the always-on idle timeout already used by
+    // the OpenAI/Codex shims. A silently dropped Anthropic
+    // stream now aborts and falls back to a non-streaming retry within
+    // STREAM_IDLE_TIMEOUT_MS, instead of hanging until QueryGuard's 5-minute
+    // idle timeout. Opt out with GAKR_DISABLE_STREAM_WATCHDOG=1 (or by
+    // explicitly setting GAKR_ENABLE_STREAM_WATCHDOG to a falsy value).
+    const streamWatchdogEnabled =
+      !isEnvTruthy(process.env.GAKR_DISABLE_STREAM_WATCHDOG) &&
+      !isEnvDefinedFalsy(process.env.GAKR_ENABLE_STREAM_WATCHDOG)
     const STREAM_IDLE_TIMEOUT_MS =
       parseInt(process.env.GAKR_STREAM_IDLE_TIMEOUT_MS || '', 10) || 90_000
     const STREAM_IDLE_WARNING_MS = STREAM_IDLE_TIMEOUT_MS / 2
@@ -1971,41 +1989,128 @@ async function* queryModel(
         streamIdleTimer = null
       }
     }
-    function resetStreamIdleTimer(): void {
-      clearStreamIdleTimers()
-      if (!streamWatchdogEnabled) {
-        return
-      }
-      streamIdleWarningTimer = setTimeout(
-        warnMs => {
-          logForDebugging(
-            `Streaming idle warning: no chunks received for ${warnMs / 1000}s`,
-            { level: 'warn' },
-          )
-          logForDiagnosticsNoPII('warn', 'cli_streaming_idle_warning')
-        },
-        STREAM_IDLE_WARNING_MS,
-        STREAM_IDLE_WARNING_MS,
+    function logStreamIdleWarning(warnMs: number): void {
+      logForDebugging(
+        `Streaming idle warning: no chunks received for ${warnMs / 1000}s`,
+        { level: 'warn' },
       )
-      streamIdleTimer = setTimeout(() => {
-        streamIdleAborted = true
-        streamWatchdogFiredAt = performance.now()
-        logForDebugging(
-          `Streaming idle timeout: no chunks received for ${STREAM_IDLE_TIMEOUT_MS / 1000}s, aborting stream`,
-          { level: 'error' },
-        )
-        logForDiagnosticsNoPII('error', 'cli_streaming_idle_timeout')
-        logEvent('tengu_streaming_idle_timeout', {
-          model:
-            options.model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          request_id: (streamRequestId ??
-            'unknown') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          timeout_ms: STREAM_IDLE_TIMEOUT_MS,
-        })
-        releaseStreamResources()
-      }, STREAM_IDLE_TIMEOUT_MS)
+      logForDiagnosticsNoPII('warn', 'cli_streaming_idle_warning')
     }
-    resetStreamIdleTimer()
+
+    function closeStreamIterator(
+      iterator: AsyncIterator<BetaRawMessageStreamEvent>,
+      reason: Error,
+    ): void {
+      const activeStream = stream
+      releaseStreamResources()
+      try {
+        activeStream?.controller?.abort(reason)
+      } catch {
+        // Ignore - the stream may already be closed by the SDK.
+      }
+
+      try {
+        const returned = iterator.return?.()
+        if (returned) {
+          void Promise.resolve(returned).catch(() => {})
+        }
+      } catch {
+        // Ignore - iterator.return() is best-effort cleanup.
+      }
+    }
+
+    function abortTimedOutStream(
+      iterator: AsyncIterator<BetaRawMessageStreamEvent>,
+      timeoutError: StreamIdleTimeoutError,
+    ): void {
+      streamIdleAborted = true
+      streamWatchdogFiredAt = performance.now()
+      logForDebugging(
+        `Streaming idle timeout: no chunks received for ${STREAM_IDLE_TIMEOUT_MS / 1000}s, aborting stream`,
+        { level: 'error' },
+      )
+      logForDiagnosticsNoPII('error', 'cli_streaming_idle_timeout')
+      logEvent('tengu_streaming_idle_timeout', {
+        model:
+          options.model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+        request_id: (streamRequestId ??
+          'unknown') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+        timeout_ms: STREAM_IDLE_TIMEOUT_MS,
+      })
+
+      closeStreamIterator(iterator, timeoutError)
+    }
+
+    function readNextStreamPart(
+      iterator: AsyncIterator<BetaRawMessageStreamEvent>,
+    ): Promise<IteratorResult<BetaRawMessageStreamEvent>> {
+      if (signal.aborted) {
+        const abortError = new APIUserAbortError()
+        closeStreamIterator(iterator, abortError)
+        return Promise.reject(abortError)
+      }
+
+      return new Promise((resolve, reject) => {
+        let settled = false
+        const cleanup = () => {
+          clearStreamIdleTimers()
+          signal.removeEventListener('abort', onAbort)
+        }
+        const settleResolve = (
+          result: IteratorResult<BetaRawMessageStreamEvent>,
+        ) => {
+          if (settled) return
+          settled = true
+          cleanup()
+          resolve(result)
+        }
+        const settleReject = (error: unknown) => {
+          if (settled) return
+          settled = true
+          cleanup()
+          reject(error)
+        }
+        const onAbort = () => {
+          const abortError = new APIUserAbortError()
+          closeStreamIterator(iterator, abortError)
+          settleReject(abortError)
+        }
+
+        signal.addEventListener('abort', onAbort, { once: true })
+
+        clearStreamIdleTimers()
+        if (streamWatchdogEnabled) {
+          streamIdleWarningTimer = setTimeout(
+            warnMs => {
+              logStreamIdleWarning(warnMs)
+            },
+            STREAM_IDLE_WARNING_MS,
+            STREAM_IDLE_WARNING_MS,
+          )
+          streamIdleTimer = setTimeout(() => {
+            const timeoutError = new StreamIdleTimeoutError(
+              STREAM_IDLE_TIMEOUT_MS,
+            )
+            abortTimedOutStream(iterator, timeoutError)
+            settleReject(timeoutError)
+          }, STREAM_IDLE_TIMEOUT_MS)
+        }
+
+        let nextPromise: Promise<IteratorResult<BetaRawMessageStreamEvent>>
+        try {
+          nextPromise = Promise.resolve(iterator.next())
+        } catch (error) {
+          settleReject(signal.aborted ? new APIUserAbortError() : error)
+          return
+        }
+
+        nextPromise.then(
+          result => settleResolve(result),
+          error =>
+            settleReject(signal.aborted ? new APIUserAbortError() : error),
+        )
+      })
+    }
 
     startSessionActivity('api_call')
     try {
@@ -2016,8 +2121,11 @@ async function* queryModel(
       let totalStallTime = 0
       let stallCount = 0
 
-      for await (const part of stream) {
-        resetStreamIdleTimer()
+      const streamIterator = stream[Symbol.asyncIterator]()
+      while (true) {
+        const streamResult = await readNextStreamPart(streamIterator)
+        if (streamResult.done) break
+        const part = streamResult.value
         const now = Date.now()
 
         // Detect and log streaming stalls (only after first event to avoid counting TTFB)
@@ -3504,4 +3612,62 @@ export function getMaxOutputTokensForModel(model: string): number {
     maxOutputTokens.upperLimit,
   )
   return result.effective
+}
+
+export function getGakrCLIStreamingAbortLogMessage(
+  signal: Pick<AbortSignal, 'reason'>,
+  streamingError: unknown,
+): string {
+  return getStreamingAbortMessage(signal.reason, errorMessage(streamingError))
+}
+
+export function getGakrCLIExpectedSideTaskApiAbortLogMessage(
+  signal: Pick<AbortSignal, 'aborted' | 'reason'>,
+  errorFromRetry: unknown,
+): string | null {
+  if (!signal.aborted || !isExpectedSideTaskAbortReason(signal.reason)) {
+    return null
+  }
+  const error =
+    errorFromRetry instanceof CannotRetryError
+      ? errorFromRetry.originalError
+      : errorFromRetry
+  if (!(error instanceof APIUserAbortError)) {
+    return null
+  }
+  return `Expected side-task API abort (${normalizeAbortReason(signal.reason)}): ${errorMessage(error)}`
+}
+
+/**
+ * Whether the native (non-shim) tool pipeline should compress tool-use history
+ * before resending it. Compression elides completed tool results from the
+ * truncated request so that the prompt prefix stays within the cache window.
+ *
+ * Only compress while prompt caching is inactive: retroactive tier rewrites
+ * diverge the cached request prefix and cost more than they save. Requests
+ * carrying a per-agent providerOverride are shim-routed and compress at the
+ * shim layer instead.
+ */
+export function shouldCompressNativeToolHistory(options: {
+  apiProvider: string
+  /** firstParty alone is not enough: a custom ANTHROPIC_BASE_URL (proxy /
+   * compatible endpoint) also reports firstParty, but getPromptCachingEnabled
+   * already returns false there — treating it as native would compress every
+   * request against an endpoint we make no assumptions about. Mirror the
+   * same base-URL guard prompt caching itself uses. */
+  isFirstPartyBaseUrl: boolean
+  isGithubNativeAnthropic: boolean
+  hasProviderOverride: boolean
+  promptCachingEnabled: boolean
+}): boolean {
+  const isNativeTransport =
+    (options.apiProvider === 'firstParty' && options.isFirstPartyBaseUrl) ||
+    options.apiProvider === 'bedrock' ||
+    options.apiProvider === 'vertex' ||
+    options.isGithubNativeAnthropic
+  return (
+    isNativeTransport &&
+    !options.hasProviderOverride &&
+    !options.promptCachingEnabled
+  )
 }

@@ -12,8 +12,12 @@ import {
 import {
   convertEffortValueToLevel,
   type EffortValue,
+  resolveAppliedEffort,
+  resolveModelReasoningControl,
+  modelSupportsShimReasoningEffort,
+  modelSupportsWireEffort,
   standardEffortToOpenAI,
-  type OpenAIEffortLevel,
+  type OpenAIShimEffortLevel,
 } from 'src/utils/effort.js'
 import { getUserAgent } from 'src/utils/http.js'
 import { getSmallFastModel } from 'src/utils/model/model.js'
@@ -36,6 +40,7 @@ import {
 } from '../../utils/envUtils.js'
 import {
   getFireworksBaseUrlOverride,
+  getLongcatBaseUrlOverride,
   getMiniMaxBaseUrlOverride,
   getNearaiBaseUrlOverride,
   getRouteDefaultBaseUrl,
@@ -44,8 +49,10 @@ import {
   getXiaomiMimoBaseUrlOverride,
   resolveEnvOnlyProviderRouteId,
 } from '../../integrations/routeMetadata.js'
+import { resolveOpenAIShimRuntimeContext } from '../../integrations/runtimeMetadata.js'
 import {
-  shouldUseFirstPartyAnthropicAuth,
+  shouldUseCustomAnthropicBearerAuth,
+  shouldUseFirstPartyAnthropicAuthForProvider,
   type ProviderOverride,
 } from './authRouting.js'
 import { AnthropicVertex } from './vertexClient.js'
@@ -87,10 +94,10 @@ export function _setOptionalRuntimeModuleImporterForTesting(
  *
  * Vertex AI:
  * - Model-specific region variables (highest priority):
- *   - VERTEX_REGION_GAKR_3_5_HAIKU: Region for GakrCLI 3.5 Haiku model
+ *   - VERTEX_REGION_GAKR_3_5_HAIKU: Region for claude 3.5 Haiku model
  *   - VERTEX_REGION_GAKR_HAIKU_4_5: Region for claude haiku 4.5 model
- *   - VERTEX_REGION_GAKR_3_5_SONNET: Region for GakrCLI 3.5 Sonnet model
- *   - VERTEX_REGION_GAKR_3_7_SONNET: Region for GakrCLI 3.7 Sonnet model
+ *   - VERTEX_REGION_GAKR_3_5_SONNET: Region for claude 3.5 Sonnet model
+ *   - VERTEX_REGION_GAKR_3_7_SONNET: Region for claude 3.7 Sonnet model
  * - CLOUD_ML_REGION: Optional. The default GCP region to use for all models
  *   If specific model region not specified above
  * - ANTHROPIC_VERTEX_PROJECT_ID: Required. Your GCP project ID
@@ -193,6 +200,7 @@ function applyMiniMaxEnvOnlyDefaults(model: string | undefined): void {
     getRouteDefaultModel('minimax')
   delete process.env.GAKR_CODE_USE_OPENAI
   delete process.env.OPENAI_API_FORMAT
+  delete process.env.OPENAI_AZURE_STYLE
   delete process.env.OPENAI_AUTH_HEADER
   delete process.env.OPENAI_AUTH_SCHEME
   delete process.env.OPENAI_AUTH_HEADER_VALUE
@@ -221,6 +229,7 @@ function applyXiaomiMimoEnvOnlyDefaults(): void {
     getRouteDefaultModel('xiaomi-mimo')
   process.env.OPENAI_API_KEY = process.env.MIMO_API_KEY
   delete process.env.OPENAI_API_FORMAT
+  delete process.env.OPENAI_AZURE_STYLE
   delete process.env.OPENAI_AUTH_HEADER
   delete process.env.OPENAI_AUTH_SCHEME
   delete process.env.OPENAI_AUTH_HEADER_VALUE
@@ -241,6 +250,7 @@ function applyXaiEnvOnlyDefaults(): void {
     getRouteDefaultModel('xai')
   process.env.OPENAI_API_KEY = process.env.XAI_API_KEY
   delete process.env.OPENAI_API_FORMAT
+  delete process.env.OPENAI_AZURE_STYLE
   delete process.env.OPENAI_AUTH_HEADER
   delete process.env.OPENAI_AUTH_SCHEME
   delete process.env.OPENAI_AUTH_HEADER_VALUE
@@ -276,6 +286,7 @@ function applyNearaiEnvOnlyDefaults(): void {
     getRouteDefaultModel('nearai')
   process.env.OPENAI_API_KEY = process.env.NEARAI_API_KEY
   delete process.env.OPENAI_API_FORMAT
+  delete process.env.OPENAI_AZURE_STYLE
   delete process.env.OPENAI_AUTH_HEADER
   delete process.env.OPENAI_AUTH_SCHEME
   delete process.env.OPENAI_AUTH_HEADER_VALUE
@@ -312,6 +323,52 @@ function applyFireworksEnvOnlyDefaults(): void {
     getRouteDefaultModel('fireworks')
   process.env.OPENAI_API_KEY = process.env.FIREWORKS_API_KEY
   delete process.env.OPENAI_API_FORMAT
+  delete process.env.OPENAI_AZURE_STYLE
+  delete process.env.OPENAI_AUTH_HEADER
+  delete process.env.OPENAI_AUTH_SCHEME
+  delete process.env.OPENAI_AUTH_HEADER_VALUE
+}
+
+function isLongcatModelName(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase()
+  return Boolean(normalized && normalized.startsWith('longcat'))
+}
+
+function applyLongcatEnvOnlyDefaults(): void {
+  const baseUrlOverride = getLongcatBaseUrlOverride()
+  const hasLongcatBaseOverride = baseUrlOverride !== undefined
+  const modelOverride = process.env.OPENAI_MODEL?.trim() || undefined
+
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL =
+    baseUrlOverride ?? getRouteDefaultBaseUrl('longcat')
+  process.env.OPENAI_MODEL =
+    (hasLongcatBaseOverride || isLongcatModelName(modelOverride)
+      ? modelOverride
+      : undefined) ??
+    getRouteDefaultModel('longcat')
+  process.env.OPENAI_API_KEY = process.env.LONGCAT_API_KEY
+  delete process.env.OPENAI_API_FORMAT
+  delete process.env.OPENAI_AZURE_STYLE
+  delete process.env.OPENAI_AUTH_HEADER
+  delete process.env.OPENAI_AUTH_SCHEME
+  delete process.env.OPENAI_AUTH_HEADER_VALUE
+}
+
+function applyAimlapiEnvOnlyDefaults(): void {
+  const baseUrlOverride =
+    process.env.OPENAI_BASE_URL?.trim() ||
+    process.env.OPENAI_API_BASE?.trim() ||
+    undefined
+  const modelOverride = process.env.OPENAI_MODEL?.trim() || undefined
+
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+  process.env.OPENAI_BASE_URL =
+    baseUrlOverride ?? getRouteDefaultBaseUrl('aimlapi')
+  process.env.OPENAI_MODEL = modelOverride ?? getRouteDefaultModel('aimlapi')
+  process.env.OPENAI_API_KEY = process.env.AIMLAPI_API_KEY
+  delete process.env.OPENAI_API_FORMAT
+  delete process.env.OPENAI_AZURE_STYLE
   delete process.env.OPENAI_AUTH_HEADER
   delete process.env.OPENAI_AUTH_SCHEME
   delete process.env.OPENAI_AUTH_HEADER_VALUE
@@ -336,9 +393,76 @@ export async function getAnthropicClient({
 }): Promise<Anthropic> {
   // Convert the runtime effort value to the OpenAI-shaped enum the shim
   // expects. Undefined → shim falls back to descriptor/alias defaults.
-  const shimReasoningEffort: OpenAIEffortLevel | undefined =
-    effortValue !== undefined
-      ? standardEffortToOpenAI(convertEffortValueToLevel(effortValue))
+  const effortProcessEnv = providerOverride
+    ? { ...process.env, OPENAI_AZURE_STYLE: undefined }
+    : process.env
+  const effortModel = providerOverride?.model ?? model
+  const effortBaseUrl =
+    providerOverride?.baseURL ??
+    process.env.OPENAI_BASE_URL ??
+    process.env.OPENAI_API_BASE
+  const effortRuntimeContext = effortModel
+    ? resolveOpenAIShimRuntimeContext({
+      processEnv: effortProcessEnv,
+      baseUrl: effortBaseUrl,
+      model: effortModel,
+      preferBaseUrlRoute:
+        providerOverride !== undefined || isEnvTruthy(process.env.GAKR_CODE_USE_OPENAI),
+    })
+    : undefined
+  const effortShimConfig = effortRuntimeContext?.openaiShimConfig
+  const effortContext = effortRuntimeContext
+      ? {
+        routeId: effortRuntimeContext.routeId ?? 'custom',
+        useRuntimeFallback: false,
+        openaiShimConfig: effortShimConfig,
+        baseUrl: effortBaseUrl,
+        processEnv: effortProcessEnv,
+        apiProvider: effortRuntimeContext.routeId === 'openai'
+          ? 'openai' as const
+          : effortRuntimeContext.routeId === 'codex'
+            ? 'codex' as const
+            : undefined,
+      }
+    : undefined
+  const supportsShimReasoningEffort = effortModel
+    ? effortShimConfig
+      ? modelSupportsShimReasoningEffort(
+        effortModel,
+        effortShimConfig.thinkingRequestFormat,
+        effortShimConfig.removeBodyFields,
+        effortContext,
+      )
+      : modelSupportsWireEffort(effortModel)
+    : false
+  const reasoningControl = effortModel
+    ? resolveModelReasoningControl(effortModel, effortContext)
+    : undefined
+  const k3ReasoningControl =
+    reasoningControl?.source === 'metadata' &&
+    reasoningControl.wireFormat === 'reasoning_effort' &&
+    reasoningControl.levels.length === 3 &&
+    reasoningControl.levels.includes('low') &&
+    reasoningControl.levels.includes('high') &&
+    reasoningControl.levels.includes('max')
+  const appliedEffort = effortModel && effortValue !== undefined
+    ? resolveAppliedEffort(
+      effortModel,
+      effortValue,
+      effortContext,
+    )
+    : undefined
+  const appliedEffortLevel = appliedEffort === undefined
+    ? undefined
+    : convertEffortValueToLevel(appliedEffort)
+  const shimReasoningEffort: OpenAIShimEffortLevel | undefined =
+    appliedEffortLevel !== undefined && supportsShimReasoningEffort
+      ? (reasoningControl?.source === 'metadata' &&
+          reasoningControl.wireFormat === 'reasoning_effort' &&
+          appliedEffortLevel === 'max' &&
+          k3ReasoningControl
+            ? 'max'
+          : standardEffortToOpenAI(appliedEffortLevel))
       : undefined
   const containerId = process.env.GAKR_CODE_CONTAINER_ID
   const remoteSessionId = process.env.GAKR_CODE_REMOTE_SESSION_ID
@@ -383,6 +507,10 @@ export async function getAnthropicClient({
     envOnlyProviderRouteId === 'nearai' && !useMiniMaxEnvOnlyProvider
   const useFireworksEnvOnlyProvider =
     envOnlyProviderRouteId === 'fireworks' && !useMiniMaxEnvOnlyProvider
+  const useLongcatEnvOnlyProvider =
+    envOnlyProviderRouteId === 'longcat' && !useMiniMaxEnvOnlyProvider
+  const useAimlapiEnvOnlyProvider =
+    envOnlyProviderRouteId === 'aimlapi' && !useMiniMaxEnvOnlyProvider
   if (useMiniMaxEnvOnlyProvider) {
     applyMiniMaxEnvOnlyDefaults(model)
   }
@@ -398,9 +526,20 @@ export async function getAnthropicClient({
   if (useFireworksEnvOnlyProvider) {
     applyFireworksEnvOnlyDefaults()
   }
+  if (useLongcatEnvOnlyProvider) {
+    applyLongcatEnvOnlyDefaults()
+  }
+  if (useAimlapiEnvOnlyProvider) {
+    applyAimlapiEnvOnlyDefaults()
+  }
 
-  const shouldUseFirstPartyAuth =
-    shouldUseFirstPartyAnthropicAuth(providerOverride)
+  const apiProvider = getAPIProvider()
+  const isFirstPartyBaseUrl = isFirstPartyAnthropicBaseUrl()
+  const shouldUseFirstPartyAuth = shouldUseFirstPartyAnthropicAuthForProvider({
+    providerOverride,
+    apiProvider,
+    isFirstPartyBaseUrl,
+  })
   const useMiniMaxNativeProvider =
     useMiniMaxEnvOnlyProvider ||
     (getAPIProvider() === 'minimax' &&
@@ -414,9 +553,29 @@ export async function getAnthropicClient({
 
   const isGakrCLIAiSubscriber =
     shouldUseFirstPartyAuth && isGakrCLIAISubscriber()
+  const anthropicAuthToken = process.env.ANTHROPIC_AUTH_TOKEN?.trim()
+  const usesCustomAnthropicAuthToken = shouldUseCustomAnthropicBearerAuth({
+    providerOverride,
+    apiProvider,
+    isFirstPartyBaseUrl,
+    authToken: anthropicAuthToken,
+  })
 
-  if (shouldUseFirstPartyAuth && !isGakrCLIAiSubscriber) {
-    await configureApiKeyHeaders(defaultHeaders, getIsNonInteractiveSession())
+  if (
+    (shouldUseFirstPartyAuth && !isGakrCLIAiSubscriber) ||
+    usesCustomAnthropicAuthToken
+  ) {
+    await configureApiKeyHeaders(
+      defaultHeaders,
+      getIsNonInteractiveSession(),
+      usesCustomAnthropicAuthToken ? anthropicAuthToken : undefined,
+    )
+  } else if (apiProvider === 'firstParty' && !isFirstPartyBaseUrl) {
+    removeManagedAnthropicAuthHeaders(defaultHeaders)
+    const anthropicApiKey = process.env.ANTHROPIC_API_KEY?.trim()
+    if (anthropicApiKey) {
+      defaultHeaders['X-Api-Key'] = anthropicApiKey
+    }
   }
 
   const resolvedFetch = buildFetch(fetchOverride, source)
@@ -476,6 +635,7 @@ export async function getAnthropicClient({
     useXaiEnvOnlyProvider ||
     useNearaiEnvOnlyProvider ||
     useFireworksEnvOnlyProvider ||
+    useAimlapiEnvOnlyProvider ||
     isEnvTruthy(process.env.GAKR_CODE_USE_OPENAI) ||
     isEnvTruthy(process.env.GAKR_CODE_USE_GITHUB) ||
     isEnvTruthy(process.env.GAKR_CODE_USE_GEMINI) ||
@@ -583,9 +743,6 @@ export async function getAnthropicClient({
       await refreshGcpCredentialsIfNeeded()
     }
 
-    // AnthropicVertex is statically imported from ./vertexClient.js — no dynamic
-    // import of @anthropic-ai/vertex-sdk needed.
-
     // TODO: Cache either GoogleAuth instance or AuthClient to improve performance
     // Currently we create a new GoogleAuth instance for every getAnthropicClient() call
     // This could cause repeated authentication flows and metadata server checks
@@ -654,7 +811,7 @@ export async function getAnthropicClient({
           : {
               projectId: process.env.ANTHROPIC_VERTEX_PROJECT_ID,
             }),
-      })
+      }) as unknown as typeof googleAuth
     }
 
     const vertexArgs = {
@@ -669,20 +826,28 @@ export async function getAnthropicClient({
 
   // Determine authentication method based on available tokens
   const clientConfig: ConstructorParameters<typeof Anthropic>[0] = {
-    apiKey: isGakrCLIAiSubscriber
+    apiKey: isGakrCLIAiSubscriber || usesCustomAnthropicAuthToken
       ? null
       : useMiniMaxNativeProvider
         ? process.env.MINIMAX_API_KEY || process.env.ANTHROPIC_API_KEY
-        : apiKey || getAnthropicApiKey(),
+        : apiKey ||
+          (!isFirstPartyBaseUrl
+            ? process.env.ANTHROPIC_API_KEY?.trim()
+            : getAnthropicApiKey()),
+    // Pass an explicit null for non-Bearer routes so the SDK cannot fall back
+    // to ANTHROPIC_AUTH_TOKEN from its own environment lookup.
     authToken: isGakrCLIAiSubscriber
       ? getGakrCLIAIOAuthTokens()?.accessToken
-      : undefined,
+      : usesCustomAnthropicAuthToken
+        ? anthropicAuthToken
+        : null,
     // Set baseURL from OAuth config when using staging OAuth
-    ...(process.env.USER_TYPE === 'ant' &&
+    ...(shouldUseFirstPartyAuth &&
+    process.env.USER_TYPE === 'ant' &&
     isEnvTruthy(process.env.USE_STAGING_OAUTH)
       ? { baseURL: getOauthConfig().BASE_API_URL }
       : process.env.ANTHROPIC_BASE_URL
-        ? { baseURL: process.env.ANTHROPIC_BASE_URL }
+        ? { baseURL: process.env.ANTHROPIC_BASE_URL.replace(/\/v1\/?$/i, '') }
         : {}),
     ...ARGS,
     ...(isDebugToStdErr() && { logger: createStderrLogger() }),
@@ -694,13 +859,27 @@ export async function getAnthropicClient({
 async function configureApiKeyHeaders(
   headers: Record<string, string>,
   isNonInteractiveSession: boolean,
+  authToken?: string,
 ): Promise<void> {
-  const token =
-    process.env.ANTHROPIC_AUTH_TOKEN ||
-    (await getApiKeyFromApiKeyHelper(isNonInteractiveSession))
+  const token = authToken || (await getApiKeyFromApiKeyHelper(isNonInteractiveSession))
   if (token) {
+    removeManagedAnthropicAuthHeaders(headers)
     headers['Authorization'] = `Bearer ${token}`
   }
+}
+
+function removeManagedAnthropicAuthHeaders(headers: Record<string, string>): void {
+  for (const name of Object.keys(headers)) {
+    const lower = name.toLowerCase()
+    if (lower === 'authorization' || lower === 'x-api-key' || lower === 'api-key') {
+      delete headers[name]
+    }
+  }
+  // The Anthropic SDK also reads ANTHROPIC_CUSTOM_HEADERS. Null sentinels clear
+  // those env-parsed managed auth headers before the supported credential wins.
+  headers.Authorization = null as unknown as string
+  headers['X-Api-Key'] = null as unknown as string
+  headers['api-key'] = null as unknown as string
 }
 
 function getCustomHeaders(): Record<string, string> {
@@ -720,7 +899,13 @@ function getCustomHeaders(): Record<string, string> {
     if (colonIdx === -1) continue
     const name = headerString.slice(0, colonIdx).trim()
     const value = headerString.slice(colonIdx + 1).trim()
-    if (name) {
+    const lowerName = name.toLowerCase()
+    if (
+      name &&
+      lowerName !== 'authorization' &&
+      lowerName !== 'x-api-key' &&
+      lowerName !== 'api-key'
+    ) {
       customHeaders[name] = value
     }
   }

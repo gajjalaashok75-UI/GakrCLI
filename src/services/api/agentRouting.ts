@@ -3,7 +3,8 @@ import type { PermissionMode } from '../../utils/permissions/PermissionMode.js'
 import { getAgentModel } from '../../utils/model/agent.js'
 import { isModelAlias } from '../../utils/model/aliases.js'
 
-/** Provider override resolved from agent routing config.
+/**
+ * Provider override resolved from agent routing config.
  * When present, the API client should use these instead of global env vars.
  */
 export interface ProviderOverride {
@@ -52,6 +53,7 @@ const PROVIDER_ENV_VARS_TO_CLEAR_FOR_OVERRIDE = [
   'MISTRAL_BASE_URL',
   'OPENAI_API_BASE',
   'OPENAI_API_FORMAT',
+  'OPENAI_AZURE_STYLE',
   'OPENAI_AUTH_HEADER',
   'OPENAI_AUTH_SCHEME',
   'OPENAI_AUTH_HEADER_VALUE',
@@ -152,13 +154,11 @@ export function resolveAgentModelProvider(
 }
 
 /**
- * Given a resolved model value from agent routing, resolve `permissionMode`
- * and `"inherit"` / aliases into the actual model string the caller should use.
- *
- * `model` came from an agentModels entry that has no cross-provider override
- * (model-only route), so it's always the active provider. `"inherit"` and
- * registered model aliases are resolved against the parent model; anything else
- * is sent literally and failing with a provider "model not found". A real model id
+ * Resolve a model-only route's model to what should actually run. A bare
+ * built-in alias ("sonnet"/"haiku"/"opus"/"inherit") is sent through the same
+ * provider-aware path as the agent model selector (getAgentModel), so on
+ * non-Claude-native providers it inherits the parent model instead of being
+ * sent literally and failing with a provider "model not found". A real model id
  * (a configured agentModels key for the active provider) passes through as-is.
  */
 export function resolveModelOnlyModel(
@@ -174,18 +174,22 @@ export function resolveModelOnlyModel(
 
 export function resolveAgentRunModelRouting({
   resolvedAgentModel,
+  parentModel,
   toolSpecifiedModel,
   agentName,
   subagentType,
   agentDefinitionModel,
   settings,
+  permissionMode,
 }: {
   resolvedAgentModel: string
+  parentModel: string
   toolSpecifiedModel?: string
   agentName?: string
   subagentType?: string
   agentDefinitionModel?: string
   settings: SettingsJson | null
+  permissionMode?: PermissionMode
 }): AgentRunModelRouting {
   const toolRequestedModel = toolSpecifiedModel?.trim()
   if (toolRequestedModel) {
@@ -197,7 +201,9 @@ export function resolveAgentRunModelRouting({
     if (isProviderOverride(route)) {
       return { mainLoopModel: route.model, providerOverride: route }
     }
-    return { mainLoopModel: route.model }
+    return {
+      mainLoopModel: resolveModelOnlyModel(route.model, parentModel, permissionMode),
+    }
   }
 
   const route =
@@ -207,7 +213,9 @@ export function resolveAgentRunModelRouting({
   if (isProviderOverride(route)) {
     return { mainLoopModel: route.model, providerOverride: route }
   }
-  return { mainLoopModel: route.model }
+  return {
+    mainLoopModel: resolveModelOnlyModel(route.model, parentModel, permissionMode),
+  }
 }
 
 /**
@@ -254,6 +262,49 @@ export function resolveOutOfProcessTeammateProvider({
     resolveAgentProvider(agentName, agentType, settings) ??
     resolveAgentModelProvider(agentDefinitionModel, settings)
   return route && isProviderOverride(route) ? route : null
+}
+
+/**
+ * Resolve the model a pane/window teammate should run when its configured route
+ * is model-only (no cross-provider override). The provider twin above filters to
+ * ProviderOverride, so model-only routes the menu writes (e.g. agentRouting set
+ * to a plain agentModels key) are dropped and the teammate inherits the parent.
+ * This returns that route's provider-aware model so the spawn path can apply it.
+ * Mirrors resolveAgentRunModelRouting's lookup order (tool model, then agent
+ * name/type, then agent-definition model). Returns undefined when there is no
+ * model-only route, so the caller keeps the inherit-parent default.
+ */
+export function resolveOutOfProcessTeammateModelOnly({
+  cliModel,
+  agentName,
+  agentType,
+  agentDefinitionModel,
+  parentModel,
+  permissionMode,
+  settings,
+}: {
+  cliModel?: string
+  agentName?: string
+  agentType?: string
+  agentDefinitionModel?: string
+  parentModel: string
+  permissionMode?: PermissionMode
+  settings: SettingsJson | null
+}): string | undefined {
+  const requestedModel = cliModel?.trim()
+  if (requestedModel) {
+    const route = resolveAgentModelProvider(requestedModel, settings)
+    return route && !isProviderOverride(route)
+      ? resolveModelOnlyModel(route.model, parentModel, permissionMode)
+      : undefined
+  }
+
+  const route =
+    resolveAgentProvider(agentName, agentType, settings) ??
+    resolveAgentModelProvider(agentDefinitionModel, settings)
+  return route && !isProviderOverride(route)
+    ? resolveModelOnlyModel(route.model, parentModel, permissionMode)
+    : undefined
 }
 
 export function resolveOutOfProcessTeammateProviderFromCliArgs(

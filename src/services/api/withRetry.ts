@@ -7,6 +7,10 @@ import {
 } from '@anthropic-ai/sdk'
 import type { QuerySource } from 'src/constants/querySource.js'
 import type { SystemAPIErrorMessage } from 'src/types/message.js'
+import {
+  isExpectedSideTaskAbortReason,
+  normalizeAbortReason,
+} from 'src/utils/abortReasons.js'
 import { isAwsCredentialsProviderError } from 'src/utils/aws.js'
 import { logForDebugging } from 'src/utils/debug.js'
 import { logError } from 'src/utils/log.js'
@@ -49,6 +53,7 @@ import { REPEATED_529_ERROR_MESSAGE, isOpenCodeGoQuotaError } from './errors.js'
 import { extractConnectionErrorDetails } from './errorUtils.js'
 import {
   extractOpenAICategoryMarker,
+  isOpenAIRequestNonReplayable,
   isRetryableOpenAICompatibilityFailureCategory,
 } from './openaiErrorClassification.js'
 
@@ -104,6 +109,12 @@ function shouldRetry529(querySource: QuerySource | undefined): boolean {
 const PERSISTENT_MAX_BACKOFF_MS = 5 * 60 * 1000
 const PERSISTENT_RESET_CAP_MS = 6 * 60 * 60 * 1000
 const HEARTBEAT_INTERVAL_MS = 30_000
+const PERSISTENT_MAX_ATTEMPTS = 100
+// Exposed for unit-test assertion only. The persistent retry cap itself is
+// driven by isPersistentRetryEnabled() — there is no runtime override seam
+// (tests must enable UNATTENDED_RETRY via `bun test --feature=UNATTENDED_RETRY`
+// and set GAKR_CODE_UNATTENDED_RETRY to exercise this path).
+export { PERSISTENT_MAX_ATTEMPTS as _PERSISTENT_MAX_ATTEMPTS_FOR_TEST, isPersistentRetryEnabled }
 
 function isPersistentRetryEnabled(): boolean {
   return feature('UNATTENDED_RETRY')
@@ -114,9 +125,24 @@ function isPersistentRetryEnabled(): boolean {
 function isQuotaExhausted(error: any): boolean {
   const msg = (error?.message || '').toLowerCase()
 
+  // OpenRouter (and other gateways) return 402 with instructions to adjust max_tokens.
+  // If the 402 is retryable via token adjustment, do not treat it as exhausted.
+  if (error?.status === 402 && error instanceof APIError && parseOpenRouterAffordableMaxTokensError(error) !== undefined) {
+    return false
+  }
+
   return (
-    error?.status === 429 &&
-    (msg.includes('limit: 0') || msg.includes('exceeded your current quota'))
+    error?.status === 402 ||
+    msg.includes('quota_exhausted') ||
+    ((error?.status === 429 || error?.status === 403 || error?.status === 400) &&
+      (msg.includes('limit: 0') ||
+        msg.includes('exceeded your current quota') ||
+        msg.includes('credit') ||
+        msg.includes('billing') ||
+        msg.includes('payment required') ||
+        msg.includes('usage limit') ||
+        msg.includes('allotment') ||
+        msg.includes('quota')))
   )
 }
 
@@ -194,6 +220,7 @@ export async function* withRetry<T>(
   options: RetryOptions,
 ): AsyncGenerator<SystemAPIErrorMessage, T> {
   const maxRetries = getMaxRetries(options)
+  const persistentRetryEnabled = isPersistentRetryEnabled()
   const retryContext: RetryContext = {
     model: options.model,
     thinkingConfig: options.thinkingConfig,
@@ -270,6 +297,16 @@ export async function* withRetry<T>(
       return await operation(client, attempt, retryContext)
     } catch (error) {
       lastError = error
+      if (
+        error instanceof APIUserAbortError &&
+        options.signal?.aborted &&
+        isExpectedSideTaskAbortReason(options.signal.reason)
+      ) {
+        logForDebugging(
+          `Expected side-task API abort (${normalizeAbortReason(options.signal.reason)}): ${errorMessage(error)}`,
+        )
+        throw new CannotRetryError(error, retryContext)
+      }
       logForDebugging(
         `API error (attempt ${attempt}/${maxRetries + 1}): ${error instanceof APIError ? `${error.status} ${error.message}` : errorMessage(error)}`,
         { level: 'error' },
@@ -283,16 +320,22 @@ export async function* withRetry<T>(
       if (isOpenCodeGoQuotaError(error)) {
         throw new CannotRetryError(error, retryContext)
       }
+      if (
+        error instanceof APIError &&
+        extractOpenAICategoryMarker(error.message) === 'quota_exhausted'
+      ) {
+        throw new CannotRetryError(error, retryContext)
+      }
       if (isQuotaExhausted(error)) {
-          throw new CannotRetryError(
-            new Error(
-              'API quota exhausted or not enabled.\n' +
-              'Fix:\n' +
-              '- Enable billing for your provider\n' +
-              '- Or switch provider via /provider',
-            ),
-            retryContext,
-          );
+        throw new CannotRetryError(
+          new Error(
+            'API quota exhausted or not enabled.\n' +
+            'Fix:\n' +
+            '- Enable billing for your provider\n' +
+            '- Or switch provider via /provider',
+          ),
+          retryContext,
+        )
       }
       // Fast mode fallback: on 429/529, either wait and retry (short delays)
       // or fall back to standard speed (long delays) to avoid cache thrashing.
@@ -302,7 +345,7 @@ export async function* withRetry<T>(
       // keep-alive path instead of fast-mode cache-preservation anyway.
       if (
         wasFastModeActive &&
-        !isPersistentRetryEnabled() &&
+        !persistentRetryEnabled &&
         error instanceof APIError &&
         (error.status === 429 || is529Error(error))
       ) {
@@ -389,7 +432,7 @@ export async function* withRetry<T>(
           if (
             process.env.USER_TYPE === 'external' &&
             !process.env.IS_SANDBOX &&
-            !isPersistentRetryEnabled()
+            !persistentRetryEnabled
           ) {
             logEvent('tengu_api_custom_529_overloaded_error', {})
             throw new CannotRetryError(
@@ -402,14 +445,37 @@ export async function* withRetry<T>(
 
       // Only retry if the error indicates we should
       const persistent =
-        isPersistentRetryEnabled() && isTransientCapacityError(error)
+        persistentRetryEnabled && isTransientCapacityError(error)
       if (attempt > maxRetries && !persistent) {
+        throw new CannotRetryError(error, retryContext)
+      }
+      // Cap persistent retries to prevent unbounded loops (100 attempts * ~5min max backoff = 8 hours).
+      // NOTE: the "~8 hours" estimate applies only to the exponential-backoff path. The
+      // reset-delay path can wait up to PERSISTENT_RESET_CAP_MS (6 hours) per attempt, so
+      // exhausting 100 attempts can take far longer.
+      if (persistent && persistentAttempt >= PERSISTENT_MAX_ATTEMPTS) {
+        logEvent('tengu_api_persistent_retry_cap_reached', {
+          error: (error as APIError).message as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+          status: (error as APIError).status,
+          model: retryContext.model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+          persistentAttempt,
+          PERSISTENT_MAX_BACKOFF_MS,
+          PERSISTENT_MAX_ATTEMPTS,
+          provider: getAPIProviderForStatsig(),
+        })
         throw new CannotRetryError(error, retryContext)
       }
 
       // AWS/GCP errors aren't always APIError, but can be retried
       const handledCloudAuthError =
         handleAwsCredentialError(error) || handleGcpCredentialError(error)
+      if (
+        !handledCloudAuthError &&
+        (!(error instanceof APIError) ||
+          !shouldRetry(error, persistentRetryEnabled))
+      ) {
+        throw new CannotRetryError(error, retryContext)
+      }
 
       // OpenRouter / OpenAI-compatible quota gateways: HTTP 402 with the
       // affordable max_tokens in the message. Retry once at the affordable
@@ -435,13 +501,6 @@ export async function* withRetry<T>(
         if (affordData) {
           throw new CannotRetryError(error, retryContext)
         }
-      }
-
-      if (
-        !handledCloudAuthError &&
-        (!(error instanceof APIError) || !shouldRetry(error, persistent))
-      ) {
-        throw new CannotRetryError(error, retryContext)
       }
 
       // Handle max tokens context overflow errors by adjusting max_tokens for the next attempt
@@ -798,6 +857,10 @@ function shouldRetry(error: APIError, persistentRetryEnabled: boolean): boolean 
     return false
   }
 
+  if (isOpenAIRequestNonReplayable(error)) {
+    return false
+  }
+
   // OpenCode Go subscription quota exhaustion is terminal — retrying burns
   // the same 429 and confuses the user with repeated "mysterious stop"
   // failures. getAssistantMessageFromError surfaces the actionable message.
@@ -882,11 +945,11 @@ function shouldRetry(error: APIError, persistentRetryEnabled: boolean): boolean 
   // Retry on lock timeouts.
   if (error.status === 409) return true
 
-  // Retry on rate limits, but not for quota exhaustion (handled by
-  // isQuotaExhausted and isOpenCodeGoQuotaError above).
+  // Retry on rate limits, but not for GakrCLIAI Subscription users
+  // Enterprise users can retry because they typically use PAYG instead of rate limits
   if (error.status === 429) {
     if (isQuotaExhausted(error)) return false
-    return true
+    return !isGakrCLIAISubscriber() || isEnterpriseSubscriber()
   }
 
   // Clear API key cache on 401 and allow retry.
@@ -908,11 +971,11 @@ function shouldRetry(error: APIError, persistentRetryEnabled: boolean): boolean 
 }
 
 export function getDefaultMaxRetries(): number {
-  const openGakrCLIMaxRetries = process.env.GAKR_MAX_RETRIES
-  if (openGakrCLIMaxRetries) {
+  const gakrMaxRetries = process.env.GAKR_MAX_RETRIES
+  if (gakrMaxRetries) {
     return validateRetryAttemptsEnvVar(
       'GAKR_MAX_RETRIES',
-      openGakrCLIMaxRetries,
+      gakrMaxRetries,
     )
   }
 
@@ -999,7 +1062,6 @@ export function parseOpenAIDuration(s: string): number | null {
   return total > 0 ? total : null
 }
 
-export { shouldRetry }
 export function getRateLimitResetDelayMs(error: APIError): number | null {
   const provider = getAPIProvider()
 
@@ -1027,3 +1089,5 @@ export function getRateLimitResetDelayMs(error: APIError): number | null {
   // bedrock, vertex, foundry, gemini — no standard reset header
   return null
 }
+
+export { shouldRetry }

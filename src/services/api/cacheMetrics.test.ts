@@ -6,6 +6,7 @@ import {
   formatCacheMetricsCompact,
   formatCacheMetricsFull,
   addCacheMetrics,
+  getCacheMetricsReliability,
 } from './cacheMetrics.js'
 
 describe('extractCacheMetrics — Anthropic (firstParty/bedrock/vertex/foundry)', () => {
@@ -205,7 +206,7 @@ describe('extractCacheMetrics — Copilot / Ollama (unsupported)', () => {
       cache_read_input_tokens: 800,
       cache_creation_input_tokens: 100,
     }
-    const m = extractCacheMetrics(usage, 'copilot-gakrcli')
+    const m = extractCacheMetrics(usage, 'copilot-claude')
     expect(m.supported).toBe(true)
     expect(m.read).toBe(800)
     expect(m.created).toBe(100)
@@ -240,7 +241,7 @@ describe('resolveCacheProvider', () => {
   test('github with claude hint → copilot-claude', () => {
     expect(
       resolveCacheProvider('github', { githubNativeAnthropic: true }),
-    ).toBe('copilot-gakrcli')
+    ).toBe('copilot-claude')
   })
   test('openai with localhost / loopback → self-hosted', () => {
     // These used to return 'ollama'; the bucket is now 'self-hosted'
@@ -444,6 +445,33 @@ describe('resolveCacheProvider — .localhost TLD (RFC 6761)', () => {
         openAiBaseUrl: 'https://mylocalhost.net/v1',
       }),
     ).toBe('openai')
+  })
+})
+
+describe('getCacheMetricsReliability', () => {
+  test('Anthropic-native cache metrics are reliable', () => {
+    expect(getCacheMetricsReliability('anthropic')).toBe('reliable')
+    expect(getCacheMetricsReliability('copilot-claude')).toBe('reliable')
+  })
+
+  test('OpenAI-compatible cache metrics are advisory by default', () => {
+    expect(
+      getCacheMetricsReliability(
+        resolveCacheProvider('openai', {
+          openAiBaseUrl: 'https://api.openai.com/v1',
+        }),
+      ),
+    ).toBe('advisory')
+    expect(getCacheMetricsReliability('codex')).toBe('advisory')
+    expect(getCacheMetricsReliability('kimi')).toBe('advisory')
+    expect(getCacheMetricsReliability('deepseek')).toBe('advisory')
+    expect(getCacheMetricsReliability('gemini')).toBe('advisory')
+    expect(getCacheMetricsReliability('self-hosted')).toBe('advisory')
+  })
+
+  test('providers without cache metric support remain unsupported', () => {
+    expect(getCacheMetricsReliability('copilot')).toBe('unsupported')
+    expect(getCacheMetricsReliability('ollama')).toBe('unsupported')
   })
 })
 
