@@ -58,6 +58,7 @@ import {
   createMicrocompactBoundaryMessage,
   createAssistantMessage,
 } from './utils/messages.js'
+import { isHumanTurn } from './utils/messagePredicates.js'
 import { analyzeContinuationIntent } from './utils/continuation.js'
 import { generateToolUseSummary } from './services/toolUseSummary/toolUseSummaryGenerator.js'
 import { prependUserContext, appendSystemContext } from './utils/api.js'
@@ -333,6 +334,14 @@ function isWithheldProviderMaxTokensCap(
 
 export type QueryParams = {
   messages: Message[]
+  /**
+   * Model-visible context for this query call only. Never compacted, yielded,
+   * exposed to tools, or written to transcript state.
+   */
+  requestOnlyMessages?: Message[]
+  /** Called around each outbound model request, including retries. */
+  onModelRequestStart?: () => void
+  onModelRequestEnd?: () => void
   systemPrompt: SystemPrompt
   userContext: { [k: string]: string }
   systemContext: { [k: string]: string }
@@ -354,6 +363,57 @@ export type QueryParams = {
   taskBudget?: { total: number }
   agentStepLimit?: AgentStepLimitConfig
   deps?: QueryDeps
+}
+
+/**
+ * `ultrathink_effort` is emitted while processing the current user input.
+ * Its attachment is deliberately transient, but the request-level effort
+ * setting must follow it for providers that expose reasoning effort as a wire
+ * parameter. The attachment must follow the newest human turn without an
+ * intervening meta user message: historical attachments and system-generated
+ * prompts must not affect the request's effort. Image metadata is appended
+ * after attachments, so it remains eligible.
+ */
+function hasUltrathinkEffortForCurrentTurn(messages: readonly Message[]): boolean {
+  const latestHumanTurn = messages.findLastIndex(isHumanTurn)
+  if (latestHumanTurn === -1) {
+    return false
+  }
+
+  const ultrathinkAttachment = messages.findIndex(
+    (message, index) =>
+      index > latestHumanTurn &&
+      message.type === 'attachment' &&
+      message.attachment.type === 'ultrathink_effort',
+  )
+  if (ultrathinkAttachment === -1) {
+    return false
+  }
+
+  return !messages
+    .slice(latestHumanTurn + 1, ultrathinkAttachment)
+    .some(
+      message =>
+        message.type === 'user' &&
+        message.isMeta &&
+        message.toolUseResult === undefined,
+    )
+}
+
+function injectRequestOnlyMessages(
+  messages: readonly Message[],
+  requestOnlyMessages: readonly Message[] | undefined,
+): Message[] {
+  if (!requestOnlyMessages?.length) return [...messages]
+  const latestUserIndex = messages.findLastIndex(isHumanTurn)
+  const insertionIndex = latestUserIndex === -1
+    ? messages.length
+    : latestUserIndex
+  return [
+    ...messages.slice(0, insertionIndex),
+    ...requestOnlyMessages,
+    ...messages.slice(insertionIndex),
+  ]
 }
 
 // -- query loop state
@@ -439,6 +499,9 @@ async function* queryLoop(
     skipCacheWrite,
   } = params
   const deps = params.deps ?? productionDeps()
+  const ultrathinkEffortForCurrentTurn = hasUltrathinkEffortForCurrentTurn(
+    params.messages,
+  )
 
   // Mutable cross-iteration state. The loop body destructures this at the top
   // of each iteration so reads stay bare-name (`messages`, `toolUseContext`).
@@ -477,6 +540,9 @@ async function* queryLoop(
   // trigger point. Loop-local (not on State) to avoid touching the 7 continue
   // sites.
   let taskBudgetRemaining: number | undefined = undefined
+  // Request-only context: injected before each outbound model call, reset after
+  // compaction/retry so a stale first-turn context is not replayed post-compact.
+  let requestOnlyMessages = params.requestOnlyMessages
   const toolFailureGuardState = createToolFailureLoopGuardState()
 
   // Snapshot immutable env/statsig/session state once at entry. See QueryConfig
@@ -741,6 +807,9 @@ async function* queryLoop(
     queryCheckpoint('query_autocompact_end')
 
     if (compactionResult) {
+      // A full rewrite removes the interrupted turn this correction context
+      // refers to, so it cannot be valid for the compacted request.
+      requestOnlyMessages = undefined
       const {
         preCompactTokenCount,
         postCompactTokenCount,
@@ -994,8 +1063,16 @@ async function* queryLoop(
         try {
           let streamingFallbackOccured = false
           queryCheckpoint('query_api_streaming_start')
-          for await (const message of deps.callModel({
-            messages: prependUserContext(messagesForQuery, userContext),
+          params.onModelRequestStart?.()
+          try {
+            for await (const message of deps.callModel({
+            messages: prependUserContext(
+              injectRequestOnlyMessages(
+                messagesForQuery,
+                requestOnlyMessages,
+              ),
+              userContext,
+            ),
             systemPrompt: fullSystemPrompt,
             thinkingConfig: toolUseContext.options.thinkingConfig,
             tools: toolsForModel,
@@ -1029,7 +1106,13 @@ async function* queryLoop(
                 c => c.type === 'pending',
               ),
               queryTracking,
-              effortValue: appState.effortValue,
+              // Explicit /effort selection wins. When it is unset, carry the
+              // current turn's ultrathink attachment through to the API client
+              // so OpenAI-compatible providers receive reasoning_effort=high
+              // instead of only a natural-language system reminder.
+              effortValue:
+                appState.effortValue ??
+                (ultrathinkEffortForCurrentTurn ? 'high' : undefined),
               advisorModel: appState.advisorModel,
               skipCacheWrite,
               agentId: toolUseContext.agentId,
@@ -1224,6 +1307,9 @@ async function* queryLoop(
                 }
               }
             }
+            }
+          } finally {
+            params.onModelRequestEnd?.()
           }
           queryCheckpoint('query_api_streaming_end')
 
@@ -1457,6 +1543,9 @@ async function* queryLoop(
             querySource,
           )
           if (drained.committed > 0) {
+            // Draining replaces archived history with a summary, so a reminder
+            // about the pre-collapse interrupted turn is no longer valid.
+            requestOnlyMessages = undefined
             const next: State = {
               messages: drained.messages,
               toolUseContext,
@@ -1497,6 +1586,9 @@ async function* queryLoop(
         })
 
         if (compacted) {
+          // The reactive path also replaces the complete conversation; do not
+          // re-inject request-only context whose referent was compacted away.
+          requestOnlyMessages = undefined
           // task_budget: same carryover as the proactive path above.
           // messagesForQuery still holds the pre-compact array here (the
           // 413-failed attempt's input).

@@ -5,6 +5,13 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.5] - 2026-07-31
+
+### Added
+- **src/query.ts**: Request-only context support — `requestOnlyMessages` on QueryParams is injected into every outbound model call (right after the latest human turn, so it never reaches tools or the transcript) and reset on proactive compaction, context-collapse drain, and reactive compaction. `ultrathink_effort` attachments now set `effortValue` to `high` for the current turn (explicit `/effort` selection still wins), so OpenAI-compatible providers receive `reasoning_effort=high` instead of only a natural-language reminder. New `onModelRequestStart`/`onModelRequestEnd` callbacks fire around each outbound model request, including retries.
+- **src/query/stopHooks.ts**: Exported `isMainThreadCacheParamSource` — matches `repl_main_thread` and its suffixed forms (e.g. `repl_main_thread:outputStyle:*`) plus `sdk`, but not subagents. The cache-safe params snapshot is now saved for those suffixed REPL output-style sources too (context-collapse ctx-agent relies on it).
+- **src/query/requestOnlyMessages.test.ts**: Test suite wired from reference covering request-only context injection, ultrathink effort propagation, lifecycle callbacks, and reset-on-compaction behavior. All 66 tests in `src/query/` pass.
+
 ## [0.6.4] - 2026-07-31
 
 ### Fixed
