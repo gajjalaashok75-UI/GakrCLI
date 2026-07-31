@@ -5,6 +5,21 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - 2026-07-31
+
+### Fixed
+- **src/services/api/openaiShim.ts**: GLM over NVIDIA NIM reasoning_effort normalization — `shimConfig.thinkingRequestFormat` is undefined for GLM models through NIM, so `reasoningRequestPlan` now falls back to the wire format (`reasoning_effort`) instead of dropping effort. Request body now sets `reasoning_effort` from the plan and deletes it only when the plan says so. Deadline timer deliberately NOT unref'd (Windows bun does not fire unref'd timers on an idle event loop, which starved the 20ms pre-header deadline). Removed `[DBG]` instrumentation from `fetchWithAttemptDeadline`/`fetchWithHeadersDeadline`. Updated comment noting some backends (e.g. NVIDIA NIM) reject the Z.AI-proprietary `tool_stream` parameter.
+- **src/services/api/withRetry.ts**: Env vars renamed to the canonical `GAKR_` prefix — `OPENGAKR_MAX_RETRIES` → `GAKR_MAX_RETRIES`, `OPENGAKR_RETRY_DELAY_MS` → `GAKR_RETRY_DELAY_MS`. `GAKR_CODE_MAX_RETRIES` kept as a deprecated legacy alias that logs a warning.
+- **src/services/api/providerConfig.ts**: Added NVIDIA branch to the `requestedModel` resolution chain in `resolveProviderRequest` — NVIDIA mode now resolves `NVIDIA_MODEL`/`OPENAI_MODEL` and falls back to `DEFAULT_NVIDIA_MODEL` instead of falling through to the Codex default (`codexplan`). `resolveCodexApiCredentials` gained an optional `includeDefaultAuthJson` option that skips default `~/.codex/auth.json` discovery when set to `false` (no longer leaks the auth path).
+- **src/services/api/openaiShim.test.ts**: The two GitHub Copilot pre-header timeout tests now set `GITHUB_TOKEN` to short-circuit the secure-storage hydrate (the synchronous PowerShell credential read blocks ~800ms on Windows, starving the 20ms deadline timer in favor of the 500ms safety abort).
+
+### Changed
+- **src/services/api/openaiShim/**: Refactored `openaiShim.ts` into 21 focused modules (clientDispatch, messageConversion, streamHandling, toolNormalization, etc.) with the source file re-exporting the public API.
+- **src/services/api/openaiShim.compression.test.ts**: Renamed `OPENGAKR_LOCAL_FAST_PATH` env var to `GAKR_LOCAL_FAST_PATH` to match production.
+- **src/services/api/openaiShim.diagnostics.test.ts**: Updated Ollama URL expectations from `/v1/chat/completions` to `/api/chat` to match production `ollamaAdapter` routing.
+- **src/services/api/gakrcli.abortClassification.test.ts**, **src/services/api/gakrcli.streamWatchdog.test.ts**, **src/services/api/gakrcli.toolHistoryRouting.test.ts**: New test files wired from reference.
+- **src/services/api**: Wired remaining shim-related production changes and tests (codexShim, compressToolHistory, client, gakrcli, bootstrap, agentRouting, authRouting, cacheMetrics, codexOAuth, errorUtils, errors, fetchWithProxyRetry, openaiErrorClassification, smartModelRouting, toolArgumentNormalization). All 1467 tests in `src/services/api/` pass.
+
 ## [0.6.1] - 2026-07-29
 
 ### Fixed

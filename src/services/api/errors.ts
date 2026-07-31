@@ -30,7 +30,11 @@ import {
   isNonCustomOpusModel,
 } from 'src/utils/model/model.js'
 import { getModelStrings } from 'src/utils/model/modelStrings.js'
-import { getAPIProvider } from 'src/utils/model/providers.js'
+import {
+  getAPIProvider,
+  isFirstPartyAnthropicBaseUrl,
+  isFirstPartyAnthropicProvider,
+} from 'src/utils/model/providers.js'
 import { getIsNonInteractiveSession } from '../../bootstrap/state.js'
 import {
   API_PDF_MAX_PAGES,
@@ -99,8 +103,9 @@ function mapOpenAICompatibilityFailureToAssistantMessage(options: {
 
     case 'vision_not_supported':
       return createAssistantAPIErrorMessage({
-        content: `The provider at ${options.host} returned 404 for a request containing images. The model (${options.model}) may not support image/vision inputs. Try removing images from your message, or ${switchCmd} to a vision-capable model.`,
+        content: getVisionNotSupportedErrorMessage(),
         error: 'invalid_request',
+        errorDetails: stripOpenAICompatibilityMetadata(options.rawMessage),
       })
 
     case 'model_not_found':
@@ -111,13 +116,19 @@ function mapOpenAICompatibilityFailureToAssistantMessage(options: {
 
     case 'auth_invalid':
       return createAssistantAPIErrorMessage({
-        content: `${API_ERROR_MESSAGE_PREFIX}: Authentication failed for your OpenAI-compatible provider. Verify OPENAI_API_KEY and endpoint-specific auth requirements.`,
+        content: `${API_ERROR_MESSAGE_PREFIX}: Authentication failed for your OpenAI-compatible provider. Verify OPENAI_API_KEYS or OPENAI_API_KEY and endpoint-specific auth requirements.`,
         error: 'authentication_failed',
       })
 
     case 'rate_limited':
       return createAssistantAPIErrorMessage({
         content: `${API_ERROR_MESSAGE_PREFIX}: Provider rate limit reached. Retry in a few seconds.`,
+        error: 'rate_limit',
+      })
+
+    case 'quota_exhausted':
+      return createAssistantAPIErrorMessage({
+        content: `${API_ERROR_MESSAGE_PREFIX}: Provider quota or usage allotment has run out. Please enable billing for your provider or switch provider via /provider.`,
         error: 'rate_limit',
       })
 
@@ -130,12 +141,20 @@ function mapOpenAICompatibilityFailureToAssistantMessage(options: {
     case 'context_overflow':
       return createAssistantAPIErrorMessage({
         content: `The conversation exceeded the provider context limit. ${compactHint}`,
+        apiError: 'context_overflow',
         error: 'invalid_request',
+        errorDetails: stripOpenAICompatibilityMetadata(options.rawMessage),
       })
 
     case 'tool_call_incompatible':
       return createAssistantAPIErrorMessage({
         content: `The selected provider/model rejected tool-calling payloads. Try ${switchCmd} to pick a tool-capable model or continue without tools.`,
+        error: 'invalid_request',
+      })
+
+    case 'tool_stream_unsupported':
+      return createAssistantAPIErrorMessage({
+        content: `The selected provider rejected the \`tool_stream\` parameter. Tool calls cannot be streamed on this provider. If this persists, switch models via ${switchCmd}.`,
         error: 'invalid_request',
       })
 
@@ -365,7 +384,7 @@ export const CCR_AUTH_ERROR_MESSAGE =
 export const REPEATED_529_ERROR_MESSAGE = 'Repeated 529 Overloaded errors'
 export function getCustomOffSwitchMessage(): string {
   return getAPIProvider() === 'firstParty'
-    ? 'Opus is experiencing high load, please use /model to switch to Sonnet'
+      ? 'Opus is experiencing high load, please use /model to switch to Sonnet'
     : 'The API is experiencing high load, please try again shortly or use /model to switch models'
 }
 // Backward-compatible constant for string matching in error handlers
@@ -398,6 +417,31 @@ export function getRequestTooLargeErrorMessage(): string {
   return getIsNonInteractiveSession()
     ? `Request too large (${limits}). Try with a smaller file.`
     : `Request too large (${limits}). Double press esc to go back and try with a smaller file.`
+}
+
+const VISION_NOT_SUPPORTED_MESSAGE_PREFIX =
+  'The active model does not support image/vision inputs. The provider rejected the request because it contained an image. Remove the image, or'
+
+export function getVisionNotSupportedErrorMessages(): string[] {
+  return [
+    `${VISION_NOT_SUPPORTED_MESSAGE_PREFIX} switch to a vision-capable model with --model.`,
+    `${VISION_NOT_SUPPORTED_MESSAGE_PREFIX} run /model to switch to a vision-capable model.`,
+  ]
+}
+
+/**
+ * Canonical message for the `vision_not_supported` OpenAI compatibility
+ * failure (issue #1421). Returned as a stable string so that
+ * `normalizeMessagesForAPI`'s `errorToBlockTypes` map can self-heal existing
+ * transcripts by stripping `image` blocks from the preceding user message
+ * on resume.
+ */
+export function getVisionNotSupportedErrorMessage(): string {
+  const [nonInteractiveMessage, interactiveMessage] =
+    getVisionNotSupportedErrorMessages()
+  return getIsNonInteractiveSession()
+    ? nonInteractiveMessage!
+    : interactiveMessage!
 }
 export const OAUTH_ORG_NOT_ALLOWED_ERROR_MESSAGE =
   'Your account does not have access to GakrCLI. Please run /login.'
@@ -1095,7 +1139,7 @@ export function getAssistantMessageFromError(
   ) {
     return createAssistantAPIErrorMessage({
       content:
-        'claude opus is not available with the GakrCLI Pro plan. If you have updated your subscription plan recently, run /logout and /login for the plan to take effect.',
+        'GakrCLI Opus is not available with the GakrCLI Pro plan. If you have updated your subscription plan recently, run /logout and /login for the plan to take effect.',
       error: 'invalid_request',
     })
   }
@@ -1167,7 +1211,7 @@ export function getAssistantMessageFromError(
     error instanceof Error &&
     error.message.toLowerCase().includes('x-api-key') &&
     getAPIProvider() === 'firstParty'
-  ) {
+    ) {
     // In CCR mode, auth is via JWTs - this is likely a transient network issue
     if (isCCRMode()) {
       return createAssistantAPIErrorMessage({
@@ -1286,6 +1330,7 @@ export function getAssistantMessageFromError(
       : ' Press esc twice to go up a few messages, or run /compact to reduce context.'
     return createAssistantAPIErrorMessage({
       content: `The conversation has grown too large for the API to process.${rewindInstruction} Alternatively, start a new session with /new.`,
+      apiError: 'context_overflow',
       error: 'invalid_request',
       errorDetails: `Context overflow (500): ${error.message}`,
     })
@@ -1321,6 +1366,14 @@ function get3PModelFallbackSuggestion(model: string): string | undefined {
   }
   // @[MODEL LAUNCH]: Add a fallback suggestion chain for the new model → previous version for 3P
   const m = model.toLowerCase()
+  // Mirror the validation-time fallback chain in validateModel.ts so the error
+  // path suggests the previous Opus for the recent models too.
+  if (m.includes('opus-4-8') || m.includes('opus_4_8')) {
+    return getModelStrings().opus47
+  }
+  if (m.includes('opus-4-7') || m.includes('opus_4_7')) {
+    return getModelStrings().opus46
+  }
   // If the failing model looks like an Opus 4.6 variant, suggest the default Opus (4.1 for 3P)
   if (m.includes('opus-4-6') || m.includes('opus_4_6')) {
     return getModelStrings().opus41
