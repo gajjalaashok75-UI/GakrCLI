@@ -5,6 +5,27 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3] - 2026-07-31
+
+### Added
+- **src/integrations/aimlapi/**: New AI/ML API client, config, prompt, and topup modules with `withResolvedPartnerHeader` attribution headers (repo/referer/title), wired into `discoveryService.ts` via `getRouteDiscoveryHeaders` and the `gateways/aimlapi.ts` gateway.
+- **src/integrations/anthropicProxies/custom.ts**: Anthropic-native proxy descriptor registered through `ANTHROPIC_PROXY_DESCRIPTORS`; `profileResolver.ts` now resolves anthropic proxy ids via `getAnthropicProxy`.
+- **New descriptors**: `brands/ling.ts`, `brands/longcat.ts`, `gateways/aimlapi.ts`, `models/ling.ts`, `models/longcat.ts`, `vendors/longcat.ts` — all in the regenerated artifacts; index.ts re-exports `isCloudflareBaseUrl` and `isLongcatBaseUrl` (from `routeMetadata.ts`).
+- **New models**: gpt-5.6-sol/terra/luna (openai vendor + gpt models, routed to `/v1/responses` when function tools + reasoning_effort), Kimi K3 (`models/kimi.ts`, `vendors/moonshot.ts`, `gateways/kimi-code.ts` K3 1M/256K + K2.7 HighSpeed variants), hicap claude-opus-4.7, opengateway free models (ling-3.0-flash-free, tencent-hy3). Tencent HY3 marked non-vision with 131k max output; opencode GLM 5.2/5.1 flagged `reasoning`.
+- **src/integrations/gpt56Catalog.test.ts**, **src/integrations/models/kimi.test.ts**, **src/integrations/vendors/longcat.test.ts**: New test files wired from reference.
+
+### Fixed
+- **src/integrations/vendors/atlas-cloud.ts**: Removed stale root-only vendor — Atlas Cloud is modeled as a gateway (per reference), and the extra vendor broke the compatibility test asserting `getVendor('atlas-cloud')` is undefined. Regenerated `integrationArtifacts.generated.ts` so `VENDOR_DESCRIPTORS` matches the reference.
+- **src/integrations/vendors/longcat.test.ts**: Guarded against ambient `OPENAI_MODEL` leaking into the `preset.model` assertion (save/restore around each test).
+- **src/integrations/gateways/custom.ts**: Preset label normalized to "Custom (OpenAI-compatible)".
+
+### Changed
+- **src/integrations/gateways/opencode.ts**, **src/integrations/gateways/gitlawb-opengateway.ts**: Preset ordering keeps Gitlawb Opengateway first, aimlapi.com second, then native Anthropic, with generic custom endpoints at the end; ZAI GLM shim transport overrides applied to GLM models.
+- **src/integrations/gateways/opencode-go.ts**: `zaiGlm` spec flag opt-in for zai-compatible request shaping; reasoning metadata for GLM 5.2/5.1.
+- **src/integrations/artifactGenerator.ts**: Preset ordering logic updated for aimlapi/custom-anthropic; test updated with `gakrcli-integration-artifacts-` tmpdir name.
+- **src/integrations/descriptors.ts**: `supportsImageInputs` on OpenAI-shim transport config; `anthropicProxy.supportsCustomHeaders` on transport config.
+- All 306 tests in `src/integrations/` pass.
+
 ## [0.6.2] - 2026-07-31
 
 ### Fixed

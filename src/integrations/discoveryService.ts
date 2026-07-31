@@ -31,11 +31,13 @@ import {
 } from '../utils/providerDiscovery.js'
 import { firstUsableCredential, hasInvalidCredentialPlaceholder } from '../services/api/credentialPool.js'
 import { parseCustomHeadersEnv } from '../utils/providerCustomHeaders.js'
+import { resolveAimlapiAttributionHeaders } from './aimlapi/config.js'
 import { isEssentialTrafficOnly } from '../utils/privacyLevel.js'
 
 export type RouteDiscoveryResult = {
   routeId: string
   models: ModelCatalogEntry[]
+  discoveredModelCount?: number
   stale: boolean
   error: DiscoveryCacheError | null
   source: 'network' | 'cache' | 'stale-cache' | 'static' | 'error'
@@ -173,15 +175,30 @@ function getRouteDiscoveryApiKey(
   )
 }
 
-function getRouteDiscoveryHeaders(
+export function getRouteDiscoveryHeaders(
   routeId: string,
-  options?: { headers?: Record<string, string> },
+  options?: { baseUrl?: string; headers?: Record<string, string> },
 ): Record<string, string> | undefined {
   const transportConfig = getRouteDescriptor(routeId)?.transportConfig
-  const headers = {
+  const acceptsCallerHeaders =
+    getRouteCatalog(routeId)?.discovery?.requiresAuth !== false
+  // Descriptor headers are attribution, not transport plumbing: an `aimlapi`
+  // profile keeps its route id while pointing at a user-controlled proxy, so the
+  // `/models` request must be filtered on the same canonical predicate the
+  // inference shim uses (`resolveAimlapiAttributionHeaders`). Without this the
+  // discovery path would hand the partner identity to an arbitrary host.
+  const descriptorHeaders = {
     ...(transportConfig?.headers ?? {}),
     ...(transportConfig?.openaiShim?.headers ?? {}),
-    ...(options?.headers ?? {}),
+  }
+  const headers = {
+    ...(routeId === 'aimlapi'
+      ? resolveAimlapiAttributionHeaders(
+          descriptorHeaders,
+          getRouteBaseUrl(routeId, options),
+        )
+      : descriptorHeaders),
+    ...(acceptsCallerHeaders ? (options?.headers ?? {}) : {}),
   }
 
   return Object.keys(headers).length > 0 ? headers : undefined
@@ -221,6 +238,26 @@ function mergeCatalogEntries(
   }
 
   return merged
+}
+
+function dedupeDiscoveredEntries(
+  entries: ModelCatalogEntry[],
+): ModelCatalogEntry[] {
+  const deduped: ModelCatalogEntry[] = []
+  const seenApiNames = new Set<string>()
+
+  for (const entry of entries) {
+    const apiName = entry.apiName.trim()
+    const apiNameKey = apiName.toLowerCase()
+    if (!apiName || seenApiNames.has(apiNameKey)) {
+      continue
+    }
+
+    seenApiNames.add(apiNameKey)
+    deduped.push({ ...entry, apiName })
+  }
+
+  return deduped
 }
 
 async function runDiscovery(
@@ -265,7 +302,7 @@ async function runDiscovery(
             entries.push(entry)
           }
         }
-        return entries
+        return dedupeDiscoveredEntries(entries)
       }
 
       const models = await listOpenAICompatibleModels({
@@ -314,6 +351,7 @@ export async function discoverModelsForRoute(
       return {
         routeId,
         models: mergeCatalogEntries(staticEntries, cached.models),
+        discoveredModelCount: cached.models.length,
         stale: false,
         error: cached.error,
         source: 'cache',
@@ -331,6 +369,7 @@ export async function discoverModelsForRoute(
       return {
         routeId,
         models: mergeCatalogEntries(staticEntries, staleEntry.models),
+        discoveredModelCount: staleEntry.models.length,
         stale,
         error: staleEntry.error,
         source: stale ? 'stale-cache' : 'cache',
@@ -356,6 +395,7 @@ export async function discoverModelsForRoute(
     return {
       routeId,
       models: mergeCatalogEntries(staticEntries, discovered),
+      discoveredModelCount: discovered.length,
       stale: false,
       error: null,
       source: 'network',
@@ -371,6 +411,7 @@ export async function discoverModelsForRoute(
       return {
         routeId,
         models: mergeCatalogEntries(staticEntries, staleEntry.models),
+        discoveredModelCount: staleEntry.models.length,
         stale: true,
         error: staleEntry.error,
         source: 'stale-cache',
