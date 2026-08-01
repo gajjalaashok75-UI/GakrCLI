@@ -6,7 +6,22 @@ import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/grow
 import { getAPIProvider } from './model/providers.js'
 import { get3PModelCapabilityOverride } from './model/modelSupportOverrides.js'
 import { getAntModelOverrideConfig, resolveAntModel } from './model/antModels.js'
-import { supportsCodexReasoningEffort } from '../services/api/providerConfig.js'
+import { baseUrlSupportsResponsesAutoRoute, supportsCodexReasoningEffort } from '../services/api/providerConfig.js'
+import {
+  ensureIntegrationsLoaded,
+  getCatalogEntriesForRoute,
+  getModel,
+  resolveActiveRouteIdFromEnv,
+} from '../integrations/index.js'
+import { resolveOpenAIShimRuntimeContext } from '../integrations/runtimeMetadata.js'
+import type {
+  CapabilityFlags,
+  ModelCatalogEntry,
+  ModelDescriptor,
+  OpenAIShimTransportConfig,
+  ReasoningControlMetadata,
+  ReasoningWireFormat,
+} from '../integrations/descriptors.js'
 import { isEnvTruthy } from './envUtils.js'
 import type { EffortLevel } from 'src/entrypoints/sdk/runtimeTypes.js'
 
@@ -29,35 +44,51 @@ export const OPENAI_EFFORT_LEVELS = [
 ] as const
 
 export type OpenAIEffortLevel = typeof OPENAI_EFFORT_LEVELS[number]
+// OpenAI-compatible shims also serve providers such as Kimi that accept the
+// provider-specific `max` value in the same `reasoning_effort` wire field.
+export type OpenAIShimEffortLevel = OpenAIEffortLevel | 'max'
 export type EffortValue = EffortLevel | number
 
 export type ReasoningControlResolution = {
   supportsReasoning: boolean
   controllable: boolean
-  mode?: 'levels'
+  mode?: ReasoningControlMetadata['mode']
   levels: EffortLevel[]
   defaultLevel?: EffortValue
-  wireFormat?: 'reasoning_effort' | 'deepseek_compatible' | 'zai_compatible'
+  wireFormat?: ReasoningWireFormat
+  disableFormat?: ReasoningControlMetadata['disableFormat']
   source: 'metadata' | 'capability' | 'compat' | 'legacy' | 'none'
 }
 
-export type ReasoningControlContext = {
-  apiProvider?: ReturnType<typeof getAPIProvider>
-  supportsCodexReasoningEffort?: boolean | ((model: string) => boolean)
+export type OpenAIShimThinkingRequestFormat =
+  NonNullable<OpenAIShimTransportConfig['thinkingRequestFormat']>
+
+export type OpenAIShimReasoningRequestPlan = {
+  thinkingType?: 'enabled' | 'disabled'
+  reasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+  wireFormat?: ReasoningWireFormat
+  source: 'metadata' | 'legacy' | 'compat' | 'none'
+}
+
+type OpenAIShimReasoningSupportContext = {
   routeId?: string | null
   useRuntimeFallback?: boolean
-  openaiShimConfig?: { thinkingRequestFormat?: string; removeBodyFields?: string[] }
-  catalogEntries?: readonly { apiName: string; id: string; aliases?: string[]; capabilities?: { supportsReasoning?: boolean }; reasoning?: { mode?: string; levels?: string[]; defaultLevel?: string; wireFormat?: string }; modelDescriptorId?: string }[]
-  modelDescriptors?: Readonly<Record<string, { capabilities?: { supportsReasoning?: boolean }; reasoning?: { mode?: string; levels?: string[]; defaultLevel?: string; wireFormat?: string } }>>
+}
+
+export type ReasoningControlContext = OpenAIShimReasoningSupportContext & {
+  apiProvider?: ReturnType<typeof getAPIProvider>
+  supportsCodexReasoningEffort?: boolean | ((model: string) => boolean)
+  catalogEntries?: readonly ModelCatalogEntry[]
+  modelDescriptors?: Readonly<Record<string, Pick<ModelDescriptor, 'capabilities' | 'reasoning'>>>
+  openaiShimConfig?: Partial<OpenAIShimTransportConfig>
+  baseUrl?: string
+  processEnv?: NodeJS.ProcessEnv
 }
 
 const DEFAULT_REASONING_LEVELS: EffortLevel[] = ['low', 'medium', 'high']
+const OPENAI_SHIM_COMPAT_LEVELS: EffortLevel[] = ['low', 'medium', 'high', 'xhigh']
 const DEEPSEEK_METADATA_COMPAT_LEVELS: EffortLevel[] = ['high', 'xhigh']
 const ZAI_METADATA_COMPAT_LEVELS: EffortLevel[] = ['low', 'medium', 'high', 'xhigh']
-
-type OpenAIShimThinkingRequestFormat = 'deepseek-compatible' | 'zai-compatible' | 'none'
-
-// ─── Context-aware helpers ─────────────────────────────────────────────
 
 function getReasoningApiProvider(
   context?: ReasoningControlContext,
@@ -81,7 +112,7 @@ function isSupportedEffortLevel(level: string): level is EffortLevel {
 }
 
 function normalizeReasoningLevels(
-  levels: string[] | undefined,
+  levels: ReasoningControlMetadata['levels'] | undefined,
 ): EffortLevel[] {
   const normalized = (levels ?? DEFAULT_REASONING_LEVELS).filter(
     isSupportedEffortLevel,
@@ -89,8 +120,32 @@ function normalizeReasoningLevels(
   return normalized.length > 0 ? normalized : [...DEFAULT_REASONING_LEVELS]
 }
 
+function normalizeMetadataReasoningLevels(
+  wireFormat: ReasoningWireFormat | undefined,
+  levels: ReasoningControlMetadata['levels'] | undefined,
+): EffortLevel[] {
+  const normalized = normalizeReasoningLevels(levels)
+  if (wireFormat === 'deepseek_compatible') {
+    return normalized.filter(level => DEEPSEEK_METADATA_COMPAT_LEVELS.includes(level))
+  }
+  if (wireFormat === 'zai_compatible') {
+    return normalized.filter(level => ZAI_METADATA_COMPAT_LEVELS.includes(level))
+  }
+  return normalized
+}
+
+function normalizeReasoningDefaultLevel(
+  level: ReasoningControlMetadata['defaultLevel'] | undefined,
+  levels: EffortLevel[],
+): EffortLevel | undefined {
+  if (!level || !isSupportedEffortLevel(level)) {
+    return undefined
+  }
+  return levels.includes(level) ? level : undefined
+}
+
 function metadataWireFormatSupportsEffort(
-  wireFormat: string | undefined,
+  wireFormat: ReasoningWireFormat | undefined,
 ): boolean {
   return wireFormat === 'reasoning_effort' ||
     wireFormat === 'deepseek_compatible' ||
@@ -132,14 +187,37 @@ function supportsZaiReasoningEffort(model: string | undefined): boolean {
   return normalized === 'glm-5.2' || normalized === 'zai-org/glm-5.2' || normalized.endsWith('/glm-5.2')
 }
 
-// ─── Compatibility wire-format resolution ──────────────────────────────
+function normalizeReasoningThinkingType(
+  value: string | undefined,
+): 'enabled' | 'disabled' | undefined {
+  const normalized = value?.trim().toLowerCase()
+  if (normalized === 'disabled') {
+    return 'disabled'
+  }
+  if (normalized === 'enabled' || normalized === 'adaptive') {
+    return 'enabled'
+  }
+  return undefined
+}
+
+function normalizeDeepSeekReasoningEffort(
+  effort: OpenAIShimEffortLevel,
+): 'high' | 'max' {
+  return effort === 'xhigh' || effort === 'max' ? 'max' : 'high'
+}
+
+function normalizeZaiReasoningEffort(
+  effort: OpenAIShimEffortLevel,
+): 'high' | 'max' {
+  return effort === 'xhigh' || effort === 'max' ? 'max' : 'high'
+}
 
 function resolveCompatibilityWireFormat(
   model: string,
   thinkingRequestFormat?: OpenAIShimThinkingRequestFormat,
   routeIdOverride?: string | null,
-  _useRuntimeFallback = true,
-): 'reasoning_effort' | 'deepseek_compatible' | 'zai_compatible' | undefined {
+  useRuntimeFallback = true,
+): ReasoningWireFormat | undefined {
   if (thinkingRequestFormat === 'deepseek-compatible') {
     return 'deepseek_compatible'
   }
@@ -150,9 +228,11 @@ function resolveCompatibilityWireFormat(
     return undefined
   }
 
-  // Only resolve routeId from explicit override since we don't have
-  // resolveActiveRouteIdFromEnv in this module.
-  const routeId = routeIdOverride !== undefined ? routeIdOverride : undefined
+  const routeId = routeIdOverride !== undefined
+    ? routeIdOverride
+    : useRuntimeFallback
+    ? resolveActiveRouteIdFromEnv(process.env)
+    : undefined
   if (!routeId || routeId === 'anthropic' || routeId === 'openai') {
     return undefined
   }
@@ -171,16 +251,22 @@ function resolveCompatibilityReasoningControl(
   removeBodyFields?: string[],
   context?: ReasoningControlContext,
 ): ReasoningControlResolution | undefined {
-  const openaiShimConfig = context?.openaiShimConfig
+  const useRuntimeFallback = context?.useRuntimeFallback ?? true
+  const runtimeShimConfig = context?.openaiShimConfig ?? (useRuntimeFallback && thinkingRequestFormat === undefined && removeBodyFields === undefined
+    ? resolveOpenAIShimRuntimeContext({
+      processEnv: process.env,
+      model,
+    }).openaiShimConfig
+    : undefined)
   const resolvedThinkingRequestFormat =
-    thinkingRequestFormat ?? openaiShimConfig?.thinkingRequestFormat as OpenAIShimThinkingRequestFormat | undefined
+    thinkingRequestFormat ?? runtimeShimConfig?.thinkingRequestFormat
   const resolvedRemoveBodyFields =
-    removeBodyFields ?? openaiShimConfig?.removeBodyFields
+    removeBodyFields ?? runtimeShimConfig?.removeBodyFields
   const wireFormat = resolveCompatibilityWireFormat(
     model,
     resolvedThinkingRequestFormat,
     context?.routeId,
-    context?.useRuntimeFallback ?? true,
+    useRuntimeFallback,
   )
   if (!wireFormat) {
     return undefined
@@ -194,7 +280,7 @@ function resolveCompatibilityReasoningControl(
       supportsReasoning: true,
       controllable: true,
       mode: 'levels',
-      levels: [...OPENAI_EFFORT_LEVELS] as EffortLevel[],
+      levels: [...OPENAI_SHIM_COMPAT_LEVELS],
       defaultLevel: undefined,
       wireFormat,
       source: 'compat',
@@ -221,18 +307,112 @@ function resolveCompatibilityReasoningControl(
   return undefined
 }
 
-// ─── Metadata-based resolution (stub — needs catalog infra) ────────────
+function resolveCatalogReasoningMetadata(
+  model: string,
+  context?: ReasoningControlContext,
+): {
+  capabilities?: CapabilityFlags
+  reasoning?: ReasoningControlMetadata
+} | undefined {
+  const routeId = context?.routeId !== undefined
+    ? context.routeId
+    : context?.useRuntimeFallback === false
+    ? undefined
+    : resolveActiveRouteIdFromEnv(process.env)
+  if (!routeId || routeId === 'anthropic') {
+    return undefined
+  }
 
-function resolveMetadataReasoningControl(
-  _model: string,
-  _context?: ReasoningControlContext,
-): ReasoningControlResolution | undefined {
-  // Root module doesn't have catalog/runtime-metadata imports.
-  // Resolution via explicit context entries is not supported here.
-  return undefined
+  ensureIntegrationsLoaded()
+  const normalizedModel = model.trim().split('?', 1)[0]!.trim().toLowerCase()
+  const matchesModel = (catalogEntry: ModelCatalogEntry): boolean =>
+    catalogEntry.apiName.trim().toLowerCase() === normalizedModel ||
+    catalogEntry.id.trim().toLowerCase() === normalizedModel ||
+    (catalogEntry.aliases ?? []).some(alias =>
+      alias.trim().split('?', 1)[0]?.trim().toLowerCase() === normalizedModel,
+    )
+
+  const entries = context?.catalogEntries ?? getCatalogEntriesForRoute(routeId)
+  let entry = entries.find(matchesModel)
+  const fallbackBaseUrl =
+    context?.baseUrl ?? context?.processEnv?.OPENAI_BASE_URL ?? process.env.OPENAI_BASE_URL ?? process.env.OPENAI_API_BASE
+  if (
+    !entry &&
+    routeId === 'custom' &&
+    baseUrlSupportsResponsesAutoRoute(fallbackBaseUrl, context?.processEnv ?? process.env)
+  ) {
+    // Azure and regional/first-party OpenAI surfaces resolve to route 'custom'
+    // (their host is not a registered route; see resolveActiveRouteIdFromEnv),
+    // whose catalog is empty. Consult the openai vendor catalog by model name so
+    // reasoning models (gpt-5.6) carry their advertised metadata (default 'high',
+    // xhigh). Gate on baseUrlSupportsResponsesAutoRoute so this only fires on the
+    // same verified OpenAI/Azure surfaces the Responses auto-route uses, NOT
+    // arbitrary OpenAI-compatible gateways that also resolve to route 'custom' —
+    // those keep their pre-PR chat_completions behavior with no injected
+    // reasoning_effort default.
+    entry = getCatalogEntriesForRoute('openai').find(matchesModel)
+  }
+
+  if (!entry) {
+    return undefined
+  }
+
+  const descriptor = entry.modelDescriptorId
+    ? context?.modelDescriptors?.[entry.modelDescriptorId] ?? getModel(entry.modelDescriptorId)
+    : undefined
+
+  return {
+    capabilities: entry.capabilities ?? descriptor?.capabilities,
+    reasoning: entry.reasoning ?? descriptor?.reasoning,
+  }
 }
 
-// ─── Legacy resolution (current root logic, context-aware) ─────────────
+function resolveMetadataReasoningControl(
+  model: string,
+  context?: ReasoningControlContext,
+): ReasoningControlResolution | undefined {
+  const metadata = resolveCatalogReasoningMetadata(
+    model,
+    context,
+  )
+  if (!metadata) {
+    return undefined
+  }
+
+  const { capabilities, reasoning } = metadata
+  if (!reasoning) {
+    return capabilities?.supportsReasoning === undefined
+      ? undefined
+      : {
+          supportsReasoning: capabilities.supportsReasoning,
+          controllable: false,
+          levels: [],
+          source: 'capability',
+        }
+  }
+
+  const wireFormat = reasoning.wireFormat
+  const levels = reasoning.mode === 'levels'
+    ? normalizeMetadataReasoningLevels(wireFormat, reasoning.levels)
+    : []
+  const controllable = Boolean(
+    capabilities?.supportsReasoning !== false &&
+    metadataWireFormatSupportsEffort(wireFormat) &&
+    reasoning.mode === 'levels' &&
+    levels.length > 0,
+  )
+
+  return {
+    supportsReasoning: capabilities?.supportsReasoning ?? true,
+    controllable,
+    mode: reasoning.mode,
+    levels,
+    defaultLevel: normalizeReasoningDefaultLevel(reasoning.defaultLevel, levels),
+    wireFormat,
+    disableFormat: reasoning.disableFormat,
+    source: 'metadata',
+  }
+}
 
 function legacyModelSupportsEffort(
   model: string,
@@ -249,7 +429,7 @@ function legacyModelSupportsEffort(
   if (modelUsesOpenAIEffort(model, context) && modelSupportsCodexReasoningEffort(model, context)) {
     return true
   }
-  // GakrCLI 4 models that support effort. Mirrors the Anthropic /messages
+  // Claude 4 models that support effort. Mirrors the Anthropic /messages
   // shim's isAdaptive || isOpus45 set (openaiShim.ts:2292-2297) — only
   // these models serialize low/medium as anthropicBody.effort. Older
   // variants (opus-4-1, sonnet-4-5, haiku) only emit thinking for
@@ -276,10 +456,9 @@ function legacyModelSupportsEffort(
 
   // Default to true for unknown model strings on 1P.
   // Do not default to true for 3P as they have different formats for their
-  // model strings (ex. anthropics/gakrcli-code#30795)
+  // model strings (ex. anthropics/claude-code#30795)
   return getReasoningApiProvider(context) === 'firstParty'
 }
-
 function legacyModelSupportsMaxEffort(model: string): boolean {
   const supported3P = get3PModelCapabilityOverride(model, 'max_effort')
   if (supported3P !== undefined) {
@@ -381,7 +560,7 @@ function resolveLegacyReasoningControl(
     controllable: true,
     mode: 'levels',
     levels: getLegacyAvailableEffortLevels(model, context),
-    defaultLevel: getDefaultEffortForModel(model, context),
+    defaultLevel: getLegacyDefaultEffortForModel(model, context),
     wireFormat: 'reasoning_effort',
     source: 'legacy',
   }
@@ -410,7 +589,6 @@ export function resolveModelReasoningControl(
 
 // @[MODEL LAUNCH]: Add the new model to the allowlist if it supports the effort parameter.
 export function modelSupportsEffort(model: string, context?: ReasoningControlContext): boolean {
-  const m = model.toLowerCase()
   if (isEnvTruthy(process.env.GAKR_CODE_ALWAYS_ENABLE_EFFORT)) {
     return true
   }
@@ -418,55 +596,202 @@ export function modelSupportsEffort(model: string, context?: ReasoningControlCon
   if (supported3P !== undefined) {
     return supported3P
   }
-  if (modelUsesOpenAIEffort(model, context) && supportsCodexReasoningEffort(model)) {
+  return resolveModelReasoningControl(model, context).controllable
+}
+
+export function modelSupportsShimReasoningEffort(
+  model: string,
+  thinkingRequestFormat?: OpenAIShimThinkingRequestFormat,
+  removeBodyFields?: string[],
+  context?: ReasoningControlContext,
+): boolean {
+  if (isEnvTruthy(process.env.GAKR_CODE_ALWAYS_ENABLE_EFFORT)) {
     return true
   }
-  // GakrCLI 4 models that support effort. Mirrors the Anthropic /messages
-  // shim's isAdaptive || isOpus45 set (openaiShim.ts:2292-2297) — only
-  // these models serialize low/medium as anthropicBody.effort. Older
-  // variants (opus-4-1, sonnet-4-5, haiku) only emit thinking for
-  // high/max, so advertising effort for them would silently drop
-  // low/medium on the wire. The substring match also covers prefix
-  // variations (e.g. `claude-opus-4-7`, `opencode-claude-opus-4-8`).
-  if (m.includes('opus-4-5') || m.includes('opus-4-6') ||
-      m.includes('opus-4-7') || m.includes('opus-4-8') ||
-      m.includes('sonnet-4-6')) {
-    return true
+  const supported3P = get3PModelCapabilityOverride(model, 'effort')
+  if (supported3P !== undefined) {
+    return supported3P
   }
-  // OpenCode Gemini models that support thinking via /models/gemini-* endpoint
-  if (m.includes('gemini-3')) {
-    return true
+
+  const metadata = resolveMetadataReasoningControl(
+    model,
+    context,
+  )
+  if (metadata?.source === 'metadata') {
+    return Boolean(metadata.controllable && metadataWireFormatSupportsEffort(metadata.wireFormat))
   }
-  // Exclude any other known legacy models (haiku, older opus/sonnet variants)
-  if (m.includes('haiku') || m.includes('sonnet') || m.includes('opus')) {
+
+  const compatibility = resolveCompatibilityReasoningControl(
+    model,
+    thinkingRequestFormat,
+    removeBodyFields,
+    context,
+  )
+  if (compatibility) {
+    return compatibility.controllable
+  }
+
+  if (
+    context?.routeId &&
+    (context.routeId === 'openai' || context.routeId === 'codex') &&
+    !removeBodyFields?.includes('reasoning_effort')
+  ) {
+    return modelSupportsCodexReasoningEffort(model, context)
+  }
+
+  if (context?.useRuntimeFallback === false) {
+    if (
+      context.routeId == null &&
+      thinkingRequestFormat === undefined &&
+      !removeBodyFields?.includes('reasoning_effort')
+    ) {
+      return resolveLegacyReasoningControl(model, context).controllable
+    }
     return false
   }
 
-  // IMPORTANT: Do not change the default effort support without notifying
-  // the model launch DRI and research. This is a sensitive setting that can
-  // greatly affect model quality and bashing.
-
-  // Default to true for unknown model strings on 1P.
-  // Do not default to true for 3P as they have different formats for their
-  // model strings (ex. anthropics/gakrcli-code#30795)
-  return getAPIProvider() === 'firstParty'
+  const control = metadata ?? resolveLegacyReasoningControl(model, context)
+  return Boolean(control.controllable && metadataWireFormatSupportsEffort(control.wireFormat))
 }
 
-// @[MODEL LAUNCH]: Add the new model to the allowlist if it supports 'max' effort.
-// Per API docs, 'max' is Opus 4.6 only for public models — other models return an error.
-export function modelSupportsMaxEffort(model: string, context?: ReasoningControlContext): boolean {
-  const control = resolveModelReasoningControl(model, context)
-  if (control.source === 'metadata' || control.source === 'capability' || control.source === 'compat') {
-    return control.levels.includes('max')
+export function modelSupportsWireEffort(model: string, context?: ReasoningControlContext): boolean {
+  if (isEnvTruthy(process.env.GAKR_CODE_ALWAYS_ENABLE_EFFORT)) {
+    return true
   }
-  return legacyModelSupportsMaxEffort(model)
+  const supported3P = get3PModelCapabilityOverride(model, 'effort')
+  if (supported3P !== undefined) {
+    return supported3P
+  }
+  return modelSupportsShimReasoningEffort(model, undefined, undefined, context)
+}
+
+export function resolveOpenAIShimReasoningRequestPlan(options: {
+  model: string
+  requestedEffort?: OpenAIShimEffortLevel
+  requestThinkingType?: string
+  defaultThinkingType?: string
+  thinkingRequestFormat?: OpenAIShimThinkingRequestFormat
+  routeId?: string | null
+  useRuntimeFallback?: boolean
+  reasoningControl?: Pick<ReasoningControlResolution, 'source' | 'wireFormat' | 'levels' | 'disableFormat'>
+}): OpenAIShimReasoningRequestPlan {
+  const metadataWireFormat = options.reasoningControl?.source === 'metadata'
+    ? options.reasoningControl.wireFormat
+    : undefined
+  if (metadataWireFormat && !metadataWireFormatSupportsEffort(metadataWireFormat)) {
+    return {
+      wireFormat: metadataWireFormat,
+      source: 'none',
+    }
+  }
+
+  const wireFormat = metadataWireFormat
+    ? metadataWireFormat
+    : resolveCompatibilityWireFormat(
+      options.model,
+      options.thinkingRequestFormat,
+      options.routeId,
+      options.useRuntimeFallback ?? true,
+    )
+  const source = metadataWireFormat ? 'metadata' : 'compat'
+  const requestedThinkingType = normalizeReasoningThinkingType(
+    options.requestThinkingType,
+  )
+  const defaultThinkingType = normalizeReasoningThinkingType(
+    options.defaultThinkingType,
+  )
+
+  if (wireFormat === 'deepseek_compatible') {
+    const thinkingType = requestedThinkingType
+    const reasoningEffort = thinkingType === 'enabled' && options.requestedEffort
+      ? normalizeDeepSeekReasoningEffort(options.requestedEffort)
+      : undefined
+    return {
+      thinkingType,
+      reasoningEffort,
+      wireFormat,
+      source,
+    }
+  }
+
+  if (wireFormat === 'zai_compatible') {
+    const thinkingType = requestedThinkingType ?? defaultThinkingType
+    if (thinkingType === 'disabled') {
+      return {
+        thinkingType: 'disabled',
+        wireFormat,
+        source,
+      }
+    }
+
+    const shouldEnableThinking = thinkingType === 'enabled' || options.requestedEffort !== undefined
+    const metadataZaiSupportsReasoningEffort =
+      metadataWireFormat === 'zai_compatible' &&
+      (options.reasoningControl?.levels.length ?? 0) > 0
+    const reasoningEffort = options.requestedEffort &&
+      (metadataZaiSupportsReasoningEffort || (
+        metadataWireFormat !== 'zai_compatible' &&
+        supportsZaiReasoningEffort(options.model)
+      ))
+      ? normalizeZaiReasoningEffort(options.requestedEffort)
+      : undefined
+    return {
+      thinkingType: shouldEnableThinking ? 'enabled' : undefined,
+      reasoningEffort,
+      wireFormat,
+      source,
+    }
+  }
+
+  return {
+    thinkingType:
+      (requestedThinkingType ?? defaultThinkingType) === 'disabled' &&
+      options.reasoningControl?.disableFormat === 'thinking_type_disabled'
+        ? 'disabled'
+        : undefined,
+    reasoningEffort:
+      (requestedThinkingType ?? defaultThinkingType) === 'disabled'
+        ? undefined
+        : options.requestedEffort,
+    wireFormat:
+      options.requestedEffort ||
+      ((requestedThinkingType ?? defaultThinkingType) === 'disabled' &&
+        options.reasoningControl?.disableFormat === 'thinking_type_disabled')
+        ? 'reasoning_effort'
+        : undefined,
+    source:
+      options.requestedEffort ||
+      ((requestedThinkingType ?? defaultThinkingType) === 'disabled' &&
+        options.reasoningControl?.disableFormat === 'thinking_type_disabled')
+        ? 'metadata'
+        : 'none',
+  }
+}
+// @[MODEL LAUNCH]: Add the new model to the allowlist if it supports 'max' effort.
+// Per API docs, 'max' is supported on the recent Opus models (4.8/4.7/4.6) for
+// public models — other models return an error.
+function legacyModelSupportsMaxEffort(model: string): boolean {
+  const supported3P = get3PModelCapabilityOverride(model, 'max_effort')
+  if (supported3P !== undefined) {
+    return supported3P
+  }
+  if (model.toLowerCase().includes('opus-4-6') || model.toLowerCase().includes('opus-4-7') || model.toLowerCase().includes('opus-4-8')) {
+    return true
+  }
+  if (process.env.USER_TYPE === 'ant' && resolveAntModel(model)) {
+    return true
+  }
+  return false
 }
 
 // @[MODEL LAUNCH]: Add the new model to the allowlist if it supports 'xhigh' effort.
-// xhigh is reserved for OpenAI/Codex models and OpenCode claude opus 4-7 / 4-8.
+// xhigh is reserved for OpenAI/Codex models and OpenCode Claude opus 4-7 / 4-8.
 // All other effort-supporting models reject xhigh at the API.
-export function modelSupportsXHighEffort(model: string, context?: ReasoningControlContext): boolean {
-  if (!modelSupportsEffort(model, context)) {
+function legacyModelSupportsXHighEffort(
+  model: string,
+  context?: ReasoningControlContext,
+): boolean {
+  if (!legacyModelSupportsEffort(model, context)) {
     return false
   }
   const supported3P = get3PModelCapabilityOverride(model, 'xhigh_effort')
@@ -490,19 +815,87 @@ export function isOpenAIEffortLevel(value: string): value is OpenAIEffortLevel {
   return (OPENAI_EFFORT_LEVELS as readonly string[]).includes(value)
 }
 
-export function modelUsesOpenAIEffort(model: string, context?: ReasoningControlContext): boolean {
+export function modelUsesOpenAIEffort(
+  model: string,
+  context?: ReasoningControlContext,
+): boolean {
   const provider = getReasoningApiProvider(context)
   if (provider !== 'openai' && provider !== 'codex') {
     return false
   }
-  // Native GakrCLI/Gemini models on OpenCode use Anthropic/Google format
+  // Native Claude/Gemini models on OpenCode use Anthropic/Google format
   // even though the OpenCode shim is provider=openai. They should not be
   // classified as OpenAI-style for effort routing.
   const m = model.toLowerCase()
-  if (m.includes('gakrcli-') || m.includes('claude-') || m.includes('gemini-')) {
+  if (m.includes('claude-') || m.includes('gemini-')) {
     return false
   }
   return true
+}
+
+function getLegacyAvailableEffortLevels(
+  model: string,
+  context?: ReasoningControlContext,
+): EffortLevel[] {
+  if (!legacyModelSupportsEffort(model, context)) {
+    return []
+  }
+  // OpenCode Claude and Gemini models use /messages or /models/gemini-*
+  // (Anthropic/Google format) even though getAPIProvider() returns 'openai'.
+  // Show standard levels (max) not OpenAI levels (xhigh).
+  const m = model.toLowerCase()
+  const isOpenCodeNativeFormat = (
+    m.includes('claude-opus-4') || m.includes('claude-sonnet-4') ||
+    m.includes('opus-4') || m.includes('sonnet-4') ||
+    m.includes('gemini-3')
+  ) && getReasoningApiProvider(context) === 'openai'
+  if (modelUsesOpenAIEffort(model, context) && !isOpenCodeNativeFormat) {
+    return [...OPENAI_EFFORT_LEVELS] as EffortLevel[]
+  }
+  const levels: EffortLevel[] = ['low', 'medium', 'high']
+  if (legacyModelSupportsXHighEffort(model, context)) {
+    levels.push('xhigh')
+  }
+  if (legacyModelSupportsMaxEffort(model)) {
+    levels.push('max')
+  }
+  if (
+    getReasoningApiProvider(context) === 'firstParty' &&
+    legacyModelSupportsXHighEffort(model, context)
+  ) {
+    levels.push('ultracode')
+  }
+  return levels
+}
+
+function appendUltracodeLevel(
+  levels: EffortLevel[],
+  context?: ReasoningControlContext,
+): EffortLevel[] {
+  if (
+    getReasoningApiProvider(context) === 'firstParty' &&
+    levels.includes('xhigh') &&
+    !levels.includes('ultracode')
+  ) {
+    return [...levels, 'ultracode']
+  }
+  return levels
+}
+
+export function modelSupportsMaxEffort(model: string, context?: ReasoningControlContext): boolean {
+  const control = resolveModelReasoningControl(model, context)
+  if (control.source === 'metadata' || control.source === 'capability' || control.source === 'compat') {
+    return control.levels.includes('max')
+  }
+  return legacyModelSupportsMaxEffort(model)
+}
+
+export function modelSupportsXHighEffort(model: string, context?: ReasoningControlContext): boolean {
+  const control = resolveModelReasoningControl(model, context)
+  if (control.source === 'metadata' || control.source === 'capability' || control.source === 'compat') {
+    return control.levels.includes('xhigh')
+  }
+  return legacyModelSupportsXHighEffort(model, context)
 }
 
 export function getAvailableEffortLevels(model: string, context?: ReasoningControlContext): EffortLevel[] {
@@ -512,8 +905,8 @@ export function getAvailableEffortLevels(model: string, context?: ReasoningContr
   }
   return getLegacyAvailableEffortLevels(model, context)
 }
-
 export function getEffortLevelLabel(level: EffortLevel | OpenAIEffortLevel): string {
+  if (level === 'ultracode') return 'Ultracode'
   if (level === 'xhigh') return 'Extra High'
   if (level === 'max') return 'Max'
   return capitalize(level)
@@ -524,7 +917,7 @@ export function openAIEffortToStandard(level: OpenAIEffortLevel): EffortLevel {
 }
 
 export function standardEffortToOpenAI(level: EffortLevel): OpenAIEffortLevel {
-  if (level === 'max') return 'xhigh'
+  if (level === 'max' || level === 'ultracode') return 'xhigh'
   return level as OpenAIEffortLevel
 }
 
@@ -551,16 +944,40 @@ export function parseEffortValue(value: unknown): EffortValue | undefined {
 }
 
 /**
+ * Frontmatter (skill / agent / plugin command) effort parser. Identical to
+ * parseEffortValue except it rejects 'ultracode'.
+ *
+ * ultracode is a session-only mode whose defining trait — the standing
+ * multi-agent permission — is granted by getUltracodePermissionAttachment(),
+ * which gates on AppState.effortValue / the env override, NOT on a
+ * command-level effort. A command/skill turn carrying `effort: ultracode`
+ * would therefore send xhigh API effort WITHOUT that permission attachment,
+ * making it indistinguishable from plain xhigh while claiming to be
+ * ultracode. Until command-level effort is threaded into attachment
+ * generation, keep ultracode out of frontmatter — callers fall back to
+ * undefined (model/session default) just as they do for any invalid value.
+ */
+export function parseFrontmatterEffortValue(
+  value: unknown,
+): Exclude<EffortValue, 'ultracode'> | undefined {
+  const parsed = parseEffortValue(value)
+  if (parsed === 'ultracode') {
+    return undefined
+  }
+  return parsed
+}
+
+/**
  * Numeric values are model-default only and not persisted.
  * 'max' can now be persisted by all users.
- * 'xhigh' is a first-class EffortLevel (supported by OpenCode GakrCLI 4.7+)
+ * 'xhigh' is a first-class EffortLevel (supported by OpenCode Claude 4.7+)
  * and is persisted as 'xhigh' — no normalization needed.
  * Write sites call this before saving to settings so the Zod schema
  * (which only accepts string levels) never rejects a write.
  */
 export function toPersistableEffort(
   value: EffortValue | undefined,
-): EffortLevel | undefined {
+): Exclude<EffortLevel, 'ultracode'> | undefined {
   if (
     value === 'low' ||
     value === 'medium' ||
@@ -602,23 +1019,28 @@ export function resolvePickerEffortPersistence(
   return hadExplicit || picked !== modelDefault ? picked : undefined
 }
 
-export function getEffortEnvOverride(): EffortValue | null | undefined {
-  const envOverride = process.env.GAKR_CODE_EFFORT_LEVEL
-  return envOverride?.toLowerCase() === 'unset' ||
-    envOverride?.toLowerCase() === 'auto'
-    ? null
-    : parseEffortValue(envOverride)
-}
-
 export function clampUltracodeEffort(
   effort: EffortValue | undefined,
   model: string,
   context?: ReasoningControlContext,
 ): EffortValue | undefined {
   if (effort === 'ultracode' && !getAvailableEffortLevels(model, context).includes('ultracode')) {
+    // Mirror resolveAppliedEffort's ultracode mapping (xhigh when supported,
+    // else high) so the startup/display clamp and the env/app-state resolution
+    // send the SAME effort to the API. Hardcoding 'max' here meant
+    // `--effort ultracode` (clamped to app state) and `GAKR_CODE_EFFORT_LEVEL=ultracode`
+    // (resolved live) diverged on max-capable-but-not-xhigh models like opus-4-6.
     return modelSupportsXHighEffort(model, context) ? 'xhigh' : 'high'
   }
   return effort
+}
+
+export function getEffortEnvOverride(): EffortValue | null | undefined {
+  const envOverride = process.env.GAKR_CODE_EFFORT_LEVEL
+  return envOverride?.toLowerCase() === 'unset' ||
+    envOverride?.toLowerCase() === 'auto'
+    ? null
+    : parseEffortValue(envOverride)
 }
 
 /**
@@ -633,7 +1055,7 @@ export function resolveAppliedEffort(
   model: string,
   appStateEffortValue: EffortValue | undefined,
   context?: ReasoningControlContext,
-): EffortValue | undefined {
+): Exclude<EffortValue, 'ultracode'> | undefined {
   const envOverride = getEffortEnvOverride()
   if (envOverride === null) {
     return undefined
@@ -644,6 +1066,31 @@ export function resolveAppliedEffort(
 
   const resolved =
     envOverride ?? appStateEffortValue ?? getDefaultEffortForModel(model, context)
+  const control = resolveModelReasoningControl(model, context)
+  if (
+    resolved === 'xhigh' &&
+    control.source === 'metadata' &&
+    control.wireFormat === 'reasoning_effort' &&
+    control.levels.length === 3 &&
+    control.levels.includes('low') &&
+    control.levels.includes('high') &&
+    control.levels.includes('max')
+  ) {
+    return 'max'
+  }
+  if (
+    typeof resolved === 'string' &&
+    (control.source === 'metadata' || control.source === 'capability' || control.source === 'compat') &&
+    control.levels.length > 0 &&
+    !control.levels.includes(resolved)
+  ) {
+    const fallback = control.levels.includes('high')
+      ? 'high'
+      : (control.defaultLevel ?? control.levels[0])
+    return fallback === 'ultracode'
+      ? modelSupportsXHighEffort(model, context) ? 'xhigh' : 'high'
+      : fallback
+  }
   // API rejects 'max' on non-Opus-4.6 Anthropic models — downgrade to 'high'.
   // OpenAI/Codex models use 'max' as the standard form of 'xhigh'; the client
   // shim converts it back to 'xhigh' on the wire, so don't clamp it here.
@@ -752,6 +1199,16 @@ export function convertEffortValueToLevel(value: EffortValue): EffortLevel {
   return 'high'
 }
 
+export function getDefaultEffortForModel(
+  model: string,
+  context?: ReasoningControlContext,
+): EffortValue | undefined {
+  const control = resolveModelReasoningControl(model, context)
+  if (control.source === 'metadata' || control.source === 'capability' || control.source === 'compat') {
+    return control.defaultLevel
+  }
+  return getLegacyDefaultEffortForModel(model, context)
+}
 /**
  * Get user-facing description for effort levels
  *
@@ -767,9 +1224,11 @@ export function getEffortLevelDescription(level: EffortLevel | OpenAIEffortLevel
     case 'high':
       return 'Comprehensive implementation with extensive testing and documentation'
     case 'max':
-      return 'Maximum capability with deepest reasoning (Opus 4.6+)'
+      return 'Maximum capability with deepest reasoning (Opus 4.8+)'
     case 'xhigh':
       return 'Extra high reasoning effort for complex tasks'
+    case 'ultracode':
+      return 'xhigh effort + standing permission for multi-agent orchestration'
   }
 }
 
@@ -815,7 +1274,7 @@ export function getOpusDefaultEffortConfig(): OpusDefaultEffortConfig {
 }
 
 // @[MODEL LAUNCH]: Update the default effort levels for new models
-export function getDefaultEffortForModel(
+function getLegacyDefaultEffortForModel(
   model: string,
   context?: ReasoningControlContext,
 ): EffortValue | undefined {
@@ -844,12 +1303,14 @@ export function getDefaultEffortForModel(
   // the model launch DRI and research. Default effort is a sensitive setting
   // that can greatly affect model quality and bashing.
 
-  // Default effort on Opus 4.6+ to medium for Pro.
+  // Default effort on the recent Opus models (4.8/4.7/4.6) to medium for Pro.
   // Max/Team also get medium when the tengu_grey_step2 config is enabled.
+  // getDefaultOpusModel() now returns opus48 for first-party users.
+  const lowerModel = model.toLowerCase()
   if (
-    model.toLowerCase().includes('opus-4-8') ||
-    model.toLowerCase().includes('opus-4-7') ||
-    model.toLowerCase().includes('opus-4-6')
+    lowerModel.includes('opus-4-8') ||
+    lowerModel.includes('opus-4-7') ||
+    lowerModel.includes('opus-4-6')
   ) {
     if (isProSubscriber()) {
       return 'medium'
@@ -863,7 +1324,7 @@ export function getDefaultEffortForModel(
   }
 
   // When ultrathink feature is on, default effort to medium (ultrathink bumps to high)
-  if (isUltrathinkEnabled() && modelSupportsEffort(model, context)) {
+  if (isUltrathinkEnabled() && legacyModelSupportsEffort(model, context)) {
     return 'medium'
   }
 

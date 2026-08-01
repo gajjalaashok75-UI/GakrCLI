@@ -422,12 +422,26 @@ export const NodeFsOperations: FsOperations = {
     try {
       await mkdirPromise(dirPath, { recursive: true, ...options })
     } catch (e) {
+      const code = getErrnoCode(e)
       // Bun/Windows: recursive:true throws EEXIST on directories with the
       // FILE_ATTRIBUTE_READONLY bit set (Group Policy, OneDrive, desktop.ini).
       // Bun's directoryExistsAt misclassifies DIRECTORY+READONLY as not-a-dir
       // (bun-internal src/sys.zig existsAtType). The dir exists; ignore.
       // https://github.com/anthropics/gakrcli-code/issues/30924
-      if (getErrnoCode(e) !== 'EEXIST') throw e
+      if (code === 'EEXIST') return
+
+      // EPERM gets the same treatment: on Windows, mkdir on a drive root
+      // ('D:\') maps the kernel's "cannot create a root that already exists"
+      // to EPERM rather than EEXIST — not an actual permissions failure.
+      // The existsSync guard keeps genuine "cannot create this directory"
+      // failures propagating.
+      if (
+        (code === 'EACCES' || code === 'EPERM') &&
+        fs.existsSync(dirPath)
+      ) {
+        return
+      }
+      throw e
     }
   },
 
@@ -547,12 +561,26 @@ export const NodeFsOperations: FsOperations = {
     try {
       fs.mkdirSync(dirPath, mkdirOptions)
     } catch (e) {
+      const code = getErrnoCode(e)
       // Bun/Windows: recursive:true throws EEXIST on directories with the
       // FILE_ATTRIBUTE_READONLY bit set (Group Policy, OneDrive, desktop.ini).
       // Bun's directoryExistsAt misclassifies DIRECTORY+READONLY as not-a-dir
       // (bun-internal src/sys.zig existsAtType). The dir exists; ignore.
       // https://github.com/anthropics/gakrcli-code/issues/30924
-      if (getErrnoCode(e) !== 'EEXIST') throw e
+      if (code === 'EEXIST') return
+
+      // EPERM gets the same treatment: on Windows, mkdir on a drive root
+      // ('D:\') maps the kernel's "cannot create a root that already exists"
+      // to EPERM rather than EEXIST — not an actual permissions failure.
+      // The existsSync guard keeps genuine "cannot create this directory"
+      // failures propagating.
+      if (
+        (code === 'EACCES' || code === 'EPERM') &&
+        fs.existsSync(dirPath)
+      ) {
+        return
+      }
+      throw e
     }
   },
 

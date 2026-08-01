@@ -10,7 +10,7 @@ import {
   handleOAuth401Error,
   isGakrCLIAISubscriber,
 } from './auth.js'
-import { getAPIProvider } from './model/providers.js'
+import { getAPIProvider, isFirstPartyAnthropicProvider } from './model/providers.js'
 import { getGakrCLICodeUserAgent } from './userAgent.js'
 import { getWorkload } from './workloadContext.js'
 
@@ -56,7 +56,7 @@ export function getMCPUserAgent(): string {
 // local CLI traffic from gakrcli.ai server-side fetches.
 export function getWebFetchUserAgent(): string {
   const supportUrl =
-    getAPIProvider() === 'firstParty'
+    isFirstPartyAnthropicProvider()
       ? 'https://support.anthropic.com/'
       : 'https://github.com/gajjalaashok75-UI/gakrcli'
   return `GakrCLI-User (${getGakrCLICodeUserAgent()}; +${supportUrl})`
