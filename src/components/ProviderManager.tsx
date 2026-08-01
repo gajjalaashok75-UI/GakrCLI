@@ -1,5 +1,6 @@
 import figures from 'figures'
 import * as React from 'react'
+import { isFirstPartyAnthropicBaseUrlForEnv } from '../utils/anthropicBaseUrl.js'
 import { DEFAULT_CODEX_BASE_URL } from '../services/api/providerConfig.js'
 import { Box, Text } from '../ink.js'
 import { useTerminalSize } from '../hooks/useTerminalSize.js'
@@ -61,6 +62,7 @@ import {
 } from '../utils/providerProfiles.js'
 import {
   clearGithubModelsToken,
+  clearHydratedGithubModelsTokenFromEnv,
   GITHUB_MODELS_HYDRATED_ENV_MARKER,
   hydrateGithubModelsTokenFromSecureStorage,
   readGithubModelsToken,
@@ -178,8 +180,8 @@ const FORM_STEPS: Array<{
   {
     key: 'apiFormat',
     label: 'API mode',
-    placeholder: 'chat_completions',
-    helpText: 'Choose the OpenAI-compatible API surface for this provider.',
+    placeholder: 'automatic',
+    helpText: 'Automatically select the API surface, or choose one explicitly.',
     optional: true,
   },
   {
@@ -230,7 +232,7 @@ function toDraft(profile: ProviderProfile): ProviderDraft {
     baseUrl: profile.baseUrl,
     model: profile.model,
     apiKey: profile.apiKey ?? '',
-    apiFormat: profile.apiFormat ?? 'chat_completions',
+    apiFormat: profile.apiFormat ?? 'auto',
     authHeader: profile.authHeader ?? '',
     authHeaderValue: profile.authHeaderValue ?? '',
     customHeaders: serializeProfileCustomHeaders(profile.customHeaders) ?? '',
@@ -294,7 +296,7 @@ function profileSummary(profile: ProviderProfile, isActive: boolean): string {
       : `${models[0]}, ${models[1]} + ${models.length - 2} more`
   const modeInfo =
     routeSupportsApiFormatSelection(routeId)
-      ? ` · ${profile.apiFormat === 'responses_compat' ? 'responses (compat)' : profile.apiFormat === 'responses' ? 'responses' : 'chat/completions'}`
+      ? ` · ${profile.apiFormat === 'responses_compat' ? 'responses (compat)' : profile.apiFormat === 'responses' ? 'responses' : profile.apiFormat === 'chat_completions' ? 'chat/completions' : 'automatic'}`
       : ''
   const authInfo =
     routeSupportsAuthHeaders(routeId) && profile.authHeader
@@ -602,6 +604,40 @@ function XaiManualCodeInput({
   )
 }
 
+function CodexManualCallbackInput({
+  onSubmit,
+}: {
+  onSubmit: (input: string) => void
+}): React.ReactNode {
+  const [value, setValue] = React.useState('')
+  const [cursorOffset, setCursorOffset] = React.useState(0)
+  const { columns: terminalColumns } = useTerminalSize()
+  const inputColumns = Math.max(20, Math.min(120, terminalColumns - 12))
+  return (
+    <Box>
+      <Text>Callback URL › </Text>
+      <TextInput
+        value={value}
+        onChange={setValue}
+        cursorOffset={cursorOffset}
+        onChangeCursorOffset={setCursorOffset}
+        columns={inputColumns}
+        onSubmit={submitted => {
+          const trimmed = submitted.trim()
+          if (trimmed) onSubmit(trimmed)
+        }}
+        // The pasted callback URL carries the OAuth `code` and `state` query
+        // params — enough to complete the in-flight exchange — so mask it the
+        // same way the xAI manual-code field above does, to keep it out of
+        // terminal scrollback, recordings, and shared sessions.
+        mask="*"
+        // The parent `CodexOAuthSetup` owns Esc via `useKeybinding('confirm:no')`.
+        disableEscapeDoublePress
+      />
+    </Box>
+  )
+}
+
 function CodexOAuthSetup({
   onBack,
   onConfigured,
@@ -638,6 +674,10 @@ function CodexOAuthSetup({
   const status = useCodexOAuthFlow({
     onAuthenticated: handleAuthenticated,
   })
+  const [pasteError, setPasteError] = React.useState<string | undefined>()
+  const isRemoteSession = Boolean(
+    process.env['SSH_CONNECTION'] || process.env['SSH_CLIENT'],
+  )
 
   if (status.state === 'error') {
     return (
@@ -693,6 +733,34 @@ function CodexOAuthSetup({
       ) : (
         <Text dimColor>Opening your browser...</Text>
       )}
+      {status.state === 'waiting' ? (
+        <>
+          {isRemoteSession ? (
+            <Text color="warning">
+              SSH session detected — the browser cannot reach this host's
+              localhost callback. After signing in, copy the full URL your
+              browser was redirected to (it starts with http://localhost:) and
+              paste it below.
+            </Text>
+          ) : (
+            <Text dimColor>
+              If the browser cannot reach localhost (remote / containerized
+              session), paste the full callback URL it was redirected to:
+            </Text>
+          )}
+          <CodexManualCallbackInput
+            onSubmit={input => {
+              const result = status.submitManualCallback(input)
+              if (!result.ok) {
+                setPasteError(result.error)
+              } else {
+                setPasteError(undefined)
+              }
+            }}
+          />
+          {pasteError ? <Text color="error">{pasteError}</Text> : null}
+        </>
+      ) : null}
       <Text dimColor>Press Esc to cancel and go back.</Text>
     </Box>
   )
@@ -808,6 +876,16 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
   const currentStep = formSteps[formStepIndex] ?? formSteps[0] ?? FORM_STEPS[0]
   const currentStepKey = currentStep.key
   const currentValue = draft[currentStepKey]
+  const displayStep =
+    draftProvider === 'custom-anthropic' && currentStepKey === 'apiKey'
+      ? {
+          ...currentStep,
+          label: 'Credential',
+          placeholder: 'Credential for this endpoint',
+          helpText: 'The custom profile stores this as an Authorization Bearer token.',
+          optional: false,
+        }
+      : currentStep
 
   // Memoize menu options to prevent unnecessary re-renders when navigating
   // the select menu. Without this, each arrow key press creates a new options
@@ -1382,17 +1460,14 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
       return error.message
     }
 
-    const hydratedTokenInSession = process.env.GITHUB_TOKEN?.trim()
-    if (
-      process.env[GITHUB_MODELS_HYDRATED_ENV_MARKER] === '1' &&
-      hydratedTokenInSession &&
-      (!storedTokenBeforeClear || hydratedTokenInSession === storedTokenBeforeClear)
-    ) {
-      delete process.env.GITHUB_TOKEN
-    }
-
     delete process.env.GAKR_CODE_USE_GITHUB
-    delete process.env[GITHUB_MODELS_HYDRATED_ENV_MARKER]
+    // Undo any GitHub Models token hydrated into the session from secure
+    // storage and drop the marker. Use the shared helper so both hydration
+    // modes are reverted: GITHUB_TOKEN and the copilot_key blob's
+    // GITHUB_COPILOT_KEY. The old hand-rolled cleanup here only cleared
+    // GITHUB_TOKEN, leaving a hydrated Copilot key behind after the marker was
+    // removed. A user-supplied token is preserved.
+    clearHydratedGithubModelsTokenFromEnv(storedTokenBeforeClear)
     delete process.env.OPENAI_MODEL
     delete process.env.OPENAI_API_KEY
     delete process.env.OPENAI_ORG
@@ -1415,7 +1490,7 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
       baseUrl: defaults.baseUrl,
       model: defaults.model,
       apiKey: defaults.apiKey ?? '',
-      apiFormat: 'chat_completions',
+      apiFormat: preset === 'custom' ? 'auto' : 'chat_completions',
       authHeader: '',
       authHeaderValue: '',
       customHeaders: '',
@@ -1440,7 +1515,7 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
       return
     }
 
-    if (preset === 'custom' || !canUseStreamlinedPresetFlow(nextDraft)) {
+    if (preset === 'custom' || preset === 'custom-anthropic' || !canUseStreamlinedPresetFlow(nextDraft)) {
       setScreen('form')
       return
     }
@@ -1471,6 +1546,17 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
     provider: ProviderProfile['provider'] = draftProvider,
     profileId: string | null = editingProfileId,
   ): void {
+    if (
+      provider === 'custom-anthropic' &&
+      (isSetupPlaceholder(nextDraft.baseUrl) ||
+        isFirstPartyAnthropicBaseUrlForEnv({
+          ANTHROPIC_BASE_URL: nextDraft.baseUrl,
+          USER_TYPE: process.env.USER_TYPE,
+        }))
+    ) {
+      setErrorMessage('Base URL must be a real Anthropic-compatible endpoint.')
+      return
+    }
     const routeId = resolveProviderEditorRouteId(provider, nextDraft.baseUrl)
     const supportsApiFormat = routeSupportsApiFormatSelection(routeId)
     const showsAuthHeader = routeShowsAuthHeader(routeId)
@@ -1486,17 +1572,21 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
 
     const requestedResponses =
       supportsApiFormat && (nextDraft.apiFormat === 'responses' || nextDraft.apiFormat === 'responses_compat')
-    const shouldUseChatCompletions =
-      !supportsApiFormat ||
-      (nextDraft.apiFormat !== 'responses' && nextDraft.apiFormat !== 'responses_compat') ||
-      !routeSupportsResponsesModel(routeId, nextDraft.model)
+    const selectedApiFormat =
+      !supportsApiFormat
+        ? 'chat_completions'
+        : nextDraft.apiFormat === 'auto'
+          ? undefined
+          : requestedResponses && !routeSupportsResponsesModel(routeId, nextDraft.model)
+            ? 'chat_completions'
+            : nextDraft.apiFormat as OpenAICompatibleApiFormat
     const payload: ProviderProfileInput = {
       provider,
       name: nextDraft.name,
       baseUrl: nextDraft.baseUrl,
       model: nextDraft.model,
       apiKey: nextDraft.apiKey,
-      apiFormat: shouldUseChatCompletions ? 'chat_completions' : (nextDraft.apiFormat as OpenAICompatibleApiFormat),
+      apiFormat: selectedApiFormat,
       authHeader:
         showsAuthHeader && nextDraft.authHeader
           ? nextDraft.authHeader
@@ -1750,8 +1840,8 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
   function handleFormSubmit(value: string): void {
     const trimmed = value.trim()
 
-    if (!currentStep.optional && trimmed.length === 0) {
-      setErrorMessage(`${currentStep.label} is required.`)
+    if (!displayStep.optional && trimmed.length === 0) {
+      setErrorMessage(`${displayStep.label} is required.`)
       return
     }
 
@@ -1932,7 +2022,7 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
         <Text color="remember" bold>
           {editingProfileId ? 'Edit provider profile' : 'Create provider profile'}
         </Text>
-        <Text dimColor>{currentStep.helpText}</Text>
+        <Text dimColor>{displayStep.helpText}</Text>
         <Text dimColor>
           Provider type:{' '}
           {getRouteProviderTypeLabel(resolveProfileRoute(draftProvider).routeId)}
@@ -1944,11 +2034,16 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
           </Text>
         ) : null}
         <Text dimColor>
-          Step {formStepIndex + 1} of {formSteps.length}: {currentStep.label}
+          Step {formStepIndex + 1} of {formSteps.length}: {displayStep.label}
         </Text>
         {currentStepKey === 'apiFormat' ? (
           <Select
             options={[
+              {
+                value: 'auto',
+                label: 'Automatic',
+                description: 'Use the provider and model defaults',
+              },
               {
                 value: 'chat_completions',
                 label: 'Chat Completions',
@@ -1966,14 +2061,14 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
               },
             ]}
             defaultValue={
-              currentValue === 'responses_compat' ? 'responses_compat' : currentValue === 'responses' ? 'responses' : 'chat_completions'
+              currentValue === 'responses_compat' ? 'responses_compat' : currentValue === 'responses' ? 'responses' : currentValue === 'chat_completions' ? 'chat_completions' : 'auto'
             }
             defaultFocusValue={
-              currentValue === 'responses_compat' ? 'responses_compat' : currentValue === 'responses' ? 'responses' : 'chat_completions'
+              currentValue === 'responses_compat' ? 'responses_compat' : currentValue === 'responses' ? 'responses' : currentValue === 'chat_completions' ? 'chat_completions' : 'auto'
             }
             onChange={(value: string) => handleFormSubmit(value)}
             onCancel={handleBackFromForm}
-            visibleOptionCount={3}
+            visibleOptionCount={4}
           />
         ) : (
           <Box flexDirection="row" gap={1}>
@@ -1989,7 +2084,7 @@ export function ProviderManager({ mode, onDone }: Props): React.ReactNode {
               onSubmit={handleFormSubmit}
               focus={true}
               showCursor={true}
-              placeholder={`${currentStep.placeholder}${figures.ellipsis}`}
+              placeholder={`${displayStep.placeholder}${figures.ellipsis}`}
               mask={
                 currentStepKey === 'apiKey' ||
                 currentStepKey === 'authHeaderValue'
