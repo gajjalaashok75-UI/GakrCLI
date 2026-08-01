@@ -203,7 +203,7 @@ type Unmatched = {
   entry: ChannelEntry;
   why: string;
 };
-function findUnmatched(entries: readonly ChannelEntry[], allowlist: ReturnType<typeof getEffectiveChannelAllowlist>): Unmatched[] {
+export function findUnmatched(entries: readonly ChannelEntry[], allowlist: ReturnType<typeof getEffectiveChannelAllowlist>): Unmatched[] {
   // Server-kind: build one Set from all scopes up front. getMcpConfigsByScope
   // is not cached (project scope walks the dir tree); getMcpConfigByName would
   // redo that walk per entry.
@@ -224,10 +224,10 @@ function findUnmatched(entries: readonly ChannelEntry[], allowlist: ReturnType<t
   // of the allowlist). Org list replaces ledger when set (team/enterprise).
   // GrowthBook _CACHED_MAY_BE_STALE — cold cache yields [] so every plugin
   // entry warns; same tradeoff the gate already accepts.
-  const {
-    entries: allowed,
-    source
-  } = allowlist;
+const {
+  entries: allowed = [],
+  source = 'default',
+} = allowlist ?? {}
 
   // Independent ifs — a plugin entry that's both uninstalled AND
   // unlisted shows two lines. Server kind checks config + dev flag.

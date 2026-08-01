@@ -5,6 +5,19 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.8] - 2026-08-01
+
+### Added
+- **src/components/LogoV2/WordmarkRow.tsx**: New component copied from reference — renders the 6-row GAKRCLI wordmark (`WORDMARK_GAKRCLI`) with bold `brand` color styling.
+- **src/components/LogoV2/WordmarkRow.test.tsx**: Test suite wired from reference — covers full row rendering, row count, color styling, and every-row-once assertions against `WORDMARK_GAKRCLI`.
+
+### Changed
+- **src/components/LogoV2/LogoV2.tsx**: Wired `WordmarkRow` into the startup logo — the manual two-line `WORDMARK_OPEN`/`WORDMARK_GAKRCLI` text rendering in the welcome block is replaced with `<WordmarkRow />`, matching the reference usage; import reduced to `BRAND_TAGLINE` from brand constants.
+- **src/components/LogoV2/ChannelsNotice.tsx**: `findUnmatched` now exported and made null-safe — allowlist destructuring falls back to `{ entries: [], source: 'default' }` when the effective allowlist is undefined.
+
+### Removed
+- **src/components/LogoV2/__tests__/ChannelsNotice.test.ts**: Deleted — test passed a stale mock shape (`configuredServerNames`/`installedPluginIds`) that did not match the real `getEffectiveChannelAllowlist` return type.
+
 ## [0.6.7] - 2026-08-01
 
 ### Added
