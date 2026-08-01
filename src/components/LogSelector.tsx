@@ -429,6 +429,11 @@ export function LogSelector({
         if (log.firstPrompt || log.customTitle) {
           return true;
         }
+        // Always show sessions with a resume branch, even without a
+        // meaningful first prompt or title
+        if (log.sessionBranch?.branchName?.trim()) {
+          return true;
+        }
         return false;
       });
     }
@@ -639,7 +644,7 @@ export function LogSelector({
     }
 
     return displayedLogs.map((log, index) => {
-      const rawSummary = getLogDisplayTitle(log);
+      const rawSummary = getResumeLogDisplayTitle(log);
       const summaryWithSidechain = rawSummary + (log.isSidechain ? ' (sidechain)' : '');
       const summary = normalizeAndTruncateToWidth(summaryWithSidechain, maxLabelWidth);
 
@@ -1369,7 +1374,9 @@ function buildSearchableText(log: LogOption): string {
   const messageText = searchableMessages.map(extractSearchableText).filter(Boolean).join(' ');
 
   const metadata = [
+    getResumeLogDisplayTitle(log),
     log.customTitle,
+    log.sessionBranch?.branchName,
     log.summary,
     log.firstPrompt,
     log.gitBranch,

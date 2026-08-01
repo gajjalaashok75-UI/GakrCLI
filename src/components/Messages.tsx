@@ -47,6 +47,7 @@ import {
   hasUnresolvedHooksFromLookup,
   isNotEmptyMessage,
   normalizeMessages,
+  normalizeMessagesCached,
   reorderMessagesInUI,
   type StreamingThinking,
   type StreamingToolUse,
@@ -407,7 +408,9 @@ const MessagesImpl = ({
   const { columns } = useTerminalSize();
   const toggleShowAllShortcut = useShortcutDisplay('transcript:toggleShowAll', 'Transcript', 'Ctrl+E');
 
-  const normalizedMessages = useMemo(() => normalizeMessages(messages).filter(isNotEmptyMessage), [messages]);
+  // normalizeMessagesCached reuses per-message normalized output across
+  // re-renders so streaming appends don't re-normalize the whole transcript.
+  const normalizedMessages = useMemo(() => normalizeMessagesCached(messages).filter(isNotEmptyMessage), [messages]);
 
   // Check if streaming thinking should be visible (streaming or within 30s timeout)
   const isStreamingThinkingVisible = useMemo(() => {
