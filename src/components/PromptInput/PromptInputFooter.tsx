@@ -187,7 +187,16 @@ function PromptInputFooter({
   useSetPromptOverlay(overlayData);
 
   const showInlineSuggestions = suggestions.length > 0 && !isFullscreen;
-  const hideRegularFooter = showInlineSuggestions || helpOpen;
+  // History search owns the footer while active; otherwise suggestions beat
+  // help (see resolveFooterOverlay).
+  const footerOverlay = isSearching
+    ? null
+    : showInlineSuggestions
+      ? 'suggestions'
+      : helpOpen
+        ? 'help'
+        : null;
+  const hideRegularFooter = footerOverlay !== null;
 
   return (
     <>
@@ -205,6 +214,7 @@ function PromptInputFooter({
           </KeepMounted>
           <PipeStatusInline />
           <PromptInputFooterLeftSide
+            active={!hideRegularFooter}
             exitMessage={exitMessage}
             vimMode={vimMode}
             mode={mode}
@@ -244,9 +254,9 @@ function PromptInputFooter({
         </Box>
       </Box>
     </KeepMounted>
-    {showInlineSuggestions ? <Box paddingX={2} paddingY={0}>
+    {footerOverlay === 'suggestions' ? <Box paddingX={2} paddingY={0}>
         <PromptInputFooterSuggestions suggestions={suggestions} selectedSuggestion={selectedSuggestion} maxColumnWidth={maxColumnWidth} />
-      </Box> : helpOpen ? <PromptInputHelpMenu dimColor={true} fixedWidth={true} paddingX={2} /> : null}
+      </Box> : footerOverlay === 'help' ? <PromptInputHelpMenu dimColor={true} fixedWidth={true} paddingX={2} /> : null}
   </>);
 }
 
