@@ -5,6 +5,23 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.18] - 2026-08-01
+
+### Added
+- **scripts/verify-clean-install.ts**: End-to-end verification script for zero-warning npm install experience. Supports `--tarball` mode (verifies local builds) and `--published` mode (verifies registry artifacts). Runs cold-install and upgrade-install scenarios in isolated prefixes with cold cache, checking for npm warnings, install scripts, and binary boot silence. Includes comprehensive retry logic for network failures and strict output whitelisting.
+- **scripts/verify-clean-install.test.ts**: Unit tests for `resolvePreviousPublishedVersion` retry/skip/infra decision logic with injected npm results (10 tests covering success, transient failures, E404 handling, and persistent infra failures).
+- **scripts/verify-no-phone-home.sh**: Build output verification script that scans dist/cli.mjs for banned patterns (Datadog, internal APIs, Kubernetes secrets, Anthropic internal endpoints). Ensures the build artifact doesn't contain phone-home or internal-only code paths.
+- **scripts/externalsValidation.ts**: Added `RUNTIME_DEPENDENCY_CONTRACT` constant (exact-pinned runtime dependencies: @orama/orama@3.1.18, @orama/plugin-data-persistence@3.1.18, @vscode/ripgrep@1.18.0), `ENGINES_NODE_CONTRACT` constant (>=22.0.0), `validateRuntimeDependencyContract()` function (enforces exact version pinning and contract compliance), `validateInstallHygieneFields()` function (prevents consumer-run install hooks, funding fields, and unintended engines.node changes), and `PkgInstallHygiene` type.
+
+### Changed
+- **scripts/externals.ts**: Added TODO comment for Bedrock/smithy typings removal once dynamic imports land. Added comment explaining vendor-specific AWS/OpenAI/Bedrock/Foundry packages are loaded on demand. Fixed duplicate `@aws-sdk/credential-providers` entry in `OPTIONAL_RUNTIME_EXTERNALS`.
+- **scripts/externalsValidation.ts**: Enhanced `validateRuntimeDependencyContract()` to also validate exact version format (prevents semver ranges from voiding the zero-warning contract). Refactored to move type definitions to top of file for better organization.
+
+### Tests
+- **verify-clean-install.test.ts**: 10 tests for previous published version resolution logic
+- **externalsValidation.test.ts**: All existing tests passing, plus 10 new tests for runtime dependency contract and install hygiene validation
+- **Total: 60 tests passing** across scripts directory
+
 ## [0.6.17] - 2026-08-01
 
 ### Added

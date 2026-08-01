@@ -7,6 +7,7 @@
  */
 
 // Packages that should be kept external in ALL bundles (CLI + SDK)
+// TODO(v2): remove these Bedrock/smithy typings once dynamic imports land.
 export const COMMON_EXTERNALS: string[] = [
   // Native image processing
   'sharp',
@@ -76,9 +77,12 @@ export const SDK_ONLY_EXTERNALS: string[] = [
 // from transitive deps or installed by users who need that provider/protocol.
 export const OPTIONAL_RUNTIME_EXTERNALS: string[] = [
   // Cloud provider SDKs (dynamically imported per-provider)
+  // Vendor-specific AWS/OpenAI/Bedrock/Foundry packages are loaded on demand.
+  // First-party AWS SDKs: base client, runtime transport, STS, credential providers.
   '@aws-sdk/client-bedrock',
   '@aws-sdk/client-bedrock-runtime',
   '@aws-sdk/client-sts',
+  '@aws-sdk/credential-providers',
   '@aws-sdk/credential-providers',
   '@azure/identity',
 ]
