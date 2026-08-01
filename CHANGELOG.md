@@ -5,6 +5,19 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.15] - 2026-08-01
+
+### Added
+- **src/utils/permissions/permissions.ts**: Ported the plan-mode revalidation architecture from the reference tree — `checkPlanModePermissions`, `revalidatePlanModePermissionAllow`, `revalidatePlanModePermissionAllowWithRaceGuard`, `samePermissionAskConstraint`, `planModeDenial`, and a plan-mode-aware `runPermissionRequestHooksForHeadlessAgent`. `hasPermissionsToUseTool` now revalidates plan mode after any allow before returning. Plan mode no longer auto-allows tools merely because bypass mode is available (`isBypassPermissionsModeAvailable`), matching the reference invariant that plan mode only auto-allows read-only operations.
+- **src/hooks/toolPermission/PermissionContext.ts**: `runHooks`/`handleUserAllow`/`handleHookAllow`/`tryClassifier` now revalidate plan mode after an allow and drop permission updates that would leave plan mode; added `handleClassifierAllow` for the classifier approval path.
+- **src/cli/structuredIO.ts**: SDK permission path (`executePermissionRequestHooksForSDK`) now takes the full `Tool`, rechecks rules and plan mode on rewritten input, drops plan-mode-violating updates, and revalidates immediately before applying; `permissionPromptToolResultToPermissionDecision` is now async and revalidates plan mode pre/post update.
+- **src/utils/permissions/PermissionUpdate.ts**: Added `filterPermissionRequestHookUpdates` (PermissionRequest hooks may approve read-only plan-mode actions but must not persist updates that change later checks or leave plan mode) and the `normalizeRuleString` helper used by `removeRules`.
+- **src/tools/PowerShellTool/readOnlyValidation.ts**: Added `isPowerShellCommandReadOnly` (parses with the existing PowerShell AST analyzer before classifying).
+- **src/utils/permissions/filesystem.ts**: Added `isActiveSessionPlanFile`, `pathsEqualForActivePlan`, `getActiveSessionPlanFilePath` for plan-file permission checks.
+
+### Changed
+- **src/utils/permissions/permissionRuleParser.ts**: `normalizeLegacyToolName` now uses `Object.hasOwn` so tool/rule names colliding with `Object.prototype` members (`constructor`, `toString`, `__proto__`, etc.) resolve to themselves instead of the inherited function/object.
+
 ## [0.6.14] - 2026-08-01
 
 ### Added
