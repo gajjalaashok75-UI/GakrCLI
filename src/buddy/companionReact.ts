@@ -5,6 +5,7 @@
  * limits, and @-mention detection, then calls the buddy_react API to
  * generate a reaction shown in the CompanionSprite speech bubble.
  */
+import { createCombinedAbortSignal } from '../utils/combinedAbortSignal.js'
 import { getCompanion } from './companion.js'
 import { getGlobalConfig } from '../utils/config.js'
 import { getGakrCLIAIOAuthTokens } from '../utils/auth.js'
@@ -146,7 +147,7 @@ async function callBuddyReactAPI(
       recent: recentReactions.map(r => r.slice(0, 200)),
       addressed,
     }),
-    signal: AbortSignal.timeout(10_000),
+    signal: createCombinedAbortSignal({ timeoutMs: 10_000 }).signal,
   })
 
   if (!resp.ok) return null
