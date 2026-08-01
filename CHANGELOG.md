@@ -5,6 +5,21 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.12] - 2026-08-01
+
+### Added
+- **src/components/PackageManagerAutoUpdater.tsx**: Exported `PackageManagerUpdateAvailableNotice` (update-available banner with the package manager's guidance message and run command).
+- **src/components/StatusLine.tsx**: Exported `resolveStatusLineUpdateAction` — the reference execution state machine with run/cancel/schedule/none transitions. StatusLine now honors `active` and `executeCommand` props, aborts in-flight updates on deactivation via `useLayoutEffect`, and clears the abort controller after each run.
+- **src/utils/anthropicBaseUrl.ts**: Ported first-party Anthropic base URL detection (`isFirstPartyAnthropicBaseUrlForEnv`), used by ProviderManager's custom-anthropic guard and Feedback's transcript handling.
+- **src/utils/packageManagerUpdateGuidance.ts**: Ported per-package-manager update guidance (message + run command), consumed by `PackageManagerUpdateAvailableNotice`.
+
+### Changed
+- **src/components/LogSelector.tsx**: Resume branch rows keep a session with a non-empty `sessionBranch.branchName` in the base filter, display the flat `getResumeLogDisplayTitle` label, and index both the resume title and branch name for search.
+- **src/components/Messages.tsx**: `normalizeMessages` replaced with `normalizeMessagesCached` in the memoized path (perf/identity win for streaming appends).
+- **src/components/Feedback.tsx**: Transcript uploads are redacted with `redactJsonLines`, the POST payload redacts sensitive values via `jsonRedactor`, and transcript collection is skipped for non-first-party Anthropic base URLs.
+- **src/components/StartupScreen.ts**: Replaced the ANSI-escape block logo with a Unicode box-drawing "GAKRCLI" logo.
+- Tests: added PackageManagerUpdateGuidance, StatusLine.active, anthropicBaseUrl, and packageManagerUpdateGuidance suites (86 tests across the related files, all passing).
+
 ## [0.6.11] - 2026-08-01
 
 ### Added

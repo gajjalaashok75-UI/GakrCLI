@@ -11,6 +11,7 @@ import {
 import { isAutoUpdaterDisabled } from '../utils/config.js';
 import { logForDebugging } from '../utils/debug.js';
 import { getPackageManager, type PackageManager } from '../utils/nativeInstaller/packageManagers.js';
+import { getPackageManagerUpdateGuidance } from '../utils/packageManagerUpdateGuidance.js';
 import { gt, gte } from '../utils/semver.js';
 import { getInitialSettings } from '../utils/settings/settings.js';
 
@@ -22,6 +23,24 @@ type Props = {
   showSuccessMessage: boolean;
   verbose: boolean;
 };
+
+export function PackageManagerUpdateAvailableNotice({
+  manager,
+}: {
+  manager: PackageManager;
+}): React.ReactNode {
+  const guidance = getPackageManagerUpdateGuidance(manager);
+  return (
+    <Text color="warning" wrap="truncate">
+      Update available! {guidance.message}
+      {guidance.command && (
+        <>
+          {' '}Run: <Text bold>{guidance.command}</Text>
+        </>
+      )}
+    </Text>
+  );
+}
 
 export function PackageManagerAutoUpdater({ verbose }: Props): React.ReactNode {
   const [updateAvailable, setUpdateAvailable] = useState(false);
@@ -82,18 +101,6 @@ export function PackageManagerAutoUpdater({ verbose }: Props): React.ReactNode {
     return null;
   }
 
-  // pacman, deb, and rpm don't get specific commands because they each have
-  // multiple frontends (pacman: yay/paru/makepkg, deb: apt/apt-get/aptitude/nala,
-  // rpm: dnf/yum/zypper)
-  const updateCommand =
-    packageManager === 'homebrew'
-      ? 'brew upgrade gakrcli-code'
-      : packageManager === 'winget'
-        ? 'winget upgrade Anthropic.gakrcli-code'
-        : packageManager === 'apk'
-          ? 'apk upgrade gakrcli-code'
-          : 'your package manager update command';
-
   return (
     <>
       {verbose && (
@@ -101,9 +108,7 @@ export function PackageManagerAutoUpdater({ verbose }: Props): React.ReactNode {
           currentVersion: {MACRO.VERSION}
         </Text>
       )}
-      <Text color="warning" wrap="truncate">
-        Update available! Run: <Text bold>{updateCommand}</Text>
-      </Text>
+      <PackageManagerUpdateAvailableNotice manager={packageManager as PackageManager} />
     </>
   );
 }
