@@ -52,6 +52,8 @@ type Props = {
   pauseStartTimeRef: React.RefObject<number | null>;
   spinnerTip?: string;
   responseLengthRef: React.RefObject<number>;
+  /** Throttled live response length for reduced-motion rendering. */
+  responseLength?: number;
   apiMetricsRef?: React.RefObject<
     Array<{
       ttftMs: number;
@@ -108,6 +110,7 @@ function SpinnerWithVerbInner({
   pauseStartTimeRef,
   spinnerTip,
   responseLengthRef,
+  responseLength,
   overrideColor,
   overrideShimmerColor,
   overrideMessage,
@@ -345,6 +348,7 @@ function SpinnerWithVerbInner({
         reducedMotion={reducedMotion}
         hasActiveTools={hasActiveTools}
         responseLengthRef={responseLengthRef}
+        responseLength={responseLength}
         message={message}
         messageColor={messageColor}
         shimmerColor={shimmerColor}

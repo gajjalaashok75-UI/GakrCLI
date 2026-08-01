@@ -5,6 +5,16 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.10] - 2026-08-01
+
+### Added
+- **src/components/Spinner/SpinnerAnimationRow.tsx**: Exported `getCurrentResponseTokenCount(responseLength)` and added optional `responseLength` prop — the row now prefers the parent's throttled live response length for reduced-motion rendering.
+- **src/components/Spinner/SpinnerAnimationRow.test.tsx**: Test suite copied from reference — covers progressive width gating, mode-glyph reserve/restore, suffix overflow drop, bare-thinking recovery, tokens-vs-timer/thinking tie-breaks, and teammate nested `(thinking)`.
+
+### Changed
+- **src/components/Spinner/SpinnerAnimationRow.tsx**: Ported the reference's full width-gating engine — 5s elapsed-timer reveal (was 30s token-gated), removal of the token-counter smoothing animation (token count now tracks the live response length), bare-chrome recovery passes that unlock higher-value status (tokens/thinking) as soon as it physically fits, suffix-overflow drop with glyph-vs-bare preference, glyph-only status gating, and `flexWrap="nowrap"`.
+- **src/components/Spinner.tsx**: Added `responseLength?: number` to `SpinnerWithVerb` props and threaded it into `SpinnerAnimationRow`.
+
 ## [0.6.9] - 2026-08-01
 
 ### Added
