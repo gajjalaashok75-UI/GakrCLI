@@ -396,6 +396,15 @@ function PromptInput({
     }
     return toolPermissionContext;
   }, [viewedTeammate, toolPermissionContext]);
+  // History search owns the footer while active: close the help menu first so
+  // the search input stays visible (previously help stayed open and hid it).
+  const setHistorySearchActive = React.useCallback(
+    (active: boolean) => {
+      if (active) setHelpOpen(false);
+      setIsSearchingHistory(active);
+    },
+    [setHelpOpen, setIsSearchingHistory],
+  );
   const { historyQuery, setHistoryQuery, historyMatch, historyFailedMatch } = useHistorySearch(
     entry => {
       setPastedContents(entry.pastedContents);
@@ -408,7 +417,7 @@ function PromptInput({
     onModeChange,
     mode,
     isSearchingHistory,
-    setIsSearchingHistory,
+    setHistorySearchActive,
     setPastedContents,
     pastedContents,
   );

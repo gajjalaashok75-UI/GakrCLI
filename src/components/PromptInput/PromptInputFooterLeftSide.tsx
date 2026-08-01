@@ -78,6 +78,7 @@ function useRssDisplay(): RssState | null {
 }
 
 type Props = {
+  active: boolean;
   exitMessage: {
     show: boolean;
     key?: string;
@@ -180,6 +181,7 @@ function GoalElapsedIndicator(): React.ReactNode {
 }
 
 export function PromptInputFooterLeftSide({
+  active,
   exitMessage,
   vimMode,
   mode,
@@ -197,14 +199,24 @@ export function PromptInputFooterLeftSide({
   historyFailedMatch,
   onOpenTasksDialog,
 }: Props): React.ReactNode {
-  if (exitMessage.show) {
+  // History search owns the footer while active: exit/paste feedback is
+  // suppressed so the search input stays visible (see resolveVisibleTransientFooterMessage).
+  const transientMessage = isSearching
+    ? null
+    : exitMessage.show
+      ? 'exit'
+      : isPasting
+        ? 'paste'
+        : null;
+  const isRegularFooterActive = active && transientMessage === null;
+  if (transientMessage === 'exit') {
     return (
       <Text dimColor key="exit-message">
         Press {exitMessage.key} again to exit
       </Text>
     );
   }
-  if (isPasting) {
+  if (transientMessage === 'paste') {
     return (
       <Text dimColor key="pasting-message">
         Pasting text…
@@ -217,7 +229,7 @@ export function PromptInputFooterLeftSide({
   return (
     <Box justifyContent="flex-start" gap={1}>
       {isSearching && (
-        <HistorySearchInput value={historyQuery} onChange={setHistoryQuery} historyFailedMatch={historyFailedMatch} />
+        <HistorySearchInput value={historyQuery} onChange={setHistoryQuery} historyFailedMatch={historyFailedMatch} focus={isRegularFooterActive} />
       )}
       {showVim ? (
         <Text dimColor key="vim-insert">

@@ -5,6 +5,21 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.9] - 2026-08-01
+
+### Added
+- **src/components/PromptInput/HistorySearchInput.test.tsx**: Test suite copied from reference — covers focused search input rendering, no-match vs match label, cursor forced to end, and input consuming/not consuming keys.
+
+### Changed
+- **src/components/PromptInput/HistorySearchInput.tsx**: Ported reference version — the search input now takes an explicit `focus` prop (previously hard-coded `focus={true}`) so the parent controls focus based on footer visibility.
+- **src/components/PromptInput/PromptInput.tsx**: History search now closes the help menu before activating (`setHistorySearchActive`), so the search input stays visible instead of being hidden behind the open help overlay.
+- **src/components/PromptInput/PromptInputFooter.tsx**: Inlined the footer-overlay precedence from the removed `footerVisibility.ts` — history search owns the footer while active; otherwise inline suggestions beat the help menu. Passes `active={!hideRegularFooter}` to the left side.
+- **src/components/PromptInput/PromptInputFooterLeftSide.tsx**: Added `active` prop and inlined the transient-message resolution — exit/paste feedback is suppressed while history search is active so the search input stays visible; passes `focus` to `HistorySearchInput` accordingly.
+
+### Removed
+- **src/components/PromptInput/footerVisibility.ts**: Removed — its logic was either already hard-coded in the components (exit/paste precedence) or is now inlined at the usage sites (close-help-on-search, footer-overlay precedence, transient suppression during search).
+- **src/components/PromptInput/PromptInputFooterLeftSide.test.ts**: Removed with the module — it only exercised the `footerVisibility.ts` functions now inlined.
+
 ## [0.6.8] - 2026-08-01
 
 ### Added
