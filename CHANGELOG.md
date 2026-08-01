@@ -5,6 +5,16 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.11] - 2026-08-01
+
+### Added
+- **src/components/ProviderManager.tsx**: Ported API mode "Automatic" (`auto`) — the API mode step now defaults to automatic surface selection instead of forcing chat/completions, with a new "Automatic" option in the Select and an "automatic" summary label for profiles without an explicit apiFormat. Ported the custom-anthropic preset flow — the API key step re-labels to "Credential" and is required, the preset always opens the full form, and `persistDraft` rejects placeholder or first-party Anthropic base URLs for custom-anthropic profiles. Ported the Codex OAuth manual-callback paste UI with SSH-session banner — when the browser cannot reach localhost the user can paste the full callback URL (masked, with error surface) instead of being stuck.
+- **src/components/useCodexOAuthFlow.ts**: Waiting status now exposes `submitManualCallback(input)` backed by `CodexOAuthService.submitManualCallback`, so the ProviderManager paste UI can complete an in-flight Codex exchange.
+- **src/utils/githubModelsCredentials.ts**: Added `clearHydratedGithubModelsTokenFromEnv(storedToken)` — undoes session hydration symmetrically for both `GITHUB_TOKEN` and the `copilot_key` blob's `GITHUB_COPILOT_KEY`, preserving user-supplied values, and removes the hydration marker.
+
+### Changed
+- **src/components/ProviderManager.tsx**: `deleteGithubProvider` now calls `clearHydratedGithubModelsTokenFromEnv` instead of the hand-rolled GITHUB_TOKEN-only cleanup, so a hydrated Copilot key is no longer left behind after deleting a GitHub provider.
+
 ## [0.6.10] - 2026-08-01
 
 ### Added
