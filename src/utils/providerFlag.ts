@@ -430,6 +430,23 @@ export function applyProviderFlag(
       }
       break
 
+    case 'gitlawb-opengateway':
+      process.env.GAKR_CODE_USE_OPENAI = '1'
+      if (process.env.OPENGATEWAY_BASE_URL?.trim()) {
+        process.env.OPENAI_BASE_URL = process.env.OPENGATEWAY_BASE_URL.trim()
+      } else {
+        applyOpenAIBaseUrlDefault(
+          provider,
+          defaultBaseUrl ?? 'https://opengateway.gitlawb.com/v1',
+        )
+      }
+      process.env.OPENAI_MODEL ??= defaultModel ?? 'mimo-v2.5-pro'
+      if (model) process.env.OPENAI_MODEL = model
+      if (opengatewayApiKey) {
+        process.env.OPENAI_API_KEY = opengatewayApiKey
+      }
+      break
+
     case 'xai':
       process.env.GAKR_CODE_USE_OPENAI = '1'
       process.env.OPENAI_BASE_URL ??= 'https://api.x.ai/v1'

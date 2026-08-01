@@ -5,6 +5,39 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.17] - 2026-08-01
+
+### Added
+- **src/utils/boundedAsync.ts**: Added concurrency control utilities (`mapWithConcurrency`, `raceAbort`, `throwIfAborted`) for bounded parallel execution with AbortSignal support. Already integrated with `teamMemorySync/index.ts`.
+- **src/utils/doomLoop.ts**: Added doom loop detection system to prevent wasted tokens on repeated identical tool calls. Tracks consecutive tool calls with the same (name, input) signature and blocks execution after a configurable threshold (default 3), with per-agent state tracking.
+- **src/utils/envProviderOption.ts**: Added `getEnvProviderOption` for deriving the "use current environment configuration" onboarding option with proper credential redaction boundary (separate `baseUrl` for persistence vs `displayBaseUrl` for UI rendering).
+- **src/utils/setupScreenGates.ts**: Added pure gating logic for first-run setup screens (`getRequiredSetupScreens`) — provider-free decision logic for onboarding and trust dialog display.
+- **src/utils/model/providers.ts**: Added `isFirstPartyAnthropicProvider()` function that combines `getAPIProvider() === 'firstParty'` check with `isFirstPartyAnthropicBaseUrl()` to properly detect third-party Anthropic endpoints.
+
+### Changed
+- **src/utils/status.tsx**: Enhanced `buildAPIProviderProperties()` with comprehensive credential redaction for URLs, query parameters, and configured secrets. Added route resolution support to display concrete provider labels (OpenRouter, Groq, Ollama, etc.) instead of generic "OpenAI-compatible". Implemented multi-level secret substring redaction with URL encoding variants (up to 3 encoding depths), query parameter value redaction, proxy credential redaction, and mTLS path redaction. Added route-specific credential summary display.
+- **src/utils/statusNoticeDefinitions.tsx**: Renamed `gakrcliAiSubscriberExternalTokenNotice` to `gakrCLIAiSubscriberExternalTokenNotice` for naming consistency. Added error handling wrapper in `getActiveNotices` to prevent individual notice failures from breaking the entire status notice system.
+- **src/utils/statusNoticeLocalModel.ts**: Refactored Ollama context warning handling with clearer message formatting ("GakrCLI.md" → "GakrCLI.md"). Exported `isLoopbackOllamaEndpoint` and `parseOllamaPsContextWarning` for external use. Improved `checkOllamaContextLength` signature (baseUrl first, model second).
+- **src/utils/http.ts**: Updated `getWebFetchUserAgent()` to use `isFirstPartyAnthropicProvider()` instead of `getAPIProvider() === 'firstParty'`, enabling proper third-party endpoint detection. Updated GitHub URL from `Gitlawb/openclaude` to `gajjalaashok75-UI/gakrcli` for GakrCLI branding.
+- **src/utils/fsOperations.ts**: Enhanced `mkdir()` and `mkdirSync()` with EPERM/EACCES handling for Windows drive root operations. On Windows, mkdir on a drive root (e.g., 'D:\') maps the kernel's "cannot create a root that already exists" to EPERM rather than EEXIST. Both functions now treat EACCES/EPERM as no-op when the directory already exists, while propagating genuine permission failures.
+- **src/utils/stringUtils.ts**: Increased `MAX_STRING_LENGTH` buffer from 2^21 (2MB) to 2^25 (32MB) for handling larger string operations without disk spillover.
+- **src/utils/providerSecrets.ts**: Enhanced with `getKnownProviderSecretEnvKeys()`, `redactSecretSubstringsForDisplay()`, and `sanitizeApiKey()` exports to support comprehensive credential redaction across the status system.
+- **src/utils/ShellCommand.ts**, **src/utils/sessionStorage.ts**, **src/utils/auth.ts**, **src/utils/effort.ts**, **src/utils/heapDumpService.ts**, **src/utils/providerFlag.ts**, **src/utils/stats.ts**, **src/utils/statsCache.ts**: Various minor improvements and refactoring from upstream integration.
+
+### Tests
+- Added comprehensive test suites for new utilities:
+  - **boundedAsync.test.ts**: 11 tests for concurrency control and abort handling
+  - **doomLoop.test.ts**: 13 tests for doom loop detection and per-agent tracking
+  - **envProviderOption.test.ts**: 7 tests for credential redaction and option derivation
+  - **setupScreenGates.test.ts**: 6 tests for setup screen gating logic
+  - **http.test.ts**: Updated and passing tests for third-party endpoint detection
+  - **fsOperations.mkdir.test.ts**: 4 tests for Windows EPERM handling
+- Enhanced existing test suites:
+  - **status.test.ts**: Added 10 new tests for credential redaction (URL query values, encoded secrets, proxy credentials, mTLS paths)
+  - **status.routes.test.ts**: Comprehensive route resolution and redaction tests
+  - **sessionStorage.test.ts**, **sessionTitle.test.ts**, **handlePromptSubmit.test.ts**, **queryLifecycle.test.ts**: All passing with upstream changes
+- **Total: 156 tests passing** across all modified and new utility files
+
 ## [0.6.16] - 2026-08-01
 
 ### Changed

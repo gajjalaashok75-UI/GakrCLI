@@ -1594,7 +1594,7 @@ export function isGakrCLIAISubscriber(): boolean {
   }
 
   if (!isAnthropicAuthEnabled()) {
-    return true
+    return false
   }
 
   return shouldUseGakrCLIAIAuth(getGakrCLIAIOAuthTokens()?.scopes)

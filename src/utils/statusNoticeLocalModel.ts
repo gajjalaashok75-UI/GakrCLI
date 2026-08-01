@@ -17,6 +17,7 @@ import { plural } from './stringUtils.js'
 import {
   type OllamaContextWarning,
   checkOllamaPsContextWarning,
+  parseOllamaPsContextWarning as parseOllamaPsContext,
 } from './ollamaContext.js'
 
 type ContributorId =
@@ -60,7 +61,7 @@ function summarizeContextWarning(
         id: warning.type,
         message: warning.message,
         details: warning.details,
-        summary: `GAKRCLI.md: ${warning.currentValue} large ${plural(warning.currentValue, 'file')}`,
+        summary: `GakrCLI.md: ${warning.currentValue} large ${plural(warning.currentValue, 'file')}`,
       }
     case 'unreachable_rules':
       return null
@@ -71,27 +72,54 @@ function summarizeOllamaContextWarning(
   warning: OllamaContextWarning,
 ): LocalModelContextContributor {
   return {
-    id: 'ollama_context_length' as ContributorId,
-    message: warning.message,
-    details: warning.details,
-    summary: `Ollama context: ~${formatTokens(warning.currentTokens)} / ~${formatTokens(warning.maxTokens)} tokens`,
+    id: 'ollama_context_length',
+    message: 'Ollama context length is too small',
+    details: [
+      `${warning.modelName}: active CONTEXT is ${warning.contextValue}`,
+      'GakrCLI requests 32768 tokens for Ollama chats. If `ollama ps` keeps showing a smaller CONTEXT after a new request, restart Ollama and verify with `ollama ps`.',
+    ],
+    summary: `Ollama CONTEXT: ${warning.contextValue} (GakrCLI requests 32K)`,
   }
+}
+
+export function isLoopbackOllamaEndpoint(baseUrl: string | undefined): boolean {
+  return isDirectLocalOllamaEndpoint(baseUrl)
+}
+
+export function parseOllamaPsContextWarning(
+  output: string,
+  activeModelName?: string,
+): LocalModelContextContributor | null {
+  const warning = parseOllamaPsContext(output, activeModelName)
+  return warning ? summarizeOllamaContextWarning(warning) : null
+}
+
+async function checkOllamaContextLength(
+  baseUrl: string | undefined,
+  activeModelName?: string,
+): Promise<LocalModelContextContributor | null> {
+  if (!isLoopbackOllamaEndpoint(baseUrl)) {
+    return null
+  }
+
+  const warning = await checkOllamaPsContextWarning(activeModelName)
+  if (!warning) {
+    return null
+  }
+
+  return summarizeOllamaContextWarning(warning)
 }
 
 export function buildLocalModelContextLoad(
   warnings: ContextWarnings | null | undefined,
   extraContributors: LocalModelContextContributor[] = [],
 ): LocalModelContextWarning | null {
-  if (!warnings && extraContributors.length === 0) {
-    return null
-  }
-
   const contributors = [
     warnings?.mcpWarning ?? null,
     warnings?.agentWarning ?? null,
     warnings?.gakrcliMdWarning ?? null,
   ]
-    .filter((warning): warning is ContextWarning => warning !== null)
+    .filter((warning): warning is ContextWarning => warning != null)
     .map(summarizeContextWarning)
     .filter(
       (contributor): contributor is LocalModelContextContributor =>
@@ -160,29 +188,6 @@ export function isActiveProviderLocalModel(
   return isLocalProviderUrl(resolveActiveProviderBaseUrl(processEnv))
 }
 
-function isLoopbackOllamaEndpoint(baseUrl: string | undefined): boolean {
-  if (!baseUrl) {
-    return false
-  }
-  return isDirectLocalOllamaEndpoint(new URL(baseUrl))
-}
-
-async function checkOllamaContextLength(
-  activeModelName: string | undefined,
-  baseUrl: string | undefined,
-): Promise<LocalModelContextContributor | null> {
-  if (!isLoopbackOllamaEndpoint(baseUrl)) {
-    return null
-  }
-
-  const warning = await checkOllamaPsContextWarning(activeModelName)
-  if (!warning) {
-    return null
-  }
-
-  return summarizeOllamaContextWarning(warning)
-}
-
 export async function checkLocalModelContextLoad(
   tools: readonly Tool[],
   agentDefinitions: AgentDefinitionsResult | null | undefined,
@@ -196,7 +201,7 @@ export async function checkLocalModelContextLoad(
     return null
   }
 
-  const [warnings, ollamaWarning] = await Promise.all([
+  const [warnings, ollamaContextContributor] = await Promise.all([
     checkContextWarnings(
       tools,
       agentDefinitions ?? null,
@@ -207,7 +212,11 @@ export async function checkLocalModelContextLoad(
         includeUnreachableRules: false,
       },
     ),
-    checkOllamaContextLength(activeModelName, resolvedBaseUrl),
+    checkOllamaContextLength(resolvedBaseUrl, activeModelName),
   ])
-  return buildLocalModelContextLoad(warnings, ollamaWarning ? [ollamaWarning] : [])
+
+  return buildLocalModelContextLoad(
+    warnings,
+    ollamaContextContributor ? [ollamaContextContributor] : [],
+  )
 }
