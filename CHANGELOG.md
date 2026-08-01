@@ -5,6 +5,26 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.7] - 2026-08-01
+
+### Added
+- **src/screens/replMaxTurns.ts**: New `DEFAULT_REPL_MAX_TURNS` (50) and `resolveReplMaxTurns` — bounds a single interactive prompt's sequential tool-use turns; REPL forwards the resolved cap to foreground and background queries and ResumeConversation passes `maxTurns={maxTurns}` into `<REPL>`.
+- **src/utils/interruptionCorrection.ts**: New interruption-correction tracker and auto-restore helpers — arms a pending correction reminder on local user cancellation, rewinds history on model completion, and replays the reminder into the next normal prompt.
+- **src/screens/REPL.queryLifecycle.test.ts**: Test suite wired from reference covering query lifecycle source assertions: timeout handler logs `abort_acknowledged` without a terminal end, and the query finally cleanup path logs a completed lifecycle context for `query-timeout`/`hard-max-query-timeout` terminal reasons.
+- **src/screens/replMaxTurnsProp.test.ts**: Tests covering `DEFAULT_REPL_MAX_TURNS` default, `resolveReplMaxTurns` resolution, and REPL/ResumeConversation wiring of the max-turns cap.
+
+### Changed
+- **src/screens/REPL.tsx**: Query lifecycle logging wired from reference — `summarizeActiveOperations`/`logQueryLifecycle`/`logCompletedLifecycle` emit `timeout`, `abort_requested`, `abort_acknowledged`, `start`, `guard_start`, and `end` lifecycle events; the finally cleanup path stamps `terminalReason`/`abortReason` and uses `queryGuard.lastContext` to emit a completed lifecycle for timeout terminals; `maxTurns` prop wired through to foreground and background queries; interruption-correction eligible flag and request-only messages forwarded into the query path.
+- **src/screens/ResumeConversation.tsx**: New `maxTurns` prop forwarded to `<REPL>`.
+- **src/utils/QueryGuard.ts**: Upgraded from the minimal 175-line version to the full reference implementation (627 lines) — `tryStart(metadata)` returns `{generation, context}`, `end(generation, terminalReason, abortReason)`, `forceEnd(reason, abortReason)`, `activeContext`/`lastContext`, `acquireLease`/`releaseLease`, `registerActivity`, `beginUserInteraction` (human-wait suspension with shifted hard-max deadlines), idle/hard-max timeout info passed to the handler, and default export constants.
+- **src/utils/queryLifecycle.ts**: Added `getQueryTerminalReason` and `updateToolUse` to `QueryLifecycleOperationTracker`.
+- **src/utils/sessionTitle.ts**: Upgraded to the full reference implementation — `titleOrNullForPromptFallback` (JSON-parse fallback chain, bounded internal-task title profile, caller-abort propagation) alongside `generateSessionTitle`.
+- **src/utils/handlePromptSubmit.ts**: Added `isNormalLocalUserPrompt`, `buildConcurrentRequeuedPrompt`, and reminder-consume/restore/re-arm flow for interruption correction; `isInterruptionCorrectionEligible` and `onModelRequestStart` options added.
+- **src/utils/QueryGuard.test.ts**: Test suite expanded to the reference version (771 lines) — leases, suspension, timeout info, terminal-reason stamping, stale-generation protection.
+
+### Fixed
+- **src/utils/handlePromptSubmit.ts**: Interruption-reminder prepend no longer gated behind autonomy `runId`/`deferAutonomyCompletion` — the reminder now injects for any eligible first prompt (normal or queued slash command), and the autonomy `deferredAutonomyRunIds` tracking block was restored.
+
 ## [0.6.6] - 2026-08-01
 
 ### Added

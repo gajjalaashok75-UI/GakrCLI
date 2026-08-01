@@ -29,11 +29,11 @@ import { errorMessage } from '../utils/errors.js';
 import type { FileHistorySnapshot } from '../utils/fileHistory.js';
 import { logError } from '../utils/log.js';
 import { createSystemMessage } from '../utils/messages.js';
-import { computeStandaloneAgentContext, restoreAgentFromSession, restoreWorktreeForResume } from '../utils/sessionRestore.js';
+import { computeStandaloneAgentContext, createForkSessionInfoMessage, restoreAgentFromSession, restoreWorktreeForResume } from '../utils/sessionRestore.js';
 import { adoptResumedSessionFile, enrichLogs, isCustomTitleEnabled, loadAllProjectsMessageLogsProgressive, loadSameRepoMessageLogsProgressive, recordContentReplacement, resetSessionFilePointer, restoreSessionMetadata, type SessionLogResult } from '../utils/sessionStorage.js';
 import type { ModelSetting } from '../utils/model/model.js';
 import type { ThinkingConfig } from '../utils/thinking.js';
-import type { ContentReplacementRecord } from '../utils/toolResultStorage.js';
+import { filterContentReplacementsForMessages, type ContentReplacementRecord } from '../utils/toolResultStorage.js';
 import { REPL } from './REPL.js';
 import { filterResumeLogs } from './resumeFilters.js';
 type Props = {
@@ -56,6 +56,7 @@ type Props = {
   filterByPr?: boolean | number | string;
   thinkingConfig: ThinkingConfig;
   fallbackModel?: string;
+  maxTurns?: number;
   onTurnComplete?: (messages: Message[]) => void | Promise<void>;
 };
 export function ResumeConversation({
@@ -78,6 +79,7 @@ export function ResumeConversation({
   filterByPr,
   thinkingConfig,
   fallbackModel,
+  maxTurns,
   onTurnComplete
 }: Props): React.ReactNode {
   const {
@@ -208,7 +210,13 @@ export function ResumeConversation({
         await resetSessionFilePointer();
         restoreCostStateForSession(result_3.sessionId);
       } else if (forkSession && result_3.contentReplacements?.length) {
-        await recordContentReplacement(result_3.contentReplacements);
+        result_3.contentReplacements = filterContentReplacementsForMessages(result_3.messages, result_3.contentReplacements);
+        if (result_3.contentReplacements.length) {
+          await recordContentReplacement(result_3.contentReplacements);
+        }
+      }
+      if (forkSession) {
+        result_3.messages.push(createForkSessionInfoMessage(result_3.sessionId ?? log_0.sessionId));
       }
       const {
         agentDefinition: resolvedAgentDef
@@ -280,7 +288,7 @@ export function ResumeConversation({
     return <CrossProjectMessage command={crossProjectCommand} />;
   }
   if (resumeData) {
-    return <REPL debug={debug} commands={commands} initialTools={initialTools} initialMessages={resumeData.messages} initialFileHistorySnapshots={resumeData.fileHistorySnapshots} initialContentReplacements={resumeData.contentReplacements} initialAgentName={resumeData.agentName} initialAgentColor={resumeData.agentColor} mcpClients={mcpClients} dynamicMcpConfig={dynamicMcpConfig} strictMcpConfig={strictMcpConfig} systemPrompt={systemPrompt} appendSystemPrompt={appendSystemPrompt} mainThreadAgentDefinition={resumeData.mainThreadAgentDefinition} baseMainLoopModel={baseMainLoopModel} hasExplicitModelOverride={hasExplicitModelOverride} autoConnectIdeFlag={autoConnectIdeFlag} disableSlashCommands={disableSlashCommands} thinkingConfig={thinkingConfig} fallbackModel={fallbackModel} onTurnComplete={onTurnComplete} />;
+    return <REPL debug={debug} commands={commands} initialTools={initialTools} initialMessages={resumeData.messages} initialFileHistorySnapshots={resumeData.fileHistorySnapshots} initialContentReplacements={resumeData.contentReplacements} initialAgentName={resumeData.agentName} initialAgentColor={resumeData.agentColor} mcpClients={mcpClients} dynamicMcpConfig={dynamicMcpConfig} strictMcpConfig={strictMcpConfig} systemPrompt={systemPrompt} appendSystemPrompt={appendSystemPrompt} mainThreadAgentDefinition={resumeData.mainThreadAgentDefinition} baseMainLoopModel={baseMainLoopModel} hasExplicitModelOverride={hasExplicitModelOverride} autoConnectIdeFlag={autoConnectIdeFlag} disableSlashCommands={disableSlashCommands} thinkingConfig={thinkingConfig} fallbackModel={fallbackModel} maxTurns={maxTurns} onTurnComplete={onTurnComplete} />;
   }
   if (loading) {
     return <Box>

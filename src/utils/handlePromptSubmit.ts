@@ -47,6 +47,36 @@ function exit(): void {
   gracefulShutdownSync(0)
 }
 
+export function isNormalLocalUserPrompt(command: QueuedCommand): boolean {
+  return (
+    command.mode === 'prompt' &&
+    typeof command.value === 'string' &&
+    !command.value.trimStart().startsWith('/') &&
+    typeof command.preExpansionValue === 'string' &&
+    !command.preExpansionValue.trimStart().startsWith('/') &&
+    command.skipSlashCommands !== true &&
+    command.bridgeOrigin !== true &&
+    command.isMeta !== true &&
+    command.origin === undefined &&
+    command.slashCommandOverride === undefined &&
+    command.workload === undefined &&
+    command.agentId === undefined &&
+    command.allowInterruptionCorrection !== false
+  )
+}
+
+export function buildConcurrentRequeuedPrompt(
+  value: string,
+  isInterruptionCorrectionEligible: boolean,
+): QueuedCommand {
+  return {
+    value,
+    preExpansionValue: isInterruptionCorrectionEligible ? value : undefined,
+    allowInterruptionCorrection: isInterruptionCorrectionEligible,
+    mode: 'prompt',
+  }
+}
+
 type BaseExecutionParams = {
   queuedCommands?: QueuedCommand[]
   messages: Message[]
@@ -80,11 +110,15 @@ type BaseExecutionParams = {
     onBeforeQuery?: (input: string, newMessages: Message[]) => Promise<boolean>,
     input?: string,
     effort?: EffortValue,
+    isInterruptionCorrectionEligible?: boolean,
+    onModelRequestStart?: () => void,
     // Return false when the query guard declines ownership before a turn starts.
   ) => Promise<void | false>
   setAppState: (updater: (prev: AppState) => AppState) => void
   onBeforeQuery?: (input: string, newMessages: Message[]) => Promise<boolean>
   canUseTool?: CanUseToolFn
+  takeInterruptionCorrectionReminder?: () => Message | null
+  restoreInterruptionCorrectionReminder?: () => void
 }
 
 /**
@@ -128,7 +162,8 @@ export type HandlePromptSubmitParams = BaseExecutionParams & {
    */
   skipSlashCommands?: boolean
   slashCommandOverride?: Command
-  /** Preserves that the input originated from Remote Control when queued. */
+  allowInterruptionCorrection?: boolean
+    /** Preserves that the input originated from Remote Control when queued. */
   bridgeOrigin?: boolean
 }
 
@@ -154,9 +189,12 @@ export async function handlePromptSubmit(
     onBeforeQuery,
     canUseTool,
     queuedCommands,
+    takeInterruptionCorrectionReminder,
+    restoreInterruptionCorrectionReminder,
     uuid,
     skipSlashCommands,
     slashCommandOverride,
+    allowInterruptionCorrection,
     bridgeOrigin,
   } = params
 
@@ -184,6 +222,8 @@ export async function handlePromptSubmit(
       resetHistory,
       canUseTool,
       onInputChange,
+      takeInterruptionCorrectionReminder,
+      restoreInterruptionCorrectionReminder,
     })
     return
   }
@@ -358,6 +398,7 @@ export async function handlePromptSubmit(
       pastedContents: hasImages ? pastedContents : undefined,
       skipSlashCommands,
       slashCommandOverride,
+      allowInterruptionCorrection,
       bridgeOrigin,
       uuid,
     })
@@ -383,6 +424,7 @@ export async function handlePromptSubmit(
     pastedContents: hasImages ? pastedContents : undefined,
     skipSlashCommands,
     slashCommandOverride,
+    allowInterruptionCorrection,
     bridgeOrigin,
     uuid,
   }
@@ -405,6 +447,8 @@ export async function handlePromptSubmit(
     resetHistory,
     canUseTool,
     onInputChange,
+    takeInterruptionCorrectionReminder,
+    restoreInterruptionCorrectionReminder,
   })
 }
 
@@ -432,6 +476,8 @@ async function executeUserInput(params: ExecuteUserInputParams): Promise<void> {
     resetHistory,
     canUseTool,
     queuedCommands,
+    takeInterruptionCorrectionReminder,
+    restoreInterruptionCorrectionReminder,
   } = params
 
   // Note: paste references are already processed before calling this function
@@ -450,6 +496,8 @@ async function executeUserInput(params: ExecuteUserInputParams): Promise<void> {
   // which transitions running→idle; cancelReservation() below is a no-op in
   // that case (only acts on dispatching state).
   let queryProfileOwnedByOnQuery = false
+  let interruptionCorrectionReminder: Message | null | undefined
+  let interruptionCorrectionReminderOwnedByModel = false
   try {
     // Reserve the guard BEFORE processUserInput — processBashCommand awaits
     // BashTool.call() and processSlashCommand awaits getMessagesForSlashCommand,
@@ -471,10 +519,9 @@ async function executeUserInput(params: ExecuteUserInputParams): Promise<void> {
     // Iterate all commands uniformly. First command gets attachments +
     // ideSelection + pastedContents, rest skip attachments to avoid
     // duplicating turn-level context (IDE selection, todos, diffs).
-    let commands = queuedCommands ?? []
-    const queuedAutonomyClaim =
+    const commands = queuedCommands ?? []
+        const queuedAutonomyClaim =
       await claimConsumableQueuedAutonomyCommands(commands)
-    commands = queuedAutonomyClaim.attachmentCommands
     const claimedAutonomyCommands = queuedAutonomyClaim.claimedCommands
     if (commands.length === 0) {
       // Clear the abort controller published a few lines above so this turn's
@@ -483,6 +530,11 @@ async function executeUserInput(params: ExecuteUserInputParams): Promise<void> {
       setAbortController(null)
       return
     }
+    const isInterruptionCorrectionEligible =
+      commands.length > 0 && commands.every(isNormalLocalUserPrompt)
+    interruptionCorrectionReminder = isInterruptionCorrectionEligible
+      ? takeInterruptionCorrectionReminder?.()
+      : undefined
 
     // Compute the workload tag for this turn. queueProcessor can batch a
     // cron prompt with a same-tick human prompt; only tag when EVERY
@@ -511,94 +563,101 @@ async function executeUserInput(params: ExecuteUserInputParams): Promise<void> {
           const cmd = commands[i]!
           const isFirst = i === 0
           const runId = cmd.autonomy?.runId
-          const result = await processUserInput({
-            input: cmd.value,
-            preExpansionInput: cmd.preExpansionValue,
-            mode: cmd.mode,
-            setToolJSX,
-            context: makeContext(),
-            pastedContents: isFirst ? cmd.pastedContents : undefined,
-            messages,
-            setUserInputOnProcessing: isFirst
-              ? setUserInputOnProcessing
-              : undefined,
-            isAlreadyProcessing: !isFirst,
-            querySource,
-            canUseTool,
-            uuid: cmd.uuid,
-            ideSelection: isFirst ? ideSelection : undefined,
+        const result = await processUserInput({
+          input: cmd.value,
+          preExpansionInput: cmd.preExpansionValue,
+          mode: cmd.mode,
+          setToolJSX,
+          context: makeContext(),
+          pastedContents: isFirst ? cmd.pastedContents : undefined,
+          messages,
+          setUserInputOnProcessing: isFirst
+            ? setUserInputOnProcessing
+            : undefined,
+          isAlreadyProcessing: !isFirst,
+          querySource,
+          canUseTool,
+          uuid: cmd.uuid,
+          ideSelection: isFirst ? ideSelection : undefined,
           skipSlashCommands: cmd.skipSlashCommands,
           slashCommandOverride: cmd.slashCommandOverride,
-            bridgeOrigin: cmd.bridgeOrigin,
-            isMeta: cmd.isMeta,
+          bridgeOrigin: cmd.bridgeOrigin,
+          isMeta: cmd.isMeta,
             skipAttachments: !isFirst,
             autonomy: cmd.autonomy,
-          })
-          if (runId && result.deferAutonomyCompletion) {
-            deferredAutonomyRunIds.add(runId)
-          }
-          // Stamp origin here rather than threading another arg through
-          // processUserInput → processUserInputBase → processTextPrompt → createUserMessage.
-          // Derive origin from mode for task-notifications — mirrors the origin
-          // derivation at messages.ts (case 'queued_command'); intentionally
-          // does NOT mirror its isMeta:true so idle-dequeued notifications stay
-          // visible in the transcript via UserAgentNotificationMessage.
-          const origin =
-            cmd.origin ??
-            (cmd.mode === 'task-notification'
-              ? ({ kind: 'task-notification' } as const)
-              : undefined)
-          if (origin) {
-            for (const m of result.messages) {
-              if (m.type === 'user') m.origin = origin
-            }
-          }
-          newMessages.push(...result.messages)
-          if (isFirst) {
-            shouldQuery = result.shouldQuery
-            allowedTools = result.allowedTools
-            model = result.model
-            effort = result.effort
-            nextInput = result.nextInput
-            submitNextInput = result.submitNextInput
+        })
+        if (runId && result.deferAutonomyCompletion) {
+          deferredAutonomyRunIds.add(runId)
+        }
+        if (
+          isFirst &&
+          result.shouldQuery &&
+          interruptionCorrectionReminder
+        ) {
+          newMessages.push(interruptionCorrectionReminder)
+        }
+        // Stamp origin here rather than threading another arg through
+        // processUserInput → processUserInputBase → processTextPrompt → createUserMessage.
+        // Derive origin from mode for task-notifications — mirrors the origin
+        // derivation at messages.ts (case 'queued_command'); intentionally
+        // does NOT mirror its isMeta:true so idle-dequeued notifications stay
+        // visible in the transcript via UserAgentNotificationMessage.
+        const origin =
+          cmd.origin ??
+          (cmd.mode === 'task-notification'
+            ? ({ kind: 'task-notification' } as const)
+            : undefined)
+        if (origin) {
+          for (const m of result.messages) {
+            if (m.type === 'user') m.origin = origin
           }
         }
-
-        queryCheckpoint('query_process_user_input_end')
-        if (fileHistoryEnabled()) {
-          queryCheckpoint('query_file_history_snapshot_start')
-          newMessages.filter(selectableUserMessagesFilter).forEach(message => {
-            void fileHistoryMakeSnapshot(
-              (updater: (prev: FileHistoryState) => FileHistoryState) => {
-                setAppState(prev => ({
-                  ...prev,
-                  fileHistory: updater(prev.fileHistory),
-                }))
-              },
-              message.uuid,
-            )
-          })
-          queryCheckpoint('query_file_history_snapshot_end')
+        newMessages.push(...result.messages)
+        if (isFirst) {
+          shouldQuery = result.shouldQuery
+          allowedTools = result.allowedTools
+          model = result.model
+          effort = result.effort
+          nextInput = result.nextInput
+          submitNextInput = result.submitNextInput
         }
+      }
 
-        if (newMessages.length) {
-          // History is now added in the caller (onSubmit) for direct user submissions.
-          // This ensures queued command processing (notifications, already-queued user input)
-          // doesn't add to history, since those either shouldn't be in history or were
-          // already added when originally queued.
-          resetHistory()
-          setToolJSX({
-            jsx: null,
-            shouldHidePromptInput: false,
-            clearLocalJSX: true,
-          })
+      queryCheckpoint('query_process_user_input_end')
+      if (fileHistoryEnabled()) {
+        queryCheckpoint('query_file_history_snapshot_start')
+        newMessages.filter(selectableUserMessagesFilter).forEach(message => {
+          void fileHistoryMakeSnapshot(
+            (updater: (prev: FileHistoryState) => FileHistoryState) => {
+              setAppState(prev => ({
+                ...prev,
+                fileHistory: updater(prev.fileHistory),
+              }))
+            },
+            message.uuid,
+          )
+        })
+        queryCheckpoint('query_file_history_snapshot_end')
+      }
 
-          const primaryCmd = commands[0]
-          const primaryMode = primaryCmd?.mode ?? 'prompt'
-          const primaryInput =
-            primaryCmd && typeof primaryCmd.value === 'string'
-              ? primaryCmd.value
-              : undefined
+      if (newMessages.length) {
+        // History is now added in the caller (onSubmit) for direct user submissions.
+        // This ensures queued command processing (notifications, already-queued user input)
+        // doesn't add to history, since those either shouldn't be in history or were
+        // already added when originally queued.
+        resetHistory()
+        setToolJSX({
+          jsx: null,
+          shouldHidePromptInput: false,
+          clearLocalJSX: true,
+        })
+
+        const primaryCmd = commands[0]
+        const primaryMode = primaryCmd?.mode ?? 'prompt'
+        const primaryInput =
+          primaryCmd && typeof primaryCmd.value === 'string'
+            ? primaryCmd.value
+            : undefined
         const shouldCallBeforeQuery = primaryMode === 'prompt'
         queryProfileOwnedByOnQuery = true
         const queryOwnershipResult = await onQuery(
@@ -612,35 +671,41 @@ async function executeUserInput(params: ExecuteUserInputParams): Promise<void> {
           shouldCallBeforeQuery ? onBeforeQuery : undefined,
           primaryInput,
           effort,
+          // Fail closed for mixed-provenance batches: only an entirely local
+          // human turn may arm interruption-correction context.
+          isInterruptionCorrectionEligible,
+          () => {
+            interruptionCorrectionReminderOwnedByModel = true
+          },
         )
         if (queryOwnershipResult === false) {
           queryProfileOwnedByOnQuery = false
         }
       } else {
-          // Local slash commands that skip messages (e.g., /model, /theme).
-          // Release the guard BEFORE clearing toolJSX to prevent spinner flash —
-          // the spinner formula checks: (!toolJSX || showSpinner) && isLoading.
-          // If we clear toolJSX while the guard is still reserved, spinner briefly
-          // shows. The finally below also calls cancelReservation (no-op if idle).
-          queryGuard.cancelReservation()
-          setToolJSX({
-            jsx: null,
-            shouldHidePromptInput: false,
-            clearLocalJSX: true,
-          })
-          resetHistory()
-          setAbortController(null)
-        }
+        // Local slash commands that skip messages (e.g., /model, /theme).
+        // Release the guard BEFORE clearing toolJSX to prevent spinner flash —
+        // the spinner formula checks: (!toolJSX || showSpinner) && isLoading.
+        // If we clear toolJSX while the guard is still reserved, spinner briefly
+        // shows. The finally below also calls cancelReservation (no-op if idle).
+        queryGuard.cancelReservation()
+        setToolJSX({
+          jsx: null,
+          shouldHidePromptInput: false,
+          clearLocalJSX: true,
+        })
+        resetHistory()
+        setAbortController(null)
+      }
 
-        // Handle nextInput from commands that want to chain (e.g., /discover activation)
-        if (nextInput) {
-          if (submitNextInput) {
-            enqueue({ value: nextInput, mode: 'prompt' })
-          } else {
-            params.onInputChange(nextInput)
-          }
+      // Handle nextInput from commands that want to chain (e.g., /discover activation)
+      if (nextInput) {
+        if (submitNextInput) {
+          enqueue({ value: nextInput, mode: 'prompt' })
+        } else {
+          params.onInputChange(nextInput)
         }
-      }) // end runWithWorkload — ALS context naturally scoped, no finally needed
+      }
+    }) // end runWithWorkload — ALS context naturally scoped, no finally needed
     } catch (error) {
       turnError = error
     }
@@ -689,6 +754,13 @@ async function executeUserInput(params: ExecuteUserInputParams): Promise<void> {
       throw turnError
     }
   } finally {
+    // Keep the reminder until an actual model request takes ownership.
+    if (
+      interruptionCorrectionReminder &&
+      !interruptionCorrectionReminderOwnedByModel
+    ) {
+      restoreInterruptionCorrectionReminder?.()
+    }
     // Safety net: release the guard reservation if processUserInput threw
     // or onQuery was skipped. No-op if onQuery already ran (guard is idle
     // via end(), or running — cancelReservation only acts on dispatching).
