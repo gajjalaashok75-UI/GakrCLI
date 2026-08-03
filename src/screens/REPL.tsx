@@ -1632,7 +1632,6 @@ export function REPL({
   const [streamingText, setStreamingText] = useState<string | null>(null);
   const streamingTextRef = useRef<string | null>(null);
   const lastFlushedStreamingVisibleRef = useRef<string | null>(null);
-  const reducedMotion = useAppState(s => s.settings.prefersReducedMotion) ?? false;
   const showStreamingText = !reducedMotion && !hasCursorUpViewportYankBug();
   const onStreamingText = useCallback((f: (current: string | null) => string | null) => {
     // decideStreamingTextUpdate keeps the ref current even when the live preview

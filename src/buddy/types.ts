@@ -119,6 +119,27 @@ export const RARITY_WEIGHTS = {
   legendary: 1,
 } as const satisfies Record<Rarity, number>
 
+// Display colors for rarity tiers (gray → green → blue → violet → amber).
+// A full Record so adding a rarity without a color is a compile error.
+export const RARITY_COLORS: Record<
+  Rarity,
+  keyof import('../utils/theme.js').Theme
+> = {
+  common: 'inactive',
+  uncommon: 'success',
+  rare: 'permission',
+  epic: 'autoAccept',
+  legendary: 'warning',
+}
+
+export const RARITY_STARS: Record<Rarity, string> = {
+  common: '★',
+  uncommon: '★★',
+  rare: '★★★',
+  epic: '★★★★',
+  legendary: '★★★★★',
+}
+
 // Every hero's signature color. A full Record so adding a species without a
 // color is a compile error, not a silent fallback.
 export const SPECIES_COLORS: Record<
