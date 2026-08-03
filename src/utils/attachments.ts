@@ -45,7 +45,7 @@ import {
   getConditionalRulesForCwdLevelDirectory,
   type MemoryFileInfo,
 } from './gakrclimd.js'
-import { dirname, parse, relative, resolve } from 'path'
+import nodePath, { dirname, parse, relative, resolve } from 'path'
 import { getCwd } from 'src/utils/cwd.js'
 import { getViewedTeammateTask } from '../state/selectors.js'
 import { logError } from './log.js'
@@ -119,6 +119,7 @@ import {
   createChildAbortController,
 } from './abortController.js'
 import { isAbortError } from './errors.js'
+import { mapWithConcurrency, raceAbort, throwIfAborted } from './boundedAsync.js'
 import { getEffortEnvOverride, modelSupportsXHighEffort } from './effort.js'
 import {
   getFileModificationTimeAsync,
@@ -1032,10 +1033,15 @@ export async function getAttachments(
   ].filter(a => a !== undefined && a !== null)
 }
 
-async function maybe<A>(label: string, f: () => Promise<A[]>): Promise<A[]> {
+async function maybe<A>(
+  label: string,
+  f: () => Promise<A[]>,
+  signal?: AbortSignal,
+): Promise<A[]> {
   const startTime = Date.now()
   try {
-    const result = await f()
+    throwIfAborted(signal, `Attachment ${label} timed out`)
+    const result = await raceAbort(f(), signal, `Attachment ${label} timed out`)
     const duration = Date.now() - startTime
     // Log only 5% of events to reduce volume
     if (Math.random() < 0.05) {
@@ -1063,9 +1069,11 @@ async function maybe<A>(label: string, f: () => Promise<A[]>): Promise<A[]> {
         error: true,
       } as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS)
     }
-    logError(e)
-    // For Ant users, log the full error to help with debugging
-    logAntError(`Attachment error in ${label}`, e)
+    if (!isAbortError(e)) {
+      logError(e)
+      // For Ant users, log the full error to help with debugging
+      logAntError(`Attachment error in ${label}`, e)
+    }
 
     return []
   }
@@ -1690,6 +1698,33 @@ async function getSelectedLinesFromIDE(
   ]
 }
 
+export function isPathUnder(
+  child: string,
+  parent: string,
+  pathApi: Pick<
+    typeof nodePath,
+    'relative' | 'join' | 'normalize' | 'isAbsolute' | 'sep'
+  > = nodePath,
+): boolean {
+  const rel = pathApi.relative(parent, child)
+  if (
+    rel === '' ||
+    rel === '..' ||
+    rel.startsWith('..' + pathApi.sep) ||
+    pathApi.isAbsolute(rel)
+  ) {
+    return false
+  }
+  const stripTrailingSep = (value: string): string =>
+    value.length > 1 && value.endsWith(pathApi.sep)
+      ? value.slice(0, -pathApi.sep.length)
+      : value
+  return (
+    stripTrailingSep(pathApi.join(parent, rel)) ===
+    stripTrailingSep(pathApi.normalize(child))
+  )
+}
+
 /**
  * Computes the directories to process for nested memory file loading.
  * Returns two lists:
@@ -1711,7 +1746,7 @@ export function getDirectoriesToProcess(
 
   // Walk up from target directory to original CWD
   while (currentDir !== originalCwd && currentDir !== parse(currentDir).root) {
-    if (currentDir.startsWith(originalCwd)) {
+    if (isPathUnder(currentDir, originalCwd)) {
       nestedDirs.push(currentDir)
     }
     currentDir = dirname(currentDir)
@@ -1938,16 +1973,85 @@ async function getOpenedFileFromIDE(
   ]
 }
 
+const ATTACHMENT_FILE_IO_CONCURRENCY = 8
+
 async function processAtMentionedFiles(
   input: string,
   toolUseContext: ToolUseContext,
+): Promise<Attachment[]> {
+  return processAtMentionedFilesWithDependencies(
+    input,
+    toolUseContext,
+    defaultAtMentionedFileDeps,
+  )
+}
+
+type AttachmentFileContext = {
+  abortController: AbortController
+  getAppState: () => { toolPermissionContext: ToolPermissionContext }
+}
+
+type AtMentionedFileStat = {
+  isDirectory: () => boolean
+}
+
+type AtMentionedFileDirent = {
+  name: string
+}
+
+type AtMentionedFileDeps = {
+  stat: (path: string) => Promise<AtMentionedFileStat>
+  readdir: (
+    path: string,
+    options: { withFileTypes: true },
+  ) => Promise<AtMentionedFileDirent[]>
+  generateFileAttachment: (
+    filename: string,
+    toolUseContext: AttachmentFileContext,
+    successEventName: string,
+    errorEventName: string,
+    mode: 'compact' | 'at-mention',
+    options?: {
+      offset?: number
+      limit?: number
+    },
+  ) => ReturnType<typeof generateFileAttachment>
+}
+
+const defaultAtMentionedFileDeps: AtMentionedFileDeps = {
+  stat,
+  readdir,
+  generateFileAttachment: (
+    filename,
+    toolUseContext,
+    successEventName,
+    errorEventName,
+    mode,
+    options,
+  ) =>
+    generateFileAttachment(
+      filename,
+      toolUseContext as ToolUseContext,
+      successEventName,
+      errorEventName,
+      mode,
+      options,
+    ),
+}
+
+async function processAtMentionedFilesWithDependencies(
+  input: string,
+  toolUseContext: AttachmentFileContext,
+  deps: AtMentionedFileDeps,
 ): Promise<Attachment[]> {
   const files = extractAtMentionedFiles(input)
   if (files.length === 0) return []
 
   const appState = toolUseContext.getAppState()
-  const results = await Promise.all(
-    files.map(async file => {
+  const results = await mapWithConcurrency(
+    files,
+    ATTACHMENT_FILE_IO_CONCURRENCY,
+    async file => {
       try {
         const { filename, lineStart, lineEnd } = parseAtMentionedFileLines(file)
         const absoluteFilename = expandPath(filename)
@@ -1960,10 +2064,10 @@ async function processAtMentionedFiles(
 
         // Check if it's a directory
         try {
-          const stats = await stat(absoluteFilename)
+          const stats = await deps.stat(absoluteFilename)
           if (stats.isDirectory()) {
             try {
-              const entries = await readdir(absoluteFilename, {
+              const entries = await deps.readdir(absoluteFilename, {
                 withFileTypes: true,
               })
               const MAX_DIR_ENTRIES = 1000
@@ -1991,7 +2095,7 @@ async function processAtMentionedFiles(
           // If stat fails, continue with file logic
         }
 
-        return await generateFileAttachment(
+        return await deps.generateFileAttachment(
           absoluteFilename,
           toolUseContext,
           'tengu_at_mention_extracting_filename_success',
@@ -2005,9 +2109,10 @@ async function processAtMentionedFiles(
       } catch {
         logEvent('tengu_at_mention_extracting_filename_error', {})
       }
-    }),
+      return null
+    },
   )
-  return results.filter(Boolean) as Attachment[]
+  return results.filter(result => result != null) as Attachment[]
 }
 
 function processAgentMentions(
@@ -2107,15 +2212,54 @@ async function processMcpResourceAttachments(
   ) as Attachment[]
 }
 
+type ChangedFileReadInput = {
+  file_path: string
+}
+
+type ChangedFileDeps = {
+  getFileModificationTime: (path: string) => Promise<number>
+  validateFileReadInput: (
+    input: ChangedFileReadInput,
+    toolUseContext: ToolUseContext,
+  ) => ReturnType<typeof FileReadTool.validateInput>
+  readFile: (
+    input: ChangedFileReadInput,
+    toolUseContext: ToolUseContext,
+  ) => ReturnType<typeof FileReadTool.call>
+  readEditedImageAttachment: (
+    path: string,
+  ) => ReturnType<typeof tryReadEditedImageAttachment>
+}
+
+const defaultChangedFileDeps: ChangedFileDeps = {
+  getFileModificationTime: getFileModificationTimeAsync,
+  validateFileReadInput: (input, context) =>
+    FileReadTool.validateInput(input, context),
+  readFile: (input, context) => FileReadTool.call(input, context),
+  readEditedImageAttachment: tryReadEditedImageAttachment,
+}
+
 export async function getChangedFiles(
   toolUseContext: ToolUseContext,
+): Promise<Attachment[]> {
+  return getChangedFilesWithDependencies(
+    toolUseContext,
+    defaultChangedFileDeps,
+  )
+}
+
+async function getChangedFilesWithDependencies(
+  toolUseContext: ToolUseContext,
+  deps: ChangedFileDeps,
 ): Promise<Attachment[]> {
   const filePaths = cacheKeys(toolUseContext.readFileState)
   if (filePaths.length === 0) return []
 
   const appState = toolUseContext.getAppState()
-  const results = await Promise.all(
-    filePaths.map(async filePath => {
+  const results = await mapWithConcurrency(
+    filePaths,
+    ATTACHMENT_FILE_IO_CONCURRENCY,
+    async filePath => {
       const fileState = toolUseContext.readFileState.get(filePath)
       if (!fileState) return null
 
@@ -2132,7 +2276,7 @@ export async function getChangedFiles(
       }
 
       try {
-        const mtime = await getFileModificationTimeAsync(normalizedPath)
+        const mtime = await deps.getFileModificationTime(normalizedPath)
         if (mtime <= fileState.timestamp) {
           return null
         }
@@ -2140,7 +2284,7 @@ export async function getChangedFiles(
         const fileInput = { file_path: normalizedPath }
 
         // Validate file path is valid
-        const isValid = await FileReadTool.validateInput(
+        const isValid = await deps.validateFileReadInput(
           fileInput,
           toolUseContext,
         )
@@ -2148,7 +2292,7 @@ export async function getChangedFiles(
           return null
         }
 
-        const result = await FileReadTool.call(fileInput, toolUseContext)
+        const result = await deps.readFile(fileInput, toolUseContext)
         // Extract only the changed section
         if (result.data.type === 'text') {
           const snippet = getSnippetForTwoFileDiff(
@@ -2168,22 +2312,10 @@ export async function getChangedFiles(
           }
         }
 
-        // For non-text files (images), apply the same token limit logic as FileReadTool
+        // For non-text files (images), apply the same token limit logic as
+        // FileReadTool. Degrades to null on failure (see the helper's contract).
         if (result.data.type === 'image') {
-          try {
-            const data = await readImageWithTokenBudget(normalizedPath)
-            return {
-              type: 'edited_image_file' as const,
-              filename: normalizedPath,
-              content: data,
-            }
-          } catch (compressionError) {
-            logError(compressionError)
-            logEvent('tengu_watched_file_compression_failed', {
-              file: normalizedPath,
-            } as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS)
-            return null
-          }
+          return deps.readEditedImageAttachment(normalizedPath)
         }
 
         // notebook / pdf / parts — no diff representation; explicitly
@@ -2202,7 +2334,7 @@ export async function getChangedFiles(
         }
         return null
       }
-    }),
+    },
   )
   return results.filter(result => result != null) as Attachment[]
 }
@@ -3007,6 +3139,14 @@ async function getLSPDiagnosticAttachments(
     // Return empty array to allow other attachments to proceed
     return []
   }
+}
+
+export const __test = {
+  ATTACHMENT_FILE_IO_CONCURRENCY,
+  getChangedFilesWithDependencies,
+  getLSPDiagnosticAttachments,
+  maybe,
+  processAtMentionedFilesWithDependencies,
 }
 
 export async function* getAttachmentMessages(

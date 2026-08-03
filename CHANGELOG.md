@@ -5,6 +5,25 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.20] - 2026-08-03
+
+### Added
+- **src/utils/toolResultStorage.ts**: Ported the reference preview subsystem — `PreviewMode`/`PreviewStrategy`/`PreviewResult` types, `formatOmissionMarker`, UTF-8-safe head/tail selection helpers (`safeHeadEnd`, `safeTailStart`, `decodedByteLength`, `fitHeadEnd`, `fitTailStart`, `chooseHeadEnd`, `chooseTailStart`, `invalidRetainedUtf8Metadata`, `getHeadTailTargets`, `generateHeadTailPreview`), and `generateFilePreview` (byte-bounded previews read directly from disk with head/tail split and omitted-byte marker).
+- **src/utils/mcpOutputStorage.ts**: Added `getLargeOutputPersistenceFailureInstructions` for when an oversized tool result cannot be saved to disk.
+- **src/utils/attachments.ts**: Added `isPathUnder` (path-boundary containment check), `ATTACHMENT_FILE_IO_CONCURRENCY`, dependency-injected `processAtMentionedFilesWithDependencies`/`getChangedFilesWithDependencies` with bounded concurrency, abort-signal support for `maybe`, and a `__test` export.
+- **Test files**: `Cursor.nfc.test.ts`, `attachments.nestedDirs.test.ts`, `attachments.performance.test.ts`, `attachments.ultrathink.test.ts`, `sessionStorage.liteTag.test.ts`, `stats.totalDays.test.ts`, `toolResultStorage.preview.test.ts`.
+
+### Changed
+- **src/utils/toolResultStorage.ts**: `generatePreview` now returns a head/tail preview with an exact omitted-byte marker within a strict UTF-8 byte budget (text mode) or a head-only fragment (JSON mode). `persistToolResult` reports `originalSize` in UTF-8 bytes and records the preview `strategy`. `buildLargeToolResultMessage` now labels persisted size in bytes, describes the preview strategy, and supports `truncated` output messaging. Analytics use byte-accurate sizing.
+- **src/utils/attachments.ts**: `processAtMentionedFiles`/`getChangedFiles` now schedule file work through `mapWithConcurrency` (bound at 8) and take injected dependencies, enabling deterministic testing. Image diffs route through `tryReadEditedImageAttachment` instead of the inline token-budget path.
+- **src/utils/mcpOutputStorage.ts**: `getLargeOutputInstructions` now reports the persisted size in UTF-8 bytes rather than characters.
+- **src/services/skillLearning/llmObserverBackend.ts**: `makeTimeoutSignal` uses the memory-safe `createCombinedAbortSignal` (setTimeout + cleanup) instead of `AbortSignal.timeout`, whose timers accumulate in native memory under Bun until they fire.
+
+### Fixed
+- **src/utils/Cursor.ts**: Cursor offset after inserting a combining mark that composes with the preceding character (e.g. "e" + U+0301 → "é") no longer lands one position past the following text — the offset is computed from the normalized prefix-plus-insert.
+- **src/utils/attachments.ts**: `getDirectoriesToProcess` no longer treats sibling directories that merely share a name prefix with the CWD (e.g. `/work/myapp-backend` when CWD is `/work/myapp`) as nested.
+- **src/services/skillLearning/llmObserverBackend.ts**: Corrected the `createCombinedAbortSignal` call to pass the opts object in the second argument position (`undefined, { timeoutMs }`), which previously threw `signal?.addEventListener is not a function` on every analyze.
+
 ## [0.6.19] - 2026-08-01
 
 ### Added
