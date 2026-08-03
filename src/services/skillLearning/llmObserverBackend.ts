@@ -1,5 +1,6 @@
 import { queryHaiku } from '../api/gakrcli.js'
 import { asSystemPrompt } from '../../utils/systemPromptType.js'
+import { createCombinedAbortSignal } from '../../utils/combinedAbortSignal.js'
 import { getSkillLearningConfig } from './config.js'
 import type { InstinctCandidate } from './instinctParser.js'
 import type { StoredSkillObservation } from './observationStore.js'
@@ -297,5 +298,5 @@ function evidenceField(value: unknown): string[] {
 }
 
 function makeTimeoutSignal(ms: number): AbortSignal {
-  return AbortSignal.timeout(ms)
+  return createCombinedAbortSignal(undefined, { timeoutMs: ms }).signal
 }
