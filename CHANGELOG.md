@@ -5,6 +5,13 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.21] - 2026-08-03
+
+### Fixed
+- **src/screens/REPL.tsx**: Removed a duplicate `reducedMotion` declaration introduced by the streaming-text block merge, which failed the bundle with `Identifier 'reducedMotion' has already been declared`.
+- **src/buddy/types.ts**: Added the missing `RARITY_COLORS` (gray → green → blue → violet → amber tier colors) and `RARITY_STARS` (1–5 star display) exports referenced by `CompanionCard.tsx`.
+- **src/buddy/companion.ts**: Added the missing `generateSeed` export (cryptographically random hex seed for hatching a companion) referenced by the `/buddy` command.
+
 ## [0.6.20] - 2026-08-03
 
 ### Added

@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { getGlobalConfig } from '../utils/config.js'
 import {
   type Companion,
@@ -110,6 +111,10 @@ export function roll(userId: string): Roll {
   const value = rollFrom(mulberry32(hashString(key)))
   rollCache = { key, value }
   return value
+}
+
+export function generateSeed(): string {
+  return randomBytes(16).toString('hex')
 }
 
 export function rollWithSeed(seed: string): Roll {
