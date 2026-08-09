@@ -184,7 +184,7 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
         : getExternalGakrCLIMdIncludes(files, ['Project', 'Local']);
       const {
         GakrCLIMdExternalIncludesDialog
-      } = await import('./components/GakrCLIMdExternalIncludesDialog.js');
+      } = await import('./components/gakrcliMdExternalIncludesDialog.js');
       await showSetupDialog(root, done => <GakrCLIMdExternalIncludesDialog onDone={done} isStandaloneDialog externalIncludes={externalIncludes} scope={warningScope} />);
     }
   }
@@ -209,10 +209,10 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
   // Check if a provider is properly configured; if not, launch the provider wizard
   if (await getProviderValidationError()) {
     const { ProviderWizard } = await import('./commands/provider/provider.js');
-    const result = await showSetupDialog(root, done => <ProviderWizard onDone={done} />);
+    const result = await showSetupDialog<string | undefined>(root, done => <ProviderWizard onDone={done} />);
     if (result === undefined) {
       await exitWithError(root, "Provider configuration required. Exiting.");
-      return;
+      return false;
     }
     // Apply the newly saved profile environment
     const startupEnv = await buildStartupEnvFromProfile({ processEnv: process.env });
@@ -221,7 +221,7 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
     const errorAfter = await getProviderValidationError();
     if (errorAfter) {
       await exitWithError(root, `Provider configuration error after wizard: ${errorAfter}`);
-      return;
+      return false;
     }
   }
 
@@ -320,7 +320,7 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
   if (gakrcliInChrome && !getGlobalConfig().hasCompletedGakrCLIInChromeOnboarding) {
     const {
       GakrCLIInChromeOnboarding
-    } = await import('./components/GakrCLIInChromeOnboarding.js');
+    } = await import('./components/gakrcliInChromeOnboarding.js');
     await showSetupDialog(root, done => <GakrCLIInChromeOnboarding onDone={done} />);
   }
   return onboardingShown;

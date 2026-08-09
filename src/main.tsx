@@ -1500,7 +1500,7 @@ async function run(): Promise<CommanderCommand> {
         }
         dynamicMcpConfig = {
           ...dynamicMcpConfig,
-          ...allowed
+          ...(allowed as Record<string, ScopedMcpServerConfig>)
         };
       }
     }
@@ -2891,6 +2891,7 @@ async function run(): Promise<CommanderCommand> {
     }
     const initialState: AppState = {
       settings: getInitialSettings(),
+      selectedBgAgentIndex: -1,
       tasks: {},
       agentNameRegistry: new Map(),
       // Session-scoped auto-continuation goal — starts unset, matching

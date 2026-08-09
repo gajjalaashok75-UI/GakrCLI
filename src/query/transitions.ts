@@ -10,6 +10,12 @@ export type Terminal =
   | { reason: 'hook_stopped' }
   | { reason: 'max_turns'; turnCount: number }
   | { reason: 'tool_failure_loop' }
+  | {
+      reason: 'agent_step_limit'
+      turnCount: number
+      stepsUsed: number
+      maxSteps: number
+    }
 
 export type Continue =
   | { reason: 'collapse_drain_retry'; committed: number }

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { createAbortController } from '../utils/abortController'
 import { QueryGuard } from '../utils/QueryGuard'
 import { handlePromptSubmit } from '../utils/handlePromptSubmit'
+import type { AppState } from '../state/AppStateStore'
 import {
   getCommandQueue,
   resetCommandQueue,
@@ -38,10 +39,12 @@ function createBaseParams() {
     commands: [],
     setUserInputOnProcessing: mock((_prompt?: string) => {}),
     setAbortController: mock((_abortController: AbortController | null) => {}),
-    onQuery: mock(async () => true) as unknown as (
+    onQuery: mock(async () => false) as unknown as (
       ...args: unknown[]
-    ) => Promise<boolean>,
-    setAppState: mock((_updater: unknown) => {}),
+    ) => Promise<void | false>,
+    setAppState: mock((_updater: unknown) => {}) as (
+      updater: (prev: AppState) => AppState,
+    ) => void,
   }
 }
 

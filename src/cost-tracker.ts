@@ -52,10 +52,6 @@ import { isFastModeEnabled } from './utils/fastMode.js'
 import { formatDuration, formatNumber } from './utils/format.js'
 import type { FpsMetrics } from './utils/fpsTracker.js'
 import { getCanonicalName } from './utils/model/model.js'
-import {
-  getAPIProvider,
-  isGithubNativeAnthropicMode,
-} from './utils/model/providers.js'
 import { calculateUSDCost } from './utils/modelCost.js'
 export {
   getTotalCostUSD as getTotalCost,

@@ -319,7 +319,7 @@ export function enqueueAgentNotification({
   enqueuePendingNotification({
     value: message,
     mode: 'task-notification',
-    ...(agentId ? { agentId } : {}),
+    ...(agentId ? { agentId: asAgentId(agentId) } : {}),
   });
 }
 

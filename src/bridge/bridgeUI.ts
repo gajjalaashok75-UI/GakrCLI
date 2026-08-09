@@ -28,7 +28,7 @@ import type {
 } from './types.js'
 
 const QR_OPTIONS = {
-  type: 'utf-8' as const,
+  type: 'utf8' as const,
   errorCorrectionLevel: 'L' as const,
   small: true,
 }

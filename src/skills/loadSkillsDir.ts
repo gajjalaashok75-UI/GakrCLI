@@ -895,7 +895,7 @@ export const getSkillDirCommands = memoize(
     for (let i = 0; i < allSkillsWithPaths.length; i++) {
       const entry = allSkillsWithPaths[i]
       if (entry === undefined || entry.skill.type !== 'prompt') continue
-      const { skill } = entry
+      const skill = entry.skill
 
       const fileId = fileIds[i]
       if (fileId === null || fileId === undefined) {
@@ -921,9 +921,10 @@ export const getSkillDirCommands = memoize(
       logForDebugging(`Deduplicated ${duplicatesRemoved} skills (same file)`)
     }
 
-    const seenSkillNames = new Map<string, Command['source']>()
+    const seenSkillNames = new Map<string, PromptCommand['source']>()
     const nameDeduplicatedSkills: Command[] = []
     for (const skill of deduplicatedSkills) {
+      if (skill.type !== 'prompt') continue
       const key = skill.name.toLowerCase()
       const existingSource = seenSkillNames.get(key)
       if (existingSource !== undefined) {

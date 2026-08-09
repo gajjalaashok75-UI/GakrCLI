@@ -1,4 +1,8 @@
 import type { BetaMessageStreamParams } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
+import type { logs } from '@opentelemetry/api-logs'
+import type { LoggerProvider } from '@opentelemetry/sdk-logs'
+import type { MeterProvider } from '@opentelemetry/sdk-metrics'
+import type { BasicTracerProvider } from '@opentelemetry/sdk-trace-base'
 import { realpathSync } from 'fs'
 import sumBy from 'lodash-es/sumBy.js'
 import { cwd } from 'process'
@@ -87,6 +91,13 @@ type State = {
   sessionId: SessionId
   // Parent session ID for tracking session lineage (e.g., plan mode -> implementation)
   parentSessionId: SessionId | undefined
+  // Logger state
+  loggerProvider: LoggerProvider | null
+  eventLogger: ReturnType<typeof logs.getLogger> | null
+  // Meter provider state
+  meterProvider: MeterProvider | null
+  // Tracer provider state
+  tracerProvider: BasicTracerProvider | null
   // Agent color state
   agentColorMap: Map<string, AgentColorName>
   agentColorIndex: number
@@ -306,6 +317,13 @@ function getInitialState(): State {
     statsStore: null,
     sessionId: randomUUID() as SessionId,
     parentSessionId: undefined,
+    // Logger state
+    loggerProvider: null,
+    eventLogger: null,
+    // Meter provider state
+    meterProvider: null,
+    // Tracer provider state
+    tracerProvider: null,
     // Agent color state
     agentColorMap: new Map(),
     agentColorIndex: 0,
@@ -1723,6 +1741,40 @@ export function getCodeEditToolDecisionCounter(): { add(value: number, attribute
 
 export function getActiveTimeCounter(): { add(value: number, attributes?: Record<string, string>): void } | null {
   return null
+}
+
+export function getLoggerProvider(): LoggerProvider | null {
+  return STATE.loggerProvider
+}
+
+export function setLoggerProvider(provider: LoggerProvider | null): void {
+  STATE.loggerProvider = provider
+}
+
+export function getEventLogger(): ReturnType<typeof logs.getLogger> | null {
+  return STATE.eventLogger
+}
+
+export function setEventLogger(
+  logger: ReturnType<typeof logs.getLogger> | null,
+): void {
+  STATE.eventLogger = logger
+}
+
+export function getMeterProvider(): MeterProvider | null {
+  return STATE.meterProvider
+}
+
+export function setMeterProvider(provider: MeterProvider | null): void {
+  STATE.meterProvider = provider
+}
+
+export function getTracerProvider(): BasicTracerProvider | null {
+  return STATE.tracerProvider
+}
+
+export function setTracerProvider(provider: BasicTracerProvider | null): void {
+  STATE.tracerProvider = provider
 }
 
 // ---------------------------------------------------------------------------

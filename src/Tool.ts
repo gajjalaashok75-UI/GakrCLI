@@ -76,6 +76,7 @@ export type {
 import type { SpinnerMode } from './components/Spinner.js'
 import type { QuerySource } from './constants/querySource.js'
 import type { SDKStatus } from './entrypoints/agentSdkTypes.js'
+import type { QueryLifecycleOperationTracker } from './utils/queryLifecycle.js'
 import type { AppState } from './state/AppState.js'
 import type { LangfuseSpan } from './services/langfuse/index.js'
 import type {
@@ -87,6 +88,10 @@ import type { AgentId } from './types/ids.js'
 import type { DeepImmutable } from './types/utils.js'
 import type { AttributionState } from './utils/commitAttribution.js'
 import type { FileHistoryState } from './utils/fileHistory.js'
+import type {
+  QueryGuardLease,
+  QueryGuardLeaseInput,
+} from './utils/QueryGuard.js'
 import type { Theme, ThemeName } from './utils/theme.js'
 
 export type QueryChainTracking = {
@@ -250,6 +255,13 @@ export type ToolUseContext = {
    *  Called by subagent streaming when a new API request starts. */
   pushApiMetricsEntry?: (ttftMs: number) => void
   setStreamMode?: (mode: SpinnerMode) => void
+  /** Query-activity API: keep the idle watchdog from firing during active
+   *  human/tool work, and acquire bounded leases for long-running work. */
+  queryActivity?: {
+    registerActivity(reason: string): void
+    acquireLease(input: QueryGuardLeaseInput): QueryGuardLease
+    beginUserInteraction?(): () => void
+  }
   onCompactProgress?: (event: CompactProgressEvent) => void
   setSDKStatus?: (status: SDKStatus) => void
   openMessageSelector?: () => void
@@ -287,6 +299,11 @@ export type ToolUseContext = {
     }
   >
   queryTracking?: QueryChainTracking
+  /**
+   * Tracks tool-use lifecycle (start/end) for operation-level observability.
+   * Wired by the streaming tool executor; undefined in plain tool runs.
+   */
+  queryLifecycle?: QueryLifecycleOperationTracker
   /** Callback factory for requesting interactive prompts from the user.
    * Returns a prompt callback bound to the given source name.
    * Only available in interactive (REPL) contexts. */
