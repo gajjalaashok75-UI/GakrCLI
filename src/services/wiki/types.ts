@@ -35,3 +35,14 @@ export type WikiIngestResult = {
   summary: string
   title: string
 }
+
+export type ConventionResult = {
+  /** Free-text markdown describing project conventions */
+  markdown: string
+  /** Fingerprint hash derived from scanned file contents (for change detection) */
+  fingerprint: string
+  /** ISO timestamp of last scan */
+  scannedAt: string
+  /** Whether the page was actually written (false when the wiki isn't initialized). */
+  saved: boolean
+}

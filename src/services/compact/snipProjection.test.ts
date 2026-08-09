@@ -3,22 +3,22 @@ import { isSnipBoundaryMessage, projectSnippedView } from './snipProjection.js'
 
 describe('isSnipBoundaryMessage', () => {
   test('returns true for message with snipMetadata', () => {
-    const msg = { type: 'system', snipMetadata: { removedUuids: ['abc'] } }
+    const msg = { type: 'system', snipMetadata: { removedUuids: ['abc'] } } as any
     expect(isSnipBoundaryMessage(msg)).toBe(true)
   })
 
   test('returns false for compact_boundary without snipMetadata', () => {
-    const msg = { type: 'system', subtype: 'compact_boundary', compactMetadata: {} }
+    const msg = { type: 'system', subtype: 'compact_boundary', compactMetadata: {} } as any
     expect(isSnipBoundaryMessage(msg)).toBe(false)
   })
 
   test('returns false for regular message', () => {
-    expect(isSnipBoundaryMessage({ type: 'user', uuid: 'abc' })).toBe(false)
+    expect(isSnipBoundaryMessage({ type: 'user', uuid: 'abc' } as any)).toBe(false)
   })
 
   test('returns false for null/undefined', () => {
-    expect(isSnipBoundaryMessage(null)).toBe(false)
-    expect(isSnipBoundaryMessage(undefined)).toBe(false)
+    expect(isSnipBoundaryMessage(null as any)).toBe(false)
+    expect(isSnipBoundaryMessage(undefined as any)).toBe(false)
   })
 })
 
@@ -27,7 +27,7 @@ describe('projectSnippedView', () => {
     const messages = [
       { uuid: 'aaa', type: 'user' },
       { uuid: 'bbb', type: 'assistant' },
-    ]
+    ] as any[]
     expect(projectSnippedView(messages)).toEqual(messages)
   })
 
@@ -38,7 +38,7 @@ describe('projectSnippedView', () => {
       { uuid: 'ccc', type: 'user' },
       { uuid: 'snip-boundary', type: 'system', snipMetadata: { removedUuids: ['aaa', 'bbb'] } },
       { uuid: 'ddd', type: 'user' },
-    ]
+    ] as any[]
     const result = projectSnippedView(messages)
     expect(result.map((m: any) => m.uuid)).toEqual(['ccc', 'snip-boundary', 'ddd'])
   })
@@ -50,7 +50,7 @@ describe('projectSnippedView', () => {
       { uuid: 'bbb', type: 'user' },
       { uuid: 'b2', type: 'system', snipMetadata: { removedUuids: ['bbb'] } },
       { uuid: 'ccc', type: 'user' },
-    ]
+    ] as any[]
     const result = projectSnippedView(messages)
     expect(result.map((m: any) => m.uuid)).toEqual(['b1', 'b2', 'ccc'])
   })
@@ -59,7 +59,7 @@ describe('projectSnippedView', () => {
     const messages = [
       { uuid: 'aaa', type: 'user' },
       { uuid: 'bnd', type: 'system', snipMetadata: {} },
-    ]
+    ] as any[]
     expect(projectSnippedView(messages).length).toBe(2)
   })
 
@@ -70,12 +70,12 @@ describe('projectSnippedView', () => {
       { uuid: 'aaa', type: 'user' },
       { uuid: 'bbb', type: 'assistant' },
       { uuid: 'ccc', type: 'user' },
-    ]
+    ] as any[]
     const boundary = {
       uuid: 'bnd',
       type: 'system',
       snipMetadata: { removedUuids: ['aaa', 'bbb'] },
-    }
+    } as any
     const result = projectSnippedView([...store, boundary])
     expect(result.map((m: any) => m.uuid)).toEqual(['ccc', 'bnd'])
   })

@@ -9,7 +9,10 @@
 import type { UUID } from 'crypto'
 import { getSessionId } from '../../bootstrap/state.js'
 import type { GoalState } from '../../types/logs.js'
-import { recordGoalState } from '../../utils/sessionStorage.js'
+import {
+  clearGoalEntry,
+  saveGoal,
+} from '../../utils/sessionStorage.js'
 import { _setGoalFromPersistedState, getGoal } from './goalState.js'
 
 /**
@@ -23,7 +26,7 @@ export function persistCurrentGoal(): void {
   const sessionId = getSessionId() as UUID
   const goal = getGoal(sessionId)
   if (!goal) return
-  recordGoalState(goal, sessionId)
+  saveGoal(sessionId, goal)
 }
 
 /**
@@ -48,5 +51,5 @@ export function hydrateGoalFromTranscript(
  */
 export function persistGoalClear(): void {
   const sessionId = getSessionId() as UUID
-  recordGoalState(null, sessionId)
+  clearGoalEntry(sessionId)
 }

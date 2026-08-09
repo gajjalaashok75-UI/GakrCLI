@@ -43,6 +43,7 @@ describe('runtimeObserver', () => {
       messages: [
         {
           type: 'user',
+          timestamp: '2024-01-01T00:00:00.000Z',
           uuid: 'u1' as any,
           message: { role: 'user', content: '不要 mock，用 testing-library' },
         },
@@ -86,6 +87,7 @@ describe('runtimeObserver', () => {
       messages: [
         {
           type: 'user',
+          timestamp: '2024-01-01T00:00:00.000Z',
           uuid: 'u1' as any,
           message: { role: 'user', content: '不要 mock，用 testing-library' },
         },
@@ -108,16 +110,19 @@ describe('runtimeObserver', () => {
       messages: [
         {
           type: 'user',
+          timestamp: '2024-01-01T00:00:00.000Z',
           uuid: 'u1' as any,
           message: { role: 'user', content: '不要 mock，用 testing-library' },
         },
         {
           type: 'user',
+          timestamp: '2024-01-01T00:00:00.000Z',
           uuid: 'u2' as any,
           message: { role: 'user', content: '不要 mock，用 testing-library' },
         },
         {
           type: 'user',
+          timestamp: '2024-01-01T00:00:00.000Z',
           uuid: 'u3' as any,
           message: { role: 'user', content: '不要 mock，用 testing-library' },
         },

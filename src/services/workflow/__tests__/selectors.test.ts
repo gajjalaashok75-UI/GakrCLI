@@ -7,7 +7,7 @@ import {
   mergePhases,
   filterAgentsByPhase,
   tabLabel,
-} from '../../commands/workflows/selectors.js'
+} from '../../../commands/workflows/selectors.js'
 
 function run(partial: Partial<RunProgress>): RunProgress {
   return {

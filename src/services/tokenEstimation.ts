@@ -468,24 +468,6 @@ export function estimateWithBounds(
 }
 
 /**
- * Like {@link roughTokenCountEstimation} but uses a more accurate
- * bytes-per-token ratio when the file type is known.
- *
- * This matters when the API-based token count is unavailable (e.g. on
- * Bedrock) and we fall back to the rough estimate — an underestimate can
- * let an oversized tool result slip into the conversation.
- */
-export function roughTokenCountEstimationForFileType(
-  content: string,
-  fileExtension: string,
-): number {
-  return roughTokenCountEstimation(
-    content,
-    bytesPerTokenForFileType(fileExtension),
-  )
-}
-
-/**
  * Estimates token count for a Message object by extracting and analyzing its text content.
  * This provides a more reliable estimate than getTokenUsage for messages that may have been compacted.
  * Uses Haiku for token counting (Haiku 4.5 supports thinking blocks), except:

@@ -25,6 +25,7 @@ import {
   isFirstPartyAnthropicBaseUrl,
   isGithubNativeAnthropicMode,
 } from 'src/utils/model/providers.js'
+import type { LangfuseSpan } from 'src/services/langfuse/index.js'
 import {
   getAttributionHeader,
   getCLISyspromptPrefix,
@@ -468,8 +469,12 @@ function configureEffortParams(
   if (effortValue === undefined) {
     betas.push(EFFORT_BETA_HEADER)
   } else if (typeof effortValue === 'string') {
-    // Send string effort level as is
-    outputConfig.effort = effortValue
+    // Send string effort level as is. 'ultracode' is a session-only meta
+    // mode, never sent to the API boundary (resolveAppliedEffort maps it to
+    // xhigh/high upstream when the model supports it).
+    if (effortValue !== 'ultracode') {
+      outputConfig.effort = effortValue
+    }
     betas.push(EFFORT_BETA_HEADER)
   } else if (process.env.USER_TYPE === 'ant') {
     // Numeric effort override - internal-only (uses anthropic_internal)
@@ -723,6 +728,8 @@ export type Options = {
   taskBudget?: { total: number; remaining?: number }
   providerOverride?: { model: string; baseURL: string; apiKey: string }
   queryLifecycle?: QueryLifecycleOperationTracker
+  langfuseTrace?: LangfuseSpan | null
+  messageNormalizationTools?: Tools
 }
 
 export async function queryModelWithoutStreaming({
@@ -1306,7 +1313,10 @@ async function* queryModel(
   })
 
   queryCheckpoint('query_message_normalization_start')
-  let messagesForAPI = normalizeMessagesForAPI(messages, filteredTools)
+  let messagesForAPI = normalizeMessagesForAPI(
+    messages,
+    options.messageNormalizationTools ?? filteredTools,
+  )
   queryCheckpoint('query_message_normalization_end')
 
   // Apply hybrid context strategy for optimal cache/fresh balance
@@ -1812,7 +1822,6 @@ async function* queryModel(
     })
     const logMessagesLength = queryParams.messages.length
     const logBetas = useBetas ? (queryParams.betas ?? []) : []
-    const logThinkingType = queryParams.thinking?.type ?? 'disabled'
     const logEffortValue = queryParams.output_config?.effort
     void options.getToolPermissionContext().then(permissionContext => {
       logAPIQuery({
@@ -1823,7 +1832,7 @@ async function* queryModel(
         permissionMode: permissionContext.mode,
         querySource: options.querySource,
         queryTracking: options.queryTracking,
-        thinkingType: logThinkingType,
+        thinkingConfig,
         effortValue: logEffortValue,
         fastMode: isFastMode,
         previousRequestId,

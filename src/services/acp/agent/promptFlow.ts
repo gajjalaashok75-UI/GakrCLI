@@ -88,7 +88,7 @@ async function prompt(
     // Reset the query engine's abort controller for a fresh query.
     // After a previous interrupt(), the internal controller is stuck in
     // aborted state — without this, submitMessage() fails immediately.
-    ;(session.queryEngine as { resetAbortController: () => void }).resetAbortController()
+    ;(session.queryEngine as unknown as { resetAbortController: () => void }).resetAbortController()
     // Switch global session state so recordTranscript writes to the correct
     // session file. Without this, multi-session scenarios (or creating a new
     // session after another) write transcript data to the wrong file.
@@ -100,7 +100,7 @@ async function prompt(
       params.sessionId,
       sdkMessages,
       getConnection(this),
-      (session.queryEngine as { getAbortSignal: () => AbortSignal }).getAbortSignal(),
+      (session.queryEngine as unknown as { getAbortSignal: () => AbortSignal }).getAbortSignal(),
       session.toolUseCache,
       readClientCapabilities(this),
       session.cwd,

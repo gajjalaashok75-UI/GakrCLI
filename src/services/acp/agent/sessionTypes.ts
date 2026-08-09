@@ -1,5 +1,7 @@
 import type {
   ClientCapabilities,
+  NewSessionResponse,
+  ResumeSessionResponse,
   SessionModeState,
   SessionConfigOption,
 } from '@agentclientprotocol/sdk'
@@ -19,6 +21,18 @@ export type SessionModelState = {
     name: string
     description?: string
   }>
+}
+
+// The published SDK (1.1.0) dropped the UNSTABLE `models` field from
+// NewSessionResponse/ResumeSessionResponse, but ACP clients (Cursor/Zed/VS
+// Code) read it to populate the model selector. The agent returns it at
+// runtime; these aliases keep that visible to callers and tests.
+export type AcpNewSessionResponse = NewSessionResponse & {
+  models?: SessionModelState | null
+}
+
+export type AcpResumeSessionResponse = ResumeSessionResponse & {
+  models?: SessionModelState | null
 }
 
 // ── Session state ─────────────────────────────────────────────────

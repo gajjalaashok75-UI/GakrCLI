@@ -1,5 +1,6 @@
 // Pure type definitions. No runtime dependencies.
 // WorkflowInput has been migrated to tool/schema.ts and derived via z.infer to avoid drift from the schema.
+export type { WorkflowInput } from '../../../tools/WorkflowTool/schema.js'
 
 /** Shape of the script's `export const meta = {...}` (must be a plain literal). */
 export type WorkflowMeta = {
