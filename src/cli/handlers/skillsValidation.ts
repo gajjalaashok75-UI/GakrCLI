@@ -176,7 +176,7 @@ export async function validateSkillPath(
   for (const file of files) {
     const fullPath = join(skillDir, file)
     const fileName = basename(file)
-    const fileStats = await fs.lstat(fullPath)
+    const fileStats = fs.lstatSync(fullPath)
 
     if (fileStats.isSymbolicLink()) {
       errors.push(`Symlinks are not allowed: ${file}.`)

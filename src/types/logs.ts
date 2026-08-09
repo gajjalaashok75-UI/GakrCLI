@@ -1,10 +1,57 @@
 import type { UUID } from 'crypto'
+// OpenClaude goal-evaluator shape (id/condition/turnCount/...). The merged
+// codebase carries TWO goal implementations: this evaluator state (persisted
+// as `goal-state` entries, exercised by sessionStorage.test.ts) and the
+// claude-code auto-continuation GoalState defined below (persisted as `goal`
+// entries via saveGoal/clearGoalEntry).
+import type { GoalState as OpenClaudeGoalState } from '../services/goal/types.js'
 import type { FileHistorySnapshot } from 'src/utils/fileHistory.js'
 import type { ContentReplacementRecord } from 'src/utils/toolResultStorage.js'
 import type { AgentId } from './ids.js'
 import type { Message } from './message.js'
 import type { QueueOperationMessage } from './messageQueueTypes.js'
-import type { GoalState } from '../services/goal/types.js'
+/**
+ * Goal status for the auto-continuation feature. Extended over the
+ * upstream reference with `achieved` and `cleared` states.
+ */
+export type GoalStatus =
+  | 'active'
+  | 'paused'
+  | 'blocked'
+  | 'budget_limited'
+  | 'usage_limited'
+  | 'max_turns'
+  | 'complete'
+  | 'achieved'
+  | 'cleared'
+
+/**
+ * Per-session goal state used by the goal auto-continuation service.
+ * Persisted as a `goal` JSONL entry on every mutation; last-wins on read.
+ *
+ * Timing fields handle pause correctly: active elapsed time is
+ * `accumulatedActiveMs + (now - startTime if active, else 0)`.
+ *
+ * `turnsExecuted` is a defensive upper bound for the auto-continuation
+ * loop so a runaway goal cannot spin indefinitely.
+ *
+ * `blockedAttempts` + `lastBlockReason` implement the "blocked only
+ * after 3 consecutive same-reason attempts" audit rule.
+ */
+export type GoalState = {
+  objective: string
+  status: GoalStatus
+  tokenBudget: number | null
+  tokensUsed: number
+  startTime: number
+  pausedAt: number | null
+  accumulatedActiveMs: number
+  blockedAttempts: number
+  lastBlockReason: string | null
+  createdAt: number
+  updatedAt: number
+  turnsExecuted: number
+}
 // SerializedMessage distributes over Message's `type` discriminant via
 // Extract so that (a) `m.type === '...'` narrowing and Extract<...> both
 // work on transcript entries, and (b) every SerializedMessage variant stays
@@ -73,7 +120,8 @@ export type LogOption = {
   mode?: 'coordinator' | 'normal' // Session mode for coordinator/normal detection
   worktreeSession?: PersistedWorktreeSession | null // Worktree state at session end (null = exited, undefined = never entered)
   contentReplacements?: ContentReplacementRecord[] // Replacement decisions for resume reconstruction
-  goal?: GoalState | null // Active goal state at session end (for resume)
+  goal?: OpenClaudeGoalState | null // Active goal-evaluator state at session end (for resume)
+  sessionBranch?: SessionBranchEntry // Conversation-branch lineage metadata, if this session is a branch
 }
 
 export type SummaryMessage = {
@@ -235,7 +283,26 @@ export type ContentReplacementEntry = {
 export type GoalStateEntry = {
   type: 'goal-state'
   sessionId: UUID
-  goal: GoalState | null
+  goal: OpenClaudeGoalState | null
+}
+
+export type SessionBranchEntry = {
+  type: 'session-branch'
+  sessionId: UUID
+  /**
+   * Immediate conversation-lineage parent. Branches of branches point to the
+   * source branch here, while rootSessionId keeps the first ancestor.
+   */
+  parentSessionId: UUID
+  rootSessionId: UUID
+  /**
+   * Session whose current transcript tail was copied for this branch. Today it
+   * matches parentSessionId; future rewind/checkpoint branches may diverge.
+   */
+  branchedFromSessionId: UUID
+  branchName?: string
+  branchedAt: string
+  branchedAtMessageId?: UUID
 }
 
 export type FileHistorySnapshotMessage = {
@@ -319,6 +386,8 @@ export type ContextCollapseCommitEntry = {
   /** Span boundaries — projectView finds these in the resumed Message[]. */
   firstArchivedUuid: string
   lastArchivedUuid: string
+  /** Number of messages collapsed into the summary. Absent for pre-field sessions. */
+  archivedCount?: number
 }
 
 /**
@@ -367,10 +436,100 @@ export type Entry =
   | WorktreeStateEntry
   | ContentReplacementEntry
   | GoalStateEntry
+  | SessionBranchEntry
   | ContextCollapseCommitEntry
   | ContextCollapseSnapshotEntry
   | GoalMetadataEntry
   | GoalClearedEntry
+
+/**
+ * Single step in the replay timeline - represents a tool execution or user message.
+ */
+export type ReplayStep =
+  | ReplayToolStep
+  | ReplayUserStep
+  | ReplayRetryStep
+  | ReplayErrorStep
+
+/**
+ * Tool execution step with input, result, and timing information.
+ */
+export interface ReplayToolStep {
+  type: 'tool'
+  stepNumber: number
+  toolName: string
+  toolUseId: string
+  input: Record<string, unknown>
+  inputSummary: string // Human-readable summary: "Read src/utils.ts"
+  resultStatus: 'success' | 'error' | 'cancelled' | 'permission_denied'
+  resultPreview?: string // First 200 chars of result
+  durationMs: number
+  timestamp: string
+  filesModified?: string[] // From file history if Edit/Write tool
+  repeatedAttemptNumber?: number // 1 for first occurrence, 2+ for repeated tool/input executions
+  isRepeatedAttempt?: boolean
+}
+
+/**
+ * User message step.
+ */
+export interface ReplayUserStep {
+  type: 'user'
+  stepNumber: number
+  content: string // User's request
+  timestamp: string
+}
+
+/**
+ * Retry event emitted by real retry paths such as API retry or permission retry.
+ */
+export interface ReplayRetryStep {
+  type: 'retry'
+  stepNumber: number
+  retryType: 'api' | 'permission'
+  attempt?: number
+  maxRetries?: number
+  retryDelayMs?: number
+  reason: string
+  commands?: string[]
+  timestamp: string
+}
+
+/**
+ * Error step for unexpected failures.
+ */
+export interface ReplayErrorStep {
+  type: 'error'
+  stepNumber: number
+  error: string
+  timestamp: string
+}
+
+/**
+ * Summary statistics for the replay session.
+ */
+export interface ReplaySummary {
+  totalSteps: number
+  toolBreakdown: Record<string, number> // { Read: 5, Edit: 3, Bash: 2 }
+  filesModified: string[]
+  durationMs: number
+  startTimestamp: string
+  endTimestamp: string
+  userRequests: number
+  retryAttempts?: number
+  repeatedAttempts?: number
+}
+
+/**
+ * Complete replay index stored as .replay.json alongside the transcript.
+ */
+export interface ReplayIndex {
+  sessionId: string
+  version: 1
+  createdAt: string
+  summary: ReplaySummary
+  steps: ReplayStep[]
+}
 
 export function sortLogs(logs: LogOption[]): LogOption[] {
   return logs.sort((a, b) => {

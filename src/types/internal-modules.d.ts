@@ -25,19 +25,25 @@ declare module 'bun:ffi' {
 
 // Third-party modules without @types packages
 declare module 'bidi-js' {
-  function getEmbeddingLevels(
-    text: string,
-    defaultDirection?: string,
-  ): { paragraphLevel: number; levels: Uint8Array }
-  function getReorderSegments(
-    text: string,
-    embeddingLevels: { paragraphLevel: number; levels: Uint8Array },
-    start?: number,
-    end?: number,
-  ): [number, number][]
-  function getVisualOrder(reorderSegments: [number, number][]): number[]
-  export { getEmbeddingLevels, getReorderSegments, getVisualOrder }
-  export default { getEmbeddingLevels, getReorderSegments, getVisualOrder }
+  type BidiEmbeddingLevels = {
+    paragraphLevel: number
+    levels: Uint8Array
+  }
+  type BidiInstance = {
+    getEmbeddingLevels(
+      text: string,
+      defaultDirection?: string,
+    ): BidiEmbeddingLevels
+    getReorderSegments(
+      text: string,
+      embeddingLevels: BidiEmbeddingLevels,
+      start?: number,
+      end?: number,
+    ): [number, number][]
+    getVisualOrder(reorderSegments: [number, number][]): number[]
+  }
+  function bidiFactory(): BidiInstance
+  export default bidiFactory
 }
 
 declare module 'asciichart' {

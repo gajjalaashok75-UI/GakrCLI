@@ -274,13 +274,16 @@ import {
   modelDisplayString,
   parseUserSpecifiedModel,
 } from 'src/utils/model/model.js'
-import { getModelOptions } from 'src/utils/model/modelOptions.js'
+import {
+  getModelOptions,
+  type ModelOption,
+} from 'src/utils/model/modelOptions.js'
 import {
   modelSupportsEffort,
   getAvailableEffortLevels,
-  EFFORT_LEVELS,
   resolveAppliedEffort,
 } from 'src/utils/effort.js'
+import type { EffortLevel } from 'src/utils/effort.js'
 import { modelSupportsAdaptiveThinking } from 'src/utils/thinking.js'
 import { modelSupportsAutoMode } from 'src/utils/betas.js'
 import { ensureModelStringsInitialized } from 'src/utils/model/modelStrings.js'
@@ -1251,15 +1254,14 @@ function runHeadlessStreaming(
     const hasFastMode = isFastModeSupportedByModel(option.value)
     const hasAutoMode = modelSupportsAutoMode(resolvedModel)
     return {
-      name: modelId,
       value: modelId,
       displayName: option.label,
       description: option.description,
       ...(hasEffort && {
         supportsEffort: true,
-        supportedEffortLevels: getAvailableEffortLevels(resolvedModel)
-          ? [...EFFORT_LEVELS]
-          : EFFORT_LEVELS.filter(l => l !== 'max'),
+        supportedEffortLevels: getAvailableEffortLevels(resolvedModel).filter(
+          (level): level is Exclude<EffortLevel, 'ultracode'> => level !== 'ultracode',
+        ),
       }),
       ...(hasAdaptiveThinking && { supportsAdaptiveThinking: true }),
       ...(hasFastMode && { supportsFastMode: true }),
@@ -3153,12 +3155,7 @@ function runHeadlessStreaming(
           )
           setAppState(prev => ({
             ...prev,
-            toolPermissionContext: handleSetPermissionMode(
-              m,
-              msg.request_id,
-              prev.toolPermissionContext,
-              output,
-            ),
+            toolPermissionContext: nextToolPermissionContext,
             isUltraplanMode: m.ultraplan ?? prev.isUltraplanMode,
           }))
           // handleSetPermissionMode sends the control_response; the
@@ -5031,7 +5028,7 @@ function handleChannelEnable(
         value: wrapChannelMessage(serverName, content, meta),
         priority: 'next',
         isMeta: true,
-        origin: { kind: 'channel', server: serverName } as unknown as string,
+        origin: { kind: 'channel', server: serverName },
         skipSlashCommands: true,
       })
     },
@@ -5107,10 +5104,7 @@ function reregisterChannelHandlerAfterReconnect(
         value: wrapChannelMessage(connection.name, content, meta),
         priority: 'next',
         isMeta: true,
-        origin: {
-          kind: 'channel',
-          server: connection.name,
-        } as unknown as string,
+        origin: { kind: 'channel', server: connection.name },
         skipSlashCommands: true,
       })
     },
@@ -5498,8 +5492,6 @@ function getStructuredIO(
       inputStream = fromArray([
         jsonStringify({
           type: 'user',
-          content: inputPrompt,
-          uuid: '',
           session_id: '',
           message: {
             role: 'user',

@@ -27,6 +27,7 @@ export type BackgroundSessionStatus =
 export type BackgroundSession = {
   id: string
   name?: string
+  kind?: string
   pid: number
   cwd: string
   status: BackgroundSessionStatus

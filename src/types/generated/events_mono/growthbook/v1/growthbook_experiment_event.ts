@@ -6,7 +6,7 @@
 
 /* eslint-disable */
 import { Timestamp } from '../../../google/protobuf/timestamp.js'
-import type { PublicApiAuth } from '../../common/v1/auth.js'
+import { PublicApiAuth } from '../../common/v1/auth.js'
 
 /**
  * GrowthBook experiment assignment event
