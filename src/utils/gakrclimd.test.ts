@@ -43,7 +43,7 @@ describe('Memory System', () => {
     })
 
     test('agents.md before soul.md', () => {
-      expect(WORKSPACE_CONTEXT_FILE_ORDER.get('agents.md')).toBeLessThan(WORKSPACE_CONTEXT_FILE_ORDER.get('soul.md'))
+      expect(WORKSPACE_CONTEXT_FILE_ORDER.get('agents.md')!).toBeLessThan(WORKSPACE_CONTEXT_FILE_ORDER.get('soul.md')!)
     })
 
     test('soul.md before identity.md before user.md', () => {

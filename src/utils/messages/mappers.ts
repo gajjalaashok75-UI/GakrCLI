@@ -17,7 +17,6 @@ import type {
   AssistantMessage,
   CompactMetadata,
   Message,
-  MessageContent,
 } from 'src/types/message.js'
 import type { DeepImmutable } from 'src/types/utils.js'
 import { stripVTControlCharacters as stripAnsi } from 'node:util'
@@ -112,14 +111,15 @@ export function fromSDKCompactMetadata(
     [key: string]: unknown
   }
   const seg = m.preserved_segment
+  const trigger = m.trigger === 'auto' ? 'auto' : 'manual'
   return {
-    trigger: m.trigger,
-    preTokens: m.pre_tokens,
+    trigger,
+    preTokens: typeof m.pre_tokens === 'number' ? m.pre_tokens : 0,
     ...(seg && {
       preservedSegment: {
-        headUuid: seg.head_uuid,
-        anchorUuid: seg.anchor_uuid,
-        tailUuid: seg.tail_uuid,
+        headUuid: seg.head_uuid as UUID,
+        anchorUuid: seg.anchor_uuid as UUID,
+        tailUuid: seg.tail_uuid as UUID,
       },
     }),
   }
@@ -228,7 +228,6 @@ export function localCommandOutputToSDKAssistantMessage(
   const synthetic = createAssistantMessage({ content: cleanContent })
   return {
     type: 'assistant',
-    content: synthetic.message?.content,
     message: synthetic.message,
     parent_tool_use_id: null,
     session_id: getSessionId(),
@@ -247,7 +246,6 @@ export function toSDKRateLimitInfo(
     return undefined
   }
   return {
-    type: 'rate_limit',
     status: limits.status,
     ...(limits.resetsAt !== undefined && { resetsAt: limits.resetsAt }),
     ...(limits.rateLimitType !== undefined && {
@@ -308,6 +306,6 @@ function normalizeAssistantMessageForSDK(
 
   return {
     ...message.message,
-    content: normalizedContent as unknown as MessageContent,
+    content: normalizedContent,
   }
 }

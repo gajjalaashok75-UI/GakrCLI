@@ -5,6 +5,7 @@ import {
   releaseSharedMutationLock,
 } from '../test/sharedMutationLock.js'
 import type { Attachment } from './attachments.js'
+import type { TodoItem } from './todo/types.js'
 import { normalizeAttachmentForAPI } from './messages.js'
 
 beforeEach(async () => {
@@ -31,7 +32,7 @@ describe('tool reminder attachments', () => {
   test('todo reminders are emitted when the kill switch is unset', () => {
     const messages = normalizeAttachmentForAPI({
       type: 'todo_reminder',
-      content: [],
+      content: [] as TodoItem[],
     } as Attachment)
 
     expect(messages.length).toBeGreaterThan(0)

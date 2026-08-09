@@ -25,6 +25,7 @@ import { setPluginCommandsState } from '../../state/pluginCommandsStore.js'
 import type { AgentDefinitionsResult } from '../../tools/AgentTool/loadAgentsDir.js'
 import { getAgentDefinitionsWithOverrides } from '../../tools/AgentTool/loadAgentsDir.js'
 import type { PluginError } from '../../types/plugin.js'
+import type { HookMatcher, HooksSettings } from '../../schemas/hooks.js'
 import { logForDebugging } from '../debug.js'
 import { errorMessage } from '../errors.js'
 import { logError } from '../log.js'
@@ -166,7 +167,9 @@ export async function refreshActivePlugins(
     if (!p.hooksConfig) return sum
     return (
       sum +
-      Object.values(p.hooksConfig).reduce(
+      (Object.values(p.hooksConfig as HooksSettings) as Array<
+        HookMatcher[] | undefined
+      >).reduce(
         (s, matchers) =>
           s + (matchers?.reduce((h, m) => h + m.hooks.length, 0) ?? 0),
         0,

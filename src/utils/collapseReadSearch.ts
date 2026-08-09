@@ -18,19 +18,20 @@ import type {
   CollapsedReadSearchGroup,
   CollapsibleMessage,
   ContentItem,
-  MessageContent,
   RenderableMessage,
   StopHookInfo,
   SystemStopHookSummaryMessage,
 } from '../types/message.js'
 
 /**
- * Safely get the first content item from a MessageContent value.
+ * Safely get the first content item from a content array.
  * Returns undefined for string content or empty arrays.
+ * Generic over the block type so both SDK `ContentBlock`/`ContentBlockParam`
+ * and beta `BetaContentBlock` arrays are accepted.
  */
-function getFirstContentItem(
-  content: MessageContent | undefined,
-): ContentItem | undefined {
+function getFirstContentItem<T>(
+  content: readonly T[] | string | undefined,
+): T | undefined {
   if (!content || typeof content === 'string') return undefined
   return content[0]
 }
@@ -39,7 +40,9 @@ function getFirstContentItem(
  * Iterate over content items that are objects (not strings).
  * Returns an empty array for string content.
  */
-function getContentItems(content: MessageContent | undefined): ContentItem[] {
+function getContentItems<T>(
+  content: readonly T[] | string | undefined,
+): readonly T[] {
   if (!content || typeof content === 'string') return []
   return content
 }

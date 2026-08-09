@@ -372,6 +372,13 @@ async function detectMultipleInstallations(): Promise<
   return installations
 }
 
+export async function detectStaleProjectSettingsPaths(
+  cwd?: string,
+): Promise<{ issue: string; fix: string } | null> {
+  void cwd
+  return null
+}
+
 async function detectConfigurationIssues(
   type: InstallationType,
 ): Promise<Array<{ issue: string; fix: string }>> {

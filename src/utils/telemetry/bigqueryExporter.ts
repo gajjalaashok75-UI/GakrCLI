@@ -10,14 +10,14 @@ import {
 import axios from 'axios'
 import { checkMetricsEnabled } from 'src/services/api/metricsOptOut.js'
 import { getIsNonInteractiveSession } from '../../bootstrap/state.js'
-import { getSubscriptionType, isgakrcliAISubscriber } from '../auth.js'
+import { getSubscriptionType, isGakrCLIAISubscriber } from '../auth.js'
 import { checkHasTrustDialogAccepted } from '../config.js'
 import { logForDebugging } from '../debug.js'
 import { errorMessage, toError } from '../errors.js'
 import { getAuthHeaders } from '../http.js'
 import { logError } from '../log.js'
 import { jsonStringify } from '../slowOperations.js'
-import { getgakrcliCodeUserAgent } from '../userAgent.js'
+import { getGakrCLICodeUserAgent } from '../userAgent.js'
 
 type DataPoint = {
   attributes: Record<string, string>
@@ -123,7 +123,7 @@ export class BigQueryMetricsExporter implements PushMetricExporter {
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'User-Agent': getgakrcliCodeUserAgent(),
+        'User-Agent': getGakrCLICodeUserAgent(),
         ...authResult.headers,
       }
 
@@ -170,7 +170,7 @@ export class BigQueryMetricsExporter implements PushMetricExporter {
     }
 
     // Add customer type and subscription type
-    if (isgakrcliAISubscriber()) {
+    if (isGakrCLIAISubscriber()) {
       resourceAttributes['user.customer_type'] = 'gakrcli_ai'
       const subscriptionType = getSubscriptionType()
       if (subscriptionType) {

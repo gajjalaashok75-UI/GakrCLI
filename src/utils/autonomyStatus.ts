@@ -120,7 +120,7 @@ async function formatRuntimeSection(): Promise<string> {
   ]
   for (const session of sessions.slice(0, 8)) {
     lines.push(
-      `  pid=${session.pid} kind=${session.kind} status=${session.status ?? 'unknown'} cwd=${session.cwd}`,
+      `  pid=${session.pid} kind=${session.kind ?? 'unknown'} status=${session.status ?? 'unknown'} cwd=${session.cwd}`,
     )
   }
   if (sessions.length > 8) {

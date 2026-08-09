@@ -160,8 +160,10 @@ export type BuildTaskReportOptions = {
   maxPreviewChars?: number
 }
 
+export type TaskReportFormat = 'json' | 'markdown'
+
 export type TaskReportArgs = {
-  format: 'json'
+  format: TaskReportFormat
   transcriptPath?: string | null
   sessionId?: string | null
   outFile?: string | null

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { createTempDir, cleanupTempDir } from '../../../tests/mocks/file-system'
+import type { AttachmentMessage } from '../../types/message'
 import { getAttachmentMessages } from '../attachments'
 import {
   createAutonomyQueuedPrompt,
@@ -55,7 +56,7 @@ describe('autonomyQueueLifecycle', () => {
       removeFromQueue(claim.staleCommands)
       removeFromQueue(claim.claimedCommands)
 
-      const attachments = []
+      const attachments: AttachmentMessage[] = []
       for await (const attachment of getAttachmentMessages(
         null,
         {} as never,

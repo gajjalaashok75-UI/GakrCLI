@@ -48,8 +48,8 @@ beforeEach(async () => {
       setGakrCLIConfigHomeDirForTesting: () => {},
 
       resolveGakrCLIConfigHomeDir: realEnvUtils.resolveGakrCLIConfigHomeDir,
-      migrateLegacyGakrCLIConfigHomeDir:
-        realEnvUtils.migrateLegacyGakrCLIConfigHomeDir,
+      migrateLegacyGakrCLIConfigHome:
+        realEnvUtils.migrateLegacyGakrCLIConfigHome,
       hasNodeOption: realEnvUtils.hasNodeOption,
       isEnvTruthy: realEnvUtils.isEnvTruthy,
       isEnvDefinedFalsy: realEnvUtils.isEnvDefinedFalsy,

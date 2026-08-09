@@ -849,13 +849,16 @@ export function normalizeMessages(messages: Message[]): NormalizedMessage[] {
         if (typeof message.message.content === 'string') {
           isNewChain = isNewChain || true
           const uuid = isNewChain ? deriveUUID(message.uuid, 0) : message.uuid
+          // Runtime assistant messages can carry string content even though the
+          // type declares an array; narrow via the runtime check, not the type.
+          const stringContent = message.message.content as string
           return [
             {
               ...message,
               uuid,
               message: {
                 ...message.message,
-                content: [{ type: 'text', text: message.message.content }],
+                content: [{ type: 'text', text: stringContent }],
               },
               isMeta: message.isMeta,
               isVirtual: message.isVirtual,
@@ -2683,13 +2686,21 @@ export function normalizeMessagesForAPI(
           // tool search beta header
           const toolSearchEnabled = isToolSearchEnabledOptimistic()
 
-          // Handle string content by wrapping in a text block
+          // Handle string content by wrapping in a text block. Runtime assistant
+          // messages can carry string content even though the type declares an
+          // array; narrow via the runtime check, not the type.
           if (typeof message.message.content === 'string') {
+            const stringContent = message.message.content as string
             result.push({
               ...message,
               message: {
                 ...message.message,
-                content: [{ type: 'text', text: message.message.content }],
+                // Runtime string content is wrapped as a bare text block;
+                // the installed SDK requires citations on text blocks, so
+                // assert at the boundary rather than inventing them.
+                content: [
+                  { type: 'text', text: stringContent },
+                ] as unknown as BetaContentBlock[],
               },
             })
             return

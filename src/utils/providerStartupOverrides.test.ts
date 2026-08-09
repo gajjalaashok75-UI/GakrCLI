@@ -19,7 +19,7 @@ describe('clearStartupProviderOverrides', () => {
       NVIDIA_BASE_URL: 'https://integrate.api.nvidia.com/v1',
       KEEP_ME: '1',
     }
-    const cleanupKeySet = new Set(removalKeys)
+    const cleanupKeySet = new Set<string>(removalKeys)
     const expectedEnv = Object.fromEntries(
       Object.entries(inputEnv).filter(([k]) => !cleanupKeySet.has(k)),
     )

@@ -111,6 +111,20 @@ export function getProjectsDir(): string {
 }
 
 /**
+ * Resolves the override env value for the config home directory.
+ * GakrCLI config must stay independent from other CLI configs.
+ */
+export function resolveConfigDirEnv(options?: {
+  openGakrCLIConfigDir?: string
+  legacyConfigDir?: string
+  warn?: (message: string) => void
+}): string | undefined {
+  void options?.legacyConfigDir
+  void options?.warn
+  return options?.openGakrCLIConfigDir || undefined
+}
+
+/**
  * Check if NODE_OPTIONS contains a specific flag.
  * Splits on whitespace and checks for exact match to avoid false positives.
  */

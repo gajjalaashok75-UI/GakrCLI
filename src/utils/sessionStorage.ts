@@ -48,6 +48,9 @@ import {
   type ContextCollapseSnapshotEntry,
   type Entry,
   type FileHistorySnapshotMessage,
+  type GoalClearedEntry,
+  type GoalMetadataEntry,
+  type GoalState,
   type GoalStateEntry,
   type LogOption,
   type PersistedWorktreeSession,
@@ -1311,6 +1314,11 @@ class Project {
     } else if (entry.type === 'marble-origami-snapshot') {
       // Always append. Last-wins on restore — later entries supersede.
       void this.enqueueWrite(sessionFile, entry)
+    } else if (entry.type === 'goal') {
+      // Auto-continuation goal checkpoints. Always append; last-wins on read.
+      void this.enqueueWrite(sessionFile, entry)
+    } else if (entry.type === 'goal-cleared') {
+      void this.enqueueWrite(sessionFile, entry)
     } else {
       const messageSet = await getSessionMessages(sessionId)
       if (entry.type === 'queue-operation') {
@@ -1608,6 +1616,42 @@ export async function recordGoalState(
   sessionId: UUID = getSessionId() as UUID,
 ) {
   await getProject().insertGoalState(goal, sessionId)
+}
+
+/**
+ * Persist the claude-code auto-continuation goal as a `goal` checkpoint
+ * entry. Distinct from recordGoalState (the OpenClaude evaluator goal,
+ * `goal-state` entries) — this is the /goal slash-command path. Last-wins
+ * on read, mirrors saveGoal in the claude-code reference.
+ */
+export function saveGoal(
+  sessionId: UUID,
+  state: GoalState,
+  fullPath?: string,
+): void {
+  const resolvedPath = fullPath ?? getTranscriptPathForSession(sessionId)
+  appendEntryToFile(resolvedPath, {
+    type: 'goal',
+    sessionId,
+    state,
+    timestamp: new Date().toISOString(),
+  } satisfies GoalMetadataEntry)
+  // Note: does NOT touch currentSessionGoal — that cache backs the OpenClaude
+  // `goal-state` re-append path and carries a different GoalState shape.
+}
+
+/**
+ * Persist a "goal cleared" tombstone so a future --resume cannot
+ * resurrect the goal from a prior `goal` entry. Also drops the
+ * in-memory cache for the current session.
+ */
+export function clearGoalEntry(sessionId: UUID, fullPath?: string): void {
+  const resolvedPath = fullPath ?? getTranscriptPathForSession(sessionId)
+  appendEntryToFile(resolvedPath, {
+    type: 'goal-cleared',
+    sessionId,
+    timestamp: new Date().toISOString(),
+  } satisfies GoalClearedEntry)
 }
 
 /**
@@ -4898,7 +4942,7 @@ export async function findUnresolvedToolUse(
     const transcriptPath = getTranscriptPath()
     const { messages } = await loadTranscriptFile(transcriptPath)
 
-    let toolUseMessage: TranscriptMessage | null = null
+    let toolUseMessage: AssistantMessage | null = null
 
     // Find the tool use but make sure there's not also a result
     for (const message of messages.values()) {

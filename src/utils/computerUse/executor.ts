@@ -451,19 +451,25 @@ export function createCliExecutor(opts: {
       // Ensure the result has fields expected by toolCalls.ts (hidden, displayId).
       // macOS native returns these from Swift; our cross-platform ComputerUseAPI
       // returns {base64, width, height} — fill in the missing fields.
-      const baseResult = raw as Partial<ResolvePrepareCaptureResult> & {
+      type ResolvePrepareCaptureShape = {
         width?: number
         height?: number
+        displayWidth?: number
+        displayHeight?: number
+        originX?: number
+        originY?: number
+        hidden?: string[]
+        displayId?: number
       }
+      const baseResult = raw as unknown as ResolvePrepareCaptureShape
       return {
-        ...raw,
+        ...(raw as object),
         displayWidth: baseResult.displayWidth ?? baseResult.width,
         displayHeight: baseResult.displayHeight ?? baseResult.height,
         originX: baseResult.originX ?? 0,
         originY: baseResult.originY ?? 0,
         hidden: baseResult.hidden ?? [],
-        displayId:
-          baseResult.displayId ?? opts.preferredDisplayId ?? d.displayId,
+        displayId: baseResult.displayId ?? opts.preferredDisplayId ?? d.displayId ?? 0,
       } as ResolvePrepareCaptureResult
     },
 

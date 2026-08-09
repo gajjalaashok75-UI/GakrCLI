@@ -404,35 +404,3 @@ export function _resetErrorLogForTesting(): void {
   errorQueue.length = 0
   inMemoryErrorLog = []
 }
-
-export function sanitizeError(err: Error): Error {
-  const sanitizedErr = Object.assign(Object.create(Object.getPrototypeOf(err)), err)
-  sanitizedErr.message = redactSensitiveInfo(err.message)
-  if (err.stack) {
-    sanitizedErr.stack = redactSensitiveInfo(err.stack)
-  }
-  for (const key of Object.keys(err)) {
-    const value = (err as unknown as Record<string, unknown>)[key]
-    if (typeof value === 'string') {
-      const redacted = jsonRedactor(key, value)
-      if (typeof redacted === 'string') {
-        (sanitizedErr as unknown as Record<string, unknown>)[key] = redacted
-      }
-    } else if (typeof value === 'object' && value !== null) {
-      const topLevelRedacted = jsonRedactor(key, value)
-      if (topLevelRedacted !== value) {
-        ;(sanitizedErr as unknown as Record<string, unknown>)[key] =
-          topLevelRedacted
-        continue
-      }
-      try {
-        ;(sanitizedErr as unknown as Record<string, unknown>)[key] = JSON.parse(
-          JSON.stringify(value, jsonRedactor),
-        )
-      } catch {
-        ;(sanitizedErr as unknown as Record<string, unknown>)[key] = "[REDACTED]"
-      }
-    }
-  }
-  return sanitizedErr
-}

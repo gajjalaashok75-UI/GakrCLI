@@ -75,8 +75,14 @@ export async function executeShellCommandsInPrompt(
   context: ToolUseContext,
   slashCommandName: string,
   shell?: FrontmatterShell,
+  options?: { lineLimits?: Record<string, number>; granularFallback?: boolean },
 ): Promise<string> {
   let result = text
+  const lineLimits = options?.lineLimits ?? {}
+  // Opt-in `granularFallback: true` rethrows the raw error and lets the caller
+  // blank just the failed snippet in place (used by the bughunter siblings
+  // where one bad git command should not discard the rest of the context).
+  const granularFallback = options?.granularFallback === true
 
   // Resolve the tool once. `shell === undefined` and `shell === 'bash'` both
   // hit BashTool. PowerShell only when the runtime gate allows — a skill
@@ -117,9 +123,21 @@ export async function executeShellCommandsInPrompt(
           }
 
           const { data } = await shellTool.call({ command }, context)
+          // Apply per-prefix line limit to the raw stdout BEFORE persistence
+          // so the trimmed output flows through processToolResultBlock and
+          // its empty-content guard fires correctly when truncation empties
+          // the block entirely. Also avoids the 30k-char Bash result cap
+          // short-circuit for huge diffs.
+          const trimmedStdout =
+            typeof data.stdout === 'string' ? data.stdout : ''
+          const boundedStdout = applyLineLimit(
+            command,
+            trimmedStdout,
+            lineLimits,
+          )
           const normalizedData = {
             ...data,
-            stdout: typeof data.stdout === 'string' ? data.stdout : '',
+            stdout: boundedStdout,
             stderr: typeof data.stderr === 'string' ? data.stderr : '',
           }
           // Reuse the same persistence flow as regular Bash tool calls
@@ -145,7 +163,15 @@ export async function executeShellCommandsInPrompt(
           if (e instanceof MalformedCommandError) {
             throw e
           }
-          formatBashError(e, match[0])
+          if (granularFallback) {
+            // Blank the failed snippet in place so the other successful
+            // snippets (e.g. git status, git diff) are preserved. Callers
+            // can render their own fallback text outside the code blocks
+            // if they need to explain the gap.
+            result = result.replace(match[0], () => '')
+            return
+          }
+          throw formatBashError(e, match[0])
         }
       }
     }),
@@ -194,4 +220,36 @@ function formatBashError(e: unknown, pattern: string, inline = false): never {
   const message = errorMessage(e)
   const formatted = inline ? `[Error: ${message}]` : `[Error]\n${message}`
   throw new MalformedCommandError(formatted)
+}
+
+/**
+ * Truncates command output to `limit` lines when the command (trimmed) exactly
+ * matches a prefix in `limits` or starts with `<prefix> `, choosing the longest
+ * matching prefix. Preserves a trailing newline.
+ */
+function applyLineLimit(
+  command: string,
+  output: string,
+  limits: Record<string, number>,
+): string {
+  const trimmed = command.trim()
+  let bestPrefix = ''
+  let bestLimit = Infinity
+  for (const [prefix, limit] of Object.entries(limits)) {
+    if (trimmed === prefix || trimmed.startsWith(prefix + ' ')) {
+      if (prefix.length > bestPrefix.length) {
+        bestPrefix = prefix
+        bestLimit = limit
+      }
+    }
+  }
+  if (bestPrefix === '') {
+    return output
+  }
+  const lines = output.split('\n')
+  if (lines.length <= bestLimit) {
+    return output
+  }
+  const truncated = lines.slice(0, bestLimit).join('\n')
+  return output.endsWith('\n') ? truncated + '\n' : truncated
 }

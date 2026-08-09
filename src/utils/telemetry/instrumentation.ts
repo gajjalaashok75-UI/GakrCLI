@@ -17,12 +17,16 @@ import {
 import {
   ConsoleMetricExporter,
   MeterProvider,
+  type MetricReader,
   PeriodicExportingMetricReader,
+  type PushMetricExporter,
 } from '@opentelemetry/sdk-metrics'
+import type { LogRecordExporter } from '@opentelemetry/sdk-logs'
 import {
   BasicTracerProvider,
   BatchSpanProcessor,
   ConsoleSpanExporter,
+  type SpanExporter,
 } from '@opentelemetry/sdk-trace-base'
 import {
   ATTR_SERVICE_NAME,
@@ -43,7 +47,7 @@ import {
   getOtelHeadersFromHelper,
   getSubscriptionType,
   is1PApiCustomer,
-  isgakrcliAISubscriber,
+  isGakrCLIAISubscriber,
 } from 'src/utils/auth.js'
 import { getPlatform, getWslVersion } from 'src/utils/platform.js'
 
@@ -134,7 +138,7 @@ async function getOtlpReaders() {
       DEFAULT_METRICS_EXPORT_INTERVAL_MS.toString(),
   )
 
-  const exporters = []
+  const exporters: PushMetricExporter[] = []
   for (const exporterType of exporterTypes) {
     if (exporterType === 'console') {
       // Custom console exporter that shows resource attributes
@@ -195,7 +199,9 @@ async function getOtlpReaders() {
       const { PrometheusExporter } = await import(
         '@opentelemetry/exporter-prometheus'
       )
-      exporters.push(new PrometheusExporter())
+      // PrometheusExporter is a pull exporter; the reader factory below
+      // unwraps it via the `'export' in exporter` runtime check.
+      exporters.push(new PrometheusExporter() as unknown as PushMetricExporter)
     } else {
       throw new Error(
         `Unknown exporter type set in OTEL_EXPORTER_OTLP_METRICS_PROTOCOL or OTEL_EXPORTER_OTLP_PROTOCOL env var: ${exporterType}`,
@@ -226,7 +232,7 @@ async function getOtlpLogExporters() {
     `[3P telemetry] getOtlpLogExporters: types=${jsonStringify(exporterTypes)}, protocol=${protocol}, endpoint=${endpoint}`,
   )
 
-  const exporters = []
+  const exporters: LogRecordExporter[] = []
   for (const exporterType of exporterTypes) {
     if (exporterType === 'console') {
       exporters.push(new ConsoleLogRecordExporter())
@@ -273,7 +279,7 @@ async function getOtlpLogExporters() {
 async function getOtlpTraceExporters() {
   const exporterTypes = parseExporterTypes(process.env.OTEL_TRACES_EXPORTER)
 
-  const exporters = []
+  const exporters: SpanExporter[] = []
   for (const exporterType of exporterTypes) {
     if (exporterType === 'console') {
       exporters.push(new ConsoleSpanExporter())
@@ -340,7 +346,7 @@ function isBigQueryMetricsEnabled() {
   // 3. GakrCLI for Teams users
   const subscriptionType = getSubscriptionType()
   const isC4EOrTeamUser =
-    isgakrcliAISubscriber() &&
+    isGakrCLIAISubscriber() &&
     (subscriptionType === 'enterprise' || subscriptionType === 'team')
 
   return is1PApiCustomer() || isC4EOrTeamUser
@@ -452,7 +458,7 @@ export async function initializeTelemetry() {
   // Enable via GAKR_CODE_PERFETTO_TRACE=1 or GAKR_CODE_PERFETTO_TRACE=<path>
   initializePerfettoTracing()
 
-  const readers = []
+  const readers: MetricReader[] = []
 
   // Add customer exporters (if enabled)
   const telemetryEnabled = isTelemetryEnabled()

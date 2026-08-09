@@ -1,5 +1,4 @@
 import { randomUUID } from 'crypto'
-import type { SDKMessage } from 'src/entrypoints/agentSdkTypes.js'
 import type { Task } from './tasks.js'
 
 export type TaskStateItem = Pick<
@@ -14,14 +13,17 @@ export type TaskStateItem = Pick<
   | 'blockedBy'
 >
 
-export type TaskStateMessage = SDKMessage & {
+export type TaskStateMessage = {
   type: 'task_state'
   uuid: string
   task_list_id: string
   tasks: TaskStateItem[]
 }
 
-export type TaskStateSnapshot = Pick<TaskStateMessage, 'task_list_id' | 'tasks'>
+export type TaskStateSnapshot = {
+  task_list_id: string
+  tasks: TaskStateItem[]
+}
 
 function toTaskStateItem(task: Task): TaskStateItem {
   return {

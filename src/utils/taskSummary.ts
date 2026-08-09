@@ -1,9 +1,6 @@
 import { feature } from 'bun:bundle'
 import { isBgSession, updateSessionActivity } from './concurrentSessions.js'
 import { logForDebugging } from './debug.js'
-import type { ToolUseContext } from '../Tool.js'
-import type { Message } from '../types/message.js'
-import type { SystemPrompt } from './systemPromptType.js'
 
 /**
  * Minimum interval between task summary generations (ms).
@@ -31,22 +28,17 @@ export function shouldGenerateTaskSummary(): boolean {
  *
  * Fire-and-forget from query.ts — errors are logged, never thrown.
  */
-export function maybeGenerateTaskSummary(_params: {
-  systemPrompt: SystemPrompt
-  userContext: { [k: string]: string }
-  systemContext: { [k: string]: string }
-  toolUseContext: ToolUseContext
-  forkContextMessages: Message[]
+export function maybeGenerateTaskSummary(options: {
+  forkContextMessages?: Array<{
+    type: string
+    message?: { content?: unknown }
+  }>
+  [key: string]: unknown
 }): void {
   lastSummaryTime = Date.now()
 
   try {
-    const messages = _params.forkContextMessages as
-      | Array<{
-          type: string
-          message?: { content?: unknown }
-        }>
-      | undefined
+    const messages = options.forkContextMessages
 
     if (!messages || messages.length === 0) return
 

@@ -786,6 +786,32 @@ export const SettingsSchema = lazySchema(() =>
             'Use "default" key as fallback. Model name must exist in agentModels. ' +
             'Example: { "Explore": "deepseek-chat", "general-purpose": "gpt-4o", "default": "gpt-4o" }',
         ),
+      smartRouting: z
+        .object({
+          enabled: z.boolean().optional().describe('Opt in to per-turn simple-vs-strong model routing. Off by default.'),
+          simpleModel: z
+            .string()
+            .optional()
+            .describe('agentModels key (or bare model id) used for turns classified "simple".'),
+          strongModel: z
+            .string()
+            .optional()
+            .describe('agentModels key (or bare model id) used for "strong" turns and whenever routing is unsure.'),
+          simpleMaxChars: z
+            .number()
+            .optional()
+            .describe('Max characters in user input to qualify as "simple". Passed to routeModel.'),
+          simpleMaxWords: z
+            .number()
+            .optional()
+            .describe('Max whitespace-separated words to qualify as "simple". Passed to routeModel.'),
+        })
+        .optional()
+        .describe(
+          'Opt-in smart routing: classify each user turn and route simple turns to the configured simple model. ' +
+            'simpleModel/strongModel are agentModels keys (or bare model ids). ' +
+            'Example: { "enabled": true, "simpleModel": "mini", "strongModel": "main" }',
+        ),
       providerFallbackChain: z
         .array(z.string())
         .optional()
@@ -1023,6 +1049,50 @@ export const SettingsSchema = lazySchema(() =>
         .describe(
           'Enable auto-memory for this project. When false, GakrCLI will not read from or write to the auto-memory directory.',
         ),
+      memory: z
+        .object({
+          autoWrite: z
+            .boolean()
+            .optional()
+            .describe(
+              'When false, disables auto-memory reads and writes for this project. Discoverable alias for `autoMemoryEnabled`; the two are equivalent and either one can be used to opt out for governance / regulated / client-sensitive repos. When both are set, the more restrictive (false) value wins so a parent-scope opt-out cannot be silently re-enabled by a narrower scope.',
+            ),
+          requireApprovalBeforeWrite: z
+            .boolean()
+            .optional()
+            .describe(
+              'Persistent auto-memory writes require explicit permission approval by default. Set to false to restore automatic memory writes when auto-memory is enabled.',
+            ),
+        })
+        .optional()
+        .describe(
+          'Memory governance settings. `autoWrite` controls whether auto-memory is active; `requireApprovalBeforeWrite` forces explicit approval for persistent memory writes.',
+        ),
+      git: z
+        .object({
+          addAICoAuthor: z
+            .boolean()
+            .optional()
+            .describe(
+              'When true, opt in to the generated Co-Authored-By trailer for local commits. When false in any settings source, generated commit attribution is blocked.',
+            ),
+          addGeneratedWithFooter: z
+            .boolean()
+            .optional()
+            .describe(
+              'When true, opt in to the generated GakrCLI footer for PR descriptions. When false in any settings source, generated PR attribution is blocked.',
+            ),
+          forbiddenCommitMessagePatterns: z
+            .array(z.string())
+            .optional()
+            .describe(
+              'Literal text patterns that must not appear in git commit messages, such as "Co-Authored-By:" or "Generated with".',
+            ),
+        })
+        .optional()
+        .describe(
+          'Git governance settings for AI attribution and commit-message policy.',
+        ),
       autoMemoryDirectory: z
         .string()
         .optional()
@@ -1146,6 +1216,21 @@ export const SettingsSchema = lazySchema(() =>
             'Patterns are matched against absolute file paths using picomatch. ' +
             'Only applies to User, Project, and Local memory types (Managed/policy files cannot be excluded). ' +
             'Examples: "/home/user/monorepo/GAKRCLI.md", "**/code/GAKRCLI.md", "**/some-dir/.gakrcli/rules/**"',
+        ),
+      cacheThreshold: z
+        .number()
+        .int()
+        .min(0)
+        .max(100)
+        .optional()
+        .describe(
+          'Prompt cache hit rate threshold (0-100). Warnings shown when cache hit rate falls below this percentage. Default: 80.',
+        ),
+      cacheWarningEnabled: z
+        .boolean()
+        .optional()
+        .describe(
+          'Whether to show cache hit rate warnings in the message flow when the rate falls below cacheThreshold. Default: true.',
         ),
       pluginTrustMessage: z
         .string()
