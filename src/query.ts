@@ -1949,6 +1949,7 @@ async function* queryLoop(
             stopHookActive: undefined,
             turnCount,
             continuationNudgeCount: state.continuationNudgeCount,
+            agentStepLimit: state.agentStepLimit,
             transition: { reason: 'token_budget_continuation' },
           }
           continue

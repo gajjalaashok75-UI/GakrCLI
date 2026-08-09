@@ -258,15 +258,33 @@ declare module '@ant/computer-use-mcp/types' {
     path?: string
   }
 
+  export type CuAppPermTier = 'read' | 'click' | 'full'
+
+  export type ResolvedAppRequest = {
+    /** What the model asked for (e.g. "Slack", "com.tinyspeck.slackmacgap"). */
+    requestedName: string
+    /** The resolved InstalledApp if found, else undefined (shown greyed in the UI). */
+    resolved?: InstalledApp
+    /** Shell-access-equivalent bundle IDs get a UI warning. */
+    isSentinel: boolean
+    /** Already in the allowlist → skip the checkbox, return in `granted` immediately. */
+    alreadyGranted: boolean
+    /** Hardcoded tier for this app (browser→"read", terminal→"click", else "full"). */
+    proposedTier: CuAppPermTier
+  }
+
   export type AppGrant = FrontmostApp & {
     grantedAt: number
   }
 
   export type DisplayGeometry = {
     id?: number
+    displayId?: number
     width: number
     height: number
     scaleFactor: number
+    originX?: number
+    originY?: number
   }
 
   export type InstalledApp = FrontmostApp & {
@@ -282,6 +300,11 @@ declare module '@ant/computer-use-mcp/types' {
     base64: string
     width: number
     height: number
+    displayWidth?: number
+    displayHeight?: number
+    originX?: number
+    originY?: number
+    accessibilityText?: string
   }
 
   export type CuGrantFlags = {
@@ -293,16 +316,29 @@ declare module '@ant/computer-use-mcp/types' {
   export const DEFAULT_GRANT_FLAGS: CuGrantFlags
 
   export type CuPermissionRequest = {
+    requestId: string
+    /** Model-provided reason string. Shown prominently in the approval UI. */
+    reason: string
+    apps: ResolvedAppRequest[]
+    /** What the model asked for. User can toggle independently of apps. */
+    requestedFlags: Partial<CuGrantFlags>
+    screenshotFiltering: 'native' | 'none'
+    /** Present only when TCC permissions are NOT yet granted. */
     tccState?: { accessibility: boolean; screenRecording: boolean }
-    apps?: ComputerUseApp[]
-    grantFlags?: CuGrantFlags
+    /** Apps with windows on the CU display that aren't in the requested allowlist. */
+    willHide?: Array<{ bundleId: string; displayName: string }>
+    /** `chicagoAutoUnhide` app preference at request time. */
+    autoUnhideEnabled?: boolean
   }
 
   export type CuPermissionResponse = {
     granted: AppGrant[]
-    denied: ComputerUseApp[]
+    /** Bundle IDs the user unchecked, or apps that weren't installed. */
+    denied: Array<{ bundleId: string; reason: 'user_denied' | 'not_installed' }>
     flags: CuGrantFlags
   }
+
+  export type LoggerDetail = Error | NodeJS.ErrnoException
 
   export type Logger = {
     silly(message: string, ...args: unknown[]): void
@@ -376,6 +412,85 @@ declare module '@ant/computer-use-mcp/types' {
     getAppIcon(path: string): Promise<string | undefined>
     listRunningApps(): Promise<RunningApp[]>
     openApp(bundleId: string): Promise<void>
+    manageWindow?(
+      action: string,
+      opts?: { x?: number; y?: number; width?: number; height?: number },
+    ): Promise<boolean>
+    getWindowRect?(): Promise<{
+      x: number
+      y: number
+      width: number
+      height: number
+    } | null>
+    openTerminal?(opts: {
+      agent: 'gakrcli' | 'codex' | 'gemini' | 'custom'
+      command?: string
+      terminal?: 'wt' | 'powershell' | 'cmd'
+      workingDirectory?: string
+    }): Promise<{ hwnd: string; title: string; launched: boolean } | null>
+    bindToWindow?(query: {
+      hwnd?: string
+      title?: string
+      pid?: number
+    }): Promise<{ hwnd: string; pid: number; title: string } | null>
+    unbindFromWindow?(): Promise<void>
+    hasBoundWindow?(): Promise<boolean>
+    getBindingStatus?(): Promise<{
+      bound: boolean
+      hwnd?: string
+      title?: string
+      pid?: number
+      rect?: { x: number; y: number; width: number; height: number }
+    } | null>
+    listVisibleWindows?(): Promise<
+      { hwnd: string; pid: number; title: string }[]
+    >
+    statusIndicator?(
+      action: 'show' | 'hide' | 'status',
+      message?: string,
+    ): Promise<{ active: boolean; message?: string }>
+    virtualKeyboard?(opts: {
+      action: 'type' | 'combo' | 'press' | 'release' | 'hold'
+      text: string
+      duration?: number
+      repeat?: number
+    }): Promise<boolean>
+    virtualMouse?(opts: {
+      action:
+        | 'click'
+        | 'double_click'
+        | 'right_click'
+        | 'move'
+        | 'drag'
+        | 'down'
+        | 'up'
+      x: number
+      y: number
+      startX?: number
+      startY?: number
+    }): Promise<boolean>
+    mouseWheel?(
+      x: number,
+      y: number,
+      delta: number,
+      horizontal?: boolean,
+    ): Promise<boolean>
+    activateWindow?(clickX?: number, clickY?: number): Promise<boolean>
+    respondToPrompt?(opts: {
+      responseType: 'yes' | 'no' | 'enter' | 'escape' | 'select' | 'type'
+      arrowDirection?: 'up' | 'down'
+      arrowCount?: number
+      text?: string
+    }): Promise<boolean>
+    clickElement?(query: {
+      name?: string
+      role?: string
+      automationId?: string
+    }): Promise<boolean>
+    typeIntoElement?(
+      query: { name?: string; role?: string; automationId?: string },
+      text: string,
+    ): Promise<boolean>
   }
 
   export type ComputerUseHostAdapter = {
@@ -531,6 +646,21 @@ declare module '@ant/computer-use-input' {
 }
 
 declare module '@ant/computer-use-swift' {
+  export type DisplayGeometry = {
+    width: number
+    height: number
+    scaleFactor: number
+    displayId: number
+    label?: string
+    isPrimary?: boolean
+  }
+
+  export type ScreenshotResult = {
+    base64: string
+    width: number
+    height: number
+  }
+
   export type ComputerUseAPI = {
     _drainMainRunLoop(): void
     dispatchMainRunOnce(timeoutMs: number): void
@@ -570,20 +700,8 @@ declare module '@ant/computer-use-swift' {
       unhide(bundleIds: string[]): Promise<void>
     }
     display: {
-      getSize(displayId?: number): {
-        id?: number
-        width: number
-        height: number
-        scaleFactor: number
-      }
-      listAll(): Promise<
-        Array<{
-          id?: number
-          width: number
-          height: number
-          scaleFactor: number
-        }>
-      >
+      getSize(displayId?: number): DisplayGeometry
+      listAll(): DisplayGeometry[]
     }
     resolvePrepareCapture(
       allowedBundleIds: string[],
@@ -598,22 +716,22 @@ declare module '@ant/computer-use-swift' {
     screenshot: {
       captureExcluding(
         allowedBundleIds: string[],
-        quality: number,
-        targetWidth: number,
-        targetHeight: number,
+        quality?: number,
+        targetWidth?: number,
+        targetHeight?: number,
         displayId?: number,
-      ): Promise<{ base64: string; width: number; height: number }>
+      ): Promise<ScreenshotResult>
       captureRegion(
         allowedBundleIds: string[],
         x: number,
         y: number,
         width: number,
         height: number,
-        targetWidth: number,
-        targetHeight: number,
-        quality: number,
+        targetWidth?: number,
+        targetHeight?: number,
+        quality?: number,
         displayId?: number,
-      ): Promise<{ base64: string; width: number; height: number }>
+      ): Promise<ScreenshotResult>
     }
   }
 }

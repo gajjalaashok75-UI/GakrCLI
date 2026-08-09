@@ -25,9 +25,6 @@ import { ResumeCompactPrompt } from '../components/ResumeCompactPrompt.js';
 import { CompactProgressBar } from '../components/CompactProgressBar.js';
 import { SearchExtraToolsHint } from '../components/SearchExtraToolsHint.js';
 import { useSearchExtraToolsHint } from '../hooks/useSearchExtraToolsHint.js';
-import { UltraplanChoiceDialog } from '../components/ultraplan/UltraplanChoiceDialog.js';
-import { UltraplanLaunchDialog } from '../components/ultraplan/UltraplanLaunchDialog.js';
-import { launchUltraplan } from '../commands/ultraplan.js';
 import * as React from 'react';
 import { useEffect, useMemo, useRef, useState, useCallback, useDeferredValue, useLayoutEffect, type RefObject } from 'react';
 import { useNotifications } from '../context/notifications.js';
@@ -255,17 +252,17 @@ import { useFeedbackSurvey } from 'src/components/FeedbackSurvey/useFeedbackSurv
 import { useMemorySurvey } from 'src/components/FeedbackSurvey/useMemorySurvey.js';
 import { usePostCompactSurvey } from 'src/components/FeedbackSurvey/usePostCompactSurvey.js';
 import { FeedbackSurvey } from 'src/components/FeedbackSurvey/FeedbackSurvey.js';
+import type { FeedbackSurveyResponse } from 'src/components/FeedbackSurvey/utils.js';
 import { useInstallMessages } from 'src/hooks/notifs/useInstallMessages.js';
 import { useAwaySummary } from 'src/hooks/useAwaySummary.js';
 import { useChromeExtensionNotification } from 'src/hooks/useChromeExtensionNotification.js';
 import { useOfficialMarketplaceNotification } from 'src/hooks/useOfficialMarketplaceNotification.js';
-import { usePromptsFromGakrCLIInChrome } from 'src/hooks/usePromptsFromGakrCLIInChrome.js';
+import { usePromptsFromGakrCLIInChrome } from 'src/hooks/usePromptsFromgakrcliInChrome.js';
 import { getTipToShowOnSpinner, recordShownTip } from 'src/services/tips/tipScheduler.js';
 import type { Theme } from 'src/utils/theme.js';
 import { resolveCriticalInputDialog } from './replFocusedInputDialog.js';
 import { isPromptTypingSuppressionActive } from './replInputSuppression.js';
 import { shouldRunStartupChecks } from './replStartupGates.js';
-import { decideStreamingTextUpdate } from './streamingTextPublish.js';
 import { checkAndDisableBypassPermissionsIfNeeded, checkAndDisableAutoModeIfNeeded, useKickOffCheckAndDisableBypassPermissionsIfNeeded, useKickOffCheckAndDisableAutoModeIfNeeded } from 'src/utils/permissions/bypassPermissionsKillswitch.js';
 import { SandboxManager } from 'src/utils/sandbox/sandbox-adapter.js';
 import { SANDBOX_NETWORK_ACCESS_TOOL_NAME } from 'src/cli/structuredIO.js';
@@ -280,7 +277,7 @@ import { useLspInitializationNotification } from 'src/hooks/notifs/useLspInitial
 import { useLspPluginRecommendation } from 'src/hooks/useLspPluginRecommendation.js';
 import { LspRecommendationMenu } from 'src/components/LspRecommendation/LspRecommendationMenu.js';
 import { useGakrCLICodeHintRecommendation } from 'src/hooks/useGakrCLICodeHintRecommendation.js';
-import { PluginHintMenu } from 'src/components/GakrCLICodeHint/PluginHintMenu.js';
+import { PluginHintMenu } from 'src/components/gakrcliCodeHint/PluginHintMenu.js';
 import { DesktopUpsellStartup, shouldShowDesktopUpsellStartup } from 'src/components/DesktopUpsell/DesktopUpsellStartup.js';
 import { usePluginInstallationStatus } from 'src/hooks/notifs/usePluginInstallationStatus.js';
 import { usePluginAutoupdateNotification } from 'src/hooks/notifs/usePluginAutoupdateNotification.js';
@@ -1935,7 +1932,7 @@ export function REPL({
   // Wrap feedback survey handler to trigger auto-run /issue
   const feedbackSurvey = useMemo(() => ({
     ...feedbackSurveyOriginal,
-    handleSelect: (selected: 'dismissed' | 'bad' | 'fine' | 'good') => {
+    handleSelect: (selected: FeedbackSurveyResponse) => {
       // Reset the ref when a new survey response comes in
       didAutoRunIssueRef.current = false;
       const showedTranscriptPrompt = feedbackSurveyOriginal.handleSelect(selected);
@@ -2295,7 +2292,7 @@ export function REPL({
   // Permission and interactive dialogs can show even when toolJSX is set,
   // as long as shouldContinueAnimation is true. This prevents deadlocks when
   // agents set background hints while waiting for user interaction.
-  function getFocusedInputDialog(): 'message-selector' | 'sandbox-permission' | 'tool-permission' | 'prompt' | 'worker-sandbox-permission' | 'elicitation' | 'cost' | 'idle-return' | 'init-onboarding' | 'ide-onboarding' | 'effort-callout' | 'remote-callout' | 'lsp-recommendation' | 'plugin-hint' | 'desktop-upsell' | 'ultraplan-choice' | 'ultraplan-launch' | 'resume-compact' | undefined {
+  function getFocusedInputDialog(): 'message-selector' | 'sandbox-permission' | 'tool-permission' | 'prompt' | 'worker-sandbox-permission' | 'elicitation' | 'cost' | 'idle-return' | 'init-onboarding' | 'ide-onboarding' | 'effort-callout' | 'remote-callout' | 'lsp-recommendation' | 'plugin-hint' | 'search-extra-tools-hint' | 'desktop-upsell' | 'ultraplan-choice' | 'ultraplan-launch' | 'resume-compact' | undefined {
     // Exit states always take precedence
     if (isExiting || exitFlow) return undefined;
 
@@ -4006,7 +4003,7 @@ export function REPL({
         });
       }
     } else {
-      injectUserMessageToTeammate(task.id, input, setAppState);
+      injectUserMessageToTeammate(task.id, input, undefined, setAppState);
     }
     setInputValue('');
     helpers.setCursorOffset(0);

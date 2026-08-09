@@ -42,7 +42,7 @@ async function getQuery(language: NonNullable<ReturnType<typeof getLanguageForFi
     if (!lang) return null
 
     const { Query } = await import('web-tree-sitter')
-    const query = new Query(lang, querySource) as TreeSitterQuery
+    const query = new Query(lang, querySource) as unknown as TreeSitterQuery
     queryCache.set(language, query)
     return query
   })()
