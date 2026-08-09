@@ -12,93 +12,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Code cleanup pass**: Reviewed the full working tree (197 files) for code reuse, quality, and efficiency. Fixed `collapseReadSearch` (removed per-render array copy), `taskSummary` (replaced `Record<string, unknown>` casts with a typed structural options type), and restored the `doctorDiagnostic.settingsPath.test.ts` contract to match the intentionally-stubbed implementation (7/7 tests pass).
 - **Type fixes**: Renamed `usegakrcliCodeHintRecommendation.tsx` → `useGakrCLICodeHintRecommendation.tsx` to fix the TS1261 case-mismatch error; full `tsc --noEmit` passes with zero errors.
 
-## [0.6.21] - 2026-08-03
+## [0.5.8] - 2026-07-14
 
 ### Fixed
-- **src/screens/REPL.tsx**: Removed a duplicate `reducedMotion` declaration introduced by the streaming-text block merge, which failed the bundle with `Identifier 'reducedMotion' has already been declared`.
-- **src/buddy/types.ts**: Added the missing `RARITY_COLORS` (gray → green → blue → violet → amber tier colors) and `RARITY_STARS` (1–5 star display) exports referenced by `CompanionCard.tsx`.
-- **src/buddy/companion.ts**: Added the missing `generateSeed` export (cryptographically random hex seed for hatching a companion) referenced by the `/buddy` command.
-
-## [0.6.20] - 2026-08-03
-
-### Added
-- **src/utils/toolResultStorage.ts**: Ported the reference preview subsystem — `PreviewMode`/`PreviewStrategy`/`PreviewResult` types, `formatOmissionMarker`, UTF-8-safe head/tail selection helpers (`safeHeadEnd`, `safeTailStart`, `decodedByteLength`, `fitHeadEnd`, `fitTailStart`, `chooseHeadEnd`, `chooseTailStart`, `invalidRetainedUtf8Metadata`, `getHeadTailTargets`, `generateHeadTailPreview`), and `generateFilePreview` (byte-bounded previews read directly from disk with head/tail split and omitted-byte marker).
-- **src/utils/mcpOutputStorage.ts**: Added `getLargeOutputPersistenceFailureInstructions` for when an oversized tool result cannot be saved to disk.
-- **src/utils/attachments.ts**: Added `isPathUnder` (path-boundary containment check), `ATTACHMENT_FILE_IO_CONCURRENCY`, dependency-injected `processAtMentionedFilesWithDependencies`/`getChangedFilesWithDependencies` with bounded concurrency, abort-signal support for `maybe`, and a `__test` export.
-- **Test files**: `Cursor.nfc.test.ts`, `attachments.nestedDirs.test.ts`, `attachments.performance.test.ts`, `attachments.ultrathink.test.ts`, `sessionStorage.liteTag.test.ts`, `stats.totalDays.test.ts`, `toolResultStorage.preview.test.ts`.
-
-### Changed
-- **src/utils/toolResultStorage.ts**: `generatePreview` now returns a head/tail preview with an exact omitted-byte marker within a strict UTF-8 byte budget (text mode) or a head-only fragment (JSON mode). `persistToolResult` reports `originalSize` in UTF-8 bytes and records the preview `strategy`. `buildLargeToolResultMessage` now labels persisted size in bytes, describes the preview strategy, and supports `truncated` output messaging. Analytics use byte-accurate sizing.
-- **src/utils/attachments.ts**: `processAtMentionedFiles`/`getChangedFiles` now schedule file work through `mapWithConcurrency` (bound at 8) and take injected dependencies, enabling deterministic testing. Image diffs route through `tryReadEditedImageAttachment` instead of the inline token-budget path.
-- **src/utils/mcpOutputStorage.ts**: `getLargeOutputInstructions` now reports the persisted size in UTF-8 bytes rather than characters.
-- **src/services/skillLearning/llmObserverBackend.ts**: `makeTimeoutSignal` uses the memory-safe `createCombinedAbortSignal` (setTimeout + cleanup) instead of `AbortSignal.timeout`, whose timers accumulate in native memory under Bun until they fire.
-
-### Fixed
-- **src/utils/Cursor.ts**: Cursor offset after inserting a combining mark that composes with the preceding character (e.g. "e" + U+0301 → "é") no longer lands one position past the following text — the offset is computed from the normalized prefix-plus-insert.
-- **src/utils/attachments.ts**: `getDirectoriesToProcess` no longer treats sibling directories that merely share a name prefix with the CWD (e.g. `/work/myapp-backend` when CWD is `/work/myapp`) as nested.
-- **src/services/skillLearning/llmObserverBackend.ts**: Corrected the `createCombinedAbortSignal` call to pass the opts object in the second argument position (`undefined, { timeoutMs }`), which previously threw `signal?.addEventListener is not a function` on every analyze.
-
-## [0.6.19] - 2026-08-01
-
-### Added
-- **src/buddy/CompanionActionFX.tsx**: Action effect rendering component for companion signature abilities. Uses canvas-based projectile/impact animations with species-specific effects (Robinhood's arrow, Kaio's energy blast, Strawhat's punch, Merlin's spell, Kage's shuriken, Ember's fireball, Corsair's cannonball).
-- **src/buddy/CompanionActionFX.test.tsx**: Tests for action effect rendering (3 tests: null state, token consumption, reduced motion).
-- **src/buddy/actionEffects.ts**: Core action effect system with phase timing (travel, draw, impact) and projectile rendering for each hero form. Includes row-based sprite rendering with color gradients.
-- **src/buddy/actionEffects.test.ts**: Comprehensive test suite for all 7 hero action effects (38 tests covering phases, row sums, finish states, narrow rendering, colors, projectile heads, and punch extension/retraction).
-- **src/buddy/deterministic.ts**: Deterministic random number generation using MurmurHash3 for reproducible companion rolls.
-- **src/buddy/pixelSprites.ts**: High-res pixel art sprite system (22x16 grid) with dual frame sets (idle/shoot) for heroes with truecolor support. Renders sprites as colored runs (text+fg+bg) for richer visuals on capable terminals.
-- **src/buddy/pixelSprites.test.ts**: Tests for pixel sprite rendering (4 tests: frame grid validation, column sum verification, frame clamping, color format).
-- **src/buddy/useShotClock.ts**: React hook for action effect timing. Tracks elapsed time during signature ability animation and consumes shot tokens to prevent replay.
-- **src/buddy/companion.test.ts**: Tests for companion species override and deterministic rolling (5 tests).
-- **src/buddy/sprites.test.ts**: Tests for sprite rendering (5 tests: frame width uniformity, robinhood cap stability, shoot sprite rendering, face mapping).
-- **src/buddy/types.test.ts**: Tests for species constants (2 tests: charCode encoding, pool uniqueness).
-
-### Changed
-- **src/buddy/CompanionSprite.tsx**: Major refactor with pixel art support, action effects integration, and animation improvements:
-  - React.memo optimization to prevent re-renders on REPL keystrokes
-  - `useAnimationFrame` replaces setInterval for smoother 500ms tick-based animation
-  - Pixel sprite rendering for truecolor-capable terminals (22x16 grid)
-  - Signature action effect rendering during shot sequences
-
-### Fixed
-- **src/buddy/feature.ts**: Simplified `isBuddyEnabled()` to always return `true` instead of checking build-time feature flag. This fixes CompanionSprite test timeout and ensures buddy features work consistently across all environments (116 tests passing).
-  - Sync-during-render for pet/bubble age (eliminates first-frame skip)
-  - Reduced motion support (freezes animation, skips effects)
-  - Column width calculation unified for pixel and line-art modes
-  - Bubble age tracking fixed (fresh bubbles start at age zero, not inheriting previous reaction age)
-- **src/buddy/companion.ts**: Enhanced with species override support, deterministic rolling with seed-based RNG, and rarity/stats/eye handling. Removed `inferLegacyCompanionBones` (legacy migration complete).
-- **src/buddy/companionReact.ts**: Updated imports to use `isBuddyEnabled()` from feature module.
-- **src/buddy/observer.ts**: Enhanced scroll detection and visibility tracking for companion interactions.
-- **src/buddy/prompt.ts**: Improved prompt generation with species-aware templates.
-- **src/buddy/sprites.ts**: Refactored sprite rendering system with separate `renderShootSprite()` for action poses, `shootFrameCount()` for animation frame counts, and `companionColor()` helper. Enhanced face rendering and sprite frame clamping.
-- **src/buddy/types.ts**: Added `ActionEffectPhase` type, `companionColor()` helper function, expanded species definitions with charCode-based encoding, and deterministic roll pool. Moved `RARITY_COLORS` export for shared use.
-- **src/buddy/useBuddyNotification.tsx**: Refactored notification logic with improved state management and reduced motion support.
+- **scripts/externals.ts**: Added `web-tree-sitter` and `tree-sitter-wasms` to COMMON_EXTERNALS (WASM runtime path resolution), and `graphology`, `graphology-metrics`, `js-tiktoken` to INTENTIONALLY_BUNDLED (build externals validation passes).
 
 ### Removed
-- **src/buddy/__tests__/companion.test.ts**: Removed outdated test file referencing non-existent `inferLegacyCompanionBones` function (replaced by newer test in main directory).
+- **Sponsored tips feature**: Removed `sponsoredTips.ts` stub and all references — `getSponsoredTipsFrequency`/`isSponsoredSlotEligible`/`recordSponsoredTipShown`/`getSessionsSinceLastSponsored` from tipScheduler, tipHistory, and tipRegistry; `sponsoredTipsHistory` field from config.ts.
 
-### Tests
-- **115 tests passing** across buddy directory
-- 1 test with intermittent timeout (CompanionSprite bubble age test - known timing issue, functionally correct)
-- Comprehensive coverage: action effects (38), pixel sprites (4), companion logic (5), sprites (5), types (2), action FX component (3)
+### Fixed
+- **vscode-extension/gakrcli-vscode**: Resolved 14 TypeScript compilation errors (TS 5.5 closure-narrowing, tagged union casts, permissionHandler type mismatches, missing `ShowElicitationMessage` type, generic handler cast incompatibilities); removed 3 duplicate command definitions in `package.json`; `gakrcli.focus` no longer broadcasts meaningless empty `at_mention_inserted` payload.
 
-### Known Issues
-- CompanionSprite.test.tsx: "bubble starts at age zero" test has intermittent 5s timeout on some test runs (reference implementation passes, functionality verified correct)
-
-## [0.6.18] - 2026-08-01
-
-### Added
-- **scripts/verify-clean-install.ts**: End-to-end verification script for zero-warning npm install experience. Supports `--tarball` mode (verifies local builds) and `--published` mode (verifies registry artifacts). Runs cold-install and upgrade-install scenarios in isolated prefixes with cold cache, checking for npm warnings, install scripts, and binary boot silence. Includes comprehensive retry logic for network failures and strict output whitelisting.
-- **scripts/verify-clean-install.test.ts**: Unit tests for `resolvePreviousPublishedVersion` retry/skip/infra decision logic with injected npm results (10 tests covering success, transient failures, E404 handling, and persistent infra failures).
-- **scripts/verify-no-phone-home.sh**: Build output verification script that scans dist/cli.mjs for banned patterns (Datadog, internal APIs, Kubernetes secrets, Anthropic internal endpoints). Ensures the build artifact doesn't contain phone-home or internal-only code paths.
-- **scripts/externalsValidation.ts**: Added `RUNTIME_DEPENDENCY_CONTRACT` constant (exact-pinned runtime dependencies: @orama/orama@3.1.18, @orama/plugin-data-persistence@3.1.18, @vscode/ripgrep@1.18.0), `ENGINES_NODE_CONTRACT` constant (>=22.0.0), `validateRuntimeDependencyContract()` function (enforces exact version pinning and contract compliance), `validateInstallHygieneFields()` function (prevents consumer-run install hooks, funding fields, and unintended engines.node changes), and `PkgInstallHygiene` type.
+### Fixed
+- **vscode-extension/gakrcli-vscode — Permission system fixes**: `elicitation_response` now routes through `PermissionHandler.handleAskUserQuestionResponse()` to wrap values in `{behavior, updatedInput}` — fixes `invalid_union` on AskUserQuestion. Removed native VS Code dialog fallback that caused double prompts. Mode changes (`set_permission_mode`) are forwarded to CLI so `hasPermissionsToUseTool` respects correct mode. `diffHandler` accepts `getPermissionMode` callback and auto-approves file edits in `acceptEdits` mode without interactive diff viewer. Webview permission response now includes user-entered reason text for denials, passed through to CLI as deny message.
 
 ### Changed
-- **scripts/externals.ts**: Added TODO comment for Bedrock/smithy typings removal once dynamic imports land. Added comment explaining vendor-specific AWS/OpenAI/Bedrock/Foundry packages are loaded on demand. Fixed duplicate `@aws-sdk/credential-providers` entry in `OPTIONAL_RUNTIME_EXTERNALS`.
-- **scripts/externalsValidation.ts**: Enhanced `validateRuntimeDependencyContract()` to also validate exact version format (prevents semver ranges from voiding the zero-warning contract). Refactored to move type definitions to top of file for better organization.
+- **vscode-extension/gakrcli-vscode — PermissionDialog redesigned to match CLI UX**: Risk level shown as small capsule badge (not full banner). Tool input parsed by type — Write shows File+Content, Bash shows Command+Description, Edit shows File+Replace+With. Four vertical options (Allow Once / Allow for Session / Enable Full Access / Deny) with optional reason text input for denial. Mode descriptions in ModeSelector expanded to clarify which tools each mode affects.
 
-### Tests
-- **verify-clean-install.test.ts**: 10 tests for previous published version resolution logic
-- **externalsValidation.test.ts**: All existing tests passing, plus 10 new tests for runtime dependency contract and install hygiene validation
-- **Total: 60 tests passing** across scripts directory
+### Fixed
+- **vscode-extension/gakrcli-vscode — PermissionRules now truly session-scoped**: Removed workspaceState persistence. Always-allow rules from previous sessions no longer silently carry over — each extension restart starts fresh, restoring the "ask before each tool use" contract of `default` mode.
+- **vscode-extension/gakrcli-vscode — Mode list synced to CLI exactly**: Replaced `dontAsk` (not a CLI mode) with `Full Access` (CLI mode). Mode descriptions now match CLI verbatim — "Standard behavior; prompts for dangerous operations" (Default), "Auto-accept file edit operations in the workspace" (Accept Edits), "Analysis only; tool execution is blocked" (Plan), "Skip normal permission prompts while preserving hard safety prompts" (Bypass), "Skip normal permission prompts and hard safety-check prompts" (Full Access).
+- **vscode-extension/gakrcli-vscode — PermissionDialog options now match CLI exactly**: Labels updated to CLI convention — "Allow Once" → "Yes", "Allow for This Session" → "Yes, allow all during this session", "Enable Full Access for Session" → "Yes, and enable Full Access for this session". "Deny" split into "No, provide reason" (inline input, shortcut R) and "No" (deny without reason, shortcut D), matching CLI's `reject+withReason` and `reject` options. Full Access option now triggers mode change to `bypassPermissions` via extension host.
+
+## [0.5.8] - 2026-07-13
+
+### Fixed
+- **src/hooks/toolPermission/handlers/interactiveHandler.ts**: Added missing `onExternalAbort` handler and closing braces for try/catch structure, fixing watchdog suspension tests (24/24 pass).
+- **src/utils/plugins/schemas.ts**: Added `isOfficialGitUrl()` for exact git URL host matching, preventing impersonation via substring matching (20/20 pass).
+- **src/integrations/runtimeMetadata.ts**: Added `.settings` field to `resolveModelRuntimeLimits()` precedence chain so settings `modelLimits` override env defaults (10/10 pass).
+- **src/tools/BashTool/bashSecurity.ts**: Added `isPermissiveSafety()` early return in `bashCommandIsSafe_DEPRECATED` and `bashCommandIsSafeAsync_DEPRECATED` for permissive mode support (6/6 pass).
+- **src/tools/PowerShellTool/commandSemantics.ts**: Replaced simplified stub with full reference implementation (wrapper command resolution, env utility, diagnostic semantics, package script resolving) (86/86 pass).
+- **src/tools/PowerShellTool/pathValidation.ts**: Changed `CMDLET_PATH_CONFIG` to use `Object.create(null)` to prevent prototype chain pollution from `constructor`/`__proto__` cmdlet names (6/6 pass).
+
+## [0.5.8] - 2026-07-08
+
+### Added
+- **scripts/build.ts**: Added `CCR_REMOTE_SETUP` feature flag for self-hosted RCS setup command.
+- **src/entrypoints/cli.tsx**: Added `SKILLS_LEADING_VALUE_FLAGS` set (18 flags including `--model`, `--provider`, `--session-id`, `--effort`) for proper skills CLI argument parsing.
+- **src/entrypoints/cli.tsx**: Added missing boolean flags (`--bare`, `--dangerously-skip-permissions`, `--disable-slash-commands`, `--fork-session`, `--init`, `--init-only`, `--maintenance`, `--mcp-debug`, `--no-session-persistence`, `--replay-user-messages`) to `SKILLS_LEADING_BOOLEAN_FLAGS`.
+- **.gitignore**: Added `remote-control-changes.md` to ignore list.
+
+### Fixed
+- **src/entrypoints/cli.tsx**: Moved skills CLI check before profile validation so `gakrcli skills` works even when provider config is broken.
+- **src/entrypoints/cli.tsx**: Fixed `getSkillsCliArgs()` — proper value flag skipping, `=` variant handling for multi-value flags with value extraction, correct optional value flag logic (set `sawPromptModeFlag` before index increment, check for `'skills'` before consuming value, added `=` variant handler).
+- **src/entrypoints/cli.tsx**: Wrapped `printStartupScreen()` in `if (args[0] !== 'skills')` guard so script-friendly skills output avoids the gradient banner.
+- **src/utils/messages.ts**: Added string content handling in `normalizeMessages()`, `stripCallerFieldFromAssistantMessage()`, and `normalizeMessagesForAPI()` to prevent `.map()` crash when `message.message.content` is a string.
+
+### Changed
+- **src/entrypoints/cli.tsx**: Moved `--model`, `-m` from `SKILLS_LEADING_BOOLEAN_FLAGS` to `SKILLS_LEADING_VALUE_FLAGS` (they take values, not booleans).
 
