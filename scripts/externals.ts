@@ -19,9 +19,17 @@ export const COMMON_EXTERNALS: string[] = [
   '@aws-sdk/client-bedrock',
   '@aws-sdk/client-bedrock-runtime',
   '@aws-sdk/client-sts',
+  '@aws-sdk/credential-provider-node',
   '@aws-sdk/credential-providers',
   '@azure/identity',
   'google-auth-library',
+  // AWS Smithy client runtime
+  '@smithy/core',
+  '@smithy/node-http-handler',
+  // OpenAI SDK (large provider client)
+  'openai',
+  // Firecrawl web-crawl client (large, dynamically imported)
+  '@mendable/firecrawl-js',
   // @vscode/ripgrep ships a platform-specific binary alongside its
   // index.js and resolves the path via __dirname at runtime. Bundling
   // would freeze the build host's absolute path into dist/cli.mjs, so we
@@ -57,11 +65,24 @@ export const COMMON_EXTERNALS: string[] = [
   '@opentelemetry/sdk-trace-base',
   '@opentelemetry/semantic-conventions',
   '@opentelemetry/exporter-trace-otlp-grpc',
+  '@opentelemetry/core',
+  '@opentelemetry/sdk-metrics',
+  '@opentelemetry/exporter-logs-otlp-grpc',
+  '@opentelemetry/exporter-logs-otlp-http',
+  '@opentelemetry/exporter-logs-otlp-proto',
+  '@opentelemetry/exporter-metrics-otlp-grpc',
+  '@opentelemetry/exporter-metrics-otlp-http',
+  '@opentelemetry/exporter-metrics-otlp-proto',
+  '@opentelemetry/exporter-prometheus',
+  '@opentelemetry/exporter-trace-otlp-http',
+  '@opentelemetry/exporter-trace-otlp-proto',
   // Markdown rendering
   'streamdown',
   'he',
   // Sentry telemetry
   '@sentry/node',
+  // Doubao speech recognition (native ASR client)
+  'doubaoime-asr',
 ]
 
 // Additional packages external only in the SDK bundle (TUI + heavy deps)
@@ -113,6 +134,7 @@ export const INTENTIONALLY_BUNDLED: string[] = [
   'figures',
   'get-east-asian-width',
   'indent-string',
+  'strip-ansi',
   'supports-hyperlinks',
   'wrap-ansi',
   // Data formats
@@ -163,6 +185,8 @@ export const INTENTIONALLY_BUNDLED: string[] = [
   '@grpc/proto-loader',
   // Language server protocol
   'vscode-languageserver-protocol',
+  'vscode-jsonrpc',
+  'vscode-languageserver-types',
   // File watching
   'chokidar',
   // Graph algorithms (repo map PageRank)

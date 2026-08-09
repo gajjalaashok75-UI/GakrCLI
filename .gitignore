@@ -5,7 +5,7 @@ bun.lockb
 package/
 cook/
 dist-d/
-.data-scout/
+.scout-it/
 COOK.md
 compiled/
 # Build outputs
