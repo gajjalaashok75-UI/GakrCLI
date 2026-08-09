@@ -9,12 +9,12 @@
 import { feature } from 'bun:bundle'
 import { useEffect } from 'react'
 import type { Tool, ToolUseContext } from '../Tool.js'
-import type { MessageType } from '../types/message.js'
+import type { Message } from '../types/message.js'
 
 type Deps = {
   store: { getState: () => any }
   tools: Tool<any, any>[]
-  setMessages: (action: React.SetStateAction<MessageType[]>) => void
+  setMessages: (action: React.SetStateAction<Message[]>) => void
   setToolUseConfirmQueue: (action: React.SetStateAction<any[]>) => void
   getToolUseContext: (...args: any[]) => ToolUseContext
   mainLoopModel: string
@@ -181,7 +181,7 @@ export function usePipePermissionForward({
         }
 
         if (message) {
-          setMessages((prev: MessageType[]) => [...prev, message])
+          setMessages((prev: Message[]) => [...prev, message])
         }
       },
     )

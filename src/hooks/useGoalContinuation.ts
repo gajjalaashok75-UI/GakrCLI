@@ -135,7 +135,7 @@ export function useGoalContinuation(opts: UseGoalContinuationOpts): void {
         mode: 'prompt',
         priority: 'now',
         isMeta: true,
-        origin: 'goal-budget-limit',
+        origin: { kind: 'goal-budget-limit' },
         skipSlashCommands: true,
       })
       return
@@ -175,7 +175,7 @@ export function useGoalContinuation(opts: UseGoalContinuationOpts): void {
       mode: 'prompt',
       priority: 'now',
       isMeta: true,
-      origin: 'goal-continuation',
+      origin: { kind: 'goal-continuation' },
       skipSlashCommands: true,
     })
     opts.onContinuationEnqueued?.({
