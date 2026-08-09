@@ -6,17 +6,22 @@ function assistantToolUse(id: string, input: Record<string, unknown>): Message {
   return {
     type: 'assistant',
     uuid: crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
     message: {
       role: 'assistant',
+      id: `msg_${id}`,
+      model: 'test-model',
+      usage: { input_tokens: 0, output_tokens: 0 },
       content: [{ type: 'tool_use' as const, id, name: 'artifact', input }],
     },
-  }
+  } as Message
 }
 
 function userToolResult(id: string, content: string, isError = false): Message {
   return {
     type: 'user',
     uuid: crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
     message: {
       role: 'user',
       content: [
@@ -39,6 +44,7 @@ describe('extractArtifacts', () => {
         {
           type: 'user',
           uuid: crypto.randomUUID(),
+          timestamp: new Date().toISOString(),
           message: {
             role: 'user',
             content: [{ type: 'text' as const, text: 'hi' }],
@@ -105,6 +111,7 @@ describe('extractArtifacts', () => {
       {
         type: 'user',
         uuid: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
         message: {
           role: 'user',
           content: [

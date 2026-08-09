@@ -19,6 +19,7 @@ async function runBenchmark(model?: string): Promise<string> {
     : getCachedOllamaModelOptions()
         .slice(0, 3)
         .map(m => m.value)
+        .filter((v): v is string => v !== null)
 
   const lines = [`Benchmarking ${modelsToBenchmark.length} model(s)...`]
 

@@ -19,7 +19,7 @@ const agentsPlatform: Command = {
   },
   isEnabled: () => true,
   bridgeSafe: false,
-  availability: ['claude-ai'],
+  availability: ['gakrcli-ai'],
   load: async () => {
     const m = await import('./launchAgentsPlatform.js')
     return { call: m.callAgentsPlatform }

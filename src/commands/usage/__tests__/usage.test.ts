@@ -8,6 +8,7 @@
  */
 
 import { mock, describe, test, expect } from 'bun:test'
+import type { Command } from '../../../commands.js'
 
 // Must mock before importing anything that pulls in bootstrap/state
 import { logMock } from '../../../../tests/mocks/log.js'
@@ -39,7 +40,7 @@ mock.module('src/utils/config.ts', () => ({
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-async function loadUsageCommand() {
+async function loadUsageCommand(): Promise<Command> {
   const mod = await import('../index.js')
   return mod.default
 }
@@ -100,7 +101,7 @@ describe('usage command — metadata', () => {
 describe('usage command — cost index is no longer standalone', () => {
   test('cost/index default name is "usage" (delegated) OR it has aliases', async () => {
     const mod = await import('../../cost/index.js')
-    const cmd = mod.default
+    const cmd = mod.default as Command
     // After the fix: cost/index either exports name='usage' with aliases,
     // or the cost command has aliases set (it's been demoted to alias)
     const isUnifiedOrAliased =
@@ -112,7 +113,7 @@ describe('usage command — cost index is no longer standalone', () => {
 describe('usage command — stats index is no longer standalone', () => {
   test('stats/index default name is "usage" (delegated) OR it has aliases', async () => {
     const mod = await import('../../stats/index.js')
-    const cmd = mod.default
+    const cmd = mod.default as Command
     const isUnifiedOrAliased =
       cmd.name === 'usage' || (cmd.aliases?.includes('stats') ?? false)
     expect(isUnifiedOrAliased).toBe(true)

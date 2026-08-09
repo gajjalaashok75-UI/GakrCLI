@@ -309,7 +309,6 @@ export type {
   ResumeEntrypoint,
 } from './types/command.js'
 export { getCommandName, isCommandEnabled } from './types/command.js'
-export type { Command } from './types/command.js'
 
 // Commands that get eliminated from the external build
 export const INTERNAL_ONLY_COMMANDS = [

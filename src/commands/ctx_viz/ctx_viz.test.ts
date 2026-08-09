@@ -170,7 +170,7 @@ describe('/ctx command surface (PR #1610)', () => {
     const out = mod.renderCtxReport({
       contextData: {
         categories: [
-          { name: 'System prompt', tokens: 7_800, color: 'claude' },
+          { name: 'System prompt', tokens: 7_800, color: 'gakrcli' },
           { name: 'System tools', tokens: 15_500, color: 'promptBorder' },
           { name: 'Memory files', tokens: 956, color: 'inactive' },
           { name: 'Messages', tokens: 84, color: 'permission' },

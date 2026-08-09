@@ -136,8 +136,8 @@ export function buildGithubOnboardingSettingsEnv(
 
 export function applyGithubOnboardingProcessEnv(
   model: string,
-  env: NodeJS.ProcessEnv = process.env,
   gheUrl?: string,
+  env: NodeJS.ProcessEnv = process.env,
 ): void {
   env.GAKR_CODE_USE_GITHUB = '1'
   env.OPENAI_MODEL = model
@@ -241,6 +241,7 @@ function OnboardGithub(props: {
   const [copilotKey, setCopilotKey] = useState(
     process.env.GITHUB_COPILOT_KEY?.trim() || '',
   )
+  const [cursorOffset, setCursorOffset] = useState(0)
 
   const finalize = useCallback(
     async (
@@ -404,7 +405,10 @@ function OnboardGithub(props: {
               setStep('menu')
             }
           }}
-          width={Math.min(termsWidth - 4, 60)}
+          columns={Math.max(20, termsWidth - 6)}
+          cursorOffset={cursorOffset}
+          onChangeCursorOffset={setCursorOffset}
+          focus
         />
         <Text dimColor>
           Enter your GitHub Enterprise Server URL to use Copilot with a
@@ -425,7 +429,10 @@ function OnboardGithub(props: {
           onSubmit={() => {
             void runDeviceFlow()
           }}
-          width={Math.min(termsWidth - 4, 60)}
+          columns={Math.max(20, termsWidth - 6)}
+          cursorOffset={cursorOffset}
+          onChangeCursorOffset={setCursorOffset}
+          focus
         />
         <Text dimColor>
           Paste your GitHub Copilot API Key. This is an alternative to the

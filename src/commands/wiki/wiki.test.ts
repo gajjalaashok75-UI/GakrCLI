@@ -30,8 +30,8 @@ async function makeProjectDir(): Promise<string> {
 
 async function runWiki(cwd: string, args = ''): Promise<string> {
   let output = ''
-  await call((message: string) => {
-    output = message
+  await call((message?: string) => {
+    output = message ?? ''
   }, { cwd } as never, args)
   return output
 }

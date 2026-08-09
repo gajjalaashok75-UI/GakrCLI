@@ -66,7 +66,7 @@ describe('onboarding auth precedence cleanup', () => {
       GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED_ID: 'profile_old',
     }
 
-    applyGithubOnboardingProcessEnv('github:copilot', env)
+    applyGithubOnboardingProcessEnv('github:copilot', undefined, env)
 
     expect(env.GAKR_CODE_USE_GITHUB).toBe('1')
     expect(env.OPENAI_MODEL).toBe('github:copilot')

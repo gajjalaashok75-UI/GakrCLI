@@ -1472,7 +1472,7 @@ export function ManagePlugins({
                   enabledPlugins: {
                     ...settings.enabledPlugins,
                     [pluginId_7]: undefined
-                  }
+                  } as Record<string, boolean | string[]>
                 });
                 success = true;
               }
