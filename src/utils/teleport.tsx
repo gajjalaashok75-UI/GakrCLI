@@ -772,6 +772,12 @@ export async function teleportToRemote(options: {
    */
   onBundleFail?: (message: string) => void;
   /**
+   * Called with a user-facing message when session creation itself fails
+   * (after bundling succeeded). In-REPL callers capture it to include in
+   * their error reporting.
+   */
+  onCreateFail?: (message: string) => void;
+  /**
    * When true, disables the git-bundle fallback entirely. Use for flows like
    * autofix where CCR must push to GitHub — a bundle can't do that.
    */
@@ -792,6 +798,13 @@ export async function teleportToRemote(options: {
     repo: string;
     number: number;
   };
+  /**
+   * Identifies which command/flow originated this teleport. CCR backend
+   * uses this for routing/observability. Known values: 'autofix_pr',
+   * 'ultrareview', 'ultraplan'. Pass-through field — not interpreted
+   * client-side; if backend doesn't recognize it, it's silently ignored.
+   */
+  source?: string;
 }): Promise<TeleportToRemoteResponse | null> {
   const {
     initialMessage,
@@ -1197,7 +1210,7 @@ export async function teleportToRemote(options: {
  * success. Fire-and-forget; failure leaks a visible session until the
  * reaper collects it.
  */
-export async function archiveRemoteSession(sessionId: string): Promise<void> {
+export async function archiveRemoteSession(sessionId: string, timeout = 10_000): Promise<void> {
   const accessToken = getGakrCLIAIOAuthTokens()?.accessToken;
   if (!accessToken) return;
   const orgUUID = await getOrganizationUUID();
@@ -1211,7 +1224,7 @@ export async function archiveRemoteSession(sessionId: string): Promise<void> {
   try {
     const resp = await axios.post(url, {}, {
       headers,
-      timeout: 10000,
+      timeout,
       validateStatus: s => s < 500
     });
     if (resp.status === 200 || resp.status === 409) {

@@ -22,6 +22,7 @@ import { countCharInString } from './stringUtils.js'
 import { count, uniq } from './array.js'
 import { getFsImplementation } from './fsOperations.js'
 import { readdir, stat } from 'fs/promises'
+import type { ToolDiscoveryResult } from '../services/searchExtraTools/prefetch.js'
 import type { IDESelection } from '../hooks/useIdeSelection.js'
 import { TODO_WRITE_TOOL_NAME } from '../tools/TodoWriteTool/constants.js'
 import { TASK_CREATE_TOOL_NAME } from '../tools/TaskCreateTool/constants.js'
@@ -219,14 +220,11 @@ import {
   tokenCountWithEstimation,
 } from './tokens.js'
 import {
+  getAutoCompactThreshold,
   getEffectiveContextWindowSize,
   isAutoCompactEnabled,
 } from '../services/compact/autoCompact.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
-import {
-  getAutoCompactThreshold,
-  getEffectiveContextWindowSize,
-} from '../services/compact/autoCompact.js'
 import {
   hasInstructionsLoadedHook,
   executeInstructionsLoadedHooks,
@@ -562,9 +560,33 @@ export type Attachment =
     }
   | {
       type: 'skill_discovery'
-      skills: { name: string; description: string; shortId?: string }[]
+      skills: {
+        name: string
+        description: string
+        shortId?: string
+        score?: number
+        autoLoaded?: boolean
+        content?: string
+        path?: string
+      }[]
       signal: DiscoverySignal
       source: 'native' | 'aki' | 'both'
+      gap?: {
+        key: string
+        status: 'pending' | 'draft' | 'active'
+        draftName?: string
+        draftPath?: string
+        activeName?: string
+        activePath?: string
+      }
+    }
+  | {
+      type: 'tool_discovery'
+      tools: ToolDiscoveryResult[]
+      trigger: 'assistant_turn' | 'user_input'
+      queryText: string
+      durationMs: number
+      indexSize: number
     }
   | {
       type: 'queued_command'
@@ -831,13 +853,15 @@ export async function getAttachments(
         skillSearchModules &&
         !options?.skipSkillDiscovery
           ? [
-              maybe('skill_discovery', () =>
-                skillSearchModules.prefetch.getTurnZeroSkillDiscovery(
-                  input,
-                  messages ?? [],
-                  context,
-                ),
-              ),
+              maybe('skill_discovery', async () => {
+                const result =
+                  await skillSearchModules.prefetch.getTurnZeroSkillDiscovery(
+                    input,
+                    messages ?? [],
+                    context,
+                  )
+                return result ? [result] : []
+              }),
             ]
           : []),
       ]
@@ -965,7 +989,12 @@ export async function getAttachments(
     ...(feature('HISTORY_SNIP')
       ? [
           maybe('context_efficiency', () =>
-            Promise.resolve(getContextEfficiencyAttachment(messages ?? [])),
+            Promise.resolve(
+              getContextEfficiencyAttachment(
+                messages ?? [],
+                toolUseContext.options.mainLoopModel,
+              ),
+            ),
           ),
         ]
       : []),

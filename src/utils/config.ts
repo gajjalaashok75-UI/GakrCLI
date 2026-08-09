@@ -263,6 +263,8 @@ export type GlobalConfig = {
   // but an org-configured connector that's been needs-auth since day one is
   // something the user has demonstrably ignored and shouldn't nag about.
   gakrcliAiMcpEverConnected?: string[]
+  // Opt in to context-collapse (GAKR_CONTEXT_COLLAPSE=1 env also works).
+  contextCollapseEnabled?: boolean
   preferredNotifChannel: NotificationChannel
   /**
    * @deprecated. Use the Notification hook instead (docs/hooks.md).
@@ -274,6 +276,12 @@ export type GlobalConfig = {
     rejected?: string[]
   }
   primaryApiKey?: string // Primary API key for the user when no environment variable is set, set via oauth (TODO: rename)
+  /**
+   * Workspace API key saved via /login UI (sk-ant-api03-*).
+   * Stored in plaintext — file should be gitignored and chmod 600.
+   * ANTHROPIC_API_KEY env var takes precedence when both are present.
+   */
+  workspaceApiKey?: string
   hasAcknowledgedCostThreshold?: boolean
   hasSeenUndercoverAutoNotice?: boolean // internal-only: whether the one-time auto-undercover explainer has been shown
   hasSeenUltraplanTerms?: boolean // internal-only: whether the one-time CCR terms notice has been shown in the ultraplan launch dialog
@@ -391,6 +399,9 @@ export type GlobalConfig = {
   >
   overageCreditUpsellSeenCount?: number // Number of times the overage credit upsell has been shown
   hasVisitedExtraUsage?: boolean // Whether the user has visited /extra-usage — hides credit upsells
+
+  // Display language preference
+  preferredLanguage?: 'auto' | 'en' | 'zh' // auto = follow system locale, en = English, zh = 中文
 
   // Voice mode notice tracking
   voiceNoticeSeenCount?: number // Number of times the voice-mode-available notice has been shown

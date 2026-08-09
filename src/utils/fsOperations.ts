@@ -2,6 +2,7 @@ import * as fs from 'fs'
 import {
   cp as cpPromise,
   mkdir as mkdirPromise,
+  mkdtemp as mkdtempPromise,
   open,
   readdir as readdirPromise,
   readFile as readFilePromise,
@@ -10,6 +11,7 @@ import {
   rm as rmPromise,
   stat as statPromise,
   unlink as unlinkPromise,
+  writeFile as writeFilePromise,
 } from 'fs/promises'
 import { homedir } from 'os'
 import * as nodePath from 'path'
@@ -42,15 +44,28 @@ export type FsOperations = {
   ): Promise<void>
   /** Creates directory recursively asynchronously. */
   mkdir(path: string, options?: { mode?: number }): Promise<void>
+  /** Creates a unique temporary directory asynchronously. */
+  mkdtemp(prefix: string): Promise<string>
   /** Reads file content as string asynchronously */
   readFile(path: string, options: { encoding: BufferEncoding }): Promise<string>
+  /** Writes file content asynchronously */
+  writeFile(
+    path: string,
+    data: string | Buffer,
+    options?: { encoding?: BufferEncoding },
+  ): Promise<void>
   /** Renames/moves file asynchronously */
   rename(oldPath: string, newPath: string): Promise<void>
   /** Copies a file or directory tree asynchronously */
   cp(
     source: string,
     destination: string,
-    options?: { recursive?: boolean },
+    options?: {
+      recursive?: boolean
+      errorOnExist?: boolean
+      force?: boolean
+      preserveTimestamps?: boolean
+    },
   ): Promise<void>
   /** Gets file stats */
   statSync(path: string): fs.Stats
@@ -445,8 +460,16 @@ export const NodeFsOperations: FsOperations = {
     }
   },
 
+  async mkdtemp(prefix) {
+    return mkdtempPromise(prefix)
+  },
+
   async readFile(fsPath, options) {
     return readFilePromise(fsPath, { encoding: options.encoding })
+  },
+
+  async writeFile(fsPath, data, options) {
+    await writeFilePromise(fsPath, data, options)
   },
 
   async rename(oldPath, newPath) {

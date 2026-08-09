@@ -140,6 +140,7 @@ describe('loadPluginFromMarketplaceEntryCacheOnly', () => {
           name: 'telegram',
           version: '1.0.0',
           source: './channel-plugins/telegram',
+          strict: true,
         },
         'telegram@test-market',
         true,

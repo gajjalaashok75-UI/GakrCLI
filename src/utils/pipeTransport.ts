@@ -19,6 +19,7 @@ import { EventEmitter } from 'events'
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs'
 import type { PermissionDecision } from '../types/permissions.js'
 import type { PermissionUpdate } from './permissions/PermissionUpdateSchema.js'
+import type { DeepImmutable } from '../types/utils.js'
 import { getGakrCLIConfigHomeDir } from './envUtils.js'
 import { logError } from './log.js'
 import { attachNdjsonFramer } from './ndjsonFramer.js'
@@ -679,11 +680,11 @@ const DEFAULT_PIPE_IPC: PipeIpcState = {
   discoveredPipes: [],
 }
 
-export function isPipeControlled(pipeIpc: PipeIpcState): boolean {
+export function isPipeControlled(pipeIpc: DeepImmutable<PipeIpcState>): boolean {
   return Boolean(pipeIpc.attachedBy)
 }
 
-export function getPipeDisplayRole(pipeIpc: PipeIpcState): string {
+export function getPipeDisplayRole(pipeIpc: DeepImmutable<PipeIpcState>): string {
   if (pipeIpc.role === 'master') {
     return 'master'
   }

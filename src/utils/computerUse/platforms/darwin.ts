@@ -113,8 +113,11 @@ const display: DisplayPlatform = {
 const apps: AppsPlatform = {
   listRunning(): WindowHandle[] {
     const swift = requireComputerUseSwift()
-    const running = swift.apps.listRunning()
-    return running.map((app: any) => ({
+    const running = swift.apps.listRunning() as unknown as Array<{
+      bundleId: string
+      displayName: string
+    }>
+    return running.map(app => ({
       id: app.bundleId ?? '',
       pid: 0, // macOS listRunning doesn't expose PID through this API
       title: app.displayName ?? '',
@@ -140,7 +143,7 @@ const apps: AppsPlatform = {
     const api = requireComputerUseInput()
     const info = api.getFrontmostAppInfo()
     if (!info) return null
-    return { id: info.bundleId, appName: info.appName }
+    return { id: info.bundleId ?? '', appName: info.appName }
   },
 
   findWindowByTitle(_title): WindowHandle | null {

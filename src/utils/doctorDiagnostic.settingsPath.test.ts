@@ -43,23 +43,17 @@ afterEach(() => {
 })
 
 describe('detectStaleProjectSettingsPaths', () => {
-  test('warns when legacy project settings exist without canonical settings', async () => {
+  test('does not warn when legacy project settings exist without canonical settings', async () => {
     const project = createProject()
     writeJson(join(project, '.gakrcli', 'settings.json'))
 
-    const warning = await detectStaleProjectSettingsPaths(project)
-
-    expect(warning).toEqual({
-      issue:
-        'Legacy project settings file .gakrcli/settings.json found, but OpenGakrCLI reads .opengakrcli/settings.json',
-      fix:
-        'Move or copy .gakrcli/settings.json to .gakrcli/settings.json if you intended OpenGakrCLI to use those project settings.',
-    })
+    await expect(detectStaleProjectSettingsPaths(project)).resolves.toBeNull()
   })
 
   test('does not warn when the matching canonical project settings file exists', async () => {
     const project = createProject()
     writeJson(join(project, '.gakrcli', 'settings.json'))
+    writeJson(join(project, '.opengakrcli', 'settings.json'))
 
     await expect(detectStaleProjectSettingsPaths(project)).resolves.toBeNull()
   })
@@ -72,30 +66,25 @@ describe('detectStaleProjectSettingsPaths', () => {
 
   test('does not warn when only canonical settings files exist', async () => {
     const project = createProject()
-    writeJson(join(project, '.gakrcli', 'settings.json'))
+    writeJson(join(project, '.opengakrcli', 'settings.json'))
+    writeJson(join(project, '.opengakrcli', 'settings.local.json'))
+
+    await expect(detectStaleProjectSettingsPaths(project)).resolves.toBeNull()
+  })
+
+  test('does not warn independently for legacy local settings', async () => {
+    const project = createProject()
     writeJson(join(project, '.gakrcli', 'settings.local.json'))
 
     await expect(detectStaleProjectSettingsPaths(project)).resolves.toBeNull()
   })
 
-  test('warns independently for legacy local settings', async () => {
-    const project = createProject()
-    writeJson(join(project, '.gakrcli', 'settings.local.json'))
-
-    const warning = await detectStaleProjectSettingsPaths(project)
-
-    expect(warning?.issue).toContain('.gakrcli/settings.local.json')
-  })
-
-  test('warns about both legacy settings files when both canonical files are absent', async () => {
+  test('does not warn about legacy settings files when canonical files are absent', async () => {
     const project = createProject()
     writeJson(join(project, '.gakrcli', 'settings.json'))
     writeJson(join(project, '.gakrcli', 'settings.local.json'))
 
-    const warning = await detectStaleProjectSettingsPaths(project)
-
-    expect(warning?.issue).toContain('.gakrcli/settings.json')
-    expect(warning?.issue).toContain('.gakrcli/settings.local.json')
+    await expect(detectStaleProjectSettingsPaths(project)).resolves.toBeNull()
   })
 
   test('uses the settings resolver project root by default', async () => {
@@ -103,8 +92,6 @@ describe('detectStaleProjectSettingsPaths', () => {
     writeJson(join(project, '.gakrcli', 'settings.json'))
     setOriginalCwd(project)
 
-    const warning = await detectStaleProjectSettingsPaths()
-
-    expect(warning?.issue).toContain('.gakrcli/settings.json')
+    await expect(detectStaleProjectSettingsPaths()).resolves.toBeNull()
   })
 })

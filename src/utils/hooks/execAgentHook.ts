@@ -13,6 +13,8 @@ import type {
   Message,
   RequestStartEvent,
   StreamEvent,
+  TombstoneMessage,
+  ToolUseSummaryMessage,
 } from '../../types/message.js'
 import { createAbortController } from '../abortController.js'
 import { createAttachmentMessage } from '../attachments.js'
@@ -35,7 +37,14 @@ import {
 } from './hookHelpers.js'
 import { clearSessionHooks } from './sessionHooks.js'
 
-type QueryMessage = Message | StreamEvent | RequestStartEvent
+// Mirrors the query() stream union so hook messages (which can include
+// tombstones and tool-use summaries) typecheck when passed to the guard.
+type QueryMessage =
+  | Message
+  | StreamEvent
+  | RequestStartEvent
+  | TombstoneMessage
+  | ToolUseSummaryMessage
 
 type StructuredOutputAttachment = {
   type: 'structured_output'

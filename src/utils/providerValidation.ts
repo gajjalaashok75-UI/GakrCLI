@@ -61,7 +61,7 @@ const GITHUB_PAT_PREFIXES = ['ghp_', 'gho_', 'ghs_', 'ghr_', 'github_pat_']
 
 function checkGithubTokenStatus(
   token: string,
-  endpointType: 'copilot' | 'models' | 'custom' = 'copilot',
+  endpointType: 'copilot' | 'models' | 'ghe' | 'custom' = 'copilot',
 ): GithubTokenStatus {
   // PATs work with GitHub Models but not with Copilot API
   if (GITHUB_PAT_PREFIXES.some(prefix => token.startsWith(prefix))) {

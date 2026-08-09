@@ -142,7 +142,10 @@ export function createStreamlinedTransformer(): (
           .message
         const content = messageContent?.content
         const text = Array.isArray(content)
-          ? extractTextContent(content, '\n').trim()
+          ? extractTextContent(
+              content as readonly { readonly type: string }[],
+              '\n',
+            ).trim()
           : ''
 
         // Accumulate tool counts from this message

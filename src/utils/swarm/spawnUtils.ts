@@ -97,7 +97,7 @@ export function buildInheritedCliArgParts(options?: {
     flags.push('--no-chrome')
   }
 
-  return flags.join(' ')
+  return flags
 }
 
 /**

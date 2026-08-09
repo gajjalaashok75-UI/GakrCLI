@@ -58,7 +58,34 @@ export function startLLMRequestSpan(): Span {
 	return noopSpan
 }
 
-export function endLLMRequestSpan() {}
+export type LLMRequestEndOptions = {
+	success: boolean
+	statusCode?: number
+	error?: string
+	attempt: number
+	inputTokens?: number
+	outputTokens?: number
+	cacheReadTokens?: number
+	cacheCreationTokens?: number
+	modelResponse?: string
+	/** Text output from the model (non-thinking content) */
+	modelOutput?: string
+	/** Thinking/reasoning output from the model */
+	thinkingOutput?: string
+	/** Whether the output included tool calls (look at tool spans for details) */
+	hasToolCall?: boolean
+	/** Time to first token in milliseconds */
+	ttftMs?: number
+	/** Time spent in pre-request setup before the successful attempt */
+	requestSetupMs?: number
+	/** Timestamps (Date.now()) of each attempt start — used to emit retry sub-spans */
+	attemptStartTimes?: number[]
+}
+
+export function endLLMRequestSpan(
+	_span?: Span,
+	_options?: LLMRequestEndOptions,
+) {}
 
 export function startToolSpan(): Span {
 	return noopSpan

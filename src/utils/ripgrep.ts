@@ -90,6 +90,37 @@ export function resolveRipgrepConfig({
   return { mode: 'system', command: 'rg', args: [] }
 }
 
+/**
+ * Pure resolution helper used by tests and tooling: picks the builtin binary
+ * when it exists, otherwise falls back to the system `rg`, and always
+ * annotates the outcome. Returns mode='builtin' with a note when neither is
+ * available so the caller can surface an install hint.
+ */
+export function resolveBuiltinWithFallback(
+  builtinCommand: string | null,
+  systemExecutablePath: string | null = 'rg',
+  platform: string = process.platform,
+): { mode: 'builtin' | 'system'; command: string; note?: string } {
+  if (builtinCommand && existsSync(builtinCommand)) {
+    return { mode: 'builtin', command: builtinCommand }
+  }
+
+  if (systemExecutablePath && systemExecutablePath !== 'rg') {
+    // SECURITY: Use command name 'rg' instead of systemExecutablePath to prevent PATH hijacking
+    return {
+      mode: 'system',
+      command: 'rg',
+      note: `Bundled ripgrep missing; falling back to system rg for ${platform}`,
+    }
+  }
+
+  return {
+    mode: 'builtin',
+    command: builtinCommand ?? 'rg',
+    note: `No ripgrep available for ${platform}`,
+  }
+}
+
 const getRipgrepConfig = memoize((): RipgrepConfig => {
   const userWantsSystemRipgrep = isEnvDefinedFalsy(
     process.env.USE_BUILTIN_RIPGREP,

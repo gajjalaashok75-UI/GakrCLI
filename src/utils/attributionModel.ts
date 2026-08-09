@@ -110,7 +110,7 @@ function resolveProviderModel(anthropicModel: string): string {
       return resolveOpenAIModel(anthropicModel)
     case 'gemini':
       return resolveGeminiModel(anthropicModel)
-    case 'grok':
+    case 'xai':
       return resolveGrokModel(anthropicModel)
     default:
       return anthropicModel

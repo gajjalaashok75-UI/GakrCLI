@@ -30,6 +30,7 @@ import type { PermissionMode } from '../../types/permissions.js'
 import {
   isValidImagePaste,
   type PromptInputMode,
+  type QueuedCommand,
 } from '../../types/textInputTypes.js'
 import {
   type AgentMentionAttachment,
@@ -81,6 +82,9 @@ export type ProcessUserInputBaseResult = {
   // Used by /discover to chain into the selected feature's command
   nextInput?: string
   submitNextInput?: boolean
+  // When true, the caller defers the autonomy command's finalize step
+  // (used when the turn result already consumed the autonomy run).
+  deferAutonomyCompletion?: boolean
 }
 
 export async function processUserInput({
@@ -140,6 +144,7 @@ export async function processUserInput({
    */
   isMeta?: boolean
   skipAttachments?: boolean
+  autonomy?: QueuedCommand['autonomy']
 }): Promise<ProcessUserInputBaseResult> {
   const inputString = typeof input === 'string' ? input : null
   // Immediately show the user input prompt while we are still processing the input.

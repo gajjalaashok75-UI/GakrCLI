@@ -719,3 +719,43 @@ export async function loadConversationForResume(
     throw error
   }
 }
+
+function parsePrIdentifier(value: string): number | null {
+  const directNumber = parseInt(value, 10)
+  if (!isNaN(directNumber) && directNumber > 0) {
+    return directNumber
+  }
+  const urlMatch = value.match(/github\.com\/[^/]+\/[^/]+\/pull\/(\d+)/)
+  if (urlMatch?.[1]) {
+    return parseInt(urlMatch[1], 10)
+  }
+  return null
+}
+
+export function findResumeLogByPrSelector(
+  logs: LogOption[],
+  selector: true | number | string,
+): LogOption | null {
+  const candidates = logs.filter(log => !log.isSidechain)
+  if (selector === true) {
+    return candidates.find(log => log.prNumber !== undefined) ?? null
+  }
+  if (typeof selector === 'number') {
+    return candidates.find(log => log.prNumber === selector) ?? null
+  }
+
+  const prNumber = parsePrIdentifier(selector)
+  if (prNumber !== null) {
+    return candidates.find(log => log.prNumber === prNumber) ?? null
+  }
+
+  return null
+}
+
+export async function findResumeSessionIdByPrSelector(
+  selector: true | string,
+): Promise<UUID | null> {
+  const log = findResumeLogByPrSelector(await loadMessageLogs(), selector)
+  if (!log) return null
+  return getSessionIdFromLog(log) ?? null
+}

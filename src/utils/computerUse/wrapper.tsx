@@ -146,7 +146,7 @@ export function buildSessionContext(): ComputerUseSessionContext {
     onResolvedDisplayUpdated: id =>
       tuc().setAppState(prev => {
         const cu = prev.computerUseMcpState;
-        if (cu?.selectedDisplayId === id && !cu.displayPinnedByModel && cu.displayResolvedForApps === undefined) {
+        if (cu?.selectedDisplayId === id && !cu?.displayPinnedByModel && cu?.displayResolvedForApps === undefined) {
           return prev;
         }
         return {
