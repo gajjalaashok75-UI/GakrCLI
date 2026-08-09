@@ -1,6 +1,28 @@
 import * as React from 'react';
 import { Box, Text } from '../../ink.js';
 import { env } from '../../utils/env.js';
+import { getGlobalConfig } from '../../utils/config.js';
+import {
+  resolveLogoPalette,
+  rgbToInkColor,
+  type LogoPalette,
+} from '../StartupScreen.palettes.js';
+
+/**
+ * Row colors for the mascot, sampled top→bottom from the /logo palette
+ * gradient — the same flow the startup splash uses. The socket (eye/body
+ * background) uses the palette's dark `border` color instead of fixed black.
+ */
+function mascotColors(): { head: string; body: string; feet: string; socket: string } {
+  const palette: LogoPalette = resolveLogoPalette(getGlobalConfig().logoColor);
+  const { gradient, border } = palette;
+  return {
+    head: rgbToInkColor(gradient[0]),
+    body: rgbToInkColor(gradient[2] ?? gradient[0]),
+    feet: rgbToInkColor(gradient[gradient.length - 1]),
+    socket: rgbToInkColor(border),
+  };
+}
 
 export type ClawdPose =
   | 'default'
@@ -79,23 +101,24 @@ export function Clawd({ pose = 'default' }: Props = {}): React.ReactNode {
     return <AppleTerminalClawd pose={pose} />;
   }
   const p = POSES[pose];
+  const colors = mascotColors();
   return (
     <Box flexDirection="column">
       <Text>
-        <Text color="clawd_body">{p.r1L}</Text>
-        <Text color="clawd_body" backgroundColor="clawd_background">
+        <Text color={colors.head}>{p.r1L}</Text>
+        <Text color={colors.head} backgroundColor={colors.socket}>
           {p.r1E}
         </Text>
-        <Text color="clawd_body">{p.r1R}</Text>
+        <Text color={colors.head}>{p.r1R}</Text>
       </Text>
       <Text>
-        <Text color="clawd_body">{p.r2L}</Text>
-        <Text color="clawd_body" backgroundColor="clawd_background">
+        <Text color={colors.body}>{p.r2L}</Text>
+        <Text color={colors.body} backgroundColor={colors.socket}>
           █████
         </Text>
-        <Text color="clawd_body">{p.r2R}</Text>
+        <Text color={colors.body}>{p.r2R}</Text>
       </Text>
-      <Text color="clawd_body">
+      <Text color={colors.feet}>
         {'  '}▘▘ ▝▝{'  '}
       </Text>
     </Box>
@@ -106,17 +129,18 @@ function AppleTerminalClawd({ pose }: { pose: ClawdPose }): React.ReactNode {
   // Apple's Terminal renders vertical space between chars by default.
   // It does NOT render vertical space between background colors
   // so we use background color to draw the main shape.
+  const colors = mascotColors();
   return (
     <Box flexDirection="column" alignItems="center">
       <Text>
-        <Text color="clawd_body">▗</Text>
-        <Text color="clawd_background" backgroundColor="clawd_body">
+        <Text color={colors.head}>▗</Text>
+        <Text color={colors.socket} backgroundColor={colors.head}>
           {APPLE_EYES[pose]}
         </Text>
-        <Text color="clawd_body">▖</Text>
+        <Text color={colors.head}>▖</Text>
       </Text>
-      <Text backgroundColor="clawd_body">{' '.repeat(7)}</Text>
-      <Text color="clawd_body">▘▘ ▝▝</Text>
+      <Text backgroundColor={colors.body}>{' '.repeat(7)}</Text>
+      <Text color={colors.feet}>▘▘ ▝▝</Text>
     </Box>
   );
 }
