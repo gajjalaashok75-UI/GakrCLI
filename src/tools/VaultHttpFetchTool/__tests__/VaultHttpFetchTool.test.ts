@@ -8,7 +8,7 @@ import {
   mock,
   test,
 } from 'bun:test'
-import { setupAxiosMock } from '../../../../../../tests/mocks/axios'
+import { setupAxiosMock } from '../../../../tests/mocks/axios'
 
 // After this suite finishes, switch our getSecret override off so localVault's
 // own store.test.ts (running in the same process) sees the real impl. Also
@@ -77,7 +77,7 @@ mock.module('src/services/localVault/store.js', () => ({
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-import { mockToolContext } from '../../../../../../tests/mocks/toolContext.js'
+import { mockToolContext } from '../../../../tests/mocks/toolContext.js'
 function mockContext() {
   return mockToolContext()
 }

@@ -63,3 +63,6 @@ export function createWorkflowToolCore(): Tool {
   if (!cached) cached = buildWorkflowTool()
   return cached
 }
+
+// Exported singleton: PermissionRequest matches tool-use requests by reference.
+export const WorkflowTool = createWorkflowToolCore()

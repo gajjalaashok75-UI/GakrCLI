@@ -49,6 +49,23 @@ const inputSchema = lazySchema(() =>
       .array(z.string())
       .optional()
       .describe('Never include search results from these domains'),
+    num_results: z
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .optional()
+      .describe('Number of search results to return'),
+    search_type: z
+      .string()
+      .optional()
+      .describe('Search type to use with the adapter'),
+    context_max_characters: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe('Maximum number of characters for the search context'),
   }),
 )
 type InputSchema = ReturnType<typeof inputSchema>
@@ -707,7 +724,12 @@ export const WebSearchTool = buildTool({
           blockedDomains: input.blocked_domains,
           numResults: input.num_results,
           signal: context.abortController.signal,
-          searchType: input.search_type,
+          searchType:
+            input.search_type === 'auto' ||
+            input.search_type === 'fast' ||
+            input.search_type === 'deep'
+              ? input.search_type
+              : undefined,
           contextMaxCharacters: input.context_max_characters,
         })
         const endTime = performance.now()

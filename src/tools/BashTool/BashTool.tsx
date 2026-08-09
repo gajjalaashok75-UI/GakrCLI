@@ -605,7 +605,8 @@ export const BashTool = buildTool({
         originalSize: persistedOutputSize ?? 0,
         isJson: false,
         preview: preview.preview,
-        hasMore: preview.hasMore
+        hasMore: preview.hasMore,
+        strategy: preview.strategy
       });
     }
     let errorMessage = normalizedStderr.trim();

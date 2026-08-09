@@ -107,7 +107,7 @@ export class ApiSearchAdapter implements WebSearchAdapter {
       }
 
       if (event.type === 'stream_event') {
-        const streamEvt = event as {
+        const streamEvt = event as unknown as {
           event?: {
             type: string
             content_block?: {
