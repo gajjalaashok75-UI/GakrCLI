@@ -9,8 +9,8 @@
  */
 
 // Provide MACRO globals needed by the codebase when running outside dev mode
-if (!globalThis.MACRO) {
-  globalThis.MACRO = { VERSION: '0.0.0-test', BUILD_TIME: '0' } as any
+if (!(globalThis as any).MACRO) {
+  ;(globalThis as any).MACRO = { VERSION: '0.0.0-test', BUILD_TIME: '0' }
 }
 
 import { BingSearchAdapter, extractBingResults } from '../adapters/bingAdapter'

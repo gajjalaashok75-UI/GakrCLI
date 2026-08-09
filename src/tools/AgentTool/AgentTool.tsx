@@ -215,6 +215,14 @@ type TeammateSpawnedOutput = {
   plan_mode_required?: boolean;
 };
 
+// Private output type for remote-launched agents (ant-only), excluded from the
+// public schema. Narrow via the 'remote_launched' status discriminant.
+export type RemoteLaunchedOutput = {
+  status: 'remote_launched';
+  taskId: string;
+  sessionUrl: string;
+};
+
 // Combined output type including both public and internal types
 // Note: TeammateSpawnedOutput type is fine - TypeScript types are erased at compile time
 type InternalOutput = Output | TeammateSpawnedOutput;
@@ -503,6 +511,7 @@ export const AgentTool = buildTool({
     const resolvedAgentModel = getAgentModel(selectedAgent.model, toolUseContext.options.mainLoopModel, isForkPath ? undefined : model, permissionMode);
     const { mainLoopModel: effectiveAgentModel } = resolveAgentRunModelRouting({
       resolvedAgentModel,
+      parentModel: toolUseContext.options.mainLoopModel,
       toolSpecifiedModel: isForkPath ? undefined : model,
       agentName: name,
       subagentType: selectedAgent.agentType,

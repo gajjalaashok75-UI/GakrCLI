@@ -21,6 +21,7 @@ import {
   validatePath,
 } from '../../utils/permissions/pathValidation.js'
 import type { BashTool } from './BashTool.js'
+import type { BashCommandAnalysis } from './bashCommandAnalysis.js'
 import { stripSafeWrappers } from './bashPermissions.js'
 import { sedCommandIsAllowedByAllowlist } from './sedValidation.js'
 
@@ -1017,6 +1018,7 @@ export function checkPathConstraints(
   compoundCommandHasCd?: boolean,
   astRedirects?: Redirect[],
   astCommands?: SimpleCommand[],
+  analysis?: BashCommandAnalysis,
 ): PermissionResult {
   // SECURITY: Process substitution >(cmd) can execute commands that write to files
   // without those files appearing as redirect targets. For example:
@@ -1033,6 +1035,22 @@ export function checkPathConstraints(
       decisionReason: {
         type: 'other',
         reason: 'Process substitution requires manual approval',
+      },
+    }
+  }
+
+  if (
+    !astRedirects &&
+    analysis?.command === input.command &&
+    analysis.legacyParse.kind === 'failed'
+  ) {
+    return {
+      behavior: 'ask',
+      message:
+        'Command paths could not be parsed safely and require manual approval',
+      decisionReason: {
+        type: 'other',
+        reason: 'Command paths could not be parsed safely',
       },
     }
   }

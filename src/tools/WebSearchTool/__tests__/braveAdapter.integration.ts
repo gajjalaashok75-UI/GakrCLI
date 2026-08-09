@@ -9,8 +9,8 @@
  *   BRAVE_API_KEY — fallback key env var
  */
 
-if (!globalThis.MACRO) {
-  globalThis.MACRO = { VERSION: '0.0.0-test', BUILD_TIME: '0' } as any
+if (!(globalThis as any).MACRO) {
+  ;(globalThis as any).MACRO = { VERSION: '0.0.0-test', BUILD_TIME: '0' }
 }
 
 import { BraveSearchAdapter } from '../adapters/braveAdapter'

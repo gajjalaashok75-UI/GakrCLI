@@ -62,7 +62,7 @@ describe('community DuckDuckGo search adapter', () => {
       new Response(html, {
         status: 200,
         headers: { 'content-type': 'text/html' },
-      })) as typeof fetch
+      })) as unknown as typeof fetch
 
     const result = await runCommunityTextSearch({
       query: 'OpenAI official website',
@@ -92,7 +92,7 @@ describe('community DuckDuckGo search adapter', () => {
       ],
     })
     globalThis.fetch = (async () =>
-      new Response('', { status: 500 })) as typeof fetch
+      new Response('', { status: 500 })) as unknown as typeof fetch
 
     const result = await runCommunityImageSearch({
       query: 'OpenAI logo',
@@ -127,7 +127,7 @@ describe('community DuckDuckGo search adapter', () => {
       ],
     })
     globalThis.fetch = (async () =>
-      new Response('', { status: 500 })) as typeof fetch
+      new Response('', { status: 500 })) as unknown as typeof fetch
 
     const result = await runCommunityVideoSearch({
       query: 'node js tutorial',

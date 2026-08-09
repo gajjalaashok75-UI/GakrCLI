@@ -114,10 +114,16 @@ describe('MCPTool.validateInput', () => {
     }
     const tool = { ...MCPTool, inputJSONSchema: schema }
 
-    const valid = await tool.validateInput!(['tab', 1], {} as never)
+    const valid = await tool.validateInput!(
+      ['tab', 1] as unknown as Record<string, unknown>,
+      {} as never,
+    )
     expect(valid.result).toBe(true)
 
-    const invalid = await tool.validateInput!(['tab', 1, 'extra'], {} as never)
+    const invalid = await tool.validateInput!(
+      ['tab', 1, 'extra'] as unknown as Record<string, unknown>,
+      {} as never,
+    )
     expect(invalid.result).toBe(false)
     expect(invalid.result === false && invalid.errorCode).toBe(400)
   })

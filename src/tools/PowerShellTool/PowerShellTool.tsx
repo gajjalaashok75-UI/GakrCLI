@@ -1,6 +1,8 @@
 import { feature } from 'bun:bundle';
 import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs';
-import { copyFile, stat as fsStat, truncate as fsTruncate, link } from 'fs/promises';
+import { copyFile, stat as fsStat, truncate as fsTruncate, unlink, link } from 'fs/promises';
+import { createReadStream, createWriteStream } from 'fs';
+import { pipeline } from 'stream/promises';
 import * as React from 'react';
 import type { CanUseToolFn } from 'src/hooks/useCanUseTool.js';
 import type { AppState } from 'src/state/AppState.js';
@@ -33,7 +35,7 @@ import { EndTruncatingAccumulator } from '../../utils/stringUtils.js';
 import { getTaskOutputPath } from '../../utils/task/diskOutput.js';
 import { TaskOutput } from '../../utils/task/TaskOutput.js';
 import { isOutputLineTruncated } from '../../utils/terminal.js';
-import { buildLargeToolResultMessage, ensureToolResultsDir, generatePreview, getToolResultPath, PREVIEW_SIZE_BYTES } from '../../utils/toolResultStorage.js';
+import { buildLargeToolResultMessage, ensureToolResultsDir, generateFilePreview, generatePreview, getToolResultPath, PREVIEW_SIZE_BYTES, type PreviewStrategy } from '../../utils/toolResultStorage.js';
 import { shouldUseSandbox } from '../BashTool/shouldUseSandbox.js';
 import { BackgroundHint } from '../BashTool/UI.js';
 import { buildImageToolResult, isImageOutput, resetCwdIfOutsideProject, resizeShellImageOutput, stdErrAppendShellResetMessage, stripEmptyLines } from '../BashTool/utils.js';
@@ -47,6 +49,96 @@ import { renderToolResultMessage, renderToolUseErrorMessage, renderToolUseMessag
 
 // Never use os.EOL for terminal output — \r\n on Windows breaks Ink rendering
 const EOL = '\n';
+export const MAX_PERSISTED_POWERSHELL_OUTPUT_SIZE = 64 * 1024 * 1024;
+
+/**
+ * Copy a rolled-output file into the tool-results dir for model access.
+ * Leaves the source intact (roll file keeps full output); the copy is
+ * truncated at maxSize bytes when the source exceeds it.
+ */
+export async function persistPowerShellOutputFile(
+  sourcePath: string,
+  taskId: string,
+  maxSize: number = MAX_PERSISTED_POWERSHELL_OUTPUT_SIZE,
+  command: string = '',
+): Promise<{
+  path: string
+  size: number
+  truncated: boolean
+  preview?: string
+  previewStrategy?: PreviewStrategy
+} | null> {
+  try {
+    const fileStat = await fsStat(sourcePath)
+    const size = fileStat.size
+    await ensureToolResultsDir()
+    const dest = getToolResultPath(taskId, false)
+    const truncated = size > maxSize
+    if (truncated) {
+      try {
+        await pipeline(
+          createReadStream(sourcePath, { start: 0, end: maxSize - 1 }),
+          createWriteStream(dest),
+        )
+      } catch (e) {
+        await unlink(dest).catch(() => {})
+        throw e
+      }
+    } else {
+      try {
+        await link(sourcePath, dest)
+      } catch {
+        await copyFile(sourcePath, dest)
+      }
+    }
+    const previewSourcePath = truncated ? sourcePath : dest
+    const previewResult = await generateFilePreview(
+      previewSourcePath,
+      PREVIEW_SIZE_BYTES,
+    ).catch(error => {
+      logError(error instanceof Error ? error : new Error(getErrorMessage(error)))
+      return undefined
+    })
+    return {
+      path: dest,
+      size,
+      truncated,
+      preview: previewResult?.preview,
+      previewStrategy: previewResult?.strategy,
+    }
+  } catch {
+    return null
+  }
+}
+
+export function appendPersistedPowerShellOutputHint(
+  stdout: string,
+  persistedPath: string,
+  persistedSize: number,
+  truncated: boolean,
+  preview?: string,
+  previewStrategy?: PreviewStrategy,
+): string {
+  const capDetail = previewStrategy === 'head-tail'
+    ? 'capped; preview may include tail bytes not saved at that path'
+    : 'capped, tail not saved'
+  const hint = truncated
+    ? `[output truncated above — first ${MAX_PERSISTED_POWERSHELL_OUTPUT_SIZE} bytes of the ${persistedSize}-byte output saved to ${persistedPath} (${capDetail}); read with the Read tool]`
+    : `[output truncated above — full output (${persistedSize} bytes) saved to ${persistedPath}; read with the Read tool]`
+  const previewStrategyLabel = previewStrategy === 'head-tail'
+    ? 'head and tail'
+    : previewStrategy === 'complete'
+      ? 'complete'
+      : 'head-only partial'
+  const previewBlock = preview
+    ? `Persisted output preview (UTF-8-safe ${previewStrategyLabel}, ${PREVIEW_SIZE_BYTES}-byte budget):\n${preview}`
+    : ''
+  const capturedFallback = preview
+    ? ''
+    : stdout.endsWith('\n') ? stdout.slice(0, -1) : stdout
+  const parts = [capturedFallback, previewBlock, hint].filter(Boolean)
+  return parts.join('\n\n')
+}
 
 /**
  * PowerShell search commands (grep equivalents) for collapsible display.
@@ -417,7 +509,8 @@ export const PowerShellTool = buildTool({
         originalSize: persistedOutputSize ?? 0,
         isJson: false,
         preview: preview.preview,
-        hasMore: preview.hasMore
+        hasMore: preview.hasMore,
+        strategy: preview.strategy
       });
     } else if (normalizedStdout) {
       processedStdout = normalizedStdout.replace(/^(\s*\n)+/, '');

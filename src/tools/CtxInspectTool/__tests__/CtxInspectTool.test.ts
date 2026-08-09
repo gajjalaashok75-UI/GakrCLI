@@ -111,21 +111,25 @@ describe.skip('CtxInspectTool', () => {
   test('formats tool results for transcript rendering', () => {
     const block = CtxInspectTool.mapToolResultToToolResultBlockParam(
       {
-        total_tokens: 192,
-        message_count: 3,
-        context_window_model: 'claude-sonnet-4-6',
-        prompt_caching_enabled: true,
-        session_memory_enabled: true,
-        context_collapse_enabled: false,
-        summary: 'Context collapse: disabled',
+        committedSpans: 2,
+        collapsedMessages: 3,
+        stagedSpans: 1,
+        armed: true,
+        health: {
+          totalSpawns: 10,
+          totalErrors: 0,
+          totalEmptySpawns: 0,
+          lastError: null,
+          emptySpawnWarningEmitted: false,
+        },
       },
       'tool-use-id',
     )
 
     expect(block.tool_use_id).toBe('tool-use-id')
-    expect(block.content).toContain('192 tokens')
-    expect(block.content).toContain('3 messages')
-    expect(block.content).toContain('Context collapse: disabled')
+    expect(block.content).toContain('"collapsedMessages": 3')
+    expect(block.content).toContain('"committedSpans": 2')
+    expect(block.content).toContain('"armed": true')
   })
 
   test('returns live context counts and mechanism state', async () => {
