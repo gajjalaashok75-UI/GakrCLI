@@ -31,7 +31,7 @@ export function useGakrCLICodeHintRecommendation() {
     recommendation,
     clearRecommendation,
     tryResolve
-  } = usePluginRecommendationBase();
+  } = usePluginRecommendationBase<PluginHintRecommendation>();
   let t0;
   let t1;
   if ($[0] !== pendingHint || $[1] !== tryResolve) {
