@@ -26,7 +26,7 @@ import type {
   BetaToolUseBlock,
   BetaUsage,
 } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
-import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
+import type { ContentBlock, ContentBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
 import type { UUID } from 'crypto'
 import type { Progress } from '../Tool.js'
 import type { Attachment } from '../utils/attachments.js'
@@ -46,12 +46,26 @@ export type SystemMessageLevel =
   | 'suggestion'
   | 'debug'
 
+/** A single content element inside message.content arrays. */
+export type ContentItem = ContentBlockParam | ContentBlock
+
+export type MessageContent = string | ContentBlockParam[] | ContentBlock[]
+
+/**
+ * Typed content array — used in narrowed message subtypes so that
+ * `message.content[0]` resolves to `ContentItem` instead of
+ * `string | ContentBlockParam | ContentBlock`.
+ */
+export type TypedMessageContent = ContentItem[]
+
 /** Provenance of a user message. undefined = human (keyboard). */
 export type MessageOrigin =
   | { kind: 'human' }
   | { kind: 'coordinator' }
   | { kind: 'task-notification' }
   | { kind: 'channel'; server: string }
+  | { kind: 'goal-continuation' }
+  | { kind: 'goal-budget-limit' }
 
 /** Direction for partial /compact: summarize up to or from a pivot message. */
 export type PartialCompactDirection = 'up_to' | 'from'
@@ -329,6 +343,13 @@ export interface SystemSnipBoundaryMessage extends SystemMessageBase {
   }
 }
 
+export interface SystemCacheWarningMessage extends SystemMessageBase {
+  subtype: 'cache_warning'
+  level: 'warning'
+  content: string
+  isMeta: boolean
+}
+
 export type SystemMessage =
   | SystemInformationalMessage
   | SystemPermissionRetryMessage
@@ -347,6 +368,7 @@ export type SystemMessage =
   | SystemFileSnapshotMessage
   | SystemThinkingMessage
   | SystemSnipBoundaryMessage
+  | SystemCacheWarningMessage
 
 // ---------------------------------------------------------------------------
 // The Message union

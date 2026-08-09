@@ -617,7 +617,7 @@ export async function killHandler(
   console.log(`Killed background session ${killed.id}.`)
 }
 
-export async function handleBgFlag(args: string[]): Promise<void> {
+export async function handleBgStart(args: string[]): Promise<void> {
   const parsed = parseBackgroundInvocation(args)
   if (!parsed.prompt && !hasResumeSource(parsed.childArgs)) {
     fail('Usage: gakrcli --bg [--name <name>] "<prompt>"')

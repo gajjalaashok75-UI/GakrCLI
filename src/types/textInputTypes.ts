@@ -344,6 +344,13 @@ export type QueuedCommand = {
    */
   origin?: MessageOrigin
   /**
+   * When true, the queued prompt is eligible to be re-queued as an
+   * interruption correction (the user's next prompt pre-empts the current
+   * turn and the current turn's reply is deferred). Defaults to true for
+   * normal local user prompts.
+   */
+  allowInterruptionCorrection?: boolean
+  /**
    * Workload tag threaded through to cc_workload= in the billing-header
    * attribution block. The queue is the async boundary between the cron
    * scheduler firing and the turn actually running — a user prompt can slip

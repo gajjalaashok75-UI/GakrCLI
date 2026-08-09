@@ -482,7 +482,7 @@ export async function main(
       } = await importers.startupProfiler();
       profileCheckpoint('cli_bg_path');
       const bg = await importers.bg();
-      await bg.handleBgFlag(args);
+      await bg.handleBgStart(args);
       return;
     }
   }

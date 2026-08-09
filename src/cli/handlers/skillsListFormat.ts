@@ -1,7 +1,13 @@
 import { getCommandName, type Command } from '../../types/command.js'
 import { getDisplayPath } from '../../utils/file.js'
 
-export type SkillListCommand = Command & { type: 'prompt' }
+export type SkillListCommand = Command & {
+  type: 'prompt'
+  /** Skill trust level from SKILL.md frontmatter (`trust` field). */
+  skillTrust?: string
+  /** Absolute path to the skill's SKILL.md file. */
+  skillFilePath?: string
+}
 
 export function sourceLabel(skill: SkillListCommand): string {
   if (!skill.source) return '-'

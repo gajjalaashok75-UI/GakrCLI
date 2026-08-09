@@ -2347,6 +2347,23 @@ export type SDKMessage = ({
   input: Record<string, unknown>
   uuid: string
   session_id: string
+}) | ({
+  type: "task_state"
+  message: Record<string, unknown> & { role: "user", content: string | Array<unknown> }
+  parent_tool_use_id: string | null
+  uuid: string
+  session_id: string
+  task_list_id: string
+  tasks: {
+    id: string
+    subject: string
+    description?: string
+    activeForm?: string
+    status: string
+    owner?: string
+    blocks?: string[]
+    blockedBy?: string[]
+  }[]
 })
 
 /** Fast mode state: off, in cooldown after rate limit, or actively enabled. */

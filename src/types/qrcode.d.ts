@@ -16,10 +16,11 @@ declare module 'qrcode' {
   export function toString(
     text: string,
     options?: {
-      type?: 'terminal' | 'svg' | 'utf-8'
+      type?: 'terminal' | 'svg' | 'utf8'
       errorCorrectionLevel?: 'L' | 'M' | 'Q' | 'H'
       margin?: number
       scale?: number
+      small?: boolean
     }
   ): Promise<string>
 

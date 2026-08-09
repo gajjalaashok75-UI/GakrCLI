@@ -2,7 +2,7 @@ import { logForDebugging } from 'src/utils/debug.js'
 import { type DOMElement, markDirty } from './dom.js'
 import type { Frame } from './frame.js'
 import { consumeAbsoluteRemovedFlag } from './node-cache.js'
-import Output from './output.js'
+import Output, { type HighWriteRatioReason } from './output.js'
 import renderNodeToOutput, {
   getScrollDrainNode,
   getScrollHint,
@@ -134,7 +134,11 @@ export default function createRenderer(
           : prevScreen,
     })
 
-    const renderedScreen = output.get()
+    const highWriteRatioReason = classifyHighWriteRatioReason(
+      options,
+      absoluteRemoved,
+    )
+    const renderedScreen = output.get({ highWriteRatioReason })
 
     // Drain continuation: render cleared scrollbox.dirty, so next frame's
     // root blit would skip the subtree. markDirty walks ancestors so the
@@ -175,4 +179,41 @@ export default function createRenderer(
       },
     }
   }
+}
+
+export function classifyHighWriteRatioReason(
+  options: RenderOptions,
+  absoluteRemoved: boolean,
+): HighWriteRatioReason {
+  const expectedViewportHeight = options.altScreen
+    ? options.terminalRows + 1
+    : options.terminalRows
+
+  if (
+    options.frontFrame.viewport.width !== options.terminalWidth ||
+    options.frontFrame.viewport.height !== expectedViewportHeight
+  ) {
+    return 'resize'
+  }
+
+  if (
+    options.prevFrameContaminated &&
+    options.frontFrame.screen.width === 0 &&
+    options.frontFrame.screen.height === 0
+  ) {
+    return 'debug-full-redraw'
+  }
+
+  if (options.prevFrameContaminated || absoluteRemoved) {
+    return 'remount'
+  }
+
+  if (
+    options.frontFrame.screen.width === 0 &&
+    options.frontFrame.screen.height === 0
+  ) {
+    return 'first-render'
+  }
+
+  return 'unknown'
 }
