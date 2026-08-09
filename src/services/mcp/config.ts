@@ -1279,7 +1279,7 @@ export async function getAllMcpConfigs(): Promise<{
   // Keys never collide (`slack` vs `gakrcli.ai Slack`) so the merge below
   // won't catch this — need content-based dedup by URL signature.
   const { servers: dedupedGakrCLIAi } = dedupGakrCLIAiMcpServers(
-    gakrcliaiMcpServers,
+    gakrcliaiMcpServers as Record<string, ScopedMcpServerConfig>,
     gakrcliCodeServers,
   )
 

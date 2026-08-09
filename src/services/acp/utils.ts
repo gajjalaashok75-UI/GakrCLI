@@ -3,7 +3,7 @@
  * Ported from gakrcli-agent-acp-main/src/utils.ts and acp-agent.ts helpers.
  */
 import { Writable } from 'node:stream'
-import type { PermissionMode } from '../../entrypoints/sdk/coreTypes.generated.js'
+import type { PermissionMode } from '../../types/permissions.js'
 
 // ── Pushable ──────────────────────────────────────────────────────
 

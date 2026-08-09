@@ -441,7 +441,7 @@ const externalTips: Tip[] = [
   {
     id: 'desktop-shortcut',
     content: async ctx => {
-      const blue = color('suggestion', ctx.theme)
+      const blue = color('suggestion', ctx?.theme ?? 'dark')
       return `Continue your session with ${blue('/desktop')}`
     },
     cooldownSessions: 15,
@@ -479,7 +479,7 @@ const externalTips: Tip[] = [
   {
     id: 'frontend-design-plugin',
     content: async ctx => {
-      const blue = color('suggestion', ctx.theme)
+      const blue = color('suggestion', ctx?.theme ?? 'dark')
       return `Working with HTML/CSS? Install the frontend-design plugin:\n${blue(`/plugin install frontend-design@${OFFICIAL_MARKETPLACE_NAME}`)}`
     },
     cooldownSessions: 3,
@@ -491,7 +491,7 @@ const externalTips: Tip[] = [
   {
     id: 'vercel-plugin',
     content: async ctx => {
-      const blue = color('suggestion', ctx.theme)
+      const blue = color('suggestion', ctx?.theme ?? 'dark')
       return `Working with Vercel? Install the vercel plugin:\n${blue(`/plugin install vercel@${OFFICIAL_MARKETPLACE_NAME}`)}`
     },
     cooldownSessions: 3,
@@ -504,7 +504,7 @@ const externalTips: Tip[] = [
   {
     id: 'effort-high-nudge',
     content: async ctx => {
-      const blue = color('suggestion', ctx.theme)
+      const blue = color('suggestion', ctx?.theme ?? 'dark')
       const cmd = blue('/effort high')
       const variant = getFeatureValue_CACHED_MAY_BE_STALE<
         'off' | 'copy_a' | 'copy_b'
@@ -534,7 +534,7 @@ const externalTips: Tip[] = [
   {
     id: 'subagent-fanout-nudge',
     content: async ctx => {
-      const blue = color('suggestion', ctx.theme)
+      const blue = color('suggestion', ctx?.theme ?? 'dark')
       const variant = getFeatureValue_CACHED_MAY_BE_STALE<
         'off' | 'copy_a' | 'copy_b'
       >('tengu_tern_alloy', 'off')
@@ -556,7 +556,7 @@ const externalTips: Tip[] = [
   {
     id: 'loop-command-nudge',
     content: async ctx => {
-      const blue = color('suggestion', ctx.theme)
+      const blue = color('suggestion', ctx?.theme ?? 'dark')
       const variant = getFeatureValue_CACHED_MAY_BE_STALE<
         'off' | 'copy_a' | 'copy_b'
       >('tengu_timber_lark', 'off')
@@ -579,7 +579,7 @@ const externalTips: Tip[] = [
   {
     id: 'guest-passes',
     content: async ctx => {
-      const gakrcli = color('gakrcli', ctx.theme)
+      const gakrcli = color('gakrcli', ctx?.theme ?? 'dark')
       const reward = getCachedReferrerReward()
       return reward
         ? `Share GakrCLI and earn ${gakrcli(formatCreditAmount(reward))} of extra usage · ${gakrcli('/passes')}`
@@ -598,7 +598,7 @@ const externalTips: Tip[] = [
   {
     id: 'overage-credit',
     content: async ctx => {
-      const gakrcli = color('gakrcli', ctx.theme)
+      const gakrcli = color('gakrcli', ctx?.theme ?? 'dark')
       const info = getCachedOverageCreditGrant()
       const amount = info ? formatGrantAmount(info) : null
       if (!amount) return ''
@@ -648,7 +648,9 @@ export async function getRelevantTips(context?: TipContext): Promise<Tip[]> {
   // The scheduler enforces the sponsored frequency cap; this just returns
   // everything currently eligible.
   const tips = [...externalTips, ...internalOnlyTips]
-  const isRelevant = await Promise.all(tips.map(_ => _.isRelevant(context)))
+  const isRelevant = await Promise.all(
+    tips.map(_ => _.isRelevant?.(context) ?? Promise.resolve(true)),
+  )
   const filtered = tips
     .filter((_, index) => isRelevant[index])
     .filter(_ => getSessionsSinceLastShown(_.id) >= _.cooldownSessions)

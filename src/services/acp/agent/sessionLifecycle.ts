@@ -132,11 +132,12 @@ async function getOrCreateSession(
     }
   }
 
+  const responseWithModels = response as NewSessionResponse & { models: SessionModelState }
   return {
     sessionId: response.sessionId,
     modes: response.modes,
     // createSession already returns models; pass it through. Same reason as above.
-    models: response.models,
+    models: responseWithModels.models,
     configOptions: response.configOptions,
   } as NewSessionResponse & { models: SessionModelState }
 }

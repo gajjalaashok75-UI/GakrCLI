@@ -4,10 +4,10 @@ import React from 'react';
 import { wrappedRender as render } from '../../../ink.js';
 import { SentryErrorBoundary } from '../../../components/SentryErrorBoundary.js';
 import type { RunProgress } from '../progress/store.js';
-import { call as panelCall } from '../../commands/workflows/panelCall.js';
-import { clampSelected, isRunTerminatedTransition, WorkflowsPanel } from '../../commands/workflows/WorkflowsPanel.js';
-import { truncateLabel } from '../../commands/workflows/AgentList.js';
-import { STATUS_DOT } from '../../commands/workflows/status.js';
+import { call as panelCall } from '../../../commands/workflows/panelCall.js';
+import { clampSelected, isRunTerminatedTransition, WorkflowsPanel } from '../../../commands/workflows/WorkflowsPanel.js';
+import { truncateLabel } from '../../../commands/workflows/AgentList.js';
+import { STATUS_DOT } from '../../../commands/workflows/status.js';
 import { __resetWorkflowServiceForTests, getWorkflowService } from '../service.js';
 
 // Pure function: clamp selection to valid range (same source as clampSelected inside the panel).

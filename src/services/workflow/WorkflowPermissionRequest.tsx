@@ -4,7 +4,6 @@ import { getTheme, type Theme } from 'src/utils/theme.js';
 import { env } from 'src/utils/env.js';
 import { shouldShowAlwaysAllowOptions } from 'src/utils/permissions/permissionsLoader.js';
 import { logUnaryEvent } from 'src/utils/unaryLogging.js';
-import { PermissionDialog } from 'src/components/permissions/PermissionDialog.js';
 import { PermissionPrompt, type PermissionPromptOption } from 'src/components/permissions/PermissionPrompt.js';
 import type { PermissionRequestProps } from 'src/components/permissions/PermissionRequest.js';
 import { PermissionRuleExplanation } from 'src/components/permissions/PermissionRuleExplanation.js';
@@ -129,17 +128,27 @@ export function WorkflowPermissionRequest({
   }, [toolUseConfirm, onDone, onReject]);
 
   return (
-    <PermissionDialog title="Workflow" workerBadge={workerBadge}>
-      <Box flexDirection="column" gap={1}>
-        <Box flexDirection="column">
-          <Text bold color={theme.permission as keyof Theme}>
-            Execute workflow: {input.workflow}
-          </Text>
-          {input.args && <Text dimColor>Arguments: {input.args}</Text>}
+    <PermissionPrompt<OptionValue>
+      toolUseConfirm={toolUseConfirm}
+      workerBadge={workerBadge}
+      title="Workflow"
+      header={
+        <Box flexDirection="column" gap={1}>
+          <Box flexDirection="column">
+            <Text bold color={theme.permission as keyof Theme}>
+              Execute workflow: {input.workflow}
+            </Text>
+            {input.args && <Text dimColor>Arguments: {input.args}</Text>}
+          </Box>
+          <PermissionRuleExplanation
+            permissionResult={toolUseConfirm.permissionResult}
+            toolType="command"
+          />
         </Box>
-        <PermissionRuleExplanation permissionResult={toolUseConfirm.permissionResult} toolType="command" />
-        <PermissionPrompt<OptionValue> options={options} onSelect={handleSelect} onCancel={handleCancel} />
-      </Box>
-    </PermissionDialog>
+      }
+      options={options}
+      onSelect={handleSelect}
+      onCancel={handleCancel}
+    />
   );
 }

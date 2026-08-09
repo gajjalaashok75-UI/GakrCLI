@@ -105,7 +105,7 @@ type Batch = { isConcurrencySafe: boolean; blocks: ToolUseBlock[] }
  */
 function partitionToolCalls(
   toolUseMessages: ToolUseBlock[],
-  toolUseContext: ToolUseContext,
+  toolUseContext: { options: Pick<ToolUseContext['options'], 'tools'> },
 ): Batch[] {
   return toolUseMessages.reduce((acc: Batch[], toolUse) => {
     const tool = findToolByName(toolUseContext.options.tools, toolUse.name)

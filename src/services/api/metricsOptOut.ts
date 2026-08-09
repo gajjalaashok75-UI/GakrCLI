@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { hasProfileScope, isgakrcliAISubscriber } from '../../utils/auth.js'
+import { hasProfileScope, isGakrCLIAISubscriber } from '../../utils/auth.js'
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { errorMessage } from '../../utils/errors.js'
@@ -7,7 +7,7 @@ import { getAuthHeaders, withOAuth401Retry } from '../../utils/http.js'
 import { logError } from '../../utils/log.js'
 import { memoizeWithTTLAsync } from '../../utils/memoize.js'
 import { isEssentialTrafficOnly } from '../../utils/privacyLevel.js'
-import { getgakrcliCodeUserAgent } from '../../utils/userAgent.js'
+import { getGakrCLICodeUserAgent } from '../../utils/userAgent.js'
 
 type MetricsEnabledResponse = {
   metrics_logging_enabled: boolean
@@ -38,7 +38,7 @@ async function _fetchMetricsEnabled(): Promise<MetricsEnabledResponse> {
 
   const headers = {
     'Content-Type': 'application/json',
-    'User-Agent': getgakrcliCodeUserAgent(),
+    'User-Agent': getGakrCLICodeUserAgent(),
     ...authResult.headers,
   }
 
@@ -131,7 +131,7 @@ export async function checkMetricsEnabled(): Promise<MetricsStatus> {
   // This check runs before the disk read so we never persist auth-state-derived
   // answers — only real API responses go to disk. Otherwise a service-key
   // session would poison the cache for a later full-OAuth session.
-  if (isgakrcliAISubscriber() && !hasProfileScope()) {
+  if (isGakrCLIAISubscriber() && !hasProfileScope()) {
     return { enabled: false, hasError: false }
   }
 

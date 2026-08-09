@@ -78,7 +78,10 @@ function estimateTokens(msg: any): number {
   return Math.ceil(text.length / 4)
 }
 
-export function shouldNudgeForSnips(messages: any[]): boolean {
+export function shouldNudgeForSnips(
+  messages: any[],
+  intervalTokens = NUDGE_INTERVAL_TOKENS,
+): boolean {
   let accumulated = 0
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i]
@@ -89,7 +92,7 @@ export function shouldNudgeForSnips(messages: any[]): boolean {
       msg?.attachment?.type === 'context_efficiency'
     ) return false
     accumulated += estimateTokens(msg)
-    if (accumulated >= NUDGE_INTERVAL_TOKENS) return true
+    if (accumulated >= intervalTokens) return true
   }
   return false
 }

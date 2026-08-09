@@ -467,6 +467,9 @@ async function getLiveCheck(
           error: connection.error,
         }
     }
+    // Unreachable: all connection types are handled above, but TS cannot
+    // prove exhaustiveness through the try/finally boundary.
+    return { attempted: true, result: 'failed', durationMs }
   } finally {
     await deps.clearServerCache(name, activeConfig).catch(() => {
       // Best-effort cleanup for diagnostic connections.

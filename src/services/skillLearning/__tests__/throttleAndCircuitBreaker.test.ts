@@ -39,6 +39,7 @@ function makeCtx(
     messages: messages.map(({ uuid, content }) => ({
       type: 'user' as const,
       uuid: uuid as any,
+      timestamp: new Date().toISOString(),
       message: { role: 'user' as const, content },
     })),
     systemPrompt: [] as any,

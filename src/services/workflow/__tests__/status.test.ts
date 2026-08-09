@@ -9,7 +9,7 @@ import {
   agentVisual,
   formatTokenCount,
   agentMetaText,
-} from '../../commands/workflows/status.js'
+} from '../../../commands/workflows/status.js'
 
 test('STATUS_DOT / RUN_STATUS_COLOR / RUN_STATUS_TEXT cover four run states', () => {
   const statuses: RunProgress['status'][] = [

@@ -291,5 +291,9 @@ export function formatGoalStatusLabel(status: GoalStatus): string {
       return 'Max Turns Reached'
     case 'complete':
       return 'Complete'
+    case 'achieved':
+      return 'Achieved'
+    case 'cleared':
+      return 'Cleared'
   }
 }

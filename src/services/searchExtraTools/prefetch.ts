@@ -88,7 +88,7 @@ export function buildToolDiscoveryAttachment(
     queryText: queryText.slice(0, 200),
     durationMs,
     indexSize,
-  } as Attachment
+  }
 }
 
 export async function startSearchExtraToolsPrefetch(

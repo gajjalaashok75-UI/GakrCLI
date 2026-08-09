@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { routeWorkflowKey } from '../../commands/workflows/useWorkflowKeyboard.js'
+import { routeWorkflowKey } from '../../../commands/workflows/useWorkflowKeyboard.js'
 
 test('Tab → nextTab；Shift+Tab → prevTab', () => {
   expect(routeWorkflowKey('', { tab: true })).toBe('nextTab')

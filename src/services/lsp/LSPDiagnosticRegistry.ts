@@ -422,6 +422,9 @@ function createDiagnosticKey(diag: {
  */
 function deduplicateDiagnosticFiles(
   allFiles: DiagnosticFile[],
+  options: { filterPreviouslyDelivered?: boolean } = {
+    filterPreviouslyDelivered: true,
+  },
 ): DeduplicationResult {
   // Group diagnostics by file URI
   const fileMap = new Map<string, Set<string>>()
@@ -443,7 +446,9 @@ function deduplicateDiagnosticFiles(
 
     // Get previously delivered diagnostics for this file (for cross-turn dedup)
     const previouslyDelivered =
-      deliveredDiagnostics.get(normalizedUri) || new Set()
+      options.filterPreviouslyDelivered === false
+        ? new Set<string>()
+        : deliveredDiagnostics.get(normalizedUri) || new Set()
 
     for (const diag of file.diagnostics) {
       try {

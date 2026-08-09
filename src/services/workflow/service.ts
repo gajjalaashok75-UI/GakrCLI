@@ -51,16 +51,18 @@ export type WorkflowService = {
   ports: WorkflowPorts
   /** Panel/tool launches a workflow: parse script → register → detached runWorkflow. */
   launch(
-    input: Pick<
-      WorkflowInput,
-      | 'script'
-      | 'name'
-      | 'scriptPath'
-      | 'args'
-      | 'description'
-      | 'resumeFromRunId'
-      | 'title'
-      | 'maxConcurrency'
+    input: Partial<
+      Pick<
+        WorkflowInput,
+        | 'script'
+        | 'name'
+        | 'scriptPath'
+        | 'args'
+        | 'description'
+        | 'resumeFromRunId'
+        | 'title'
+        | 'maxConcurrency'
+      >
     >,
     toolUseContext: ToolUseContext,
     canUseTool: CanUseToolFn,

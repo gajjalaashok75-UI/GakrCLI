@@ -32,7 +32,6 @@ import {
   type ListSessionsRequest,
   type ListSessionsResponse,
   type ResumeSessionRequest,
-  type ResumeSessionResponse,
   type ForkSessionRequest,
   type ForkSessionResponse,
   type CloseSessionRequest,
@@ -52,7 +51,11 @@ import {
   canonicalizePath,
 } from '../../../utils/sessionStoragePortable.js'
 import { getOriginalCwd } from '../../../bootstrap/state.js'
-import type { AcpSession } from './sessionTypes.js'
+import type {
+  AcpNewSessionResponse,
+  AcpResumeSessionResponse,
+  AcpSession,
+} from './sessionTypes.js'
 
 // ── Agent class ───────────────────────────────────────────────────
 //
@@ -149,7 +152,7 @@ export class AcpAgent implements Agent {
 
   // ── newSession ────────────────────────────────────────────────
 
-  async newSession(params: NewSessionRequest): Promise<NewSessionResponse> {
+  async newSession(params: NewSessionRequest): Promise<AcpNewSessionResponse> {
     const result = await this.createSession(params)
     this.scheduleAvailableCommandsUpdate(result.sessionId)
     return result
@@ -159,7 +162,7 @@ export class AcpAgent implements Agent {
 
   async unstable_resumeSession(
     params: ResumeSessionRequest,
-  ): Promise<ResumeSessionResponse> {
+  ): Promise<AcpResumeSessionResponse> {
     // Per session-setup.mdx "Resuming a Session": the Agent MUST NOT replay the
     // conversation history via session/update notifications before responding.
     // Only restore context + MCP connections, then return immediately. This
