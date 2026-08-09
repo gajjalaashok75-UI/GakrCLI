@@ -936,7 +936,7 @@ export function LogSelector({
 
         // Right/left arrow to expand/collapse branch groups
         if (isResumeWithRenameEnabled && focusedNode) {
-          if (key.right) {
+          if (key.rightArrow) {
             const groupNode = findContainingGroupNode(treeNodes, focusedNode.id);
             if (groupNode?.children?.length && String(groupNode.id).startsWith('group:')) {
               const groupId = String(groupNode.id).substring(6);
@@ -948,7 +948,7 @@ export function LogSelector({
               return;
             }
           }
-          if (key.left) {
+          if (key.leftArrow) {
             const groupNode = findContainingGroupNode(treeNodes, focusedNode.id);
             if (groupNode?.children?.length && String(groupNode.id).startsWith('group:')) {
               const groupId = String(groupNode.id).substring(6);
@@ -1007,7 +1007,7 @@ export function LogSelector({
     { isActive: true },
   );
 
-  const filterIndicators = [];
+  const filterIndicators: string[] = [];
   if (branchFilterEnabled && currentBranch) {
     filterIndicators.push(currentBranch);
   }

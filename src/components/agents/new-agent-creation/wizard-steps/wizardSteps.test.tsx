@@ -111,6 +111,8 @@ async function renderWizardChild(
       steps={[_tempStep, _tempStep]}
       initialData={initialData}
       onComplete={() => {}}
+      onCancel={() => {}}
+      title="Test wizard"
     >
       <Box flexDirection="column">
         {child}

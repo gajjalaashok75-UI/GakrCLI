@@ -641,38 +641,6 @@ function StatusLineInner({
   // Get padding from settings or default to 0
   const paddingX = settings?.statusLine?.padding ?? 0;
 
-  // ---- Top row data: feed BuiltinStatusLine (model + ctx + 5h + 7d + cost) ---
-  const builtinRuntimeModel = getRuntimeMainLoopModel({
-    permissionMode,
-    mainLoopModel,
-    exceeds200kTokens: previousStateRef.current.exceeds200kTokens,
-  });
-  const builtinContextWindowSize = getContextWindowForModel(builtinRuntimeModel, getSdkBetas());
-  const builtinCurrentUsage = getCurrentUsage(messagesRef.current);
-  const builtinUsedTokens = builtinCurrentUsage
-    ? builtinCurrentUsage.input_tokens +
-      builtinCurrentUsage.cache_creation_input_tokens +
-      builtinCurrentUsage.cache_read_input_tokens
-    : 0;
-  const builtinContextPct = builtinCurrentUsage
-    ? Math.round(calculateContextPercentages(builtinCurrentUsage, builtinContextWindowSize).used ?? 0)
-    : 0;
-  const builtinRawUtil = getRawUtilization();
-  const builtinRateLimits = {
-    ...(builtinRawUtil.five_hour && {
-      five_hour: {
-        utilization: builtinRawUtil.five_hour.utilization,
-        resets_at: builtinRawUtil.five_hour.resets_at,
-      },
-    }),
-    ...(builtinRawUtil.seven_day && {
-      seven_day: {
-        utilization: builtinRawUtil.seven_day.utilization,
-        resets_at: builtinRawUtil.seven_day.resets_at,
-      },
-    }),
-  };
-
   // BuiltinStatusLine + CachePill: only when statusLineEnabled is explicitly true.
   // Shell command output: only when a statusLine.command is configured.
   // These are independent — a user can have one, both, or neither.
@@ -684,14 +652,7 @@ function StatusLineInner({
       {/* Top: built-in fork status (model | ctx | 5h | 7d | cost) + Cache pill */}
       {showBuiltin && (
         <Box gap={2}>
-          <BuiltinStatusLine
-            modelName={renderModelName(builtinRuntimeModel)}
-            contextUsedPct={builtinContextPct}
-            usedTokens={builtinUsedTokens}
-            contextWindowSize={builtinContextWindowSize}
-            totalCostUsd={getTotalCost()}
-            rateLimits={builtinRateLimits}
-          />
+          <BuiltinStatusLine messagesRef={messagesRef} lastAssistantMessageId={lastAssistantMessageId} />
           <GoalPill />
           <CachePill messages={messagesRef.current} />
         </Box>

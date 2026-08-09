@@ -108,7 +108,7 @@ export function MCPAgentServerMenu({ agentServer, onCancel, onComplete }: Props)
     );
   }
 
-  const menuOptions = [];
+  const menuOptions: Array<{ label: string; value: string }> = [];
 
   // Only show authenticate option for HTTP/SSE servers
   if (agentServer.needsAuth) {

@@ -115,8 +115,6 @@ export function ContextVisualization({ data }: Props): React.ReactNode {
     agents,
     skills,
     messageBreakdown,
-    cacheHitRate,
-    cacheThreshold,
   } = data;
 
   // Filter out categories with 0 tokens for the legend, and exclude Free space, Autocompact buffer, and deferred
@@ -168,12 +166,6 @@ export function ContextVisualization({ data }: Props): React.ReactNode {
             {model} · {formatTokens(totalTokens)}/{formatTokens(rawMaxTokens)} tokens ({percentage}%)
           </Text>
           <CollapseStatus />
-          {cacheHitRate !== undefined && cacheThreshold !== undefined && (
-            <Text color={cacheHitRate < cacheThreshold ? 'warning' : undefined}>
-              Cache hit rate: {cacheHitRate.toFixed(0)}%
-              {cacheHitRate < cacheThreshold ? ` (below ${cacheThreshold}% threshold)` : ''}
-            </Text>
-          )}
           <Text> </Text>
           <Text dimColor italic>
             Estimated usage by category

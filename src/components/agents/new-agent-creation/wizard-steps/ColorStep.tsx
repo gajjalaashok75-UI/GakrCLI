@@ -18,7 +18,7 @@ export function ColorStep(): React.ReactNode {
 
   const handleConfirm = (color?: string): void => {
     updateWizardData({
-      selectedColor: color,
+      selectedColor: color as AgentColorName | undefined,
       // Prepare final agent for confirmation
       finalAgent: {
         agentType: wizardData.agentType!,

@@ -93,7 +93,7 @@ export function TeleportError({
 
     case 'needsLogin': {
       if (isLoggingIn) {
-        return <ConsoleOAuthFlow onDone={handleLoginComplete} mode="login" forceLoginMethod="gakrcli" />;
+        return <ConsoleOAuthFlow onDone={handleLoginComplete} mode="login" forceLoginMethod="gakrcliai" />;
       }
 
       return (

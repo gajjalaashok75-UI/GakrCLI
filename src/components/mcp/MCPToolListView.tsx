@@ -36,7 +36,7 @@ export function MCPToolListView({ server, onSelectTool, onBack }: Props): React.
     const isDestructive = tool.isDestructive?.({}) ?? false;
     const isOpenWorld = tool.isOpenWorld?.({}) ?? false;
 
-    const annotations = [];
+    const annotations: string[] = [];
     if (isReadOnly) annotations.push('read-only');
     if (isDestructive) annotations.push('destructive');
     if (isOpenWorld) annotations.push('open-world');

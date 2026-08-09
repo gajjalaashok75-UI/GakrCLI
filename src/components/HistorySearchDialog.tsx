@@ -110,7 +110,7 @@ export function HistorySearchDialog({ initialQuery, onSelect, onCancel }: Props)
           <Text dimColor>{item.age}</Text>
           <Text color={isFocused ? 'suggestion' : undefined}> 
             {' '}
-            {highlightFuzzyMatch(truncateToWidth(item_2.firstLine, rowWidth), pickerQuery)}
+            {highlightFuzzyMatch(truncateToWidth(item.firstLine, rowWidth), query)}
 
           </Text>
         </Text>

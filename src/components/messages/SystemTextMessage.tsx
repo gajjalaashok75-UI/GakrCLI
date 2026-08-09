@@ -192,7 +192,7 @@ function StopHookSummaryMessage({
         {isTranscriptMode &&
           hookInfos.map((info, idx) => {
             const durationStr =
-              false && info.durationMs !== undefined ? ` (${formatSecondsShort(info.durationMs)})` : '';
+              false && info.durationMs !== undefined ? ` (${formatSecondsShort(info.durationMs ?? 0)})` : '';
             return (
               <Text key={`cmd-${idx}`} dimColor>
                 {'     ⎿ '}
@@ -225,7 +225,7 @@ function StopHookSummaryMessage({
           hookInfos.length > 0 &&
           hookInfos.map((info, idx) => {
             const durationStr =
-              false && info.durationMs !== undefined ? ` (${formatSecondsShort(info.durationMs)})` : '';
+              false && info.durationMs !== undefined ? ` (${formatSecondsShort(info.durationMs ?? 0)})` : '';
             return (
               <Text key={`cmd-${idx}`} dimColor>
                 ⎿ &nbsp;

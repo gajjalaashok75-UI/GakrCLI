@@ -22,7 +22,7 @@ type Props = {
 export function MonitorMcpDetailDialog({ task, onBack, onKill }: Props): React.ReactNode {
   const elapsedTime = useElapsedTime(task.startTime, task.status === 'running', 1000, 0);
 
-  useKeybindings({}, { context: 'MonitorMcpDetail' });
+  useKeybindings({}, { context: 'Confirmation' });
 
   const handleKeyDown = (e: KeyboardEvent): void => {
     if (e.key === 'left' && onBack) {

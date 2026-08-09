@@ -29,7 +29,7 @@ describe('WordmarkRow', () => {
       .map(line => line.trimEnd())
       .filter(Boolean)
 
-    expect(plain).toEqual(WORDMARK_GAKRCLI)
+    expect(plain).toEqual([...WORDMARK_GAKRCLI])
   })
 
   test('renders the expected number of rows', async () => {

@@ -7,7 +7,7 @@ import sliceAnsi from '../utils/sliceAnsi.js';
 import { countCharInString } from '../utils/stringUtils.js';
 import { HighlightedCodeFallback } from './HighlightedCode/Fallback.js';
 import { expectColorFile } from './StructuredDiff/colorDiff.js';
-import type { ColorFile as ColorFileType } from 'color-diff-napi';
+import type { ColorFile as ColorFileType } from '../native-ts/color-diff/index.js';
 
 // Module-level LRU cache for ColorFile instances to avoid recreating
 // them for the same (filePath, code) across component instances.

@@ -33,7 +33,7 @@ import { collapseTeammateShutdowns } from '../utils/collapseTeammateShutdowns.js
 import { getGlobalConfig } from '../utils/config.js';
 import { isEnvTruthy } from '../utils/envUtils.js';
 import { isFullscreenEnvEnabled } from '../utils/fullscreen.js';
-import { applyGrouping } from '../utils/groupToolUses.js';
+import { applyGrouping, type MessageWithoutProgress } from '../utils/groupToolUses.js';
 import {
   buildMessageLookups,
   computeMessageStructureKey,
@@ -591,7 +591,7 @@ const MessagesImpl = ({
 
     const hasTruncatedMessages = shouldTruncate && briefFiltered.length > MAX_MESSAGES_TO_SHOW_IN_TRANSCRIPT_MODE;
 
-    const { messages: groupedMessages } = applyGrouping(messagesToShow as MessageType[], tools, verbose);
+    const { messages: groupedMessages } = applyGrouping(messagesToShow as MessageWithoutProgress[], tools, verbose);
 
     const collapsed = collapseBackgroundBashNotifications(
       collapseHookSummaries(collapseTeammateShutdowns(collapseReadSearchGroups(groupedMessages, tools))),

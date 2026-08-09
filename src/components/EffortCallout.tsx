@@ -109,10 +109,17 @@ function EffortOptionLabel({ level, text }: { level: EffortLevel; text: string }
  * - Max/Team: getting medium via tengu_grey_step2 config; show when enabled
  * - Everyone else: mark as dismissed so it never shows
  */
+export function effortCalloutCoversModel(model: string): boolean {
+  const parsed = parseUserSpecifiedModel(model).toLowerCase();
+  return (
+    parsed.includes('opus-4-8') ||
+    parsed.includes('opus-4-7') ||
+    parsed.includes('opus-4-6')
+  );
+}
+
 export function shouldShowEffortCallout(model: string): boolean {
-  // Only show for Opus 4.6 for now
-  const parsed = parseUserSpecifiedModel(model);
-  if (!parsed.toLowerCase().includes('opus-4-6')) {
+  if (!effortCalloutCoversModel(model)) {
     return false;
   }
 
