@@ -55,7 +55,7 @@ describe('buddy command', () => {
 
   test.each(HELP_ARGS)('/buddy %s shows help', async (arg) => {
     let output = ''
-    const onDone = (text: string) => { output = text }
+    const onDone = (text: string | undefined) => { output = text ?? '' }
     await call(onDone, baseContext, arg)
     expect(output).toContain('Usage: /buddy')
     expect(output).toContain('status')
@@ -65,7 +65,7 @@ describe('buddy command', () => {
   test.each(INFO_ARGS)('/buddy %s shows "no companion"', async (arg) => {
     mockGetCompanion.mockImplementation(() => null)
     let output = ''
-    const onDone = (text: string) => { output = text }
+    const onDone = (text: string | undefined) => { output = text ?? '' }
     await call(onDone, baseContext, arg)
     expect(output).toContain('No companion hatched yet')
   })
@@ -73,7 +73,7 @@ describe('buddy command', () => {
   test('/buddy status shows "no companion" when none hatched', async () => {
     mockGetCompanion.mockImplementation(() => null)
     let output = ''
-    const onDone = (text: string) => { output = text }
+    const onDone = (text: string | undefined) => { output = text ?? '' }
     await call(onDone, baseContext, 'status')
     expect(output).toContain('No companion hatched yet')
   })
@@ -81,7 +81,7 @@ describe('buddy command', () => {
   test('/buddy pet shows "no companion" when none hatched', async () => {
     mockGetCompanion.mockImplementation(() => null)
     let output = ''
-    const onDone = (text: string) => { output = text }
+    const onDone = (text: string | undefined) => { output = text ?? '' }
     await call(onDone, baseContext, 'pet')
     expect(output).toContain('no companion yet')
   })
@@ -99,7 +99,7 @@ describe('buddy command', () => {
   test('/buddy with no args hatches a companion', async () => {
     mockGetCompanion.mockImplementation(() => null)
     let output = ''
-    const onDone = (text: string) => { output = text }
+    const onDone = (text: string | undefined) => { output = text ?? '' }
     await call(onDone, baseContext, '')
     expect(output).toContain('A wild companion appeared!')
     expect(output).toContain('Rarity:')

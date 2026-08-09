@@ -20,6 +20,7 @@ import {
   saveInstinct,
   upsertInstinct,
 } from '../../services/skillLearning/index.js'
+import type { StoredInstinct } from '../../services/skillLearning/instinctParser.js'
 
 export const call: LocalCommandCall = async (
   args,
@@ -67,7 +68,7 @@ export const call: LocalCommandCall = async (
         }
       }
       const instincts = analyzeObservations(observations)
-      const saved = []
+      const saved: StoredInstinct[] = []
       for (const instinct of instincts) {
         saved.push(await upsertInstinct(instinct, options))
       }
@@ -80,7 +81,7 @@ export const call: LocalCommandCall = async (
       const generate = parts.includes('--generate')
       const instincts = await loadInstincts(options)
       const drafts = generateSkillCandidates(instincts, { cwd: process.cwd() })
-      const written = []
+      const written: string[] = []
       if (generate) {
         for (const draft of drafts) {
           const roots = [

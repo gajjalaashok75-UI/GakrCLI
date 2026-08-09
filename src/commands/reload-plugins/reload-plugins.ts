@@ -40,8 +40,8 @@ export const call: LocalCommandCall = async (_args, context) => {
     .then(result => ({ status: 'ok', result } as const))
     .catch(err => ({ status: 'error', err } as const))
 
-  const timeoutPromise = new Promise(resolve => {
-    setTimeout(() => resolve({ status: 'timeout' } as const), timeoutMs)
+  const timeoutPromise = new Promise<{ status: 'timeout' }>(resolve => {
+    setTimeout(() => resolve({ status: 'timeout' }), timeoutMs)
   })
 
   const outcome = await Promise.race([refreshPromise, timeoutPromise])
