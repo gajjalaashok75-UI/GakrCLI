@@ -147,7 +147,7 @@ async function callBuddyReactAPI(
       recent: recentReactions.map(r => r.slice(0, 200)),
       addressed,
     }),
-    signal: createCombinedAbortSignal({ timeoutMs: 10_000 }).signal,
+    signal: createCombinedAbortSignal(undefined, { timeoutMs: 10_000 }).signal,
   })
 
   if (!resp.ok) return null

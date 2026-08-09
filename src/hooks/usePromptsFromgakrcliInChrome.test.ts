@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { getGakrCLIInChromePermissionMode } from './usePromptsFromGakrCLIInChrome.tsx'
+import { getGakrCLIInChromePermissionMode } from './usePromptsFromgakrcliInChrome.tsx'
 
 describe('getGakrCLIInChromePermissionMode', () => {
   test('maps only fullAccess to skip-all permission checks', () => {

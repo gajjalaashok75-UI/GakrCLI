@@ -870,7 +870,10 @@ export function useReplBridge(
           if (snapshotKey === lastPublishedSnapshotKey && handle === lastPublishedHandle) {
             return;
           }
-          handle.writeSdkMessages([buildTaskStateMessage(taskListId, tasks)]);
+          // task_state is a bridge-extension message outside the strict
+          // SDKMessage union (assistant/user/result); cast at the boundary
+          // like mapMessageToSDK does for internal messages.
+          handle.writeSdkMessages([buildTaskStateMessage(taskListId, tasks) as unknown as SDKMessage]);
           lastPublishedSnapshotKey = snapshotKey;
           lastPublishedHandle = handle;
         } catch (err) {
