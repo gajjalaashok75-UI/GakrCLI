@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import type { ReactNode } from 'react'
 
 import type { OptionWithDescription } from './select.js'
 import { optionsNavigateEqual } from './use-select-navigation.js'
@@ -11,20 +12,20 @@ function option<T>(
     label: String(value),
     value,
     ...overrides,
-  }
+  } as OptionWithDescription<T>
 }
 
 describe('optionsNavigateEqual', () => {
   test('ignores identity-unstable labels and callbacks', () => {
     const first = [
       option('a', {
-        label: { type: 'text', props: { children: 'A' } },
+        label: { type: 'text', props: { children: 'A' } } as ReactNode,
         onChange: () => undefined,
       }),
     ]
     const second = [
       option('a', {
-        label: { type: 'text', props: { children: 'A' } },
+        label: { type: 'text', props: { children: 'A' } } as ReactNode,
         onChange: () => undefined,
       }),
     ]

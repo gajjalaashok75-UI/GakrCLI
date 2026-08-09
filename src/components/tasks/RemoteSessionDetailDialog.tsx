@@ -100,7 +100,7 @@ function UltraplanSessionDetail({ session, onDone, onBack, onKill }: Omit<Props,
     let lastBlock: { name: string; input: unknown } | null = null;
     for (const msg of session.log) {
       if (msg.type !== 'assistant') continue;
-      const content = (msg.message as { content?: unknown[] })?.content ?? [];
+      const content = (msg.message as unknown as { content?: unknown[] })?.content ?? [];
       for (const block of content as Array<{ type: string; name: string; input: unknown }>) {
         if (block.type !== 'tool_use') continue;
         calls++;

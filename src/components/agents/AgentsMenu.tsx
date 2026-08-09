@@ -47,7 +47,7 @@ export function AgentsMenu({ tools, onExit, onSetActiveAgent, initialModeState }
 
   useExitOnCtrlCDWithKeybindings();
 
-  const agentsBySource: Record<SettingSource | 'all' | 'built-in' | 'plugin' | 'sdk', AgentDefinition[]> = useMemo(
+  const agentsBySource: Record<SettingSource | 'all' | 'built-in' | 'plugin', AgentDefinition[]> = useMemo(
     () => ({
       'built-in': allAgents.filter(a => a.source === 'built-in'),
       userSettings: allAgents.filter(a => a.source === 'userSettings'),
@@ -56,7 +56,6 @@ export function AgentsMenu({ tools, onExit, onSetActiveAgent, initialModeState }
       localSettings: allAgents.filter(a => a.source === 'localSettings'),
       flagSettings: allAgents.filter(a => a.source === 'flagSettings'),
       plugin: allAgents.filter(a => a.source === 'plugin'),
-      sdk: allAgents.filter(a => a.source === 'sdk'),
       all: allAgents,
     }),
     [allAgents],
@@ -108,8 +107,7 @@ export function AgentsMenu({ tools, onExit, onSetActiveAgent, initialModeState }
               ...agentsBySource['policySettings'],
               ...agentsBySource['flagSettings'],
               ...agentsBySource['plugin'],
-              ...agentsBySource['sdk'],
-            ]
+                  ]
           : agentsBySource[modeState.source];
 
       // Resolve overrides and filter to the agents we want to show
@@ -166,8 +164,7 @@ export function AgentsMenu({ tools, onExit, onSetActiveAgent, initialModeState }
       const isEditable =
         agentToUse.source !== 'built-in' &&
         agentToUse.source !== 'plugin' &&
-        agentToUse.source !== 'flagSettings' &&
-        agentToUse.source !== 'sdk';
+        agentToUse.source !== 'flagSettings';
 
       const activeAgentItems: { label: string; value: string; disabled?: boolean }[] = onSetActiveAgent
         ? isActiveAgent

@@ -13,7 +13,7 @@ export function CapabilitiesSection({
   serverPromptsCount,
   serverResourcesCount,
 }: Props): React.ReactNode {
-  const capabilities = [];
+  const capabilities: string[] = [];
   if (serverToolsCount > 0) {
     capabilities.push('tools');
   }

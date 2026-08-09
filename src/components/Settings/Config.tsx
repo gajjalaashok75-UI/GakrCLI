@@ -21,13 +21,13 @@ import { useAppState, useSetAppState, useAppStateStore } from '../../state/AppSt
 import { ModelPicker } from '../ModelPicker.js';
 import { modelDisplayString, isOpus1mMergeEnabled } from '../../utils/model/model.js';
 import { isBilledAsExtraUsage } from '../../utils/extraUsage.js';
-import { GakrCLIMdExternalIncludesDialog } from '../GakrCLIMdExternalIncludesDialog.js';
+import { GakrCLIMdExternalIncludesDialog } from '../gakrcliMdExternalIncludesDialog.js';
 import { ChannelDowngradeDialog, type ChannelDowngradeChoice } from '../ChannelDowngradeDialog.js';
 import { Dialog } from '../design-system/Dialog.js';
 import { Select } from '../CustomSelect/index.js';
 import { OutputStylePicker } from '../OutputStylePicker.js';
 import { LanguagePicker } from '../LanguagePicker.js';
-import { getExternalGakrCLIMdIncludes, getMemoryFiles, hasExternalGakrCLIMdIncludes } from 'src/utils/gakrclimd.js';
+import { getExternalGakrCLIMdIncludes, getMemoryFiles, hasExternalGakrCLIMdIncludes, type MemoryFileInfo } from 'src/utils/gakrclimd.js';
 import { KeyboardShortcutHint } from '../design-system/KeyboardShortcutHint.js';
 import { ConfigurableShortcutHint } from '../ConfigurableShortcutHint.js';
 import { Byline } from '../design-system/Byline.js';
@@ -198,7 +198,7 @@ export function Config({
   }, [ownsEsc, onIsSearchModeChange]);
   const isConnectedToIde = hasAccessToIDEExtensionDiffFeature(context.options.mcpClients);
   const isFileCheckpointingAvailable = !isEnvTruthy(process.env.GAKR_CODE_DISABLE_FILE_CHECKPOINTING);
-  const memoryFiles = React.use(getMemoryFiles(true));
+  const memoryFiles = React.use(getMemoryFiles(true)) as MemoryFileInfo[];
   function getPendingExternalIncludesScope(): 'User' | 'Project' | null {
     const cfg = getCurrentProjectConfig();
     // Project/Local first (mirrors startup priority in shouldShowGakrCLIMdExternalIncludesWarning)

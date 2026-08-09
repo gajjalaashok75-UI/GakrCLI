@@ -120,7 +120,12 @@ test('does not restart OAuth when an inline authenticated callback changes after
   )
   const cleanup = mock(() => {})
   const openBrowser = mock(async () => true)
-  const onAuthenticated = mock(async () => {})
+  const onAuthenticated = mock(
+    async (
+      _tokens: typeof TOKENS,
+      _persistCredentials: (options?: { profileId?: string }) => void,
+    ) => {},
+  )
   const deps = {
     createOAuthService: () => ({
       startOAuthFlow,

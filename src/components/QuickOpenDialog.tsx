@@ -144,7 +144,7 @@ export function QuickOpenDialog({ onDone, onInsert }: Props): React.ReactNode {
       emptyMessage={q => (q ? 'No matching files' : 'Start typing to search…')}
       selectAction="open in editor"
       renderItem={(p, isFocused) => (
-        <Text color={isFocused ? 'suggestion' : undefined}>{highlightFuzzyMatch(truncatePathMiddle(p, maxPathWidth), pickerQuery ?? "")}</Text>
+        <Text color={isFocused ? 'suggestion' : undefined}>{highlightFuzzyMatch(truncatePathMiddle(p, maxPathWidth), query ?? "")}</Text>
       )}
       renderPreview={p =>
         preview ? (

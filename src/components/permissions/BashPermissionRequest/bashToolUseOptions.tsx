@@ -122,7 +122,7 @@ export function bashToolUseOptions({
     // same role and having two identical-looking "don't ask again" inputs is confusing.
     const editablePrefixShown = options.some(o => o.value === 'yes-prefix-edited');
     if (
-      "external" === 'ant' &&
+      process.env.USER_TYPE === 'ant' &&
       !editablePrefixShown &&
       isClassifierPermissionsEnabled() &&
       onClassifierDescriptionChange &&

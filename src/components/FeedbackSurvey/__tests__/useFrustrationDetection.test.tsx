@@ -33,9 +33,16 @@ function apiError(uuid: string): Message {
   return {
     type: 'assistant',
     uuid: uuid as any,
+    timestamp: '2024-01-01T00:00:00.000Z',
     isApiErrorMessage: true,
-    message: { role: 'assistant', content: [] },
-  };
+    message: {
+      role: 'assistant',
+      content: [] as unknown[],
+      id: uuid,
+      model: 'test-model',
+      usage: { input_tokens: 0, output_tokens: 0 },
+    },
+  } as Message;
 }
 
 async function renderDetection(props: {

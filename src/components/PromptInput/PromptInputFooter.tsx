@@ -321,12 +321,12 @@ function PipeStatusInline(): React.ReactNode {
 
   const slaves = pipeIpc?.slaves ?? {};
   const slaveNames = Object.keys(slaves);
-  const discovered: Array<{ pipeName: string; role: string; ip: string; hostname: string }> =
+  const discovered: ReadonlyArray<{ pipeName: string; role: string; ip: string; hostname: string }> =
     pipeIpc?.discoveredPipes ?? [];
   const allPipes = [...new Set([...slaveNames, ...discovered.map(d => d.pipeName)])].filter(
     n => n !== pipeIpc?.serverName,
   );
-  const selectedPipes: string[] = pipeIpc?.selectedPipes ?? [];
+  const selectedPipes: readonly string[] = pipeIpc?.selectedPipes ?? [];
   const displayRole = pipeIpc ? getPipeDisplayRole(pipeIpc) : 'main';
   const routeMode: 'selected' | 'local' = pipeIpc?.routeMode ?? 'selected';
   const selectedRouteActive = routeMode !== 'local' && selectedPipes.length > 0;

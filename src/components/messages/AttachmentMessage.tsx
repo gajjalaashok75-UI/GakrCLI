@@ -415,7 +415,8 @@ export function AttachmentMessage({ attachment, addMargin, verbose, isTranscript
         | 'skill_discovery'
         | 'tool_discovery'
         | 'teammate_mailbox'
-        | 'bagel_console';
+        | 'bagel_console'
+        | 'ultracode_mode';
       return null;
   }
 }
