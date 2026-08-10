@@ -151,7 +151,11 @@ export function buildBackgroundChildProcessConfig(
 
 function fail(message: string): never {
   console.error(`Error: ${message}`)
-  process.exit(1)
+  // Never hard-exit: inside the REPL, process.exit(1) kills the whole CLI.
+  // Set the exit code and throw so the caller (e.g. /daemon wrapper) can
+  // report the error; a standalone CLI run still exits with code 1.
+  process.exitCode = 1
+  throw new Error(message)
 }
 
 function errorMessage(error: unknown): string {

@@ -21,17 +21,27 @@ export async function call(
   }
 
   // For all other subcommands, capture console output and return via onDone
+  let errorMessage: string | undefined
   const lines = await captureConsole(async () => {
-    if (sub === 'bg') {
-      const bg = await import('../../cli/bg.js');
-      await bg.handleBgStart(parts.slice(1));
-    } else {
-      const { daemonMain } = await import('../../daemon/main.js');
-      await daemonMain([sub, ...parts.slice(1)]);
+    try {
+      if (sub === 'bg') {
+        const bg = await import('../../cli/bg.js');
+        await bg.handleBgStart(parts.slice(1));
+      } else {
+        const { daemonMain } = await import('../../daemon/main.js');
+        await daemonMain([sub, ...parts.slice(1)]);
+      }
+    } catch (error) {
+      // bg.ts fail() throws instead of process.exit(1) so the REPL survives.
+      // The message was already printed via the patched console.error.
+      errorMessage = error instanceof Error ? error.message : String(error);
     }
   });
 
-  onDone(lines.join('\n') || 'Done.', { display: 'system' });
+  const alreadyReported =
+    errorMessage !== undefined && lines.some(l => l === `Error: ${errorMessage}`)
+  const output = lines.join('\n') + (errorMessage !== undefined && !alreadyReported ? `\nError: ${errorMessage}` : '')
+  onDone(output || 'Done.', { display: 'system' });
   return null;
 }
 
