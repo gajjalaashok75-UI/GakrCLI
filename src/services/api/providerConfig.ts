@@ -24,9 +24,11 @@ import {
 } from './clinepassUsage/types.js'
 import { getCatalogEntriesForRoute } from '../../integrations/registry.js'
 import {
+  getRouteDefaultBaseUrl,
   getRouteDefaultModel,
   isClinePassBaseUrl,
 } from '../../integrations/routeMetadata.js'
+import { hasUsableOpenAICredential } from './credentialPool.js'
 import {
   openAIShimSupportsApiFormatForModel,
   resolveOpenAIShimRuntimeContext,
@@ -52,7 +54,7 @@ function asGithubEnterpriseEnvUrl(value: string | undefined): string | undefined
   return trimmed
 }
 
-function normalizegitlawbOpengatewayBaseUrl(baseUrl: string | undefined): string | undefined {
+function normalizeGitlawbOpengatewayBaseUrl(baseUrl: string | undefined): string | undefined {
   if (!baseUrl) return undefined
   try {
     const parsed = new URL(baseUrl)
@@ -81,7 +83,7 @@ const CODEX_ALIAS_MODELS: Record<
   }
 > = {
   codexplan: {
-    model: 'gpt-5.5',
+    model: 'gpt-5.6-sol',
     reasoningEffort: 'high',
   },
   // GPT-5.6 family (July 2026). `gpt-5.6` follows the Codex CLI convention of
@@ -240,7 +242,10 @@ function asEnvUrl(value: string | undefined): string | undefined {
   if (!value) return undefined
   const trimmed = value.trim()
   if (!trimmed) return undefined
-  if (trimmed === 'undefined') {
+  const normalized = trimmed.toLowerCase()
+  // Windows/dotenv templates often materialize unset vars as the literal
+  // strings "undefined" or "null". Neither is a usable endpoint.
+  if (normalized === 'undefined' || normalized === 'null') {
     return undefined
   }
   return trimmed
@@ -255,11 +260,12 @@ function asNamedEnvUrl(
   const trimmed = value.trim()
   if (!trimmed) return undefined
 
-  if (trimmed === 'undefined') {
+  const normalized = trimmed.toLowerCase()
+  if (normalized === 'undefined' || normalized === 'null') {
     if (!warnedUndefinedEnvNames.has(envName)) {
       warnedUndefinedEnvNames.add(envName)
       logForDebugging(
-        `[provider-config] Environment variable ${envName} is the literal string "undefined"; ignoring it.`,
+        `[provider-config] Environment variable ${envName} is the literal string "${trimmed}"; ignoring it.`,
         { level: 'warn' },
       )
     }
@@ -267,6 +273,15 @@ function asNamedEnvUrl(
   }
 
   return trimmed
+}
+
+function asUsableModelEnvValue(value: string | undefined): string | undefined {
+  const trimmed = value?.trim()
+  if (!trimmed) return undefined
+  const normalized = trimmed.toLowerCase()
+  return normalized === 'undefined' || normalized === 'null'
+    ? undefined
+    : trimmed
 }
 
 function readNestedString(
@@ -1075,7 +1090,7 @@ export function resolveProviderRequest(options?: {
     !isGithubMode && isCodexAliasModel && !hasUserSetBaseUrl
       ? DEFAULT_CODEX_BASE_URL
       : rawBaseUrl
-  const finalBaseUrl = normalizegitlawbOpengatewayBaseUrl(finalBaseUrlRaw)
+  const finalBaseUrl = normalizeGitlawbOpengatewayBaseUrl(finalBaseUrlRaw)
 
   const gheUrl = githubEnterpriseEnvUrl
   const githubEndpointType = isGithubMode
@@ -1177,18 +1192,17 @@ export function resolveProviderRequest(options?: {
         ? requestedApiFormat
         : 'chat_completions'
 
-  // The gpt-5.6 alias defaults are Codex-transport-only: off the Codex
+  // Explicit gpt-5.6 alias defaults are Codex-transport-only: off the Codex
   // transport the 5.6 family's effort metadata is owned by the route catalog
   // (#1961), and an OPENAI_API_BASE gateway must not inherit the first-party
   // default. Explicit picks (the /effort override or a ?reasoning= query)
-  // still flow on every transport, and the older aliases (gpt-5.4/5.5,
-  // codexplan) keep the pre-5.6 legacy behavior of carrying their default
-  // effort everywhere.
+  // still flow on every transport, and codexplan keeps its existing behavior
+  // of carrying its high default effort everywhere.
   const requestedReasoning = options?.reasoningEffortOverride
     ? { effort: options.reasoningEffortOverride }
     : descriptor.reasoningFromAlias &&
         transport !== 'codex_responses' &&
-        /^gpt-5\.6/.test(descriptor.baseModel)
+        /^gpt-5\.6(?:-|$|[?[])/i.test(requestedModel.trim())
       ? undefined
       : descriptor.reasoning
   const catalogReasoningLevels =
@@ -1465,11 +1479,7 @@ export function resolveRuntimeCodexCredentials(options?: {
 
 export function resolveCodexApiCredentials(
   env: NodeJS.ProcessEnv = process.env,
-  options?: {
-    includeDefaultAuthJson?: boolean
-  },
 ): ResolvedCodexCredentials {
-  const includeDefaultAuthJson = options?.includeDefaultAuthJson !== false
   const envAccountId =
     asTrimmedString(env.CODEX_ACCOUNT_ID) ??
     asTrimmedString(env.CHATGPT_ACCOUNT_ID)
@@ -1496,9 +1506,8 @@ export function resolveCodexApiCredentials(
     })
 
     const shouldCheckDefaultAuthJson =
-      includeDefaultAuthJson &&
-      (!resolvedStoredCredentials.accountId ||
-        isCodexRefreshFailureCoolingDown(storedCredentials))
+      !resolvedStoredCredentials.accountId ||
+      isCodexRefreshFailureCoolingDown(storedCredentials)
 
     if (!shouldCheckDefaultAuthJson) {
       return resolvedStoredCredentials
@@ -1524,9 +1533,7 @@ export function resolveCodexApiCredentials(
     return resolvedStoredCredentials
   }
 
-  return includeDefaultAuthJson
-    ? resolveEnvOrAuthJsonCodexCredentials(env)
-    : resolveEnvOrAuthJsonCodexCredentials(env, { explicitAuthPathOnly: true })
+  return resolveEnvOrAuthJsonCodexCredentials(env)
 }
 
 export function getReasoningEffortForModel(model: string): ReasoningEffort | undefined {
