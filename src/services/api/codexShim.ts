@@ -299,13 +299,11 @@ export function convertAnthropicMessagesToResponsesInput(
 
         for (const toolResult of toolResults) {
           const { callId } = normalizeToolUseId(toolResult.tool_use_id)
+          const out = convertToolResultToText(toolResult.content)
           items.push({
             type: 'function_call_output',
             call_id: callId,
-            output: (() => {
-              const out = convertToolResultToText(toolResult.content)
-              return toolResult.is_error ? `Error: ${out}` : out
-            })(),
+            output: toolResult.is_error ? `Error: ${out}` : out,
           })
         }
 
