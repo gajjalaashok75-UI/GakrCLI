@@ -53,6 +53,10 @@ export const COMMON_EXTERNALS: string[] = [
   'byn',
   // Chrome extension MCP — dynamically imported at runtime
   '@gakr-gakr/gakrcli-for-chrome-mcp',
+  // Browser automation (WebBrowserTool) — playwright-core resolves native
+  // helpers like chromium-bidi at runtime; bundling freezes the build host
+  // paths, so keep it external and rely on the npm package being installed.
+  'playwright',
   // Observability / feature flags
   '@growthbook/growthbook',
   '@langfuse/otel',

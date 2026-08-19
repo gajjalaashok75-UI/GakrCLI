@@ -3,6 +3,7 @@ node_modules/
 package-lock.json
 bun.lockb
 package/
+terminal-log.md
 cook/
 dist-d/
 .scout-it/
