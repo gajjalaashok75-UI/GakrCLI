@@ -5,6 +5,11 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-08-19 14:49:41 +0530
+
+### Added
+- **WebBrowserTool**: Enabled the built-in browser navigation tool (`WEB_BROWSER_TOOL` flag). Refactored the tool into modular files — `browserEngine.ts` (Chromium/Playwright engine), `browserServer.ts` (device session server), `asyncMutex.ts`, `eventStorage.ts`, `recording.ts`, `refManager.ts`, `types.ts`, and `index.ts`. Added the `playwright` dependency (kept external in `scripts/externals.ts` so native helpers resolve at runtime). Expanded the panel UI and added new test suites: `WebBrowserTool.mocks.test.ts`, `WebBrowserTool.newtab.test.ts`, `jsScripts.test.ts`, and `recording.test.ts`.
+
 ## [0.6.0] - 2026-08-09 08:33:46 +0530
 
 ### Changed

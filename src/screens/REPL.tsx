@@ -1875,6 +1875,15 @@ export function REPL({
     if (!first || first.type !== 'tool_use') return null;
     return active.length > 1 ? `${first.name} +${active.length - 1}` : first.name;
   }, [messages, inProgressToolUseIDs, isLoading]);
+  // True while the current conversation's latest assistant message used the
+  // WebBrowser tool. Gates the WebBrowserPanel so it tracks the conversation
+  // instead of staying mounted above the prompt input forever (the shared
+  // browser executor outlives individual turns).
+  const browserToolActiveInTurn = useMemo(() => {
+    const lastAssistant = messages.findLast(m => m.type === 'assistant');
+    if (lastAssistant?.type !== 'assistant') return false;
+    return lastAssistant.message.content.some(b => b.type === 'tool_use' && b.name === 'WebBrowser');
+  }, [messages]);
   const mrOnBeforeQuery = useCallback(async (_input: string, _allMessages: MessageType[], _newMessageCount: number) => true, []);
   const mrOnTurnComplete = useCallback(async (_allMessages: MessageType[], _aborted: boolean) => { }, []);
   const mrRender = useCallback(() => null, []);
@@ -5016,7 +5025,7 @@ export function REPL({
         {toolJSX && !(toolJSX.isLocalJSXCommand && toolJSX.isImmediate) && !toolJsxCentered && <Box flexDirection="column" width="100%">
           {toolJSX.jsx}
         </Box>}
-        {feature('WEB_BROWSER_TOOL') ? WebBrowserPanelModule && <WebBrowserPanelModule.WebBrowserPanel /> : null}
+        {feature('WEB_BROWSER_TOOL') && isLoading && browserToolActiveInTurn ? WebBrowserPanelModule && <WebBrowserPanelModule.WebBrowserPanel /> : null}
         <Box flexGrow={1} />
         {showSpinner && <SpinnerWithVerb mode={streamMode} spinnerTip={spinnerTip} responseLengthRef={responseLengthRef} responseLength={reducedMotion ? reducedMotionResponseLength : undefined} overrideMessage={spinnerMessage} spinnerSuffix={stopHookSpinnerSuffix ?? activeToolSpinnerSuffix} verbose={verbose} loadingStartTimeRef={loadingStartTimeRef} totalPausedMsRef={totalPausedMsRef} pauseStartTimeRef={pauseStartTimeRef} overrideColor={spinnerColor} overrideShimmerColor={spinnerShimmerColor} hasActiveTools={inProgressToolUseIDs.size > 0} leaderIsIdle={!isLoading} />}
         {/* Permanently mounted: it observes the isLoading transition to flash
