@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **WebBrowserPanel**: "Last Action" footer now shows target URL for `switch_tab` and `close_tab` operations instead of just the tab ID (e.g., "SWITCH_TAB → to https://example.com").
 
 ### Fixed
+- **SleepTool**: Fixed immediate return when calling Sleep in normal REPL mode — was incorrectly checking proactive mode state instead of allowing sleep in all modes. Now only interrupts for queued work (proactive auto-wake).
 - **RecordingSession tests**: Fixed mock evaluate sequence, double-start handling, stop error scenarios.
 - **WebBrowserPanel**: Removed sync `/tmp` debug logging, eliminated 145-line inline render duplication.
 - **WebBrowserPanel**: Memoized `computeBoxWidth`/`displayWidth`/`truncate`, fixed spinner interval leak, bounded executor polling.
