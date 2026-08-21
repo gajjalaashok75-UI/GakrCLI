@@ -5,6 +5,21 @@ All notable changes to GakrCLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-08-21
+
+### Added
+- **WebBrowserTool**: Added `UI.tsx` component for programmatic usage and new test suite `WebBrowserTool.result.test.ts` for result handling.
+
+### Changed
+- **WebBrowserPanel**: Complete UX refactor (Round 12-13) — ANSI-safe widths, tab overflow (+N more), separated tab bar, right-aligned status badges, content wrapping, perfect borders, terminal resize safe at 80/120/160/200 cols.
+- **WebBrowserPanel UX**: Active tab bracket highlight (●/○), tab title normalization, content clipping (8 lines), fixed viewport, empty state (🌐), HTTP status colors (🟢 2xx, 🟡 3xx/4xx, 🔴 5xx), content hierarchy, footer "Last Action", tab count badge, content summary mode.
+
+### Fixed
+- **RecordingSession tests**: Fixed mock evaluate sequence, double-start handling, stop error scenarios.
+- **WebBrowserPanel**: Removed sync `/tmp` debug logging, eliminated 145-line inline render duplication.
+- **WebBrowserPanel**: Memoized `computeBoxWidth`/`displayWidth`/`truncate`, fixed spinner interval leak, bounded executor polling.
+- **WebBrowserPanel**: Moved `parseLastAction` outside component, removed unused `resolveLogoAccent`/`panelAccentColor`, wrapped with `React.memo`.
+
 ## [0.6.0] - 2026-08-19 14:49:41 +0530
 
 ### Added
