@@ -33,13 +33,9 @@ function isProactiveAutomationEnabled(): boolean {
 }
 
 function isProactiveSleepAllowed(): boolean {
-  if (!(feature('PROACTIVE') || feature('KAIROS'))) {
-    return true
-  }
-
-  const mod =
-    require('src/proactive/index.js') as typeof import('src/proactive/index.js')
-  return mod.isProactiveActive()
+  // SleepTool should always be allowed - it works in both proactive and normal REPL mode
+  // The proactive mode check is only for auto-sleep between ticks, not manual Sleep tool calls
+  return true
 }
 
 function hasQueuedWakeSignal(): boolean {
@@ -49,7 +45,9 @@ function hasQueuedWakeSignal(): boolean {
 }
 
 function shouldInterruptSleep(): boolean {
-  return !isProactiveSleepAllowed() || hasQueuedWakeSignal()
+  // Only interrupt if there's queued work (for proactive mode auto-wake)
+  // In normal mode, hasQueuedWakeSignal() will be false, so sleep won't be interrupted
+  return hasQueuedWakeSignal()
 }
 
 export const SleepTool = buildTool({
