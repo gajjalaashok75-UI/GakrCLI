@@ -23,7 +23,7 @@
  */
 
 import { Box, Text } from '../../ink.js';
-import { shortActionResult } from './WebBrowserTool.js';
+import { shortActionResult, parseLastOperationForDisplay } from './WebBrowserTool.js';
 import type { WebBrowserInput } from './WebBrowserTool.js';
 import * as React from 'react';
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
@@ -267,8 +267,14 @@ function parseLastAction(raw?: string) {
   if (kw === 'click') return { action: 'click', selector: rest, index: undefined, new_tab: false };
   if (kw === 'type') return { action: 'type', text: rest, selector: undefined, index: undefined, new_tab: false };
   if (kw === 'scroll') return { action: 'scroll', direction: rest, index: undefined, new_tab: false };
-  if (kw === 'switch_tab') return { action: 'switch_tab', tab_id: rest, index: undefined, new_tab: false };
-  if (kw === 'close_tab') return { action: 'close_tab', tab_id: rest, index: undefined, new_tab: false };
+  if (kw === 'switch_tab') {
+    const parts = raw.split(' ');
+    return { action: 'switch_tab', tab_id: parts[1], url: parts.slice(2).join(' '), index: undefined, new_tab: false };
+  }
+  if (kw === 'close_tab') {
+    const parts = raw.split(' ');
+    return { action: 'close_tab', tab_id: parts[1], url: parts.slice(2).join(' '), index: undefined, new_tab: false };
+  }
   if (kw === 'wait') return { action: 'wait', ms: Number(rest), selector: undefined, index: undefined, new_tab: false };
   if (kw === 'press_key') return { action: 'press_key', key: rest, selector: undefined, index: undefined, new_tab: false };
   if (kw === 'get_state') return { action: 'get_state', include_screenshot: false, selector: undefined, index: undefined, new_tab: false };
@@ -656,9 +662,12 @@ export function WebBrowserPanel(): React.ReactNode {
   // Parse last action (memoized callback outside component)
   const lastRaw = state.lastOperation ?? undefined;
   const parsedAct = useMemo(() => parseLastAction(lastRaw), [lastRaw]);
+  const parsedOp = useMemo(() => parseLastOperationForDisplay(lastRaw), [lastRaw]);
   const verb = parsedAct ? parsedAct.action.toUpperCase() : null;
   const summary = parsedAct ? shortActionResult(parsedAct.action, parsedAct as WebBrowserInput) : null;
-  const footerText = verb ? truncate(`Last Action: ${verb} \u2192 ${summary}`, innerWidth) : null;
+  // For switch_tab/close_tab, use the URL from parseLastOperationForDisplay
+  const displaySummary = parsedOp ? `${parsedOp.verb} \u2192 ${parsedOp.summary}` : (verb ? `${verb} \u2192 ${summary}` : null);
+  const footerText = displaySummary ? truncate(`Last Action: ${displaySummary}`, innerWidth) : null;
 
   const autoSwitch = state.autoSwitchedToNewTab ? truncate('\u2192 New tab opened and focused', innerWidth) : null;
   const recording = state.isRecording ? truncate(`REC${state.recordingEventCount > 0 ? ` (${state.recordingEventCount})` : ''}`, innerWidth) : null;
