@@ -5,8 +5,12 @@ import { buildTool } from 'src/Tool.js'
 import { lazySchema } from 'src/utils/lazySchema.js'
 import { notifyAutomationStateChanged } from 'src/utils/sessionState.js'
 import { SLEEP_TOOL_NAME, DESCRIPTION, SLEEP_TOOL_PROMPT } from './prompt.js'
+import type { CanUseToolFn } from 'src/hooks/useCanUseTool.js'
+import type { AssistantMessage } from 'src/types/message.js'
+import type { ToolCallProgress, ToolUseContext } from 'src/Tool.js'
 
 const SLEEP_WAKE_CHECK_INTERVAL_MS = 500
+const SLEEP_PROGRESS_INTERVAL_MS = 1000
 
 const inputSchema = lazySchema(() =>
   z.strictObject({
@@ -21,6 +25,14 @@ type InputSchema = ReturnType<typeof inputSchema>
 type SleepInput = z.infer<InputSchema>
 
 type SleepOutput = { slept_seconds: number; interrupted: boolean }
+
+type SleepProgressData = {
+  type: 'sleep_progress'
+  elapsed_seconds: number
+  total_seconds: number
+  remaining_seconds: number
+  interrupted: boolean
+}
 
 function isProactiveAutomationEnabled(): boolean {
   if (!(feature('PROACTIVE') || feature('KAIROS'))) {
@@ -86,6 +98,21 @@ export const SleepTool = buildTool({
     return `Sleep: ${secs}s`
   },
 
+  renderToolUseProgressMessage(
+    progressMessages: ProgressMessage<SleepProgressData>[],
+    _options: { tools: Tools; verbose: boolean; terminalSize?: { columns: number; rows: number }; inProgressToolCallCount?: number; isTranscriptMode?: boolean },
+  ): React.ReactNode {
+    const lastProgress = progressMessages.at(-1)?.data
+    if (!lastProgress || lastProgress.type !== 'sleep_progress') {
+      return <Text dimColor>Sleeping…</Text>
+    }
+    const { elapsed_seconds, total_seconds, remaining_seconds, interrupted } = lastProgress
+    if (interrupted) {
+      return <Text warnColor>Sleep interrupted after {elapsed_seconds}s</Text>
+    }
+    return <Text dimColor>Sleeping… {elapsed_seconds}s / {total_seconds}s (remaining: {remaining_seconds}s)</Text>
+  },
+
   mapToolResultToToolResultBlockParam(
     content: SleepOutput,
     toolUseID: string,
@@ -100,7 +127,13 @@ export const SleepTool = buildTool({
     }
   },
 
-  async call(input: SleepInput, context) {
+  async call(
+    input: SleepInput,
+    context: ToolUseContext,
+    _canUseTool: CanUseToolFn,
+    _parentMessage: AssistantMessage,
+    onProgress?: ToolCallProgress<SleepProgressData>,
+  ): Promise<ToolResult<SleepOutput>> {
     // Don't enter sleep if proactive was disabled or new work arrived while
     // the model was deciding to wait.
     if (shouldInterruptSleep()) {
@@ -129,7 +162,9 @@ export const SleepTool = buildTool({
       await new Promise<void>((resolve, reject) => {
         let timer: ReturnType<typeof setTimeout> | null = null
         let wakeCheck: ReturnType<typeof setInterval> | null = null
+        let progressTimer: ReturnType<typeof setInterval> | null = null
         let settled = false
+        let lastProgressSeconds = 0
 
         const cleanup = () => {
           if (timer !== null) {
@@ -139,6 +174,10 @@ export const SleepTool = buildTool({
           if (wakeCheck !== null) {
             clearInterval(wakeCheck)
             wakeCheck = null
+          }
+          if (progressTimer !== null) {
+            clearInterval(progressTimer)
+            progressTimer = null
           }
           context.abortController.signal.removeEventListener('abort', onAbort)
         }
@@ -179,6 +218,41 @@ export const SleepTool = buildTool({
             interrupt()
           }
         }, SLEEP_WAKE_CHECK_INTERVAL_MS)
+
+        // Send progress updates with countdown
+        if (onProgress && duration_seconds > 0) {
+          // Send initial progress (0s elapsed, full remaining)
+          onProgress({
+            toolUseID: context.toolUseID,
+            data: {
+              type: 'sleep_progress',
+              elapsed_seconds: 0,
+              total_seconds: duration_seconds,
+              remaining_seconds: duration_seconds,
+              interrupted: false,
+            },
+          })
+
+          if (duration_seconds > 1) {
+            progressTimer = setInterval(() => {
+              const elapsed = Math.floor((Date.now() - startTime) / 1000)
+              if (elapsed !== lastProgressSeconds && elapsed < duration_seconds) {
+                lastProgressSeconds = elapsed
+                const remaining = Math.max(0, duration_seconds - elapsed)
+                onProgress({
+                  toolUseID: context.toolUseID,
+                  data: {
+                    type: 'sleep_progress',
+                    elapsed_seconds: elapsed,
+                    total_seconds: duration_seconds,
+                    remaining_seconds: remaining,
+                    interrupted: false,
+                  },
+                })
+              }
+            }, SLEEP_PROGRESS_INTERVAL_MS)
+          }
+        }
       })
       return {
         data: {
