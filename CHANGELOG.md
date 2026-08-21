@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **WebBrowserPanel**: Complete UX refactor (Round 12-13) — ANSI-safe widths, tab overflow (+N more), separated tab bar, right-aligned status badges, content wrapping, perfect borders, terminal resize safe at 80/120/160/200 cols.
 - **WebBrowserPanel UX**: Active tab bracket highlight (●/○), tab title normalization, content clipping (8 lines), fixed viewport, empty state (🌐), HTTP status colors (🟢 2xx, 🟡 3xx/4xx, 🔴 5xx), content hierarchy, footer "Last Action", tab count badge, content summary mode.
+- **WebBrowserPanel**: "Last Action" footer now shows target URL for `switch_tab` and `close_tab` operations instead of just the tab ID (e.g., "SWITCH_TAB → to https://example.com").
 
 ### Fixed
 - **RecordingSession tests**: Fixed mock evaluate sequence, double-start handling, stop error scenarios.
