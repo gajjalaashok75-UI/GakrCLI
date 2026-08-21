@@ -1,25 +1,24 @@
 /**
- * Tests for the browser-side script files in `js/` (now TypeScript `.ts`
- * sources) and the inlined equivalents bundled into `recording.ts`.
+ * Tests for the inlined browser script constants in `recording.ts`.
  *
- * These files are not normal ES modules: each is a self-contained IIFE that
+ * These scripts are not normal ES modules: each is a self-contained IIFE that
  * Playwright injects into the page via `page.evaluate()` /
- * `page.addInitScript()`. The single CDN-templated file (`rrweb-loader.ts`)
+ * `page.addInitScript()`. The single CDN-templated script (`RRWEB_LOADER_JS`)
  * is loaded at runtime by name; the other five are inlined verbatim into
  * `recording.ts` at build time so they are available inside the bundled
  * `cli.mjs` without any disk reads at runtime.
  *
  * Invariants verified here:
  *
- *   1. Every `.ts` script file under `js/` exists and is non-empty.
- *   2. Each file's body is syntactically valid JavaScript (the browser only
+ *   1. Every inlined script constant in `recording.ts` exists and is non-empty.
+ *   2. Each constant's body is syntactically valid JavaScript (the browser only
  *      ever runs the raw text, and TypeScript is a superset of JS, so a
  *      valid JS IIFE is a valid `.ts` file with no extra type syntax).
  *   3. The exported `getRrwebLoaderJs(cdnUrl)` builder substitutes
- *      `{{CDN_URL}}` and otherwise returns the `rrweb-loader.ts` body
+ *      `{{CDN_URL}}` and otherwise returns the `RRWEB_LOADER_JS` body
  *      byte-for-byte.
  *   4. The corresponding inlined constants/callers in `recording.ts` each
- *      return the same literal text as their source file, guaranteeing the
+ *      return the same literal text as their source constant, guaranteeing the
  *      bundled output carries identical script bodies.
  *
  * Written with `vitest`.
@@ -42,24 +41,30 @@ import {
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_DIR = path.resolve(MODULE_DIR, '..');
-const JS_DIR = path.join(PROJECT_DIR, 'js');
 const RECORDING_SRC = fs.readFileSync(path.join(PROJECT_DIR, 'recording.ts'), 'utf-8');
 
-/** The six script files recording.ts is expected to load, with stable base names. */
-const EXPECTED_SCRIPTS = [
-  'flush-events',
-  'rrweb-loader',
-  'start-recording-simple',
-  'start-recording',
-  'stop-recording',
-  'wait-for-rrweb',
-] as const;
-
-/** Collect every `loadJsFile('xxx')` reference from recording.ts source. */
-function referencedLoadJsFiles(): string[] {
-  const matches = [...RECORDING_SRC.matchAll(/loadJsFile\(['"]([^'"]+)['"]\)/g)];
-  return matches.map((m) => m[1]).sort();
+/** Extract inlined script constants from recording.ts source. */
+function extractScriptConstants(source: string): Map<string, string> {
+  const map = new Map<string, string>();
+  const regex = /^const\s+([A-Z_]+_JS)\s*=\s*`([\s\S]*?)`;/gm;
+  let match;
+  while ((match = regex.exec(source)) !== null) {
+    map.set(match[1], match[2]);
+  }
+  return map;
 }
+
+const SCRIPT_CONSTANTS = extractScriptConstants(RECORDING_SRC);
+
+/** The six inlined script constants in recording.ts. */
+const INLINED_SCRIPTS = [
+  { name: 'RRWEB_LOADER_JS', value: SCRIPT_CONSTANTS.get('RRWEB_LOADER_JS') ?? '', hasCDNPlaceholder: true },
+  { name: 'FLUSH_EVENTS_JS', value: SCRIPT_CONSTANTS.get('FLUSH_EVENTS_JS') ?? '', hasCDNPlaceholder: false },
+  { name: 'START_RECORDING_SIMPLE_JS', value: SCRIPT_CONSTANTS.get('START_RECORDING_SIMPLE_JS') ?? '', hasCDNPlaceholder: false },
+  { name: 'START_RECORDING_JS', value: SCRIPT_CONSTANTS.get('START_RECORDING_JS') ?? '', hasCDNPlaceholder: false },
+  { name: 'STOP_RECORDING_JS', value: SCRIPT_CONSTANTS.get('STOP_RECORDING_JS') ?? '', hasCDNPlaceholder: false },
+  { name: 'WAIT_FOR_RRWEB_JS', value: SCRIPT_CONSTANTS.get('WAIT_FOR_RRWEB_JS') ?? '', hasCDNPlaceholder: false },
+] as const;
 
 /** Safely check that a string is a runnable JS program by compiling it. */
 function isSyntacticallyValidJs(source: string): boolean {
@@ -72,73 +77,56 @@ function isSyntacticallyValidJs(source: string): boolean {
   }
 }
 
-describe('js/ script files — existence & content', () => {
-  for (const base of EXPECTED_SCRIPTS) {
-    const file = `${base}.ts`;
-    it(`exists and is non-empty: ${file}`, () => {
-      const full = path.join(JS_DIR, file);
-      expect(fs.existsSync(full)).toBe(true);
-      const content = fs.readFileSync(full, 'utf-8');
-      expect(content.trim().length).toBeGreaterThan(0);
+describe('recording.ts — inlined script constants', () => {
+  for (const script of INLINED_SCRIPTS) {
+    it(`constant ${script.name} exists and is non-empty`, () => {
+      expect(script.value).toBeDefined();
+      expect(typeof script.value).toBe('string');
+      expect(script.value.trim().length).toBeGreaterThan(0);
     });
 
-    it(`is syntactically valid JS (browser-runnable): ${file}`, () => {
-      const content = fs.readFileSync(path.join(JS_DIR, file), 'utf-8');
-      expect(isSyntacticallyValidJs(content)).toBe(true);
+    it(`constant ${script.name} is syntactically valid JS (browser-runnable)`, () => {
+      expect(isSyntacticallyValidJs(script.value)).toBe(true);
     });
 
-    it(`is wrapped in an IIFE (self-contained browser script): ${file}`, () => {
-      const content = fs.readFileSync(path.join(JS_DIR, file), 'utf-8').trim();
+    it(`constant ${script.name} is wrapped in an IIFE (self-contained browser script)`, () => {
+      const content = script.value.trim();
       expect(content.startsWith('(function')).toBe(true);
       expect(content.endsWith(')();')).toBe(true);
     });
   }
 });
 
-describe('js/ directory — script inventory', () => {
-  it('no .js copies remain in js/ (conversion to .ts is complete)', () => {
-    const entries = fs.readdirSync(JS_DIR);
-    const jsFiles = entries.filter((f) => f.endsWith('.js'));
-    expect(jsFiles).toEqual([]);
-  });
-
-  it('the js/ directory contains exactly the six converted .ts scripts', () => {
-    const tsFiles = fs.readdirSync(JS_DIR).filter((f) => f.endsWith('.ts')).sort();
-    const expected = EXPECTED_SCRIPTS.map((b) => `${b}.ts`).sort();
-    expect(tsFiles).toEqual(expected);
-  });
-});
-
-describe('recording.ts — inlined script constants match source files byte-for-byte', () => {
-  it('inline rrweb-loader matches rrweb-loader.ts (CDN placeholder substituted)', () => {
-    const original = fs.readFileSync(path.join(JS_DIR, 'rrweb-loader.ts'), 'utf-8');
+describe('recording.ts — inlined script getters match source constants', () => {
+  it('getRrwebLoaderJs matches RRWEB_LOADER_JS (CDN placeholder substituted)', () => {
     const cdn = DEFAULT_RECORDING_CONFIG.cdn_url;
-    expect(getRrwebLoaderJs(cdn)).toBe(original.replace('{{CDN_URL}}', cdn));
+    const rrwebLoader = SCRIPT_CONSTANTS.get('RRWEB_LOADER_JS') ?? '';
+    expect(getRrwebLoaderJs(cdn)).toBe(rrwebLoader.replace('{{CDN_URL}}', cdn));
   });
 
-  it('inline flush-events matches flush-events.ts', () => {
-    const original = fs.readFileSync(path.join(JS_DIR, 'flush-events.ts'), 'utf-8');
-    expect(getFlushEventsJs()).toBe(original);
+  it('getFlushEventsJs matches FLUSH_EVENTS_JS', () => {
+    const flushEvents = SCRIPT_CONSTANTS.get('FLUSH_EVENTS_JS') ?? '';
+    expect(getFlushEventsJs()).toBe(flushEvents);
   });
 
-  it('inline start-recording-simple matches start-recording-simple.ts', () => {
-    const original = fs.readFileSync(path.join(JS_DIR, 'start-recording-simple.ts'), 'utf-8');
-    expect(getStartRecordingSimpleJs()).toBe(original);
+  it('getStartRecordingSimpleJs matches START_RECORDING_SIMPLE_JS', () => {
+    const startSimple = SCRIPT_CONSTANTS.get('START_RECORDING_SIMPLE_JS') ?? '';
+    expect(getStartRecordingSimpleJs()).toBe(startSimple);
   });
 
-  it('inline start-recording matches start-recording.ts', () => {
-    const original = fs.readFileSync(path.join(JS_DIR, 'start-recording.ts'), 'utf-8');
-    expect(getStartRecordingJs()).toBe(original);
+  it('getStartRecordingJs matches START_RECORDING_JS', () => {
+    const startRecording = SCRIPT_CONSTANTS.get('START_RECORDING_JS') ?? '';
+    expect(getStartRecordingJs()).toBe(startRecording);
   });
 
-  it('inline stop-recording matches stop-recording.ts', () => {
-    const original = fs.readFileSync(path.join(JS_DIR, 'stop-recording.ts'), 'utf-8');
-    expect(getStopRecordingJs()).toBe(original);
+  it('getStopRecordingJs matches STOP_RECORDING_JS', () => {
+    const stopRecording = SCRIPT_CONSTANTS.get('STOP_RECORDING_JS') ?? '';
+    expect(getStopRecordingJs()).toBe(stopRecording);
   });
 
-  it('inline wait-for-rrweb matches wait-for-rrweb.ts', () => {
-    const original = fs.readFileSync(path.join(JS_DIR, 'wait-for-rrweb.ts'), 'utf-8');
-    expect(getWaitForRrwebJs()).toBe(original);
+  it('getWaitForRrwebJs matches WAIT_FOR_RRWEB_JS', () => {
+    const waitRrweb = SCRIPT_CONSTANTS.get('WAIT_FOR_RRWEB_JS') ?? '';
+    expect(getWaitForRrwebJs()).toBe(waitRrweb);
   });
 });
 
@@ -151,9 +139,9 @@ describe('getRrwebLoaderJs — CDN template wiring (the only exported builder)',
   });
 
   it('leaves the rest of the loader body byte-for-byte intact', () => {
-    const original = fs.readFileSync(path.join(JS_DIR, 'rrweb-loader.ts'), 'utf-8');
+    const rrwebLoader = SCRIPT_CONSTANTS.get('RRWEB_LOADER_JS') ?? '';
     const out = getRrwebLoaderJs('https://example.test/rrweb.js');
-    const expected = original.replace('{{CDN_URL}}', 'https://example.test/rrweb.js');
+    const expected = rrwebLoader.replace('{{CDN_URL}}', 'https://example.test/rrweb.js');
     expect(out).toBe(expected);
   });
 
