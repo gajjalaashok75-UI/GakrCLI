@@ -984,9 +984,10 @@ export class BrowserServer {
     const pages = this.requirePage().context().pages();
     const target = pages.find((p) => this.tabId(p) === tabId);
     if (!target) return `Error: Tab ${tabId} not found`;
+    const targetUrl = target.url();
     this.page = target;
     await target.bringToFront();
-    await this.refreshLiveState({ lastOperation: `switch_tab ${tabId}` });
+    await this.refreshLiveState({ lastOperation: `switch_tab ${tabId} ${targetUrl}` });
     return `Switched to tab ${tabId}`;
   }
 
@@ -994,6 +995,7 @@ export class BrowserServer {
     const pages = this.requirePage().context().pages();
     const target = pages.find((p) => this.tabId(p) === tabId);
     if (!target) return `Error: Tab ${tabId} not found`;
+    const targetUrl = target.url();
     // ROUND 8 FIX: previously refused to close the last remaining tab.
     // Now that navigate()/requirePage() both handle a genuine zero-tab
     // state gracefully (see round 8 fixes above), there's no correctness
@@ -1006,7 +1008,7 @@ export class BrowserServer {
       this.page = remaining[0] ?? null;
       if (!this.page) this.refManager.clear();
     }
-    await this.refreshLiveState({ lastOperation: `close_tab ${tabId}` });
+    await this.refreshLiveState({ lastOperation: `close_tab ${tabId} ${targetUrl}` });
     const remainingCount = pages.length - 1;
     return remainingCount === 0
       ? `Closed tab ${tabId}. No tabs remain open — call browser_navigate to open a new one.`

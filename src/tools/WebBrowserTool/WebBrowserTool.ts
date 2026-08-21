@@ -245,6 +245,20 @@ export function shortActionResult(action: string, input: WebBrowserInput): strin
   }
 }
 
+// Parse lastOperation from live state to extract URL for display (switch_tab/close_tab include URL after tab_id)
+export function parseLastOperationForDisplay(raw?: string): { verb: string; summary: string } | null {
+  if (!raw) return null;
+  const parts = raw.split(' ');
+  const action = parts[0];
+  if (action === 'switch_tab' || action === 'close_tab') {
+    // Format: "switch_tab <tab_id> <url>" or "close_tab <tab_id> <url>"
+    const url = parts.slice(2).join(' ');
+    const verb = action.toUpperCase().replace('_', ' ');
+    return { verb, summary: `to ${url}` };
+  }
+  return null;
+}
+
 function toContentBlocks(blocks: LLMContentBlock[]): WebBrowserOutput['contentBlocks'] {
   return blocks.map((block) => {
     if (block.type === 'text') {
