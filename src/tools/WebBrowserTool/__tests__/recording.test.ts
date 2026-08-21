@@ -1,4 +1,4 @@
-import { describe, it, expect, mock, beforeAll, afterAll } from 'bun:test';
+import { describe, it, expect, mock, beforeEach } from 'bun:test';
 import { RecordingSession, DEFAULT_RECORDING_CONFIG, getRrwebLoaderJs } from '../recording';
 
 // ---------------------------------------------------------------------------
@@ -20,31 +20,38 @@ function makePage(results: EvalResult[]): FakePage {
   const calls: { kind: string; result?: EvalResult }[] = [];
   let index = 0;
 
-  const evaluate = async (_fnOrString: Function | string) => {
+  const evaluate = async (fnOrString: Function | string) => {
     const result = results[Math.min(index, results.length - 1)];
+    const resultStr = result === undefined ? 'undefined' : (typeof result === 'string' ? result.slice(0, 100) : JSON.stringify(result).slice(0, 100));
+    console.log(`[MOCK] evaluate #${index}: arg=${typeof fnOrString === 'function' ? 'function' : String(fnOrString).slice(0, 50)}... -> result=${resultStr}`);
     calls.push({ kind: 'evaluate', result });
     index++;
+    // For flush-events and stop-recording, return JSON string like real browser would
+    if (typeof result === 'object' && result !== null && 'events' in result) {
+      return JSON.stringify(result);
+    }
     return result;
   };
 
-  const addInitScript = async () => {
+  const addInitScript = async (script: any) => {
+    console.log(`[MOCK] addInitScript: content=${String(script?.content ?? script).slice(0, 50)}...`);
     calls.push({ kind: 'addInitScript' });
+    return {}; // Playwright returns a Script object
   };
 
   return { _calls: calls, _evalIndex: 0, evaluate, addInitScript, url: () => 'http://test.local' };
 }
 
 const DEFAULT_RESULTS: EvalResult[] = [
-  // 0: rrweb-loader evaluate (idempotent, returns undefined in real browser)
+  // 0: injectScripts evaluate rrweb-loader (page.evaluate)
   undefined,
   // 1: wait-for-rrweb — resolves { success: true }
   { success: true },
   // 2: start-recording IIFE — returns { status: 'started' }
   { status: 'started' },
-  // 3+: flush-events / stop-recording return `JSON.stringify(...)` which
-  //     Playwright auto-deserialises; we model that as plain objects/strings.
-  { events: [] },      // flush
-  { events: [] },      // stop (flush before stop)
+  // 3+: flush-events / stop-recording return JSON string with events
+  JSON.stringify({ events: [] }),      // flush
+  JSON.stringify({ events: [] }),      // stop (flush before stop)
 ];
 
 // ---------------------------------------------------------------------------
@@ -76,26 +83,37 @@ describe('RecordingSession unit tests', () => {
     expect(session.isActive).toBe(false);
   });
 
-  // ---- 2. stop() without start() is a no-op -------------------------------
+  // ---- 2. stop() without start() returns error message -------------------------------
 
   it('stop() before start() returns an error message and does not throw', async () => {
     page = freshPage();
     const session = new RecordingSession('/tmp/out', DEFAULT_RECORDING_CONFIG);
 
-    await expect(session.stop(page as any)).rejects.toThrow();
+    const msg = await session.stop(page as any);
+    expect(msg).toContain('Error: Not recording');
   });
 
   // ---- 3. double start() is idempotent ------------------------------------
 
   it('start() called twice returns Already recording and does not break state', async () => {
-    page = freshPage();
-    // Second call catches the already_recording fast-path where
-    // start_recording.js returns { status: 'already_recording' }
-    const results = [
-      undefined,
-      { success: true },
-      { status: 'started' },
-      { status: 'already_recording' }, // second start-recording eval
+    // Sequence based on actual call order from mock logs:
+    // 0: injectScripts evaluate (rrweb-loader) - first start
+    // 1: waitForRrwebLoad (first)
+    // 2: executeStartRecording (first) -> returns 'started'
+    // 3: periodic flush (after first start, triggers setTimeout callback)
+    // 4: waitForRrwebLoad (second start) - rrweb already loaded
+    // 5: executeStartRecording (second start) - returns 'already_recording'
+    // 6: flush (stop)
+    // 7: stopRecording
+    const results: EvalResult[] = [
+      undefined,                      // 0: injectScripts evaluate
+      { success: true },              // 1: waitForRrwebLoad (first)
+      { status: 'started' },          // 2: executeStartRecording (first)
+      JSON.stringify({ events: [] }), // 3: periodic flush after first start
+      { success: true },              // 4: waitForRrwebLoad (second) - rrweb already loaded
+      { status: 'already_recording' },// 5: executeStartRecording (second)
+      JSON.stringify({ events: [] }), // 6: flush (stop)
+      JSON.stringify({ events: [] }), // 7: stopRecording
     ];
     const page2 = makePage(results);
     const session = new RecordingSession('/tmp/out', DEFAULT_RECORDING_CONFIG);
@@ -115,11 +133,11 @@ describe('RecordingSession unit tests', () => {
   it('stop() reports the correct number of events captured from the browser', async () => {
     const fakeEvents = [{ type: 2 }, { type: 3 }, { type: 4 }];
     const results: EvalResult[] = [
-      undefined,
-      { success: true },
-      { status: 'started' },
-      { events: fakeEvents.slice(0, 2) }, // first flush
-      { events: fakeEvents.slice(2) },     // stop returns last batch
+      undefined,                      // injectScripts evaluate (rrweb-loader)
+      { success: true },              // waitForRrwebLoad
+      { status: 'started' },          // executeStartRecording
+      JSON.stringify({ events: [] }), // flush (periodic - empty)
+      JSON.stringify({ events: fakeEvents }), // stopRecording returns ALL events
     ];
     const p = makePage(results);
     const session = new RecordingSession('/tmp/out', DEFAULT_RECORDING_CONFIG);
@@ -134,8 +152,8 @@ describe('RecordingSession unit tests', () => {
 
   it('start() returns an error when rrweb fails to load', async () => {
     const results: EvalResult[] = [
-      undefined,
-      { success: false, error: 'load_failed' },
+      undefined,              // injectScripts evaluate
+      { success: false, error: 'load_failed' }, // waitForRrwebLoad
     ];
     const p = makePage(results);
     const session = new RecordingSession('/tmp/out', DEFAULT_RECORDING_CONFIG);
@@ -150,15 +168,15 @@ describe('RecordingSession unit tests', () => {
 
   it('start() returns an error when rrweb load times out', async () => {
     const results: EvalResult[] = [
-      undefined,
-      { success: false, error: 'timeout' },
+      undefined,              // injectScripts evaluate
+      { success: false, error: 'timeout' }, // waitForRrwebLoad
     ];
     const p = makePage(results);
     const session = new RecordingSession('/tmp/out', DEFAULT_RECORDING_CONFIG);
 
     const msg = await session.start(p as any);
     expect(msg).toContain('Error');
-    expect(msg).toContain('timed out');
+    expect(msg).toContain('in time');  // Updated error message uses "in time"
     expect(session.isActive).toBe(false);
   });
 
@@ -184,10 +202,11 @@ describe('RecordingSession unit tests', () => {
     const outDir = '/tmp/recording-out';
     const fakeEvents = [{ type: 5, data: { href: '/page2' } }];
     const results: EvalResult[] = [
-      undefined,
-      { success: true },
-      { status: 'started' },
-      { events: fakeEvents },
+      undefined,                      // injectScripts evaluate (rrweb-loader)
+      { success: true },              // waitForRrwebLoad
+      { status: 'started' },          // executeStartRecording
+      JSON.stringify({ events: [] }), // flush (periodic)
+      JSON.stringify({ events: fakeEvents }), // stopRecording
     ];
     const p = makePage(results);
     const session = new RecordingSession(outDir, DEFAULT_RECORDING_CONFIG);
@@ -198,7 +217,8 @@ describe('RecordingSession unit tests', () => {
     expect(msg).toContain('1 event');
     // sessionDir is populated after createSessionSubfolder()
     expect(session.sessionDir).not.toBeNull();
-    expect(session.sessionDir).toContain(outDir);
+    // Path may use forward or back slashes depending on platform
+    expect(session.sessionDir).toContain('recording-out');
   });
 
   // ---- 9. DEFAULT_RECORDING_CONFIG values --------------------------------

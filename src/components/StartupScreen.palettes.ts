@@ -132,9 +132,9 @@ export function rgbToInkColor([r, g, b]: RGB): RGBColor {
 export function resolveLogoSpinnerColors(
   name: string | undefined,
 ): LogoSpinnerColors {
-  const palette = resolveLogoPalette(name)
+  const palette = resolveLogoPalette(name);
   return {
     accent: rgbToInkColor(palette.accent),
     shimmer: rgbToInkColor(palette.gradient[0] ?? palette.accent),
-  }
+  };
 }

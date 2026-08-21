@@ -5025,7 +5025,6 @@ export function REPL({
         {toolJSX && !(toolJSX.isLocalJSXCommand && toolJSX.isImmediate) && !toolJsxCentered && <Box flexDirection="column" width="100%">
           {toolJSX.jsx}
         </Box>}
-        {feature('WEB_BROWSER_TOOL') && isLoading && browserToolActiveInTurn ? WebBrowserPanelModule && <WebBrowserPanelModule.WebBrowserPanel /> : null}
         <Box flexGrow={1} />
         {showSpinner && <SpinnerWithVerb mode={streamMode} spinnerTip={spinnerTip} responseLengthRef={responseLengthRef} responseLength={reducedMotion ? reducedMotionResponseLength : undefined} overrideMessage={spinnerMessage} spinnerSuffix={stopHookSpinnerSuffix ?? activeToolSpinnerSuffix} verbose={verbose} loadingStartTimeRef={loadingStartTimeRef} totalPausedMsRef={totalPausedMsRef} pauseStartTimeRef={pauseStartTimeRef} overrideColor={spinnerColor} overrideShimmerColor={spinnerShimmerColor} hasActiveTools={inProgressToolUseIDs.size > 0} leaderIsIdle={!isLoading} />}
         {/* Permanently mounted: it observes the isLoading transition to flash
@@ -5365,6 +5364,12 @@ export function REPL({
               feature('MESSAGE_ACTIONS') && isFullscreenEnvEnabled() && !disableMessageActions ? enterMessageActions : undefined} mcpClients={mcpClients} pastedContents={pastedContents} setPastedContents={setPastedContents} vimMode={vimMode} setVimMode={setVimMode} showBashesDialog={showBashesDialog} setShowBashesDialog={setShowBashesDialog} onSubmit={onSubmit} onAgentSubmit={onAgentSubmit} isSearchingHistory={isSearchingHistory} setIsSearchingHistory={setIsSearchingHistory} helpOpen={isHelpOpen} setHelpOpen={setIsHelpOpen} insertTextRef={feature('VOICE_MODE') ? insertTextRef : undefined} voiceInterimRange={voice.interimRange} />
             <SessionBackgroundHint onBackgroundSession={handleBackgroundSession} isLoading={isLoading} />
             <BackgroundAgentSelector />
+            {(() => {
+  const Browser = WebBrowserPanelModule;
+  const executor = Browser?.BrowserToolExecutor?.getSharedIfExists?.();
+  const tabs = executor?.getLiveState?.()?.tabs;
+  return feature('WEB_BROWSER_TOOL') && Browser && Array.isArray(tabs) && tabs.length > 0 ? <Browser.WebBrowserPanel /> : null;
+})()}
           </>}
           {cursor &&
             // inputValue is REPL state; typed text survives the round-trip.

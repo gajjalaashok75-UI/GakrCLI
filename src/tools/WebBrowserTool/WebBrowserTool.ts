@@ -55,6 +55,7 @@ import { zodToJsonSchema } from 'src/utils/zodToJsonSchema.js';
 import { z } from 'zod/v4';
 
 import { BrowserToolExecutor } from './browserEngine.js';
+import { renderToolResultMessage, extractSearchText } from './UI.js';
 import {
   BROWSER_CLICK_DESCRIPTION,
   BROWSER_CLOSE_ALL_TABS_DESCRIPTION,
@@ -97,7 +98,7 @@ const TOOL_NAME = 'WebBrowser';
 const inputSchema = lazySchema(() => BrowserActionSchema);
 
 type InputSchema = ReturnType<typeof inputSchema>;
-type WebBrowserInput = z.infer<InputSchema>;
+export type WebBrowserInput = z.infer<InputSchema>;
 
 // zod v4 serializes a top-level z.discriminatedUnion as {anyOf} with no
 // top-level `type`, which model providers reject ("schema must be a JSON
@@ -110,6 +111,16 @@ const inputJSONSchema: ToolInputJSONSchema = {
   ...zodToJsonSchema(inputSchema()),
   type: 'object',
 };
+
+const outputSchema = lazySchema(() => z.object({
+  observationText: z.string(),
+  isError: z.boolean(),
+  contentBlocks: z.array(z.union([
+    z.object({ type: z.literal('text'), text: z.string() }),
+    z.object({ type: z.literal('image'), source: z.object({ type: z.literal('base64'), media_type: z.string(), data: z.string() }) }),
+  ])),
+}));
+type OutputSchema = ReturnType<typeof outputSchema>;
 
 /**
  * `Output` returned by `call()`'s `data` field and consumed by
@@ -191,6 +202,49 @@ function toBrowserAction(input: WebBrowserInput): BrowserAction {
   return input;
 }
 
+export function shortActionResult(action: string, input: WebBrowserInput): string {
+  switch (action) {
+    case 'navigate':
+      return `Navigated to ${input.url}`;
+    case 'click':
+      return input.selector ? `Clicked ${input.selector}` : `Clicked element [${input.index}]`;
+    case 'type':
+      return input.selector ? `Typed into ${input.selector}` : `Typed into element [${input.index}]`;
+    case 'get_state':
+      return 'Page state read';
+    case 'get_content':
+      return 'Page content read';
+    case 'scroll':
+      return `Scrolled ${input.direction ?? 'down'}`;
+    case 'go_back':
+      return 'Went back';
+    case 'list_tabs':
+      return 'Tabs listed';
+    case 'switch_tab':
+      return `Switched to tab ${input.tab_id}`;
+    case 'close_tab':
+      return `Closed tab ${input.tab_id}`;
+    case 'close_all_tabs':
+      return 'All tabs closed';
+    case 'get_storage':
+      return 'Browser storage read';
+    case 'set_storage':
+      return 'Browser storage set';
+    case 'start_recording':
+      return 'Recording started';
+    case 'stop_recording':
+      return 'Recording stopped';
+    case 'refresh':
+      return 'Page refreshed';
+    case 'wait':
+      return `Waited ${input.ms}ms`;
+    case 'press_key':
+      return `Pressed key ${input.key}`;
+    default:
+      return 'Browser action completed';
+  }
+}
+
 function toContentBlocks(blocks: LLMContentBlock[]): WebBrowserOutput['contentBlocks'] {
   return blocks.map((block) => {
     if (block.type === 'text') {
@@ -213,6 +267,10 @@ export const WebBrowserTool = buildTool({
 
   get inputSchema(): InputSchema {
     return inputSchema();
+  },
+
+  get outputSchema(): OutputSchema {
+    return outputSchema();
   },
 
   inputJSONSchema,
@@ -282,6 +340,8 @@ export const WebBrowserTool = buildTool({
         return 'Starting session recording';
       case 'stop_recording':
         return 'Stopping session recording';
+      case 'close_all_tabs':
+        return 'Closing all tabs';
       case 'refresh':
         return 'Refreshing page';
       case 'wait':
@@ -292,6 +352,9 @@ export const WebBrowserTool = buildTool({
         return 'Browser action';
     }
   },
+
+  renderToolResultMessage,
+  extractSearchText,
 
   toAutoClassifierInput(input: WebBrowserInput) {
     // Browser actions are security-relevant (navigation, form fill, storage
@@ -310,10 +373,15 @@ export const WebBrowserTool = buildTool({
   },
 
   mapToolResultToToolResultBlockParam(content: WebBrowserOutput, toolUseID: string): ToolResultBlockParam {
+    const statusLine = content.isError
+      ? `WebBrowser error: ${content.observationText}`
+      : content.observationText;
+    const terminalBlock = statusLine.length > 120 ? `${statusLine.slice(0, 117)}...` : statusLine;
+    const blocks = [{ type: 'text' as const, text: terminalBlock }, ...content.contentBlocks];
     return {
       tool_use_id: toolUseID,
       type: 'tool_result',
-      content: JSON.stringify(content.contentBlocks),
+      content: JSON.stringify(blocks),
       is_error: content.isError,
     };
   },
@@ -337,11 +405,18 @@ export const WebBrowserTool = buildTool({
     // The content blocks are now carried inside `data` so
     // mapToolResultToToolResultBlockParam can assemble the real
     // ToolResultBlockParam from them.
+    const resultText = observation.is_error
+      ? observation.text
+      : `${input.action} → ${shortActionResult(input.action, input as WebBrowserInput)}`;
+    const contentBlocks = toContentBlocks(observation.toLLMContent());
+    const terminalBlocks = contentBlocks.some(b => b.type === 'text' && b.text === observation.text)
+      ? [{ type: 'text' as const, text: resultText }, ...contentBlocks]
+      : [{ type: 'text' as const, text: resultText }, ...contentBlocks.filter(b => b.type !== 'text' || b.text !== observation.text)];
     return {
       data: {
         observationText: observation.text,
         isError: observation.is_error,
-        contentBlocks: toContentBlocks(observation.toLLMContent()),
+        contentBlocks: terminalBlocks,
       },
     };
   },

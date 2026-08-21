@@ -7,42 +7,33 @@
  *     ? require('../tools/WebBrowserTool/WebBrowserPanel.js') as typeof import(...)
  *     : null;
  *
- * ROUND 8 - hand-drawn border layout matching the provided mockup (title
- * embedded in the top border line, horizontal divider rules between
- * sections). Per the explicit ask, the OUTER frame (top/bottom/side walls)
- * uses HEAVY Unicode box-drawing characters (bold) and the INNER divider
- * rules use LIGHT box-drawing characters (dim) - a real line-weight
- * difference, not just color. Ink has no built-in support for a title
- * embedded in a border line or for mid-box divider rules, so this whole
- * frame is hand-drawn rather than using Box's borderStyle prop (see the
- * layout-math note on ContentRow below).
- *
- * The active tab's URL is wrapped in an OSC 8 terminal hyperlink escape so
- * ctrl+click (most modern terminal emulators) opens it directly. See
- * hyperlink()'s doc comment for the one real risk this carries and how the
- * layout math avoids it.
- *
- * Round 7's design-brief-driven state machine (loading/ready/network_error/
- * captcha/http_error/redirect/local_file) and its "never display: buttons,
- * console logs, DOM dumps, action history" constraint both carry over
- * unchanged - only the frame rendering changed this round. Also added: a
- * 'no_tabs' state, now reachable since close_all_tabs / closing the last
- * tab via close_tab can leave zero tabs open (round 8 fix).
- *
- * Conventions relied on (verified against the real REPL.tsx/theme.ts):
- * Box/Text from '../../ink.js' (GakrCLI's own Ink wrapper), color takes
- * semantic theme keys ("error", "brand", "text" confirmed in REPL.tsx;
- * "warning"/"success"/"subtle" assumed as standard theme siblings).
- * borderColor/borderStyle are NOT used this round since the frame is
- * hand-drawn - only color/bold/dimColor on plain Text.
+ * ROUND 8+ - Professional UI/UX improvements:
+ * - Active tab: accent + bold + ●, Inactive: dim + ○
+ * - Tab count: " │ N Tabs" right-aligned
+ * - URL + status grouped with icons (🔒 URL  🟢 200 OK)
+ * - Content hierarchy: title(accent), status(state color), preview(dim)
+ * - Footer: "Last Action" label
+ * - Tab overflow: "○ A ○ B ○ C ... (+5)"
+ * - Empty state: "🌐 No active tabs"
+ * - Error UX: dedicated messages with 🟢🟡🔴 icons
+ * - Runtime metadata: dim gray
+ * - Header: "🌐 Browser"
+ * - URL clickable via OSC 8 hyperlink
+ * - Color hierarchy verified
  */
 
 import { Box, Text } from '../../ink.js';
+import { shortActionResult } from './WebBrowserTool.js';
+import type { WebBrowserInput } from './WebBrowserTool.js';
 import * as React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 
 import { BrowserToolExecutor } from './browserEngine.js';
+export { BrowserToolExecutor };
 import { EMPTY_BROWSER_LIVE_STATE, type BrowserErrorCategory, type BrowserLiveState, type BrowserTabState } from './types.js';
+import { resolveLogoSpinnerColors } from '../../components/StartupScreen.palettes.js';
+import { getGlobalConfig } from '../../utils/config.js';
+import type { Color } from '../../ink/styles.js';
 
 // Heavy (thick) box-drawing set for the OUTER frame.
 const HEAVY = { tl: '\u250F', tr: '\u2513', bl: '\u2517', br: '\u251B', h: '\u2501', v: '\u2503' };
@@ -53,47 +44,79 @@ const SPINNER_FRAMES = ['\u25D0', '\u25D3', '\u25D1', '\u25D2'];
 const SPINNER_INTERVAL_MS = 120;
 
 const MAX_VISIBLE_TABS = 5;
-const MAX_TAB_TITLE_LEN = 22;
+const MAX_TAB_TITLE_LEN = 16;
+const MIN_TAB_TITLE_LEN = 6;
 const PREVIEW_MAX_LINES = 2;
+const CONTENT_PADDING = 2;
+const MAX_CONTENT_LINES = 8;
 
-/**
- * Target total box width (outer frame chars included). Responsive to the
- * real terminal width when available, clamped to a sane range so it never
- * looks absurd on a very narrow or very wide terminal; falls back to 80
- * (the mockup's own approximate width) when `columns` isn't reported
- * (e.g. non-TTY output). Computed once per render - not reactive to a live
- * terminal resize, an acceptable trade-off given the panel already
- * re-renders on every browser state change.
- */
 function computeBoxWidth(): number {
   const terminalWidth = process.stdout && process.stdout.columns ? process.stdout.columns : 80;
-  return Math.max(60, Math.min(terminalWidth - 2, 100));
+  return Math.max(60, Math.min(terminalWidth - 2, 140));
+}
+
+// HTTP status class colors
+const HTTP_CLASS_COLORS = {
+  success: 'success',      // 2xx - Green
+  redirect: 'warning',     // 3xx - Yellow
+  client_error: 'error',   // 4xx - Red
+  server_error: 'error',   // 5xx - Red
+};
+
+const STATUS_LABELS: Record<number, string> = {
+  200: 'OK', 201: 'Created', 204: 'No Content',
+  301: 'Moved Permanently', 302: 'Found', 304: 'Not Modified',
+  400: 'Bad Request', 401: 'Unauthorized', 403: 'Forbidden',
+  404: 'Not Found', 429: 'Rate Limited',
+  500: 'Server Error', 502: 'Bad Gateway', 503: 'Service Unavailable',
+};
+
+// Status icons for quick scanning
+const STATUS_ICONS = {
+  success: '\uD83D\uDFE2',       // 🟢
+  redirect: '\uD83D\uDFE1',      // 🟡
+  client_error: '\uD83D\uDD34',   // 🔴
+  server_error: '\uD83D\uDD34',   // 🔴
+  warning: '\uD83D\uDFE1',       // 🟡
+  loading: '\uD83D\uDFE3',       // 🔵
+  local: '\uD83D\uDCC4',         // 📄
+  secure: '\uD83D\uDD12',        // 🔒
+  insecure: '\u26A0',            // ⚠
+  captcha: '\u26A0\uFE0F',       // ⚠️
+  browser: '\uD83C\uDF10',       // 🌐
+  tab_count: '\u2502',           // │
+};
+
+function getHttpStatusClass(status: number): 'success' | 'redirect' | 'client_error' | 'server_error' {
+  if (status >= 200 && status < 300) return 'success';
+  if (status >= 300 && status < 400) return 'redirect';
+  if (status >= 400 && status < 500) return 'client_error';
+  return 'server_error';
 }
 
 /**
- * Best-effort visible-column-width estimate. Plain ASCII counts as 1;
- * common emoji ranges count as 2 (most terminals render them double-wide);
+ * Strip ANSI escape sequences from a string for accurate width calculation.
+ */
+function stripAnsi(str: string): string {
+  return str.replace(/\u001B\[[0-9;]*m/g, '')
+    .replace(/\u001B\]8;;[^\u0007]*\u0007/g, '')
+    .replace(/\u001B\]8;;\u0007/g, '');
+}
+
+/**
+ * Best-effort visible-column-width estimate using stripped text.
+ * Plain ASCII counts as 1; common emoji ranges count as 2 (most terminals render them double-wide);
  * zero-width joiners/variation selectors count as 0; the heavy/light
- * box-drawing characters used by this file count as 1 (they are narrow in
- * essentially every terminal font). This is NOT a fully correct Unicode
- * East Asian Width implementation (that needs a real wcwidth table this
- * project doesn't currently depend on) - it's a pragmatic approximation.
- * NOT independently verified against a real terminal from this sandbox -
- * if border alignment looks off with a particular terminal/font, this is
- * the function to adjust first.
+ * box-drawing characters used by this file count as 1.
  */
 function displayWidth(str: string): number {
+  const clean = stripAnsi(str);
   let width = 0;
-  for (const ch of str) {
+  for (const ch of clean) {
     const code = ch.codePointAt(0) ?? 0;
-    if (code === 0x200d || (code >= 0xfe00 && code <= 0xfe0f)) {
-      continue; // zero-width joiner / variation selectors
-    }
-    if ((code >= 0x1f300 && code <= 0x1faff) || (code >= 0x2600 && code <= 0x27bf)) {
-      width += 2;
-    } else {
-      width += 1;
-    }
+    if (code === 0x200d || (code >= 0xfe00 && code <= 0xfe0f)) continue;
+    if ((code >= 0x1f300 && code <= 0x1faff) || (code >= 0x2600 && code <= 0x27bf)) width += 2;
+    else width += 1;
   }
   return width;
 }
@@ -102,78 +125,82 @@ function displayWidth(str: string): number {
 function truncate(text: string, maxWidth: number): string {
   if (displayWidth(text) <= maxWidth) return text;
   if (maxWidth <= 1) return '\u2026';
-  let out = '';
-  let w = 0;
+  let out = '', w = 0;
   for (const ch of text) {
-    const chWidth = displayWidth(ch);
-    if (w + chWidth > maxWidth - 1) break;
-    out += ch;
-    w += chWidth;
+    const cw = displayWidth(ch);
+    if (w + cw > maxWidth - 1) break;
+    out += ch; w += cw;
   }
   return `${out}\u2026`;
 }
 
 /**
- * Wraps `label` in an OSC 8 terminal hyperlink escape pointing at `url`, so
- * ctrl+click (most modern terminal emulators) opens it directly - this was
- * an explicit ask: "the active tab url need to navigatable or clickable".
- *
- * RISK, stated plainly: some terminals'/libraries' string-width
- * measurement doesn't correctly account for OSC 8 escape sequences (unlike
- * standard SGR color codes, which are widely handled), which COULD cause
- * Ink to mis-measure this Text node's width if it were placed inside an
- * auto-sized flex layout. This panel avoids that risk structurally: all
- * padding math in this file is computed from the PLAIN label text via
- * displayWidth() BEFORE wrapping in this hyperlink escape - the escaped
- * string is only substituted in as the final rendered content, never used
- * as an input to any width calculation. Not independently verified in a
- * real terminal from this sandbox; if ctrl+click doesn't work in your
- * terminal or introduces visible artifacts, that's a terminal-support gap,
- * not a broken build - output degrades to the plain label verbatim when
- * `process.stdout.isTTY` is false (e.g. logs/CI/piped output).
+ * Wraps `label` in an OSC 8 terminal hyperlink escape pointing at `url`.
+ * Width math is ALWAYS done against plain label text BEFORE wrapping.
+ * Adds underline for visual clickability indication.
  */
 function hyperlink(url: string, label: string): string {
   if (!process.stdout || !process.stdout.isTTY) return label;
-  return `\u001B]8;;${url}\u0007${label}\u001B]8;;\u0007`;
+  // OSC 8: \e]8;;{url}\e\{label}\e]8;;\e\
+  // Underline (4) + OSC 8 for clear clickable indication
+  return `\u001B[4m\u001B]8;;${url}\u0007${label}\u001B]8;;\u0007\u001B[24m`;
+}
+
+/**
+ * Normalize tab title to short, consistent form.
+ */
+function normalizeTabTitle(title: string, url: string): string {
+  if (!title || title.trim() === '') {
+    try { return new URL(url).hostname.replace('www.', ''); } catch { return 'New Tab'; }
+  }
+  let n = title
+    .replace(/\s*[-|]\s*(BBC|News|Reuters|Guardian|AP|Associated Press|Breaking|Latest|Home).*$/i, '')
+    .replace(/\s*[-|]\s*.*$/i, '')
+    .trim();
+  if (n.length < 3 || /^(home|index|main|default)$/i.test(n)) {
+    try { n = new URL(url).hostname.replace('www.', ''); } catch {}
+  }
+  return n;
+}
+
+/**
+ * Check if a tab is a placeholder (about:blank) that should be hidden from UI.
+ */
+function isPlaceholderTab(tab: BrowserTabState): boolean {
+  if (!tab.url) return true;
+  try {
+    const u = new URL(tab.url);
+    return u.protocol === 'about:' && (u.hostname === 'blank' || u.href === 'about:blank');
+  } catch { return false; }
+}
+
+/**
+ * Filter out placeholder tabs for UI display.
+ */
+function getVisibleTabs(tabs: BrowserTabState[]): BrowserTabState[] {
+  return tabs.filter(t => !isPlaceholderTab(t));
 }
 
 interface ParsedUrl {
-  isSecure: boolean;
-  isLocal: boolean;
-  isFile: boolean;
-  isBlank: boolean;
-  hostname: string;
-  pathAndQuery: string;
-  display: string;
+  isSecure: boolean; isLocal: boolean; isFile: boolean; isBlank: boolean;
+  hostname: string; pathAndQuery: string; display: string;
 }
 
-/** Break a URL into address-bar parts. Never throws - falls back to the raw string. */
 function parseUrl(url: string | null): ParsedUrl | null {
   if (!url) return null;
   try {
     const u = new URL(url);
     const isFile = u.protocol === 'file:';
     const isBlank = u.protocol === 'about:';
-    // ROUND 10 FIX (real-world rendering bug): "about:", "data:", and
-    // "javascript:" are OPAQUE-PATH URLs in WHATWG URL parsing - their
-    // `pathname` has no leading "/" the way http(s)/file URLs do. The old
-    // `hostname + pathAndQuery` concatenation assumed a leading separator
-    // always existed, so "about:blank" (hostname="", protocol="about:" ->
-    // hostname fallback "about", pathname="blank") rendered as the
-    // unreadable "aboutblank" with no separator at all. These schemes now
-    // just show the raw URL verbatim, same as the existing file: handling.
-    const isOpaquePath = isBlank || u.protocol === 'data:' || u.protocol === 'javascript:';
-    const hostname = u.hostname || (isFile || isOpaquePath ? '' : u.protocol.replace(':', ''));
+    const isOpaque = isBlank || u.protocol === 'data:' || u.protocol === 'javascript:';
+    const hostname = u.hostname || (isFile || isOpaque ? '' : u.protocol.replace(':', ''));
     const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || isFile || isBlank;
     const pathAndQuery = u.pathname === '/' ? '' : u.pathname + u.search;
     return {
-      isSecure: u.protocol === 'https:',
-      isLocal,
-      isFile,
-      isBlank,
+      isSecure: u.protocol === 'https:', isLocal, isFile, isBlank,
       hostname: hostname + (u.port ? `:${u.port}` : ''),
       pathAndQuery,
-      display: isFile || isOpaquePath ? url : hostname + (u.port ? `:${u.port}` : '') + pathAndQuery,
+      display: isFile || isOpaque ? url : hostname + (u.port ? `:${u.port}` : '') + pathAndQuery,
     };
   } catch {
     return { isSecure: false, isLocal: false, isFile: false, isBlank: false, hostname: url, pathAndQuery: '', display: url };
@@ -191,12 +218,6 @@ const ERROR_CATEGORY_LABELS: Record<BrowserErrorCategory, { label: string; sever
   other: { label: 'Error', severity: 'error' },
 };
 
-/**
- * Derives the panel's overall "browser state" from live state - this one
- * value drives the border title, the status badge, the context message,
- * and the colors, so all pieces always agree with each other instead of
- * being computed independently and risking drift.
- */
 type PanelState =
   | { kind: 'no_tabs' }
   | { kind: 'loading' }
@@ -208,9 +229,8 @@ type PanelState =
   | { kind: 'ready'; status: number | null; statusText: string | null };
 
 function derivePanelState(state: BrowserLiveState, parsed: ParsedUrl | null): PanelState {
-  // ROUND 8: zero tabs is now a normal, reachable state (close_all_tabs /
-  // closing the last tab via close_tab) rather than an error.
-  if (state.tabs.length === 0) return { kind: 'no_tabs' };
+  const visibleTabs = getVisibleTabs(state.tabs);
+  if (visibleTabs.length === 0) return { kind: 'no_tabs' };
   if (state.isLoading) return { kind: 'loading' };
   if (state.lastError) {
     const category = state.lastErrorCategory ?? 'other';
@@ -226,97 +246,100 @@ function derivePanelState(state: BrowserLiveState, parsed: ParsedUrl | null): Pa
   return { kind: 'ready', status: state.httpStatus, statusText: state.httpStatusText };
 }
 
-/** Border title + accent color, per the mockup's per-state examples. */
-function borderChrome(panelState: PanelState): { title: string; color: string } {
+function borderChrome(panelState: PanelState): { title: string; color: Color } {
+  const logoColor = getGlobalConfig()?.logoColor ?? 'aurora';
+  const accentColor: Color = resolveLogoSpinnerColors(logoColor).accent;
   switch (panelState.kind) {
-    case 'network_error':
-      return { title: 'Browser Error', color: 'error' };
-    case 'captcha':
-      return { title: 'Browser Attention Required', color: 'warning' };
-    case 'http_error':
-      return { title: 'Browser', color: 'warning' };
-    default:
-      return { title: 'Browser', color: 'brand' };
+    case 'network_error': return { title: '\uD83C\uDF10 Browser Error', color: accentColor };
+    case 'captcha': return { title: '\uD83C\uDF10 Browser Attention Required', color: accentColor };
+    case 'http_error': return { title: '\uD83C\uDF10 Browser', color: accentColor };
+    default: return { title: '\uD83C\uDF10 Browser', color: accentColor };
   }
 }
 
-/** Context Message row - one short human-readable sentence per state. */
+// Parse last action - defined outside component to avoid re-creation on every render
+function parseLastAction(raw?: string) {
+  if (!raw) return null;
+  const kw = raw.split(' ')[0], rest = raw.split(' ', 2)[1] ?? '';
+  const acts = ['navigate','click','type','get_state','get_content','scroll','go_back','list_tabs','switch_tab','close_tab','close_all_tabs','get_storage','set_storage','start_recording','stop_recording','refresh','wait','press_key'];
+  if (!acts.includes(kw)) return null;
+  if (kw === 'navigate') return { action: 'navigate', url: rest, new_tab: false };
+  if (kw === 'click') return { action: 'click', selector: rest, index: undefined, new_tab: false };
+  if (kw === 'type') return { action: 'type', text: rest, selector: undefined, index: undefined, new_tab: false };
+  if (kw === 'scroll') return { action: 'scroll', direction: rest, index: undefined, new_tab: false };
+  if (kw === 'switch_tab') return { action: 'switch_tab', tab_id: rest, index: undefined, new_tab: false };
+  if (kw === 'close_tab') return { action: 'close_tab', tab_id: rest, index: undefined, new_tab: false };
+  if (kw === 'wait') return { action: 'wait', ms: Number(rest), selector: undefined, index: undefined, new_tab: false };
+  if (kw === 'press_key') return { action: 'press_key', key: rest, selector: undefined, index: undefined, new_tab: false };
+  if (kw === 'get_state') return { action: 'get_state', include_screenshot: false, selector: undefined, index: undefined, new_tab: false };
+  if (kw === 'get_content') return { action: 'get_content', extract_links: false, start_from_char: 0, selector: undefined, index: undefined, new_tab: false };
+  if (kw === 'list_tabs') return { action: 'list_tabs', selector: undefined, index: undefined, new_tab: false };
+  if (kw === 'close_all_tabs') return { action: 'close_all_tabs', selector: undefined, index: undefined, new_tab: false };
+  if (kw === 'get_storage') return { action: 'get_storage', selector: undefined, index: undefined, new_tab: false };
+  if (kw === 'start_recording') return { action: 'start_recording', selector: undefined, index: undefined, new_tab: false };
+  if (kw === 'stop_recording') return { action: 'stop_recording', selector: undefined, index: undefined, new_tab: false };
+  if (kw === 'refresh') return { action: 'refresh', selector: undefined, index: undefined, new_tab: false };
+  return { action: 'navigate', url: kw, new_tab: false };
+}
+
 function contextMessage(panelState: PanelState): string {
   switch (panelState.kind) {
-    case 'no_tabs':
-      return 'No tabs open. Call browser_navigate to open one.';
-    case 'loading':
-      return 'Loading page content...';
-    case 'network_error':
-      return 'Unable to connect to website.';
-    case 'captcha':
-      return 'Human verification detected.';
+    case 'no_tabs': return 'No active tabs. Use navigate(url) to open a page.';
+    case 'loading': return 'Loading page content...';
+    case 'network_error': return 'Unable to connect to website.';
+    case 'captcha': return 'Human verification required.';
     case 'http_error':
       if (panelState.status === 404) return 'Requested page not found.';
       if (panelState.status === 403) return 'Access forbidden.';
       if (panelState.status === 429) return 'Rate limit exceeded.';
       if (panelState.status >= 500) return 'Server returned an internal error.';
       return `Server returned HTTP ${panelState.status}.`;
-    case 'redirect':
-      return 'Following redirect...';
-    case 'local_file':
-      return 'Local content loaded - not browsing the internet.';
-    case 'ready':
-      return 'Page loaded successfully.';
+    case 'redirect': return 'Following redirect...';
+    case 'local_file': return 'Local content loaded.';
+    case 'ready': return 'Page loaded successfully.';
   }
 }
 
-/** Plain-text label for the status badge (used for both rendering and width math). */
-function statusBadgeText(panelState: PanelState): string {
+function getErrorInfo(panelState: PanelState): { icon: string; title: string; desc: string; color: string } {
   switch (panelState.kind) {
-    case 'no_tabs':
-      return '';
-    case 'loading':
-      return 'Loading...';
-    case 'network_error':
-      return ERROR_CATEGORY_LABELS[panelState.category].label;
-    case 'captcha':
-      return 'Verification Required';
-    case 'http_error':
-      return `${panelState.status} ${panelState.statusText || (panelState.status === 404 ? 'Not Found' : '')}`.trim();
-    case 'redirect':
-      return `${panelState.status} Redirect`;
-    case 'local_file':
-      return 'Local File';
+    case 'http_error': {
+      const cls = getHttpStatusClass(panelState.status);
+      const label = STATUS_LABELS[panelState.status] || 'Error';
+      return { icon: STATUS_ICONS[cls], title: `HTTP ${panelState.status} ${label}`, desc: contextMessage(panelState), color: HTTP_CLASS_COLORS[cls] };
+    }
+    case 'network_error': {
+      const cat = ERROR_CATEGORY_LABELS[panelState.category];
+      return { icon: STATUS_ICONS.client_error, title: cat.label, desc: panelState.message, color: 'error' };
+    }
+    case 'captcha': return { icon: STATUS_ICONS.captcha, title: 'Human Verification Required', desc: 'Site requested CAPTCHA validation.', color: 'warning' };
+    case 'redirect': {
+      const label = STATUS_LABELS[panelState.status] || 'Redirect';
+      return { icon: STATUS_ICONS.redirect, title: `HTTP ${panelState.status} ${label}`, desc: 'Following redirect...', color: 'warning' };
+    }
+    case 'local_file': return { icon: STATUS_ICONS.local, title: 'Local File', desc: 'Not browsing the internet.', color: 'subtle' };
+    case 'loading': return { icon: STATUS_ICONS.loading, title: 'Loading...', desc: 'Loading page content...', color: 'brand' };
     case 'ready':
-      return panelState.status ? `${panelState.status} ${panelState.statusText || 'Loaded'}` : 'Ready';
+      if (panelState.status) {
+        const cls = getHttpStatusClass(panelState.status);
+        const label = STATUS_LABELS[panelState.status] || 'OK';
+        return { icon: STATUS_ICONS[cls], title: `${panelState.status} ${label}`, desc: 'Page loaded successfully.', color: HTTP_CLASS_COLORS[cls] };
+      }
+      return { icon: STATUS_ICONS.success, title: 'Ready', desc: 'Page loaded successfully.', color: 'success' };
+    default: return { icon: '', title: '', desc: '', color: 'dim' };
   }
 }
 
-function statusBadgeColor(panelState: PanelState): string | undefined {
-  switch (panelState.kind) {
-    case 'loading':
-      return 'brand';
-    case 'network_error':
-      return 'error';
-    case 'captcha':
-      return 'warning';
-    case 'http_error':
-      return panelState.status >= 500 ? 'error' : 'warning';
-    case 'redirect':
-      return 'brand';
-    case 'local_file':
-      return 'subtle';
-    case 'ready':
-      return 'success';
-    default:
-      return undefined;
-  }
-}
-
-/** Cycling spinner, only ticking while `active` (no idle CPU cost). */
 function useSpinnerFrame(active: boolean): string {
   const [frame, setFrame] = useState(0);
+  const activeRef = useRef(active);
+  activeRef.current = active;
+
   useEffect(() => {
-    if (!active) return;
-    const timer = setInterval(() => setFrame((f) => (f + 1) % SPINNER_FRAMES.length), SPINNER_INTERVAL_MS);
+    const timer = setInterval(() => {
+      if (activeRef.current) setFrame((f) => (f + 1) % SPINNER_FRAMES.length);
+    }, SPINNER_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [active]);
+  }, []);
   return SPINNER_FRAMES[frame];
 }
 
@@ -324,7 +347,7 @@ function useSpinnerFrame(active: boolean): string {
 // Hand-drawn frame primitives
 // ============================================================
 
-/** Heavy (thick) top border with the title embedded, e.g. a line that reads "Browser" inline. */
+/** Heavy (thick) top border with the title embedded. */
 function TopBorder({ title, color, width }: { title: string; color: string; width: number }) {
   const prefix = `${HEAVY.tl}${HEAVY.h} ${title} `;
   const fillLen = Math.max(1, width - displayWidth(prefix) - 1);
@@ -349,16 +372,6 @@ function BottomBorder({ color, width }: { color: string; width: number }) {
 }
 
 /** Light (thin), dim horizontal divider between sections. */
-/**
- * ROUND 9 FIX (real-world rendering feedback): previously rendered with
- * `dimColor` alone, no explicit `color` — which lets the terminal/Ink fall
- * back to some default dim (often a generic gray) rather than a genuinely
- * DIMMED VERSION OF THE SAME ACCENT COLOR the outer frame uses. The ask
- * was explicit: outer bright, inner the SAME color but dim — not a
- * different color entirely. Passing `color={accentColor}` alongside
- * `dimColor` tells Ink to dim THAT specific color rather than substitute
- * an unrelated default.
- */
 function Divider({ width, accentColor }: { width: number; accentColor: string }) {
   return (
     <Text color={accentColor} dimColor>
@@ -372,8 +385,8 @@ function Divider({ width, accentColor }: { width: number; accentColor: string })
 /**
  * One content row: heavy side walls (bold, accent color) framing
  * `children`, right-padded to `width` using `plainText` for the width
- * calculation (see the module doc comment on why width math is always
- * done against plain text, never against already-styled/escaped strings).
+ * calculation.
+ * Renders as a single Text element to ensure perfect border alignment.
  */
 function ContentRow({
   children,
@@ -387,254 +400,348 @@ function ContentRow({
   accentColor: string;
 }) {
   const innerWidth = width - 4; // left wall + space + space + right wall
-  const padLen = Math.max(0, innerWidth - displayWidth(plainText));
+  const safeContent = displayWidth(plainText) <= innerWidth ? plainText : truncate(plainText, innerWidth);
+  const padLen = Math.max(0, innerWidth - displayWidth(safeContent));
+  const fullLine = `${HEAVY.v} ${safeContent}${' '.repeat(padLen)} ${HEAVY.v}`;
+
   return (
-    <Box>
-      <Text bold color={accentColor}>
-        {HEAVY.v}{' '}
-      </Text>
-      {children}
-      <Text>{' '.repeat(padLen)}</Text>
-      <Text bold color={accentColor}>
-        {' '}
-        {HEAVY.v}
-      </Text>
-    </Box>
+    <Text bold color={accentColor}>
+      {fullLine}
+    </Text>
   );
 }
 
 // ============================================================
-// Section content builders - each returns { node, plainText } so
-// ContentRow can right-pad correctly regardless of how many separately
-// colored segments are inside.
+// Section content builders
 // ============================================================
 
-function buildTabsRow(tabs: BrowserTabState[], currentUrl: string | null): { node: React.ReactNode; plainText: string } {
-  if (tabs.length === 0) {
-    return { node: <Text dimColor>No tabs open</Text>, plainText: 'No tabs open' };
+/**
+ * Build tab bar with:
+ * - Active: accent + bold + ●
+ * - Inactive: dim + ○
+ * - Overflow: "○ A ○ B ○ C ... (+5)"
+ * - Tab count: " │ N Tabs" right-aligned
+ */
+function buildTabsRow(tabs: BrowserTabState[], currentUrl: string | null, innerWidth: number): { plainText: string } {
+  const visibleTabs = getVisibleTabs(tabs);
+
+  if (visibleTabs.length === 0) {
+    return { plainText: '\uD83C\uDF10 No active tabs' };
   }
 
-  const visible = tabs.slice(0, MAX_VISIBLE_TABS);
-  const overflow = tabs.length - visible.length;
-  const activeIndex = Math.max(0, tabs.findIndex((t) => t.url === currentUrl));
-  const countLabel = tabs.length > 1 ? `${activeIndex + 1}/${tabs.length} Tabs` : '';
+  const activeIndex = visibleTabs.findIndex(t => t.url === currentUrl);
+  const displayTabs: BrowserTabState[] = [];
+  let overflow = 0;
 
-  const tabTexts = visible.map((tab) => ({
-    label: truncate(tab.title || tab.url, MAX_TAB_TITLE_LEN),
+  if (visibleTabs.length <= MAX_VISIBLE_TABS) {
+    displayTabs.push(...visibleTabs);
+  } else {
+    if (activeIndex >= 0 && activeIndex < visibleTabs.length) {
+      const rem = MAX_VISIBLE_TABS - 1;
+      const before = Math.min(activeIndex, Math.floor(rem / 2));
+      const after = Math.min(visibleTabs.length - activeIndex - 1, rem - before);
+      displayTabs.push(...visibleTabs.slice(activeIndex - before, activeIndex + after + 1));
+      overflow = visibleTabs.length - displayTabs.length;
+    } else {
+      displayTabs.push(...visibleTabs.slice(0, MAX_VISIBLE_TABS));
+      overflow = visibleTabs.length - MAX_VISIBLE_TABS;
+    }
+  }
+
+  const tabLabels = displayTabs.map(tab => ({
+    label: truncate(normalizeTabTitle(tab.title || tab.url, tab.url), MAX_TAB_TITLE_LEN),
     isActive: tab.url === currentUrl,
   }));
 
-  const dot = (active: boolean) => (active ? '\u25CF' : '\u25CB');
-  const leftPlain = tabTexts.map((t) => `${dot(t.isActive)} ${t.label}`).join('   ') + (overflow > 0 ? `   +${overflow} more` : '');
-  const plainText = countLabel ? `${leftPlain}   ${countLabel}` : leftPlain;
+  // Build tab segments: active gets ●, inactive gets ○
+  let tabSegment = tabLabels.map((t, i) => {
+    const dot = t.isActive ? '\u25CF' : '\u25CB'; // ● ○
+    return `${dot} ${t.label}`;
+  }).join('  ');
 
-  const node = (
-    <Box justifyContent="space-between" width="100%">
-      <Box>
-        {tabTexts.map((t, i) => (
-          <Text key={i} color={t.isActive ? 'brand' : undefined} dimColor={!t.isActive} bold={t.isActive}>
-            {i > 0 ? '   ' : ''}
-            {dot(t.isActive)} {t.label}
-          </Text>
-        ))}
-        {overflow > 0 && <Text dimColor>   +{overflow} more</Text>}
-      </Box>
-      {countLabel && <Text dimColor>{countLabel}</Text>}
-    </Box>
-  );
+  if (overflow > 0) {
+    tabSegment += `  ... (+${overflow})`;
+  }
 
-  return { node, plainText };
+  // Tab count: " │ N Tabs" right-aligned
+  const countStr = ` ${STATUS_ICONS.tab_count} ${visibleTabs.length} Tab${visibleTabs.length !== 1 ? 's' : ''}`;
+  const countWidth = displayWidth(countStr);
+  const availableWidth = innerWidth - countWidth;
+
+  if (displayWidth(tabSegment) > availableWidth) {
+    tabSegment = truncate(tabSegment, availableWidth);
+  }
+
+  const plainText = tabSegment + countStr;
+
+  return { plainText };
 }
 
-function statusIcon(state: BrowserLiveState, parsed: ParsedUrl | null): string {
-  if (state.isLoading) return SPINNER_FRAMES[0];
-  if (parsed?.isFile) return '\uD83D\uDCC4'; // page icon
-  if (parsed?.isLocal) return '\u2302'; // house icon
-  if (parsed?.isSecure) return '\uD83D\uDD12'; // lock icon
-  return '\u26A0'; // warning icon
+function getUrlIcon(state: BrowserLiveState, parsed: ParsedUrl | null, panelState: PanelState): { icon: string; color: string } {
+  if (state.isLoading) return { icon: STATUS_ICONS.loading, color: 'brand' };
+  if (parsed?.isFile) return { icon: STATUS_ICONS.local, color: 'subtle' };
+  if (parsed?.isLocal) return { icon: STATUS_ICONS.insecure, color: 'warning' };
+  if (parsed?.isSecure) return { icon: STATUS_ICONS.secure, color: 'success' };
+
+  // Fallback based on panel state
+  if (panelState.kind === 'captcha') return { icon: STATUS_ICONS.captcha, color: 'warning' };
+  if (panelState.kind === 'network_error') return { icon: STATUS_ICONS.client_error, color: 'error' };
+  if (panelState.kind === 'http_error') return { icon: STATUS_ICONS.client_error, color: 'error' };
+  if (panelState.kind === 'redirect') return { icon: STATUS_ICONS.redirect, color: 'warning' };
+  return { icon: STATUS_ICONS.insecure, color: 'warning' };
 }
 
-function buildUrlPlainText(state: BrowserLiveState, parsed: ParsedUrl | null, panelState: PanelState, urlLabel: string): string {
-  const icon = statusIcon(state, parsed);
-  const badgeText = statusBadgeText(panelState);
-  return `${icon} ${urlLabel}${badgeText ? `  ${badgeText}` : ''}`;
+/**
+ * Build URL bar: "🔒 apnews.com    🟢 200 OK" (grouped with status icon)
+ * URL is clickable via OSC 8 hyperlink
+ */
+function buildUrlRow(state: BrowserLiveState, parsed: ParsedUrl | null, panelState: PanelState, urlLabel: string, innerWidth: number): { plainText: string } {
+  const errorInfo = getErrorInfo(panelState);
+  const urlIcon = getUrlIcon(state, parsed, panelState);
+
+  const badgeText = errorInfo.title;
+  const iconSpace = `${urlIcon.icon} `;
+  const badgeSpace = `  ${errorInfo.icon} ${badgeText}`;
+  const reserved = innerWidth - displayWidth(iconSpace) - displayWidth(badgeSpace) - 2;
+  const safeUrl = displayWidth(urlLabel) <= reserved ? urlLabel : truncate(urlLabel, Math.max(MIN_TAB_TITLE_LEN, reserved));
+
+  // URL with OSC 8 hyperlink for clickable
+  const linkedUrl = state.currentUrl ? hyperlink(state.currentUrl, safeUrl) : safeUrl;
+  const urlPart = `${iconSpace}${linkedUrl}`;
+  const pad = Math.max(2, innerWidth - displayWidth(`${iconSpace}${safeUrl}`) - displayWidth(badgeSpace));
+
+  const plainText = `${iconSpace}${safeUrl}${' '.repeat(pad)}${badgeSpace}`;
+
+  return { plainText };
 }
 
-function UrlRowNode({
-  state,
-  parsed,
-  panelState,
-  urlLabel,
-}: {
-  state: BrowserLiveState;
-  parsed: ParsedUrl | null;
-  panelState: PanelState;
-  urlLabel: string;
-}) {
-  const spinnerFrame = useSpinnerFrame(state.isLoading);
-  const iconColor = state.isLoading ? 'brand' : parsed?.isFile ? 'subtle' : parsed?.isLocal ? undefined : parsed?.isSecure ? 'success' : 'warning';
-  const badgeText = statusBadgeText(panelState);
-  const badgeColor = statusBadgeColor(panelState);
-  const icon = statusIcon(state, parsed);
-
-  // ROUND 8: the active tab's URL is ctrl+clickable (OSC 8 hyperlink) -
-  // see hyperlink()'s doc comment for how this stays safe w.r.t. layout math.
-  const linkedLabel = state.currentUrl ? hyperlink(state.currentUrl, urlLabel) : urlLabel;
-
-  return (
-    <Box justifyContent="space-between" width="100%">
-      <Box>
-        <Text color={iconColor} dimColor={Boolean(parsed?.isLocal) && !state.isLoading}>
-          {state.isLoading ? spinnerFrame : icon}{' '}
-        </Text>
-        <Text dimColor={Boolean(parsed?.isLocal)} color={parsed?.isLocal ? undefined : 'brand'}>
-          {linkedLabel}
-        </Text>
-      </Box>
-      {badgeText && (
-        <Text color={badgeColor} bold={panelState.kind !== 'ready'}>
-          {badgeText}
-        </Text>
-      )}
-    </Box>
-  );
+function wrapText(text: string, lineWidth: number): string[] {
+  const lines: string[] = []; const words = text.split(/\s+/); let cur = '';
+  for (const w of words) {
+    const test = cur ? `${cur} ${w}` : w;
+    if (displayWidth(test) <= lineWidth) cur = test;
+    else { if (cur) lines.push(cur); if (displayWidth(w) > lineWidth) { lines.push(truncate(w, lineWidth)); cur = ''; } else cur = w; }
+  } if (cur) lines.push(cur); return lines;
 }
 
-function buildPreviewLines(text: string, lineWidth: number): string[] {
-  const lines: string[] = [];
-  let rest = text;
-  while (rest.length > 0 && lines.length < PREVIEW_MAX_LINES) {
-    if (displayWidth(rest) <= lineWidth) {
-      lines.push(rest);
-      break;
+function buildContentSummary(content: string): string[] {
+  const lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const out: string[] = [];
+  for (const l of lines) {
+    if (l.length > 200 || l.length < 10) continue;
+    if (/^(skip|menu|navigation|subscribe|sign in|log in|cookie|privacy|terms|search)/i.test(l)) continue;
+    out.push(l); if (out.length >= 5) break;
+  }
+  return out.length > 0 ? out : [content.slice(0, 400)];
+}
+
+function getContentLineColor(panelState: PanelState, lineIndex: number, isTitle: boolean): string {
+  if (isTitle) return 'accent';
+  // Status line (first non-title line)
+  if (lineIndex === (panelState.kind === 'no_tabs' ? 0 : 1)) {
+    switch (panelState.kind) {
+      case 'ready': return 'success';
+      case 'loading': return 'brand';
+      case 'captcha': return 'warning';
+      case 'http_error': case 'network_error': return 'error';
+      case 'redirect': return 'warning';
+      case 'local_file': return 'subtle';
+      default: return 'dim';
     }
-    let cut = rest.lastIndexOf(' ', lineWidth);
-    if (cut <= 0) cut = lineWidth;
-    lines.push(rest.slice(0, cut));
-    rest = rest.slice(cut).trimStart();
   }
-  if (rest.length > 0 && lines.length === PREVIEW_MAX_LINES) {
-    lines[lines.length - 1] = truncate(lines[lines.length - 1], lineWidth);
-  }
-  return lines;
+  return 'dim';
 }
+
+function buildContentLines(state: BrowserLiveState, panelState: PanelState, innerWidth: number): { text: string; isTitle: boolean }[] {
+  const cw = innerWidth - CONTENT_PADDING * 2;
+  const out: { text: string; isTitle: boolean }[] = [];
+
+  if (panelState.kind === 'no_tabs') {
+    return [
+      { text: 'No active tabs.', isTitle: false },
+      { text: 'Use navigate(url) to open a page.', isTitle: false }
+    ];
+  }
+
+  let lineIdx = 0;
+  if (state.currentTitle) {
+    out.push(...wrapText(state.currentTitle, cw).map(t => ({ text: t, isTitle: true })));
+    lineIdx++;
+  }
+
+  // Status message with error info
+  const err = getErrorInfo(panelState);
+  const statusLine = `${err.icon} ${err.title}`;
+  out.push(...wrapText(statusLine, cw).map((t, i) => ({ text: t, isTitle: i === 0 })));
+  lineIdx++;
+
+  if (panelState.kind === 'ready' && state.contentPreview) {
+    for (const l of buildContentSummary(state.contentPreview)) {
+      out.push(...wrapText(l, cw).map(t => ({ text: t, isTitle: false })));
+    }
+  }
+
+  if (out.length === 0) out.push({ text: ' ', isTitle: false });
+
+  if (out.length > MAX_CONTENT_LINES) {
+    out.length = MAX_CONTENT_LINES - 1;
+    out.push({ text: '\u2026 more content available (use get_content)', isTitle: false });
+  }
+
+  return out;
+}
+
+// ============================================================
+// MAIN COMPONENT
+// ============================================================
 
 export function WebBrowserPanel(): React.ReactNode {
   const [state, setState] = useState<BrowserLiveState>(EMPTY_BROWSER_LIVE_STATE);
 
+  // Memoize width computation - only changes on terminal resize
+  const [width, setWidth] = useState(() => computeBoxWidth());
   useEffect(() => {
-    let unsubscribe: (() => void) | null = null;
-    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    const handler = () => setWidth(computeBoxWidth());
+    process.stdout?.on('resize', handler);
+    return () => process.stdout?.off('resize', handler);
+  }, []);
 
-    function attach(executor: BrowserToolExecutor) {
-      setState(executor.getLiveState());
-      unsubscribe = executor.onLiveStateChange(setState);
-      if (pollTimer) {
-        clearInterval(pollTimer);
-        pollTimer = null;
-      }
-    }
+  useEffect(() => {
+    let unsub: (() => void) | null = null;
+    let poll: ReturnType<typeof setInterval> | null = null;
+    let retries = 0;
+    const MAX_RETRIES = 30; // 30 seconds max
+
+    const attach = (ex: BrowserToolExecutor) => {
+      setState(ex.getLiveState());
+      unsub = ex.onLiveStateChange(setState);
+      if (poll) { clearInterval(poll); poll = null; }
+    };
 
     const existing = BrowserToolExecutor.getSharedIfExists();
     if (existing) {
       attach(existing);
     } else {
-      // The shared executor is created lazily on the WebBrowserTool's first
-      // call, which can happen well after this panel mounts. Poll for it to
-      // appear rather than requiring a screen remount to pick it up.
-      pollTimer = setInterval(() => {
-        const executor = BrowserToolExecutor.getSharedIfExists();
-        if (executor) attach(executor);
+      poll = setInterval(() => {
+        const ex = BrowserToolExecutor.getSharedIfExists();
+        if (ex) {
+          attach(ex);
+        } else if (++retries >= MAX_RETRIES) {
+          clearInterval(poll!);
+        }
       }, 1000);
     }
 
     return () => {
-      if (unsubscribe) unsubscribe();
-      if (pollTimer) clearInterval(pollTimer);
+      if (unsub) unsub();
+      if (poll) clearInterval(poll);
     };
   }, []);
 
-  // Matches the original stub's behavior when the tool has never been used
-  // at all this session (distinct from "zero tabs but browser alive" - see
-  // PanelState's 'no_tabs' kind - which DOES render the panel).
-  if (!state.isInitialized) return null;
-
-  const width = computeBoxWidth();
   const innerWidth = width - 4;
   const parsed = parseUrl(state.currentUrl);
   const panelState = derivePanelState(state, parsed);
   const { title: borderTitle, color: accentColor } = borderChrome(panelState);
 
-  const tabsRow = buildTabsRow(state.tabs, state.currentUrl);
-  const urlLabel = parsed ? truncate(parsed.display, Math.max(20, innerWidth - 24)) : 'about:blank';
-  const urlPlainText = buildUrlPlainText(state, parsed, panelState, urlLabel);
+  // Memoize expensive computations
+  const tabsRow = useMemo(() => buildTabsRow(state.tabs, state.currentUrl, innerWidth), [state.tabs, state.currentUrl, innerWidth]);
+  const urlLabel = useMemo(() => parsed ? truncate(parsed.display, Math.max(20, innerWidth - 20)) : 'about:blank', [parsed, innerWidth]);
+  const urlRow = useMemo(() => buildUrlRow(state, parsed, panelState, urlLabel, innerWidth), [state, parsed, panelState, urlLabel, innerWidth]);
+  const contentLines = useMemo(() => buildContentLines(state, panelState, innerWidth), [state, panelState, innerWidth]);
 
-  const titleText = truncate(state.currentTitle || '(untitled)', innerWidth);
-  const contextText = contextMessage(panelState);
-  const previewLines = panelState.kind === 'ready' && state.contentPreview ? buildPreviewLines(state.contentPreview, innerWidth) : [];
-  const lastActionVerb = state.lastOperation ? state.lastOperation.split(' ')[0] || state.lastOperation : null;
+  // Memoize error info and url icon for URL row rendering
+  const errorInfo = useMemo(() => getErrorInfo(panelState), [panelState]);
+  const urlIcon = useMemo(() => getUrlIcon(state, parsed, panelState), [state, parsed, panelState]);
+
+  // Parse last action (memoized callback outside component)
+  const lastRaw = state.lastOperation ?? undefined;
+  const parsedAct = useMemo(() => parseLastAction(lastRaw), [lastRaw]);
+  const verb = parsedAct ? parsedAct.action.toUpperCase() : null;
+  const summary = parsedAct ? shortActionResult(parsedAct.action, parsedAct as WebBrowserInput) : null;
+  const footerText = verb ? truncate(`Last Action: ${verb} \u2192 ${summary}`, innerWidth) : null;
+
+  const autoSwitch = state.autoSwitchedToNewTab ? truncate('\u2192 New tab opened and focused', innerWidth) : null;
+  const recording = state.isRecording ? truncate(`REC${state.recordingEventCount > 0 ? ` (${state.recordingEventCount})` : ''}`, innerWidth) : null;
+
+  if (!state.isInitialized) return null;
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" width="100%">
+      {/* Header: 🌐 Browser */}
       <TopBorder title={borderTitle} color={accentColor} width={width} />
 
+      {/* Tabs: active accent+bold, inactive dim, count right-aligned */}
+      <Divider width={width} accentColor={accentColor} />
       <ContentRow plainText={tabsRow.plainText} width={width} accentColor={accentColor}>
-        {tabsRow.node}
+        {tabsRow.plainText === '\uD83C\uDF10 No active tabs' ? (
+          <Text dimColor>\uD83C\uDF10 No active tabs</Text>
+        ) : (
+          <>
+            {state.tabs
+              .filter(t => !isPlaceholderTab(t))
+              .slice(0, MAX_VISIBLE_TABS)
+              .map((tab, idx) => {
+                const isActive = tab.url === state.currentUrl;
+                const label = truncate(normalizeTabTitle(tab.title || tab.url, tab.url), MAX_TAB_TITLE_LEN);
+                return (
+                  <Text key={idx} color={isActive ? 'accent' : undefined} dimColor={!isActive} bold={isActive}>
+                    {idx > 0 ? '  ' : ''}
+                    {isActive ? '\u25CF' : '\u25CB'} {label}
+                  </Text>
+                );
+              })}
+            {state.tabs.filter(t => !isPlaceholderTab(t)).length > MAX_VISIBLE_TABS && (
+              <Text dimColor>  ... (+{state.tabs.filter(t => !isPlaceholderTab(t)).length - MAX_VISIBLE_TABS})</Text>
+            )}
+            <Text dimColor>
+              {` ${STATUS_ICONS.tab_count} ${state.tabs.filter(t => !isPlaceholderTab(t)).length} Tab${state.tabs.filter(t => !isPlaceholderTab(t)).length !== 1 ? 's' : ''}`}
+            </Text>
+          </>
+        )}
       </ContentRow>
-
       <Divider width={width} accentColor={accentColor} />
 
-      <ContentRow plainText={urlPlainText} width={width} accentColor={accentColor}>
-        <UrlRowNode state={state} parsed={parsed} panelState={panelState} urlLabel={urlLabel} />
-      </ContentRow>
-
-      <Divider width={width} accentColor={accentColor} />
-
-      {/* Per design: don't show the title until the page has actually loaded, and not when there are no tabs. */}
-      {panelState.kind !== 'loading' && panelState.kind !== 'no_tabs' && (
-        <ContentRow plainText={titleText} width={width} accentColor={accentColor}>
-          <Text color="text">{titleText}</Text>
-        </ContentRow>
-      )}
-
-      <ContentRow plainText={contextText} width={width} accentColor={accentColor}>
-        <Text
-          dimColor={panelState.kind !== 'network_error' && panelState.kind !== 'captcha'}
-          color={panelState.kind === 'network_error' ? 'error' : panelState.kind === 'captcha' ? 'warning' : undefined}
-        >
-          {contextText}
+      {/* URL + status grouped with icons: 🔒 URL  🟢 200 OK */}
+      <ContentRow plainText={urlRow.plainText} width={width} accentColor={accentColor}>
+        <Text color={state.isLoading ? 'brand' : urlIcon.color} dimColor={Boolean(parsed?.isLocal) && !state.isLoading}>
+          {state.isLoading ? SPINNER_FRAMES[0] : urlIcon.icon}{' '}
+        </Text>
+        <Text dimColor={Boolean(parsed?.isLocal)} color={parsed?.isLocal ? undefined : 'accent'}>
+          {state.currentUrl ? hyperlink(state.currentUrl, truncate(urlLabel, Math.max(MIN_TAB_TITLE_LEN, innerWidth - displayWidth(urlRow.plainText) - 10))) : urlLabel}
+        </Text>
+        <Text color={errorInfo.color} bold={panelState.kind !== 'ready' && panelState.kind !== 'local_file'}>
+          {errorInfo.icon} {errorInfo.title}
         </Text>
       </ContentRow>
+      <Divider width={width} accentColor={accentColor} />
 
-      {previewLines.map((line, i) => (
-        <ContentRow key={i} plainText={line} width={width} accentColor={accentColor}>
-          <Text dimColor>{line}</Text>
-        </ContentRow>
-      ))}
-
-      {state.autoSwitchedToNewTab && (
-        <ContentRow plainText="-> New tab opened and focused" width={width} accentColor={accentColor}>
-          <Text color="brand">-&gt; New tab opened and focused</Text>
-        </ContentRow>
-      )}
-
-      {state.isRecording && (
-        <ContentRow
-          plainText={`REC${state.recordingEventCount > 0 ? ` (${state.recordingEventCount})` : ''}`}
-          width={width}
-          accentColor={accentColor}
-        >
-          <Text color="error" bold>
-            {'\u25CF'} REC{state.recordingEventCount > 0 ? ` (${state.recordingEventCount})` : ''}
+      {/* Content: title(accent), status(state color), preview(dim) */}
+      {contentLines.map((line, i) =>
+        <ContentRow key={i} plainText={line.text} width={width} accentColor={accentColor}>
+          <Text color={getContentLineColor(panelState, i, line.isTitle)}>
+            {line.text}
           </Text>
         </ContentRow>
       )}
 
-      {lastActionVerb && (
+      {autoSwitch && (
+        <ContentRow plainText={autoSwitch} width={width} accentColor={accentColor}>
+          <Text color="accent">{autoSwitch}</Text>
+        </ContentRow>
+      )}
+
+      {recording && (
+        <ContentRow plainText={recording} width={width} accentColor={accentColor}>
+          <Text color="accent" bold>\u25CF {recording.replace(/^REC\s*/, '')}</Text>
+        </ContentRow>
+      )}
+
+      {/* Footer: "Last Action" label */}
+      {footerText && (
         <>
           <Divider width={width} accentColor={accentColor} />
-          <ContentRow plainText={`Last Action: ${lastActionVerb}()`} width={width} accentColor={accentColor}>
-            <Text dimColor>Last Action: {lastActionVerb}()</Text>
+          <ContentRow plainText={footerText} width={width} accentColor={accentColor}>
+            <Text color="accent">{footerText}</Text>
           </ContentRow>
         </>
       )}
