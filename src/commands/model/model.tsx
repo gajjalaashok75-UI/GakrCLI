@@ -4,6 +4,7 @@ import type { CommandResultDisplay } from '../../commands.js'
 import {
   ModelPicker,
   type ModelPickerDiscoveryState,
+  type Props as ModelPickerProps,
 } from '../../components/ModelPicker.js'
 import { COMMON_HELP_ARGS, COMMON_INFO_ARGS } from '../../constants/xml.js'
 import {
@@ -610,15 +611,6 @@ function ModelPickerWrapper({
   )
   const isFastMode = useAppState((s: AppState) => s.fastMode)
   const setAppState = useSetAppState()
-  const [optionsOverride, setOptionsOverride] = React.useState<ModelOption[] | undefined>(
-    discoveryContext && 'optionsOverride' in discoveryContext
-      ? discoveryContext.optionsOverride
-      : undefined,
-  )
-  const [discoveryState, setDiscoveryState] =
-    React.useState<ModelPickerDiscoveryState | undefined>(
-      discoveryContext?.discoveryState,
-    )
 
   const handleCancel = () => {
     logEvent('tengu_model_command_menu', {
@@ -689,6 +681,64 @@ function ModelPickerWrapper({
 
     onDone(message)
   }
+
+  return (
+    <ModelPickerWithDiscovery
+      discoveryContext={discoveryContext}
+      initial={mainLoopModel}
+      sessionModel={mainLoopModelForSession}
+      onSelect={handleSelect}
+      onCancel={handleCancel}
+      isStandaloneCommand
+      showFastModeNotice={
+        isFastModeEnabled() &&
+        isFastMode &&
+        isFastModeSupportedByModel(mainLoopModel) &&
+        isFastModeAvailable()
+      }
+    />
+  )
+}
+
+/**
+ * The presentation-only slice of the picker — everything except the discovery
+ * plumbing that `ModelPickerWithDiscovery` supplies itself.
+ */
+type SharedModelPickerProps = Pick<
+  ModelPickerProps,
+  | 'initial'
+  | 'sessionModel'
+  | 'onSelect'
+  | 'onCancel'
+  | 'isStandaloneCommand'
+  | 'showFastModeNotice'
+>
+
+/**
+ * Renders `ModelPicker` with the active route's discovered models: seeds the
+ * option list from an already-resolved discovery context, auto-refreshes it
+ * when the route's catalog is stale, and wires the manual refresh.
+ *
+ * Shared by `/model` and the in-REPL model hotkey so both surfaces offer the
+ * same list. The hotkey picker used to render `ModelPicker` bare, which meant
+ * it only ever showed the built-in Anthropic options no matter which provider
+ * was configured.
+ */
+export function ModelPickerWithDiscovery({
+  discoveryContext,
+  ...pickerProps
+}: SharedModelPickerProps & {
+  discoveryContext: ModelDiscoveryContext | null
+}) {
+  const [optionsOverride, setOptionsOverride] = React.useState<ModelOption[] | undefined>(
+    discoveryContext && 'optionsOverride' in discoveryContext
+      ? discoveryContext.optionsOverride
+      : undefined,
+  )
+  const [discoveryState, setDiscoveryState] =
+    React.useState<ModelPickerDiscoveryState | undefined>(
+      discoveryContext?.discoveryState,
+    )
 
   async function refreshAvailableModels(manual: boolean): Promise<void> {
     if (!discoveryContext) {
@@ -824,17 +874,7 @@ function ModelPickerWrapper({
 
   return (
     <ModelPicker
-      initial={mainLoopModel}
-      sessionModel={mainLoopModelForSession}
-      onSelect={handleSelect}
-      onCancel={handleCancel}
-      isStandaloneCommand
-      showFastModeNotice={
-        isFastModeEnabled() &&
-        isFastMode &&
-        isFastModeSupportedByModel(mainLoopModel) &&
-        isFastModeAvailable()
-      }
+      {...pickerProps}
       optionsOverride={optionsOverride}
       discoveryState={discoveryState}
       allowCustomModelInput
@@ -845,6 +885,53 @@ function ModelPickerWrapper({
             }
           : undefined
       }
+    />
+  )
+}
+
+/**
+ * `ModelPickerWithDiscovery` for callers that cannot await the discovery
+ * context before rendering — the in-REPL model hotkey, which toggles the picker
+ * synchronously, unlike `/model` whose `call` resolves the context first.
+ *
+ * Renders nothing until the context settles. Mounting the picker beforehand
+ * would flash the built-in Anthropic list before the provider's models replaced
+ * it; resolving the context reads the discovery cache rather than the network,
+ * so the gap is not user-visible.
+ */
+export function ModelPickerWithLazyDiscovery(
+  pickerProps: SharedModelPickerProps,
+): React.ReactNode {
+  const [resolved, setResolved] = React.useState<{
+    context: ModelDiscoveryContext | null
+  } | null>(null)
+
+  React.useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      let context: ModelDiscoveryContext | null = null
+      try {
+        context = await loadModelDiscoveryContext()
+      } catch {
+        // Open with the built-in options rather than never opening at all.
+      }
+      if (!cancelled) {
+        setResolved({ context })
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  if (!resolved) {
+    return null
+  }
+
+  return (
+    <ModelPickerWithDiscovery
+      {...pickerProps}
+      discoveryContext={resolved.context}
     />
   )
 }

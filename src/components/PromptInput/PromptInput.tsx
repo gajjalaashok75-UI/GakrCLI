@@ -119,7 +119,7 @@ import { getEffortNotificationText } from '../EffortIndicator.js';
 import { getFastIconString } from '../FastIcon.js';
 import { GlobalSearchDialog } from '../GlobalSearchDialog.js';
 import { HistorySearchDialog } from '../HistorySearchDialog.js';
-import { ModelPicker } from '../ModelPicker.js';
+import { ModelPickerWithLazyDiscovery } from '../../commands/model/model.js';
 import { usePermissionModeChangeRequest } from '../permissions/usePermissionModeChangeRequest.js';
 import { QuickOpenDialog } from '../QuickOpenDialog.js';
 import TextInput from '../TextInput.js';
@@ -2427,7 +2427,7 @@ function PromptInput({
     if (!showModelPicker) return null;
     return (
       <Box flexDirection="column" marginTop={1}>
-        <ModelPicker
+        <ModelPickerWithLazyDiscovery
           initial={mainLoopModel_}
           sessionModel={mainLoopModelForSession}
           onSelect={handleModelSelect}
