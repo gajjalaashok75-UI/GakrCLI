@@ -34,7 +34,6 @@ export default defineVendor({
     name: 'Xiaomi MiMo',
     apiKeyEnvVars: ['MIMO_API_KEY'],
     modelEnvVars: ['OPENAI_MODEL'],
-    badge: { text: 'Sponsor', color: 'success' },
   },
   validation: {
     kind: 'credential-env',
