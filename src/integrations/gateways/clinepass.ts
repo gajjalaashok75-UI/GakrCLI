@@ -1,4 +1,5 @@
 import { defineGateway } from '../define.js'
+import { mapOpenAIChatCatalogModel } from '../discoveryModelFilter.js'
 
 export default defineGateway({
   id: 'clinepass',
@@ -33,7 +34,14 @@ export default defineGateway({
       'ClinePass auth is required. Set CLINE_API_KEY.',
   },
   catalog: {
-    source: 'static',
+    source: 'hybrid',
+    discovery: {
+      kind: 'openai-compatible',
+      mapModel: mapOpenAIChatCatalogModel,
+    },
+    discoveryCacheTtl: '1d',
+    discoveryRefreshMode: 'background-if-stale',
+    allowManualRefresh: true,
     models: [
       {
         id: 'cline-pass/qwen3.7-max',

@@ -1,4 +1,5 @@
 import { defineVendor } from '../define.js'
+import { mapOpenAIChatCatalogModel } from '../discoveryModelFilter.js'
 
 export default defineVendor({
   id: 'openai',
@@ -51,7 +52,14 @@ export default defineVendor({
   },
   isFirstParty: true,
   catalog: {
-    source: 'static',
+    source: 'hybrid',
+    discovery: {
+      kind: 'openai-compatible',
+      mapModel: mapOpenAIChatCatalogModel,
+    },
+    discoveryCacheTtl: '1d',
+    discoveryRefreshMode: 'background-if-stale',
+    allowManualRefresh: true,
     models: [
       // gpt-5.6 (sol/terra/luna): reject function tools + reasoning_effort on
       // /v1/chat/completions, so modelRequiresResponsesApi routes them to

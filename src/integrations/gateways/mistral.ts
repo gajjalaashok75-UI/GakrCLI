@@ -1,4 +1,5 @@
 import { defineGateway } from '../define.js'
+import { mapOpenAIChatCatalogModel } from '../discoveryModelFilter.js'
 
 /**
  * Mistral has dedicated runtime provider behavior that is not yet fully
@@ -45,7 +46,14 @@ export default defineGateway({
       'MISTRAL_API_KEY is required when GAKR_CODE_USE_MISTRAL=1.',
   },
   catalog: {
-    source: 'static',
+    source: 'hybrid',
+    discovery: {
+      kind: 'openai-compatible',
+      mapModel: mapOpenAIChatCatalogModel,
+    },
+    discoveryCacheTtl: '1d',
+    discoveryRefreshMode: 'background-if-stale',
+    allowManualRefresh: true,
     models: [
       { id: 'mistral-vibe-cli', apiName: 'mistral-vibe-cli-latest', label: 'Vibe CLI Latest', modelDescriptorId: 'mistral-vibe-cli-latest' },
       { id: 'mistral-devstral', apiName: 'devstral-latest', label: 'Devstral Latest', modelDescriptorId: 'devstral-latest' },

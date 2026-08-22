@@ -837,6 +837,7 @@ function ModelPickerWrapper({
       }
       optionsOverride={optionsOverride}
       discoveryState={discoveryState}
+      allowCustomModelInput
       onRefresh={
         discoveryContext?.canRefresh
           ? () => {

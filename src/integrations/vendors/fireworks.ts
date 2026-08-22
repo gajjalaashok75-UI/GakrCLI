@@ -1,4 +1,5 @@
 import { defineVendor } from '../define.js'
+import { mapOpenAIChatCatalogModel } from '../discoveryModelFilter.js'
 
 export default defineVendor({
   id: 'fireworks',
@@ -31,7 +32,14 @@ export default defineVendor({
     missingCredentialMessage: 'FIREWORKS_API_KEY is required.',
   },
   catalog: {
-    source: 'static',
+    source: 'hybrid',
+    discovery: {
+      kind: 'openai-compatible',
+      mapModel: mapOpenAIChatCatalogModel,
+    },
+    discoveryCacheTtl: '1d',
+    discoveryRefreshMode: 'background-if-stale',
+    allowManualRefresh: true,
     models: [
       {
         id: 'accounts/fireworks/models/chronos-hermes-13b-v2',

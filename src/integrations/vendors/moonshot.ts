@@ -1,4 +1,5 @@
 import { defineVendor } from '../define.js'
+import { mapOpenAIChatCatalogModel } from '../discoveryModelFilter.js'
 
 export default defineVendor({
   id: 'moonshot',
@@ -32,7 +33,14 @@ export default defineVendor({
     apiKeyEnvVars: ['MOONSHOT_API_KEY'],
   },
   catalog: {
-    source: 'static',
+    source: 'hybrid',
+    discovery: {
+      kind: 'openai-compatible',
+      mapModel: mapOpenAIChatCatalogModel,
+    },
+    discoveryCacheTtl: '1d',
+    discoveryRefreshMode: 'background-if-stale',
+    allowManualRefresh: true,
     models: [
       { id: 'k3', apiName: 'kimi-k3', label: 'Kimi K3', modelDescriptorId: 'k3', contextWindow: 1_048_576, maxOutputTokens: 32_768, capabilities: { supportsVision: true, supportsFunctionCalling: true, supportsJsonMode: true, supportsReasoning: true }, reasoning: { mode: 'levels', levels: ['low', 'high', 'max'], defaultLevel: 'max', wireFormat: 'reasoning_effort' } },
       { id: 'kimi-k2.7-code', apiName: 'kimi-k2.7-code', aliases: ['moonshotai/kimi-k2.7-code'], label: 'Kimi K2.7 Code', modelDescriptorId: 'kimi-k2.7-code', contextWindow: 262_144, maxOutputTokens: 32_768, capabilities: { supportsVision: true, supportsFunctionCalling: true, supportsJsonMode: true, supportsReasoning: true }, reasoning: { mode: 'levels', levels: ['low', 'medium', 'high'], defaultLevel: 'medium', wireFormat: 'reasoning_effort' } },

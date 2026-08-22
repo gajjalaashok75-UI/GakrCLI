@@ -1,4 +1,5 @@
 import { defineGateway } from '../define.js'
+import { mapOpenAIChatCatalogModel } from '../discoveryModelFilter.js'
 
 export default defineGateway({
   id: 'kimi-code',
@@ -33,7 +34,14 @@ export default defineGateway({
     vendorId: 'openai',
   },
   catalog: {
-    source: 'static',
+    source: 'hybrid',
+    discovery: {
+      kind: 'openai-compatible',
+      mapModel: mapOpenAIChatCatalogModel,
+    },
+    discoveryCacheTtl: '1d',
+    discoveryRefreshMode: 'background-if-stale',
+    allowManualRefresh: true,
     models: [
       { id: 'k3', apiName: 'k3', label: 'Kimi K3 (1M)', modelDescriptorId: 'k3', contextWindow: 1_048_576, maxOutputTokens: 32_768, capabilities: { supportsVision: true, supportsFunctionCalling: true, supportsJsonMode: true, supportsReasoning: true }, reasoning: { mode: 'levels', levels: ['low', 'high', 'max'], defaultLevel: 'max', wireFormat: 'reasoning_effort', disableFormat: 'thinking_type_disabled' }, notes: 'Allegretto+' },
       { id: 'k3-256k', apiName: 'k3', label: 'Kimi K3 (256K)', modelDescriptorId: 'k3', contextWindow: 262_144, maxOutputTokens: 32_768, capabilities: { supportsVision: true, supportsFunctionCalling: true, supportsJsonMode: true, supportsReasoning: true }, reasoning: { mode: 'levels', levels: ['low', 'high', 'max'], defaultLevel: 'max', wireFormat: 'reasoning_effort', disableFormat: 'thinking_type_disabled' }, notes: 'Moderato+' },

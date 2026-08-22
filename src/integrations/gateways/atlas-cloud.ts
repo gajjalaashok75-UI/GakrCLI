@@ -1,5 +1,6 @@
 import { defineGateway } from '../define.js'
 import { ZAI_GLM_OPENAI_SHIM } from '../transport/zaiGlmShim.js'
+import { mapOpenAIChatCatalogModel } from '../discoveryModelFilter.js'
 
 export default defineGateway({
   id: 'atlas-cloud',
@@ -34,7 +35,14 @@ export default defineGateway({
       'Atlas Cloud auth is required. Set ATLAS_CLOUD_API_KEY.',
   },
   catalog: {
-    source: 'static',
+    source: 'hybrid',
+    discovery: {
+      kind: 'openai-compatible',
+      mapModel: mapOpenAIChatCatalogModel,
+    },
+    discoveryCacheTtl: '1d',
+    discoveryRefreshMode: 'background-if-stale',
+    allowManualRefresh: true,
     // Mirrors https://www.atlascloud.ai/models/list/llm
     models: [
       { id: 'deepseek-ai/deepseek-v4-pro', apiName: 'deepseek-ai/deepseek-v4-pro', aliases: ['deepseek-v4-pro'], modelDescriptorId: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro', contextWindow: 1_048_576, maxOutputTokens: 393_216, capabilities: { supportsFunctionCalling: true, supportsJsonMode: true, supportsReasoning: true }, reasoning: { mode: 'levels', levels: ['low', 'medium', 'high', 'xhigh'], wireFormat: 'reasoning_effort' } },

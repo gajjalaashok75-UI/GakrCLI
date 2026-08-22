@@ -1,6 +1,7 @@
 import { defineGateway } from '../define.js'
 import { ZAI_GLM_OPENAI_SHIM } from '../transport/zaiGlmShim.js'
 import type { ReasoningControlMode, ReasoningEffortLevel, ReasoningWireFormat } from '../descriptors.js'
+import { mapOpenAIChatCatalogModel } from '../discoveryModelFilter.js'
 
 type OpenCodeGoCatalogSpec = {
   id: string
@@ -98,7 +99,14 @@ export default defineGateway({
     modelEnvVars: ['OPENAI_MODEL'],
   },
   catalog: {
-    source: 'static',
+    source: 'hybrid',
+    discovery: {
+      kind: 'openai-compatible',
+      mapModel: mapOpenAIChatCatalogModel,
+    },
+    discoveryCacheTtl: '1d',
+    discoveryRefreshMode: 'background-if-stale',
+    allowManualRefresh: true,
     models: goModels.map(catalogEntry),
   },
   usage: { supported: false },
