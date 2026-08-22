@@ -28,11 +28,7 @@ export const PROVIDER_PRESET_MANIFEST = [
       "OPENAI_MODEL"
     ],
     "fallbackBaseUrl": "https://opengateway.gitlawb.com/v1",
-    "fallbackModel": "mimo-v2.5-pro",
-    "badge": {
-      "text": "Recommended",
-      "color": "success"
-    }
+    "fallbackModel": "mimo-v2.5-pro"
   },
   {
     "preset": "aimlapi",
@@ -46,11 +42,7 @@ export const PROVIDER_PRESET_MANIFEST = [
     ],
     "modelEnvVars": [
       "OPENAI_MODEL"
-    ],
-    "badge": {
-      "text": "Recommended",
-      "color": "success"
-    }
+    ]
   },
   {
     "preset": "anthropic",
@@ -333,7 +325,11 @@ export const PROVIDER_PRESET_MANIFEST = [
     "description": "NVIDIA NIM endpoint",
     "apiKeyEnvVars": [
       "NVIDIA_API_KEY"
-    ]
+    ],
+    "badge": {
+      "text": "Recommended",
+      "color": "success"
+    }
   },
   {
     "preset": "openai",
@@ -383,7 +379,11 @@ export const PROVIDER_PRESET_MANIFEST = [
     "description": "OpenRouter OpenAI-compatible endpoint",
     "apiKeyEnvVars": [
       "OPENROUTER_API_KEY"
-    ]
+    ],
+    "badge": {
+      "text": "Recommended",
+      "color": "success"
+    }
   },
   {
     "preset": "together",
@@ -435,11 +435,7 @@ export const PROVIDER_PRESET_MANIFEST = [
     ],
     "modelEnvVars": [
       "OPENAI_MODEL"
-    ],
-    "badge": {
-      "text": "Sponsor",
-      "color": "success"
-    }
+    ]
   },
   {
     "preset": "xiaomi-mimo-token",
@@ -455,11 +451,7 @@ export const PROVIDER_PRESET_MANIFEST = [
     ],
     "modelEnvVars": [
       "OPENAI_MODEL"
-    ],
-    "badge": {
-      "text": "Sponsor",
-      "color": "success"
-    }
+    ]
   },
   {
     "preset": "zai",

@@ -24,6 +24,7 @@ export default defineGateway({
   preset: {
     id: 'openrouter',
     description: 'OpenRouter OpenAI-compatible endpoint',
+    badge: { text: 'Recommended', color: 'success' },
     apiKeyEnvVars: ['OPENROUTER_API_KEY'],
     vendorId: 'openai',
   },

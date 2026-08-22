@@ -40,6 +40,7 @@ export default defineGateway({
   preset: {
     id: 'nvidia-nim',
     description: 'NVIDIA NIM endpoint',
+    badge: { text: 'Recommended', color: 'success' },
     apiKeyEnvVars: ['NVIDIA_API_KEY'],
     vendorId: 'openai',
   },
