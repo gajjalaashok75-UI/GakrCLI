@@ -345,8 +345,10 @@ function PromptInput({
   // Tmux pill (ant-only) — visible when there's an active tungsten session
   const hasTungstenSession = useAppState(s => process.env.USER_TYPE === 'ant' && s.tungstenActiveSession !== undefined);
   const tmuxFooterVisible = process.env.USER_TYPE === 'ant' && hasTungstenSession;
-  // WebBrowser pill — visible when a browser is open
-  const bagelFooterVisible = useAppState(_s => false);
+  // WebBrowser pill — visible when a browser is live. `bagelActive` is mirrored
+  // from the shared browser executor by useWebBrowserLiveState() in REPL.tsx.
+  const bagelActive = useAppState(s => s.bagelActive ?? false);
+  const bagelFooterVisible = feature('WEB_BROWSER_TOOL') && bagelActive;
   const teamContext = useAppState(s => s.teamContext);
   const queuedCommands = useCommandQueue();
   const promptSuggestionState = useAppState(s => s.promptSuggestion);
@@ -584,7 +586,7 @@ function PromptInput({
 
   const tasksSelected = footerItemSelected === 'tasks';
   const tmuxSelected = footerItemSelected === 'tmux';
-  const _bagelSelected = footerItemSelected === 'bagel';
+  const bagelSelected = footerItemSelected === 'bagel';
   const teamsSelected = footerItemSelected === 'teams';
   const bridgeSelected = footerItemSelected === 'bridge';
   const bgAgentSelected = footerItemSelected === 'bg_agent';
@@ -2150,6 +2152,12 @@ function PromptInput({
             }
             break;
           case 'bagel':
+            // Default true mirrors WebBrowserPanelGate's `?? true`, so the first
+            // press hides the auto-shown panel instead of being a no-op.
+            setAppState(prev => ({
+              ...prev,
+              bagelPanelVisible: !(prev.bagelPanelVisible ?? true),
+            }));
             break;
           case 'teams':
             setShowTeamsDialog(true);
@@ -2764,6 +2772,7 @@ function PromptInput({
         teamsSelected={teamsSelected}
         bridgeSelected={bridgeSelected}
         tmuxSelected={tmuxSelected}
+        bagelSelected={bagelSelected}
         teammateFooterIndex={teammateFooterIndex}
         ideSelection={ideSelection}
         mcpClients={mcpClients}
