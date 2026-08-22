@@ -765,12 +765,40 @@ export class BrowserToolExecutor {
 
   private static sharedExecutor: BrowserToolExecutor | null = null;
   private static sharedLock = new AsyncMutex();
+  private static sharedListeners = new Set<(ex: BrowserToolExecutor | null) => void>();
+
+  /**
+   * Subscribe to shared-executor creation/teardown. UI code needs this because
+   * `getSharedIfExists()` is a plain static read with no change signal — without
+   * it, a panel mounted before the tool first runs can only discover the
+   * executor by polling. Fires with the new value (or null on reset).
+   */
+  static onSharedChange(listener: (ex: BrowserToolExecutor | null) => void): () => void {
+    BrowserToolExecutor.sharedListeners.add(listener);
+    return () => {
+      BrowserToolExecutor.sharedListeners.delete(listener);
+    };
+  }
+
+  /** Notify shared-slot subscribers. Never lets a bad listener break the caller. */
+  private static notifySharedChange(ex: BrowserToolExecutor | null): void {
+    for (const listener of BrowserToolExecutor.sharedListeners) {
+      try {
+        listener(ex);
+      } catch (e) {
+        logger.warn(`BrowserToolExecutor shared-change listener threw: ${e}`);
+      }
+    }
+  }
 
   static async getShared(opts?: BrowserToolExecutorOptions): Promise<BrowserToolExecutor> {
+    let created: BrowserToolExecutor | null = null;
+    let shared: BrowserToolExecutor;
     await BrowserToolExecutor.sharedLock.acquire();
     try {
       if (!BrowserToolExecutor.sharedExecutor) {
         BrowserToolExecutor.sharedExecutor = new BrowserToolExecutor(opts);
+        created = BrowserToolExecutor.sharedExecutor;
       } else if (opts) {
         logger.warn(
           'BrowserToolExecutor.getShared() called with options but a shared executor ' +
@@ -778,10 +806,14 @@ export class BrowserToolExecutor {
             "subagent requests browser tools — it reuses the parent's browser session.",
         );
       }
-      return BrowserToolExecutor.sharedExecutor;
+      shared = BrowserToolExecutor.sharedExecutor;
     } finally {
       BrowserToolExecutor.sharedLock.release();
     }
+    // Notify outside the lock: a listener that re-enters getShared()/resetShared()
+    // would otherwise deadlock on the mutex it is already holding.
+    if (created) BrowserToolExecutor.notifySharedChange(created);
+    return shared;
   }
 
   /**
@@ -796,14 +828,17 @@ export class BrowserToolExecutor {
 
   /** Detach and clear the shared executor if this instance owns that slot. */
   static async resetShared(): Promise<void> {
+    let cleared = false;
     await BrowserToolExecutor.sharedLock.acquire();
     try {
       if (BrowserToolExecutor.sharedExecutor) {
         await BrowserToolExecutor.sharedExecutor.close();
         BrowserToolExecutor.sharedExecutor = null;
+        cleared = true;
       }
     } finally {
       BrowserToolExecutor.sharedLock.release();
     }
+    if (cleared) BrowserToolExecutor.notifySharedChange(null);
   }
 }

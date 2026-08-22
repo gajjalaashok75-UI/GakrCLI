@@ -95,6 +95,7 @@ type Props = {
   teamsSelected: boolean;
   bridgeSelected: boolean;
   tmuxSelected: boolean;
+  bagelSelected: boolean;
   teammateFooterIndex?: number;
   ideSelection: IDESelection | undefined;
   mcpClients?: MCPServerConnection[];
@@ -130,6 +131,7 @@ function PromptInputFooter({
   teamsSelected,
   bridgeSelected,
   tmuxSelected,
+  bagelSelected,
   teammateFooterIndex,
   ideSelection,
   mcpClients,
@@ -225,6 +227,7 @@ function PromptInputFooter({
             teamsSelected={teamsSelected}
             teammateFooterIndex={teammateFooterIndex}
             tmuxSelected={tmuxSelected}
+            bagelSelected={bagelSelected}
             isPasting={isPasting}
             isSearching={isSearching}
             historyQuery={historyQuery}

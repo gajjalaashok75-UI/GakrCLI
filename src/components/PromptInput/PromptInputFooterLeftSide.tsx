@@ -28,6 +28,7 @@ import { count } from '../../utils/array.js';
 import { countVisibleBackgroundTasks, shouldHideTasksFooter } from '../tasks/taskStatusUtils.js';
 import { isAgentSwarmsEnabled } from '../../utils/agentSwarmsEnabled.js';
 import { TeamStatus } from '../teams/TeamStatus.js';
+import { BagelPill } from './BagelPill.js';
 import { isInProcessEnabled } from '../../utils/swarm/backends/registry.js';
 import { useAppState, useAppStateStore } from 'src/state/AppState.js';
 import { getIsRemoteMode } from '../../bootstrap/state.js';
@@ -92,6 +93,7 @@ type Props = {
   tasksSelected: boolean;
   teamsSelected: boolean;
   tmuxSelected: boolean;
+  bagelSelected: boolean;
   teammateFooterIndex?: number;
   isPasting?: boolean;
   isSearching: boolean;
@@ -191,6 +193,7 @@ export function PromptInputFooterLeftSide({
   tasksSelected,
   teamsSelected,
   tmuxSelected,
+  bagelSelected,
   teammateFooterIndex,
   isPasting,
   isSearching,
@@ -245,6 +248,7 @@ export function PromptInputFooterLeftSide({
         teamsSelected={teamsSelected}
         teammateFooterIndex={teammateFooterIndex}
         tmuxSelected={tmuxSelected}
+        bagelSelected={bagelSelected}
         onOpenTasksDialog={onOpenTasksDialog}
       />
     </Box>
@@ -259,6 +263,7 @@ type ModeIndicatorProps = {
   tasksSelected: boolean;
   teamsSelected: boolean;
   tmuxSelected: boolean;
+  bagelSelected: boolean;
   teammateFooterIndex?: number;
   onOpenTasksDialog?: (taskId?: string) => void;
 };
@@ -271,6 +276,7 @@ function ModeIndicator({
   tasksSelected,
   teamsSelected,
   tmuxSelected,
+  bagelSelected,
   teammateFooterIndex,
   onOpenTasksDialog,
 }: ModeIndicatorProps): React.ReactNode {
@@ -288,6 +294,9 @@ function ModeIndicator({
   const showSpinnerTree = expandedView === 'teammates';
   const prStatus = usePrStatus(isLoading, isPrStatusEnabled());
   const hasTmuxSession = useAppState(s => process.env.USER_TYPE === 'ant' && s.tungstenActiveSession !== undefined);
+  // Mirrored from the shared browser executor by useWebBrowserLiveState() in
+  // REPL.tsx — true while at least one tab is open.
+  const bagelActive = useAppState(s => s.bagelActive ?? false);
 
   const nextTickAt = useSyncExternalStore(
     proactiveModule?.subscribeToProactiveChanges ?? NO_OP_SUBSCRIBE,
@@ -419,6 +428,13 @@ function ModeIndicator({
     // wrapper (reconciler throws on Box-in-Text).
     // Tmux pill (ant-only) — appears right after tasks in nav order
     ...(process.env.USER_TYPE === 'ant' && hasTmuxSession ? [<TungstenPill key="tmux" selected={tmuxSelected} />] : []),
+    // WebBrowser pill — appears right after tmux, matching footerItems nav order
+    // in PromptInput.tsx. Gated on bagelActive here rather than letting the pill
+    // return null, because Byline separates parts by array index and would leave
+    // a stray "·" behind an empty entry.
+    ...(feature('WEB_BROWSER_TOOL') && bagelActive
+      ? [<BagelPill key="bagel" selected={bagelSelected} showHint={showHint} />]
+      : []),
     ...(isAgentSwarmsEnabled() && hasTeams
       ? [<TeamStatus key="teams" teamsSelected={teamsSelected} showHint={showHint && !hasBackgroundTasks} />]
       : []),

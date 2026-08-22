@@ -294,9 +294,91 @@ import { useTeammateLifecycleNotification } from 'src/hooks/notifs/useTeammateSh
 import { useFastModeNotification } from 'src/hooks/notifs/useFastModeNotification.js';
 import { AutoRunIssueNotification, shouldAutoRunIssue, getAutoRunIssueReasonText, getAutoRunCommand, type AutoRunIssueReason } from '../utils/autoRunIssue.js';
 import type { HookProgress } from '../types/hooks.js';
+// Type-only: erased at compile time, so this does not pull the browser engine
+// into the bundle when WEB_BROWSER_TOOL is off.
+import type { BrowserLiveState } from '../tools/WebBrowserTool/types.js';
+import type { BrowserToolExecutor } from '../tools/WebBrowserTool/browserEngine.js';
 /* eslint-disable @typescript-eslint/no-require-imports */
 const WebBrowserPanelModule = feature('WEB_BROWSER_TOOL') ? require('../tools/WebBrowserTool/WebBrowserPanel.js') as typeof import('../tools/WebBrowserTool/WebBrowserPanel.js') : null;
 /* eslint-enable @typescript-eslint/no-require-imports */
+
+/**
+ * Mirrors the shared browser executor's live state into AppState (`bagelActive`
+ * / `bagelUrl`) so the footer pill and the panel gate can react to a browser
+ * opening or closing without importing the browser engine themselves.
+ *
+ * Must be called unconditionally from REPL's body. The panel renders inside a
+ * subtree that unmounts whenever a dialog takes focus or a turn is in flight,
+ * so subscribing from there would tear the mirror down and drop the pill
+ * mid-session.
+ */
+function useWebBrowserLiveState(): void {
+  const setAppState = useSetAppState();
+  useEffect(() => {
+    const Executor = WebBrowserPanelModule?.BrowserToolExecutor;
+    // Both statics are used below; bail as a unit so a partially-shaped module
+    // can never throw out of an effect and take the whole REPL down.
+    if (!Executor?.getSharedIfExists || !Executor.onSharedChange) return;
+
+    let unsubLive: (() => void) | null = null;
+
+    const applyState = (state: BrowserLiveState) => {
+      const active = Boolean(state.isInitialized) && Array.isArray(state.tabs) && state.tabs.length > 0;
+      const url = state.currentUrl || undefined;
+      setAppState(prev =>
+        (prev.bagelActive ?? false) === active && prev.bagelUrl === url
+          ? prev
+          : { ...prev, bagelActive: active, bagelUrl: url },
+      );
+    };
+
+    const clearState = () => {
+      setAppState(prev =>
+        !(prev.bagelActive ?? false) && prev.bagelUrl === undefined
+          ? prev
+          : { ...prev, bagelActive: false, bagelUrl: undefined },
+      );
+    };
+
+    const attach = (ex: BrowserToolExecutor | null) => {
+      unsubLive?.();
+      unsubLive = null;
+      if (!ex) {
+        clearState();
+        return;
+      }
+      applyState(ex.getLiveState());
+      unsubLive = ex.onLiveStateChange(applyState);
+    };
+
+    // The executor is created lazily on first tool use, which may be long after
+    // this mounts — onSharedChange covers that case without polling.
+    attach(Executor.getSharedIfExists());
+    const unsubShared = Executor.onSharedChange(attach);
+
+    return () => {
+      unsubLive?.();
+      unsubShared();
+    };
+  }, [setAppState]);
+}
+
+/**
+ * Renders the browser panel when a browser is live and the user hasn't hidden
+ * it via the footer pill. A real component (not an inline IIFE) so its hooks
+ * run in their own render scope instead of the conditionally-rendered subtree
+ * this sits in.
+ */
+function WebBrowserPanelGate(): React.ReactNode {
+  const bagelActive = useAppState(s => s.bagelActive ?? false);
+  // Defaults to visible so a browser opening shows the panel without the user
+  // having to reach for the pill; the pill then toggles it back off.
+  const bagelPanelVisible = useAppState(s => s.bagelPanelVisible ?? true);
+  const Browser = WebBrowserPanelModule;
+  if (!feature('WEB_BROWSER_TOOL') || !Browser) return null;
+  if (!bagelActive || !bagelPanelVisible) return null;
+  return <Browser.WebBrowserPanel />;
+}
 import { IssueFlagBanner } from '../components/PromptInput/IssueFlagBanner.js';
 import { useIssueFlagBanner } from '../hooks/useIssueFlagBanner.js';
 import { CompanionSprite, CompanionFloatingBubble, MIN_COLS_FOR_FULL_SPRITE } from '../buddy/CompanionSprite.js';
@@ -716,6 +798,9 @@ export function REPL({
   const ultraplanLaunchPending = useAppState(s => s.ultraplanLaunchPending);
   const viewingAgentTaskId = useAppState(s => s.viewingAgentTaskId);
   const setAppState = useSetAppState();
+  // Keeps bagelActive/bagelUrl in sync with the shared browser executor. Called
+  // unconditionally here so the footer pill survives dialogs stealing focus.
+  useWebBrowserLiveState();
   const autoCompactTrackingBySessionRef = useRef(new Map<ReturnType<typeof getSessionId>, AutoCompactTrackingState>());
   const getAutoCompactTrackingForSession = useCallback((sessionId: ReturnType<typeof getSessionId>) => autoCompactTrackingBySessionRef.current.get(sessionId), []);
   const setAutoCompactTrackingForSession = useCallback((sessionId: ReturnType<typeof getSessionId>, tracking: AutoCompactTrackingState | undefined) => {
@@ -5364,12 +5449,7 @@ export function REPL({
               feature('MESSAGE_ACTIONS') && isFullscreenEnvEnabled() && !disableMessageActions ? enterMessageActions : undefined} mcpClients={mcpClients} pastedContents={pastedContents} setPastedContents={setPastedContents} vimMode={vimMode} setVimMode={setVimMode} showBashesDialog={showBashesDialog} setShowBashesDialog={setShowBashesDialog} onSubmit={onSubmit} onAgentSubmit={onAgentSubmit} isSearchingHistory={isSearchingHistory} setIsSearchingHistory={setIsSearchingHistory} helpOpen={isHelpOpen} setHelpOpen={setIsHelpOpen} insertTextRef={feature('VOICE_MODE') ? insertTextRef : undefined} voiceInterimRange={voice.interimRange} />
             <SessionBackgroundHint onBackgroundSession={handleBackgroundSession} isLoading={isLoading} />
             <BackgroundAgentSelector />
-            {(() => {
-  const Browser = WebBrowserPanelModule;
-  const executor = Browser?.BrowserToolExecutor?.getSharedIfExists?.();
-  const tabs = executor?.getLiveState?.()?.tabs;
-  return feature('WEB_BROWSER_TOOL') && Browser && Array.isArray(tabs) && tabs.length > 0 ? <Browser.WebBrowserPanel /> : null;
-})()}
+            <WebBrowserPanelGate />
           </>}
           {cursor &&
             // inputValue is REPL state; typed text survives the round-trip.
