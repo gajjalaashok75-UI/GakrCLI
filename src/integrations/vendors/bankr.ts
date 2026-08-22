@@ -1,4 +1,5 @@
 import { defineVendor } from '../define.js'
+import { mapOpenAIChatCatalogModel } from '../discoveryModelFilter.js'
 
 export default defineVendor({
   id: 'bankr',
@@ -31,7 +32,14 @@ export default defineVendor({
       'Bankr auth is required. Set BNKR_API_KEY or OPENAI_API_KEY.',
   },
   catalog: {
-    source: 'static',
+    source: 'hybrid',
+    discovery: {
+      kind: 'openai-compatible',
+      mapModel: mapOpenAIChatCatalogModel,
+    },
+    discoveryCacheTtl: '1d',
+    discoveryRefreshMode: 'background-if-stale',
+    allowManualRefresh: true,
     models: [
       { id: 'claude-opus-4.6', apiName: 'claude-opus-4.6', label: 'Claude Opus 4.6' },
     ],

@@ -1,4 +1,5 @@
 import { defineVendor } from '../define.js'
+import { mapOpenAIChatCatalogModel } from '../discoveryModelFilter.js'
 
 export default defineVendor({
   id: 'xai',
@@ -37,7 +38,14 @@ export default defineVendor({
       'XAI_API_KEY is required, or sign in with `gakrcli auth xai login` (browser OAuth) or `gakrcli auth xai device` (remote hosts).',
   },
   catalog: {
-    source: 'static',
+    source: 'hybrid',
+    discovery: {
+      kind: 'openai-compatible',
+      mapModel: mapOpenAIChatCatalogModel,
+    },
+    discoveryCacheTtl: '1d',
+    discoveryRefreshMode: 'background-if-stale',
+    allowManualRefresh: true,
     models: [
       {
         id: 'grok-4.3',

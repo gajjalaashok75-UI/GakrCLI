@@ -1,5 +1,6 @@
 import { defineGateway } from '../define.js'
 import { ZAI_GLM_OPENAI_SHIM } from '../transport/zaiGlmShim.js'
+import { mapOpenAIChatCatalogModel } from '../discoveryModelFilter.js'
 
 export default defineGateway({
   id: 'gitlawb-opengateway',
@@ -58,7 +59,14 @@ export default defineGateway({
     fallbackModel: 'mimo-v2.5-pro',
   },
   catalog: {
-    source: 'static',
+    source: 'hybrid',
+    discovery: {
+      kind: 'openai-compatible',
+      mapModel: mapOpenAIChatCatalogModel,
+    },
+    discoveryCacheTtl: '1d',
+    discoveryRefreshMode: 'background-if-stale',
+    allowManualRefresh: true,
     models: [
       // Virtual model: the gateway's smart router picks the cheapest model
       // expected to handle the request and escalates on upstream failure

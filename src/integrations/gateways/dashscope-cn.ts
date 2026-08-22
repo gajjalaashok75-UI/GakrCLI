@@ -1,4 +1,5 @@
 import { defineGateway } from '../define.js'
+import { mapOpenAIChatCatalogModel } from '../discoveryModelFilter.js'
 
 export default defineGateway({
   id: 'dashscope-cn',
@@ -25,7 +26,14 @@ export default defineGateway({
     vendorId: 'openai',
   },
   catalog: {
-    source: 'static',
+    source: 'hybrid',
+    discovery: {
+      kind: 'openai-compatible',
+      mapModel: mapOpenAIChatCatalogModel,
+    },
+    discoveryCacheTtl: '1d',
+    discoveryRefreshMode: 'background-if-stale',
+    allowManualRefresh: true,
     models: [
       { id: 'qwen-cn-3.6-plus', apiName: 'qwen3.6-plus', label: 'Qwen 3.6 Plus', modelDescriptorId: 'qwen3.6-plus' },
     ],

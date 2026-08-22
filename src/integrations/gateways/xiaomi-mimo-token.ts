@@ -1,4 +1,5 @@
 import { defineGateway } from '../define.js'
+import { mapOpenAIChatCatalogModel } from '../discoveryModelFilter.js'
 
 export default defineGateway({
   id: 'xiaomi-mimo-token',
@@ -49,7 +50,14 @@ export default defineGateway({
       'Xiaomi MiMo Token Plan auth is required. Set MIMO_API_KEY or OPENAI_API_KEY.',
   },
   catalog: {
-    source: 'static',
+    source: 'hybrid',
+    discovery: {
+      kind: 'openai-compatible',
+      mapModel: mapOpenAIChatCatalogModel,
+    },
+    discoveryCacheTtl: '1d',
+    discoveryRefreshMode: 'background-if-stale',
+    allowManualRefresh: true,
     models: [
       { id: 'mimo-v2.5-pro', apiName: 'mimo-v2.5-pro', label: 'MiMo V2.5 Pro', modelDescriptorId: 'mimo-v2.5-pro', reasoning: { mode: 'levels', levels: ['low', 'medium', 'high'], defaultLevel: 'medium', wireFormat: 'reasoning_effort' } },
       { id: 'mimo-v2.5', apiName: 'mimo-v2.5', label: 'MiMo V2.5', modelDescriptorId: 'mimo-v2.5', reasoning: { mode: 'levels', levels: ['low', 'medium', 'high'], defaultLevel: 'medium', wireFormat: 'reasoning_effort' } },

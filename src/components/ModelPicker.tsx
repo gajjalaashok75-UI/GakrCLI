@@ -3,10 +3,11 @@ import * as React from 'react';
 import { useCallback, useMemo, useState } from 'react';
 import { has1mContext } from '../utils/context.js';
 import { useExitOnCtrlCDWithKeybindings } from 'src/hooks/useExitOnCtrlCDWithKeybindings.js';
+import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from 'src/services/analytics/index.js';
 import { FAST_MODE_MODEL_DISPLAY, isFastModeAvailable, isFastModeCooldown, isFastModeEnabled } from 'src/utils/fastMode.js';
 import { Box, Text } from '../ink.js';
-import { useKeybindings } from '../keybindings/useKeybinding.js';
+import { useKeybinding, useKeybindings } from '../keybindings/useKeybinding.js';
 import { useAppState, useSetAppState } from '../state/AppState.js';
 import { convertEffortValueToLevel, type EffortLevel, getAvailableEffortLevels, getDefaultEffortForModel, modelSupportsEffort, modelSupportsMaxEffort, modelSupportsXHighEffort, resolvePickerEffortPersistence, toPersistableEffort } from '../utils/effort.js';
 import { isModelAllowed } from '../utils/model/modelAllowlist.js';
@@ -19,6 +20,7 @@ import { Byline } from './design-system/Byline.js';
 import { KeyboardShortcutHint } from './design-system/KeyboardShortcutHint.js';
 import { Pane } from './design-system/Pane.js';
 import { effortLevelToSymbol } from './EffortIndicator.js';
+import TextInput from './TextInput.js';
 export type ModelPickerDiscoveryState = {
   message: string;
   tone?: 'info' | 'success' | 'warning' | 'error';
@@ -42,9 +44,19 @@ export type Props = {
   optionsOverride?: ModelOption[];
   discoveryState?: ModelPickerDiscoveryState;
   onRefresh?: () => void;
+  /**
+   * Appends an "Enter model name" row as the last option. Selecting it swaps
+   * the list for a free-text field so the user can name a model the catalog
+   * does not know about — the common case for custom / unlisted providers,
+   * where discovery cannot enumerate the route and the picker would otherwise
+   * only offer the configured default. Off by default so embedded pickers
+   * (onboarding, /config) keep their fixed choice sets.
+   */
+  allowCustomModelInput?: boolean;
 };
 
 const NO_PREFERENCE = '__NO_PREFERENCE__';
+const CUSTOM_MODEL_INPUT = '__CUSTOM_MODEL_INPUT__';
 function mapDiscoveryToneToColor(tone: ModelPickerDiscoveryState['tone']): 'error' | 'warning' | 'success' | 'subtle' {
   switch (tone) {
     case 'error':
@@ -69,11 +81,14 @@ export function ModelPicker({
   skipSettingsWrite,
   optionsOverride,
   discoveryState,
-  onRefresh
+  onRefresh,
+  allowCustomModelInput
 }: Props): React.ReactNode {
   const setAppState = useSetAppState();
   const exitState = useExitOnCtrlCDWithKeybindings();
   const maxVisible = 10;
+
+  const [customInputActive, setCustomInputActive] = useState(false);
 
   const initialValue = initial === null ? NO_PREFERENCE : initial;
   const [focusedValue, setFocusedValue] = useState<string | undefined>(initialValue);
@@ -85,7 +100,7 @@ export function ModelPicker({
   );
 
   const handleToggle1M = useCallback(() => {
-    if (!focusedValue || focusedValue === NO_PREFERENCE) return;
+    if (!focusedValue || focusedValue === NO_PREFERENCE || focusedValue === CUSTOM_MODEL_INPUT) return;
     // Key on the base value so lookups in handleSelect / is1MMarked match the
     // initializer — predefined 1M options arrive with a `[1m]` suffix in
     // `focusedValue`, which would diverge from the base-value key set.
@@ -134,14 +149,25 @@ export function ModelPicker({
     return modelOptions;
   }, [modelOptions, initial]);
 
-  const selectOptions = useMemo(
-    () =>
-      optionsWithInitial.map(opt => ({
-        ...opt,
-        value: opt.value === null ? NO_PREFERENCE : opt.value,
-      })),
-    [optionsWithInitial],
-  );
+  const selectOptions = useMemo(() => {
+    const mapped = optionsWithInitial.map(opt => ({
+      ...opt,
+      value: opt.value === null ? NO_PREFERENCE : opt.value,
+    }));
+    if (!allowCustomModelInput) {
+      return mapped;
+    }
+    // Always last, after every discovered/static entry, so the catalog stays
+    // the primary answer and the manual field is the explicit fallback.
+    return [
+      ...mapped,
+      {
+        value: CUSTOM_MODEL_INPUT,
+        label: 'Enter model name…',
+        description: 'Type a model name manually — for custom or unlisted providers',
+      },
+    ];
+  }, [optionsWithInitial, allowCustomModelInput]);
   const initialFocusValue = useMemo(
     () => (selectOptions.some(_ => _.value === initialValue) ? initialValue : (selectOptions[0]?.value ?? undefined)),
     [selectOptions, initialValue],
@@ -198,10 +224,17 @@ export function ModelPicker({
       'modelPicker:increaseEffort': () => handleCycleEffort('right'),
       'modelPicker:toggle1M': () => handleToggle1M(),
     },
-    { context: 'ModelPicker' },
+    // Left/right/Space belong to the text field while it is open, otherwise
+    // typing a model name would silently cycle effort instead of moving the
+    // cursor.
+    { context: 'ModelPicker', isActive: !customInputActive },
   );
 
   function handleSelect(value: string): void {
+    if (value === CUSTOM_MODEL_INPUT) {
+      setCustomInputActive(true);
+      return;
+    }
     logEvent('tengu_model_command_menu_effort', {
       effort: effort as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
     });
@@ -238,6 +271,47 @@ export function ModelPicker({
     const wants1M = marked1MValues.has(baseValue);
     const finalValue = wants1M ? `${baseValue}[1m]` : baseValue;
     onSelect(finalValue, selectedEffort);
+  }
+
+  function handleCustomModelSubmit(raw: string): void {
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      // Empty submit is the guaranteed way back to the list, even if this
+      // render tree has no keybinding context for Esc.
+      setCustomInputActive(false);
+      return;
+    }
+    handleSelect(trimmed);
+  }
+
+  if (customInputActive) {
+    const customContent = (
+      <Box flexDirection="column">
+        <Box marginBottom={1} flexDirection="column">
+          <Text color="remember" bold>
+            Enter model name
+          </Text>
+          <Text dimColor>
+            Type the model name exactly as your provider expects it (for example{' '}
+            <Text bold>deepseek-chat</Text> or <Text bold>meta-llama/Llama-3.3-70B-Instruct</Text>
+            ).
+          </Text>
+        </Box>
+        <CustomModelNameInput
+          onSubmit={handleCustomModelSubmit}
+          onCancel={() => setCustomInputActive(false)}
+        />
+        <Box marginTop={1}>
+          <Text dimColor italic>
+            <Byline>
+              <KeyboardShortcutHint shortcut="Enter" action="confirm" />
+              <KeyboardShortcutHint shortcut="Esc" action="back to model list" />
+            </Byline>
+          </Text>
+        </Box>
+      </Box>
+    );
+    return isStandaloneCommand ? <Pane color="permission">{customContent}</Pane> : customContent;
   }
 
   const content = (
@@ -346,7 +420,41 @@ export function ModelPicker({
 
 function resolveOptionModel(value?: string): string | undefined {
   if (!value) return undefined;
+  if (value === CUSTOM_MODEL_INPUT) return undefined;
   return value === NO_PREFERENCE ? getDefaultMainLoopModel() : parseUserSpecifiedModel(value);
+}
+
+function CustomModelNameInput({
+  onSubmit,
+  onCancel,
+}: {
+  onSubmit: (value: string) => void;
+  onCancel: () => void;
+}): React.ReactNode {
+  const [value, setValue] = useState('');
+  const [cursorOffset, setCursorOffset] = useState(0);
+  const { columns: terminalColumns } = useTerminalSize();
+  const inputColumns = Math.max(20, Math.min(80, terminalColumns - 8));
+
+  // Esc is owned here rather than by BaseTextInput's double-press flow so a
+  // single press returns to the list instead of first clearing the field.
+  useKeybinding('confirm:no', onCancel, { context: 'ModelPicker' });
+
+  return (
+    <Box>
+      <Text>Model › </Text>
+      <TextInput
+        value={value}
+        onChange={setValue}
+        cursorOffset={cursorOffset}
+        onChangeCursorOffset={setCursorOffset}
+        columns={inputColumns}
+        placeholder="model-name"
+        onSubmit={onSubmit}
+        disableEscapeDoublePress
+      />
+    </Box>
+  );
 }
 
 function EffortLevelIndicator({ effort }: { effort?: EffortLevel }): React.ReactNode {

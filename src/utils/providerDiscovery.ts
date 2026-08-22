@@ -259,6 +259,35 @@ export async function listOllamaModels(
   return models
 }
 
+/**
+ * Normalizes a `GET /models` payload into a list of raw model records, or
+ * `null` when the payload contains no recognizable list.
+ *
+ * The OpenAI contract is `{ object: 'list', data: [...] }`, but several
+ * OpenAI-compatible providers (Together AI, some LiteLLM/proxy deployments)
+ * return the array at the top level instead. Reading only `data.data` treated
+ * those responses as "no models" and silently fell back to the static catalog,
+ * so accept both shapes. A `models` key is also honored because a handful of
+ * self-hosted gateways use it.
+ */
+function normalizeModelsListPayload(
+  payload: unknown,
+): Array<Record<string, unknown>> | null {
+  if (Array.isArray(payload)) {
+    return payload as Array<Record<string, unknown>>
+  }
+  if (payload && typeof payload === 'object') {
+    const record = payload as { data?: unknown; models?: unknown }
+    if (Array.isArray(record.data)) {
+      return record.data as Array<Record<string, unknown>>
+    }
+    if (Array.isArray(record.models)) {
+      return record.models as Array<Record<string, unknown>>
+    }
+  }
+  return null
+}
+
 export async function listOpenAICompatibleModels(options?: {
   baseUrl?: string
   apiKey?: string
@@ -288,15 +317,13 @@ export async function listOpenAICompatibleModels(options?: {
       return null
     }
 
-    const data = (await response.json()) as {
-      data?: Array<{ id?: string }>
-    }
+    const entries = normalizeModelsListPayload(await response.json()) ?? []
 
     return Array.from(
       new Set(
-        (data.data ?? [])
-          .filter(model => Boolean(model.id))
-          .map(model => model.id!),
+        entries
+          .map(model => (typeof model?.id === 'string' ? model.id : undefined))
+          .filter((id): id is string => Boolean(id)),
       ),
     )
   } catch {
@@ -332,11 +359,8 @@ export async function fetchOpenAICompatibleModelsRaw(options?: {
       return null
     }
 
-    const data = (await response.json()) as {
-      data?: Array<Record<string, unknown>>
-    }
-
-    return data.data ?? null
+    const entries = normalizeModelsListPayload(await response.json())
+    return entries
   } catch {
     return null
   } finally {

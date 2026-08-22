@@ -1,6 +1,7 @@
 import { defineGateway } from '../define.js'
 import { ZAI_GLM_OPENAI_SHIM } from '../transport/zaiGlmShim.js'
 import type { ReasoningControlMode, ReasoningEffortLevel, ReasoningWireFormat, OpenAIShimTransportConfig } from '../descriptors.js'
+import { mapOpenAIChatCatalogModel } from '../discoveryModelFilter.js'
 
 type OpenCodeCatalogSpec = {
   id: string
@@ -124,7 +125,14 @@ export default defineGateway({
       'OPENCODE_API_KEY or OPENAI_API_KEYS / OPENAI_API_KEY is required. Get your API key from https://opencode.ai',
   },
   catalog: {
-    source: 'static',
+    source: 'hybrid',
+    discovery: {
+      kind: 'openai-compatible',
+      mapModel: mapOpenAIChatCatalogModel,
+    },
+    discoveryCacheTtl: '1d',
+    discoveryRefreshMode: 'background-if-stale',
+    allowManualRefresh: true,
     models: zenModels.map(catalogEntry),
   },
   usage: { supported: false },
