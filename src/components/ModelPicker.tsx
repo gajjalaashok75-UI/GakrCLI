@@ -89,6 +89,7 @@ export function ModelPicker({
   const maxVisible = 10;
 
   const [customInputActive, setCustomInputActive] = useState(false);
+  const [customInputError, setCustomInputError] = useState<string | undefined>(undefined);
 
   const initialValue = initial === null ? NO_PREFERENCE : initial;
   const [focusedValue, setFocusedValue] = useState<string | undefined>(initialValue);
@@ -223,10 +224,11 @@ export function ModelPicker({
       'modelPicker:decreaseEffort': () => handleCycleEffort('left'),
       'modelPicker:increaseEffort': () => handleCycleEffort('right'),
       'modelPicker:toggle1M': () => handleToggle1M(),
+      'modelPicker:refresh': () => onRefresh?.(),
     },
-    // Left/right/Space belong to the text field while it is open, otherwise
-    // typing a model name would silently cycle effort instead of moving the
-    // cursor.
+    // Left/right/Space/r belong to the text field while it is open, otherwise
+    // typing a model name would silently cycle effort or trigger a refresh
+    // instead of inserting the character.
     { context: 'ModelPicker', isActive: !customInputActive },
   );
 
@@ -279,6 +281,17 @@ export function ModelPicker({
       // Empty submit is the guaranteed way back to the list, even if this
       // render tree has no keybinding context for Esc.
       setCustomInputActive(false);
+      setCustomInputError(undefined);
+      return;
+    }
+    // A free-text field is the one path into the picker that bypasses the
+    // option list, so the org allowlist has to be enforced here. Rejecting
+    // inline keeps the field open to retype — the callers that check after
+    // selection can only close the picker with an error.
+    if (!isModelAllowed(trimmed)) {
+      setCustomInputError(
+        `'${trimmed}' is not available. Your organization restricts model selection.`,
+      );
       return;
     }
     handleSelect(trimmed);
@@ -298,8 +311,13 @@ export function ModelPicker({
           </Text>
         </Box>
         <CustomModelNameInput
+          error={customInputError}
+          onDirty={() => setCustomInputError(undefined)}
           onSubmit={handleCustomModelSubmit}
-          onCancel={() => setCustomInputActive(false)}
+          onCancel={() => {
+            setCustomInputActive(false);
+            setCustomInputError(undefined);
+          }}
         />
         <Box marginTop={1}>
           <Text dimColor italic>
@@ -330,6 +348,9 @@ export function ModelPicker({
               Currently using {modelDisplayString(sessionModel)} for this session (set by plan mode). Selecting a model
               will undo this.
             </Text>
+          )}
+          {discoveryState && (
+            <Text color={mapDiscoveryToneToColor(discoveryState.tone)}>{discoveryState.message}</Text>
           )}
         </Box>
 
@@ -403,6 +424,14 @@ export function ModelPicker({
           ) : (
             <Byline>
               <KeyboardShortcutHint shortcut="Enter" action="confirm" />
+              {onRefresh ? (
+                <ConfigurableShortcutHint
+                  action="modelPicker:refresh"
+                  context="ModelPicker"
+                  fallback="r"
+                  description="refresh models"
+                />
+              ) : null}
               <ConfigurableShortcutHint action="select:cancel" context="Select" fallback="Esc" description="exit" />
             </Byline>
           )}
@@ -425,9 +454,13 @@ function resolveOptionModel(value?: string): string | undefined {
 }
 
 function CustomModelNameInput({
+  error,
+  onDirty,
   onSubmit,
   onCancel,
 }: {
+  error?: string;
+  onDirty: () => void;
   onSubmit: (value: string) => void;
   onCancel: () => void;
 }): React.ReactNode {
@@ -440,19 +473,30 @@ function CustomModelNameInput({
   // single press returns to the list instead of first clearing the field.
   useKeybinding('confirm:no', onCancel, { context: 'ModelPicker' });
 
+  const handleChange = useCallback(
+    (next: string) => {
+      setValue(next);
+      onDirty();
+    },
+    [onDirty],
+  );
+
   return (
-    <Box>
-      <Text>Model › </Text>
-      <TextInput
-        value={value}
-        onChange={setValue}
-        cursorOffset={cursorOffset}
-        onChangeCursorOffset={setCursorOffset}
-        columns={inputColumns}
-        placeholder="model-name"
-        onSubmit={onSubmit}
-        disableEscapeDoublePress
-      />
+    <Box flexDirection="column">
+      <Box>
+        <Text>Model › </Text>
+        <TextInput
+          value={value}
+          onChange={handleChange}
+          cursorOffset={cursorOffset}
+          onChangeCursorOffset={setCursorOffset}
+          columns={inputColumns}
+          placeholder="model-name"
+          onSubmit={onSubmit}
+          disableEscapeDoublePress
+        />
+      </Box>
+      {error ? <Text color="error">{error}</Text> : null}
     </Box>
   );
 }
