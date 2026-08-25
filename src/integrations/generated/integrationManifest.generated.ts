@@ -83,6 +83,21 @@ export const PROVIDER_PRESET_MANIFEST = [
     ]
   },
   {
+    "preset": "apismart",
+    "routeKind": "gateway",
+    "routeId": "apismart",
+    "vendorId": "openai",
+    "gatewayId": "apismart",
+    "description": "ApiSmart unified OpenAI-compatible gateway",
+    "apiKeyEnvVars": [
+      "APISMART_API_KEY"
+    ],
+    "modelEnvVars": [
+      "APISMART_MODEL",
+      "OPENAI_MODEL"
+    ]
+  },
+  {
     "preset": "atlas-cloud",
     "routeKind": "gateway",
     "routeId": "atlas-cloud",
@@ -150,6 +165,24 @@ export const PROVIDER_PRESET_MANIFEST = [
       "CLOUDFLARE_API_TOKEN"
     ],
     "modelEnvVars": [
+      "OPENAI_MODEL"
+    ]
+  },
+  {
+    "preset": "concentrate",
+    "routeKind": "gateway",
+    "routeId": "concentrate",
+    "vendorId": "openai",
+    "gatewayId": "concentrate",
+    "description": "Concentrate AI — 150+ models via OpenAI-compatible API",
+    "apiKeyEnvVars": [
+      "CONCENTRATE_API_KEY"
+    ],
+    "baseUrlEnvVars": [
+      "CONCENTRATE_BASE_URL"
+    ],
+    "modelEnvVars": [
+      "CONCENTRATE_MODEL",
       "OPENAI_MODEL"
     ]
   },
@@ -519,11 +552,13 @@ export const ORDERED_PROVIDER_PRESETS = [
   "anthropic",
   "dashscope-cn",
   "dashscope-intl",
+  "apismart",
   "atlas-cloud",
   "azure-openai",
   "bankr",
   "clinepass",
   "cloudflare",
+  "concentrate",
   "deepseek",
   "fireworks",
   "gemini",

@@ -1,8 +1,8 @@
 import { defineBrand } from '../define.js'
 
 export default defineBrand({
-  id: 'ling',
-  label: 'Ling',
+  id: 'macaron',
+  label: 'Macaron',
   canonicalVendorId: 'openai',
   defaultCapabilities: {
     supportsVision: false,
@@ -12,5 +12,5 @@ export default defineBrand({
     supportsReasoning: true,
     supportsPreciseTokenCount: false,
   },
-  modelIds: ['inclusionai/ling-3.0-flash:free', 'inclusionai/ling-3.0-tiny:free'],
+  modelIds: ['mindai/macaron-v1-tall', 'mindai/macaron-v1-venti'],
 })

@@ -2,12 +2,12 @@ import { defineModel } from '../define.js'
 
 export default [
   defineModel({
-    id: 'inclusionai/ling-3.0-flash:free',
-    label: 'Ling 3.0 Flash (free)',
-    brandId: 'ling',
+    id: 'mindai/macaron-v1-tall',
+    label: 'Macaron V1 Tall',
+    brandId: 'macaron',
     vendorId: 'openai',
     classification: ['chat', 'reasoning', 'coding'],
-    defaultModel: 'inclusionai/ling-3.0-flash:free',
+    defaultModel: 'mindai/macaron-v1-tall',
     capabilities: {
       supportsVision: false,
       supportsStreaming: true,
@@ -20,12 +20,12 @@ export default [
     maxOutputTokens: 32_768,
   }),
   defineModel({
-    id: 'inclusionai/ling-3.0-tiny:free',
-    label: 'Ling 3.0 Tiny (free)',
-    brandId: 'ling',
+    id: 'mindai/macaron-v1-venti',
+    label: 'Macaron V1 Venti',
+    brandId: 'macaron',
     vendorId: 'openai',
     classification: ['chat', 'reasoning', 'coding'],
-    defaultModel: 'inclusionai/ling-3.0-tiny:free',
+    defaultModel: 'mindai/macaron-v1-venti',
     capabilities: {
       supportsVision: false,
       supportsStreaming: true,
@@ -34,7 +34,7 @@ export default [
       supportsReasoning: true,
       supportsPreciseTokenCount: false,
     },
-    contextWindow: 262_144,
-    maxOutputTokens: 32_768,
+    contextWindow: 1_048_576,
+    maxOutputTokens: 131_072,
   }),
 ]
