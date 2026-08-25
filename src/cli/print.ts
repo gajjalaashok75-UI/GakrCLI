@@ -147,6 +147,11 @@ import {
   permissionPromptToolResultToPermissionDecision,
 } from 'src/utils/permissions/PermissionPromptToolResultSchema.js'
 import { createAbortController } from 'src/utils/abortController.js'
+import {
+  registerInterruptionController,
+  requestAbort,
+} from 'src/utils/interruptionTrace.js'
+import { abortPrintModeControlRequest } from './printInterruption.js'
 import { createCombinedAbortSignal } from 'src/utils/combinedAbortSignal.js'
 import { generateSessionTitle } from 'src/utils/sessionTitle.js'
 import { buildSideQuestionFallbackParams } from 'src/utils/queryContext.js'
@@ -1066,6 +1071,17 @@ function runHeadlessStreaming(
   let shutdownPromptInjected = false
   let heldBackResult: StdoutMessage | null = null
   let abortController: AbortController | undefined
+  // Every print-mode abort routes through here so the interruption trace can
+  // attribute the cancellation to a source (SIGINT, priority queue, SDK
+  // bridge) instead of recording a bare `AbortController.abort()`.
+  const abortActiveQuery = (source: string, reason: unknown): void => {
+    if (!abortController || abortController.signal.aborted) return
+    requestAbort(abortController, reason, {
+      source,
+      subsystem: 'print_mode',
+      controllerRole: 'query-root',
+    })
+  }
   // Same queue sendRequest() enqueues to — one FIFO for everything.
   const output = structuredIO.outbound
 
@@ -1074,9 +1090,7 @@ function runHeadlessStreaming(
   // failsafe timer that force-exits if cleanup hangs.
   const sigintHandler = () => {
     logForDiagnosticsNoPII('info', 'shutdown_signal', { signal: 'SIGINT' })
-    if (abortController && !abortController.signal.aborted) {
-      abortController.abort()
-    }
+    abortActiveQuery('print_sigint', 'interrupt')
     void gracefulShutdown(0)
   }
   process.on('SIGINT', sigintHandler)
@@ -1932,7 +1946,7 @@ function runHeadlessStreaming(
   // Abort the current operation when a 'now' priority message arrives.
   subscribeToCommandQueue(() => {
     if (abortController && getCommandsByMaxPriority('now').length > 0) {
-      abortController.abort('interrupt')
+      abortActiveQuery('priority_now', 'interrupt')
     }
   })
 
@@ -2214,6 +2228,10 @@ function runHeadlessStreaming(
           }
 
           abortController = createAbortController()
+          registerInterruptionController(abortController, {
+            subsystem: 'print_mode',
+            controllerRole: 'query-root',
+          })
           const turnStartTime = feature('FILE_PERSISTENCE')
             ? Date.now()
             : undefined
@@ -3069,10 +3087,16 @@ function runHeadlessStreaming(
               },
             }))
           }
-          if (abortController) {
-            abortController.abort()
-          }
-          suggestionState.abortController?.abort()
+          // One causal event links the query abort to the speculation abort, so
+          // the trace shows a single SDK interrupt fanning out instead of two
+          // unrelated cancellations. A bare suggestionState.abortController
+          // .abort() would leave the speculation abort unattributed.
+          abortPrintModeControlRequest(
+            abortController,
+            suggestionState.abortController,
+            'sdk_control_interrupt',
+            'interrupt',
+          )
           suggestionState.abortController = null
           suggestionState.lastEmitted = null
           suggestionState.pendingSuggestion = null
@@ -3081,10 +3105,12 @@ function runHeadlessStreaming(
           logForDebugging(
             `[print.ts] end_session received, reason=${req.reason ?? 'unspecified'}`,
           )
-          if (abortController) {
-            abortController.abort()
-          }
-          suggestionState.abortController?.abort()
+          abortPrintModeControlRequest(
+            abortController,
+            suggestionState.abortController,
+            'sdk_end_session',
+            undefined,
+          )
           suggestionState.abortController = null
           suggestionState.lastEmitted = null
           suggestionState.pendingSuggestion = null
@@ -4175,7 +4201,7 @@ function runHeadlessStreaming(
                     structuredIO.injectControlResponse(response)
                   },
                   onInterrupt() {
-                    abortController?.abort()
+                    abortActiveQuery('bridge_interrupt', 'interrupt')
                   },
                   onSetModel(model) {
                     const resolved =
