@@ -28,7 +28,6 @@ import {
   type JSONRPCMessage,
   type ListPromptsResult,
   ListPromptsResultSchema,
-  ListResourcesResultSchema,
   ListRootsRequestSchema,
   type ListToolsResult,
   ListToolsResultSchema,
@@ -36,7 +35,6 @@ import {
   type PromptMessage,
   type ResourceLink,
 } from '@modelcontextprotocol/sdk/types.js'
-import mapValues from 'lodash-es/mapValues.js'
 import memoize from 'lodash-es/memoize.js'
 import zipObject from 'lodash-es/zipObject.js'
 import pMap from 'p-map'
@@ -78,6 +76,7 @@ import {
   getBinaryBlobSavedMessage,
   getFormatDescription,
   getLargeOutputInstructions,
+  getLargeOutputPersistenceFailureInstructions,
   persistBinaryContent,
 } from '../../utils/mcpOutputStorage.js'
 import {
@@ -112,6 +111,7 @@ import {
 } from './elicitationHandler.js'
 import { buildMcpToolName } from './mcpStringUtils.js'
 import { normalizeNameForMCP } from './normalization.js'
+import { listAllMcpResources, paginateMcpList } from './pagination.js'
 import { getLoggingSafeMcpBaseUrl } from './utils.js'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -213,6 +213,7 @@ export function isMcpSessionExpiredError(error: Error): boolean {
  * tools to hang indefinitely on unresponsive servers.
  */
 const DEFAULT_MCP_TOOL_TIMEOUT_MS = 300_000
+const MCP_TOOL_ACTIVITY_INTERVAL_MS = 30_000
 
 /**
  * Cap on MCP tool descriptions and server instructions sent to the model.
@@ -257,6 +258,7 @@ import { dirname, join } from 'path'
 import { getGakrCLIConfigHomeDir } from '../../utils/envUtils.js'
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { jsonParse, jsonStringify } from '../../utils/slowOperations.js'
+import { jsonRedactor } from '../../utils/redaction.js'
 
 const MCP_AUTH_CACHE_TTL_MS = 15 * 60 * 1000 // 15 min
 
@@ -569,6 +571,51 @@ type InProcessMcpServer = {
   close(): Promise<void>
 }
 
+const MAX_MCP_STDERR_CHARS = 256 * 1024
+const MCP_STDERR_TRUNCATED_MARKER = '\n...[stderr truncated]'
+
+export function buildMcpSseEventSourceHeaders(
+  initHeaders: HeadersInit | undefined,
+): Headers {
+  const headers = new Headers(initHeaders)
+  if (!headers.has('User-Agent')) {
+    headers.set('User-Agent', getMCPUserAgent())
+  }
+  headers.set('Accept', 'text/event-stream')
+  return headers
+}
+
+export function buildMcpSseRequestHeaders(
+  initHeaders: HeadersInit | undefined,
+  combinedHeaders: Record<string, string>,
+): Headers {
+  const headers = new Headers(initHeaders)
+  new Headers(combinedHeaders).forEach((value, key) => {
+    headers.set(key, value)
+  })
+  return headers
+}
+
+export function appendBoundedMcpStderr(
+  current: string,
+  chunk: Buffer | string,
+): string {
+  if (current.includes(MCP_STDERR_TRUNCATED_MARKER)) {
+    return current
+  }
+
+  const text = typeof chunk === 'string' ? chunk : chunk.toString()
+  const next = current + text
+  if (next.length <= MAX_MCP_STDERR_CHARS) {
+    return next
+  }
+
+  return (
+    next.slice(0, MAX_MCP_STDERR_CHARS - MCP_STDERR_TRUNCATED_MARKER.length) +
+    MCP_STDERR_TRUNCATED_MARKER
+  )
+}
+
 export async function cleanupFailedConnection(
   transport: Pick<Transport, 'close'>,
   inProcessServer?: Pick<InProcessMcpServer, 'close'>,
@@ -655,6 +702,9 @@ export const connectToServer = memoize(
 
         // Get combined headers (static + dynamic)
         const combinedHeaders = await getMcpServerHeaders(name, serverRef)
+        const allowUnauthorizedRefresh = !new Headers(combinedHeaders).has(
+          'Authorization',
+        )
 
         // Use the auth provider with SSEClientTransport
         const transportOptions: SSEClientTransportOptions = {
@@ -663,7 +713,11 @@ export const connectToServer = memoize(
           // Step-up detection wraps innermost so the 403 is seen before the
           // SDK's handler calls auth() → tokens().
           fetch: wrapFetchWithTimeout(
-            wrapFetchWithStepUpDetection(createFetchWithInit(), authProvider),
+            wrapFetchWithStepUpDetection(createFetchWithInit(), authProvider, {
+              allowUnauthorizedRefresh,
+              resourceUrl: serverRef.url,
+              providerOwnsAuthorization: allowUnauthorizedRefresh,
+            }),
           ),
           requestInit: {
             headers: {
@@ -678,27 +732,28 @@ export const connectToServer = memoize(
         // to receive server-sent events), so applying a 60-second timeout would kill it.
         // The timeout is only meant for individual API requests (POST, auth refresh), not
         // the persistent SSE stream.
-        transportOptions.eventSourceInit = {
-          fetch: async (url: string | URL, init?: RequestInit) => {
-            // Get auth headers from the auth provider
-            const authHeaders: Record<string, string> = {}
-            const tokens = await authProvider.tokens()
-            if (tokens) {
-              authHeaders.Authorization = `Bearer ${tokens.access_token}`
-            }
-
+        const eventSourceFetch = wrapFetchWithStepUpDetection(
+          async (url: string | URL, init?: RequestInit) => {
             const proxyOptions = getProxyFetchOptions()
             // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
             return fetch(url, {
               ...init,
               ...proxyOptions,
-              headers: {
-                'User-Agent': getMCPUserAgent(),
-                ...authHeaders,
-                ...init?.headers,
-                ...combinedHeaders,
-                Accept: 'text/event-stream',
-              },
+              headers: buildMcpSseEventSourceHeaders(init?.headers),
+            })
+          },
+          authProvider,
+          {
+            allowUnauthorizedRefresh,
+            resourceUrl: serverRef.url,
+            providerOwnsAuthorization: allowUnauthorizedRefresh,
+          },
+        )
+        transportOptions.eventSourceInit = {
+          fetch: async (url: string | URL, init?: RequestInit) => {
+            return eventSourceFetch(url, {
+              ...init,
+              headers: buildMcpSseRequestHeaders(init?.headers, combinedHeaders),
             })
           },
         }
@@ -783,8 +838,8 @@ export const connectToServer = memoize(
         }
 
         // Redact sensitive headers before logging
-        const wsHeadersForLogging = mapValues(wsHeaders, (value, key) =>
-          key.toLowerCase() === 'authorization' ? '[REDACTED]' : value,
+        const wsHeadersForLogging = JSON.parse(
+          JSON.stringify(wsHeaders, jsonRedactor),
         )
 
         logMCPDebug(
@@ -836,13 +891,16 @@ export const connectToServer = memoize(
 
         // Get combined headers (static + dynamic)
         const combinedHeaders = await getMcpServerHeaders(name, serverRef)
-
         // Check if this server has stored OAuth tokens. If so, the SDK's
         // authProvider will set Authorization — don't override with the
         // session ingress token (SDK merges requestInit AFTER authProvider).
         // CCR proxy URLs (ccr_shttp_mcp) have no stored OAuth, so they still
         // get the ingress token. See PR #24454 discussion.
         const hasOAuthTokens = !!(await authProvider.tokens())
+        const hasExplicitAuthorization =
+          new Headers(combinedHeaders).has('Authorization') ||
+          Boolean(sessionIngressToken && !hasOAuthTokens)
+        const allowUnauthorizedRefresh = !hasExplicitAuthorization
 
         // Use the auth provider with StreamableHTTPClientTransport
         const proxyOptions = getProxyFetchOptions()
@@ -857,7 +915,11 @@ export const connectToServer = memoize(
           // Step-up detection wraps innermost so the 403 is seen before the
           // SDK's handler calls auth() → tokens().
           fetch: wrapFetchWithTimeout(
-            wrapFetchWithStepUpDetection(createFetchWithInit(), authProvider),
+            wrapFetchWithStepUpDetection(createFetchWithInit(), authProvider, {
+              allowUnauthorizedRefresh,
+              resourceUrl: serverRef.url,
+              providerOwnsAuthorization: allowUnauthorizedRefresh,
+            }),
           ),
           requestInit: {
             ...proxyOptions,
@@ -874,10 +936,11 @@ export const connectToServer = memoize(
 
         // Redact sensitive headers before logging
         const headersForLogging = transportOptions.requestInit?.headers
-          ? mapValues(
-            transportOptions.requestInit.headers as Record<string, string>,
-            (value, key) =>
-              key.toLowerCase() === 'authorization' ? '[REDACTED]' : value,
+          ? JSON.parse(
+            JSON.stringify(
+              transportOptions.requestInit.headers as Record<string, string>,
+              jsonRedactor,
+            ),
           )
           : undefined
 
@@ -1008,14 +1071,7 @@ export const connectToServer = memoize(
         const stdioTransport = transport as StdioClientTransport
         if (stdioTransport.stderr) {
           stderrHandler = (data: Buffer) => {
-            // Cap stderr accumulation to prevent unbounded memory growth
-            if (stderrOutput.length < 64 * 1024 * 1024) {
-              try {
-                stderrOutput += data.toString()
-              } catch {
-                // Ignore errors from exceeding max string length
-              }
-            }
+            stderrOutput = appendBoundedMcpStderr(stderrOutput, data)
           }
           stdioTransport.stderr.on('data', stderrHandler)
         }
@@ -1766,7 +1822,7 @@ export function areMcpConfigsEqual(
 // Max cache size for fetch* caches. Keyed by server name (stable across
 // reconnects), bounded to prevent unbounded growth with many MCP servers.
 const MCP_FETCH_CACHE_SIZE = 20
-const MCP_TOOL_ACTIVITY_INTERVAL_MS = 30_000
+export const MCP_TOOLS_LIST_RETRY_BUDGET_MS = 3_000
 
 /**
  * Encode MCP tool input for the auto-mode security classifier.
@@ -1792,35 +1848,60 @@ export const fetchToolsForClient = memoizeWithLRU(
         return []
       }
 
-      // Retry tool list fetch up to 2 times on transient failures.
-      // Without retry, a single timeout during tools/list makes all MCP tools
-      // silently disappear from the model's context until the next reconnect.
-      let result: ListToolsResult | undefined
-      let lastError: unknown
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          result = (await client.client.request(
-            { method: 'tools/list' },
-            ListToolsResultSchema,
-          )) as ListToolsResult
-          break
-        } catch (err) {
-          lastError = err
-          if (attempt < 2) {
-            logMCPDebug(
-              client.name,
-              `tools/list failed (attempt ${attempt + 1}/3): ${errorMessage(err)}. Retrying...`,
-            )
-            await sleep(1000 * (attempt + 1))
+      const retryDeadline =
+        performance.now() + MCP_TOOLS_LIST_RETRY_BUDGET_MS
+      const tools = await paginateMcpList({
+        method: 'tools/list',
+        resultSchema: ListToolsResultSchema,
+        // Preserve the existing three-attempt 1s/2s policy for each page while
+        // one traversal-wide deadline has retry budget remaining. A page-two
+        // retry must not replay the successful first page.
+        requestPage: async (request, resultSchema) => {
+          let result: ListToolsResult | undefined
+          let lastError: unknown
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              result = (await client.client.request(
+                request,
+                resultSchema,
+              )) as ListToolsResult
+              break
+            } catch (err) {
+              lastError = err
+              if (attempt < 2) {
+                const remainingRetryBudget =
+                  retryDeadline - performance.now()
+                if (remainingRetryBudget <= 0) {
+                  break
+                }
+                logMCPDebug(
+                  client.name,
+                  `tools/list failed (attempt ${attempt + 1}/3): ${errorMessage(err)}. Retrying...`,
+                )
+                await sleep(
+                  Math.min(1000 * (attempt + 1), remainingRetryBudget),
+                )
+                // A timer can wake after its scheduled deadline when the event
+                // loop is busy. Do not turn that overdue wake-up into another
+                // request; a wake exactly at the deadline preserves the legacy
+                // third attempt after the full 1s/2s backoff.
+                if (performance.now() > retryDeadline) {
+                  break
+                }
+              }
+            }
           }
-        }
-      }
-      if (!result) {
-        throw lastError ?? new Error('tools/list failed after 3 attempts')
-      }
+          if (!result) {
+            throw lastError ?? new Error('tools/list failed after 3 attempts')
+          }
+          return result
+        },
+        getItems: result => result.tools,
+        getNextCursor: result => result.nextCursor,
+      })
 
-      // Sanitize tool data from MCP server
-      const toolsToProcess = recursivelySanitizeUnicode(result.tools)
+      // Sanitize tool data from MCP server after the complete list succeeds.
+      const toolsToProcess = recursivelySanitizeUnicode(tools)
 
       // Check if we should skip the mcp__ prefix for SDK MCP servers
       const skipPrefix =
@@ -1920,22 +2001,23 @@ export const fetchToolsForClient = memoizeWithLRU(
                     },
                   })
                 } catch (error) {
-                  // A throwing consumer must not prevent the MCP
-                  // tool call from proceeding.
+                  // A throwing progress consumer must not prevent the MCP
+                  // request from starting.
                   logMCPError(client.name, error)
                 }
               }
 
               const startTime = Date.now()
-              let latestServerProgress: {
-                progress: number
-                total?: number
-                progressMessage?: string
-              } | undefined
-              // Heartbeat emits a progress update even when the server sends
-              // none — the consumer uses it to detect inactivity.
-              const stopActivityHeartbeat = () => {}
-              const activityInterval =
+              // Cover connection setup, retries, and elicitation waits, not only
+              // the individual protocol request inside callMCPTool.
+              let latestServerProgress:
+                | {
+                    progress: number
+                    total?: number
+                    progressMessage?: string
+                  }
+                | undefined
+              let activityInterval =
                 onProgress && toolUseId
                   ? setInterval(() => {
                       try {
@@ -1946,15 +2028,24 @@ export const fetchToolsForClient = memoizeWithLRU(
                             status: 'progress',
                             serverName: client.name,
                             toolName: tool.name,
-                            elapsedTimeMs: Date.now() - startTime,
                             ...latestServerProgress,
+                            elapsedTimeMs: Date.now() - startTime,
                           },
                         })
                       } catch (error) {
+                        // Timer callbacks escape the surrounding try/finally;
+                        // an uncaught throw here would crash the process.
                         logMCPError(client.name, error)
                       }
                     }, MCP_TOOL_ACTIVITY_INTERVAL_MS)
                   : undefined
+              const stopActivityHeartbeat = () => {
+                if (activityInterval !== undefined) {
+                  clearInterval(activityInterval)
+                  activityInterval = undefined
+                }
+              }
+
               const MAX_SESSION_RETRIES = 1
               for (let attempt = 0; ; attempt++) {
                 try {
@@ -1967,56 +2058,53 @@ export const fetchToolsForClient = memoizeWithLRU(
                     meta,
                     signal: context.abortController.signal,
                     setAppState: context.setAppState,
-                    onProgress:
-                      onProgress && toolUseId
-                        ? progressData => {
-                            let dataToEmit: typeof progressData = progressData
-                            if (
-                              progressData.status === 'progress' &&
-                              typeof progressData.progress === 'number'
-                            ) {
-                              // Merge partial updates so a notification
-                              // carrying only progress does not drop the
-                              // previously reported total/progressMessage.
-                              latestServerProgress = {
-                                ...latestServerProgress,
-                                progress: progressData.progress,
-                                ...(progressData.total !== undefined && {
-                                  total: progressData.total,
-                                }),
-                                ...(progressData.progressMessage !== undefined && {
-                                  progressMessage:
-                                    progressData.progressMessage,
-                                }),
-                              }
-                              dataToEmit = {
-                                ...progressData,
-                                ...latestServerProgress,
-                              }
-                            }
-                            try {
-                              onProgress({
-                                toolUseID: toolUseId,
-                                data: dataToEmit,
-                              })
-                            } catch (error) {
-                              // A throwing consumer must not propagate into
-                              // the MCP SDK's notification handler.
-                              logMCPError(client.name, error)
-                            }
-                          }
-                        : undefined,
-                    handleElicitation: context.handleElicitation,
                     onUrlElicitationRequired: () => {
                       // The protocol attempt has ended before elicitation
                       // handling begins, so its cached progress is stale.
                       latestServerProgress = undefined
                     },
+                    onProgress:
+                      onProgress && toolUseId
+                        ? progressData => {
+                          let dataToEmit = progressData
+                          if (
+                            progressData.status === 'progress' &&
+                            typeof progressData.progress === 'number'
+                          ) {
+                            // Merge partial updates so a notification carrying
+                            // only progress does not drop the previously
+                            // reported total/progressMessage.
+                            latestServerProgress = {
+                              ...latestServerProgress,
+                              progress: progressData.progress,
+                              ...(progressData.total !== undefined && {
+                                total: progressData.total,
+                              }),
+                              ...(progressData.progressMessage !== undefined && {
+                                progressMessage: progressData.progressMessage,
+                              }),
+                            }
+                            dataToEmit = {
+                              ...progressData,
+                              ...latestServerProgress,
+                            }
+                          }
+                          try {
+                            onProgress({
+                              toolUseID: toolUseId,
+                              data: dataToEmit,
+                            })
+                          } catch (error) {
+                            // A throwing consumer must not propagate into
+                            // the MCP SDK's notification handler.
+                            logMCPError(client.name, error)
+                          }
+                        }
+                        : undefined,
+                    handleElicitation: context.handleElicitation,
                   })
 
-                  if (activityInterval !== undefined) {
-                    clearInterval(activityInterval)
-                  }
+                  stopActivityHeartbeat()
                   // Emit progress when tool completes successfully
                   if (onProgress && toolUseId) {
                     try {
@@ -2031,6 +2119,8 @@ export const fetchToolsForClient = memoizeWithLRU(
                         },
                       })
                     } catch (error) {
+                      // A throwing progress consumer must not turn a
+                      // completed tool call into a failure.
                       logMCPError(client.name, error)
                     }
                   }
@@ -2055,17 +2145,17 @@ export const fetchToolsForClient = memoizeWithLRU(
                     error instanceof McpSessionExpiredError &&
                     attempt < MAX_SESSION_RETRIES
                   ) {
-                    latestServerProgress = undefined
                     logMCPDebug(
                       client.name,
                       `Retrying tool '${tool.name}' after session recovery`,
                     )
+                    // The retried call starts over, so cached progress from
+                    // the previous attempt is no longer truthful.
+                    latestServerProgress = undefined
                     continue
                   }
 
-                  if (activityInterval !== undefined) {
-                    clearInterval(activityInterval)
-                  }
+                  stopActivityHeartbeat()
                   // Emit progress when tool fails
                   if (onProgress && toolUseId) {
                     try {
@@ -2079,8 +2169,10 @@ export const fetchToolsForClient = memoizeWithLRU(
                           elapsedTimeMs: Date.now() - startTime,
                         },
                       })
-                    } catch (error) {
-                      logMCPError(client.name, error)
+                    } catch (progressError) {
+                      // Preserve the original tool error; the progress
+                      // consumer failure is only logged.
+                      logMCPError(client.name, progressError)
                     }
                   }
                   // Wrap MCP SDK errors so telemetry gets useful context
@@ -2155,18 +2247,7 @@ export const fetchResourcesForClient = memoizeWithLRU(
         return []
       }
 
-      const result = await client.client.request(
-        { method: 'resources/list' },
-        ListResourcesResultSchema,
-      )
-
-      if (!result.resources) return []
-
-      // Add server name to each resource
-      return result.resources.map(resource => ({
-        ...resource,
-        server: client.name,
-      }))
+      return await listAllMcpResources(client)
     } catch (error) {
       logMCPError(
         client.name,
@@ -2188,16 +2269,20 @@ export const fetchCommandsForClient = memoizeWithLRU(
         return []
       }
 
-      // Request prompts list from client
-      const result = (await client.client.request(
-        { method: 'prompts/list' },
-        ListPromptsResultSchema,
-      )) as ListPromptsResult
+      const prompts = await paginateMcpList({
+        method: 'prompts/list',
+        resultSchema: ListPromptsResultSchema,
+        requestPage: async (request, resultSchema) =>
+          (await client.client.request(
+            request,
+            resultSchema,
+          )) as ListPromptsResult,
+        getItems: result => result.prompts,
+        getNextCursor: result => result.nextCursor,
+      })
 
-      if (!result.prompts) return []
-
-      // Sanitize prompt data from MCP server
-      const promptsToProcess = recursivelySanitizeUnicode(result.prompts)
+      // Sanitize prompt data from MCP server after the complete list succeeds.
+      const promptsToProcess = recursivelySanitizeUnicode(prompts)
 
       // Convert MCP prompts to our Command format
       return promptsToProcess.map(prompt => {
@@ -2925,20 +3010,22 @@ export async function processMCPResult(
 
   if (isPersistError(persistResult)) {
     // If file save failed, fall back to returning truncated content info
-    const contentLength = contentStr.length
     logEvent('tengu_mcp_large_result_handled', {
       outcome: 'truncated',
       reason: 'persist_failed',
       sizeEstimateTokens,
     } as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS)
-    return `Error: result (${contentLength.toLocaleString()} characters) exceeds maximum allowed tokens. Failed to save output to file: ${persistResult.error}. If this MCP server provides pagination or filtering tools, use them to retrieve specific portions of the data.`
+    return getLargeOutputPersistenceFailureInstructions(
+      contentStr,
+      persistResult.error,
+    )
   }
 
   logEvent('tengu_mcp_large_result_handled', {
     outcome: 'persisted',
     reason: 'file_saved',
     sizeEstimateTokens,
-    persistedSizeChars: persistResult.originalSize,
+    persistedSizeBytes: persistResult.originalSize,
   } as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS)
 
   const formatDescription = getFormatDescription(type, schema)
