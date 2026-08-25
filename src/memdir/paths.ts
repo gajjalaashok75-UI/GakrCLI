@@ -25,8 +25,13 @@ import {
  *   1. GAKR_CODE_DISABLE_AUTO_MEMORY env var (1/true → OFF, 0/false → ON)
  *   2. GAKR_CODE_SIMPLE (--bare) → OFF
  *   3. CCR without persistent storage → OFF (no GAKR_CODE_REMOTE_MEMORY_DIR)
- *   4. autoMemoryEnabled in settings.json (supports project-level opt-out)
- *   5. Default: enabled
+ *   4. settings.json — `memory.autoWrite` and `autoMemoryEnabled` are equivalent
+ *      opt-outs (#1326), evaluated across the raw per-source settings so a
+ *      single `false` in any source wins. A parent-scope opt-out can't be
+ *      silently re-enabled by a narrower scope flipping the same key to `true`.
+ *   5. One-shot non-interactive (-p) runs → OFF unless explicitly provisioned
+ *      (settings opt-in, Cowork path override, or a mounted remote memory dir)
+ *   6. Default: enabled
  */
 export function isAutoMemoryEnabled(): boolean {
   const envVal = process.env.GAKR_CODE_DISABLE_AUTO_MEMORY
@@ -53,6 +58,9 @@ export function isAutoMemoryEnabled(): boolean {
   // overwritten by a higher-priority `true`. `memory.autoWrite` and
   // `autoMemoryEnabled` are equivalent; a single `false` in any source wins, so
   // a parent-scope opt-out cannot be re-enabled by a narrower scope (#1326).
+  // Per-source reads are cached (getSettingsForSource), so this stays cheap on
+  // the hot path.
+  let explicitOptIn = false
   for (const source of getEnabledSettingSources()) {
     const sourceSettings = getSettingsForSource(source)
     if (
@@ -61,6 +69,26 @@ export function isAutoMemoryEnabled(): boolean {
     ) {
       return false
     }
+    if (
+      sourceSettings?.autoMemoryEnabled === true ||
+      sourceSettings?.memory?.autoWrite === true
+    ) {
+      explicitOptIn = true
+    }
+  }
+  // One-shot non-interactive (-p) runs have no future session to build memory
+  // for: default off to skip the ~3.2k-token memory protocol section, the
+  // per-request arc/RAG system-prompt append (which busts the prompt cache),
+  // and turn-end extraction forks. Still enabled by any explicit provisioning:
+  // a settings opt-in, GAKR_CODE_DISABLE_AUTO_MEMORY=0 (handled above), a
+  // Cowork memory-path override, or a mounted remote memory dir — those
+  // sessions are non-interactive but deliberately memory-backed.
+  const envProvisionedMemory =
+    hasAutoMemPathOverride() ||
+    (isEnvTruthy(process.env.GAKR_CODE_REMOTE) &&
+      Boolean(process.env.GAKR_CODE_REMOTE_MEMORY_DIR))
+  if (!explicitOptIn && !envProvisionedMemory && getIsNonInteractiveSession()) {
+    return false
   }
   return true
 }
@@ -221,8 +249,9 @@ function getAutoMemBase(): string {
  * Resolution order:
  *   1. GAKR_COWORK_MEMORY_PATH_OVERRIDE env var (full-path override, used by Cowork)
  *   2. autoMemoryDirectory in settings.json (trusted sources only: policy/local/user)
- *   3. <workspace>/projects/<sanitized-git-root>/memory/
- *      where workspace is resolved by getGakrCLIWorkspaceDir()
+ *   3. <base>/projects/<sanitized-git-root>/memory/
+ *      where base is the GAKR_CODE_REMOTE_MEMORY_DIR mount when set
+ *      (getMemoryBaseDir()), else getGakrCLIWorkspaceDir()
  *
  * Memoized: render-path callers (collapseReadSearchGroups → isAutoManagedMemoryFile)
  * fire per tool-use message per Messages re-render; each miss costs
@@ -237,7 +266,22 @@ export const getAutoMemPath = memoize(
     if (override) {
       return override
     }
-    const projectsDir = getProjectsDir()
+    // A mounted remote memory dir wins over the local workspace layout. In a
+    // remote (CCR) session `isAutoMemoryEnabled()` returns true *only* because
+    // GAKR_CODE_REMOTE_MEMORY_DIR is set (that env var is the signal that
+    // persistent storage exists) — resolving to <configHome>/workspace/projects
+    // there would write memdir, MEMORY.md and /remember output to the
+    // container's ephemeral filesystem and lose them on restart. getMemoryBaseDir()
+    // returns that mount when set, and agentMemory.ts already namespaces its own
+    // project scope the same way (`join(REMOTE_MEMORY_DIR, 'projects')`).
+    //
+    // With no mount, getMemoryBaseDir() would collapse to the config home, so
+    // getProjectsDir() is kept for the local case: it preserves the existing
+    // <workspace>/projects/... layout rather than silently relocating the
+    // memory directory of every existing install.
+    const projectsDir = process.env.GAKR_CODE_REMOTE_MEMORY_DIR
+      ? join(getMemoryBaseDir(), 'projects')
+      : getProjectsDir()
     return (
       join(projectsDir, sanitizePath(getAutoMemBase()), AUTO_MEM_DIRNAME) + sep
     ).normalize('NFC')

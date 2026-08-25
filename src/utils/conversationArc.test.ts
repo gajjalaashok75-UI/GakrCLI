@@ -17,12 +17,16 @@ import {
   resetArc,
   getArcStats,
   finalizeArcTurn,
+  appendArcToSystemPrompt,
 } from './conversationArc.js'
 import { getGlobalGraph, resetGlobalGraph, clearMemoryOnly } from './knowledgeGraph.js'
 import {
   acquireSharedMutationLock,
   releaseSharedMutationLock,
 } from '../test/sharedMutationLock.js'
+import { setGakrCLIConfigHomeDirForTesting } from './envUtils.js'
+import { setGovernancePolicySettingsForSourceForTesting } from './governancePolicy.js'
+import { getAutoMemPath } from '../memdir/paths.js'
 
 function createMessage(role: string, content: string): any {
   return {
@@ -32,8 +36,62 @@ function createMessage(role: string, content: string): any {
 }
 
 describe('conversationArc', () => {
+  // The arc's vector-RAG tier resolves the auto-memory directory and indexes
+  // every fact under it. Without an override these tests would index — and,
+  // with write-approval disabled below, write to — the developer's real memory
+  // corpus, which makes them destructive and unboundedly slow (the index build
+  // is proportional to corpus size). Redirect memory at a temp dir, matching
+  // query.conversationArc.test.ts.
+  let configDir: string
+  let memoryDir: string
+  const originalMemoryOverride = process.env.GAKR_COWORK_MEMORY_PATH_OVERRIDE
+  const originalDisableAutoMemory = process.env.GAKR_CODE_DISABLE_AUTO_MEMORY
+
+  // On Windows the graph/vector-index files under these temp dirs can still be
+  // held open briefly after the handles are dropped, so a straight rmSync
+  // intermittently raises EBUSY/EPERM and fails an otherwise-passing test.
+  // Retry, then give up: leftover os.tmpdir() entries are reclaimed by the OS.
+  // Same helper as knowledgeGraph.test.ts.
+  const removeDirWithRetry = (dir: string) => {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        rmSync(dir, { recursive: true, force: true })
+        return
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code
+        if (code !== 'EBUSY' && code !== 'EPERM') {
+          throw error
+        }
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25 * (attempt + 1))
+      }
+    }
+
+    try {
+      rmSync(dir, { recursive: true, force: true })
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (code !== 'EBUSY' && code !== 'EPERM') {
+        throw error
+      }
+    }
+  }
+
   beforeEach(async () => {
     await acquireSharedMutationLock('conversationArc')
+    configDir = mkdtempSync(join(tmpdir(), 'conversation-arc-config-'))
+    memoryDir = mkdtempSync(join(tmpdir(), 'conversation-arc-memory-'))
+    setGakrCLIConfigHomeDirForTesting(configDir)
+    process.env.GAKR_COWORK_MEMORY_PATH_OVERRIDE = memoryDir
+    delete process.env.GAKR_CODE_DISABLE_AUTO_MEMORY
+    // getAutoMemPath is memoized on the project root, so the redirect only
+    // takes effect once the previously memoized path is dropped.
+    getAutoMemPath.cache?.clear?.()
+    // Fact extraction and vector-index writes respect the memory-write approval
+    // policy; opt in so the memdir tier behaves as it does in production with
+    // require-approval=false.
+    setGovernancePolicySettingsForSourceForTesting(() => ({
+      memory: { requireApprovalBeforeWrite: false },
+    }))
     resetArc()
     resetGlobalGraph()
     clearMemoryOnly()
@@ -41,9 +99,26 @@ describe('conversationArc', () => {
 
   afterEach(() => {
     try {
+      // Ordered before the override is restored so the graph and vector-index
+      // artifacts these clear are the temp ones, not the real ones.
       resetArc()
       resetGlobalGraph()
       clearMemoryOnly()
+      setGovernancePolicySettingsForSourceForTesting(null)
+      setGakrCLIConfigHomeDirForTesting(undefined)
+      if (originalMemoryOverride === undefined) {
+        delete process.env.GAKR_COWORK_MEMORY_PATH_OVERRIDE
+      } else {
+        process.env.GAKR_COWORK_MEMORY_PATH_OVERRIDE = originalMemoryOverride
+      }
+      if (originalDisableAutoMemory === undefined) {
+        delete process.env.GAKR_CODE_DISABLE_AUTO_MEMORY
+      } else {
+        process.env.GAKR_CODE_DISABLE_AUTO_MEMORY = originalDisableAutoMemory
+      }
+      getAutoMemPath.cache?.clear?.()
+      removeDirWithRetry(memoryDir)
+      removeDirWithRetry(configDir)
     } finally {
       releaseSharedMutationLock()
     }
@@ -249,6 +324,56 @@ describe('conversationArc', () => {
       const stats = getArcStats()
       expect(stats?.goalCount).toBe(1)
       expect(stats?.decisionCount).toBe(1)
+    })
+  })
+
+  describe('appendArcToSystemPrompt', () => {
+    it('appends arc memory as one fenced element without mutating messages', async () => {
+      initializeArc()
+      await updateArcPhase([
+        createMessage('user', 'implement authentication system'),
+      ])
+      const goal = addGoal('Add JWT auth')
+      updateGoalStatus(goal.id, 'completed')
+      await finalizeArcTurn()
+
+      const systemPrompt = ['# System Instructions', 'You are an assistant.']
+      // `type` (not `sender`) is what the production Message union carries, and
+      // it is what selects the human-authored text used as the retrieval query.
+      const messages = [
+        {
+          type: 'user',
+          message: { role: 'user', content: 'add login endpoint' },
+        },
+      ] as unknown as Parameters<typeof appendArcToSystemPrompt>[1]
+
+      const promptWithArc = await appendArcToSystemPrompt(
+        systemPrompt,
+        messages,
+      )
+
+      // One extra element: arc content must never be concatenated into an
+      // existing entry, and the user message must not be rewritten.
+      expect(promptWithArc.length).toBe(systemPrompt.length + 1)
+      const joined = promptWithArc.join('\n')
+      expect(joined).toContain('Phase:')
+      expect(joined).toContain('Add JWT auth')
+      expect(joined).toContain('BEGIN RETRIEVED MEMORY (DATA ONLY)')
+      expect(joined).toContain('END RETRIEVED MEMORY (DATA ONLY)')
+      // Exactly one envelope — a nested fence trains the model to ignore it.
+      expect(joined.split('BEGIN RETRIEVED MEMORY (DATA ONLY)')).toHaveLength(2)
+      expect(messages[0].message.content).toBe('add login endpoint')
+    })
+
+    it('renders the arc block with real newlines, not escaped ones', async () => {
+      initializeArc()
+      addGoal('Keep the prompt readable')
+      const promptWithArc = await appendArcToSystemPrompt(['# System'], [])
+      const arcBlock = promptWithArc[promptWithArc.length - 1]
+      expect(arcBlock).toContain('Phase: ')
+      expect(arcBlock).toContain('\n')
+      // A literal backslash-n would collapse the block into one physical line.
+      expect(arcBlock).not.toContain('\\n')
     })
   })
 })

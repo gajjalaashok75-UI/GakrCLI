@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Conversation arc and knowledge-graph recall**: `utils/conversationArc.ts` and `utils/knowledgeGraph.ts` build a per-session arc over extracted memories, wired into `query.ts` behind the existing feature gate, so recall can follow relationships between facts rather than matching text alone.
+- **Automatic fact extraction and vector memory index**: `memdir/autoExtractFacts.ts` derives durable facts from a session, `memdir/vectorIndex.ts` gives them a searchable index, and `memdir/memorySecurity.ts` keeps writes inside the resolved memory directory.
 - **Manual model entry and profile switching in the picker**: `ModelPicker.tsx` and `utils/model/modelOptions.ts` de-duplicate the merged provider catalog and allow switching profile in place, so a route that appears under several vendors is listed once and a model name can be typed when discovery has not seen it.
 - **Prompt input editing utilities**: Text editing moves behind `types/textInputTypes.ts` with shared `utils/Cursor.ts` handling, so `useTextInput` and `useVimInput` operate on the same cursor model, and `utils/earlyInput.ts` preserves keystrokes typed before the REPL finishes mounting.
 - **Custom model pricing in settings**: `utils/settings/modelPricing.ts` and its schema let a user declare per-token rates for a model the built-in catalog does not know, and `utils/modelCost.ts` uses them so cost display and the budget check in `QueryEngine.ts` report real numbers for custom and self-hosted routes instead of zero.
