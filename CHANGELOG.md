@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Permission prompt result schema and filesystem scoping**: `utils/permissions/PermissionPromptToolResultSchema.ts` validates what a permission-prompt tool returns before it is trusted, and `utils/permissions/filesystem.ts` resolves path rules so a rule cannot grant access outside the directory it names.
+- **Abortable in-process permission requests**: `utils/swarm/inProcessPermissionAbort.ts` cancels a pending permission request when its owning agent is interrupted, so an aborted swarm agent no longer leaves a prompt waiting on a caller that is gone.
 - **MCP token refresh locking and paginated listings**: `services/mcp/refreshLock.ts` serializes OAuth token refresh so concurrent tool calls no longer race and invalidate each other's token, and `services/mcp/pagination.ts` follows cursors when a server returns tools or resources in pages instead of stopping at the first page.
 - **MCP XAA authentication**: `services/mcp/xaa.ts` and `xaaIdpLogin.ts` add the XAA identity-provider login flow for servers that require it, wired through `useManageMCPConnections`.
 - **WebBrowser tool panel and session recording**: `WebBrowserPanel.tsx` renders the live browser state in the REPL and the tool now records a replayable action trace, covered by `recording.test.ts`.
