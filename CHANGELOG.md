@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Message queue, event driver and goal evaluation**: `utils/messageQueueManager.ts` and `utils/queryEventDriver.ts` give queued input and query events a single owner, and `services/goal/controller.ts` with `evaluator.ts` assess whether a run met its goal before it reports completion.
+- **SSH session handling and diagnostics**: `hooks/useSSHSession.ts` with `utils/sshPreParse.ts` recognizes SSH targets before argument parsing, and `utils/diagLogs.ts` plus the Sentry wiring capture diagnostics for a failed run.
+- **Sleep tool countdown, firecrawl client and computer-use wrapper**: `SleepTool.tsx` shows remaining time while it waits, `tools/firecrawl/client.ts` backs the crawl tooling, and `utils/computerUse/wrapper.tsx` hosts the computer-use surface.
 - **Daemon mode and SDK session entrypoints**: `daemon/main.ts` with the `/daemon` command runs the CLI as a long-lived process, and `entrypoints/sdk/sessions.ts` plus `query.ts` and `v2.ts` expose session handling to SDK consumers, all wired from `main.tsx` and `entrypoints/cli.tsx`.
 - **Git-aware repo map and git settings**: `context/repoMap/gitFiles.ts` enumerates tracked files through git so the repo map respects `.gitignore` without walking ignored directories, and `utils/gitSettings.ts` reads the repo's git configuration for the settings that depend on it.
 - **Atomic session and config writes**: `utils/atomicReplace.ts` writes through a temp file and rename, and `sessionStorage.ts`, `config.ts`, `plans.ts` and `transcriptFileLock.ts` now use it, so an interrupted write can no longer leave a truncated session, config or plan file behind.

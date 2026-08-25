@@ -1,13 +1,20 @@
 import { feature } from 'bun:bundle'
 import { z } from 'zod/v4'
 import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
+import type { ReactNode } from 'react'
+import { Text } from 'src/ink.js'
 import { buildTool } from 'src/Tool.js'
 import { lazySchema } from 'src/utils/lazySchema.js'
 import { notifyAutomationStateChanged } from 'src/utils/sessionState.js'
 import { SLEEP_TOOL_NAME, DESCRIPTION, SLEEP_TOOL_PROMPT } from './prompt.js'
 import type { CanUseToolFn } from 'src/hooks/useCanUseTool.js'
-import type { AssistantMessage } from 'src/types/message.js'
-import type { ToolCallProgress, ToolUseContext } from 'src/Tool.js'
+import type { AssistantMessage, ProgressMessage } from 'src/types/message.js'
+import type {
+  ToolCallProgress,
+  ToolResult,
+  Tools,
+  ToolUseContext,
+} from 'src/Tool.js'
 
 const SLEEP_WAKE_CHECK_INTERVAL_MS = 500
 const SLEEP_PROGRESS_INTERVAL_MS = 1000
@@ -101,14 +108,16 @@ export const SleepTool = buildTool({
   renderToolUseProgressMessage(
     progressMessages: ProgressMessage<SleepProgressData>[],
     _options: { tools: Tools; verbose: boolean; terminalSize?: { columns: number; rows: number }; inProgressToolCallCount?: number; isTranscriptMode?: boolean },
-  ): React.ReactNode {
+  ): ReactNode {
     const lastProgress = progressMessages.at(-1)?.data
     if (!lastProgress || lastProgress.type !== 'sleep_progress') {
       return <Text dimColor>Sleeping…</Text>
     }
     const { elapsed_seconds, total_seconds, remaining_seconds, interrupted } = lastProgress
     if (interrupted) {
-      return <Text warnColor>Sleep interrupted after {elapsed_seconds}s</Text>
+      // `warning` is a theme key; ThemedText resolves it. There is no
+      // `warnColor` boolean prop — only `dimColor` works that way.
+      return <Text color="warning">Sleep interrupted after {elapsed_seconds}s</Text>
     }
     return <Text dimColor>Sleeping… {elapsed_seconds}s / {total_seconds}s (remaining: {remaining_seconds}s)</Text>
   },
@@ -130,8 +139,11 @@ export const SleepTool = buildTool({
   async call(
     input: SleepInput,
     context: ToolUseContext,
-    _canUseTool: CanUseToolFn,
-    _parentMessage: AssistantMessage,
+    // Unused, and optional so callers that only need input + context (the
+    // tests, and any direct invocation) don't have to fabricate them. Same
+    // convention as BashTool's `_canUseTool?` / `parentMessage?`.
+    _canUseTool?: CanUseToolFn,
+    _parentMessage?: AssistantMessage,
     onProgress?: ToolCallProgress<SleepProgressData>,
   ): Promise<ToolResult<SleepOutput>> {
     // Don't enter sleep if proactive was disabled or new work arrived while
@@ -148,6 +160,13 @@ export const SleepTool = buildTool({
     const { duration_seconds } = input
     const startTime = Date.now()
     const sleepUntil = startTime + duration_seconds * 1000
+    // Each emitted progress message needs its own ID: toolExecution maps
+    // `progress.toolUseID` to the nested message's own ID and puts the real
+    // tool_use id in `parentToolUseID`, so this is a per-tick identifier, not
+    // the tool call's id (`context.toolUseId` is optional and would not type
+    // against `ToolProgress.toolUseID: string` anyway). Mirrors BashTool's
+    // `bash-progress-${n}` and PowerShellTool's `ps-progress-${n}`.
+    let progressCounter = 0
 
     if (isProactiveAutomationEnabled()) {
       notifyAutomationStateChanged({
@@ -223,7 +242,7 @@ export const SleepTool = buildTool({
         if (onProgress && duration_seconds > 0) {
           // Send initial progress (0s elapsed, full remaining)
           onProgress({
-            toolUseID: context.toolUseID,
+            toolUseID: `sleep-progress-${progressCounter++}`,
             data: {
               type: 'sleep_progress',
               elapsed_seconds: 0,
@@ -240,7 +259,7 @@ export const SleepTool = buildTool({
                 lastProgressSeconds = elapsed
                 const remaining = Math.max(0, duration_seconds - elapsed)
                 onProgress({
-                  toolUseID: context.toolUseID,
+                  toolUseID: `sleep-progress-${progressCounter++}`,
                   data: {
                     type: 'sleep_progress',
                     elapsed_seconds: elapsed,
