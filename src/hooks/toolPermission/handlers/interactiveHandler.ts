@@ -35,6 +35,10 @@ import {
 import type { PermissionDecision } from '../../../utils/permissions/PermissionResult.js'
 import type { PermissionUpdate } from '../../../utils/permissions/PermissionUpdateSchema.js'
 import { hasPermissionsToUseTool } from '../../../utils/permissions/permissions.js'
+import {
+  getInterruptionSignalAbortTrace,
+  tracePermissionAbortResolution,
+} from '../../../utils/interruptionTrace.js'
 import type { PermissionContext } from '../PermissionContext.js'
 import { createResolveOnce } from '../PermissionContext.js'
 
@@ -160,11 +164,13 @@ function handleInteractivePermission(
     watchdogResumed = true
     rawResume?.()
   }
+  let removeExternalAbortListener = () => {}
   try {
     const resolveOnceHandle = createResolveOnce(
       (decision: PermissionDecision) => {
         // Idempotent safety net; the claim() wrapper below normally resumes first.
         resumeWatchdog()
+        removeExternalAbortListener()
         resolve(decision)
       },
     )
@@ -209,6 +215,45 @@ function handleInteractivePermission(
       ctx.updateQueueItem({ classifierCheckInProgress: false })
     }
   }
+
+  // Aborts that bypass the dialog callbacks (bridge interrupt, backgrounding)
+  // must mirror the local paths' cleanup — cancel the remote bridge prompt,
+  // forget the pipe relay and drop the channel entry — then dequeue/cancel so
+  // the awaiter unblocks immediately instead of idling for a full timeout.
+  // Declared after bridgeRequestId/channelUnsubscribe so the immediate-abort
+  // branch can read them; runtime aborts see their latest values via closure.
+  const abortSignal = ctx.toolUseContext.abortController.signal
+  const onExternalAbort = () => {
+    if (!claim()) return
+    const abortTrace = getInterruptionSignalAbortTrace(abortSignal)
+    tracePermissionAbortResolution(
+      abortTrace.source,
+      abortTrace.causalEventId,
+      'tool_permission',
+    )
+    forgetPipePermission('Permission request was aborted externally in sub.')
+    if (bridgeCallbacks && bridgeRequestId) {
+      bridgeCallbacks.cancelRequest(bridgeRequestId)
+    }
+    channelUnsubscribe?.()
+    ctx.removeFromQueue()
+    resolveOnce(
+      ctx.cancelAndAbort(undefined, true, undefined, {
+        source: abortTrace.source ?? 'permission_abort',
+        causalEventId: abortTrace.causalEventId,
+      }),
+    )
+  }
+  if (abortSignal.aborted) {
+    // Already aborted: cancel and stop setup so we never enqueue a stale prompt.
+    onExternalAbort()
+    return
+  }
+  abortSignal.addEventListener('abort', onExternalAbort, { once: true })
+  // Detach on a normal resolution so a resolved prompt doesn't retain a closure
+  // on the abort signal.
+  removeExternalAbortListener = () =>
+    abortSignal.removeEventListener('abort', onExternalAbort)
 
   const toolUseConfirm: ToolUseConfirm = {
     assistantMessage: ctx.assistantMessage,
@@ -255,7 +300,7 @@ function handleInteractivePermission(
         ctx.removeFromQueue()
       }
     },
-    onAbort() {
+    onAbort(source, causalEventId) {
       if (!claim()) return
       forgetPipePermission('Permission request was aborted locally in sub.')
       if (bridgeCallbacks && bridgeRequestId) {
@@ -271,7 +316,12 @@ function handleInteractivePermission(
         { decision: 'reject', source: { type: 'user_abort' } },
         { permissionPromptStartTimeMs },
       )
-      resolveOnce(ctx.cancelAndAbort(undefined, true))
+      resolveOnce(
+        ctx.cancelAndAbort(undefined, true, undefined, {
+          source: source ?? 'permission_dialog',
+          causalEventId,
+        }),
+      )
     },
     async onAllow(
       updatedInput,
@@ -737,6 +787,7 @@ function handleInteractivePermission(
   } catch (setupError) {
     // Clean up partial setup before rethrowing (all idempotent / no-op if not
     // yet done).
+    removeExternalAbortListener()
     ctx.removeFromQueue()
     resumeWatchdog()
     throw setupError
