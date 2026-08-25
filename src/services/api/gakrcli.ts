@@ -77,6 +77,7 @@ import {
   getStreamingAbortMessage,
   isExpectedSideTaskAbortReason,
   normalizeAbortReason,
+  shouldCreateUserInterruptionMessage,
 } from '../../utils/abortReasons.js'
 import { computeFingerprintFromMessages } from '../../utils/fingerprint.js'
 import { captureAPIRequest, logError } from '../../utils/log.js'
@@ -175,6 +176,13 @@ import { CHROME_TOOL_SEARCH_INSTRUCTIONS } from 'src/utils/gakrcliInChrome/promp
 import { COMPACT_MAX_OUTPUT_TOKENS, getContextWindowForModel, getMaxThinkingTokensForModel } from 'src/utils/context.js'
 import { logForDebugging } from 'src/utils/debug.js'
 import { logForDiagnosticsNoPII } from 'src/utils/diagLogs.js'
+import {
+  flushInterruptionTrace,
+  getInterruptionErrorCausalEventId,
+  getInterruptionSignalAbortEventId,
+  requestAbort,
+  traceInterruptionEvent,
+} from 'src/utils/interruptionTrace.js'
 import { type EffortValue, modelSupportsEffort } from 'src/utils/effort.js'
 import type { QueryLifecycleOperationTracker } from 'src/utils/queryLifecycle.js'
 import {
@@ -1075,6 +1083,26 @@ async function* queryModel(
   StreamEvent | AssistantMessage | SystemAPIErrorMessage,
   void
 > {
+  /**
+   * Record how the non-streaming fallback ended, chained to the event that
+   * triggered it. Without this the trace shows a fallback starting and then
+   * nothing — an aborted fallback and a hung one look identical.
+   */
+  function traceFallbackSettlement(
+    outcome: 'superseded' | 'aborted' | 'failed' | 'completed',
+    causalEventId: string | undefined,
+    error?: unknown,
+  ): void {
+    traceInterruptionEvent('gakr_stream.fallback_settled', {
+      subsystem: 'gakr_stream',
+      transport: 'anthropic_messages',
+      model: options.model,
+      outcome,
+      causalEventId,
+      ...(error === undefined ? {} : { error }),
+    })
+    flushInterruptionTrace('gakr_stream_fallback_settled')
+  }
   // Check cheap conditions first — the off-switch await blocks on GrowthBook
   // init (~10ms). For non-Opus models (haiku, sonnet) this skips the await
   // entirely. Subscribers don't hit this path at all.
@@ -1984,6 +2012,10 @@ async function* queryModel(
       parseInt(process.env.GAKR_STREAM_IDLE_TIMEOUT_MS || '', 10) || 90_000
     const STREAM_IDLE_WARNING_MS = STREAM_IDLE_TIMEOUT_MS / 2
     let streamIdleAborted = false
+    // Event id of whatever settled this stream (watchdog timeout, parent abort,
+    // provider error). Every downstream trace event chains to it so a single
+    // interruption reads as one causal chain instead of unrelated events.
+    let streamSettlementCausalEventId: string | undefined
     // performance.now() snapshot when watchdog fires, for measuring abort propagation delay
     let streamWatchdogFiredAt: number | null = null
     let streamIdleWarningTimer: ReturnType<typeof setTimeout> | null = null
@@ -1998,25 +2030,45 @@ async function* queryModel(
         streamIdleTimer = null
       }
     }
+
     function logStreamIdleWarning(warnMs: number): void {
       logForDebugging(
         `Streaming idle warning: no chunks received for ${warnMs / 1000}s`,
         { level: 'warn' },
       )
       logForDiagnosticsNoPII('warn', 'cli_streaming_idle_warning')
+      traceInterruptionEvent('gakr_stream.idle_warning', {
+        subsystem: 'gakr_stream',
+        transport: 'anthropic_messages',
+        model: options.model,
+        sinceLastYieldMs: warnMs,
+      })
     }
 
     function closeStreamIterator(
       iterator: AsyncIterator<BetaRawMessageStreamEvent>,
       reason: Error,
+      source: 'gakr_stream_watchdog' | 'gakr_stream_parent',
+      causalEventId?: string,
     ): void {
       const activeStream = stream
-      releaseStreamResources()
       try {
-        activeStream?.controller?.abort(reason)
+        if (activeStream?.controller) {
+          requestAbort(activeStream.controller, reason, {
+            source,
+            causalEventId,
+            subsystem: 'gakr_stream',
+            transport: 'anthropic_messages',
+            model: options.model,
+            controllerRole: 'provider-stream',
+          })
+        }
       } catch {
         // Ignore - the stream may already be closed by the SDK.
       }
+      // Release after aborting: requestAbort reads `stream` to attribute the
+      // abort, and releaseStreamResources clears it.
+      releaseStreamResources()
 
       try {
         const returned = iterator.return?.()
@@ -2039,6 +2091,14 @@ async function* queryModel(
         { level: 'error' },
       )
       logForDiagnosticsNoPII('error', 'cli_streaming_idle_timeout')
+      const causalEventId = traceInterruptionEvent('gakr_stream.idle_timeout', {
+        subsystem: 'gakr_stream',
+        transport: 'anthropic_messages',
+        model: options.model,
+        sinceLastYieldMs: STREAM_IDLE_TIMEOUT_MS,
+      })
+      streamSettlementCausalEventId = causalEventId
+      flushInterruptionTrace('gakr_stream_idle_timeout')
       logEvent('tengu_streaming_idle_timeout', {
         model:
           options.model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -2047,7 +2107,12 @@ async function* queryModel(
         timeout_ms: STREAM_IDLE_TIMEOUT_MS,
       })
 
-      closeStreamIterator(iterator, timeoutError)
+      closeStreamIterator(
+        iterator,
+        timeoutError,
+        'gakr_stream_watchdog',
+        causalEventId,
+      )
     }
 
     function readNextStreamPart(
@@ -2055,7 +2120,14 @@ async function* queryModel(
     ): Promise<IteratorResult<BetaRawMessageStreamEvent>> {
       if (signal.aborted) {
         const abortError = new APIUserAbortError()
-        closeStreamIterator(iterator, abortError)
+        streamSettlementCausalEventId =
+          getInterruptionSignalAbortEventId(signal)
+        closeStreamIterator(
+          iterator,
+          abortError,
+          'gakr_stream_parent',
+          getInterruptionSignalAbortEventId(signal),
+        )
         return Promise.reject(abortError)
       }
 
@@ -2081,7 +2153,24 @@ async function* queryModel(
         }
         const onAbort = () => {
           const abortError = new APIUserAbortError()
-          closeStreamIterator(iterator, abortError)
+          const parentCausalEventId = getInterruptionSignalAbortEventId(signal)
+          const causalEventId = traceInterruptionEvent(
+            'gakr_stream.parent_abort',
+            {
+              subsystem: 'gakr_stream',
+              transport: 'anthropic_messages',
+              model: options.model,
+              reason: signal.reason,
+              causalEventId: parentCausalEventId,
+            },
+          )
+          streamSettlementCausalEventId = causalEventId ?? parentCausalEventId
+          closeStreamIterator(
+            iterator,
+            abortError,
+            'gakr_stream_parent',
+            causalEventId ?? parentCausalEventId,
+          )
           settleReject(abortError)
         }
 
@@ -2513,6 +2602,14 @@ async function* queryModel(
           streamWatchdogFiredAt !== null
             ? Math.round(performance.now() - streamWatchdogFiredAt)
             : -1
+        traceInterruptionEvent('gakr_stream.loop_settled', {
+          subsystem: 'gakr_stream',
+          transport: 'anthropic_messages',
+          model: options.model,
+          outcome: 'clean',
+          causalEventId: streamSettlementCausalEventId,
+          sinceLastYieldMs: exitDelayMs,
+        })
         logForDiagnosticsNoPII(
           'info',
           'cli_stream_loop_exited_after_watchdog_clean',
@@ -2602,6 +2699,20 @@ async function* queryModel(
     } catch (streamingError) {
       // Clear the idle timeout watchdog on error path too
       clearStreamIdleTimers()
+      streamSettlementCausalEventId =
+        getInterruptionErrorCausalEventId(streamingError) ??
+        streamSettlementCausalEventId
+      traceInterruptionEvent('gakr_stream.error', {
+        subsystem: 'gakr_stream',
+        transport: 'anthropic_messages',
+        model: options.model,
+        outcome: signal.aborted ? 'root_aborted' : 'external_error',
+        reason: signal.reason,
+        causalEventId:
+          getInterruptionSignalAbortEventId(signal) ??
+          streamSettlementCausalEventId,
+        error: streamingError,
+      })
 
       // Instrumentation: if the watchdog had already fired and the for-await
       // threw (rather than exiting cleanly), record that the loop DID exit and
@@ -2610,6 +2721,15 @@ async function* queryModel(
         const exitDelayMs = Math.round(
           performance.now() - streamWatchdogFiredAt,
         )
+        traceInterruptionEvent('gakr_stream.loop_settled', {
+          subsystem: 'gakr_stream',
+          transport: 'anthropic_messages',
+          model: options.model,
+          outcome: 'error',
+          causalEventId: streamSettlementCausalEventId,
+          error: streamingError,
+          sinceLastYieldMs: exitDelayMs,
+        })
         logForDiagnosticsNoPII(
           'info',
           'cli_stream_loop_exited_after_watchdog_error',
@@ -2630,15 +2750,19 @@ async function* queryModel(
       }
 
       if (streamingError instanceof APIUserAbortError) {
-        // Check if the abort signal was triggered by the user (ESC key)
-        // If the signal is aborted, it's a user-initiated abort
-        // If not, it's likely a timeout from the SDK
+        // If the signal is aborted, classify by the AbortSignal reason — a
+        // watchdog/compaction/side-task cancellation must not be logged as a
+        // user abort. If not aborted, it's likely a timeout from the SDK.
         if (signal.aborted) {
-          // This is a real user abort (ESC key was pressed)
           logForDebugging(
-            `Streaming aborted by user: ${errorMessage(streamingError)}`,
+            getGakrCLIStreamingAbortLogMessage(signal, streamingError),
           )
-          if (isAdvisorInProgress) {
+          // Only a genuine user interruption counts as the advisor being
+          // interrupted; a timeout or side-task cancel is not user intent.
+          if (
+            isAdvisorInProgress &&
+            shouldCreateUserInterruptionMessage(signal.reason)
+          ) {
             logEvent('tengu_advisor_tool_interrupted', {
               model:
                 options.model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -2657,6 +2781,16 @@ async function* queryModel(
           // Throw a more specific error for timeout
           throw new APIConnectionTimeoutError({ message: 'Request timed out' })
         }
+      }
+
+      // The parent query signal is already aborted, so the non-streaming
+      // fallback below would immediately abort too. Classify the abort now
+      // instead of burning a request to rediscover it.
+      if (signal.aborted) {
+        logForDebugging(
+          getGakrCLIStreamingAbortLogMessage(signal, streamingError),
+        )
+        throw new APIUserAbortError()
       }
 
       // When the flag is enabled, skip the non-streaming fallback and let the
@@ -2737,6 +2871,17 @@ async function* queryModel(
       // Instrumentation: proves executeNonStreamingRequest was entered (vs. the
       // fallback event firing but the call itself hanging at dispatch).
       logForDiagnosticsNoPII('info', 'cli_nonstreaming_fallback_started')
+      const fallbackStartedEventId = traceInterruptionEvent(
+        'gakr_stream.fallback_started',
+        {
+          subsystem: 'gakr_stream',
+          transport: 'anthropic_messages',
+          model: options.model,
+          trigger: streamIdleAborted ? 'watchdog' : 'other',
+          causalEventId: streamSettlementCausalEventId,
+        },
+      )
+      flushInterruptionTrace('gakr_stream_fallback_started')
       logEvent('tengu_nonstreaming_fallback_started', {
         request_id: (streamRequestId ??
           'unknown') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -2747,51 +2892,62 @@ async function* queryModel(
           : 'other') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       })
       endActiveApiCall()
-      const result = yield* executeNonStreamingRequest(
-        { model: options.model, source: options.querySource, providerOverride: options.providerOverride, effortValue: effort },
-        {
-          model: options.model,
-          fallbackModel: options.fallbackModel,
-          thinkingConfig,
-          ...(isFastModeEnabled() && { fastMode: isFastMode }),
-          signal,
-          initialConsecutive529Errors: is529Error(streamingError) ? 1 : 0,
-          querySource: options.querySource,
-        },
-        paramsFromContext,
-        (attempt, _startTime, tokens) => {
-          attemptNumber = attempt
-          maxOutputTokens = tokens
-        },
-        params => captureAPIRequest(params, options.querySource),
-        streamRequestId,
-        options.queryLifecycle,
-      )
+      let fallbackResultMessage: AssistantMessage
+      try {
+        const result = yield* executeNonStreamingRequest(
+          { model: options.model, source: options.querySource, providerOverride: options.providerOverride, effortValue: effort },
+          {
+            model: options.model,
+            fallbackModel: options.fallbackModel,
+            thinkingConfig,
+            ...(isFastModeEnabled() && { fastMode: isFastMode }),
+            signal,
+            initialConsecutive529Errors: is529Error(streamingError) ? 1 : 0,
+            querySource: options.querySource,
+          },
+          paramsFromContext,
+          (attempt, _startTime, tokens) => {
+            attemptNumber = attempt
+            maxOutputTokens = tokens
+          },
+          params => captureAPIRequest(params, options.querySource),
+          streamRequestId,
+          options.queryLifecycle,
+        )
 
-      const m: AssistantMessage = {
-        message: {
-          ...result,
-          content: normalizeContentFromAPI(
-            result.content,
-            tools,
-            options.agentId,
-          ),
-        },
-        requestId: streamRequestId ?? undefined,
-        type: 'assistant',
-        uuid: randomUUID(),
-        timestamp: new Date().toISOString(),
-        ...(process.env.USER_TYPE === 'ant' &&
-          research !== undefined && {
-            research,
+        fallbackResultMessage = {
+          message: {
+            ...result,
+            content: normalizeContentFromAPI(
+              result.content,
+              tools,
+              options.agentId,
+            ),
+          },
+          requestId: streamRequestId ?? undefined,
+          type: 'assistant',
+          uuid: randomUUID(),
+          timestamp: new Date().toISOString(),
+          ...(process.env.USER_TYPE === 'ant' &&
+            research !== undefined && {
+              research,
+            }),
+          ...(advisorModel && {
+            advisorModel,
           }),
-        ...(advisorModel && {
-          advisorModel,
-        }),
+        }
+        newMessages.push(fallbackResultMessage)
+        fallbackMessage = fallbackResultMessage
+      } catch (error) {
+        traceFallbackSettlement(
+          signal.aborted ? 'aborted' : 'failed',
+          fallbackStartedEventId,
+          error,
+        )
+        throw error
       }
-      newMessages.push(m)
-      fallbackMessage = m
-      yield m
+      traceFallbackSettlement('completed', fallbackStartedEventId)
+      yield fallbackResultMessage
     } finally {
       clearStreamIdleTimers()
     }
@@ -2802,6 +2958,19 @@ async function* queryModel(
     // an error message with no actual retry on the fallback model.
     if (errorFromRetry instanceof FallbackTriggeredError) {
       throw errorFromRetry
+    }
+
+    // Side-task cancellations (speculation, compaction, title generation) abort
+    // by design. Return quietly instead of running them through logAPIError and
+    // the error-message path, which would report a normal cancel as a failure.
+    if (
+      handleGakrCLIExpectedSideTaskApiAbort(
+        signal,
+        errorFromRetry,
+        releaseStreamResources,
+      )
+    ) {
+      return
     }
 
     // Check if this is a 404 error during stream creation that should trigger
@@ -2816,6 +2985,16 @@ async function* queryModel(
       errorFromRetry.originalError.status === 404
 
     if (is404StreamCreationError) {
+      const streamCreationErrorEventId = traceInterruptionEvent(
+        'gakr_stream.error',
+        {
+          subsystem: 'gakr_stream',
+          phase: 'stream_creation',
+          transport: 'anthropic_messages',
+          model: options.model,
+          error: errorFromRetry,
+        },
+      )
       // 404 is thrown at .withResponse() before streamRequestId is assigned,
       // and CannotRetryError means every retry failed — so grab the failed
       // request's ID from the error header instead.
@@ -2844,6 +3023,18 @@ async function* queryModel(
         fallback_cause:
           '404_stream_creation' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       })
+
+      const fallbackStartedEventId = traceInterruptionEvent(
+        'gakr_stream.fallback_started',
+        {
+          subsystem: 'gakr_stream',
+          transport: 'anthropic_messages',
+          model: options.model,
+          trigger: '404_stream_creation',
+          causalEventId: streamCreationErrorEventId,
+        },
+      )
+      flushInterruptionTrace('gakr_stream_fallback_started')
 
       try {
         // Fall back to non-streaming mode
@@ -2892,13 +3083,30 @@ async function* queryModel(
         }
         newMessages.push(m)
         fallbackMessage = m
+        traceFallbackSettlement('completed', fallbackStartedEventId)
         yield m
 
         // Continue to success logging below
       } catch (fallbackError) {
+        traceFallbackSettlement(
+          signal.aborted ? 'aborted' : 'failed',
+          fallbackStartedEventId,
+          fallbackError,
+        )
         // Propagate model-fallback signal to query.ts (see comment above).
         if (fallbackError instanceof FallbackTriggeredError) {
           throw fallbackError
+        }
+
+        // A side-task cancel here is expected, not a fallback failure.
+        if (
+          handleGakrCLIExpectedSideTaskApiAbort(
+            signal,
+            fallbackError,
+            releaseStreamResources,
+          )
+        ) {
+          return
         }
 
         // Fallback also failed, handle as normal error
@@ -3109,7 +3317,11 @@ export function cleanupStream(
   try {
     // Abort the stream via its controller if not already aborted
     if (!stream.controller.signal.aborted) {
-      stream.controller.abort()
+      requestAbort(stream.controller, undefined, {
+        source: 'gakr_stream_cleanup',
+        subsystem: 'gakr_stream',
+        controllerRole: 'provider-stream',
+      })
     }
   } catch {
     // Ignore - stream may already be closed
@@ -3645,6 +3857,31 @@ export function getGakrCLIExpectedSideTaskApiAbortLogMessage(
     return null
   }
   return `Expected side-task API abort (${normalizeAbortReason(signal.reason)}): ${errorMessage(error)}`
+}
+
+/**
+ * Side-task queries (speculation, compaction, title generation, advisor) abort
+ * as part of normal operation. When the abort reason marks the cancellation as
+ * expected, swallow the APIUserAbortError instead of surfacing it as an API
+ * error message: log it at debug level, release the stream, and let the caller
+ * return quietly.
+ *
+ * Returns `true` when the abort was handled (the caller should stop), `false`
+ * when this is a genuine failure the caller must keep propagating.
+ */
+function handleGakrCLIExpectedSideTaskApiAbort(
+  signal: Pick<AbortSignal, 'aborted' | 'reason'>,
+  errorFromRetry: unknown,
+  releaseStreamResources: () => void,
+): boolean {
+  const expectedSideTaskAbortLogMessage =
+    getGakrCLIExpectedSideTaskApiAbortLogMessage(signal, errorFromRetry)
+  if (!expectedSideTaskAbortLogMessage) return false
+  if (!(errorFromRetry instanceof CannotRetryError)) {
+    logForDebugging(expectedSideTaskAbortLogMessage)
+  }
+  releaseStreamResources()
+  return true
 }
 
 /**

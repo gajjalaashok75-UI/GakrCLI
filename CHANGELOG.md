@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Gemini stream conversion and shim stream control**: `openaiShim/geminiStreamConversion.ts` translates Gemini's stream format into the internal event shape, and `openaiShim/streamControl.ts` centralizes pause, resume and abort so every shim path stops the same way.
+- **Split shim dispatch and transport**: The OpenAI-compatible shim is separated into `clientDispatch.ts`, `transport.ts` and `responseAdapters.ts`, so provider-specific response quirks are handled in one adapter layer instead of inside the stream reader.
 - **In-process swarm agents and main-session tasks**: `utils/swarm/inProcessRunner.ts` and `spawnInProcess.ts` run a subagent inside the current process, and `tasks/LocalMainSessionTask.ts` lets a task target the main session, so agent-to-agent messaging works without a separate CLI spawn per agent.
 - **Built-in code-reviewer agent and agent-run persistence**: `AgentTool/built-in/codeReviewerAgent.ts` ships as a built-in agent type, and `runAgent.ts` persists a run so its transcript survives the spawning turn.
 - **Permission prompt result schema and filesystem scoping**: `utils/permissions/PermissionPromptToolResultSchema.ts` validates what a permission-prompt tool returns before it is trusted, and `utils/permissions/filesystem.ts` resolves path rules so a rule cannot grant access outside the directory it names.

@@ -19,6 +19,7 @@ import type { AssistantMessage } from 'src/types/message.js'
 import { logForDebugging } from 'src/utils/debug.js'
 import type { EffortLevel } from 'src/utils/effort.js'
 import { logError } from 'src/utils/log.js'
+import { hasPrintFlag } from 'src/utils/printFlag.js'
 import { getAPIProviderForStatsig } from 'src/utils/model/providers.js'
 import type { PermissionMode } from 'src/utils/permissions/PermissionMode.js'
 import { jsonStringify } from 'src/utils/slowOperations.js'
@@ -457,8 +458,7 @@ function logAPISuccess({
 }): void {
   const isNonInteractiveSession = getIsNonInteractiveSession()
   const isPostCompaction = consumePostCompaction()
-  const hasPrintFlag =
-    process.argv.includes('-p') || process.argv.includes('--print')
+  const isPrintMode = hasPrintFlag(process.argv)
 
   const now = Date.now()
   const lastCompletion = getLastApiCompletionTimestamp()
@@ -511,7 +511,7 @@ function logAPISuccess({
     costUSD,
     didFallBackToNonStreaming,
     isNonInteractiveSession,
-    print: hasPrintFlag,
+    print: isPrintMode,
     isTTY: process.stdout.isTTY ?? false,
     querySource:
       querySource as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
