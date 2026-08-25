@@ -20,7 +20,7 @@ import {
 } from '../context.js'
 import { isEnvTruthy } from '../envUtils.js'
 import { getModelStrings, resolveOverriddenModel } from './modelStrings.js'
-import { formatModelPricing, getOpus46CostTier } from '../modelCost.js'
+import { getModelPricingString } from '../modelCost.js'
 import { getSettings_DEPRECATED } from '../settings/settings.js'
 import type { PermissionMode } from '../permissions/PermissionMode.js'
 import { getAPIProvider } from './providers.js'
@@ -223,11 +223,11 @@ export function getDefaultOpusModel(): ModelName {
   }
   // 3P providers (Bedrock, Vertex, Foundry) — kept as a separate branch
   // since 3P availability lags firstParty and these will diverge again at
-  // the next model launch. Keep 3P on Opus 4.6 until they roll out 4.7.
+  // the next model launch. Keep 3P on Opus 4.7 until they roll out 4.8.
   if (getAPIProvider() !== 'firstParty') {
-    return getModelStrings().opus46
+    return getModelStrings().opus47
   }
-  return getModelStrings().opus47
+  return getModelStrings().opus48
 }
 
 // @[MODEL LAUNCH]: Update the default Sonnet model (3P providers may lag so keep defaults unchanged).
@@ -534,9 +534,17 @@ export function renderDefaultModelSetting(
   return renderModelName(parseUserSpecifiedModel(setting))
 }
 
-export function getOpus46PricingSuffix(fastMode: boolean): string {
+export function getOpus46PricingSuffix(
+  fastMode: boolean,
+  model: string = getModelStrings().opus48,
+): string {
   if (getAPIProvider() !== 'firstParty') return ''
-  const pricing = formatModelPricing(getOpus46CostTier(fastMode))
+  // Route through getModelPricingString so a `modelPricing` settings override
+  // for this exact model id wins over the built-in fast/standard cost tier.
+  const pricing = getModelPricingString(model, {
+    speed: fastMode ? 'fast' : 'standard',
+  })
+  if (!pricing) return ''
   const fastModeIndicator = fastMode ? ` (${LIGHTNING_BOLT})` : ''
   return ` ·${fastModeIndicator} ${pricing}`
 }

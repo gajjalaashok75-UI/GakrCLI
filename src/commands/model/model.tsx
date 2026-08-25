@@ -14,6 +14,7 @@ import {
   parseDurationString,
 } from '../../integrations/discoveryCache.js'
 import type { ModelCatalogConfig } from '../../integrations/descriptors.js'
+import { filterAvailableCatalogEntries } from '../../integrations/index.js'
 import {
   discoverModelsForRoute,
   getDiscoveryCacheKey,
@@ -53,7 +54,9 @@ import {
 } from '../../utils/model/check1mAccess.js'
 import {
   getDefaultOptionForUser,
+  getInactiveProviderProfileOptions,
   type ModelOption,
+  parseSwitchProfileValue,
 } from '../../utils/model/modelOptions.js'
 import { buildRouteCatalogModelOptions, mergeRouteCatalogEntries } from '../../utils/model/routeCatalogOptions.js'
 import { discoverOpenAICompatibleModelOptions } from '../../utils/model/openaiModelDiscovery.js'
@@ -71,8 +74,10 @@ import {
   getActiveOpenAIRouteModelOptionsCache,
   getActiveProviderProfile,
   getConfiguredProfileModelOptions,
+  getProviderProfiles,
   setActiveOpenAIRouteModelOptionsCache,
   setActiveOpenAIModelOptionsCache,
+  setActiveProviderProfile,
 } from '../../utils/providerProfiles.js'
 import { parseModelList } from '../../utils/providerModels.js'
 import { getInitialSettings } from '../../utils/settings/settings.js'
@@ -317,6 +322,46 @@ function getLegacyOpenAIOptionsOverride(options: {
   )
 }
 
+// The picker renders `optionsOverride ?? getModelOptions()`. getModelOptions()
+// appends inactive-profile switch entries when a provider profile env is
+// applied, but the discovery/refresh override lists are built from
+// mergeActiveProfileModelOptions, which only merges the ACTIVE profile's route
+// models. Without re-appending here, the unified `/model` switcher disappears
+// for descriptor-backed and legacy OpenAI-compatible discovery contexts
+// (OpenRouter/Kimi/MiniMax, refreshed local profiles). Mirror getModelOptions()
+// so any override list carries the same inactive-profile switch options.
+function withInactiveProfileSwitchOptions(
+  options: ModelOption[],
+): ModelOption[] {
+  if (process.env.GAKR_CODE_PROVIDER_PROFILE_ENV_APPLIED !== '1') {
+    return options
+  }
+  const activeProfile = getActiveProviderProfile()
+  const switchOptions = getInactiveProviderProfileOptions(activeProfile?.id)
+  if (switchOptions.length === 0) {
+    return options
+  }
+  const present = new Set(
+    options.flatMap(option =>
+      typeof option.value === 'string' ? [option.value] : [],
+    ),
+  )
+  const additions = switchOptions.filter(option => {
+    if (typeof option.value !== 'string' || present.has(option.value)) {
+      return false
+    }
+    // Apply the org allowlist to the decoded target model, mirroring
+    // getModelOptions()'s allowlist pass, so a restricted switch target is not
+    // surfaced. handleSelect re-checks this before activating regardless.
+    const target =
+      option.switchToProfileId !== undefined
+        ? parseSwitchProfileValue(option.value)?.model ?? option.value
+        : option.value
+    return isModelAllowed(target)
+  })
+  return additions.length > 0 ? [...options, ...additions] : options
+}
+
 function getOpenAIDiscoveryRequestOptions(routeId?: string | null): {
   apiKey?: string
   baseUrl?: string
@@ -403,7 +448,16 @@ async function loadDescriptorDiscoveryContext(
     routeId,
     settingsMode: getProviderProfileModelPickerMode(),
   })
-  const staticEntries = catalog.models ?? []
+  // Availability-filter the static entries (hidden / availableUntil) — this
+  // path reads the descriptor's catalog directly, so it must apply the same
+  // filter as getCatalogEntriesForRoute or an expired time-boxed entry
+  // (e.g. a closed free window) stays selectable in the picker. The RAW list
+  // is kept alongside: the static+discovery merge below dedupes by apiName
+  // with static entries winning, so the expired static entry must still be
+  // present there to block a cached discovery duplicate (which would carry
+  // no availableUntil marker and survive the post-merge filter).
+  const rawStaticEntries = catalog.models ?? []
+  const staticEntries = filterAvailableCatalogEntries(rawStaticEntries)
   const trafficRestricted = isEssentialTrafficOnly()
   const canRefresh = Boolean(
     catalog.discovery && catalog.allowManualRefresh && !trafficRestricted,
@@ -445,9 +499,13 @@ async function loadDescriptorDiscoveryContext(
     staticEntryCount: staticEntries.length,
     stale,
   }) && !trafficRestricted
-  const mergedEntries = mergeRouteCatalogEntries(
-    staticEntries,
-    cached?.models ?? [],
+  // Merge the RAW static list (see above), then filter: the expired static
+  // entry wins the apiName dedup against any cached discovery duplicate, and
+  // the post-merge filter removes it — so neither copy survives. Filtering
+  // after the merge also covers discovery entries carrying their own
+  // hidden/availableUntil markers (mapModel).
+  const mergedEntries = filterAvailableCatalogEntries(
+    mergeRouteCatalogEntries(rawStaticEntries, cached?.models ?? []),
   )
 
   let discoveryState: ModelPickerDiscoveryState | undefined
@@ -621,7 +679,117 @@ function ModelPickerWrapper({
     })
   }
 
-  const handleSelect = (model: string | null, effort: EffortLevel | undefined) => {
+  const handleSelect = (
+    model: string | null,
+    effort: EffortLevel | undefined,
+    switchToProfileId?: string,
+  ) => {
+    // Cross-profile switch from the /model picker. The composite value carries
+    // the profile id; activate that profile first so subsequent requests use
+    // the new OPENAI_BASE_URL / OPENAI_API_KEY, then drop down to the regular
+    // model-switch path with the bare model string.
+    //
+    // Only treat the value as a switch when the SELECTED OPTION carried the
+    // `switchToProfileId` marker (threaded here by the picker) — not merely
+    // because the value parses as `__switch_profile__:<profileId>:<model>` for
+    // an existing profile. A real custom model id such as
+    // `__switch_profile__:profile_openai:gpt-5-mini` (where `profile_openai`
+    // happens to exist) is a plain option with no marker, and must be applied
+    // as a literal model rather than activating the provider.
+    const decodedSwitch = parseSwitchProfileValue(model)
+    const switchTarget =
+      decodedSwitch &&
+      switchToProfileId === decodedSwitch.profileId &&
+      getProviderProfiles().some(p => p.id === decodedSwitch.profileId)
+        ? decodedSwitch
+        : null
+    if (switchTarget) {
+      // Apply the org allowlist to the decoded target model, not the composite
+      // value, so a permitted cross-profile model is not wrongly rejected.
+      if (!isModelAllowed(switchTarget.model)) {
+        onDone(
+          `Model '${switchTarget.model}' is not available. Your organization restricts model selection.`,
+          { display: 'system' },
+        )
+        return
+      }
+      // Run the same fast-mode reconciliation as the regular switch path —
+      // otherwise fastMode latched on Anthropic would carry into the new
+      // profile even when its model can't support it. This MUST run before
+      // setActiveProviderProfile: reconcileFastModeForSwitch gates on
+      // isFastModeEnabled(), which reads the *active* provider, so once the
+      // target profile is activated it reflects the new (fast-mode-less)
+      // provider and short-circuits to 'unchanged', leaving fastMode latched.
+      const switchFastMode = reconcileFastModeForSwitch(
+        switchTarget.model,
+        isFastMode ?? false,
+      )
+
+      const activated = setActiveProviderProfile(switchTarget.profileId)
+      if (!activated) {
+        onDone(
+          `Could not activate provider profile "${switchTarget.profileId}".`,
+          { display: 'system' },
+        )
+        return
+      }
+      logEvent('tengu_model_command_menu', {
+        action: 'switch_profile' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+        from_model: String(mainLoopModel) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+        to_model: String(switchTarget.model) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+      })
+      setAppState(prev => ({
+        ...prev,
+        mainLoopModel: switchTarget.model,
+        mainLoopModelForSession: null,
+      }))
+
+      // Re-evaluate fast mode AFTER activation: the pre-activation reconcile
+      // gates on the *source* provider, so its 'on' result can be stale when
+      // the target provider can't actually run fast mode. isFastModeEnabled()
+      // now reflects the target provider, so force fastMode off whenever it is
+      // no longer genuinely supported.
+      const fastModeSupportedNow =
+        isFastModeEnabled() &&
+        isFastModeSupportedByModel(switchTarget.model) &&
+        isFastModeAvailable()
+      const shouldTurnFastModeOff =
+        (isFastMode ?? false) &&
+        (switchFastMode === 'off' || !fastModeSupportedNow)
+
+      if (shouldTurnFastModeOff) {
+        setAppState(prev => ({ ...prev, fastMode: false }))
+      }
+
+      let switchMessage = `Switched to ${chalk.bold(activated.name)} · model ${chalk.bold(switchTarget.model)}`
+      // Mirror the regular switch confirmation so a cross-profile selection
+      // surfaces the same cost-impacting feedback: the selected effort and the
+      // `Billed as extra usage` notice. The picker already decodes effort for
+      // switch values, so omitting it here would silently hide
+      // reasoning/extra-usage information the direct model path shows.
+      if (effort !== undefined) {
+        switchMessage += ` with ${chalk.bold(effort)} effort`
+      }
+      const crossProfileFastModeOn =
+        (isFastMode ?? false) && fastModeSupportedNow && !shouldTurnFastModeOff
+      if (shouldTurnFastModeOff) {
+        switchMessage += ' · Fast mode OFF'
+      } else if (crossProfileFastModeOn) {
+        switchMessage += ' · Fast mode ON'
+      }
+      if (
+        isBilledAsExtraUsage(
+          switchTarget.model,
+          crossProfileFastModeOn,
+          isOpus1mMergeEnabled(),
+        )
+      ) {
+        switchMessage += ' · Billed as extra usage'
+      }
+      onDone(switchMessage)
+      return
+    }
+
     if (model && !isModelAllowed(model)) {
       onDone(
         `Model '${model}' is not available. Your organization restricts model selection.`,
@@ -690,6 +858,7 @@ function ModelPickerWrapper({
       onSelect={handleSelect}
       onCancel={handleCancel}
       isStandaloneCommand
+      allowProfileSwitch
       showFastModeNotice={
         isFastModeEnabled() &&
         isFastMode &&
@@ -712,6 +881,7 @@ type SharedModelPickerProps = Pick<
   | 'onCancel'
   | 'isStandaloneCommand'
   | 'showFastModeNotice'
+  | 'allowProfileSwitch'
 >
 
 /**
@@ -875,7 +1045,11 @@ export function ModelPickerWithDiscovery({
   return (
     <ModelPicker
       {...pickerProps}
-      optionsOverride={optionsOverride}
+      optionsOverride={
+        optionsOverride
+          ? withInactiveProfileSwitchOptions(optionsOverride)
+          : undefined
+      }
       discoveryState={discoveryState}
       allowCustomModelInput
       onRefresh={
