@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **WebBrowser tool panel and session recording**: `WebBrowserPanel.tsx` renders the live browser state in the REPL and the tool now records a replayable action trace, covered by `recording.test.ts`.
+
+### Fixed
+- **WebBrowser schema rejected calls from non-Anthropic providers**: The tool's action union relied on a discriminator that OpenAI-compatible shims serialize differently, so after switching model or provider every call failed with `invalid_union` / "No matching discriminator" before the browser ever launched. The schema now accepts both serializations.
 - **Conversation arc and knowledge-graph recall**: `utils/conversationArc.ts` and `utils/knowledgeGraph.ts` build a per-session arc over extracted memories, wired into `query.ts` behind the existing feature gate, so recall can follow relationships between facts rather than matching text alone.
 - **Automatic fact extraction and vector memory index**: `memdir/autoExtractFacts.ts` derives durable facts from a session, `memdir/vectorIndex.ts` gives them a searchable index, and `memdir/memorySecurity.ts` keeps writes inside the resolved memory directory.
 - **Manual model entry and profile switching in the picker**: `ModelPicker.tsx` and `utils/model/modelOptions.ts` de-duplicate the merged provider catalog and allow switching profile in place, so a route that appears under several vendors is listed once and a model name can be typed when discovery has not seen it.

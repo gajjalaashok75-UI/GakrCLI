@@ -552,6 +552,162 @@ export const BrowserActionSchema = z.discriminatedUnion('action', [
 
 export type BrowserAction = z.infer<typeof BrowserActionSchema>;
 
+/**
+ * Per-action lookup used to produce a targeted validation error instead of the
+ * discriminated union's opaque one. A union-level failure reports
+ * `invalid_union` with an empty `errors` array and `path: ['action']`, which
+ * tells the model nothing about which field it actually got wrong; re-parsing
+ * against the single variant the `action` selects yields the real message.
+ *
+ * The `satisfies` clause is the drift guard: adding a variant to
+ * BrowserActionSchema without registering it here is a compile error, so this
+ * map and the union cannot silently diverge.
+ */
+export const BROWSER_ACTION_SCHEMA_BY_NAME = {
+  navigate: BrowserNavigateActionSchema,
+  click: BrowserClickActionSchema,
+  type: BrowserTypeActionSchema,
+  get_state: BrowserGetStateActionSchema,
+  get_content: BrowserGetContentActionSchema,
+  scroll: BrowserScrollActionSchema,
+  go_back: BrowserGoBackActionSchema,
+  list_tabs: BrowserListTabsActionSchema,
+  switch_tab: BrowserSwitchTabActionSchema,
+  close_tab: BrowserCloseTabActionSchema,
+  close_all_tabs: BrowserCloseAllTabsActionSchema,
+  get_storage: BrowserGetStorageActionSchema,
+  set_storage: BrowserSetStorageActionSchema,
+  start_recording: BrowserStartRecordingActionSchema,
+  stop_recording: BrowserStopRecordingActionSchema,
+  refresh: BrowserRefreshActionSchema,
+  wait: BrowserWaitActionSchema,
+  press_key: BrowserPressKeyActionSchema,
+} satisfies Record<BrowserAction['action'], z.ZodTypeAny>;
+
+/**
+ * The 18 action names, in schema order. The cast is sound because the
+ * `satisfies` clause above proves the keys are exactly `BrowserAction['action']`.
+ */
+export const BROWSER_ACTION_NAMES = Object.keys(
+  BROWSER_ACTION_SCHEMA_BY_NAME,
+) as [BrowserAction['action'], ...BrowserAction['action'][]];
+
+/**
+ * PROVIDER-FACING input schema — flat, single `z.strictObject`.
+ *
+ * Why this exists alongside BrowserActionSchema: zod serializes a top-level
+ * `z.discriminatedUnion` to `{anyOf: [...]}` with no top-level `properties`.
+ * OpenAI-compatible providers reject or ignore a root-level combinator in
+ * function parameters — a gateway that compiles the schema into a constrained
+ * decoding grammar sees an object with ZERO declared fields and emits `{}`,
+ * which then fails union validation with "No matching discriminator". That is
+ * why the tool worked on one provider (which passed `anyOf` through) and broke
+ * on every provider switched to afterwards.
+ *
+ * So the model is shown one flat object whose `action` enumerates all 18
+ * operations and whose remaining fields are optional and documented with the
+ * action they belong to, while BrowserActionSchema still does the real,
+ * strict per-action validation in the tool's `validateInput`/`call`. This
+ * mirrors LSPTool, which solves the identical problem the same way.
+ *
+ * Fields are optional and carry NO defaults: a default here would materialize
+ * a key on actions whose variant is a `strictObject` that does not declare it,
+ * and the per-action re-parse would then reject it as unknown. Defaults stay
+ * on the variants, where they are action-scoped. The `loose*` wrappers are
+ * reused so a harness that stringifies parameters is tolerated identically on
+ * both paths.
+ */
+export const BrowserActionFlatSchema = z.strictObject({
+  action: z
+    .enum(BROWSER_ACTION_NAMES)
+    .describe('The browser operation to perform. Required on every call.'),
+  url: z.string().optional().describe('[navigate] The URL to navigate to.'),
+  new_tab: looseBoolean()
+    .optional()
+    .describe('[navigate, click] Open in / open resulting navigation in a new tab. Default: false.'),
+  index: looseNumber(z.number().int().min(0))
+    .optional()
+    .describe('[click, type] Index of the element from get_state. Ignored if `selector` is given.'),
+  selector: z
+    .string()
+    .optional()
+    .describe('[click, type] CSS selector to target directly, bypassing the element index.'),
+  text: z.string().optional().describe('[type] The text to type.'),
+  include_screenshot: looseBoolean()
+    .optional()
+    .describe('[get_state] Include a screenshot of the current page. Default: false.'),
+  extract_links: looseBoolean()
+    .optional()
+    .describe('[get_content] Include links in the extracted content. Default: false.'),
+  start_from_char: looseNumber(z.number().int().min(0))
+    .optional()
+    .describe('[get_content] Character index to start from in the page content. Default: 0.'),
+  direction: z
+    .enum(['up', 'down'])
+    .optional()
+    .describe("[scroll] Direction to scroll: 'up' or 'down'. Default: 'down'."),
+  tab_id: z
+    .string()
+    .optional()
+    .describe('[switch_tab, close_tab] 4-character tab ID from list_tabs.'),
+  storage_state: looseObject(StorageStateSchema)
+    .optional()
+    .describe("[set_storage] Storage state with 'cookies' and 'origins', from get_storage."),
+  ms: looseNumber(z.number().int().min(100).max(30000))
+    .optional()
+    .describe('[wait] Milliseconds to wait (100-30000).'),
+  key: z
+    .string()
+    .optional()
+    .describe('[press_key] Key to press, e.g. "Enter", "Escape", "Tab", "ArrowDown".'),
+});
+
+export type BrowserActionFlat = z.infer<typeof BrowserActionFlatSchema>;
+
+export type BrowserActionParseResult =
+  | { success: true; action: BrowserAction }
+  | { success: false; message: string };
+
+/**
+ * Narrow a flat provider-facing input into the strict per-action shape.
+ *
+ * This is where the real validation happens: the flat schema above only proves
+ * `action` is one of the 18 names, so every action-specific requirement is
+ * checked here against that action's own variant. Used by both the tool's
+ * `validateInput` (to report a precise error to the model) and `call` (to get
+ * the narrowed action, with that variant's defaults and coercion applied).
+ */
+export function parseBrowserAction(
+  input: BrowserActionFlat,
+): BrowserActionParseResult {
+  // Fields the model omitted are present-but-undefined after the flat parse.
+  // The variants are strictObject, so an undefined-valued key for a field that
+  // action doesn't declare would be rejected as unknown — drop them first.
+  const present: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (value !== undefined) present[key] = value;
+  }
+
+  const variant = BROWSER_ACTION_SCHEMA_BY_NAME[
+    input.action
+  ] as unknown as z.ZodObject<z.ZodRawShape>;
+  const parsed = variant.safeParse(present);
+  if (!parsed.success) {
+    const detail = parsed.error.issues
+      .map(issue => {
+        const field = issue.path.join('.');
+        return field ? `${field}: ${issue.message}` : issue.message;
+      })
+      .join('; ');
+    const allowed = Object.keys(variant.shape).join(', ');
+    return {
+      success: false,
+      message: `Invalid parameters for action "${input.action}": ${detail}. Parameters accepted by this action: ${allowed}.`,
+    };
+  }
+  return { success: true, action: parsed.data as BrowserAction };
+}
+
 export type BrowserNavigateAction = z.infer<typeof BrowserNavigateActionSchema>;
 export type BrowserClickAction = z.infer<typeof BrowserClickActionSchema>;
 export type BrowserTypeAction = z.infer<typeof BrowserTypeActionSchema>;
