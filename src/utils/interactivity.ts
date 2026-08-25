@@ -2,6 +2,8 @@
  * Determines if the current session should be treated as interactive.
  * Robustly handles SSH sessions which might not report TTY status accurately.
  */
+import { hasPrintFlag } from './printFlag.js'
+
 export function isInteractiveSession(options: {
   stdoutIsTTY: boolean;
   args: string[];
@@ -9,12 +11,14 @@ export function isInteractiveSession(options: {
 }): boolean {
   const { stdoutIsTTY, args, env } = options;
 
-  // Explicit non-interactive flags
-  const hasPrintFlag = args.includes('-p') || args.includes('--print');
+  // Explicit non-interactive flags. The print scan is arity-aware: a naive
+  // `args.includes('-p')` treats a value like `--model -p` as the print flag
+  // and silently drops the session out of interactive mode.
+  const isPrint = hasPrintFlag(args);
   const hasInitOnlyFlag = args.includes('--init-only');
   const hasSdkUrl = args.some(arg => arg.startsWith('--sdk-url'));
 
-  if (hasPrintFlag || hasInitOnlyFlag || hasSdkUrl) {
+  if (isPrint || hasInitOnlyFlag || hasSdkUrl) {
     return false;
   }
 

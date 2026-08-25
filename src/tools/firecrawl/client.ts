@@ -42,11 +42,32 @@ interface FirecrawlScrapeOptions extends FirecrawlRequestOptions {
   formats?: string[]
 }
 
+/**
+ * Whether `apiUrl` points at Firecrawl's hosted cloud API (which requires an
+ * API key) rather than a self-hosted instance (which does not).
+ *
+ * Compares the parsed hostname exactly. A substring test on the raw URL
+ * misclassifies self-hosted deployments whose URL merely contains the cloud
+ * host — `https://api.firecrawl.dev.internal.example`, or a proxy path like
+ * `https://proxy.internal/api.firecrawl.dev` — and would reject them for not
+ * carrying a cloud key they don't need. The catch branch handles a bare
+ * host with no scheme, which `new URL()` cannot parse.
+ */
+export function isFirecrawlCloudApiUrl(apiUrl: string | undefined): boolean {
+  const normalized = (apiUrl ?? DEFAULT_FIRECRAWL_API_URL).trim()
+  try {
+    return new URL(normalized).hostname === 'api.firecrawl.dev'
+  } catch {
+    const withoutTrailingSlash = normalized.replace(/\/+$/, '')
+    return withoutTrailingSlash.toLowerCase() === 'api.firecrawl.dev'
+  }
+}
+
 function getFirecrawlConfig(options: FirecrawlRequestOptions) {
   const apiKey = options.apiKey ?? process.env.FIRECRAWL_API_KEY ?? ''
   const apiUrl = (options.apiUrl ?? process.env.FIRECRAWL_API_URL ?? DEFAULT_FIRECRAWL_API_URL).replace(/\/$/, '')
 
-  if (apiUrl.includes('api.firecrawl.dev') && !apiKey) {
+  if (isFirecrawlCloudApiUrl(apiUrl) && !apiKey) {
     throw new Error(
       'Firecrawl API key is required for the cloud API. Set FIRECRAWL_API_KEY or use FIRECRAWL_API_URL for a self-hosted instance.',
     )

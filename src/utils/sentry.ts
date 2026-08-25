@@ -7,6 +7,8 @@
 
 import * as Sentry from '@sentry/node'
 import { logForDebugging } from './debug.js'
+import { TelemetrySafeError_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS as TelemetrySafeError } from './errors.js'
+import { isTelemetryDisabled } from './privacyLevel.js'
 
 declare const BUILD_ENV: string | undefined
 
@@ -168,4 +170,76 @@ export async function closeSentry(timeoutMs = 2000): Promise<void> {
  */
 export function isSentryInitialized(): boolean {
   return initialized
+}
+
+// ─── Env-driven, opt-in error reporting ─────────────────────────────────────
+//
+// A second, deliberately minimal surface used by the crash handlers in
+// gracefulShutdown. Disabled by default: enabled only when SENTRY_DSN is set
+// AND telemetry is not disabled via DISABLE_TELEMETRY /
+// GAKRCLI_DISABLE_NONESSENTIAL_TRAFFIC.
+//
+// Only TelemetrySafeError.telemetryMessage (never a raw error.message) is
+// sent, so file paths and other PII cannot leak into Sentry. This is why it
+// does not reuse captureException() above — that path forwards raw errors.
+
+let sentryReportingInitialized = false
+let sentryModule: typeof import('@sentry/node') | null = null
+
+export function isSentryEnabled(): boolean {
+  return Boolean(process.env.SENTRY_DSN) && !isTelemetryDisabled()
+}
+
+/**
+ * Lazily initializes Sentry for opt-in error reporting. No-op if SENTRY_DSN is
+ * unset or telemetry is disabled. Safe to call multiple times; only initializes
+ * once. Async because @sentry/node is loaded via dynamic import — this bundle
+ * is ESM and does not define require().
+ */
+export async function initializeSentry(): Promise<void> {
+  if (sentryReportingInitialized || !isSentryEnabled()) {
+    return
+  }
+  sentryReportingInitialized = true
+
+  try {
+    // Dynamic import so the module resolution (and any test-time mock) is
+    // honored, and so it works under ESM where require() is not defined.
+    sentryModule = await import('@sentry/node')
+    sentryModule.init({
+      dsn: process.env.SENTRY_DSN,
+      environment: process.env.NODE_ENV ?? 'production',
+      tracesSampleRate: 0,
+      // Disable Sentry's automatic uncaughtException/unhandledRejection
+      // integrations. Those hooks report raw error content, bypassing the
+      // TelemetrySafeError sanitization in reportErrorToSentry(). Only
+      // explicit reportErrorToSentry() calls should ever send data.
+      defaultIntegrations: false,
+    })
+  } catch {
+    // Never let Sentry setup crash the CLI.
+    sentryModule = null
+  }
+}
+
+/**
+ * Reports an error to Sentry if enabled. Only sends the sanitized
+ * telemetryMessage for TelemetrySafeError instances. Errors that are not
+ * TelemetrySafeError are NOT reported, since their raw message may contain
+ * file paths or other PII — never send an implicit raw error message.
+ */
+export function reportErrorToSentry(error: unknown): void {
+  if (!sentryModule || !isSentryEnabled()) {
+    return
+  }
+
+  try {
+    if (error instanceof TelemetrySafeError) {
+      sentryModule.captureMessage(error.telemetryMessage, 'error')
+    }
+    // Non-TelemetrySafeError errors are intentionally not reported — their
+    // message has not been vetted as safe to send.
+  } catch {
+    // Reporting must never throw.
+  }
 }
