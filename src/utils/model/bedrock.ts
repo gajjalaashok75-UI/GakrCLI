@@ -2,14 +2,27 @@ import memoize from 'lodash-es/memoize.js'
 import { refreshAndGetAwsCredentials } from '../auth.js'
 import { getAWSRegion, isEnvTruthy } from '../envUtils.js'
 import { logError } from '../log.js'
+import { importOptionalRuntimeModule } from '../optionalRuntimeModule.js'
 import { getAWSClientProxyConfig } from '../proxy.js'
+
+// @aws-sdk/client-bedrock lives in optionalDependencies, so an install run with
+// --omit=optional (or a sandbox that prunes optional trees) will not have it.
+// Loading it through importOptionalRuntimeModule turns that case into an
+// actionable "install this package" error instead of a bare
+// ERR_MODULE_NOT_FOUND. The `typeof import(...)` generic keeps the call sites
+// fully typed, so nothing degrades to `any`.
+const importBedrockClientModule = () =>
+  importOptionalRuntimeModule<typeof import('@aws-sdk/client-bedrock')>(
+    '@aws-sdk/client-bedrock',
+    'AWS Bedrock',
+  )
 
 export const getBedrockInferenceProfiles = memoize(async function (): Promise<
   string[]
 > {
   const [client, { ListInferenceProfilesCommand }] = await Promise.all([
     createBedrockClient(),
-    import('@aws-sdk/client-bedrock'),
+    importBedrockClientModule(),
   ])
   const allProfiles: Array<{ inferenceProfileId?: string }> = []
   let nextToken: string | undefined
@@ -48,7 +61,7 @@ export function findFirstMatch(
 }
 
 async function createBedrockClient() {
-  const { BedrockClient } = await import('@aws-sdk/client-bedrock')
+  const { BedrockClient } = await importBedrockClientModule()
   // Match the Anthropic Bedrock SDK's region behavior exactly:
   // - Reads AWS_REGION or AWS_DEFAULT_REGION env vars (not AWS config files)
   // - Falls back to 'us-east-1' if neither is set
@@ -144,7 +157,7 @@ export const getInferenceProfileBackingModel = memoize(async function (
   try {
     const [client, { GetInferenceProfileCommand }] = await Promise.all([
       createBedrockClient(),
-      import('@aws-sdk/client-bedrock'),
+      importBedrockClientModule(),
     ])
     const command = new GetInferenceProfileCommand({
       inferenceProfileIdentifier: profileId,

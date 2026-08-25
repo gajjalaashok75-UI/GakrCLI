@@ -4,7 +4,11 @@
  */
 import { describe, expect, test } from 'bun:test'
 import { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk'
-import { BedrockClient } from '../bedrockClient.js'
+import { createBedrockClientClass } from '../bedrockClient.js'
+
+// Production builds the class from the runtime-loaded SDK export; a test can
+// import the SDK statically, so build it the same way from that import.
+const BedrockClient = createBedrockClientClass(AnthropicBedrock)
 
 type Captured = {
   url: string
@@ -140,5 +144,20 @@ describe('BedrockClient.buildRequest body.anthropic_beta cleanup', () => {
     const body = JSON.parse(c!.body) as Record<string, unknown>
     expect('anthropic_beta' in body).toBe(false)
     expect(c!.headers['anthropic-beta']).toBeUndefined()
+  })
+})
+
+describe('createBedrockClientClass', () => {
+  test('subclasses the base class it is handed', () => {
+    expect(
+      Object.prototype.isPrototypeOf.call(AnthropicBedrock, BedrockClient),
+    ).toBe(true)
+    expect(new BedrockClient(BEDROCK_ARGS)).toBeInstanceOf(AnthropicBedrock)
+  })
+
+  test('returns the identical constructor for the same base class', () => {
+    // createClient() runs per request; a fresh subclass each time would give
+    // every client its own prototype chain and break instanceof identity.
+    expect(createBedrockClientClass(AnthropicBedrock)).toBe(BedrockClient)
   })
 })
