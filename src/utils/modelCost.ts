@@ -3,6 +3,7 @@ import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from 
 import { logEvent } from 'src/services/analytics/index.js'
 import { setHasUnknownModelCost } from '../bootstrap/state.js'
 import { isFastModeEnabled } from './fastMode.js'
+import { getModelPricingOverride } from './settings/modelPricing.js'
 import {
   GAKR_3_5_HAIKU_CONFIG,
   GAKR_3_5_V2_SONNET_CONFIG,
@@ -145,7 +146,18 @@ function tokensToUSDCost(modelCosts: ModelCosts, usage: Usage): number {
   )
 }
 
-export function getModelCosts(model: string, usage: Usage): ModelCosts {
+function getKnownModelCosts(
+  model: string,
+  usage: { speed?: Usage['speed'] },
+): ModelCosts | undefined {
+  // Custom prices match the exact resolved model id before any canonical
+  // first-party fallback. This intentionally does not normalize case, aliases,
+  // prefixes, route names, or provider-specific identifiers.
+  const override = getModelPricingOverride(model)
+  if (override) {
+    return override
+  }
+
   const shortName = getCanonicalName(model)
 
   // Check if this is an Opus 4.6+ model with fast mode active.
@@ -158,15 +170,29 @@ export function getModelCosts(model: string, usage: Usage): ModelCosts {
     return getOpus46CostTier(isFastMode)
   }
 
-  const costs = MODEL_COSTS[shortName]
-  if (!costs) {
-    trackUnknownModelCost(model, shortName)
-    return (
-      MODEL_COSTS[getCanonicalName(getDefaultMainLoopModelSetting())] ??
-      DEFAULT_UNKNOWN_MODEL_COST
-    )
+  // MODEL_COSTS is a plain object, so a bare `MODEL_COSTS[shortName]` inherits
+  // Object.prototype members: a model id like `constructor` or `__proto__`
+  // (arbitrary strings for custom/OpenAI-compatible providers, and lowercase so
+  // getCanonicalName passes them through unchanged) would return a truthy
+  // prototype value, skip the unknown-model path, and yield NaN costs downstream.
+  // Match on own properties only.
+  return Object.hasOwn(MODEL_COSTS, shortName)
+    ? MODEL_COSTS[shortName]
+    : undefined
+}
+
+export function getModelCosts(model: string, usage: Usage): ModelCosts {
+  const costs = getKnownModelCosts(model, usage)
+  if (costs) {
+    return costs
   }
-  return costs
+
+  const shortName = getCanonicalName(model)
+  trackUnknownModelCost(model, shortName)
+  const defaultShortName = getCanonicalName(getDefaultMainLoopModelSetting())
+  return Object.hasOwn(MODEL_COSTS, defaultShortName)
+    ? MODEL_COSTS[defaultShortName]!
+    : DEFAULT_UNKNOWN_MODEL_COST
 }
 
 function trackUnknownModelCost(model: string, shortName: ModelShortName): void {
@@ -229,9 +255,10 @@ export function formatModelPricing(costs: ModelCosts): string {
  * Accepts either a short name or full model name
  * Returns undefined if model is not found
  */
-export function getModelPricingString(model: string): string | undefined {
-  const shortName = getCanonicalName(model)
-  const costs = MODEL_COSTS[shortName]
-  if (!costs) return undefined
-  return formatModelPricing(costs)
+export function getModelPricingString(
+  model: string,
+  usage: { speed?: Usage['speed'] } = {},
+): string | undefined {
+  const costs = getKnownModelCosts(model, usage)
+  return costs ? formatModelPricing(costs) : undefined
 }
