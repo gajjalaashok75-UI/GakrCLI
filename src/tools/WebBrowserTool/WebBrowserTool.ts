@@ -41,17 +41,16 @@ import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs
 import type { CanUseToolFn } from 'src/hooks/useCanUseTool.js';
 import type {
   ToolCallProgress,
-  ToolInputJSONSchema,
   ToolPermissionContext,
   ToolProgressData,
   Tools,
   ToolResult,
   ToolUseContext,
+  ValidationResult,
 } from 'src/Tool.js';
 import { buildTool } from 'src/Tool.js';
 import type { AssistantMessage } from 'src/types/message.js';
 import { lazySchema } from 'src/utils/lazySchema.js';
-import { zodToJsonSchema } from 'src/utils/zodToJsonSchema.js';
 import { z } from 'zod/v4';
 
 import { BrowserToolExecutor } from './browserEngine.js';
@@ -75,7 +74,8 @@ import {
   BROWSER_SWITCH_TAB_DESCRIPTION,
   BROWSER_TYPE_DESCRIPTION,
   BROWSER_WAIT_DESCRIPTION,
-  BrowserActionSchema,
+  BrowserActionFlatSchema,
+  parseBrowserAction,
   type BrowserAction,
   type LLMContentBlock,
 } from './types.js';
@@ -88,29 +88,28 @@ const TOOL_NAME = 'WebBrowser';
  * `BrowserActionSchema` — the exact kind of drift risk that bit this
  * project once already (this file's schema didn't get the `refresh`/`wait`/
  * `press_key` actions added to it in the same pass as types.ts, for a few
- * rounds). Reusing `BrowserActionSchema` directly means there is now
- * exactly ONE place that defines the 18 action shapes — including the
- * `looseBoolean`/`looseNumber`/`looseObject` coercion that fixes log.md's
- * issue #1 (the XML tool-call harness stringifying non-string params) and
- * the new `selector` field on click/type — and both the engine layer and
- * this GakrCLI-facing tool automatically stay in sync with it.
+ * rounds). types.ts remains the single place that defines the 18 action
+ * shapes — including the `looseBoolean`/`looseNumber`/`looseObject` coercion
+ * that fixes log.md's issue #1 (the XML tool-call harness stringifying
+ * non-string params) and the `selector` field on click/type.
+ *
+ * SCHEMA FIX: the tool advertises `BrowserActionFlatSchema` (a flat
+ * `z.strictObject`), not `BrowserActionSchema` (a `z.discriminatedUnion`).
+ * A union at the root of a tool's input schema serializes to `{anyOf: [...]}`
+ * with no top-level `properties`, and OpenAI-compatible providers reject or
+ * ignore a root-level combinator in function parameters: a gateway that
+ * compiles the schema into a constrained decoding grammar sees an object with
+ * zero declared fields, so the model emits `{}` and validation dies with
+ * "No matching discriminator" before Chromium is ever launched. Providers that
+ * forward `anyOf` verbatim happened to work, which is why this only surfaced
+ * after switching model mid-session. Strict per-action validation is preserved
+ * in `validateInput` and `call` via `parseBrowserAction`. LSPTool splits its
+ * schema the same way, for the same reason.
  */
-const inputSchema = lazySchema(() => BrowserActionSchema);
+const inputSchema = lazySchema(() => BrowserActionFlatSchema);
 
 type InputSchema = ReturnType<typeof inputSchema>;
 export type WebBrowserInput = z.infer<InputSchema>;
-
-// zod v4 serializes a top-level z.discriminatedUnion as {anyOf} with no
-// top-level `type`, which model providers reject ("schema must be a JSON
-// Schema of 'type: "object"'"). All working tools serialize their
-// z.object/strictObject inputSchema to a top-level `type: 'object'`. We keep
-// the discriminated union for strict per-action validation (toolExecution.ts
-// parses via tool.inputSchema) but expose an inputJSONSchema whose top level
-// is `type: 'object'` so the provider-facing schema matches the convention.
-const inputJSONSchema: ToolInputJSONSchema = {
-  ...zodToJsonSchema(inputSchema()),
-  type: 'object',
-};
 
 const outputSchema = lazySchema(() => z.object({
   observationText: z.string(),
@@ -191,39 +190,55 @@ function buildPrompt(): string {
   ].join('\n');
 }
 
-/** Map GakrCLI's flat `action`-tagged input into the engine's BrowserAction shape. */
+/**
+ * Narrow GakrCLI's flat `action`-tagged input into the engine's strict
+ * BrowserAction shape, applying that action's own defaults and coercion.
+ *
+ * No longer an identity function: the provider-facing schema is flat (see the
+ * SCHEMA FIX note on `inputSchema`), so the per-action variant has to be
+ * applied here. Throws on mismatch — `validateInput` runs first in the normal
+ * tool path and reports the same failure to the model with a precise message,
+ * so reaching this throw means a caller bypassed validation (e.g. a direct
+ * `call()`), and failing loudly beats handing the engine an unvalidated action.
+ */
 function toBrowserAction(input: WebBrowserInput): BrowserAction {
-  // CODE-REUSE CLEANUP (round 7): now a true identity function — both
-  // types are literally `z.infer<typeof BrowserActionSchema>` since
-  // WebBrowserTool.ts's inputSchema reuses BrowserActionSchema directly
-  // rather than a hand-duplicated copy. Kept as a named function (instead
-  // of inlining `input` at each call site) so `call()` reads the same way
-  // regardless of whether this ever needs to diverge again in the future.
-  return input;
+  const parsed = parseBrowserAction(input);
+  if (!parsed.success) {
+    throw new Error(parsed.message);
+  }
+  return parsed.action;
 }
 
-export function shortActionResult(action: string, input: WebBrowserInput): string {
-  switch (action) {
+/**
+ * Human-readable one-liner for a completed action.
+ *
+ * Switches on `action.action` rather than a separately-passed `action` string:
+ * narrowing off the discriminant is what makes the per-variant field reads
+ * (`action.url`, `action.selector`, ...) type-safe, and it also removes the
+ * possibility of the label disagreeing with the action it describes.
+ */
+export function shortActionResult(action: BrowserAction): string {
+  switch (action.action) {
     case 'navigate':
-      return `Navigated to ${input.url}`;
+      return `Navigated to ${action.url}`;
     case 'click':
-      return input.selector ? `Clicked ${input.selector}` : `Clicked element [${input.index}]`;
+      return action.selector ? `Clicked ${action.selector}` : `Clicked element [${action.index}]`;
     case 'type':
-      return input.selector ? `Typed into ${input.selector}` : `Typed into element [${input.index}]`;
+      return action.selector ? `Typed into ${action.selector}` : `Typed into element [${action.index}]`;
     case 'get_state':
       return 'Page state read';
     case 'get_content':
       return 'Page content read';
     case 'scroll':
-      return `Scrolled ${input.direction ?? 'down'}`;
+      return `Scrolled ${action.direction ?? 'down'}`;
     case 'go_back':
       return 'Went back';
     case 'list_tabs':
       return 'Tabs listed';
     case 'switch_tab':
-      return `Switched to tab ${input.tab_id}`;
+      return `Switched to tab ${action.tab_id}`;
     case 'close_tab':
-      return `Closed tab ${input.tab_id}`;
+      return `Closed tab ${action.tab_id}`;
     case 'close_all_tabs':
       return 'All tabs closed';
     case 'get_storage':
@@ -237,9 +252,9 @@ export function shortActionResult(action: string, input: WebBrowserInput): strin
     case 'refresh':
       return 'Page refreshed';
     case 'wait':
-      return `Waited ${input.ms}ms`;
+      return `Waited ${action.ms}ms`;
     case 'press_key':
-      return `Pressed key ${input.key}`;
+      return `Pressed key ${action.key}`;
     default:
       return 'Browser action completed';
   }
@@ -287,7 +302,21 @@ export const WebBrowserTool = buildTool({
     return outputSchema();
   },
 
-  inputJSONSchema,
+  /**
+   * Strict per-action validation. `inputSchema` is deliberately flat so the
+   * provider-facing JSON Schema has real top-level `properties` (see the
+   * SCHEMA FIX note above), which means it only proves `action` is one of the
+   * 18 names — every action-specific requirement is enforced here, against
+   * that action's own variant, and reported with the offending field named
+   * rather than as an opaque union failure.
+   */
+  async validateInput(input: WebBrowserInput): Promise<ValidationResult> {
+    const parsed = parseBrowserAction(input);
+    if (!parsed.success) {
+      return { result: false, message: parsed.message, errorCode: 1 };
+    }
+    return { result: true };
+  },
 
   async description(
     _input: WebBrowserInput,
@@ -354,8 +383,6 @@ export const WebBrowserTool = buildTool({
         return 'Starting session recording';
       case 'stop_recording':
         return 'Stopping session recording';
-      case 'close_all_tabs':
-        return 'Closing all tabs';
       case 'refresh':
         return 'Refreshing page';
       case 'wait':
@@ -421,7 +448,7 @@ export const WebBrowserTool = buildTool({
     // ToolResultBlockParam from them.
     const resultText = observation.is_error
       ? observation.text
-      : `${input.action} → ${shortActionResult(input.action, input as WebBrowserInput)}`;
+      : `${action.action} → ${shortActionResult(action)}`;
     const contentBlocks = toContentBlocks(observation.toLLMContent());
     const terminalBlocks = contentBlocks.some(b => b.type === 'text' && b.text === observation.text)
       ? [{ type: 'text' as const, text: resultText }, ...contentBlocks]

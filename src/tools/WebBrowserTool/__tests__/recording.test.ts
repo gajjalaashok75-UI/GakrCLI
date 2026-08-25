@@ -5,13 +5,26 @@ import { RecordingSession, DEFAULT_RECORDING_CONFIG, getRrwebLoaderJs } from '..
 // Helpers
 // ---------------------------------------------------------------------------
 
-type EvalResult = string | { status?: string; success?: boolean; error?: string; events?: unknown[] };
+type EvalResult =
+  | string
+  | { status?: string; success?: boolean; error?: string; events?: unknown[] }
+  // `undefined` is a real fixture value, not an omission: the rrweb-loader
+  // injection is evaluated for its side effect and resolves with no value, so
+  // every results array below starts with it. makePage() branches on it
+  // explicitly when logging.
+  | undefined;
+
+/** Playwright's `addInitScript` is only ever called with `{ content }` here. */
+type InitScriptArg = { content?: string };
 
 interface FakePage {
   _calls: { kind: string; result?: EvalResult }[];
   _evalIndex: number;
-  evaluate: ReturnType<typeof makeEvaluate>;
-  addInitScript: ReturnType<typeof makeAddInitScript>;
+  // Typed by shape rather than `ReturnType<typeof makeEvaluate>`: there are no
+  // makeEvaluate/makeAddInitScript factories — both are defined inline in
+  // makePage() below, so those names never resolved.
+  evaluate: (fnOrString: Function | string) => Promise<EvalResult>;
+  addInitScript: (script: InitScriptArg) => Promise<unknown>;
   url: () => string;
 }
 
@@ -33,7 +46,7 @@ function makePage(results: EvalResult[]): FakePage {
     return result;
   };
 
-  const addInitScript = async (script: any) => {
+  const addInitScript = async (script: InitScriptArg) => {
     console.log(`[MOCK] addInitScript: content=${String(script?.content ?? script).slice(0, 50)}...`);
     calls.push({ kind: 'addInitScript' });
     return {}; // Playwright returns a Script object

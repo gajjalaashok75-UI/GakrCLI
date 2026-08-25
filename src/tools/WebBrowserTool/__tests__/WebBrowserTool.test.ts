@@ -294,7 +294,10 @@ describe('BUG 3: extractLinks link stripping', () => {
 
 describe('ROUND 10: recording.ts uses page.evaluate() / page.addInitScript() (no more raw CDP)', () => {
   it('injectScripts() registers an init script AND evaluates the loader on the current document', async () => {
-    const addInitScript = mock(async () => {});
+    // Declare the parameter: a `mock(async () => {})` with no params types its
+    // `mock.calls` entries as the empty tuple `[]`, so `calls[0][0]` has no
+    // element to read. recording.ts always calls it as `{ content: string }`.
+    const addInitScript = mock(async (_script: { content?: string }) => {});
     const evaluate = mock(async () => {});
     const fakePage: any = { addInitScript, evaluate };
 

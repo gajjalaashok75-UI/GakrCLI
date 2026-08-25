@@ -24,7 +24,7 @@
 
 import { Box, Text } from '../../ink.js';
 import { shortActionResult, parseLastOperationForDisplay } from './WebBrowserTool.js';
-import type { WebBrowserInput } from './WebBrowserTool.js';
+import type { BrowserAction } from './types.js';
 import * as React from 'react';
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 
@@ -609,7 +609,11 @@ export function WebBrowserPanel(): React.ReactNode {
   useEffect(() => {
     const handler = () => setWidth(computeBoxWidth());
     process.stdout?.on('resize', handler);
-    return () => process.stdout?.off('resize', handler);
+    // Braced so the cleanup returns void: `off()` returns the stream itself,
+    // which React would otherwise reject as a destructor.
+    return () => {
+      process.stdout?.off('resize', handler);
+    };
   }, []);
 
   useEffect(() => {
@@ -664,7 +668,10 @@ export function WebBrowserPanel(): React.ReactNode {
   const parsedAct = useMemo(() => parseLastAction(lastRaw), [lastRaw]);
   const parsedOp = useMemo(() => parseLastOperationForDisplay(lastRaw), [lastRaw]);
   const verb = parsedAct ? parsedAct.action.toUpperCase() : null;
-  const summary = parsedAct ? shortActionResult(parsedAct.action, parsedAct as WebBrowserInput) : null;
+  // parseLastAction reconstructs a display shape from the logged operation
+  // string, so it is narrowed rather than validated here — the panel only ever
+  // reads it to build a label.
+  const summary = parsedAct ? shortActionResult(parsedAct as BrowserAction) : null;
   // For switch_tab/close_tab, use the URL from parseLastOperationForDisplay
   const displaySummary = parsedOp ? `${parsedOp.verb} \u2192 ${parsedOp.summary}` : (verb ? `${verb} \u2192 ${summary}` : null);
   const footerText = displaySummary ? truncate(`Last Action: ${displaySummary}`, innerWidth) : null;
