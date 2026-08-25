@@ -70,7 +70,7 @@ export async function daemonMain(args: string[]): Promise<void> {
     // --- Session management (delegates to bg.ts) ---
     case 'bg': {
       const bg = await import('../cli/bg.js')
-      await bg.handleBgStart(args.slice(1))
+      await bg.handleBgFlag(args.slice(1))
       break
     }
     case 'attach': {

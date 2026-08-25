@@ -36,7 +36,7 @@ const mockPsHandler = mock(async (_args: string[]) => {})
 const mockLogsHandler = mock(async (_args: string[]) => {})
 const mockAttachHandler = mock(async (_args: string[]) => {})
 const mockKillHandler = mock(async (_args: string[]) => {})
-const mockHandleBgStart = mock(async (_args: string[]) => {})
+const mockHandleBgFlag = mock(async (_args: string[]) => {})
 const mockLoadEnvFile = mock((_filePath: string) => ({}))
 const mockParseProviderEnvFileArgs = mock((_args: string[]) => ({ paths: [] }))
 const mockReapplyRememberedEnvFileValues = mock(() => {})
@@ -73,7 +73,7 @@ const runtimeMocks = [
   mockLogsHandler,
   mockAttachHandler,
   mockKillHandler,
-  mockHandleBgStart,
+  mockHandleBgFlag,
   mockLoadEnvFile,
   mockParseProviderEnvFileArgs,
   mockReapplyRememberedEnvFileValues,
@@ -332,7 +332,7 @@ describe('cli.tsx — background routing behavior', () => {
         logsHandler: mockLogsHandler,
         attachHandler: mockAttachHandler,
         killHandler: mockKillHandler,
-        handleBgStart: mockHandleBgStart,
+        handleBgFlag: mockHandleBgFlag,
       }),
       envFile: async () => ({
         loadEnvFile: mockLoadEnvFile,
@@ -420,7 +420,7 @@ describe('cli.tsx — background routing behavior', () => {
 
       expect(handler.mock.calls).toEqual([[tail]])
       expect(mockParseProviderEnvFileArgs).not.toHaveBeenCalled()
-      expect(mockHandleBgStart).not.toHaveBeenCalled()
+      expect(mockHandleBgFlag).not.toHaveBeenCalled()
       expect(mockEnableConfigs).not.toHaveBeenCalled()
       expect(mockValidateProviderEnvForStartupOrExit).not.toHaveBeenCalled()
       expect(mockCliMain).not.toHaveBeenCalled()
@@ -442,7 +442,7 @@ describe('cli.tsx — background routing behavior', () => {
 
       expect(handler.mock.calls).toEqual([[['--bg', 'session-1']]])
       expect(mockParseProviderEnvFileArgs).not.toHaveBeenCalled()
-      expect(mockHandleBgStart).not.toHaveBeenCalled()
+      expect(mockHandleBgFlag).not.toHaveBeenCalled()
       expect(mockEnableConfigs).not.toHaveBeenCalled()
       expect(mockValidateProviderEnvForStartupOrExit).not.toHaveBeenCalled()
       expect(mockCliMain).not.toHaveBeenCalled()
@@ -460,7 +460,7 @@ describe('cli.tsx — background routing behavior', () => {
     expect(mockApplySafeConfigEnvironmentVariables).toHaveBeenCalledTimes(1)
     expect(mockApplyStartupEnvFromProfile).toHaveBeenCalledTimes(1)
     expect(mockEagerLoadSettingsFromArgs.mock.calls).toEqual([[args]])
-    expect(mockHandleBgStart.mock.calls).toEqual([[args]])
+    expect(mockHandleBgFlag.mock.calls).toEqual([[args]])
     expect(mockRefreshGithubModelsTokenIfNeeded).not.toHaveBeenCalled()
     expect(mockValidateProviderEnvForStartupOrExit).not.toHaveBeenCalled()
     expect(mockCliMain).not.toHaveBeenCalled()
@@ -471,7 +471,7 @@ describe('cli.tsx — background routing behavior', () => {
 
     await runCliEntrypoint(args, bgOptions)
 
-    expect(mockHandleBgStart).not.toHaveBeenCalled()
+    expect(mockHandleBgFlag).not.toHaveBeenCalled()
     expect(mockRefreshGithubModelsTokenIfNeeded).toHaveBeenCalledTimes(1)
     expect(mockHydrateGithubModelsTokenFromSecureStorage).toHaveBeenCalledTimes(
       1,

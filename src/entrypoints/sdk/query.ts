@@ -21,6 +21,7 @@ import {
 import { getTools } from '../../tools.js'
 import { createFileStateCacheWithSizeLimit } from '../../utils/fileStateCache.js'
 import { init } from '../init.js'
+import { requestSdkRootAbort } from './interruption.js'
 import {
   resolveSessionFilePath,
   readTranscriptForLoad,
@@ -745,8 +746,12 @@ class QueryImpl implements Query {
   }
 
   close(): void {
-    this.interrupt()
-    this.abortController.abort()
+    // Read once up front so the traced abort below acts on the controller that
+    // owns the signal handed to in-flight requests, independent of what the
+    // interrupt path does to engine state.
+    const wrapperController = this.abortController
+    this.interruptWithSource('sdk_close')
+    requestSdkRootAbort(wrapperController, 'sdk_close', 'sdk_query')
     // Disconnect MCP clients to prevent resource leaks
     const mcpClients = this._engine?.getMcpClients?.() ?? []
     for (const client of mcpClients) {
@@ -762,8 +767,21 @@ class QueryImpl implements Query {
   }
 
   interrupt(): void {
+    this.interruptWithSource('sdk_interrupt')
+  }
+
+  /**
+   * Shared interrupt path for interrupt() and close(), carrying the caller's
+   * source into the interruption trace so an SDK-initiated abort is
+   * distinguishable from an engine-internal one. When no engine exists yet the
+   * wrapper controller is aborted directly — still through requestAbort, so the
+   * abort is registered rather than silently untraced.
+   */
+  private interruptWithSource(source: string): void {
     if (this._engine) {
-      this._engine.interrupt()
+      this._engine.interrupt(source)
+    } else {
+      requestSdkRootAbort(this.abortController, source, 'sdk_query')
     }
     // Deny all pending permission prompts before clearing
     for (const [toolUseId, pending] of this.pendingPermissionPrompts) {
