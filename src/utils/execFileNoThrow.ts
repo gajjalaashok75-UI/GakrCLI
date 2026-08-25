@@ -218,6 +218,7 @@ export function execFileNoThrowWithCwd(
       shell: false,
       signal: abortSignal,
       stdio: [stdinMode, 'pipe', 'pipe'],
+      windowsHide: true,
     })
 
     let settled = false

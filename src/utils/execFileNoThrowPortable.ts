@@ -79,6 +79,7 @@ export function execSyncWithDefaults_DEPRECATED(
       shell: true, // execSync typically runs shell commands
       reject: false, // Don't throw on non-zero exit codes
       input,
+      windowsHide: true,
     })
     if (!result.stdout) {
       return null

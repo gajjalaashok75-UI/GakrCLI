@@ -253,6 +253,7 @@ function git(args: string[], cwd: string): string | null {
     const output = execFileSync('git', ['-C', cwd, ...args], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
+      windowsHide: true,
     })
     const trimmed = output.trim()
     return trimmed ? trimmed : null
