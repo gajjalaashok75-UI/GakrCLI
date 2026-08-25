@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **In-process swarm agents and main-session tasks**: `utils/swarm/inProcessRunner.ts` and `spawnInProcess.ts` run a subagent inside the current process, and `tasks/LocalMainSessionTask.ts` lets a task target the main session, so agent-to-agent messaging works without a separate CLI spawn per agent.
+- **Built-in code-reviewer agent and agent-run persistence**: `AgentTool/built-in/codeReviewerAgent.ts` ships as a built-in agent type, and `runAgent.ts` persists a run so its transcript survives the spawning turn.
 - **Permission prompt result schema and filesystem scoping**: `utils/permissions/PermissionPromptToolResultSchema.ts` validates what a permission-prompt tool returns before it is trusted, and `utils/permissions/filesystem.ts` resolves path rules so a rule cannot grant access outside the directory it names.
 - **Abortable in-process permission requests**: `utils/swarm/inProcessPermissionAbort.ts` cancels a pending permission request when its owning agent is interrupted, so an aborted swarm agent no longer leaves a prompt waiting on a caller that is gone.
 - **MCP token refresh locking and paginated listings**: `services/mcp/refreshLock.ts` serializes OAuth token refresh so concurrent tool calls no longer race and invalidate each other's token, and `services/mcp/pagination.ts` follows cursors when a server returns tools or resources in pages instead of stopping at the first page.
