@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Atomic session and config writes**: `utils/atomicReplace.ts` writes through a temp file and rename, and `sessionStorage.ts`, `config.ts`, `plans.ts` and `transcriptFileLock.ts` now use it, so an interrupted write can no longer leave a truncated session, config or plan file behind.
+- **Multi-repo worktree parent resolution**: Worktree resolution handles a workspace containing nested repositories, so entering a worktree from a parent directory picks the repository that actually owns it.
 - **Gemini stream conversion and shim stream control**: `openaiShim/geminiStreamConversion.ts` translates Gemini's stream format into the internal event shape, and `openaiShim/streamControl.ts` centralizes pause, resume and abort so every shim path stops the same way.
 - **Split shim dispatch and transport**: The OpenAI-compatible shim is separated into `clientDispatch.ts`, `transport.ts` and `responseAdapters.ts`, so provider-specific response quirks are handled in one adapter layer instead of inside the stream reader.
 - **In-process swarm agents and main-session tasks**: `utils/swarm/inProcessRunner.ts` and `spawnInProcess.ts` run a subagent inside the current process, and `tasks/LocalMainSessionTask.ts` lets a task target the main session, so agent-to-agent messaging works without a separate CLI spawn per agent.

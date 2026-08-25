@@ -197,12 +197,18 @@ export const MAX_MESSAGES_COMPACTION_THRESHOLDS = [
 export type MaxMessagesCompactionThreshold =
   (typeof MAX_MESSAGES_COMPACTION_THRESHOLDS)[number]
 
-export function normalizeMaxMessagesCompactionThreshold(
+export function isValidMaxMessagesCompactionThreshold(
   value: unknown,
-): MaxMessagesCompactionThreshold {
+): value is MaxMessagesCompactionThreshold {
   return MAX_MESSAGES_COMPACTION_THRESHOLDS.includes(
     value as MaxMessagesCompactionThreshold,
   )
+}
+
+export function normalizeMaxMessagesCompactionThreshold(
+  value: unknown,
+): MaxMessagesCompactionThreshold {
+  return isValidMaxMessagesCompactionThreshold(value)
     ? (value as MaxMessagesCompactionThreshold)
     : 'off'
 }
@@ -292,6 +298,11 @@ export type GlobalConfig = {
   bypassPermissionsModeAccepted?: boolean
   hasUsedBackslashReturn?: boolean
   autoCompactEnabled: boolean // Controls whether auto-compact is enabled
+  /**
+   * Per-prompt local interactive REPL turn cap (default: 50).
+   * Overridden by CLI `--max-turns` and GAKR_MAX_TURNS / GAKR_CODE_MAX_TURNS.
+   */
+  replMaxTurns?: number
   toolHistoryCompressionEnabled: boolean // Compress old tool_result content for small-context providers
   showTurnDuration: boolean // Controls whether to show turn duration message (e.g., "Cooked for 1m 6s")
   // Controls whether to show per-query cache hit/miss stats at the end of each turn.
@@ -749,6 +760,7 @@ export const GLOBAL_CONFIG_KEYS = [
   'editorMode',
   'hasUsedBackslashReturn',
   'autoCompactEnabled',
+  'replMaxTurns',
   'toolHistoryCompressionEnabled',
   'showTurnDuration',
   'showCacheStats',
