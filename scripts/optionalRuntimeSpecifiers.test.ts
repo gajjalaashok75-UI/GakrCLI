@@ -54,16 +54,37 @@ function collectSpecifiers(): { specifier: string; file: string }[] {
 // Foundry/Vertex/Azure path regressed while some other optional import kept the
 // total up. Adding/removing a provider load site is a deliberate change that
 // must update this list.
+//
+// Scope note — this set is deliberately narrower than the equivalent list in
+// references/openclaude-main, which routes every @aws-sdk/* and @smithy/*
+// package through the indirection because that build ships a minimal dependency
+// set and must keep them all un-resolvable-but-not-bundled. Here the dividing
+// line is whether the package is guaranteed to be installed:
+//
+//  - Declared in `dependencies` (@smithy/core, @smithy/node-http-handler,
+//    @aws-sdk/credential-providers, @aws-sdk/credential-provider-node) — always
+//    installed, so a plain `await import()` cannot fail. They stay statically
+//    typed at the call site instead of going through the generic. See
+//    src/utils/model/bedrock.ts, src/utils/proxy.ts,
+//    src/services/tokenEstimation.ts.
+//  - Declared in `optionalDependencies` (@aws-sdk/client-bedrock,
+//    @aws-sdk/client-sts) — absent under `--omit=optional` or a pruned optional
+//    tree, so they MUST go through the indirection to produce an actionable
+//    install hint rather than a bare ERR_MODULE_NOT_FOUND.
+//    @aws-sdk/client-bedrock-runtime is the one exception: it is only ever
+//    reached after a Bedrock client already loaded @aws-sdk/client-bedrock
+//    through the indirection, so that call site already reports the missing
+//    optional tree.
+//  - Not external at all (@anthropic-ai/bedrock-sdk, @anthropic-ai/foundry-sdk)
+//    — the case externals cannot cover, where the package's own static imports
+//    would otherwise be hoisted into the bundle (@anthropic-ai/bedrock-sdk
+//    statically imports @aws-sdk/client-bedrock-runtime; see
+//    src/services/api/client.ts).
 const EXPECTED_SPECIFIERS = [
   '@anthropic-ai/bedrock-sdk',
   '@anthropic-ai/foundry-sdk',
   '@aws-sdk/client-bedrock',
-  '@aws-sdk/client-bedrock-runtime',
   '@aws-sdk/client-sts',
-  '@aws-sdk/credential-provider-node',
-  '@aws-sdk/credential-providers',
-  '@smithy/core',
-  '@smithy/node-http-handler',
   '@azure/identity',
   'google-auth-library',
 ].sort()

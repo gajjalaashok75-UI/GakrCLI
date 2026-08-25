@@ -8,11 +8,14 @@
  * - src/ path aliases
  */
 
-import { mkdirSync, readFileSync, rmSync } from 'fs'
-import { basename, resolve } from 'path'
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'fs'
+import { createRequire } from 'module'
+import { basename, dirname, join, resolve } from 'path'
 import { noTelemetryPlugin } from './no-telemetry-plugin'
 import { CLI_EXTERNALS, SDK_EXTERNALS } from './externals.js'
+import { canonicalStub, collectBundleStubs } from './stubMarkerGuard.js'
 
+const nodeRequire = createRequire(import.meta.url)
 const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'))
 const version = pkg.version
 
@@ -191,6 +194,94 @@ const featureFlagPreprocessPlugin = {
   },
 }
 
+// ── Production React bundling ────────────────────────────────────────────────
+// Bun resolves react/react-reconciler/scheduler to their *development* CJS
+// builds, which carry the dev-only warning machinery, `Object.freeze` on every
+// element, and the double-invoked-render checks. The shipped CLI never needs
+// them, so remap each specifier to the package's production file.
+//
+// Resolution goes through createRequire().resolve() rather than a hardcoded
+// node_modules path on purpose: Bun installs with an *isolated* layout
+// (node_modules/.bun/<pkg>@<version>/node_modules/<pkg>) and only symlinks
+// direct dependencies into the node_modules root. Probing
+// `node_modules/scheduler` therefore yields a false negative — resolve() walks
+// the real package graph instead.
+const reactPackageDir = dirname(nodeRequire.resolve('react/package.json'))
+const reactReconcilerPackageDir = dirname(
+  nodeRequire.resolve('react-reconciler/package.json'),
+)
+// scheduler is a *transitive* dependency (via react-reconciler and react-dom),
+// so under Bun's isolated layout it is not resolvable from this script's own
+// paths. Resolve it from react-reconciler, which declares it directly; the
+// top-level attempt still comes first so an npm/pnpm hoisted install keeps
+// working unchanged.
+const schedulerPackageDir = dirname(
+  (() => {
+    try {
+      return nodeRequire.resolve('scheduler/package.json')
+    } catch {
+      return createRequire(
+        join(reactReconcilerPackageDir, 'package.json'),
+      ).resolve('scheduler/package.json')
+    }
+  })(),
+)
+
+const productionReactModules = new Map<string, string>([
+  ['react', join(reactPackageDir, 'cjs/react.production.js')],
+  [
+    'react/jsx-runtime',
+    join(reactPackageDir, 'cjs/react-jsx-runtime.production.js'),
+  ],
+  // NOT react-jsx-dev-runtime.production.js: that file exports
+  // `jsxDEV: undefined` on purpose (production code is expected to use the
+  // non-dev transform), but Bun transpiles our JSX to jsxDEV() calls, so the
+  // real production file would leave every component invoking undefined()
+  // and the UI would never render. The shim dispatches to production
+  // jsx/jsxs; its own `react/jsx-runtime` import is remapped by this plugin.
+  [
+    'react/jsx-dev-runtime',
+    join(import.meta.dir, 'reactJsxDevRuntimeProductionShim.js'),
+  ],
+  [
+    'react-reconciler',
+    join(reactReconcilerPackageDir, 'cjs/react-reconciler.production.js'),
+  ],
+  [
+    'react-reconciler/constants.js',
+    join(
+      reactReconcilerPackageDir,
+      'cjs/react-reconciler-constants.production.js',
+    ),
+  ],
+  ['scheduler', join(schedulerPackageDir, 'cjs/scheduler.production.js')],
+])
+
+for (const [specifier, resolvedPath] of productionReactModules) {
+  if (!existsSync(resolvedPath)) {
+    throw new Error(
+      `productionReactPlugin: expected production file for "${specifier}" not found at ${resolvedPath}. ` +
+        'The installed React package layout may have changed.',
+    )
+  }
+}
+
+const productionReactPlugin = {
+  name: 'production-react-bundle',
+  setup(build: Bun.PluginBuilder) {
+    build.onResolve(
+      {
+        filter:
+          /^(react|react\/jsx-runtime|react\/jsx-dev-runtime|react-reconciler|react-reconciler\/constants\.js|scheduler)$/,
+      },
+      args => {
+        const path = productionReactModules.get(args.path)
+        return path ? { path } : null
+      },
+    )
+  },
+}
+
 let result: Awaited<ReturnType<typeof Bun.build>> | undefined
 let sdkResult: Awaited<ReturnType<typeof Bun.build>> | undefined
 
@@ -224,6 +315,7 @@ result = await Bun.build({
   plugins: [
     noTelemetryPlugin,
     featureFlagPreprocessPlugin,
+    productionReactPlugin,
     {
       name: 'bun-bundle-shim',
       setup(build) {
@@ -456,9 +548,16 @@ export const Trace = noop;
           (args) => {
             const names = missingModuleExports.get(args.path) ?? new Set()
             const exports = [...names].map(n => `export const ${n} = noop;`).join('\n')
+            // The guard below finds Bun's `// missing-module-stub:<path>`
+            // module-boundary comments, which only survive an unminified build.
+            // Also emit the marker as a side-effecting string push so the
+            // tripwire keeps working if this bundle is ever minified (comments
+            // are stripped, but treeshaking and syntax-minify keep the literal).
+            const marker = JSON.stringify(`missing-module-stub:${args.path}`)
             return {
               contents: `
 const noop = () => null;
+;(globalThis.__gakrcliStubMarkers ??= []).push(${marker});
 export default noop;
 ${exports}
 `,
@@ -1002,29 +1101,22 @@ if (result?.success) {
   // Stub markers are not byte-stable across build hosts: the per-importer
   // scanner records each stub as the resolved absolute source path, which
   // differs only by the repo-root prefix (`/home/ubuntu/.../gakrcli` locally
-  // vs `/home/runner/work/gakrcli/gakrcli` on CI). Diffing raw text made
-  // CI fail on already-allowlisted stubs and report them stale. Key on the
-  // repo-relative path from `src/` onward without extension: stable across hosts
-  // yet still path-specific, so a stub named `constants.ts` in one directory
-  // cannot mask a different `constants.ts` somewhere else (a basename-only key
-  // would).
-  const canonicalStub = (marker: string): string => {
-    const normalized = marker.split(/[\\/]/).join('/')
-    const srcIdx = normalized.lastIndexOf('/src/')
-    const fromSrc = srcIdx >= 0 ? normalized.slice(srcIdx + 1) : normalized
-    return fromSrc.replace(/\.(?:[cm]?[jt]sx?)$/, '')
-  }
-
+  // vs `/home/runner/work/gakrcli/gakrcli` on CI) and by separator on Windows.
+  // Diffing raw text made CI fail on already-allowlisted stubs and report them
+  // stale. canonicalStub() keys on the repo-relative path from `src/` onward
+  // without extension: stable across hosts yet still path-specific, so a stub
+  // named `constants.ts` in one directory cannot mask a different
+  // `constants.ts` somewhere else (a basename-only key would). Both live in
+  // stubMarkerGuard.ts so the marker parsing is unit-tested against synthetic
+  // bundle text — including Windows paths containing spaces, which the previous
+  // inline `(\S+)` pattern truncated at the first space.
   const acceptableCanonical = new Set(
     [...ACCEPTABLE_RUNTIME_STUBS].map(canonicalStub),
   )
 
   const bundleText = await Bun.file('dist/cli.mjs').text()
   // canonical key -> raw marker text (kept for human-readable diagnostics)
-  const stubbed = new Map<string, string>()
-  for (const m of bundleText.matchAll(/\/\/\s*missing-module-stub:(\S+)/g)) {
-    stubbed.set(canonicalStub(m[1]), m[1])
-  }
+  const stubbed = collectBundleStubs(bundleText)
   const unexpected = [...stubbed]
     .filter(([key]) => !acceptableCanonical.has(key))
     .map(([, raw]) => raw)

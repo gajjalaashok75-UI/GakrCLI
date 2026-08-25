@@ -5,7 +5,17 @@
  * Run as part of the build to catch missing externals early.
  */
 import { readFileSync } from 'fs'
-import { CLI_EXTERNALS, SDK_EXTERNALS, INTENTIONALLY_BUNDLED, OPTIONAL_RUNTIME_EXTERNALS } from './externals.js'
+import {
+  CLI_EXTERNALS,
+  SDK_EXTERNALS,
+  INTENTIONALLY_BUNDLED,
+  OPTIONAL_RUNTIME_EXTERNALS,
+  RUNTIME_INDIRECTION_ONLY_EXTERNALS,
+} from './externals.js'
+import {
+  validateInstallHygieneFields,
+  validateOptionalPeers,
+} from './externalsValidation.js'
 
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'))
 const allDeps = new Set([
@@ -16,9 +26,17 @@ const allDeps = new Set([
 function validate(bundleName: string, externals: string[]): boolean {
   const externalSet = new Set(externals)
   const intentionallyBundledSet = new Set(INTENTIONALLY_BUNDLED)
+  // Third category: reached only through the `new Function` runtime import, so
+  // deliberately neither external nor bundled. Marking one external would let
+  // esbuild see the specifier again and hoist the package's own static imports
+  // into the bundle, which is precisely what the indirection prevents.
+  const indirectionOnlySet = new Set(RUNTIME_INDIRECTION_ONLY_EXTERNALS)
 
   const missing = [...allDeps].filter(
-    d => !externalSet.has(d) && !intentionallyBundledSet.has(d),
+    d =>
+      !externalSet.has(d) &&
+      !intentionallyBundledSet.has(d) &&
+      !indirectionOnlySet.has(d),
   )
 
   if (missing.length > 0) {
@@ -27,7 +45,9 @@ function validate(bundleName: string, externals: string[]): boolean {
       console.error(`   - ${dep}`)
     }
     console.error(
-      `\n   Either add them to scripts/externals.ts or to INTENTIONALLY_BUNDLED.`,
+      `\n   Add them to scripts/externals.ts, to INTENTIONALLY_BUNDLED, or — if\n` +
+        `   they are only ever loaded via importOptionalRuntimeModule — to\n` +
+        `   RUNTIME_INDIRECTION_ONLY_EXTERNALS.`,
     )
     return false
   }
@@ -63,11 +83,108 @@ function validateIntentionallyBundled(): boolean {
   return true
 }
 
+/**
+ * Keep the indirection-only exemption honest. It suppresses the
+ * dependency-coverage error above, so an unchecked entry would let a genuinely
+ * un-externalized package slip through:
+ *  - every entry must also be an OPTIONAL_RUNTIME_EXTERNAL (it is loaded on
+ *    demand by definition), and
+ *  - no entry may appear in either bundle's externals, or esbuild sees the
+ *    specifier again and hoists the package's static imports into the bundle.
+ */
+function validateIndirectionOnly(): boolean {
+  const optionalSet = new Set(OPTIONAL_RUNTIME_EXTERNALS)
+  const cli = new Set(CLI_EXTERNALS)
+  const sdk = new Set(SDK_EXTERNALS)
+  const errors: string[] = []
+
+  for (const dep of RUNTIME_INDIRECTION_ONLY_EXTERNALS) {
+    if (!optionalSet.has(dep)) {
+      errors.push(`${dep}: in RUNTIME_INDIRECTION_ONLY_EXTERNALS but not in OPTIONAL_RUNTIME_EXTERNALS.`)
+    }
+    const leaked = [
+      ...(cli.has(dep) ? ['CLI_EXTERNALS'] : []),
+      ...(sdk.has(dep) ? ['SDK_EXTERNALS'] : []),
+    ]
+    if (leaked.length > 0) {
+      errors.push(
+        `${dep}: runtime-indirection-only, so it must NOT be listed in ${leaked.join(' or ')}.`,
+      )
+    }
+  }
+
+  if (errors.length > 0) {
+    console.error(`❌ RUNTIME_INDIRECTION_ONLY_EXTERNALS invalid:`)
+    for (const e of errors) console.error(`   - ${e}`)
+    return false
+  }
+
+  console.log(
+    `✓ RUNTIME_INDIRECTION_ONLY_EXTERNALS: consistent (${RUNTIME_INDIRECTION_ONLY_EXTERNALS.length} entries).`,
+  )
+  return true
+}
+
+/**
+ * Packaging hygiene for THIS repo's package.json, checked at build time.
+ *
+ * scripts/verify-clean-install.ts already runs validateInstallHygieneFields,
+ * but against the *globally installed* artifact — so a regression is only caught
+ * in that opt-in publish verifier, after the bad manifest has been built and
+ * published. These two checks are the model-agnostic subset of
+ * externalsValidation.ts (they say nothing about how many packages ship or
+ * whether versions are exact-pinned), so they can run against the source
+ * manifest on every build:
+ *  - no consumer-run install hooks, no `funding` field, engines.node pinned;
+ *  - every peerDependency marked optional, so adding a non-optional one (which
+ *    npm 7+ tries to install for every user) fails here instead of silently
+ *    regressing install output.
+ *
+ * The remaining validators in externalsValidation.ts stay out on purpose:
+ * validateRuntimeDependencyContract, its validateIntentionallyBundled, and
+ * validateOptionalRuntimeExternals all encode the reference's minimal-install
+ * shipping model (3 exact-pinned runtime deps, every optional SDK a
+ * devDependency). This package ships 111 caret-ranged dependencies, so those
+ * three would fail by construction — adopting them is a shipping-model decision,
+ * not a validation gap. They remain available to verify-clean-install.ts, which
+ * checks a published artifact.
+ */
+function validatePackagingHygiene(): boolean {
+  const checks: [string, { ok: boolean; errors: string[] }][] = [
+    ['install hygiene', validateInstallHygieneFields(pkg)],
+    ['optional peerDependencies', validateOptionalPeers(pkg)],
+  ]
+
+  const failures = checks.filter(([, result]) => !result.ok)
+  if (failures.length > 0) {
+    console.error(`❌ package.json packaging hygiene:`)
+    for (const [name, result] of failures) {
+      for (const error of result.errors) console.error(`   - [${name}] ${error}`)
+    }
+    return false
+  }
+
+  const peerCount = Object.keys(pkg.peerDependencies || {}).length
+  console.log(
+    `✓ package.json hygiene: no consumer install hooks, engines.node pinned, ` +
+      `${peerCount} peerDependencies (all optional).`,
+  )
+  return true
+}
+
 const cliOk = validate('CLI bundle', CLI_EXTERNALS)
 const sdkOk = validate('SDK bundle', SDK_EXTERNALS)
 const intentionallyBundledOk = validateIntentionallyBundled()
+const indirectionOnlyOk = validateIndirectionOnly()
+const packagingHygieneOk = validatePackagingHygiene()
 
-if (!cliOk || !sdkOk || !intentionallyBundledOk) {
+if (
+  !cliOk ||
+  !sdkOk ||
+  !intentionallyBundledOk ||
+  !indirectionOnlyOk ||
+  !packagingHygieneOk
+) {
   console.error(`\n❌ External list validation failed. Fix scripts/externals.ts before committing.`)
   process.exit(1)
 }

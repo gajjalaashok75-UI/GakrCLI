@@ -128,15 +128,6 @@ export function validateInstallHygieneFields(pkg: PkgInstallHygiene): Validation
   return { ok: errors.length === 0, errors }
 }
 
-export type ValidationResult = { ok: boolean; errors: string[] }
-
-export type PkgDeps = {
-  dependencies?: Record<string, string>
-  peerDependencies?: Record<string, string>
-  peerDependenciesMeta?: Record<string, { optional?: boolean }>
-  devDependencies?: Record<string, string>
-}
-
 /**
  * The set of INTENTIONALLY_BUNDLED packages that are genuinely inlined into a
  * given bundle. A package declared as a peerDependency is provided by the
