@@ -76,7 +76,12 @@ function gitLsFiles(root: string): Promise<string[]> {
     execFile(
       'git',
       ['ls-files', '-z', '--cached', '--others', '--exclude-standard'],
-      { cwd: root, env: gitChildEnv(), maxBuffer: 10 * 1024 * 1024 },
+      {
+        cwd: root,
+        env: gitChildEnv(),
+        maxBuffer: 10 * 1024 * 1024,
+        windowsHide: true,
+      },
       (error, stdout) => {
         if (error) {
           reject(error)

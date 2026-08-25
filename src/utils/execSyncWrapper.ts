@@ -34,5 +34,9 @@ export function execSync_DEPRECATED(
   options?: ExecSyncOptions,
 ): Buffer | string {
   using _ = slowLogging`execSync: ${command.slice(0, 100)}`
-  return nodeExecSync(command, options)
+  // windowsHide defaults to true: execSync runs via cmd.exe, and a console-less
+  // parent (e.g. the detached `--bg` child) would otherwise make Windows
+  // allocate a brand-new visible console window for every call. Callers may
+  // still override it explicitly.
+  return nodeExecSync(command, { windowsHide: true, ...options })
 }

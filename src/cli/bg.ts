@@ -868,6 +868,7 @@ export async function handleBgFlag(args: string[]): Promise<void> {
       detached: true,
       env: childConfig.env,
       stdio: ['ignore', stdoutFd, stderrFd],
+      windowsHide: true,
     })
     child.unref()
   } catch (error) {

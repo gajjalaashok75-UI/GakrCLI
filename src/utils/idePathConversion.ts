@@ -44,6 +44,7 @@ export class WindowsToWSLConverter implements IDEPathConverter {
       const result = execFileSync('wslpath', ['-u', windowsPath], {
         encoding: 'utf8',
         stdio: ['pipe', 'pipe', 'ignore'], // wslpath writes "wslpath: <errortext>" to stderr
+        windowsHide: true,
       }).trim()
 
       return result
@@ -63,6 +64,7 @@ export class WindowsToWSLConverter implements IDEPathConverter {
       const result = execFileSync('wslpath', ['-w', wslPath], {
         encoding: 'utf8',
         stdio: ['pipe', 'pipe', 'ignore'], // wslpath writes "wslpath: <errortext>" to stderr
+        windowsHide: true,
       }).trim()
 
       return result

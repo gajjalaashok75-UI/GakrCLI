@@ -37,7 +37,14 @@ function execFilePromise(
     execFile(
       cmd,
       args,
-      { encoding: 'utf-8', timeout: MDM_SUBPROCESS_TIMEOUT_MS },
+      {
+        encoding: 'utf-8',
+        timeout: MDM_SUBPROCESS_TIMEOUT_MS,
+        // Without this, `reg query` gets a new visible console window whenever
+        // the parent has no console (the detached `--bg` child). This read
+        // fires at module evaluation, so it hit every background session.
+        windowsHide: true,
+      },
       (err, stdout) => {
         // biome-ignore lint/nursery/noFloatingPromises: resolve() is not a floating promise
         resolve({ stdout: stdout ?? '', code: err ? 1 : 0 })
