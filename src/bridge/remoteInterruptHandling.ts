@@ -1,5 +1,7 @@
 import { feature } from 'bun:bundle'
 
+import { requestBridgeInterrupt } from '../utils/replInterruption.js'
+
 export function handleRemoteInterrupt(
   abortController: AbortController | null,
 ): void {
@@ -9,5 +11,7 @@ export function handleRemoteInterrupt(
     pauseProactive()
   }
 
-  abortController?.abort()
+  // Route the abort through the shared REPL interruption helper so the bridge
+  // interrupt is traced with a causal id and a stable 'interrupt' reason.
+  requestBridgeInterrupt({ current: abortController })
 }
