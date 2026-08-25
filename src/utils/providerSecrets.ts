@@ -1,15 +1,17 @@
 import type { ProviderPresetManifestEntry } from '../integrations/descriptors.js'
-import {
-  ANTHROPIC_PROXY_DESCRIPTORS,
-  GATEWAY_DESCRIPTORS,
-  PROVIDER_PRESET_MANIFEST,
-  VENDOR_DESCRIPTORS,
-} from '../integrations/generated/integrationArtifacts.generated.js'
+// Import the preset manifest from the lightweight manifest module (it only
+// imports a compile-time type, so it pulls in zero descriptor data). The heavy
+// descriptor arrays live in integrationArtifacts.generated.js and are required
+// lazily below so that merely importing this module on the bootstrap startup
+// path (bootstrap -> providerConfig -> providerProfile -> providerSecrets) does
+// not eagerly evaluate the full descriptor graph.
+import { PROVIDER_PRESET_MANIFEST } from '../integrations/generated/integrationManifest.generated.js'
 
 // Manually-curated fallback. Kept defensive for legacy and OAuth/token
 // credential paths that either predate descriptors or are accepted by
 // provider-specific auth helpers outside setup.credentialEnvVars.
 const FALLBACK_SECRET_ENV_KEYS: readonly string[] = [
+  'OPENAI_API_KEYS',
   'OPENAI_API_KEY',
   'OPENAI_AUTH_HEADER_VALUE',
   'CODEX_API_KEY',
@@ -19,6 +21,7 @@ const FALLBACK_SECRET_ENV_KEYS: readonly string[] = [
   'MISTRAL_API_KEY',
   'BNKR_API_KEY',
   'XAI_API_KEY',
+  'AIMLAPI_API_KEY',
 ]
 
 function readDescriptorCredentialEnvKeys(): readonly string[] {
@@ -31,10 +34,17 @@ function readDescriptorCredentialEnvKeys(): readonly string[] {
     }
   }
 
+  // Lazy require so the descriptor graph is only evaluated on the first (and,
+  // thanks to getKnownProviderSecretEnvKeys's cache, only) call, rather than at
+  // module import time. Same pattern as the lazy requires in integrations/index.ts.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const artifacts =
+    require('../integrations/generated/integrationArtifacts.generated.js') as typeof import('../integrations/generated/integrationArtifacts.generated.js')
+
   const descriptorsWithSetup = [
-    ...VENDOR_DESCRIPTORS,
-    ...GATEWAY_DESCRIPTORS,
-    ...(ANTHROPIC_PROXY_DESCRIPTORS as readonly { setup?: { credentialEnvVars?: readonly string[] } }[]),
+    ...artifacts.VENDOR_DESCRIPTORS,
+    ...artifacts.GATEWAY_DESCRIPTORS,
+    ...(artifacts.ANTHROPIC_PROXY_DESCRIPTORS as readonly { setup?: { credentialEnvVars?: readonly string[] } }[]),
   ]
   for (const descriptor of descriptorsWithSetup) {
     for (const key of descriptor.setup?.credentialEnvVars ?? []) {
@@ -77,7 +87,19 @@ export type SecretValueSource = Partial<Record<string, string | undefined>>
 export function sanitizeApiKey(
   key: string | null | undefined,
 ): string | undefined {
-  if (!key || key === 'SUA_CHAVE') return undefined
+  if (!key) return undefined
+  const trimmed = key.trim()
+  if (!trimmed) return undefined
+  const normalized = trimmed.toLowerCase()
+  // Keep profile/env sanitization aligned with credentialPool placeholders so
+  // template values like SUA_CHAVE / null / undefined never persist as keys.
+  if (
+    normalized === 'sua_chave' ||
+    normalized === 'null' ||
+    normalized === 'undefined'
+  ) {
+    return undefined
+  }
   return key
 }
 
@@ -90,17 +112,23 @@ const SECRET_PREFIX_PATTERNS = [
   /^AIza/,
   /^ghp_/,
   /^gho_/,
+  /^ghu_/,
   /^ghs_/,
   /^ghr_/,
   /^github_pat_/,
+  /^npm_/,
+  /^glpat-/,
+  /^AKIA/,
+  /^ASIA/,
+  /^xox[baprs]-/,
 ]
 
 const SECRET_PREFIX_SUBSTRING_PATTERN =
-  /(?:sk-ant-|sk-|AIza|ghp_|gho_|ghs_|ghr_|github_pat_)[A-Za-z0-9._-]{8,}/g
+  /(?:sk-ant-|sk-|AIza|ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|npm_|glpat-|AKIA|ASIA|xox[baprs]-)[A-Za-z0-9._-]{8,}/g
 const JWT_SUBSTRING_PATTERN =
   /\b[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g
 
-function looksLikeSecretValue(value: string): boolean {
+export function looksLikeSecretValue(value: string): boolean {
   const trimmed = value.trim()
   if (!trimmed) return false
 
@@ -112,9 +140,9 @@ function looksLikeSecretValue(value: string): boolean {
 }
 
 // Opaque provider tokens are typically long, mixed-case alphanumeric payloads,
-// sometimes with short prefix segments separated by dashes/underscores.
+// sometimes with short prefix segments separated by dashes/underscores/dots.
 function looksLikeOpaqueToken(value: string): boolean {
-  if (value.length < 24) return false
+  if (value.length < 11) return false
   if (value.includes('://')) return false
   if (value.includes(' ')) return false
   if (value.includes('/')) return false
@@ -129,42 +157,97 @@ function looksLikeOpaqueToken(value: string): boolean {
       (ch >= 'A' && ch <= 'Z') ||
       (ch >= '0' && ch <= '9') ||
       ch === '-' ||
-      ch === '_'
+      ch === '_' ||
+      ch === '.'
     if (!isAllowed) return false
   }
 
-  return value
-    .split(/[-_]+/)
-    .some(segment => segment.length >= 16 && hasLowerUpperDigit(segment))
-}
+  const hasLower = /[a-z]/.test(value)
+  const hasUpper = /[A-Z]/.test(value)
+  const hasDigit = /[0-9]/.test(value)
+  const hasSep = /[-_.]/.test(value)
+  const len = value.length
+  const segments = value.split(/[-_.]+/)
 
-function hasLowerUpperDigit(value: string): boolean {
-  let hasLower = false
-  let hasUpper = false
-  let hasDigit = false
+  // Check for common credential keywords using word boundaries on separator-normalized value
+  const containsSecretKeyword = /\b(?:token|secret|pass|password|passphrase|pwd|key|credential|secure|private)\b|\bauth\b/i.test(value.replace(/[-_.]/g, ' '))
 
-  for (const ch of value) {
-    if (ch >= 'a' && ch <= 'z') hasLower = true
-    else if (ch >= 'A' && ch <= 'Z') hasUpper = true
-    else if (ch >= '0' && ch <= '9') hasDigit = true
+  // 1. If it contains a secret keyword and is of moderate length, it's a secret.
+  //    When the value has separators, require at least one segment to be long
+  //    so that compound model names (e.g. "prefix-sk-or-SECRET-VALUE-123-suffix")
+  //    are not falsely flagged.
+  if (containsSecretKeyword && len >= 12) {
+    if (!hasSep) return true
+    if (segments.some(seg => seg.length >= 12)) return true
   }
 
-  return hasLower && hasUpper && hasDigit
+  // 2. pure hex blobs
+  if (len >= 16 && /^[a-f0-9]+$/i.test(value) && hasDigit) return true
+
+  if (!hasSep) {
+    // Single segment (no hyphens/underscores/dots)
+    // Mixed-case with digit >= 11 (e.g. Tr0ub4dour1)
+    if (hasLower && hasUpper && hasDigit && len >= 11) return true
+    // All-caps + digit >= 11 (e.g. TOKENABC123)
+    if (hasUpper && hasDigit && !hasLower && len >= 11) return true
+    // Lowercase + digit >= 16
+    if (hasLower && hasDigit && !hasUpper && len >= 16) return true
+    // Mixed-case without digit >= 24
+    if (hasLower && hasUpper && !hasDigit && len >= 24) return true
+  } else {
+    // Has separators
+    // Mixed-case with digit: require at least one segment with digit to be >= 12
+    if (hasLower && hasUpper && hasDigit) {
+      if (segments.some(seg => seg.length >= 12 && /[0-9]/.test(seg))) return true
+    }
+    // Lowercase with separator: require at least one segment to be >= 16
+    if (!hasUpper && segments.some(seg => seg.length >= 16)) return true
+    // Mixed-case without digit: require at least one segment to be >= 16
+    if (hasLower && hasUpper && !hasDigit && segments.some(seg => seg.length >= 16)) return true
+  }
+
+  return false
+}
+
+// Redaction sources may be full process env objects, so also collect values
+// from generic credential-bearing suffixes. The descriptor registry covers
+// known providers; this defensive path covers custom routes and cloud/database
+// auth variables that can still be surfaced through status/config displays.
+function isSecretEnvKey(
+  key: string,
+  knownKeys: ReadonlySet<string>,
+): boolean {
+  return (
+    knownKeys.has(key) ||
+    key.endsWith('_API_KEY') ||
+    key.endsWith('_AUTH_HEADER_VALUE') ||
+    key.endsWith('_PASSWORD') ||
+    key.endsWith('_SECRET') ||
+    key.endsWith('_SECRET_ACCESS_KEY') ||
+    key.endsWith('_SECRET_KEY') ||
+    key.endsWith('_TOKEN')
+  )
 }
 
 function collectSecretValues(
   sources: Array<SecretValueSource | null | undefined>,
 ): string[] {
-  const knownKeys = getKnownProviderSecretEnvKeys()
+  const knownKeys = new Set(getKnownProviderSecretEnvKeys())
   const values = new Set<string>()
 
   for (const source of sources) {
     if (!source) continue
 
-    for (const key of knownKeys) {
+    for (const key of Object.keys(source)) {
+      if (!isSecretEnvKey(key, knownKeys)) continue
+
       const value = sanitizeApiKey(source[key])?.trim()
       if (value) {
         values.add(value)
+        for (const part of value.split(',')) {
+          const trimmedPart = sanitizeApiKey(part)?.trim()
+          if (trimmedPart) values.add(trimmedPart)
+        }
       }
     }
   }
@@ -264,6 +347,11 @@ function encodedSecretPattern(value: string): RegExp {
   return new RegExp(characterPatterns.join(''), 'g')
 }
 
+/**
+ * Redacts configured secrets when each character is literal or percent-encoded
+ * without decoding unrelated message text. Encoding depth is explicitly
+ * bounded to keep matching predictable on untrusted diagnostics.
+ */
 export function redactEncodedSecretSubstringsForDisplay(
   value: string | null | undefined,
   ...sources: Array<SecretValueSource | null | undefined>
