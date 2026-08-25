@@ -1,11 +1,11 @@
 import type { ConfigScope } from 'src/services/mcp/types.js'
-import type { ZodError, ZodIssue } from 'zod/v4'
+import { type ZodError, type ZodIssue, z } from 'zod/v4'
 import { jsonParse } from '../slowOperations.js'
 import { plural } from '../stringUtils.js'
 import { validatePermissionRule } from './permissionValidation.js'
 import { generateSettingsJSONSchema } from './schemaOutput.js'
 import type { SettingsJson } from './types.js'
-import { SettingsSchema } from './types.js'
+import { ModelPricingDiagnosticSchema, SettingsSchema } from './types.js'
 import { getValidationTip } from './validationTips.js'
 
 /**
@@ -262,4 +262,32 @@ export function filterInvalidPermissionRules(
     })
   }
   return warnings
+}
+
+/**
+ * Surface the raw `modelPricing` value that SettingsSchema silently drops.
+ *
+ * The schema field is `.catch(undefined)` so one malformed pricing map cannot
+ * invalidate unrelated settings in the same file. That makes the drop invisible
+ * to the author, so re-validate the field on its own and report it as a warning
+ * carrying the original value.
+ */
+export function filterInvalidModelPricing(
+  data: unknown,
+  filePath: string,
+): ValidationError[] {
+  if (
+    !data ||
+    typeof data !== 'object' ||
+    !Object.hasOwn(data, 'modelPricing')
+  ) {
+    return []
+  }
+
+  const result = z
+    .object({ modelPricing: ModelPricingDiagnosticSchema })
+    .safeParse({
+      modelPricing: (data as Record<string, unknown>).modelPricing,
+    })
+  return result.success ? [] : formatZodError(result.error, filePath)
 }
