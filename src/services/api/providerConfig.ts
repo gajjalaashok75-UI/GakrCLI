@@ -1479,7 +1479,22 @@ export function resolveRuntimeCodexCredentials(options?: {
 
 export function resolveCodexApiCredentials(
   env: NodeJS.ProcessEnv = process.env,
+  options?: {
+    /**
+     * When false, never fall back to discovering the default
+     * `~/.codex/auth.json`: only credentials from the environment or from an
+     * explicitly-configured `CODEX_AUTH_JSON_PATH` / `CODEX_HOME` are honored.
+     *
+     * Defaults to true — the discovery behavior every existing caller relies
+     * on. Pass false when the result must not depend on whatever happens to be
+     * on the host's disk (tests, and any hermetic resolution path); this is the
+     * same gate `resolveEnvOrAuthJsonCodexCredentials`'s `explicitAuthPathOnly`
+     * already provides, lifted to this entry point.
+     */
+    includeDefaultAuthJson?: boolean
+  },
 ): ResolvedCodexCredentials {
+  const includeDefaultAuthJson = options?.includeDefaultAuthJson ?? true
   const envAccountId =
     asTrimmedString(env.CODEX_ACCOUNT_ID) ??
     asTrimmedString(env.CHATGPT_ACCOUNT_ID)
@@ -1506,8 +1521,9 @@ export function resolveCodexApiCredentials(
     })
 
     const shouldCheckDefaultAuthJson =
-      !resolvedStoredCredentials.accountId ||
-      isCodexRefreshFailureCoolingDown(storedCredentials)
+      includeDefaultAuthJson &&
+      (!resolvedStoredCredentials.accountId ||
+        isCodexRefreshFailureCoolingDown(storedCredentials))
 
     if (!shouldCheckDefaultAuthJson) {
       return resolvedStoredCredentials
@@ -1533,7 +1549,9 @@ export function resolveCodexApiCredentials(
     return resolvedStoredCredentials
   }
 
-  return resolveEnvOrAuthJsonCodexCredentials(env)
+  return resolveEnvOrAuthJsonCodexCredentials(env, {
+    explicitAuthPathOnly: !includeDefaultAuthJson,
+  })
 }
 
 export function getReasoningEffortForModel(model: string): ReasoningEffort | undefined {

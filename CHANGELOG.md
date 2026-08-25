@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **xAI credential resolution and provider validation**: `utils/xaiCredentials.ts` resolves xAI keys from the environment and stored provider profiles, and `utils/providerValidation.ts` checks a provider profile before a request is attempted, so a missing or malformed credential surfaces as a clear message instead of a provider-side auth error.
 - **Ling, Macaron and xAI provider integrations**: New brand, model and vendor descriptors for Ling, Macaron and xAI, plus the APISmart and Concentrate gateways and the GitLawb OpenGateway route, all registered through `integrations/registry.ts` so they appear in provider discovery and the model picker.
 - **Route metadata for provider capability reporting**: `integrations/routeMetadata.ts` describes what each route supports, and the regenerated integration manifest and artifacts pick it up, so compatibility checks read declared capabilities instead of guessing from the route name.
 - **Background task finalization and routing**: `src/cli/bgFinalizer.ts` settles a background task's final state (with fixture and tests) and `bgRouting.ts` decides where its output goes, both now wired into `bg.ts` and `bgRegistry.ts`. Adds `taskNotificationIdentity.ts` so a completion notification can be matched back to the task that produced it instead of relying on ordering.
