@@ -26,6 +26,7 @@ import type { FileHistoryState } from './fileHistory.js'
 import { fileHistoryEnabled, fileHistoryMakeSnapshot } from './fileHistory.js'
 import { gracefulShutdownSync } from './gracefulShutdown.js'
 import { toError } from './errors.js'
+import { requestAbort, traceInterruptionEvent } from './interruptionTrace.js'
 import { logError } from './log.js'
 import { enqueue } from './messageQueueManager.js'
 import { resolveSkillModelOverride } from './model/model.js'
@@ -386,7 +387,18 @@ export async function handlePromptSubmit(
         streamMode:
           params.streamMode as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       })
-      params.abortController?.abort('interrupt')
+      if (params.abortController) {
+        const causalEventId = traceInterruptionEvent('input.submit_interrupt', {
+          source: 'interrupt_on_submit',
+          subsystem: 'prompt_submit',
+        })
+        requestAbort(params.abortController, 'interrupt', {
+          source: 'interrupt_on_submit',
+          subsystem: 'prompt_submit',
+          controllerRole: 'query-root',
+          causalEventId,
+        })
+      }
     }
 
     // Enqueue with string value + raw pastedContents. Images will be resized
