@@ -87,3 +87,13 @@ packages/mcp-chrome-shared
 
 # Remote control changes notes
 remote-control-changes.md
+
+# Provider credentials — never commit
+auth.json
+
+# Local git worktrees created by agent/developer tooling.
+/.worktrees/
+
+# Scratch files
+.tmp
+.tmp-*
