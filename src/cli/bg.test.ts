@@ -6,6 +6,10 @@ import {
   parseBackgroundInvocation,
   parseLogsInvocation,
 } from './bg.js'
+import {
+  BACKGROUND_SESSION_ID_ENV,
+  BACKGROUND_SESSION_LAUNCHER_PID_ENV,
+} from './bgFinalizer.js'
 
 describe('background session CLI parsing', () => {
   it('builds a print-mode child command and preserves provider/model flags', () => {
@@ -256,7 +260,7 @@ describe('background session CLI parsing', () => {
     })
   })
 
-  it('preserves Node exec flags and lets the launcher manage heap relaunch state', () => {
+  it('preserves Node exec flags and keeps the registered launcher PID stable', () => {
     const config = buildBackgroundChildProcessConfig({
       execPath: '/usr/bin/node',
       execArgv: ['--max-old-space-size=8192', '--expose-gc'],
@@ -268,6 +272,8 @@ describe('background session CLI parsing', () => {
       },
       sessionName: 'tests',
       stdoutLogPath: '/tmp/bg.out.log',
+      backgroundSessionId: 'bg-tests',
+      launcherPid: 700,
     })
 
     expect(config.command).toBe('/usr/bin/node')
@@ -278,11 +284,53 @@ describe('background session CLI parsing', () => {
       '--print',
       'fix failing tests',
     ])
-    expect(config.env.GAKR_HEAP_RELAUNCHED).toBeUndefined()
+    expect(config.env.GAKR_HEAP_RELAUNCHED).toBe('1')
     expect(config.env.GAKR_NODE_MAX_OLD_SPACE_SIZE_MB).toBe('8192')
     expect(config.env.GAKR_CODE_SESSION_KIND).toBe('bg')
     expect(config.env.GAKR_CODE_SESSION_LOG).toBe('/tmp/bg.out.log')
     expect(config.env.GAKR_CODE_SESSION_NAME).toBe('tests')
+    expect(config.env[BACKGROUND_SESSION_ID_ENV]).toBe('bg-tests')
+    expect(config.env[BACKGROUND_SESSION_LAUNCHER_PID_ENV]).toBe('700')
+  })
+
+  it('supplies launcher heap flags instead of relaunching to a different PID', () => {
+    const config = buildBackgroundChildProcessConfig({
+      execPath: '/usr/bin/node',
+      execArgv: [],
+      entrypoint: '/repo/bin/gakrcli',
+      childArgs: ['--print', 'fix failing tests'],
+      processEnv: {
+        GAKR_HEAP_RELAUNCHED: '1',
+        GAKR_NODE_MAX_OLD_SPACE_SIZE_MB: '4096',
+      },
+      stdoutLogPath: '/tmp/bg.out.log',
+      backgroundSessionId: 'bg-no-wrapper',
+      launcherPid: 701,
+    })
+
+    expect(config.args.slice(0, 2)).toEqual([
+      '--max-old-space-size=4096',
+      '--expose-gc',
+    ])
+    expect(config.env.GAKR_HEAP_RELAUNCHED).toBe('1')
+  })
+
+  it('prevents the installed launcher from replacing a non-Node registered PID', () => {
+    const config = buildBackgroundChildProcessConfig({
+      execPath: '/usr/local/bin/bun',
+      execArgv: [],
+      entrypoint: '/repo/bin/gakrcli',
+      childArgs: ['--print', 'work'],
+      processEnv: {},
+      stdoutLogPath: '/tmp/bg.out.log',
+      backgroundSessionId: 'bg-bun-owner',
+      launcherPid: 702,
+    })
+
+    expect(config.command).toBe('/usr/local/bin/bun')
+    expect(config.env.GAKR_HEAP_RELAUNCHED).toBe('1')
+    expect(config.env[BACKGROUND_SESSION_ID_ENV]).toBe('bg-bun-owner')
+    expect(config.env[BACKGROUND_SESSION_LAUNCHER_PID_ENV]).toBe('702')
   })
 
   it('escalates process-tree termination and waits for exit before returning', async () => {

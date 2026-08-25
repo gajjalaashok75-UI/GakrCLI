@@ -5,6 +5,7 @@ import { open, readFile, unlink } from 'node:fs/promises'
 import { basename } from 'node:path'
 import treeKill from 'tree-kill'
 import { argsBeforeDelimiter } from '../utils/cliArgs.js'
+import { hasPrintFlag } from '../utils/printFlag.js'
 import { isProcessRunning } from '../utils/genericProcessUtils.js'
 import {
   assertBackgroundSessionNameAvailable,
@@ -16,8 +17,17 @@ import {
   markBackgroundSessionKilled,
   refreshBackgroundSessionStatuses,
   resolveBackgroundSession,
+  getBackgroundSessionProcessLiveness,
+  isTerminalBackgroundSession,
+  verifyBackgroundSessionProcessIdentity,
+  type BackgroundSession,
+  type BackgroundSessionProcessIdentity,
+  type BackgroundSessionProcessIdentityOptions,
 } from './bgRegistry.js'
-import type { BackgroundSession } from './bgRegistry.js'
+import {
+  BACKGROUND_SESSION_ID_ENV,
+  BACKGROUND_SESSION_LAUNCHER_PID_ENV,
+} from './bgRouting.js'
 
 export type ParsedBackgroundInvocation = {
   name?: string
@@ -45,6 +55,8 @@ export type BuildBackgroundChildProcessConfigInput = {
   processEnv: NodeJS.ProcessEnv
   sessionName?: string
   stdoutLogPath: string
+  backgroundSessionId: string
+  launcherPid?: number
 }
 
 type PrResumeSelector = true | string
@@ -56,6 +68,8 @@ export type BuildBackgroundSessionLaunchDeps = {
 }
 
 const HEAP_RELAUNCHED_ENV = 'GAKR_HEAP_RELAUNCHED'
+const HEAP_SIZE_ENV = 'GAKR_NODE_MAX_OLD_SPACE_SIZE_MB'
+const DEFAULT_HEAP_SIZE_MB = 8192
 const DEFAULT_TERM_GRACE_MS = 2_000
 const DEFAULT_KILL_GRACE_MS = 2_000
 const DEFAULT_KILL_POLL_INTERVAL_MS = 100
@@ -91,6 +105,7 @@ const REQUIRED_OPTION_VALUE_FLAGS = new Set([
   '--plugin-dir',
   '--prefill',
   '--provider',
+  '--provider-env-file',
   '--resume-session-at',
   '--rewind-files',
   '--session-id',
@@ -115,13 +130,43 @@ const SPACE_OPTIONAL_VALUE_FLAGS = new Set([
   '-r',
 ])
 
-function safeNodeExecArgvForBackground(execArgv: string[]): string[] {
-  return execArgv.filter(
+function isNodeExecutable(execPath: string): boolean {
+  return /^node(?:\.exe)?$/i.test(basename(execPath))
+}
+
+function hasNodeFlag(args: string[], flag: string): boolean {
+  return args.some(arg => arg === flag || arg.startsWith(`${flag}=`))
+}
+
+function safeNodeExecArgvForBackground(
+  execPath: string,
+  execArgv: string[],
+  processEnv: NodeJS.ProcessEnv,
+): string[] {
+  const safeArgs = execArgv.filter(
     arg =>
       arg === '--expose-gc' ||
       arg.startsWith('--max-old-space-size') ||
       arg.startsWith('--heapsnapshot-near-heap-limit'),
   )
+  if (!isNodeExecutable(execPath)) return safeArgs
+
+  const nodeOptions = (processEnv.NODE_OPTIONS ?? '')
+    .split(/\s+/)
+    .filter(Boolean)
+  const effectiveArgs = [...safeArgs, ...nodeOptions]
+  if (!hasNodeFlag(effectiveArgs, '--max-old-space-size')) {
+    const configuredHeap = Number.parseInt(processEnv[HEAP_SIZE_ENV] ?? '', 10)
+    const heapSize =
+      Number.isSafeInteger(configuredHeap) && configuredHeap > 0
+        ? configuredHeap
+        : DEFAULT_HEAP_SIZE_MB
+    safeArgs.push(`--max-old-space-size=${heapSize}`)
+  }
+  if (!hasNodeFlag(effectiveArgs, '--expose-gc')) {
+    safeArgs.push('--expose-gc')
+  }
+  return safeArgs
 }
 
 export function buildBackgroundChildProcessConfig(
@@ -135,13 +180,24 @@ export function buildBackgroundChildProcessConfig(
     ...(input.sessionName
       ? { GAKR_CODE_SESSION_NAME: input.sessionName }
       : {}),
+    [BACKGROUND_SESSION_ID_ENV]: input.backgroundSessionId,
+    [BACKGROUND_SESSION_LAUNCHER_PID_ENV]: String(
+      input.launcherPid ?? process.pid,
+    ),
   }
-  delete env[HEAP_RELAUNCHED_ENV]
+  // Keep the registered detached PID stable under every runtime. The installed
+  // launcher otherwise relaunches itself before finalizer ownership is checked.
+  // Node-only heap flags are still supplied by safeNodeExecArgvForBackground.
+  env[HEAP_RELAUNCHED_ENV] = '1'
 
   return {
     command: input.execPath,
     args: [
-      ...safeNodeExecArgvForBackground(input.execArgv),
+      ...safeNodeExecArgvForBackground(
+        input.execPath,
+        input.execArgv,
+        input.processEnv,
+      ),
       input.entrypoint,
       ...input.childArgs,
     ],
@@ -240,8 +296,7 @@ function findSessionName(args: string[]): string | undefined {
 }
 
 function hasPrintMode(args: string[]): boolean {
-  const searchable = argsBeforeDelimiter(args)
-  return searchable.includes('--print') || searchable.includes('-p')
+  return hasPrintFlag(args)
 }
 
 function insertBeforePrompt(args: string[], values: string[]): string[] {
@@ -520,6 +575,10 @@ export async function terminateBackgroundProcessTree(
     termGraceMs?: number
     killGraceMs?: number
     pollIntervalMs?: number
+    verifyBeforeSignal?: (
+      pid: number,
+      signal: string | number,
+    ) => Promise<'matches' | 'not-running'>
   },
 ): Promise<void> {
   const isProcessAlive = options?.isProcessAlive ?? isProcessRunning
@@ -528,7 +587,13 @@ export async function terminateBackgroundProcessTree(
   const pollIntervalMs =
     options?.pollIntervalMs ?? DEFAULT_KILL_POLL_INTERVAL_MS
 
-  if (!isProcessAlive(pid)) return
+  if (options?.verifyBeforeSignal) {
+    if ((await options.verifyBeforeSignal(pid, 'SIGTERM')) === 'not-running') {
+      return
+    }
+  } else if (!isProcessAlive(pid)) {
+    return
+  }
   await killTree(pid, 'SIGTERM')
   if (
     await waitForProcessExit(pid, {
@@ -541,6 +606,9 @@ export async function terminateBackgroundProcessTree(
     return
   }
 
+  if ((await options?.verifyBeforeSignal?.(pid, 'SIGKILL')) === 'not-running') {
+    return
+  }
   await killTree(pid, 'SIGKILL')
   if (
     await waitForProcessExit(pid, {
@@ -554,6 +622,138 @@ export async function terminateBackgroundProcessTree(
   }
 
   throw new Error(`Process ${pid} did not exit after SIGKILL`)
+}
+
+type BackgroundSessionTerminationOptions = BackgroundSessionProcessIdentityOptions & {
+  killTree?: (pid: number, signal: string | number) => Promise<void>
+  sleep?: (ms: number) => Promise<void>
+  termGraceMs?: number
+  killGraceMs?: number
+  pollIntervalMs?: number
+  verifySessionIdentity?: (
+    session: BackgroundSession,
+  ) => BackgroundSessionProcessIdentity
+}
+
+function unverifiedProcessError(
+  session: BackgroundSession,
+  reason: string,
+): Error {
+  return new Error(
+    `GakrCLI refused to signal an unverified process for background session ${session.id} (PID ${session.pid}): ${reason}. Re-run \`gakrcli ps\` and retry after confirming the session identity.`,
+  )
+}
+
+export async function terminateBackgroundSessionProcessTree(
+  session: BackgroundSession,
+  options: BackgroundSessionTerminationOptions = {},
+): Promise<void> {
+  const getLiveness = (pid: number) =>
+    getBackgroundSessionProcessLiveness(pid, options)
+
+  await terminateBackgroundProcessTree(session.pid, {
+    ...options,
+    isProcessAlive: pid => getLiveness(pid) !== 'not-running',
+    verifyBeforeSignal: async pid => {
+      const identity = verifySelectedBackgroundSessionIdentity(session, options)
+      if (pid !== session.pid) {
+        throw unverifiedProcessError(
+          session,
+          'the identity check did not correspond to the selected session and PID',
+        )
+      }
+      return authorizeBackgroundSessionSignal(session, identity)
+    },
+  })
+}
+
+function verifySelectedBackgroundSessionIdentity(
+  session: BackgroundSession,
+  options: BackgroundSessionTerminationOptions,
+): BackgroundSessionProcessIdentity {
+  let identity: BackgroundSessionProcessIdentity
+  if (options.verifySessionIdentity) {
+    try {
+      identity = options.verifySessionIdentity(session)
+    } catch {
+      throw unverifiedProcessError(
+        session,
+        'the live process identity could not be read',
+      )
+    }
+  } else {
+    identity = verifyBackgroundSessionProcessIdentity(session, options)
+  }
+  if (
+    identity.backgroundSessionId !== session.id ||
+    identity.pid !== session.pid
+  ) {
+    throw unverifiedProcessError(
+      session,
+      'the identity check did not correspond to the selected session and PID',
+    )
+  }
+  return identity
+}
+
+function authorizeBackgroundSessionSignal(
+  session: BackgroundSession,
+  identity: BackgroundSessionProcessIdentity,
+): 'matches' | 'not-running' {
+  if (identity.state === 'not-running') return 'not-running'
+  if (identity.state === 'matches') return 'matches'
+  throw unverifiedProcessError(
+    session,
+    identity.state === 'mismatch'
+      ? 'the PID now belongs to a different process'
+      : 'the live process identity could not be read',
+  )
+}
+
+export async function killBackgroundSession(
+  session: BackgroundSession,
+  options: BackgroundSessionTerminationOptions & {
+    markKilled?: (session: BackgroundSession) => Promise<BackgroundSession>
+  } = {},
+): Promise<BackgroundSession> {
+  const markKilled =
+    options.markKilled ??
+    (async (selected: BackgroundSession) =>
+      await markBackgroundSessionKilled(selected.id))
+
+  if (isTerminalBackgroundSession(session)) return await markKilled(session)
+
+  const identity = verifySelectedBackgroundSessionIdentity(session, options)
+  if (authorizeBackgroundSessionSignal(session, identity) === 'matches') {
+    await terminateBackgroundSessionProcessTree(session, options)
+  }
+
+  return await markKilled(session)
+}
+
+type ConfirmBackgroundSessionLaunchOptions = {
+  isProcessAlive?: (pid: number) => boolean
+  refreshStatuses?: () => Promise<BackgroundSession[]>
+  resolveSession?: (id: string) => Promise<BackgroundSession>
+}
+
+export async function confirmBackgroundSessionLaunch(
+  session: BackgroundSession,
+  options: ConfirmBackgroundSessionLaunchOptions = {},
+): Promise<BackgroundSession> {
+  if ((options.isProcessAlive ?? isProcessRunning)(session.pid)) return session
+
+  await (options.refreshStatuses ?? refreshBackgroundSessionStatuses)()
+  const resolved = await (
+    options.resolveSession ?? resolveBackgroundSession
+  )(session.id)
+  if (resolved.status === 'stale') {
+    throw new Error(
+      `Background session ${session.id} exited before finalization was installed. ` +
+        `Logs were retained at ${session.stdoutLogPath} and ${session.stderrLogPath}.`,
+    )
+  }
+  return resolved
 }
 
 export async function psHandler(_args: string[]): Promise<void> {
@@ -604,24 +804,15 @@ export async function killHandler(
 
   await refreshBackgroundSessionStatuses()
   const session = await resolveSessionOrExit(target)
-  if (session.status === 'unknown' && isProcessRunning(session.pid)) {
+  const killed = await killBackgroundSession(session).catch(error => {
     fail(
-      `Cannot safely kill background session ${session.id}: process identity could not be verified`,
+      `Failed to kill background session ${session.id}: ${errorMessage(error)}`,
     )
-  }
-  if (session.status === 'running' && isProcessRunning(session.pid)) {
-    await terminateBackgroundProcessTree(session.pid).catch(error => {
-      fail(
-        `Failed to kill background session ${session.id}: ${errorMessage(error)}`,
-      )
-    })
-  }
-
-  const killed = await markBackgroundSessionKilled(session.id)
+  })
   console.log(`Killed background session ${killed.id}.`)
 }
 
-export async function handleBgStart(args: string[]): Promise<void> {
+export async function handleBgFlag(args: string[]): Promise<void> {
   const parsed = parseBackgroundInvocation(args)
   if (!parsed.prompt && !hasResumeSource(parsed.childArgs)) {
     fail('Usage: gakrcli --bg [--name <name>] "<prompt>"')
@@ -654,6 +845,8 @@ export async function handleBgStart(args: string[]): Promise<void> {
     processEnv: process.env,
     sessionName: parsed.name,
     stdoutLogPath: logPaths.stdoutLogPath,
+    backgroundSessionId: id,
+    launcherPid: process.pid,
   })
 
   let stdoutFd: number | undefined
@@ -699,7 +892,7 @@ export async function handleBgStart(args: string[]): Promise<void> {
   }
 
   const command = [childConfig.command, ...childConfig.args]
-  const session = await createBackgroundSession({
+  let session = await createBackgroundSession({
     id,
     name: parsed.name,
     pid: child.pid,
@@ -717,7 +910,15 @@ export async function handleBgStart(args: string[]): Promise<void> {
     fail(errorMessage(error))
   })
 
-  console.log(`Started background session ${session.id}.`)
+  session = await confirmBackgroundSessionLaunch(session).catch(error => {
+    fail(errorMessage(error))
+  })
+
+  console.log(
+    isTerminalBackgroundSession(session)
+      ? `Background session ${session.id} finished with status ${session.status}.`
+      : `Started background session ${session.id}.`,
+  )
   if (session.name) console.log(`Name: ${session.name}`)
   console.log(`PID: ${session.pid}`)
   console.log(`Logs: ${session.stdoutLogPath}`)

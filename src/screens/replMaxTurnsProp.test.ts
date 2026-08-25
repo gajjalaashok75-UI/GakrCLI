@@ -36,11 +36,11 @@ describe('interactive REPL max-turn cap', () => {
 
   test('passes the resolved cap to foreground and background queries', () => {
     const source = readScreen('REPL.tsx')
-    const foreground = objectBody(source, /for await \(const event of query\(\{/)
+    const foreground = objectBody(source, /const queryGenerator = query\(\{/)
     const background = objectBody(source, /queryParams:\s*\{/)
 
-    expect(foreground).toContain('maxTurns,')
-    expect(background).toContain('maxTurns,')
+    expect(foreground).toContain('turnBudget,')
+    expect(background).toContain('turnBudget: backgroundHandoff.budget,')
   })
 
   test('passes the cap from the resume selector into REPL', () => {
