@@ -48,6 +48,17 @@ import {
 } from './services/api/errors.js'
 import { logAntError, logForDebugging } from './utils/debug.js'
 import {
+  getMissingToolResultAbortMessage,
+  getQueryAbortSystemMessage,
+  normalizeAbortReason,
+  shouldCreateUserInterruptionMessage,
+} from './utils/abortReasons.js'
+import {
+  flushInterruptionTrace,
+  getInterruptionSignalAbortEventId,
+  traceInterruptionEvent,
+} from './utils/interruptionTrace.js'
+import {
   createUserMessage,
   createUserInterruptionMessage,
   normalizeMessagesForAPI,
@@ -137,6 +148,68 @@ const taskSummaryModule = feature('BG_SESSIONS')
   ? (require('./utils/taskSummary.js') as typeof import('./utils/taskSummary.js'))
   : null
 /* eslint-enable @typescript-eslint/no-require-imports */
+
+function traceAbortMessageSelection(
+  signal: AbortSignal,
+  phase: 'streaming' | 'tools' | 'post-tools',
+): void {
+  const abortReason = signal.reason
+  const createsUserInterruption =
+    shouldCreateUserInterruptionMessage(abortReason)
+  const createsSystemWarning = getQueryAbortSystemMessage(abortReason) !== null
+  traceInterruptionEvent('query.abort_classified', {
+    subsystem: 'query',
+    phase,
+    reason: abortReason,
+    causalEventId: getInterruptionSignalAbortEventId(signal),
+    outcome: createsUserInterruption
+      ? 'user_interruption'
+      : createsSystemWarning
+        ? 'system_warning'
+        : 'silent',
+  })
+  flushInterruptionTrace('query_abort_classified')
+}
+
+/**
+ * Emit the terminal messages for a tool-phase abort. Shared by the post-tool
+ * abort check and the max-turns re-check so both owners classify the abort the
+ * same way: submit-interrupts stay silent (the queued user message that follows
+ * carries the context), timeouts/backgrounding get a system warning, and only a
+ * genuine user abort produces the "Interrupted by user" message.
+ *
+ * `hasSharedTurnBudget` suppresses the max-turns cap for a backgrounded query —
+ * the continuation that took the budget over emits it instead, so emitting here
+ * too would persist the terminal record twice.
+ */
+function* emitAbortedToolsAfterCleanup(
+  signal: AbortSignal,
+  maxTurns: number | undefined,
+  nextTurnCount: number,
+  hasSharedTurnBudget: boolean,
+): Generator<Message, Extract<Terminal, { reason: 'aborted_tools' }>> {
+  const abortReason = signal.reason
+  traceAbortMessageSelection(signal, 'tools')
+  const abortSystemMessage = getQueryAbortSystemMessage(abortReason)
+  if (abortSystemMessage) {
+    yield createSystemMessage(abortSystemMessage, 'warning')
+  }
+  if (shouldCreateUserInterruptionMessage(abortReason)) {
+    yield createUserInterruptionMessage({ toolUse: true })
+  }
+  if (
+    maxTurns &&
+    nextTurnCount > maxTurns &&
+    (!hasSharedTurnBudget || normalizeAbortReason(abortReason) !== 'background')
+  ) {
+    yield createAttachmentMessage({
+      type: 'max_turns_reached',
+      maxTurns,
+      turnCount: nextTurnCount,
+    })
+  }
+  return { reason: 'aborted_tools' }
+}
 
 function* yieldMissingToolResultBlocks(
   assistantMessages: AssistantMessage[],
@@ -342,6 +415,12 @@ export type QueryParams = {
   /** Called around each outbound model request, including retries. */
   onModelRequestStart?: () => void
   onModelRequestEnd?: () => void
+  /**
+   * Called once provider dispatch is accepted for the current turn. Retries and
+   * fallback attempts reuse the same reservation, so this fires at most once per
+   * turn and never after the query has been aborted.
+   */
+  onProviderDispatchAccepted?: () => void
   systemPrompt: SystemPrompt
   userContext: { [k: string]: string }
   systemContext: { [k: string]: string }
@@ -351,6 +430,11 @@ export type QueryParams = {
   querySource: QuerySource
   maxOutputTokensOverride?: number
   maxTurns?: number
+  /**
+   * Mutable per-prompt budget shared by query() calls that continue the same
+   * logical prompt (for example, when a local REPL query is backgrounded).
+   */
+  turnBudget?: QueryTurnBudget
   skipCacheWrite?: boolean
   autoCompactTracking?: AutoCompactTrackingState
   onAutoCompactTrackingChange?: (
@@ -363,6 +447,17 @@ export type QueryParams = {
   taskBudget?: { total: number }
   agentStepLimit?: AgentStepLimitConfig
   deps?: QueryDeps
+}
+
+export type QueryTurnBudget = {
+  readonly maxTurns: number | undefined
+  turnsStarted: number
+}
+
+export function createQueryTurnBudget(
+  maxTurns?: number,
+): QueryTurnBudget {
+  return { maxTurns, turnsStarted: 0 }
 }
 
 /**
@@ -495,9 +590,14 @@ async function* queryLoop(
     canUseTool,
     fallbackModel,
     querySource,
-    maxTurns,
     skipCacheWrite,
   } = params
+  const maxTurns = params.turnBudget
+    ? params.turnBudget.maxTurns
+    : params.maxTurns
+  const initialTurnCount = params.turnBudget
+    ? params.turnBudget.turnsStarted + 1
+    : 1
   const deps = params.deps ?? productionDeps()
   const ultrathinkEffortForCurrentTurn = hasUltrathinkEffortForCurrentTurn(
     params.messages,
@@ -516,7 +616,7 @@ async function* queryLoop(
     maxOutputTokensRecoveryCount: 0,
     hasAttemptedReactiveCompact: false,
     hasAttemptedProviderFallback: false,
-    turnCount: 1,
+    turnCount: initialTurnCount,
     continuationNudgeCount: 0,
     pendingToolUseSummary: undefined,
     transition: undefined,
@@ -732,17 +832,13 @@ async function* queryLoop(
     let promptWithArc: readonly string[] = systemPrompt
     if (feature('CONVERSATION_ARC')) {
       if (getGlobalConfig().knowledgeGraphEnabled) {
-        const lastMessage = messagesForQuery[messagesForQuery.length - 1]
-        const userQueryText =
-          lastMessage?.type === 'user' &&
-          typeof lastMessage.message.content === 'string'
-            ? lastMessage.message.content
-            : ''
-        const { getArcSummary } = await import('./utils/conversationArc.js')
-        const arcSummary = await getArcSummary(userQueryText)
-        if (arcSummary) {
-          promptWithArc = [...systemPrompt, arcSummary]
-        }
+        const { appendArcToSystemPrompt } = await import(
+          './utils/conversationArc.js'
+        )
+        promptWithArc = await appendArcToSystemPrompt(
+          systemPrompt,
+          messagesForQuery,
+        )
       }
     }
 
@@ -1055,6 +1151,9 @@ async function* queryLoop(
       : toolUseContext.options.tools
 
     let attemptWithFallback = true
+    // Per-turn latch: fallback/streaming retries reuse this turn's reservation
+    // so the shared budget is claimed — and the owner notified — exactly once.
+    let providerDispatchAccepted = false
 
     queryCheckpoint('query_api_loop_start')
     try {
@@ -1064,6 +1163,22 @@ async function* queryLoop(
           let streamingFallbackOccured = false
           queryCheckpoint('query_api_streaming_start')
           params.onModelRequestStart?.()
+          // Claim this turn on the shared per-prompt budget the moment dispatch
+          // is accepted. A handoff owner (see LocalMainSessionTask) reads
+          // turnsStarted to know how much of the cap the previous owner spent,
+          // and commits notification ownership only once the provider is
+          // actually engaged. Skipped when the query is already aborted so a
+          // cancelled prompt never burns a turn.
+          if (
+            !providerDispatchAccepted &&
+            !toolUseContext.abortController.signal.aborted
+          ) {
+            providerDispatchAccepted = true
+            if (params.turnBudget && params.turnBudget.turnsStarted < turnCount) {
+              params.turnBudget.turnsStarted = turnCount
+            }
+            params.onProviderDispatchAccepted?.()
+          }
           try {
             for await (const message of deps.callModel({
             messages: prependUserContext(
@@ -1460,6 +1575,11 @@ async function* queryLoop(
     // executor can generate synthetic tool_result blocks for queued/in-progress tools.
     // Without this, tool_use blocks would lack matching tool_result blocks.
     if (toolUseContext.abortController.signal.aborted) {
+      const streamingAbortReason = toolUseContext.abortController.signal.reason
+      traceAbortMessageSelection(
+        toolUseContext.abortController.signal,
+        'post-tools',
+      )
       if (streamingToolExecutor) {
         // Consume remaining results - executor generates synthetic tool_results for
         // aborted tools since it checks the abort signal in executeTool()
@@ -1471,7 +1591,7 @@ async function* queryLoop(
       } else {
         yield* yieldMissingToolResultBlocks(
           assistantMessages,
-          'Interrupted by user',
+          getMissingToolResultAbortMessage(streamingAbortReason),
         )
       }
       // chicago MCP: auto-unhide + lock release on interrupt. Same cleanup
@@ -1488,9 +1608,16 @@ async function* queryLoop(
         }
       }
 
-      // Skip the interruption message for submit-interrupts — the queued
-      // user message that follows provides sufficient context.
-      if (toolUseContext.abortController.signal.reason !== 'interrupt') {
+      // Classify the abort before picking a message: submit-interrupts stay
+      // silent (the queued user message that follows carries the context),
+      // timeouts/backgrounding get a system warning, and only genuine user
+      // aborts produce the "Interrupted by user" message.
+      const streamingAbortSystemMessage =
+        getQueryAbortSystemMessage(streamingAbortReason)
+      if (streamingAbortSystemMessage) {
+        yield createSystemMessage(streamingAbortSystemMessage, 'warning')
+      }
+      if (shouldCreateUserInterruptionMessage(streamingAbortReason)) {
         yield createUserInterruptionMessage({
           toolUse: false,
         })
@@ -2202,23 +2329,12 @@ async function* queryLoop(
           // Failures are silent — this is dogfooding cleanup, not critical path
         }
       }
-      // Skip the interruption message for submit-interrupts — the queued
-      // user message that follows provides sufficient context.
-      if (toolUseContext.abortController.signal.reason !== 'interrupt') {
-        yield createUserInterruptionMessage({
-          toolUse: true,
-        })
-      }
-      // Check maxTurns before returning when aborted
-      const nextTurnCountOnAbort = turnCount + 1
-      if (maxTurns && nextTurnCountOnAbort > maxTurns) {
-        yield createAttachmentMessage({
-          type: 'max_turns_reached',
-          maxTurns,
-          turnCount: nextTurnCountOnAbort,
-        })
-      }
-      return { reason: 'aborted_tools' }
+      return yield* emitAbortedToolsAfterCleanup(
+        toolUseContext.abortController.signal,
+        maxTurns,
+        turnCount + 1,
+        params.turnBudget !== undefined,
+      )
     }
 
     // If a hook indicated to prevent continuation, stop here
@@ -2538,6 +2654,17 @@ async function* queryLoop(
       nextTurnCount > maxTurns &&
       !nextAgentStepLimit?.summaryRequested
     ) {
+      // Attachment/memory/skill collection above can await after the earlier
+      // post-tool abort check. Re-check immediately before emitting the cap so
+      // a Ctrl+B handoff cannot make both owners persist the terminal record.
+      if (toolUseContext.abortController.signal.aborted) {
+        return yield* emitAbortedToolsAfterCleanup(
+          toolUseContext.abortController.signal,
+          maxTurns,
+          nextTurnCount,
+          params.turnBudget !== undefined,
+        )
+      }
       yield createAttachmentMessage({
         type: 'max_turns_reached',
         maxTurns,

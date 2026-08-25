@@ -9,6 +9,14 @@ import { AsyncLocalStorage } from 'async_hooks'
 import { SQLiteProvider } from './storage/SQLiteProvider.js'
 import { JSONProvider } from './storage/JSONProvider.js'
 import { writeFileSyncAndFlush_DEPRECATED } from './file.js'
+import { getAutoMemPath, isAutoMemoryEnabled } from '../memdir/paths.js'
+import { sanitizeMemoryText } from '../memdir/memorySecurity.js'
+import {
+  clearIndex,
+  getIndexMetaPath,
+  getIndexPath,
+  searchMemdirIndex,
+} from '../memdir/vectorIndex.js'
 
 export interface Entity {
   id: string
@@ -548,6 +556,85 @@ function calculateBM25Score(
   return totalScore
 }
 
+// The vector tier renders at most this many hits, and clips each fact body to
+// this many characters. Both bounds exist because the block lands in the system
+// prompt: an unbounded corpus dump would crowd out the conversation and repeat
+// any leaked credential on every request.
+const MEMDIR_RENDER_LIMIT = 8
+const MEMDIR_BODY_EXCERPT_CHARS = 500
+
+/**
+ * Vector RAG over the memdir auto-memory corpus.
+ *
+ * This is a different corpus from the knowledge graph: memdir holds the durable
+ * `.md` fact files written by extractFactsIntoMemdir, while the graph holds
+ * entities and summaries in SQLite/JSON/Orama. Its hits are therefore additive
+ * to the graph tiers rather than a fallback for them.
+ *
+ * No untrusted-data envelope is emitted here on purpose: appendArcToSystemPrompt
+ * fences the whole composed block exactly once, and nesting fences would teach
+ * the model that the delimiters are ordinary text.
+ */
+async function getMemdirVectorMemory(query: string): Promise<string> {
+  if (!query || !isAutoMemoryEnabled()) return ''
+
+  let memDir: string
+  try {
+    memDir = getAutoMemPath()
+  } catch {
+    // No resolvable project root (e.g. bare mode) — nothing to search.
+    return ''
+  }
+  if (!memDir) return ''
+
+  try {
+    const results = await searchMemdirIndex(query, memDir, 10)
+    if (results.length === 0) return ''
+
+    let body = ''
+    let rendered = 0
+    for (const result of results.slice(0, MEMDIR_RENDER_LIMIT)) {
+      const safeTitle = sanitizeMemoryText(result.title)
+      if (safeTitle.wholeSecret || !safeTitle.text.trim()) continue
+      rendered++
+      body += `- ${safeTitle.text}`
+
+      if (result.description) {
+        const safeDescription = sanitizeMemoryText(result.description)
+        if (!safeDescription.wholeSecret && safeDescription.text.trim()) {
+          body += `: ${safeDescription.text}`
+        }
+      }
+
+      // Decisions and config are frequently recorded only in the fact body, so
+      // a bounded, secret-redacted excerpt is included alongside the title.
+      if (result.content) {
+        const safeBody = sanitizeMemoryText(
+          result.content.trim().slice(0, MEMDIR_BODY_EXCERPT_CHARS),
+        )
+        if (!safeBody.wholeSecret && safeBody.text.trim()) {
+          body += `\n  ${safeBody.text.replace(/\n/g, '\n  ')}`
+        }
+      }
+
+      body += '\n'
+    }
+
+    // Every hit redacted to nothing is indistinguishable from no hits, and a
+    // bare header is prompt noise.
+    if (rendered === 0) return ''
+    return (
+      '\n--- [PERSISTENT PROJECT MEMORY (VECTOR RAG)] ---\n' +
+      body +
+      '------------------------------------------------\n'
+    )
+  } catch {
+    // A missing or corrupt vector index must not take retrieval down with it:
+    // the graph tiers still answer.
+    return ''
+  }
+}
+
 export async function getOrchestratedMemory(query: string): Promise<string> {
   const graph = getGlobalGraph()
   const queryWords = extractKeywords(query)
@@ -555,6 +642,12 @@ export async function getOrchestratedMemory(query: string): Promise<string> {
   if (queryWords.length === 0) {
     return getGlobalGraphSummary()
   }
+
+  // Searched before the graph tiers so a fact the user wrote to memory this
+  // session is present even when the graph tiers also match. Prefixed to every
+  // return path below instead of short-circuiting them, because the two stores
+  // hold different material.
+  const memdirSection = await getMemdirVectorMemory(query)
 
   await initOrama(getFsImplementation().cwd())
 
@@ -594,7 +687,7 @@ export async function getOrchestratedMemory(query: string): Promise<string> {
         }
         output += 'Relevant Technical Entities & History:\n'
         output += hitsContent
-        return output + '------------------------------------------------\n'
+        return memdirSection + output + '------------------------------------------------\n'
       }
     } catch (e) {
       console.error('Orama search failed, falling back to native search:', e)
@@ -663,10 +756,10 @@ export async function getOrchestratedMemory(query: string): Promise<string> {
         output += `- ${s.content}\n`
       }
     }
-    return output + '------------------------------------------------\n'
+    return memdirSection + output + '------------------------------------------------\n'
   }
 
-  return ''
+  return memdirSection
 }
 
 export async function searchGlobalGraph(query: string): Promise<string> {
@@ -739,10 +832,43 @@ export function resetGlobalGraph(): void {
   const oramaPath = getOramaPersistencePath(cwd)
   removePathWithRetry(oramaPath, { requireMissingAfterCleanup: true })
 
+  // The memdir vector index is a derived artifact of the auto-memory corpus, so
+  // it has to be invalidated alongside the graph stores. A stale index would
+  // keep serving hits for facts the user just cleared. Best-effort: an index
+  // that cannot be removed must not fail the graph reset, which has already
+  // succeeded by this point.
+  clearMemdirVectorIndexArtifacts()
+
   oramaDb = null
   projectGraph = null
   // Clear cache for this specific project
   providerCache.delete(projectDir)
+}
+
+/**
+ * Removes the on-disk memdir vector index plus its metadata sidecar and drops
+ * the in-memory index cache. Split out from resetGlobalGraph so /knowledge
+ * clear and the arc reset path share one definition of "index is stale".
+ */
+function clearMemdirVectorIndexArtifacts(): void {
+  let memDir: string
+  try {
+    memDir = getAutoMemPath()
+  } catch {
+    return
+  }
+  if (!memDir) return
+
+  for (const artifactPath of [getIndexPath(memDir), getIndexMetaPath(memDir)]) {
+    if (!existsSync(artifactPath)) continue
+    try {
+      rmSync(artifactPath, { force: true })
+    } catch {
+      // A locked index file is rebuilt on next search; not fatal.
+    }
+  }
+
+  clearIndex(memDir)
 }
 
 export function clearMemoryOnly(): void {
@@ -755,5 +881,15 @@ export function clearMemoryOnly(): void {
   if (providers) {
     providers.sqlite.close()
     providerCache.delete(projectDir)
+  }
+
+  // The memdir vector index is an in-memory Orama instance keyed by memory dir,
+  // so it belongs to the same "drop caches, keep disk" contract as the graph
+  // handles above. Nothing on disk is touched here.
+  try {
+    const memDir = getAutoMemPath()
+    if (memDir) clearIndex(memDir)
+  } catch {
+    // No resolvable memory dir means nothing was cached for it.
   }
 }

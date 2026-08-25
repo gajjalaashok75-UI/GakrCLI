@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, expect, test, mock } from 'bun:test'
-import { setAllowedSettingSources } from '../bootstrap/state.js'
+import {
+  getIsInteractive,
+  setAllowedSettingSources,
+  setIsInteractive,
+} from '../bootstrap/state.js'
 import { SETTING_SOURCES } from '../utils/settings/constants.js'
 import * as realSettings from '../utils/settings/settings.js'
 import { isAutoMemoryEnabled } from './paths.ts'
@@ -12,6 +16,7 @@ import { isAutoMemoryEnabled } from './paths.ts'
 // opt-out can't be silently re-enabled by a narrower scope flipping the key.
 
 let _originalEnv: Record<string, string | undefined> = {}
+let _originalInteractive = false
 
 type SourceFixture = { source: string; settings: Record<string, unknown> }
 let _sources: SourceFixture[] = []
@@ -38,6 +43,10 @@ beforeEach(() => {
   delete process.env.GAKR_CODE_REMOTE_MEMORY_DIR
 
   _sources = []
+  // Auto-memory defaults off for non-interactive (-p) sessions; these tests
+  // exercise the interactive default unless a test overrides this.
+  _originalInteractive = getIsInteractive()
+  setIsInteractive(true)
   // Enable every source so getEnabledSettingSources() returns the full set in
   // priority order; the fixtures decide which of them carry a value.
   setAllowedSettingSources([...SETTING_SOURCES])
@@ -58,6 +67,7 @@ afterEach(() => {
       process.env[k] = v
     }
   }
+  setIsInteractive(_originalInteractive)
   setAllowedSettingSources([...SETTING_SOURCES])
   // mock.restore() undoes spies but NOT mock.module() registrations, which
   // otherwise leak into later test files in the same (serial) run. Re-register
@@ -69,6 +79,40 @@ afterEach(() => {
 test('defaults to enabled when no source sets the key and no env override', () => {
   mockSources([{ source: 'userSettings', settings: {} }])
   expect(isAutoMemoryEnabled()).toBe(true)
+})
+
+test('defaults to disabled in non-interactive (-p) sessions', () => {
+  setIsInteractive(false)
+  mockSources([{ source: 'userSettings', settings: {} }])
+  expect(isAutoMemoryEnabled()).toBe(false)
+})
+
+test('an explicit settings opt-in overrides the non-interactive default', () => {
+  setIsInteractive(false)
+  mockSources([
+    { source: 'userSettings', settings: { memory: { autoWrite: true } } },
+  ])
+  expect(isAutoMemoryEnabled()).toBe(true)
+})
+
+test('a mounted remote memory dir overrides the non-interactive default', () => {
+  // GAKR_CODE_REMOTE_MEMORY_DIR is how CCR signals persistent storage: such a
+  // session is non-interactive but deliberately memory-backed.
+  setIsInteractive(false)
+  process.env.GAKR_CODE_REMOTE = '1'
+  process.env.GAKR_CODE_REMOTE_MEMORY_DIR = '/mnt/memory'
+  mockSources([{ source: 'userSettings', settings: {} }])
+  expect(isAutoMemoryEnabled()).toBe(true)
+})
+
+test('a settings opt-out still wins over the non-interactive escape hatches', () => {
+  setIsInteractive(false)
+  process.env.GAKR_CODE_REMOTE = '1'
+  process.env.GAKR_CODE_REMOTE_MEMORY_DIR = '/mnt/memory'
+  mockSources([
+    { source: 'userSettings', settings: { memory: { autoWrite: false } } },
+  ])
+  expect(isAutoMemoryEnabled()).toBe(false)
 })
 
 test('memory.autoWrite: false opts out via the new discoverable alias (#1326)', () => {

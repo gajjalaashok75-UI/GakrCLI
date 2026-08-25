@@ -44,6 +44,14 @@ import { SYNTHETIC_OUTPUT_TOOL_NAME } from './tools/SyntheticOutputTool/Syntheti
 import type { Message } from './types/message.js'
 import type { OrphanedPermission } from './types/textInputTypes.js'
 import { createAbortController } from './utils/abortController.js'
+import {
+  flushInterruptionTrace,
+  getInterruptionSignalAbortEventId,
+  isInterruptionTraceEnabled,
+  registerInterruptionController,
+  requestAbort,
+  traceInterruptionEvent,
+} from './utils/interruptionTrace.js'
 import { validateArrayOf, assertNonEmptyString, assertObject, assertFunction } from './utils/validation.js'
 import { invalidateRemovedToolSchemas } from './utils/toolSchemaCache.js'
 import type { AttributionState } from './utils/commitAttribution.js'
@@ -204,12 +212,66 @@ export class QueryEngine {
     this.config = config
     this.mutableMessages = config.initialMessages ?? []
     this.abortController = config.abortController ?? createAbortController()
+    registerInterruptionController(this.abortController, {
+      subsystem: 'query_engine',
+      controllerRole: 'query-root',
+    })
     this.permissionDenials = []
     this.readFileState = config.readFileCache
     this.totalUsage = EMPTY_USAGE
   }
 
   async *submitMessage(
+    prompt: string | ContentBlockParam[],
+    options?: { uuid?: string; isMeta?: boolean },
+  ): AsyncGenerator<SDKMessage, void, unknown> {
+    const queryId = isInterruptionTraceEnabled() ? randomUUID() : undefined
+    registerInterruptionController(this.abortController, {
+      subsystem: 'query_engine',
+      controllerRole: 'query-root',
+      queryId,
+      querySource: 'sdk',
+    }, { refreshQueryContext: true })
+    const startedEventId = traceInterruptionEvent('query.started', {
+      subsystem: 'query_engine',
+      phase: 'running',
+      queryId,
+      querySource: 'sdk',
+      controllerRole: 'query-root',
+    })
+    let outcome = 'consumer_closed'
+    let terminalError: unknown
+    try {
+      yield* this.submitMessageImpl(prompt, options)
+      outcome = this.abortController.signal.aborted ? 'aborted' : 'completed'
+    } catch (error) {
+      terminalError = error
+      outcome = this.abortController.signal.aborted ? 'aborted' : 'failed'
+      throw error
+    } finally {
+      const terminalOutcome = this.abortController.signal.aborted
+        ? 'aborted'
+        : outcome
+      traceInterruptionEvent('query.terminal', {
+        subsystem: 'query_engine',
+        phase: terminalOutcome,
+        queryId,
+        querySource: 'sdk',
+        controllerRole: 'query-root',
+        outcome: terminalOutcome,
+        reason: this.abortController.signal.reason,
+        error: terminalError,
+        causalEventId: terminalOutcome === 'aborted'
+          ? getInterruptionSignalAbortEventId(this.abortController.signal)
+          : startedEventId,
+      })
+      if (this.abortController.signal.aborted) {
+        flushInterruptionTrace('query_terminal')
+      }
+    }
+  }
+
+  private async *submitMessageImpl(
     prompt: string | ContentBlockParam[],
     options?: { uuid?: string; isMeta?: boolean },
   ): AsyncGenerator<SDKMessage, void, unknown> {
@@ -948,7 +1010,7 @@ export class QueryEngine {
               // applySnipRemovals prune them in loadTranscriptFile(). Without
               // this, --resume/restart rebuilds the un-snipped history and the
               // context reduction is lost. Mirror the boundary into the local
-              // `messages` recording copy — like the compact_boundary path —
+// `messages` recording copy — like the compact_boundary path —
               // so later writes and the parent chain stay consistent.
               messages.push(message)
               if (persistSession) {
@@ -1202,8 +1264,12 @@ export class QueryEngine {
     }
   }
 
-  interrupt(): void {
-    this.abortController.abort('interrupt')
+  interrupt(source = 'programmatic_interrupt'): void {
+    requestAbort(this.abortController, undefined, {
+      source,
+      subsystem: 'query_engine',
+      controllerRole: 'query-root',
+    })
   }
 
   getMessages(): readonly Message[] {
