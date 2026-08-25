@@ -26,7 +26,7 @@ export async function call(
     try {
       if (sub === 'bg') {
         const bg = await import('../../cli/bg.js');
-        await bg.handleBgStart(parts.slice(1));
+        await bg.handleBgFlag(parts.slice(1));
       } else {
         const { daemonMain } = await import('../../daemon/main.js');
         await daemonMain([sub, ...parts.slice(1)]);
