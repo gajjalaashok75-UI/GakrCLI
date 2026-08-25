@@ -9,6 +9,14 @@ import { findToolByName, type Tools, type ToolUseContext } from '../../Tool.js'
 import { BASH_TOOL_NAME } from '../../tools/BashTool/toolName.js'
 import type { AssistantMessage, Message } from '../../types/message.js'
 import { createChildAbortController } from '../../utils/abortController.js'
+import {
+  getMissingToolResultAbortMessage,
+  shouldCreateUserInterruptionMessage,
+} from '../../utils/abortReasons.js'
+import {
+  getInterruptionSignalAbortEventId,
+  requestAbort,
+} from '../../utils/interruptionTrace.js'
 import { runToolUse } from './toolExecution.js'
 import { createToolBatchSpan, endToolBatchSpan } from '../langfuse/index.js'
 import type { LangfuseSpan } from '../langfuse/index.js'
@@ -33,6 +41,10 @@ type TrackedTool = {
   contextModifiers?: Array<(context: ToolUseContext) => ToolUseContext>
 }
 
+type SyntheticErrorReason =
+  | { reason: 'sibling_error' | 'streaming_fallback' | 'user_interrupted' }
+  | { reason: 'parent_abort'; abortReason: unknown }
+
 /**
  * Executes tools as they stream in with concurrency control.
  * - Concurrent-safe tools can execute in parallel with other concurrent-safe tools
@@ -44,8 +56,12 @@ export class StreamingToolExecutor {
   private toolUseContext: ToolUseContext
   private hasErrored = false
   private erroredToolDescription = ''
+  // Child of toolUseContext.abortController. Fires when a Bash tool errors
+  // so sibling subprocesses die immediately instead of running to completion.
+  // Aborting this does NOT abort the parent — query.ts won't end the turn.
   private siblingAbortController: AbortController
   private discarded = false
+  // Signal to wake up getRemainingResults when progress is available
   private progressAvailableResolve?: () => void
   private turnSpan: LangfuseSpan | null = null
 
@@ -57,6 +73,11 @@ export class StreamingToolExecutor {
     this.toolUseContext = toolUseContext
     this.siblingAbortController = createChildAbortController(
       toolUseContext.abortController,
+      undefined,
+      {
+        subsystem: 'streaming_tool_executor',
+        controllerRole: 'sibling-tools',
+      },
     )
   }
 
@@ -76,13 +97,27 @@ discard(): void {
   this.discarded = true
 
   // Abort all running tool executions.
-  this.siblingAbortController.abort('streaming_fallback')
+  requestAbort(this.siblingAbortController, 'streaming_fallback', {
+    source: 'streaming_fallback',
+    subsystem: 'streaming_tool_executor',
+    controllerRole: 'sibling-tools',
+  })
+
+  // Only end lifecycle entries the guard still tracks — a tool that already
+  // reached a terminal state must not be double-ended.
+  const activeLifecycleToolUseIds = new Set(
+    this.toolUseContext.queryLifecycle
+      ?.snapshot()
+      .toolUses.map(toolUse => toolUse.toolUseId) ?? [],
+  )
 
   // Mark all non-terminal tools as completed/discarded.
   for (const tool of this.tools) {
     if (tool.status === 'yielded') continue
 
-    this.toolUseContext.queryLifecycle?.endToolUse(tool.id)
+    if (activeLifecycleToolUseIds.has(tool.id)) {
+      this.toolUseContext.queryLifecycle?.endToolUse(tool.id)
+    }
     markToolUseAsComplete(this.toolUseContext, tool.id)
 
     // Drop buffered progress updates.
@@ -207,9 +242,10 @@ discard(): void {
 
   private createSyntheticErrorMessage(
     toolUseId: string,
-    reason: 'sibling_error' | 'user_interrupted' | 'streaming_fallback',
+    syntheticReason: SyntheticErrorReason,
     assistantMessage: AssistantMessage,
   ): Message {
+    const { reason } = syntheticReason
     // For user interruptions (ESC to reject), use REJECT_MESSAGE so the UI shows
     // "User rejected edit" instead of "Error editing file"
     if (reason === 'user_interrupted') {
@@ -223,6 +259,23 @@ discard(): void {
           },
         ],
         toolUseResult: 'User rejected tool use',
+        sourceToolAssistantUUID: assistantMessage.uuid,
+      })
+    }
+    if (reason === 'parent_abort') {
+      const abortMessage = getMissingToolResultAbortMessage(
+        syntheticReason.abortReason,
+      )
+      return createUserMessage({
+        content: [
+          {
+            type: 'tool_result',
+            content: withMemoryCorrectionHint(abortMessage),
+            is_error: true,
+            tool_use_id: toolUseId,
+          },
+        ],
+        toolUseResult: abortMessage,
         sourceToolAssistantUUID: assistantMessage.uuid,
       })
     }
@@ -262,14 +315,12 @@ discard(): void {
   /**
    * Determine why a tool should be cancelled.
    */
-  private getAbortReason(
-    tool: TrackedTool,
-  ): 'sibling_error' | 'user_interrupted' | 'streaming_fallback' | null {
+  private getAbortReason(tool: TrackedTool): SyntheticErrorReason | null {
     if (this.discarded) {
-      return 'streaming_fallback'
+      return { reason: 'streaming_fallback' }
     }
     if (this.hasErrored) {
-      return 'sibling_error'
+      return { reason: 'sibling_error' }
     }
     if (this.toolUseContext.abortController.signal.aborted) {
       // 'interrupt' means the user typed a new message while tools were
@@ -277,10 +328,20 @@ discard(): void {
       // 'block' tools shouldn't reach here (abort isn't fired).
       if (this.toolUseContext.abortController.signal.reason === 'interrupt') {
         return this.getToolInterruptBehavior(tool) === 'cancel'
-          ? 'user_interrupted'
+          ? { reason: 'user_interrupted' }
           : null
       }
-      return 'user_interrupted'
+      if (
+        shouldCreateUserInterruptionMessage(
+          this.toolUseContext.abortController.signal.reason,
+        )
+      ) {
+        return { reason: 'user_interrupted' }
+      }
+      return {
+        reason: 'parent_abort',
+        abortReason: this.toolUseContext.abortController.signal.reason,
+      }
     }
     return null
   }
@@ -355,6 +416,11 @@ discard(): void {
       // sends REJECT_MESSAGE to the model instead of aborting (#21056 regression).
       const toolAbortController = createChildAbortController(
         this.siblingAbortController,
+        undefined,
+        {
+          subsystem: 'streaming_tool_executor',
+          controllerRole: 'tool',
+        },
       )
       toolAbortController.signal.addEventListener(
         'abort',
@@ -364,8 +430,17 @@ discard(): void {
             !this.toolUseContext.abortController.signal.aborted &&
             !this.discarded
           ) {
-            this.toolUseContext.abortController.abort(
+            requestAbort(
+              this.toolUseContext.abortController,
               toolAbortController.signal.reason,
+              {
+                source: 'tool_abort_propagation',
+                causalEventId: getInterruptionSignalAbortEventId(
+                  toolAbortController.signal,
+                ),
+                subsystem: 'streaming_tool_executor',
+                controllerRole: 'query-root',
+              },
             )
           }
         },
@@ -414,7 +489,11 @@ discard(): void {
           if (tool.block.name === BASH_TOOL_NAME) {
             this.hasErrored = true
             this.erroredToolDescription = this.getToolDescription(tool)
-            this.siblingAbortController.abort('sibling_error')
+            requestAbort(this.siblingAbortController, 'sibling_error', {
+              source: 'sibling_error',
+              subsystem: 'streaming_tool_executor',
+              controllerRole: 'sibling-tools',
+            })
           }
         }
 

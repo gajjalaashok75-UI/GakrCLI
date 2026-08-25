@@ -5,6 +5,7 @@ import { getReplBridgeHandle } from '../../bridge/replBridgeHandle.js'
 import type { Tool, ToolUseContext } from '../../Tool.js'
 import { buildTool, type ToolDef } from '../../Tool.js'
 import { findTeammateTaskByAgentId } from '../../tasks/InProcessTeammateTask/InProcessTeammateTask.js'
+import { abortApprovedInProcessTeammate } from './shutdownInterruptionTrace.js'
 import {
   isLocalAgentTask,
   queuePendingMessage,
@@ -387,7 +388,9 @@ async function handleShutdownApproval(
       const appState = context.getAppState()
       const task = findTeammateTaskByAgentId(agentId, appState.tasks)
       if (task?.abortController) {
-        task.abortController.abort()
+        abortApprovedInProcessTeammate(task.abortController, {
+          agentId,
+        })
         logForDebugging(
           `[SendMessageTool] Aborted controller for in-process teammate ${agentName}`,
         )
@@ -405,7 +408,9 @@ async function handleShutdownApproval(
         logForDebugging(
           `[SendMessageTool] Fallback: Found in-process task for ${agentName} via AppState, aborting`,
         )
-        task.abortController.abort()
+        abortApprovedInProcessTeammate(task.abortController, {
+          agentId,
+        })
 
         return {
           data: {

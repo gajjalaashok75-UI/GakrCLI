@@ -55,6 +55,7 @@ import { spawnTeammate } from '../shared/spawnMultiAgent.js';
 import { setAgentColor } from './agentColorManager.js';
 import { agentToolResultSchema, classifyHandoffIfNeeded, emitTaskProgress, extractPartialResult, finalizeAgentTool, getLastToolUseName, runAsyncAgentLifecycle } from './agentToolUtils.js';
 import { GENERAL_PURPOSE_AGENT } from './built-in/generalPurposeAgent.js';
+import { isBuiltInAgentType } from './builtInAgents.js';
 import { AGENT_TOOL_NAME, LEGACY_AGENT_TOOL_NAME, ONE_SHOT_BUILTIN_AGENT_TYPES } from './constants.js';
 import { buildForkedMessages, buildWorktreeNotice, FORK_AGENT, isForkSubagentEnabled, isInForkChild } from './forkSubagent.js';
 import type { AgentDefinition } from './loadAgentsDir.js';
@@ -321,6 +322,22 @@ export const AgentTool = buildTool({
     if (teamName && name) {
       // Set agent definition color for grouped UI display before spawning
       const agentDef = subagent_type ? toolUseContext.options.agentDefinitions.activeAgents.find(a => a.agentType === subagent_type) : undefined;
+
+      // Built-in agents are single-turn subagents with no inbox: spawning one as a
+      // teammate lands it in the roster where the lead can SendMessage to it and
+      // never get a reply. Reject by definition source when the type is active, and
+      // fall back to the static type list when it is not (feature-gated agents, or
+      // an SDK session that disabled built-ins) so the error is the same either way.
+      if (subagent_type) {
+        if (agentDef) {
+          if (agentDef.source === 'built-in') {
+            throw new Error(`Built-in agent type '${subagent_type}' cannot be spawned as a teammate. Please omit name and team_name to use it as a standard subagent.`);
+          }
+        } else if (isBuiltInAgentType(subagent_type)) {
+          throw new Error(`Built-in agent type '${subagent_type}' cannot be spawned as a teammate. Please omit name and team_name to use it as a standard subagent.`);
+        }
+      }
+
       if (agentDef?.color) {
         setAgentColor(subagent_type!, agentDef.color);
       }

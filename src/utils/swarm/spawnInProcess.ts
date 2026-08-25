@@ -28,6 +28,10 @@ import { markAutonomyRunFailed } from '../autonomyRuns.js'
 import { formatAgentId } from '../agentId.js'
 import { registerCleanup } from '../cleanupRegistry.js'
 import { logForDebugging } from '../debug.js'
+import {
+  registerInterruptionController,
+  requestAbort,
+} from '../interruptionTrace.js'
 import { emitTaskTerminatedSdk } from '../sdkEventQueue.js'
 import { evictTaskOutput } from '../task/diskOutput.js'
 import {
@@ -44,6 +48,11 @@ import {
 import { removeMemberByAgentId } from './teamHelpers.js'
 
 type SetAppStateFn = (updater: (prev: AppState) => AppState) => void
+
+export type InProcessTeammateKillTrace = {
+  source: string
+  causalEventId?: string
+}
 
 /**
  * Minimal context required for spawning an in-process teammate.
@@ -121,6 +130,11 @@ export async function spawnInProcessTeammate(
     // Create independent AbortController for this teammate
     // Teammates should not be aborted when the leader's query is interrupted
     const abortController = createAbortController()
+    registerInterruptionController(abortController, {
+      subsystem: 'in_process_teammate',
+      controllerRole: 'subagent-lifecycle',
+      subagentId: agentId,
+    })
 
     // Get parent session ID for transcript correlation
     const parentSessionId = getSessionId()
@@ -183,7 +197,12 @@ export async function spawnInProcessTeammate(
     // Register cleanup handler for graceful shutdown
     const unregisterCleanup = registerCleanup(async () => {
       logForDebugging(`[spawnInProcessTeammate] Cleanup called for ${agentId}`)
-      abortController.abort()
+      requestAbort(abortController, undefined, {
+        source: 'graceful_shutdown',
+        subsystem: 'in_process_teammate',
+        controllerRole: 'subagent-lifecycle',
+        subagentId: agentId,
+      })
       // Task state will be updated by the execution loop when it detects abort
     })
     taskState.unregisterCleanup = unregisterCleanup
@@ -228,6 +247,7 @@ export async function spawnInProcessTeammate(
 export function killInProcessTeammate(
   taskId: string,
   setAppState: SetAppStateFn,
+  trace: InProcessTeammateKillTrace = { source: 'task_stop' },
 ): boolean {
   let killed = false
   let teamName: string | null = null
@@ -269,7 +289,15 @@ export function killInProcessTeammate(
     )
 
     // Abort the controller to stop execution
-    teammateTask.abortController?.abort()
+    if (teammateTask.abortController) {
+      requestAbort(teammateTask.abortController, undefined, {
+        source: trace.source,
+        subsystem: 'in_process_teammate',
+        controllerRole: 'subagent-lifecycle',
+        subagentId: teammateTask.identity.agentId,
+        causalEventId: trace.causalEventId,
+      })
+    }
 
     // Call cleanup handler
     teammateTask.unregisterCleanup?.()
