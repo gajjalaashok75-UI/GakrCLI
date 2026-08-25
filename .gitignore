@@ -5,6 +5,7 @@ bun.lockb
 package/
 terminal-log.md
 cook/
+FEATURE-BUGS.md
 dist-d/
 .scout-it/
 COOK.md
