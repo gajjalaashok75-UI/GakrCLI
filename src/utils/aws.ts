@@ -1,4 +1,5 @@
 import { logForDebugging } from './debug.js'
+import { importOptionalRuntimeModule } from './optionalRuntimeModule.js'
 
 /** AWS short-term credentials format. */
 export type AwsCredentials = {
@@ -48,9 +49,15 @@ export function isValidAwsStsOutput(obj: unknown): obj is AwsStsOutput {
 
 /** Throws if STS caller identity cannot be retrieved. */
 export async function checkStsCallerIdentity(): Promise<void> {
-  const { STSClient, GetCallerIdentityCommand } = await import(
-    '@aws-sdk/client-sts'
-  )
+  // @aws-sdk/client-sts is an optionalDependency (only the AWS/Bedrock auth
+  // paths need it), so route it through importOptionalRuntimeModule: an install
+  // run with --omit=optional then reports which package to install instead of
+  // failing with a bare ERR_MODULE_NOT_FOUND.
+  const { STSClient, GetCallerIdentityCommand } =
+    await importOptionalRuntimeModule<typeof import('@aws-sdk/client-sts')>(
+      '@aws-sdk/client-sts',
+      'AWS credential verification',
+    )
   await new STSClient().send(new GetCallerIdentityCommand({}))
 }
 

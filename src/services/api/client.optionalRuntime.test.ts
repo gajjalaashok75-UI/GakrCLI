@@ -7,6 +7,14 @@ import * as optionalRuntimeModule from '../../utils/optionalRuntimeModule.js'
 
 const originalEnv = { ...process.env }
 
+// Each test deliberately re-imports client.js with a cache-busting query so it
+// gets a virgin module to inject the optional-runtime importer into. That means
+// paying the full client.ts import graph per test (~6s), which overruns bun's
+// 5s default and made this file pass alone but time out in a multi-file run.
+// The fresh import is the mechanism under test, so raise the budget rather than
+// working around it.
+const FRESH_IMPORT_TIMEOUT_MS = 30_000
+
 type OptionalImport = typeof optionalRuntimeModule.importOptionalRuntimeModule
 
 function friendlyMissing(specifier: string, feature: string): Error {
@@ -70,7 +78,7 @@ test('Bedrock reports the missing provider SDK through the optional runtime help
     '@anthropic-ai/bedrock-sdk',
     'AWS Bedrock',
   )
-})
+}, FRESH_IMPORT_TIMEOUT_MS)
 
 test('Foundry skip-auth does not load Azure identity', async () => {
   process.env.GAKR_CODE_USE_FOUNDRY = '1'
@@ -102,7 +110,7 @@ test('Foundry skip-auth does not load Azure identity', async () => {
     '@azure/identity',
     'Azure Foundry authentication',
   )
-})
+}, FRESH_IMPORT_TIMEOUT_MS)
 
 test('Foundry real-auth branch reports missing Azure identity through the optional runtime helper', async () => {
   process.env.GAKR_CODE_USE_FOUNDRY = '1'
@@ -127,7 +135,7 @@ test('Foundry real-auth branch reports missing Azure identity through the option
     '@azure/identity',
     'Azure Foundry authentication',
   )
-})
+}, FRESH_IMPORT_TIMEOUT_MS)
 
 test('Vertex skip-auth branch does not load google-auth-library', async () => {
   process.env.GAKR_CODE_USE_VERTEX = '1'
@@ -145,4 +153,4 @@ test('Vertex skip-auth branch does not load google-auth-library', async () => {
     'google-auth-library',
     'Vertex AI (GCP) authentication',
   )
-})
+}, FRESH_IMPORT_TIMEOUT_MS)

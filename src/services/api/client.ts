@@ -55,6 +55,7 @@ import {
   shouldUseFirstPartyAnthropicAuthForProvider,
   type ProviderOverride,
 } from './authRouting.js'
+import { createBedrockClientClass } from './bedrockClient.js'
 import { AnthropicVertex } from './vertexClient.js'
 import { importOptionalRuntimeModule } from '../../utils/optionalRuntimeModule.js'
 
@@ -696,8 +697,12 @@ export async function getAnthropicClient({
       }
     }
     // we have always been lying about the return type - this doesn't support batching or models
+    // Patched subclass, not AnthropicBedrock itself: the SDK re-plants the
+    // anthropic-beta header into the request body as `anthropic_beta`, which
+    // Bedrock rejects with a 400 "invalid beta flag". See bedrockClient.ts.
+    const BedrockClient = createBedrockClientClass(AnthropicBedrock)
     // Cast: the overloads demand a statically-known credential shape; ours is runtime-conditional.
-    return new AnthropicBedrock(
+    return new BedrockClient(
       bedrockArgs as ConstructorParameters<typeof AnthropicBedrock>[0],
     ) as unknown as Anthropic
   }
