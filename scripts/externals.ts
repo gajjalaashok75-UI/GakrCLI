@@ -108,8 +108,37 @@ export const OPTIONAL_RUNTIME_EXTERNALS: string[] = [
   '@aws-sdk/client-bedrock-runtime',
   '@aws-sdk/client-sts',
   '@aws-sdk/credential-providers',
-  '@aws-sdk/credential-providers',
   '@azure/identity',
+  // Loaded through the `new Function` indirection in
+  // src/utils/optionalRuntimeModule.ts (see RUNTIME_INDIRECTION_ONLY_EXTERNALS
+  // below for the two that must stay OUT of the bundle externals).
+  '@anthropic-ai/bedrock-sdk',
+  '@anthropic-ai/foundry-sdk',
+  // Vertex/Gemini auth: importOptionalRuntimeModule in src/services/api/client.ts
+  // and src/utils/geminiAuth.ts.
+  'google-auth-library',
+]
+
+/**
+ * The subset of OPTIONAL_RUNTIME_EXTERNALS that source code reaches ONLY through
+ * the `new Function('return import(specifier)')` indirection in
+ * src/utils/optionalRuntimeModule.ts — never with a statically visible
+ * `import`/`import()`.
+ *
+ * These must stay OUT of CLI_EXTERNALS/SDK_EXTERNALS. Listing one as external
+ * would tell esbuild the specifier exists, re-exposing the package's own static
+ * imports (@anthropic-ai/bedrock-sdk statically imports
+ * @aws-sdk/client-bedrock-runtime) and hoisting that AWS tree into the bundle —
+ * the exact outcome the indirection exists to prevent.
+ *
+ * They are also the reason validate-externals.ts needs a third exemption
+ * category: they are shipped `dependencies` that are legitimately neither
+ * external nor bundled, so the dependency-coverage check would otherwise report
+ * them missing.
+ */
+export const RUNTIME_INDIRECTION_ONLY_EXTERNALS: string[] = [
+  '@anthropic-ai/bedrock-sdk',
+  '@anthropic-ai/foundry-sdk',
 ]
 
 // Computed full lists
@@ -120,9 +149,10 @@ export const SDK_EXTERNALS: string[] = [...COMMON_EXTERNALS, ...SDK_ONLY_EXTERNA
 // These are small utilities that are fine to inline into the output bundle.
 export const INTENTIONALLY_BUNDLED: string[] = [
   // Test utilities (bundled, not external)
-  // Anthropic provider variants (bundled, not the main SDK)
-  '@anthropic-ai/bedrock-sdk',
-  '@anthropic-ai/foundry-sdk',
+  // Anthropic provider variants (bundled, not the main SDK).
+  // NOTE: @anthropic-ai/bedrock-sdk and @anthropic-ai/foundry-sdk are NOT here —
+  // they are loaded through the runtime-import indirection, so they are neither
+  // bundled nor external. See RUNTIME_INDIRECTION_ONLY_EXTERNALS.
   '@anthropic-ai/sandbox-runtime',
   '@anthropic-ai/vertex-sdk',
   // CLI / TUI utilities

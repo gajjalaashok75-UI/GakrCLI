@@ -298,6 +298,10 @@ function checkTarballContents(tarballPath: string): void {
   const required = [
     'package/package.json',
     'package/bin/gakrcli',
+    // bin/gakrcli imports this at module scope, so a tarball that drops it
+    // fails at startup with an unresolved import — the exact class of break
+    // this script exists to catch.
+    'package/bin/node-compile-cache.mjs',
     'package/dist/cli.mjs',
     'package/dist/sdk.mjs',
     'package/src/entrypoints/sdk.d.ts',
