@@ -4,7 +4,7 @@
 
 # GakrCLI
 
-**Version 0.5.7**
+**Version 0.6.0**
 
 Any model. Every tool. One terminal-first coding agent.
 
@@ -129,9 +129,15 @@ Advanced and source-build guides:
 | OpenCode Go | `/provider` or env vars | $10/mo subscription for open models (13 models); uses `OPENCODE_API_KEY` via `https://opencode.ai/zen/go/v1`; shared key with OpenCode Zen |
 | Xiaomi MiMo | `/provider` or env vars | OpenAI-compatible API at `https://mimo.mi.com`; uses `MIMO_API_KEY` and defaults to `mimo-v2.5-pro` |
 | NEAR AI | `/provider` or env vars | Unified gateway (GakrCLI, GPT, Gemini + TEE open models); uses `NEARAI_API_KEY` at `https://cloud-api.near.ai/v1` |
+| xAI | `/provider` or env vars | Direct Grok route at `https://api.x.ai/v1`; uses `XAI_API_KEY` and filters non-chat catalog entries out of discovery |
+| ApiSmart | `/provider` or env vars | OpenAI-compatible gateway at `https://gw.apismart.ai/v1`; uses `APISMART_API_KEY` with a curated multi-vendor catalog (DeepSeek, Kimi, GLM, Qwen) |
+| Concentrate | `/provider` or env vars | OpenAI-compatible gateway at `https://api.concentrate.ai/v1`; uses `CONCENTRATE_API_KEY`, override the endpoint with `CONCENTRATE_BASE_URL` |
+| Gitlawb Opengateway | `/provider` or env vars | Smart gateway at `https://opengateway.gitlawb.com/v1`; mint a free key at https://gitlawb.com/opengateway/keys and set `OPENGATEWAY_API_KEY` |
 | Ollama | `/provider` or env vars | Local inference with no API key |
 | Atomic Chat | `/provider`, env vars, or `bun run dev:atomic-chat` | Local Model Provider; auto-detects loaded models |
 | Bedrock / Vertex / Foundry | env vars | Anthropic-family cloud routes; Vertex is for GakrCLI on Vertex AI, not arbitrary Model Garden models |
+
+Ling (`inclusionai/ling-3.0-*`) and Macaron (`mindai/macaron-v1-*`) ship as brand and model descriptors rather than standalone routes, so their models show up in provider discovery and the `/model` picker on any OpenAI-compatible gateway that serves them.
 
 ## What Works
 
@@ -141,6 +147,13 @@ Advanced and source-build guides:
 - **Images**: URL and base64 image inputs for providers that support vision
 - **Provider profiles**: Guided setup plus saved user-level provider profile support
 - **Local and remote model backends**: Cloud APIs, local servers, and Apple Silicon local inference
+- **Browser automation**: The built-in `WebBrowser` tool drives a Chromium session for navigation, interaction, and recording, with a live in-REPL panel and a `browser (<host>)` footer pill
+- **Dynamic model discovery**: 31 provider routes enumerate their catalog from `GET /models` at runtime, with a static fallback when a provider is unreachable
+- **Model picker**: `/model` de-duplicates the merged provider catalog, shows the discovery status line, refreshes on `r`, and ends with an `Enter model name…` row so an unlisted model can be switched to by typing its name
+- **Custom model pricing**: Declare per-token rates in settings for a model the built-in catalog does not know, so cost display and budget checks report real numbers on custom and self-hosted routes
+- **Repo map**: A git-aware, PageRank-ranked map of the workspace built from tracked files, so context selection respects `.gitignore`
+- **Session memory**: Automatic fact extraction with a searchable vector index and a knowledge graph over recalled facts
+- **Daemon mode**: Run the CLI as a long-lived process via `/daemon` for embedded and automation hosts
 
 ## Provider Notes
 
@@ -152,6 +165,7 @@ GakrCLI supports multiple providers, but behavior is not identical across all of
 - Some providers impose lower output caps than the CLI defaults, and GakrCLI adapts where possible
 - gakr-gakr Opengateway is the fresh-install startup default and requires an API key from https://gakr-gakr.com/opengateway/keys. It uses one OpenAI-compatible base URL; switch between `mimo-*` and `google/gemini-3.1-flash-lite-preview` with `/model`, and do not pin the base URL to `/v1/xiaomi-mimo`.
 - Xiaomi MiMo uses `api-key` header auth on the direct OpenAI-compatible route and currently does not support `/usage` reporting in GakrCLI
+- Bedrock ships `@aws-sdk/client-bedrock` and `@aws-sdk/client-sts` as `optionalDependencies`. A normal install includes them; if you installed with `--no-optional`, GakrCLI reports the missing package and the install command instead of a bare module-resolution error
 
 ### GitHub Copilot sub-agent optimization
 
@@ -297,10 +311,13 @@ Helpful commands:
 - `bun run dev`
 - `bun test`
 - `bun run test:coverage`
+- `bun run test:conversation-arc`
 - `bun run security:pr-scan -- --base origin/main`
 - `bun run smoke`
 - `bun run doctor:runtime`
 - `bun run verify:privacy`
+- `bun run install:verify`
+- `bun run benchmark:startup`
 - focused `bun test ...` runs for the areas you touch
 
 ## Testing And Coverage
