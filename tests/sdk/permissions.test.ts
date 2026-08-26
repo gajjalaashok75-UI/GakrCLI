@@ -1057,8 +1057,10 @@ describe('createExternalCanUseTool timeout scenarios', () => {
     )
 
     expect(result.behavior).toBe('deny')
-    // When timeout occurs, the implementation calls onTimeout and falls through to fallback
-    expect(result.message).toBe('fallback')
+    // A timeout reports itself. Falling through to the fallback would report
+    // "no canUseTool or onPermissionRequest callback provided", which is not
+    // true here -- onPermissionRequest was supplied, it just did not answer.
+    expect(result.message).toContain('timed out')
     expect(onTimeout).toHaveBeenCalled()
     expect(onTimeout.mock.calls[0][0].type).toBe('permission_timeout')
     expect(onTimeout.mock.calls[0][0].tool_name).toBe('TestTool')

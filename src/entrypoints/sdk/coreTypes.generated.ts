@@ -1470,7 +1470,7 @@ export type ModelInfo = {
   displayName: string
   description: string
   supportsEffort?: boolean
-  supportedEffortLevels?: ("low" | "medium" | "high" | "xhigh" | "max")[]
+  supportedEffortLevels?: ("low" | "medium" | "high" | "xhigh" | "max" | "ultracode")[]
   supportsAdaptiveThinking?: boolean
   supportsFastMode?: boolean
   supportsAutoMode?: boolean
@@ -1532,6 +1532,7 @@ export type AgentDefinition = {
   skills?: string[]
   initialPrompt?: string
   maxTurns?: number
+  maxSteps?: number
   background?: boolean
   memory?: "user" | "project" | "local"
   effort?: "low" | "medium" | "high" | "xhigh" | "max" | number
@@ -2001,6 +2002,22 @@ export type SDKSessionStateChangedMessage = {
   session_id: string
 }
 
+/** Opt-in headless liveness signal emitted while --print output is quiet. */
+export type SDKHeartbeatMessage = {
+  type: "system"
+  subtype: "heartbeat"
+  timestamp: string
+  elapsed_ms: number
+  since_last_activity_ms: number
+  state: "starting" | "running" | "requires_action" | "idle" | "shutting_down"
+  phase: "startup" | "loading_session" | "connecting_mcp" | "draining_commands" | "in_turn" | "waiting_for_permission" | "waiting_for_agents" | "flushing" | "shutting_down"
+  heartbeat_index: number
+  pending_permission_requests: number
+  background_tasks: Record<string, number>
+  uuid: string
+  session_id: string
+}
+
 export type SDKToolUseSummaryMessage = {
   type: "tool_use_summary"
   summary: string
@@ -2294,6 +2311,19 @@ export type SDKMessage = ({
   session_id: string
 }) | ({
   type: "system"
+  subtype: "heartbeat"
+  timestamp: string
+  elapsed_ms: number
+  since_last_activity_ms: number
+  state: "starting" | "running" | "requires_action" | "idle" | "shutting_down"
+  phase: "startup" | "loading_session" | "connecting_mcp" | "draining_commands" | "in_turn" | "waiting_for_permission" | "waiting_for_agents" | "flushing" | "shutting_down"
+  heartbeat_index: number
+  pending_permission_requests: number
+  background_tasks: Record<string, number>
+  uuid: string
+  session_id: string
+}) | ({
+  type: "system"
   subtype: "files_persisted"
   files: {
     filename: string
@@ -2347,23 +2377,6 @@ export type SDKMessage = ({
   input: Record<string, unknown>
   uuid: string
   session_id: string
-}) | ({
-  type: "task_state"
-  message: Record<string, unknown> & { role: "user", content: string | Array<unknown> }
-  parent_tool_use_id: string | null
-  uuid: string
-  session_id: string
-  task_list_id: string
-  tasks: {
-    id: string
-    subject: string
-    description?: string
-    activeForm?: string
-    status: string
-    owner?: string
-    blocks?: string[]
-    blockedBy?: string[]
-  }[]
 })
 
 /** Fast mode state: off, in cooldown after rate limit, or actively enabled. */
