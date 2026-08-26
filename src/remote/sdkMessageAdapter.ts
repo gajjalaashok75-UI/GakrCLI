@@ -174,6 +174,17 @@ export function convertSDKMessage(
   msg: SDKMessage,
   opts?: ConvertOptions,
 ): ConvertedMessage {
+  // `task_state` is a bridge extension published by useReplBridge, which casts
+  // at the boundary because the snapshot lives outside the strict SDKMessage
+  // union. Recognize it here rather than as a `case` in the switch below:
+  // coreTypes.generated.ts is regenerated from coreSchemas.ts, so a hand-added
+  // union member would silently disappear on the next generator run.
+  if ((msg as { type: string }).type === 'task_state') {
+    // Bridge-only task snapshots are consumed by the web panel, not REPL UIs.
+    logForDebugging('[sdkMessageAdapter] Ignoring task_state message')
+    return { type: 'ignored' }
+  }
+
   switch (msg.type) {
     case 'assistant':
       return {
@@ -285,11 +296,6 @@ export function convertSDKMessage(
     case 'rate_limit_event':
       // Rate limit events are SDK-only events, not displayed in REPL
       logForDebugging('[sdkMessageAdapter] Ignoring rate_limit_event message')
-      return { type: 'ignored' }
-
-    case 'task_state':
-      // Bridge-only task snapshots are consumed by the web panel, not REPL UIs.
-      logForDebugging('[sdkMessageAdapter] Ignoring task_state message')
       return { type: 'ignored' }
 
     default: {
