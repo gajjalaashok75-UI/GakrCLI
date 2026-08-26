@@ -114,7 +114,7 @@ test('ambient NVIDIA mode does not hijack an explicit Codex alias request', () =
   expect(resolveProviderRequest({ model: 'codexplan' })).toMatchObject({
     transport: 'codex_responses',
     requestedModel: 'codexplan',
-    resolvedModel: 'gpt-5.5',
+    resolvedModel: 'gpt-5.6-sol',
     baseUrl: DEFAULT_CODEX_BASE_URL,
   })
 })

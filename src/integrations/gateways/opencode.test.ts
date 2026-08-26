@@ -93,10 +93,11 @@ describe('OpenCode Zen gateway descriptor', () => {
     expect(gateway!.validation!.kind).toBe('credential-env')
   })
 
-  test('has catalog with static source', () => {
+  test('has catalog with hybrid source backed by discovery', () => {
     const gateway = getGateway('opencode')
     expect(gateway!.catalog).toBeDefined()
-    expect(gateway!.catalog!.source).toBe('static')
+    expect(gateway!.catalog!.source).toBe('hybrid')
+    expect(gateway!.catalog!.discovery?.kind).toBe('openai-compatible')
   })
 
   test('has static models in catalog', () => {
@@ -171,10 +172,11 @@ describe('OpenCode Go gateway descriptor', () => {
     expect(gateway!.preset!.apiKeyEnvVars).toContain('OPENCODE_API_KEY')
   })
 
-  test('has catalog with static source', () => {
+  test('has catalog with hybrid source backed by discovery', () => {
     const gateway = getGateway('opencode-go')
     expect(gateway!.catalog).toBeDefined()
-    expect(gateway!.catalog!.source).toBe('static')
+    expect(gateway!.catalog!.source).toBe('hybrid')
+    expect(gateway!.catalog!.discovery?.kind).toBe('openai-compatible')
   })
 
   test('has static models in catalog', () => {
