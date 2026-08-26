@@ -42,6 +42,180 @@ process.env.GAKR_CODE_DISABLE_EXPERIMENTAL_BETAS ??= 'true'
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
 process.env.COREPACK_ENABLE_AUTO_PIN = '0';
 
+const SKILLS_LEADING_BOOLEAN_FLAGS = new Set([
+  '--bare',
+  '--debug',
+  '--debug-to-stderr',
+  '--yolo', // alias for --dangerously-skip-permissions
+  '--dangerously-skip-permissions',
+  '--allow-dangerously-skip-permissions',
+  '--disable-slash-commands',
+  '--enable-auth-status',
+  '--fork-session',
+  '--ide',
+  '--include-hook-events',
+  '--include-partial-messages',
+  '--init',
+  '--init-only',
+  '--maintenance',
+  '--mcp-debug',
+  '--no-chrome',
+  '--no-session-persistence',
+  '--replay-user-messages',
+  '--strict-mcp-config',
+  '--verbose',
+])
+
+const SKILLS_LEADING_VALUE_FLAGS = new Set([
+  '--agent',
+  '--append-system-prompt',
+  '--append-system-prompt-file',
+  '--debug-file',
+  '--effort',
+  '--fallback-model',
+  '--heartbeat',
+  '--input-format',
+  '--json-schema',
+  '--max-budget-usd',
+  '--max-thinking-tokens',
+  '--max-turns',
+  '--model',
+  '--output-format',
+  '--permission-mode',
+  '--permission-prompt-tool',
+  '--provider',
+  '--resume-session-at',
+  '--session-id',
+  '--settings',
+  '--setting-sources',
+  '--system-prompt',
+  '--system-prompt-file',
+  '--thinking',
+  '--workload',
+  '-n',
+  '--name',
+])
+
+const SKILLS_LEADING_OPTIONAL_VALUE_FLAGS = new Set([
+  '--continue',
+  '--from-pr',
+  '--print',
+  '-c',
+  '-p',
+  '-r',
+  '--resume',
+])
+
+const SKILLS_LEADING_MULTI_VALUE_FLAGS = new Set([
+  '--add-dir',
+  '--allowedTools',
+  '--allowed-tools',
+  '--betas',
+  '--disallowedTools',
+  '--disallowed-tools',
+  '--file',
+  '--mcp-config',
+  '--plugin-dir',
+  '--provider-env-file',
+  '--tools',
+])
+
+type SkillsCliParseResult = {
+  additionalDirectories: string[]
+  args: string[]
+}
+
+function getSkillsCliArgs(args: string[]): SkillsCliParseResult | undefined {
+  const additionalDirectories: string[] = []
+  let sawPromptModeFlag = false
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]
+    if (arg === 'skills') {
+      if (sawPromptModeFlag) {
+        return undefined
+      }
+      return { additionalDirectories, args: args.slice(index) }
+    }
+    if (SKILLS_LEADING_BOOLEAN_FLAGS.has(arg)) {
+      continue
+    }
+    if (SKILLS_LEADING_MULTI_VALUE_FLAGS.has(arg)) {
+      let consumed = false
+      while (args[index + 1] && !args[index + 1]!.startsWith('-')) {
+        index += 1
+        const value = args[index]
+        if (value === 'skills') {
+          if (sawPromptModeFlag) {
+            return undefined
+          }
+          return {
+            additionalDirectories,
+            args: args.slice(index),
+          }
+        }
+        if (value && arg === '--add-dir') {
+          additionalDirectories.push(value)
+        }
+        consumed = true
+      }
+      if (!consumed) {
+        return undefined
+      }
+      continue
+    }
+    const multiValueEqualsFlag = Array.from(SKILLS_LEADING_MULTI_VALUE_FLAGS)
+      .find(flag => arg?.startsWith(`${flag}=`))
+    if (multiValueEqualsFlag) {
+      const value = arg.slice(`${multiValueEqualsFlag}=`.length)
+      if (!value) {
+        return undefined
+      }
+      if (multiValueEqualsFlag === '--add-dir') {
+        additionalDirectories.push(value)
+      }
+      continue
+    }
+    if (
+      SKILLS_LEADING_VALUE_FLAGS.has(arg) &&
+      args[index + 1] &&
+      !args[index + 1]!.startsWith('-')
+    ) {
+      index += 1
+      continue
+    }
+    if (
+      Array.from(SKILLS_LEADING_VALUE_FLAGS).some(flag =>
+        arg?.startsWith(`${flag}=`),
+      )
+    ) {
+      continue
+    }
+    if (SKILLS_LEADING_OPTIONAL_VALUE_FLAGS.has(arg)) {
+      sawPromptModeFlag = true
+      if (
+        args[index + 1] &&
+        args[index + 1] !== 'skills' &&
+        !args[index + 1]!.startsWith('-')
+      ) {
+        index += 1
+      }
+      continue
+    }
+    if (
+      Array.from(SKILLS_LEADING_OPTIONAL_VALUE_FLAGS).some(flag =>
+        arg?.startsWith(`${flag}=`),
+      )
+    ) {
+      sawPromptModeFlag = true
+      continue
+    }
+    return undefined
+  }
+
+  return undefined
+}
+
 // Set max heap size for child processes. The current CLI process is already
 // running by this point; the package launcher raises its heap before importing
 // dist/cli.mjs. Keeping NODE_OPTIONS here preserves the larger cap for tools or
@@ -140,163 +314,6 @@ function isBgSessionsEnabled(options: CliEntrypointOptions): boolean {
   return false
 }
 
-const SKILLS_LEADING_BOOLEAN_FLAGS = new Set([
-  '--bare',
-  '--dangerously-skip-permissions',
-  '--disable-slash-commands',
-  '--fork-session',
-  '--init',
-  '--init-only',
-  '--maintenance',
-  '--mcp-debug',
-  '--no-session-persistence',
-  '--preview',
-  '--replay-user-messages',
-  '--verbose',
-  '-v',
-])
-
-const SKILLS_LEADING_OPTIONAL_VALUE_FLAGS = new Set([
-  '--continue',
-  '--from-pr',
-  '--print',
-  '-c',
-  '-p',
-  '-r',
-  '--resume',
-])
-
-const SKILLS_LEADING_MULTI_VALUE_FLAGS = new Set([
-  '--add-dir',
-  '--allowedTools',
-  '--allowed-tools',
-  '--betas',
-  '--disallowedTools',
-  '--disallowed-tools',
-  '--file',
-  '--mcp-config',
-  '--plugin-dir',
-  '--provider-env-file',
-  '--tools',
-])
-
-const SKILLS_LEADING_VALUE_FLAGS = new Set([
-  '--agent',
-  '--append-system-prompt',
-  '--debug-file',
-  '--effort',
-  '--fallback-model',
-  '--input-format',
-  '--max-budget-usd',
-  '--model',
-  '--output-format',
-  '--permission-mode',
-  '--provider',
-  '--resume-session-at',
-  '--session-id',
-  '--settings',
-  '--system-prompt',
-  '--thinking',
-  '-m',
-  '-n',
-  '--name',
-])
-
-type SkillsCliParseResult = {
-  additionalDirectories: string[]
-  args: string[]
-}
-
-function getSkillsCliArgs(args: string[]): SkillsCliParseResult | undefined {
-  const additionalDirectories: string[] = []
-  let sawPromptModeFlag = false
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index]
-    if (arg === 'skills') {
-      if (sawPromptModeFlag) {
-        return undefined
-      }
-      return { additionalDirectories, args: args.slice(index) }
-    }
-    if (SKILLS_LEADING_BOOLEAN_FLAGS.has(arg)) {
-      continue
-    }
-    if (SKILLS_LEADING_MULTI_VALUE_FLAGS.has(arg)) {
-      let consumed = false
-      while (args[index + 1] && !args[index + 1]!.startsWith('-')) {
-        index += 1
-        const value = args[index]
-        if (value === 'skills') {
-          if (sawPromptModeFlag) {
-            return undefined
-          }
-          return {
-            additionalDirectories,
-            args: args.slice(index),
-          }
-        }
-        if (value && arg === '--add-dir') {
-          additionalDirectories.push(value)
-        }
-        consumed = true
-      }
-      if (!consumed) {
-        return undefined
-      }
-      continue
-    }
-    const multiValueEqualsFlag = Array.from(SKILLS_LEADING_MULTI_VALUE_FLAGS)
-      .find(flag => arg?.startsWith(`${flag}=`))
-    if (multiValueEqualsFlag) {
-      const value = arg.slice(`${multiValueEqualsFlag}=`.length)
-      if (!value) {
-        return undefined
-      }
-      if (multiValueEqualsFlag === '--add-dir') {
-        additionalDirectories.push(value)
-      }
-      continue
-    }
-    if (
-      SKILLS_LEADING_VALUE_FLAGS.has(arg) &&
-      args[index + 1] &&
-      !args[index + 1]!.startsWith('-')
-    ) {
-      index += 1
-      continue
-    }
-    if (
-      Array.from(SKILLS_LEADING_VALUE_FLAGS).some(flag =>
-        arg?.startsWith(`${flag}=`),
-      )
-    ) {
-      continue
-    }
-    if (SKILLS_LEADING_OPTIONAL_VALUE_FLAGS.has(arg)) {
-      sawPromptModeFlag = true
-      if (
-        args[index + 1] &&
-        args[index + 1] !== 'skills' &&
-        !args[index + 1]!.startsWith('-')
-      ) {
-        index += 1
-      }
-      continue
-    }
-    if (
-      Array.from(SKILLS_LEADING_OPTIONAL_VALUE_FLAGS).some(flag =>
-        arg?.startsWith(`${flag}=`),
-      )
-    ) {
-      sawPromptModeFlag = true
-      continue
-    }
-    return undefined
-  }
-  return undefined
-}
-
 export async function main(
   args: string[] = process.argv.slice(2),
   options: CliEntrypointOptions = {},
@@ -325,7 +342,8 @@ export async function main(
 
   // Fast-path for `--daemon-worker=<kind>` (internal — supervisor spawns this).
   // Must come before other checks: spawned per-worker, so perf-sensitive.
-  // No enableConfigs(), no analytics sinks at this layer — workers are lean.
+  // No config enablement, no analytics sinks at this layer — workers are lean.
+  // If a worker kind needs configs/auth it calls them inside its run() fn.
   if (args[0] === '--daemon-worker' || args[0]?.startsWith('--daemon-worker=')) {
     if (!feature('DAEMON')) {
       console.error(
@@ -437,6 +455,19 @@ export async function main(
   }
   reapplyExplicitProviderInputs()
 
+  // --bare: set SIMPLE early so gates fire during module eval / commander
+  // option building (not just inside the action handler).
+  //
+  // This has to happen before the skills fast path below. isBareMode() falls
+  // back to scanning process.argv, and that fast path rewrites argv to
+  // args.slice(indexOf('skills')) — which drops every leading flag. Without the
+  // env var set first, `gakrcli --bare skills list` silently loses --bare (and
+  // returns auto-discovered skills) while `gakrcli skills list --bare`, whose
+  // flag survives the slice, correctly returns none.
+  if (args.includes('--bare')) {
+    process.env.GAKR_CODE_SIMPLE = '1';
+  }
+
   // Local skills management must stay available even when provider startup
   // configuration is broken, so users can inspect/fix skills from scripts.
   const skillsCliArgs = getSkillsCliArgs(args)
@@ -531,8 +562,8 @@ export async function main(
   const { eagerParseCliFlag } = await importers.cliArgs()
   const earlyModelFlag = eagerParseCliFlag('--model')
 
-  // Print the gradient startup screen before the Ink UI loads.
-  // Skills management commands are script-friendly and avoid the banner.
+  // Print the gradient startup screen before the Ink UI loads. Plain CLI
+  // management subcommands should stay script-friendly and avoid the banner.
   if (args[0] !== 'skills') {
     const { printStartupScreen } = await importers.startupScreen()
     printStartupScreen(earlyModelFlag)
@@ -597,19 +628,6 @@ export async function main(
     return;
   }
 
-  // Fast-path for `--daemon-worker=<kind>` (internal — supervisor spawns this).
-  // Must come before the daemon subcommand check: spawned per-worker, so
-  // perf-sensitive. No enableConfigs(), no analytics sinks at this layer —
-  // workers are lean. If a worker kind needs configs/auth (assistant will),
-  // it calls them inside its run() fn.
-  if (feature('DAEMON') && args[0] === '--daemon-worker') {
-    const {
-      runDaemonWorker
-    } = await import('../daemon/workerRegistry.js');
-    await runDaemonWorker(args[1]);
-    return;
-  }
-
   // Fast-path for `gakrcli remote-control` (also accepts legacy `gakrcli remote` / `gakrcli sync` / `gakrcli bridge`):
   // serve local machine as bridge environment.
   // feature() must stay inline for build-time dead code elimination;
@@ -639,7 +657,7 @@ export async function main(
     // getBridgeDisabledReason awaits GB init, so the returned value is fresh
     // (not the stale disk cache), but init still needs auth headers to work.
     const {
-      getGakrCLIAIOAuthTokens
+      getGakrCLIAIOAuthTokens,
     } = await import('../utils/auth.js');
     if (!getGakrCLIAIOAuthTokens()?.accessToken) {
       exitWithError(BRIDGE_LOGIN_ERROR);
@@ -754,11 +772,7 @@ export async function main(
     process.argv = [process.argv[0]!, process.argv[1]!, 'update'];
   }
 
-  // --bare: set SIMPLE early so gates fire during module eval / commander
-  // option building (not just inside the action handler).
-  if (args.includes('--bare')) {
-    process.env.GAKR_CODE_SIMPLE = '1';
-  }
+  // --bare already set GAKR_CODE_SIMPLE above the skills fast path.
 
   // No special flags detected, load and run the full CLI
   if (process.env.GAKR_DISABLE_EARLY_INPUT !== '1') {
@@ -778,5 +792,5 @@ export async function main(
 
 // eslint-disable-next-line custom-rules/no-top-level-side-effects, custom-rules/no-process-env-top-level
 if (process.env.GAKR_DISABLE_CLI_ENTRYPOINT_AUTO_RUN !== '1') {
-  void main();
+  await main();
 }

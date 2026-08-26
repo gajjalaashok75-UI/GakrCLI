@@ -12,8 +12,9 @@ export function isInteractiveSession(options: {
   const { stdoutIsTTY, args, env } = options;
 
   // Explicit non-interactive flags. The print scan is arity-aware: a naive
-  // `args.includes('-p')` treats a value like `--model -p` as the print flag
-  // and silently drops the session out of interactive mode.
+  // membership test for the print flag treats a consumed value such as
+  // `--model -p` as print mode and silently drops the session out of
+  // interactive mode.
   const isPrint = hasPrintFlag(args);
   const hasInitOnlyFlag = args.includes('--init-only');
   const hasSdkUrl = args.some(arg => arg.startsWith('--sdk-url'));

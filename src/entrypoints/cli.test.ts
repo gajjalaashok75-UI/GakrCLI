@@ -16,6 +16,11 @@ import {
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Command } from '@commander-js/extra-typings'
+import {
+  BACKGROUND_SESSION_ID_ENV,
+  BACKGROUND_SESSION_LAUNCHER_PID_ENV,
+} from '../cli/bgRouting.js'
 import {
   applyLoadedEnvFileValues,
   loadEnvFile,
@@ -37,6 +42,7 @@ const mockLogsHandler = mock(async (_args: string[]) => {})
 const mockAttachHandler = mock(async (_args: string[]) => {})
 const mockKillHandler = mock(async (_args: string[]) => {})
 const mockHandleBgFlag = mock(async (_args: string[]) => {})
+const mockPrepareBackgroundSessionFinalizer = mock(async () => 'installed')
 const mockLoadEnvFile = mock((_filePath: string) => ({}))
 const mockParseProviderEnvFileArgs = mock((_args: string[]) => ({ paths: [] }))
 const mockReapplyRememberedEnvFileValues = mock(() => {})
@@ -74,6 +80,7 @@ const runtimeMocks = [
   mockAttachHandler,
   mockKillHandler,
   mockHandleBgFlag,
+  mockPrepareBackgroundSessionFinalizer,
   mockLoadEnvFile,
   mockParseProviderEnvFileArgs,
   mockReapplyRememberedEnvFileValues,
@@ -290,7 +297,7 @@ describe('cli.tsx — --provider startup ordering', () => {
 
   it('dispatches background session management before config and provider validation', async () => {
     const src = await Bun.file(`${import.meta.dir}/cli.tsx`).text()
-    const bgManagementIndex = src.indexOf("bgSessionsEnabled && (args[0] === 'ps'")
+    const bgManagementIndex = src.indexOf("args[0] === 'ps'")
     const configEnableIndex = src.indexOf('enableConfigs()')
     const providerValidationIndex = src.indexOf(
       'await validateProviderEnvForStartupOrExit()',
@@ -320,70 +327,76 @@ describe('cli.tsx — --provider startup ordering', () => {
 
 })
 
+const mockImporters = {
+  startupProfiler: async () => ({
+    profileCheckpoint: mockProfileCheckpoint,
+  }),
+  bg: async () => ({
+    psHandler: mockPsHandler,
+    logsHandler: mockLogsHandler,
+    attachHandler: mockAttachHandler,
+    killHandler: mockKillHandler,
+    handleBgFlag: mockHandleBgFlag,
+  }),
+  bgFinalizer: async () => ({
+    prepareBackgroundSessionFinalizer: mockPrepareBackgroundSessionFinalizer,
+  }),
+  envFile: async () => ({
+    loadEnvFile: mockLoadEnvFile,
+    parseProviderEnvFileArgs: mockParseProviderEnvFileArgs,
+    reapplyRememberedEnvFileValues: mockReapplyRememberedEnvFileValues,
+    rememberLoadedEnvFileValues: mockRememberLoadedEnvFileValues,
+  }),
+  config: async () => ({
+    enableConfigs: mockEnableConfigs,
+  }),
+  managedEnv: async () => ({
+    applySafeConfigEnvironmentVariables:
+      mockApplySafeConfigEnvironmentVariables,
+  }),
+  providerProfile: async () => ({
+    applyStartupEnvFromProfile: mockApplyStartupEnvFromProfile,
+  }),
+  providerValidation: async () => ({
+    getProviderValidationError: mockGetProviderValidationError,
+    validateProviderEnvForStartupOrExit:
+      mockValidateProviderEnvForStartupOrExit,
+  }),
+  flagSettings: async () => ({
+    eagerLoadSettingsFromArgs: mockEagerLoadSettingsFromArgs,
+  }),
+  agentRouting: async () => ({
+    applyAgentProviderOverrideToEnv: mockApplyAgentProviderOverrideToEnv,
+    resolveOutOfProcessTeammateProviderFromCliArgs:
+      mockResolveOutOfProcessTeammateProviderFromCliArgs,
+  }),
+  settings: async () => ({
+    getInitialSettings: mockGetInitialSettings,
+  }),
+  githubModelsCredentials: async () => ({
+    hydrateGithubModelsTokenFromSecureStorage:
+      mockHydrateGithubModelsTokenFromSecureStorage,
+    refreshGithubModelsTokenIfNeeded: mockRefreshGithubModelsTokenIfNeeded,
+  }),
+  startupScreen: async () => ({
+    printStartupScreen: mockPrintStartupScreen,
+  }),
+  earlyInput: async () => ({
+    startCapturingEarlyInput: mockStartCapturingEarlyInput,
+  }),
+  main: async () => ({
+    main: mockCliMain,
+  }),
+}
+
 describe('cli.tsx — background routing behavior', () => {
   const bgOptions = {
     bgSessionsEnabled: true,
-    importers: {
-      startupProfiler: async () => ({
-        profileCheckpoint: mockProfileCheckpoint,
-      }),
-      bg: async () => ({
-        psHandler: mockPsHandler,
-        logsHandler: mockLogsHandler,
-        attachHandler: mockAttachHandler,
-        killHandler: mockKillHandler,
-        handleBgFlag: mockHandleBgFlag,
-      }),
-      envFile: async () => ({
-        loadEnvFile: mockLoadEnvFile,
-        parseProviderEnvFileArgs: mockParseProviderEnvFileArgs,
-        reapplyRememberedEnvFileValues: mockReapplyRememberedEnvFileValues,
-        rememberLoadedEnvFileValues: mockRememberLoadedEnvFileValues,
-      }),
-      config: async () => ({
-        enableConfigs: mockEnableConfigs,
-      }),
-      managedEnv: async () => ({
-        applySafeConfigEnvironmentVariables:
-          mockApplySafeConfigEnvironmentVariables,
-      }),
-      providerProfile: async () => ({
-        applyStartupEnvFromProfile: mockApplyStartupEnvFromProfile,
-      }),
-      providerValidation: async () => ({
-        getProviderValidationError: mockGetProviderValidationError,
-        validateProviderEnvForStartupOrExit:
-          mockValidateProviderEnvForStartupOrExit,
-      }),
-      flagSettings: async () => ({
-        eagerLoadSettingsFromArgs: mockEagerLoadSettingsFromArgs,
-      }),
-      agentRouting: async () => ({
-        applyAgentProviderOverrideToEnv: mockApplyAgentProviderOverrideToEnv,
-        resolveOutOfProcessTeammateProviderFromCliArgs:
-          mockResolveOutOfProcessTeammateProviderFromCliArgs,
-      }),
-      settings: async () => ({
-        getInitialSettings: mockGetInitialSettings,
-      }),
-      githubModelsCredentials: async () => ({
-        hydrateGithubModelsTokenFromSecureStorage:
-          mockHydrateGithubModelsTokenFromSecureStorage,
-        refreshGithubModelsTokenIfNeeded: mockRefreshGithubModelsTokenIfNeeded,
-      }),
-      startupScreen: async () => ({
-        printStartupScreen: mockPrintStartupScreen,
-      }),
-      earlyInput: async () => ({
-        startCapturingEarlyInput: mockStartCapturingEarlyInput,
-      }),
-      main: async () => ({
-        main: mockCliMain,
-      }),
-    },
+    importers: mockImporters,
   } as unknown as Parameters<CliMain>[1]
   const originalAutoRunGuard =
     process.env.GAKR_DISABLE_CLI_ENTRYPOINT_AUTO_RUN
+  const savedArgv = [...process.argv]
 
   beforeAll(async () => {
     process.env.GAKR_DISABLE_CLI_ENTRYPOINT_AUTO_RUN = '1'
@@ -403,6 +416,10 @@ describe('cli.tsx — background routing behavior', () => {
 
   beforeEach(() => {
     clearRuntimeMocks()
+  })
+
+  afterEach(() => {
+    process.argv = [...savedArgv]
   })
 
   it('dispatches background management commands before startup work', async () => {
@@ -425,6 +442,36 @@ describe('cli.tsx — background routing behavior', () => {
       expect(mockValidateProviderEnvForStartupOrExit).not.toHaveBeenCalled()
       expect(mockCliMain).not.toHaveBeenCalled()
     }
+  })
+
+  it('establishes background finalizer ownership before any command path', async () => {
+    process.env[BACKGROUND_SESSION_ID_ENV] = 'bg-entrypoint'
+    mockPrepareBackgroundSessionFinalizer.mockImplementationOnce(async () => {
+      throw new Error('finalizer ownership not ready')
+    })
+    try {
+      await expect(runCliEntrypoint(['ps'], bgOptions)).rejects.toThrow(
+        'finalizer ownership not ready',
+      )
+    } finally {
+      delete process.env[BACKGROUND_SESSION_ID_ENV]
+    }
+
+    expect(mockPrepareBackgroundSessionFinalizer).toHaveBeenCalledTimes(1)
+    expect(mockPsHandler).not.toHaveBeenCalled()
+    expect(mockEnableConfigs).not.toHaveBeenCalled()
+  })
+
+  it('routes partial background metadata through the finalizer before dispatch', async () => {
+    process.env[BACKGROUND_SESSION_LAUNCHER_PID_ENV] = '123'
+    try {
+      await runCliEntrypoint(['ps'], bgOptions)
+    } finally {
+      delete process.env[BACKGROUND_SESSION_LAUNCHER_PID_ENV]
+    }
+
+    expect(mockPrepareBackgroundSessionFinalizer).toHaveBeenCalledTimes(1)
+    expect(mockPsHandler).toHaveBeenCalledTimes(1)
   })
 
   it('keeps management commands on the management path even with --bg arguments', async () => {
@@ -479,5 +526,242 @@ describe('cli.tsx — background routing behavior', () => {
     expect(mockValidateProviderEnvForStartupOrExit).toHaveBeenCalledTimes(1)
     expect(mockPrintStartupScreen).toHaveBeenCalledTimes(1)
     expect(mockCliMain).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('Node 24 premature exit regression (issue #1678)', () => {
+  it('built CLI stays alive during initialization in interactive mode without premature exit', async () => {
+    const os = await import('node:os')
+    const path = await import('node:path')
+    const fs = await import('node:fs/promises')
+    const url = await import('node:url')
+
+    const scriptPath = path.join(os.tmpdir(), `test-cli-startup-${Date.now()}.mjs`)
+    const cliUrl = url.pathToFileURL(path.resolve(import.meta.dir, '../../dist/cli.mjs')).href
+    let proc
+
+    try {
+      await Bun.write(scriptPath, `
+        // Mock TTY so the CLI thinks it's interactive and starts the TUI
+        process.stdout.isTTY = true;
+        process.stdin.isTTY = true;
+        process.stdin.setRawMode = () => {};
+        process.env.GAKR_DISABLE_TELEMETRY = '1';
+        process.env.OPENGATEWAY_API_KEY = 'dummy';
+
+        // Ensure the CLI auto-runs even if the test runner disabled it globally
+        delete process.env.GAKR_DISABLE_CLI_ENTRYPOINT_AUTO_RUN;
+
+        // Use absolute import to work from os.tmpdir()
+        // If the entrypoint uses void main(), this promise resolves immediately.
+        // If it correctly uses await main(), it stays pending while the CLI runs.
+        import('${cliUrl}').then(() => {
+          console.log('---PREMATURE_EVAL_END---');
+          process.exit(0);
+        });
+      `)
+
+      proc = Bun.spawn(['node', scriptPath], { stdout: 'pipe' })
+      const reader = proc.stdout.getReader()
+
+      let gotOutput = false
+      let evaluationEndedPrematurely = false
+
+      async function readStdout() {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          const text = new TextDecoder().decode(value)
+          if (text.includes('---PREMATURE_EVAL_END---')) {
+            evaluationEndedPrematurely = true
+          } else if (text.trim().length > 0) {
+            gotOutput = true
+          }
+        }
+      }
+
+      // Start reading without awaiting it yet
+      const readPromise = readStdout()
+
+      // Wait until we get startup output or detect premature evaluation end.
+      // A cold start of the built bundle costs ~8s on Windows, so this budget
+      // has to be well above the actual startup cost — the assertion below is
+      // about premature exit, not about startup latency.
+      const start = Date.now()
+      while (!gotOutput && !evaluationEndedPrematurely && Date.now() - start < 30_000) {
+        await new Promise(r => setTimeout(r, 10))
+      }
+
+      expect(gotOutput).toBe(true)
+
+      // The critical regression window: wait 500ms *after* output.
+      // With void main(), Node 24 will exit during the subsequent async imports because the event loop empties,
+      // which allows the import() promise above to resolve and emit the signal.
+      await new Promise(r => setTimeout(r, 500))
+
+      expect(evaluationEndedPrematurely).toBe(false)
+      expect(proc.exitCode).toBe(null)
+      expect(proc.killed).toBe(false)
+    } finally {
+      if (proc && proc.exitCode === null && !proc.killed) {
+        proc.kill()
+      }
+      await fs.unlink(scriptPath).catch(() => {})
+    }
+    // Cold-starting the built bundle plus the 500ms regression window exceeds
+    // the default 5s per-test budget on Windows.
+  }, 60_000)
+
+  it('cli.tsx uses top-level await for main() to prevent premature exit', async () => {
+    const src = await Bun.file(`${import.meta.dir}/cli.tsx`).text()
+    expect(src).toMatch(/await main\(\)/)
+    expect(src).not.toMatch(/^\s*void main\(\)/m)
+  })
+})
+
+describe('cli.tsx — --yolo alias (PR #1939)', () => {
+  const options = {
+    importers: mockImporters,
+  } as unknown as Parameters<CliMain>[1]
+  const originalAutoRunGuard =
+    process.env.GAKR_DISABLE_CLI_ENTRYPOINT_AUTO_RUN
+  const savedArgv = [...process.argv]
+
+  beforeAll(async () => {
+    process.env.GAKR_DISABLE_CLI_ENTRYPOINT_AUTO_RUN = '1'
+    const entrypoint = await import('./cli.js')
+    runCliEntrypoint = entrypoint.main
+  })
+
+  afterAll(() => {
+    if (originalAutoRunGuard === undefined) {
+      delete process.env.GAKR_DISABLE_CLI_ENTRYPOINT_AUTO_RUN
+    } else {
+      process.env.GAKR_DISABLE_CLI_ENTRYPOINT_AUTO_RUN =
+        originalAutoRunGuard
+    }
+  })
+
+  beforeEach(() => {
+    clearRuntimeMocks()
+  })
+
+  afterEach(() => {
+    process.argv = [...savedArgv]
+  })
+
+  // Mirrors the registration in main.tsx. commander derives the option's
+  // attribute from the LAST long flag, so both spellings set the same
+  // dangerouslySkipPermissions key — the whole reason a native alias works.
+  const buildProgram = () =>
+    new Command()
+      .option(
+        '--yolo, --dangerously-skip-permissions',
+        'bypass',
+        () => true,
+      )
+      .allowExcessArguments()
+      .exitOverride()
+
+  it('commander resolves --yolo to dangerouslySkipPermissions', () => {
+    expect(
+      buildProgram().parse(['node', 'x', '--yolo']).opts()
+        .dangerouslySkipPermissions,
+    ).toBe(true)
+    expect(
+      buildProgram().parse(['node', 'x', '--dangerously-skip-permissions']).opts()
+        .dangerouslySkipPermissions,
+    ).toBe(true)
+    expect(
+      buildProgram().parse(['node', 'x']).opts().dangerouslySkipPermissions,
+    ).toBeUndefined()
+  })
+
+  it('passes args through to cliMain verbatim — no per-token --yolo rewrite', async () => {
+    // Regression guard for the six correctness bugs the old pre-parse argv
+    // rewrite caused: --yolo must reach commander untouched, whatever position
+    // it sits in (after a value flag, after `--`, or on a subcommand), so
+    // commander — not a hand-rolled scanner — resolves it.
+    const cases = [
+      ['--yolo', '-p', 'hi'],
+      ['--system-prompt', '--yolo'],
+      ['-p', '--', '--yolo'],
+      ['mcp', 'add', '--yolo', 'srv', 'cmd'],
+    ]
+    for (const argv of cases) {
+      clearRuntimeMocks()
+      process.argv = ['node', 'gakrcli', ...argv]
+      let argvSeenByCliMain: string[] | undefined
+      mockCliMain.mockImplementationOnce(async () => {
+        argvSeenByCliMain = [...process.argv]
+      })
+
+      await runCliEntrypoint(argv, options)
+
+      expect(argvSeenByCliMain).toEqual(['node', 'gakrcli', ...argv])
+    }
+  })
+
+  it('does not mutate the host process.argv (no leak of a caller args array)', async () => {
+    // main() must not push an explicit args array into the process-global argv:
+    // cliMain reads the real process.argv, and leaking a caller's args (e.g. a
+    // bypass flag) into it would corrupt an overlapping call or the host.
+    const hostArgv = ['node', 'gakrcli', 'host-arg']
+    process.argv = [...hostArgv]
+    await runCliEntrypoint(['--yolo', '-p', 'hi'], options)
+    expect(process.argv).toEqual(hostArgv)
+  })
+
+  it('the built CLI lists --yolo on the main, ssh, and open command help (live registration)', async () => {
+    // Behavioral proof the alias is registered on the real commands — not dead
+    // code or the wrong command: commander only prints an option in --help if it
+    // is actually registered. --help short-circuits before any startup.
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+    const cliPath = path.resolve(import.meta.dir, '../../dist/cli.mjs')
+    if (!fs.existsSync(cliPath)) return // needs `bun run build`; always present in CI
+    // The describe's beforeAll sets GAKR_DISABLE_CLI_ENTRYPOINT_AUTO_RUN=1
+    // to keep main() from auto-running in-process; the child must NOT inherit it
+    // or the entrypoint never runs and prints nothing.
+    const childEnv: Record<string, string | undefined> = {
+      ...process.env,
+      GAKR_DISABLE_TELEMETRY: '1',
+    }
+    delete childEnv.GAKR_DISABLE_CLI_ENTRYPOINT_AUTO_RUN
+    for (const argv of [
+      ['--yolo', '--help'],
+      ['ssh', '--yolo', '--help'],
+      ['open', '--yolo', '--help'],
+    ]) {
+      const out = Bun.spawnSync(['node', cliPath, ...argv], { env: childEnv })
+      const text = `${out.stdout.toString()}${out.stderr.toString()}`
+      expect(out.exitCode).toBe(0)
+      expect(text).not.toContain('unknown option')
+      expect(text).toContain('--yolo, --dangerously-skip-permissions')
+    }
+    // Three sequential cold starts of the built bundle. Each costs ~8s on
+    // Windows (module graph + antivirus scan), so the whole loop needs a budget
+    // well above the 20s the upstream reference gets away with on Linux.
+  }, { timeout: 120_000 })
+
+  it('has no production startup gates using naive includes print checks', async () => {
+    // All pre-Commander print-mode decisions must go through the shared
+    // arity-aware predicate. A naive .includes('-p') / .includes('--print')
+    // disagrees with Commander on value-consumed tokens such as
+    // `--system-prompt --print` or `--model -p`.
+    const files = [
+      'src/utils/interactivity.ts',
+      'src/utils/earlyInput.ts',
+      'src/utils/gracefulShutdown.ts',
+      'src/utils/providerValidation.ts',
+      'src/services/api/logging.ts',
+      'src/cli/bg.ts',
+      'src/main.tsx',
+    ]
+    for (const file of files) {
+      const src = await Bun.file(`${import.meta.dir}/../../${file}`).text()
+      expect(src).not.toMatch(/\.includes\(['"]-p['"]\)/)
+      expect(src).not.toMatch(/\.includes\(['"]--print['"]\)/)
+    }
   })
 })
