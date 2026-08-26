@@ -146,6 +146,12 @@ export type CustomAgentDefinition = BaseAgentDefinition & {
   baseDir?: string
 }
 
+// SDK-injected agents - supplied programmatically via the `agents` option
+export type SdkAgentDefinition = BaseAgentDefinition & {
+  getSystemPrompt: () => string
+  source: 'sdk'
+}
+
 // Plugin agents - similar to custom but with plugin metadata, prompt stored via closure
 export type PluginAgentDefinition = BaseAgentDefinition & {
   getSystemPrompt: () => string
@@ -158,6 +164,7 @@ export type PluginAgentDefinition = BaseAgentDefinition & {
 export type AgentDefinition =
   | BuiltInAgentDefinition
   | CustomAgentDefinition
+  | SdkAgentDefinition
   | PluginAgentDefinition
 
 // Type guards for runtime type checking
@@ -170,7 +177,11 @@ export function isBuiltInAgent(
 export function isCustomAgent(
   agent: AgentDefinition,
 ): agent is CustomAgentDefinition {
-  return agent.source !== 'built-in' && agent.source !== 'plugin'
+  return (
+    agent.source !== 'built-in' &&
+    agent.source !== 'plugin' &&
+    agent.source !== 'sdk'
+  )
 }
 
 export function isPluginAgent(
@@ -195,6 +206,7 @@ export function getActiveAgentsFromList(
   const projectAgents = allAgents.filter(a => a.source === 'projectSettings')
   const managedAgents = allAgents.filter(a => a.source === 'policySettings')
   const flagAgents = allAgents.filter(a => a.source === 'flagSettings')
+  const sdkAgents = allAgents.filter(a => a.source === 'sdk')
 
   const agentGroups = [
     builtInAgents,
@@ -202,6 +214,7 @@ export function getActiveAgentsFromList(
     projectAgents,
     userAgents,
     flagAgents,
+    sdkAgents,
     managedAgents,
   ]
 
