@@ -752,33 +752,42 @@ export function parseUserSpecifiedModel(
   }
   const normalizedModel = modelInputTrimmed.toLowerCase()
 
+  const hasTagSyntax = /\[1m]$/i.test(normalizedModel)
   const has1mTag = has1mContext(normalizedModel)
-  const modelString = has1mTag
+  const modelString = hasTagSyntax
     ? normalizedModel.replace(/\[1m]$/i, '').trim()
     : normalizedModel
+
+  // Strip a [1m] baked into a resolved default, then re-append when the user
+  // asked for it (has1mTag) or the default itself baked one in (has1mContext
+  // resolves false when 1M is disabled, so baked tags are dropped in that case).
+  const applyOneMTag = (resolved: string, wantsTag: boolean): string => {
+    const base = resolved.replace(/\[1m]$/i, '')
+    return wantsTag || has1mContext(resolved) ? `${base}[1m]` : base
+  }
 
   if (isModelAlias(modelString)) {
     switch (modelString) {
       case 'opusplan':
-        return getDefaultSonnetModel() + (has1mTag ? '[1m]' : '') // Sonnet is default, Opus in plan mode
+        return applyOneMTag(getDefaultSonnetModel(), has1mTag) // Sonnet is default, Opus in plan mode
       case 'sonnet':
-        return getDefaultSonnetModel() + (has1mTag ? '[1m]' : '')
+        return applyOneMTag(getDefaultSonnetModel(), has1mTag)
       case 'haiku':
-        return getDefaultHaikuModel() + (has1mTag ? '[1m]' : '')
+        return applyOneMTag(getDefaultHaikuModel(), has1mTag)
       case 'opus':
-        return getDefaultOpusModel() + (has1mTag ? '[1m]' : '')
+        return applyOneMTag(getDefaultOpusModel(), has1mTag)
       case 'best':
-        return getBestModel()
+        return applyOneMTag(getBestModel(), has1mTag)
       default:
     }
   }
 
   // Handle Codex aliases - map to actual model names
   if (modelString === 'codexplan') {
-    return 'gpt-5.5'
+    return applyOneMTag('gpt-5.5', has1mTag)
   }
   if (modelString === 'codexspark') {
-    return 'gpt-5.3-codex-spark'
+    return applyOneMTag('gpt-5.3-codex-spark', has1mTag)
   }
 
   // Opus 4/4.1 are no longer available on the first-party API (same as
@@ -811,8 +820,9 @@ export function parseUserSpecifiedModel(
 
   // Preserve original case for custom model names (e.g., Azure Foundry deployment IDs)
   // Only strip [1m] suffix if present, maintaining case of the base model
-  if (has1mTag) {
-    return modelInputTrimmed.replace(/\[1m\]$/i, '').trim() + '[1m]'
+  if (hasTagSyntax) {
+    const base = modelInputTrimmed.replace(/\[1m\]$/i, '').trim()
+    return has1mTag ? base + '[1m]' : base
   }
   return modelInputTrimmed
 }
