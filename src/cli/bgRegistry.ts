@@ -27,6 +27,10 @@ import {
   isProcessRunning,
 } from '../utils/genericProcessUtils.js'
 import { jsonParse, jsonStringify } from '../utils/slowOperations.js'
+import {
+  backgroundProcessMarkerToken,
+  isValidBackgroundProcessMarker,
+} from './bgRouting.js'
 
 export type BackgroundSessionStatus =
   | 'running'
@@ -39,6 +43,7 @@ export type BackgroundSessionStatus =
 export type BackgroundSession = {
   id: string
   name?: string
+  /** Optional session-kind label, surfaced by the autonomy status view. */
   kind?: string
   pid: number
   cwd: string
@@ -46,6 +51,7 @@ export type BackgroundSession = {
   provider?: string
   model?: string
   sessionId: string
+  processMarker?: string
   startedAt: string
   updatedAt: string
   command: string[]
@@ -86,6 +92,7 @@ export type CreateBackgroundSessionInput = {
   provider?: string
   model?: string
   sessionId: string
+  processMarker?: string
   now?: Date
   stdoutLogPath?: string
   stderrLogPath?: string
@@ -427,6 +434,8 @@ function isBackgroundSession(
       typeof candidate.provider === 'string') &&
     (candidate.model === undefined || typeof candidate.model === 'string') &&
     typeof candidate.sessionId === 'string' &&
+    (candidate.processMarker === undefined ||
+      isValidBackgroundProcessMarker(candidate.processMarker)) &&
     typeof candidate.startedAt === 'string' &&
     typeof candidate.updatedAt === 'string' &&
     isStringArray(candidate.command) &&
@@ -683,6 +692,12 @@ export async function createBackgroundSession(
   if (!Number.isInteger(input.pid) || input.pid <= 0) {
     throw new Error(`Invalid background session pid: ${input.pid}`)
   }
+  if (
+    input.processMarker !== undefined &&
+    !isValidBackgroundProcessMarker(input.processMarker)
+  ) {
+    throw new Error('Invalid background process marker')
+  }
   await assertBackgroundSessionNameAvailable(input.name)
   const timestamp = iso(input.now)
   const logPaths = getBackgroundSessionLogPaths(input.id)
@@ -695,6 +710,9 @@ export async function createBackgroundSession(
     ...(input.provider ? { provider: input.provider } : {}),
     ...(input.model ? { model: input.model } : {}),
     sessionId: input.sessionId,
+    ...(input.processMarker
+      ? { processMarker: input.processMarker }
+      : {}),
     startedAt: timestamp,
     updatedAt: timestamp,
     command: input.command,
@@ -747,18 +765,19 @@ export async function resolveBackgroundSession(
   const exactId = sessions.filter(s => s.id === target)
   if (exactId.length === 1) return exactId[0]
 
-  const idPrefix = sessions.filter(s => s.id.startsWith(target))
-  if (idPrefix.length === 1) return idPrefix[0]
-  if (idPrefix.length > 1) {
-    throw new Error(`Background session id "${target}" is ambiguous`)
-  }
-
   const byName = sessions.filter(s => s.name === target)
   const liveByName = byName.filter(s => !isTerminalBackgroundSession(s))
   if (liveByName.length === 1) return liveByName[0]
   if (liveByName.length > 1) {
     throw new Error(`Background session name "${target}" is ambiguous`)
   }
+
+  const idPrefix = sessions.filter(s => s.id.startsWith(target))
+  if (idPrefix.length === 1) return idPrefix[0]
+  if (idPrefix.length > 1) {
+    throw new Error(`Background session id "${target}" is ambiguous`)
+  }
+
   if (byName.length === 1) return byName[0]
   if (byName.length > 1) {
     throw new Error(`Background session name "${target}" is ambiguous`)
@@ -897,6 +916,35 @@ function commandLineMatchesBackgroundSession(
   return commandLineContainsArgs(commandLine, session.command)
 }
 
+function markedCommandLineIdentity(
+  commandLine: string,
+  session: BackgroundSession,
+  processMarker: string,
+): 'matches' | 'mismatch' | 'unreadable' {
+  const markerToken = backgroundProcessMarkerToken(processMarker)
+  const storedTokens = session.command.flatMap(tokenizeCommandLine)
+  const expectedIndex = storedTokens.indexOf(markerToken)
+  if (expectedIndex === -1) return 'unreadable'
+
+  const liveTokens = tokenizeCommandLine(commandLine)
+  const comparablePrefixLength = Math.min(expectedIndex, liveTokens.length)
+  for (let index = 0; index < comparablePrefixLength; index += 1) {
+    if (liveTokens[index] !== storedTokens[index]) return 'mismatch'
+  }
+
+  if (liveTokens.length <= expectedIndex) return 'unreadable'
+  const candidate = liveTokens[expectedIndex]!
+  if (candidate === markerToken) return 'matches'
+  if (
+    expectedIndex === liveTokens.length - 1 &&
+    candidate.length > 0 &&
+    markerToken.startsWith(candidate)
+  ) {
+    return 'unreadable'
+  }
+  return 'mismatch'
+}
+
 export function verifyBackgroundSessionProcessIdentity(
   session: BackgroundSession,
   options?: BackgroundSessionProcessIdentityOptions,
@@ -919,12 +967,19 @@ export function verifyBackgroundSessionProcessIdentity(
     command = readCommand(session.pid)
   } catch {
     const latestLiveness = getLiveness()
-    return result(latestLiveness === 'alive' ? 'unreadable' : latestLiveness)
+    return result(
+      latestLiveness === 'alive' ? 'unreadable' : latestLiveness,
+    )
   }
   const latestLiveness = getLiveness()
   if (latestLiveness !== 'alive') return result(latestLiveness)
   if (command == null || command.trim() === '') {
     return result('unreadable')
+  }
+  if (session.processMarker !== undefined) {
+    return result(
+      markedCommandLineIdentity(command, session, session.processMarker),
+    )
   }
   return result(
     commandLineMatchesBackgroundSession(command, session)
@@ -1037,9 +1092,7 @@ export async function recordBackgroundSessionNaturalTermination(
   ) {
     // Retain an exhaustive guard so future status additions require a deliberate
     // natural-finalization policy.
-    throw new Error(
-      'Background session is not eligible for natural finalization',
-    )
+    throw new Error('Background session is not eligible for natural finalization')
   }
 
   await installTerminalFact(
@@ -1074,9 +1127,7 @@ export function recordBackgroundSessionNaturalTerminationSync(
   ) {
     // Retain an exhaustive guard so future status additions require a deliberate
     // natural-finalization policy.
-    throw new Error(
-      'Background session is not eligible for natural finalization',
-    )
+    throw new Error('Background session is not eligible for natural finalization')
   }
 
   installTerminalFactSync(
@@ -1093,9 +1144,7 @@ export async function markBackgroundSessionKilled(
   const session = await resolveBackgroundSession(target)
   const rawSession = await readSessionFile(metadataPathForId(session.id))
   if (!rawSession || rawSession.pid !== session.pid) {
-    throw new Error(
-      'Background session changed before it could be marked killed',
-    )
+    throw new Error('Background session changed before it could be marked killed')
   }
   await installTerminalFact(
     {

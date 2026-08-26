@@ -40,9 +40,6 @@ type PrepareBackgroundSessionFinalizerOptions = {
   finalizeSync?: typeof recordBackgroundSessionNaturalTerminationSync
   getObservedSignal?: () => ObservedBackgroundSessionSignal | undefined
   debug?: (message: string) => void
-  // Bun cannot reset `process.exitCode` back to undefined once it is assigned,
-  // so tests must never mutate the real global to exercise the exit-code paths.
-  readExitCode?: () => NodeJS.Process['exitCode']
 }
 
 export type BackgroundSessionFinalizerPreparation =
@@ -66,10 +63,8 @@ function defaultDebug(message: string): void {
   logForDebugging(message, { level: 'error' })
 }
 
-function currentProcessExitCode(
-  readExitCode: () => NodeJS.Process['exitCode'],
-): number {
-  const value = readExitCode()
+function currentProcessExitCode(): number {
+  const value = process.exitCode
   if (value === undefined) return 0
   const parsed =
     typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value
@@ -192,13 +187,12 @@ export async function prepareBackgroundSessionFinalizer(
   const getObservedSignal =
     options.getObservedSignal ?? beginBackgroundSessionSignalTracking()
   const debug = options.debug ?? defaultDebug
-  const readExitCode = options.readExitCode ?? (() => process.exitCode)
   let finalized = false
 
   const currentTermination = () => {
     const signal = getObservedSignal()
     return signal === undefined
-      ? { exitCode: currentProcessExitCode(readExitCode) }
+      ? { exitCode: currentProcessExitCode() }
       : { signal }
   }
 
