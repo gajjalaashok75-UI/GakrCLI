@@ -11,9 +11,15 @@ import {
 } from './bgFinalizer.js'
 import { buildBackgroundChildProcessConfig } from './bg.js'
 import {
+  BACKGROUND_PROCESS_MARKER_FLAG,
+  backgroundProcessMarkerToken,
+  isValidBackgroundProcessMarker,
+} from './bgRouting.js'
+import {
   _setBackgroundSessionsRootForTesting,
   listBackgroundSessions,
   refreshBackgroundSessionStatuses,
+  verifyBackgroundSessionProcessIdentity,
   type BackgroundSession,
 } from './bgRegistry.js'
 
@@ -196,10 +202,6 @@ describe('background session finalizer', () => {
       onExit: listener => {
         exitListener = listener
       },
-      // Bun cannot restore `process.exitCode` to undefined once assigned, and a
-      // leaked value changes headless startup in later suites. Inject the
-      // numeric-string form instead of mutating the real global.
-      readExitCode: () => '7',
       finalize: async (_id, termination) => {
         finalized.push(termination.exitCode ?? -1)
         return ownedSession('bg-owned', 500)
@@ -212,9 +214,15 @@ describe('background session finalizer', () => {
     expect(preparation).toBe('installed')
     expect(reads).toBe(3)
     expect(env[BACKGROUND_SESSION_ID_ENV]).toBeUndefined()
-    await beforeExitListener?.()
-    await cleanup?.()
-    exitListener?.(7)
+    const previousExitCode = process.exitCode
+    process.exitCode = '7' as unknown as number
+    try {
+      await beforeExitListener?.()
+      await cleanup?.()
+      exitListener?.(7)
+    } finally {
+      process.exitCode = previousExitCode ?? 0
+    }
     expect(finalized).toEqual([7])
     expect(finalizedSync).toEqual([])
   })
@@ -223,42 +231,43 @@ describe('background session finalizer', () => {
     let cleanup: (() => void | Promise<void>) | undefined
     let exitListener: ((code: number) => void) | undefined
     const diagnostics: string[] = []
-    // Compare against the ambient value rather than pinning it: finalization
-    // must never write `process.exitCode`, and Bun makes an assignment here
-    // permanent for the rest of the test process.
-    const exitCodeBeforeFinalization = process.exitCode
-    await prepareBackgroundSessionFinalizer({
-      env: {
-        [BACKGROUND_SESSION_ID_ENV]: 'bg-write-failure',
-        [BACKGROUND_SESSION_LAUNCHER_PID_ENV]: '123',
-      },
-      pid: 500,
-      readSession: async () => ownedSession('bg-write-failure', 500),
-      isLauncherAlive: () => true,
-      registerCleanup: fn => {
-        cleanup = fn
-        return () => {}
-      },
-      onBeforeExit: () => {},
-      onExit: listener => {
-        exitListener = listener
-      },
-      readExitCode: () => 29,
-      finalize: async () => {
-        throw Object.assign(new Error('private path /secret'), { code: 'EIO' })
-      },
-      finalizeSync: () => {
-        throw new Error('private sync details')
-      },
-      debug: message => {
-        diagnostics.push(message)
-        throw new Error('diagnostic sink failed')
-      },
-    })
+    const previousExitCode = process.exitCode
+    process.exitCode = 29
+    try {
+      await prepareBackgroundSessionFinalizer({
+        env: {
+          [BACKGROUND_SESSION_ID_ENV]: 'bg-write-failure',
+          [BACKGROUND_SESSION_LAUNCHER_PID_ENV]: '123',
+        },
+        pid: 500,
+        readSession: async () => ownedSession('bg-write-failure', 500),
+        isLauncherAlive: () => true,
+        registerCleanup: fn => {
+          cleanup = fn
+          return () => {}
+        },
+        onBeforeExit: () => {},
+        onExit: listener => {
+          exitListener = listener
+        },
+        finalize: async () => {
+          throw Object.assign(new Error('private path /secret'), { code: 'EIO' })
+        },
+        finalizeSync: () => {
+          throw new Error('private sync details')
+        },
+        debug: message => {
+          diagnostics.push(message)
+          throw new Error('diagnostic sink failed')
+        },
+      })
 
-    await cleanup?.()
-    exitListener?.(29)
-    expect(process.exitCode).toBe(exitCodeBeforeFinalization)
+      await cleanup?.()
+      exitListener?.(29)
+      expect(process.exitCode).toBe(29)
+    } finally {
+      process.exitCode = previousExitCode ?? 0
+    }
     expect(diagnostics).toHaveLength(2)
     expect(diagnostics[0]).toContain('(EIO)')
     expect(diagnostics.join('\n')).not.toContain('/secret')
@@ -268,29 +277,34 @@ describe('background session finalizer', () => {
   it('records an observed shutdown signal instead of a successful exit code', async () => {
     let cleanup: (() => void | Promise<void>) | undefined
     let termination: { exitCode?: number; signal?: string } | undefined
-    await prepareBackgroundSessionFinalizer({
-      env: {
-        [BACKGROUND_SESSION_ID_ENV]: 'bg-observed-sigint',
-        [BACKGROUND_SESSION_LAUNCHER_PID_ENV]: '123',
-      },
-      pid: 500,
-      readSession: async () => ownedSession('bg-observed-sigint', 500),
-      isLauncherAlive: () => true,
-      registerCleanup: fn => {
-        cleanup = fn
-        return () => {}
-      },
-      onBeforeExit: () => {},
-      onExit: () => {},
-      getObservedSignal: () => 'SIGINT',
-      readExitCode: () => 0,
-      finalize: async (_id, observed) => {
-        termination = observed
-        return ownedSession('bg-observed-sigint', 500)
-      },
-    })
+    const previousExitCode = process.exitCode
+    process.exitCode = 0
+    try {
+      await prepareBackgroundSessionFinalizer({
+        env: {
+          [BACKGROUND_SESSION_ID_ENV]: 'bg-observed-sigint',
+          [BACKGROUND_SESSION_LAUNCHER_PID_ENV]: '123',
+        },
+        pid: 500,
+        readSession: async () => ownedSession('bg-observed-sigint', 500),
+        isLauncherAlive: () => true,
+        registerCleanup: fn => {
+          cleanup = fn
+          return () => {}
+        },
+        onBeforeExit: () => {},
+        onExit: () => {},
+        getObservedSignal: () => 'SIGINT',
+        finalize: async (_id, observed) => {
+          termination = observed
+          return ownedSession('bg-observed-sigint', 500)
+        },
+      })
 
-    await cleanup?.()
+      await cleanup?.()
+    } finally {
+      process.exitCode = previousExitCode ?? 0
+    }
     expect(termination).toEqual({ signal: 'SIGINT' })
   })
 
@@ -335,6 +349,7 @@ describe('background session finalizer', () => {
     id: string,
     args: string[],
   ): Promise<number> {
+    const processMarker = 'c'.repeat(64)
     const processEnv: NodeJS.ProcessEnv = {
       ...process.env,
       GAKR_CONFIG_DIR: configDir,
@@ -348,6 +363,7 @@ describe('background session finalizer', () => {
       processEnv,
       stdoutLogPath: join(configDir, `${id}.out.log`),
       backgroundSessionId: id,
+      processMarker,
       launcherPid: process.pid,
     })
     const child = spawn(childConfig.command, childConfig.args, {
@@ -359,7 +375,11 @@ describe('background session finalizer', () => {
     await mkdir(join(sessionsRoot, 'sessions'), { recursive: true })
     await writeFile(
       join(sessionsRoot, 'sessions', `${id}.json`),
-      JSON.stringify(ownedSession(id, child.pid)),
+      JSON.stringify({
+        ...ownedSession(id, child.pid),
+        processMarker,
+        command: [childConfig.command, ...childConfig.args],
+      }),
     )
     const [code] = (await once(child, 'exit')) as [number]
     return code
@@ -476,11 +496,76 @@ describe('background session finalizer', () => {
         exitCode: expectation.exitCode,
         terminalReason: 'exit_code',
       })
+      expect(isValidBackgroundProcessMarker(session.processMarker)).toBe(true)
+      expect(session.command).toContain(
+        backgroundProcessMarkerToken(session.processMarker!),
+      )
+      expect(stdout).not.toContain(BACKGROUND_PROCESS_MARKER_FLAG)
       expect(await Bun.file(session.stdoutLogPath).exists()).toBe(true)
       expect(await Bun.file(session.stderrLogPath).exists()).toBe(true)
     })
   }
 
+  it.skipIf(process.platform === 'win32')(
+    'recognizes a live built marked child through the production command probe',
+    async () => {
+      const id = 'bg-built-live-marker'
+      const processMarker = 'e'.repeat(64)
+      const processEnv: NodeJS.ProcessEnv = {
+        ...process.env,
+        GAKR_CONFIG_DIR: configDir,
+      }
+      delete processEnv.GAKR_DISABLE_CLI_ENTRYPOINT_AUTO_RUN
+      const childConfig = buildBackgroundChildProcessConfig({
+        execPath: 'node',
+        execArgv: [],
+        entrypoint: installedLauncherPath,
+        childArgs: ['--version'],
+        processEnv,
+        stdoutLogPath: join(configDir, `${id}.out.log`),
+        backgroundSessionId: id,
+        processMarker,
+        launcherPid: process.pid,
+      })
+      const child = spawn(childConfig.command, childConfig.args, {
+        env: childConfig.env,
+        stdio: ['ignore', 'ignore', 'ignore'],
+      })
+      if (!child.pid) throw new Error('built CLI fixture did not start')
+      const exit = once(child, 'exit')
+      let forceTimer: ReturnType<typeof setTimeout> | undefined
+
+      try {
+        expect(child.kill('SIGSTOP')).toBe(true)
+        const session: BackgroundSession = {
+          ...ownedSession(id, child.pid),
+          processMarker,
+          command: [childConfig.command, ...childConfig.args],
+        }
+        await mkdir(join(sessionsRoot, 'sessions'), { recursive: true })
+        await writeFile(
+          join(sessionsRoot, 'sessions', `${id}.json`),
+          JSON.stringify(session),
+        )
+
+        expect(verifyBackgroundSessionProcessIdentity(session).state).toBe(
+          'matches',
+        )
+        expect(await refreshBackgroundSessionStatuses()).toMatchObject([
+          { id, status: 'running', processMarker },
+        ])
+      } finally {
+        child.kill('SIGCONT')
+        forceTimer = setTimeout(() => child.kill('SIGKILL'), 5_000)
+        await exit
+        clearTimeout(forceTimer)
+      }
+    },
+  )
+
+  // Spawns the bundled launcher three times end to end. A cold start of the
+  // built bundle costs several seconds per process on Windows, so the default
+  // 5s per-test budget is not enough for the whole sequence.
   it('keeps the installed launcher PID stable and shows outcomes truthfully in ps', async () => {
     expect(await runBuiltCliSession('bg-built-success', ['--version'])).toBe(0)
     expect(
@@ -512,9 +597,13 @@ describe('background session finalizer', () => {
     expect(stderr).toBe('')
     expect(stdout).toMatch(/bg-built-success\s+exited/)
     expect(stdout).toMatch(/bg-built-failure\s+failed/)
-    // Three cold starts of the installed launcher (two sessions plus `ps`),
-    // each loading the full dist bundle, exceed the default per-test budget.
-  }, 60_000)
+    for (const session of await listBackgroundSessions()) {
+      expect(session.processMarker).toBe('c'.repeat(64))
+      expect(session.command).toContain(
+        backgroundProcessMarkerToken(session.processMarker!),
+      )
+    }
+  }, 120_000)
 
   it.skipIf(process.platform === 'win32')(
     'does not invent success when a fixture is forcibly destroyed',
