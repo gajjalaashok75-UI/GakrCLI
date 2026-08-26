@@ -16,8 +16,54 @@ import {
   getDiscoveryCacheKey,
   getRouteDiscoveryHeaders,
 } from './discoveryService'
+import glmBrand from './brands/glm.js'
+import glmModels from './models/glm.js'
+import zaiVendor from './vendors/zai.js'
 
 const originalConfigDir = process.env.GAKR_CONFIG_DIR
+
+describe('Z.AI GLM-5.3 descriptor contract', () => {
+  it('wires the verified shared model, brand, and direct catalog entry without changing the default', () => {
+    const model = glmModels.find(candidate => candidate.id === 'glm-5.3')
+    expect(model).toMatchObject({
+      id: 'glm-5.3',
+      label: 'GLM 5.3',
+      vendorId: 'zai',
+      brandId: 'glm',
+      classification: ['chat', 'reasoning', 'coding'],
+      defaultModel: 'glm-5.3',
+      contextWindow: 1_000_000,
+      maxOutputTokens: 131_072,
+      runtimeMetadataScope: 'catalog',
+      capabilities: {
+        supportsVision: false,
+        supportsStreaming: true,
+        supportsFunctionCalling: true,
+        supportsJsonMode: true,
+        supportsReasoning: true,
+        supportsPreciseTokenCount: false,
+      },
+    })
+    expect(glmBrand.modelIds?.[0]).toBe('glm-5.3')
+
+    const catalogEntry = zaiVendor.catalog?.models?.[0]
+    expect(catalogEntry).toMatchObject({
+      id: 'glm-5.3',
+      apiName: 'glm-5.3',
+      label: 'GLM-5.3',
+      modelDescriptorId: 'glm-5.3',
+      reasoning: {
+        mode: 'levels',
+        levels: ['low', 'high', 'xhigh'],
+        wireFormat: 'zai_compatible',
+      },
+      transportOverrides: {
+        openaiShim: { enableToolStreaming: true },
+      },
+    })
+    expect(zaiVendor.defaultModel).toBe('glm-5.2')
+  })
+})
 
 async function withTempConfigDir<T>(fn: () => Promise<T>): Promise<T> {
   await acquireSharedMutationLock('integrations/runtimeMetadata.test.ts')

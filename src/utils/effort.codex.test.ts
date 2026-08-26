@@ -3,18 +3,29 @@ import {
   acquireSharedMutationLock,
   releaseSharedMutationLock,
 } from '../test/sharedMutationLock.js'
-// Import the real auth.js and providerConfig.js up front so we can spread
-// their export surfaces into mock factories. `mock.module()` is process-global
-// in bun:test and `mock.restore()` does not undo it (see user.test.ts), so
-// any module we mock here needs to keep the full original export shape — or
-// downstream tests that load it via openaiShim/client/codexShim crash with
-// "Export named 'X' not found in module".
+// Import the real auth.js etc. up front so we can spread their export surfaces
+// into mock factories. `mock.module()` is process-global in bun:test and
+// `mock.restore()` does not undo it (see user.test.ts), so any module we mock
+// here needs to keep the full original export shape — or downstream tests that
+// load it via openaiShim/client/codexShim crash with "Export named 'X' not
+// found in module".
 import * as actualAuth from './auth.js'
-import * as actualProviderConfig from '../services/api/providerConfig.js'
 import * as actualThinking from './thinking.js'
 import * as actualGrowthbook from 'src/services/analytics/growthbook.js'
 import * as actualProviders from './model/providers.js'
 import * as actualModelSupportOverrides from './model/modelSupportOverrides.js'
+
+// Re-register every module this file mocks back to its real export surface.
+// `mock.module()` is process-global and `mock.restore()` does not undo it, so
+// without this the `importFreshEffortModule()` stubs leak into every other test
+// file sharing the process.
+function restoreMockedModulesToActual(): void {
+  mock.module('./model/providers.js', () => actualProviders)
+  mock.module('./model/modelSupportOverrides.js', () => actualModelSupportOverrides)
+  mock.module('./auth.js', () => actualAuth)
+  mock.module('./thinking.js', () => actualThinking)
+  mock.module('src/services/analytics/growthbook.js', () => actualGrowthbook)
+}
 
 beforeEach(async () => {
   await acquireSharedMutationLock('utils/effort.codex.test.ts')
@@ -23,6 +34,7 @@ beforeEach(async () => {
 afterEach(() => {
   try {
     mock.restore()
+    restoreMockedModulesToActual()
   } finally {
     releaseSharedMutationLock()
   }
@@ -40,10 +52,15 @@ async function importFreshEffortModule(options: {
     ...actualModelSupportOverrides,
     get3PModelCapabilityOverride: () => undefined,
   }))
-  mock.module('../services/api/providerConfig.js', () => ({
-    ...actualProviderConfig,
-    supportsCodexReasoningEffort: () => options.supportsCodexReasoningEffort,
-  }))
+  // providerConfig.js is deliberately NOT mocked. Replacing
+  // `supportsCodexReasoningEffort` with a constant is redundant — the real
+  // lookup already returns `options.supportsCodexReasoningEffort` for every
+  // model these tests exercise (gpt-5.4 is a Codex alias, gpt-5.3-codex-spark
+  // is explicitly excluded, and the Anthropic/Gemini ids match neither the
+  // alias map nor the gpt-5 family). Mocking it leaked a constant-true stub
+  // process-wide into providerConfig.protoAlias.test.ts, which asserts the real
+  // prototype-safe lookup; a mock.module registration cannot be undone, so the
+  // only real fix is not to register one.
   mock.module('./auth.js', () => ({
     ...actualAuth,
     isProSubscriber: () => false,
@@ -197,7 +214,7 @@ test('xhigh does not appear in available levels for non-supporting models', asyn
 
   // Has xhigh AND max (opus-4-8)
   const opusLevels = getAvailableEffortLevels('claude-opus-4-8')
-  expect(opusLevels).toEqual(['low', 'medium', 'high', 'xhigh', 'max'])
+  expect(opusLevels).toEqual(['low', 'medium', 'high', 'xhigh', 'max', 'ultracode'])
 })
 
 test('effort allowlist is narrowed to the shim isAdaptive||isOpus45 set', async () => {
