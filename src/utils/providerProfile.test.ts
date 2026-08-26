@@ -280,14 +280,14 @@ test('openai launch ignores codex persisted transport hints', async () => {
   assert.equal(env.OPENAI_API_KEY, 'sk-live')
 })
 
-test('buildStartupEnvFromProfile defaults fresh installs to gakr-gakr Opengateway', async () => {
+test('buildStartupEnvFromProfile defaults fresh installs to Gitlawb Opengateway', async () => {
   const env = await buildStartupEnvFromProfile({
     persisted: null,
     processEnv: {},
   })
 
   assert.equal(env.GAKR_CODE_USE_OPENAI, '1')
-  assert.equal(env.OPENAI_BASE_URL, 'https://opengateway.gakr-gakr.com/v1')
+  assert.equal(env.OPENAI_BASE_URL, 'https://opengateway.gitlawb.com/v1')
   assert.equal(env.OPENAI_MODEL, 'mimo-v2.5-pro')
   assert.equal(isDefaultStartupProviderEnv(env), true)
 })
@@ -319,13 +319,13 @@ test('buildStartupEnvFromProfile preserves env-only Fireworks setup without a sa
     },
   })
 
-  // Must NOT fall through to gakr-gakr Opengateway default
+  // Must NOT fall through to Gitlawb Opengateway default
   assert.equal(env.FIREWORKS_API_KEY, 'fw-key')
   assert.equal(env.GAKR_CODE_USE_OPENAI, undefined)
   assert.equal(
     env.OPENAI_BASE_URL,
     undefined,
-    'should not inject gakr-gakr Opengateway base URL',
+    'should not inject Gitlawb Opengateway base URL',
   )
   assert.equal(isDefaultStartupProviderEnv(env), false)
 })
@@ -342,7 +342,7 @@ test('buildStartupEnvFromProfile preserves env-only NEAR AI setup without a save
   assert.equal(
     env.OPENAI_BASE_URL,
     undefined,
-    'should not inject gakr-gakr Opengateway base URL',
+    'should not inject Gitlawb Opengateway base URL',
   )
   assert.equal(isDefaultStartupProviderEnv(env), false)
 })
