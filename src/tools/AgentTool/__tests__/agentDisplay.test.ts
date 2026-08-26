@@ -122,12 +122,18 @@ describe('compareAgentsByName', () => {
 
 describe('AGENT_SOURCE_GROUPS', () => {
   test('contains expected source groups in order', () => {
-    expect(AGENT_SOURCE_GROUPS).toHaveLength(7)
+    expect(AGENT_SOURCE_GROUPS).toHaveLength(8)
     expect(AGENT_SOURCE_GROUPS[0]).toEqual({
       label: 'User agents',
       source: 'userSettings',
     })
+    // 'sdk' sits between the CLI-arg and built-in groups: SDK-supplied agents
+    // override built-ins but still lose to anything the user configured.
     expect(AGENT_SOURCE_GROUPS[6]).toEqual({
+      label: 'SDK agents',
+      source: 'sdk',
+    })
+    expect(AGENT_SOURCE_GROUPS[7]).toEqual({
       label: 'Built-in agents',
       source: 'built-in',
     })

@@ -202,16 +202,26 @@ describe('AgentTool output status contract', () => {
     expect(output).toContain('Backgrounded agent')
   })
 
-  test('does not render the removed remote-launched status', async () => {
+  test('renders the internal remote-launched status', async () => {
+    // Upstream deleted this renderer; Gakrcli keeps it. RemoteLaunchedOutput is
+    // a private type deliberately excluded from the public output schema (see
+    // 'rejects removed remote-launched output status' above) and from
+    // mapToolResultToToolResultBlockParam, but UI.tsx still renders it, so the
+    // status must not be treated as unreachable here.
     const output = await renderToString(
       renderToolResultMessage(
-        { status: 'remote_launched' } as never,
+        {
+          status: 'remote_launched',
+          taskId: 'task-1',
+          sessionUrl: 'https://example.com/session',
+        } as never,
         [],
         { tools: [], verbose: false, theme: 'dark' },
       ),
       80,
     )
 
-    expect(output.trim()).toBe('')
+    expect(output).toContain('Remote agent launched')
+    expect(output).toContain('task-1')
   })
 })

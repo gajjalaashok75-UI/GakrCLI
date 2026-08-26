@@ -64,10 +64,10 @@ function CollapseStatus(): React.ReactNode {
 }
 
 // Order for displaying source groups: Project > User > Managed > Plugin > Built-in
-const SOURCE_DISPLAY_ORDER = ['Project', 'User', 'Managed', 'Plugin', 'Built-in'];
+const SOURCE_DISPLAY_ORDER = ['Project', 'User', 'Managed', 'Plugin', 'SDK', 'Built-in'];
 
 /** Group items by source type for display, sorted by tokens descending within each group */
-function groupBySource<T extends { source: SettingSource | 'plugin' | 'built-in'; tokens: number }>(
+function groupBySource<T extends { source: SettingSource | 'plugin' | 'sdk' | 'built-in'; tokens: number }>(
   items: T[],
 ): Map<string, T[]> {
   const groups = new Map<string, T[]>();
