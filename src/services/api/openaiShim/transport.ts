@@ -261,7 +261,13 @@ export async function fetchWithHeadersDeadline(
         }),
       options.timeoutMs,
     )
-    timer.unref?.()
+    // Deliberately NOT unref'd. Bun (1.3.11, Windows) will neither fire an
+    // unref'd timer nor exit when that timer is the only pending work, so an
+    // unref'd deadline can never abort a fetch that stalls before headers --
+    // exactly the case this deadline exists to bound. The timer is always
+    // cleared in the `finally` below, so its lifetime is capped by the
+    // time-to-headers of an in-flight request, which already holds the loop
+    // open via its socket; keeping it ref'd therefore does not delay exit.
 
     let headersReceived = false
     try {
