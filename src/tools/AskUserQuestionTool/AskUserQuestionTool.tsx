@@ -145,7 +145,7 @@ export type Question = z.infer<ReturnType<typeof questionSchema>>;
 export type QuestionOption = z.infer<ReturnType<typeof questionOptionSchema>>;
 export type Output = z.infer<OutputSchema>;
 
-function AskUserQuestionResultMessage({ answers }: { answers: Output['answers'] }): React.ReactNode {
+function AskUserQuestionResultMessage({ answers = {} }: { answers?: Output['answers'] }): React.ReactNode {
   return (
     <Box flexDirection="column" marginTop={1}>
       <Box flexDirection="row">
@@ -245,7 +245,8 @@ export const AskUserQuestionTool: Tool<InputSchema, Output> = buildTool({
   renderToolUseProgressMessage() {
     return null;
   },
-  renderToolResultMessage({ answers }, _toolUseID) {
+  renderToolResultMessage(result, _toolUseID) {
+    const answers = result?.answers ?? {}
     return <AskUserQuestionResultMessage answers={answers} />;
   },
   renderToolUseRejectedMessage() {
