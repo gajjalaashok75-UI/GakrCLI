@@ -122,6 +122,27 @@ export const ExecuteTool = buildTool({
       }
     }
 
+    // Block interactive tools. AskUserQuestion (and any other tool whose
+    // requiresUserInteraction() is true) needs its dedicated picker rendered by
+    // the permission pipeline to collect user input. ExecuteExtraTool delegates
+    // straight to targetTool.call(), bypassing that pipeline, so it can never
+    // capture the user's answers — every invocation would return the model's
+    // empty answers and a blank "User answered" line. Route the model to invoke
+    // the tool directly, where the real selector runs.
+    if (targetTool.requiresUserInteraction?.()) {
+      return {
+        data: {
+          result: null,
+          tool_name: input.tool_name,
+        },
+        newMessages: [
+          createUserMessage({
+            content: `Tool "${input.tool_name}" requires user interaction and cannot be invoked through ExecuteExtraTool. Invoke "${input.tool_name}" directly with your questions and options so the interactive picker can collect the answers.`,
+          }),
+        ],
+      }
+    }
+
     // Schema-validate params against the target tool BEFORE delegating.
     // ExecuteExtraTool passes raw params straight from the model to
     // validateInput/call without re-running the target's zod schema, so a

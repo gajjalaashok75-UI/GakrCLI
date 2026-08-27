@@ -46,6 +46,7 @@ mock.module('src/utils/searchExtraTools.js', () => ({
       'CronCreate',
       'WithDefaults',
       'McpTool',
+      'AskUserQuestion',
     ]),
   isDeferredToolsDeltaEnabled: () => false,
   getDeferredToolsDelta: () => null,
@@ -181,6 +182,40 @@ describe('ExecuteTool', () => {
     })
     expect(result.newMessages).toBeDefined()
     expect(result.newMessages!.length).toBeGreaterThan(0)
+  })
+
+  test('blocks interactive tools instead of delegating empty answers', async () => {
+    // AskUserQuestion requires user interaction: its answers are collected by
+    // the dedicated picker rendered through the permission pipeline. If invoked
+    // via ExecuteExtraTool it would delegate straight to call() with the model's
+    // empty answers and return a blank "User answered" line. So ExecuteExtraTool
+    // must refuse and tell the model to invoke the tool directly.
+    const interactiveTarget = makeMockTool('AskUserQuestion', 'collected')
+    interactiveTarget.requiresUserInteraction = () => true
+    const ctx = makeContext([interactiveTarget])
+
+    const result = await ExecuteTool.call(
+      {
+        tool_name: 'AskUserQuestion',
+        params: {
+          questions: [{ question: 'Q?', header: 'H', options: [{ label: 'A' }] }],
+        },
+      },
+      ctx,
+      async () => ({ behavior: 'allow' }),
+      { type: 'assistant', content: [], uuid: 'msg1' } as never,
+      undefined,
+    )
+
+    expect(result.data).toEqual({
+      result: null,
+      tool_name: 'AskUserQuestion',
+    })
+    expect(result.newMessages).toBeDefined()
+    const message = result.newMessages![0].content as string
+    expect(message).toContain('requires user interaction')
+    expect(message).toContain('AskUserQuestion')
+    expect(message).toMatch(/directly/i)
   })
 
   test('returns permission denied when target denies', async () => {
