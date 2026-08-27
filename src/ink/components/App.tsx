@@ -121,8 +121,13 @@ export default class App extends PureComponent<Props, State> {
   // where startup input appears frozen when data mode is the default.
   stdinMode: 'readable' | 'data' = process.env.GAKR_USE_DATA_STDIN === '1' || process.env.GAKR_USE_READABLE_STDIN === '0' ? 'data' : 'readable';
   // Timeout durations for incomplete sequences (ms)
-  readonly NORMAL_TIMEOUT = 50; // Short timeout for regular esc sequences
-  readonly PASTE_TIMEOUT = 500; // Longer timeout for paste operations
+  // NORMAL_TIMEOUT must exceed IME composition gaps: Vietnamese Telex/VNI
+  // and CJK IMEs emit multi-byte UTF-8 / CSI-u sequences whose halves can
+  // arrive with inter-chunk pauses. Flushing at 50ms split those sequences
+  // into garbage keys ; 300ms gives composition room while keeping
+  // lone-escape detection acceptable.
+  readonly NORMAL_TIMEOUT = 300;
+  readonly PASTE_TIMEOUT = 1000; // Longer timeout for paste operations
 
   // Terminal query/response dispatch. Responses arrive on stdin (parsed
   // out by parse-keypress) and are routed to pending promise resolvers.
@@ -242,10 +247,10 @@ export default class App extends PureComponent<Props, State> {
         stdin.setRawMode(true);
         if (this.stdinMode === 'data') {
           stdin.addListener('data', this.handleDataChunk);
+          stdin.resume();
         } else {
           stdin.addListener('readable', this.handleReadable);
         }
-        stdin.resume();
         // Enable bracketed paste mode
         this.props.stdout.write(EBP);
         // Enable terminal focus reporting (DECSET 1004)
@@ -456,7 +461,7 @@ export default class App extends PureComponent<Props, State> {
       this.props.stdout.write(SHOW_CURSOR + DFE + DISABLE_MOUSE_TRACKING);
     }
 
-    // Emit suspend event for GakrCLI Code to handle. Mostly just has a notification
+    // Emit suspend event for GakrCLI to handle. Mostly just has a notification
     this.internal_eventEmitter.emit('suspend');
 
     // Set up resume handler
@@ -477,7 +482,7 @@ export default class App extends PureComponent<Props, State> {
         this.props.stdout.write(EFE);
       }
 
-      // Emit resume event for GakrCLI Code to handle
+      // Emit resume event for GakrCLI to handle
       this.internal_eventEmitter.emit('resume');
       process.removeListener('SIGCONT', resumeHandler);
     };
