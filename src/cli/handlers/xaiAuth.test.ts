@@ -28,7 +28,7 @@ beforeEach(async () => {
   process.chdir(tempCwd)
   process.env.GAKR_CONFIG_DIR = tempConfigDir
   process.env.GAKR_CODE_SIMPLE = '1'
-  // Other test files (SQLiteProvider, knowledgeGraph, …) call
+  // Other test files ( knowledgeGraph, …) call
   // setGakrCLIConfigHomeDirForTesting and may leak the override. Pin it
   // to our temp dir so clearPersistedXaiOAuthProfile's path resolution
   // lands on the file we just wrote.

@@ -101,20 +101,6 @@ export async function readFileInRange(
       throw new FileTooLargeError(stats.size, maxBytes)
     }
 
-    // For targeted reads of moderately large files, prefer streaming to
-    // avoid loading the full file into memory when only a slice is needed.
-    const isTargetedRead = offset > 0 || maxLines !== undefined
-    if (isTargetedRead && stats.size > FAST_PATH_MAX_SIZE / 4) {
-      return readFileInRangeStreaming(
-        filePath,
-        offset,
-        maxLines,
-        maxBytes,
-        truncateOnByteLimit,
-        signal,
-      )
-    }
-
     const text = await readFile(filePath, { encoding: 'utf8', signal })
     return readFileInRangeFast(
       text,
@@ -150,6 +136,22 @@ function readFileInRangeFast(
 
   // Strip BOM.
   const text = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw
+
+  // Empty file: no lines at all. Without this short-circuit the final-fragment
+  // block below pushes one phantom empty line and reports totalLines: 1, which
+  // makes the FileReadTool empty-file branch (keyed on totalLines === 0) show
+  // the wrong "shorter than the provided offset" warning for a 0-byte file.
+  if (text.length === 0) {
+    return {
+      content: '',
+      lineCount: 0,
+      totalLines: 0,
+      totalBytes: 0,
+      readBytes: 0,
+      truncatedByBytes: false,
+      mtimeMs,
+    }
+  }
 
   // Split lines, strip \r, select range.
   const selectedLines: string[] = []
