@@ -105,3 +105,4 @@ test('explicit GAKR_CODE_DISABLE_GIT_INSTRUCTIONS=0 forces instructions on outsi
   // The defined-falsy env value short-circuits before repository detection.
   expect(shouldIncludeGitInstructions()).toBe(true)
 })
+

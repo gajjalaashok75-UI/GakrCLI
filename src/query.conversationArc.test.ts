@@ -110,9 +110,8 @@ function makeToolUseContext(): QueryParams['toolUseContext'] {
 const productionArcTest = feature('CONVERSATION_ARC') ? test : test.skip
 
 productionArcTest('query appends arc memory to the model system prompt without mutating user input', async () => {
-  // Root's arc lives in the knowledge graph (project-scoped under the config
-  // home this test overrides), not in a memdir sidecar, so it takes no path.
-  initializeArc()
+  const memoryPath = getAutoMemPath()
+  initializeArc(memoryPath)
   const goal = addGoal('Ship query integration')
   updateGoalStatus(goal.id, 'completed')
   await finalizeArcTurn()
