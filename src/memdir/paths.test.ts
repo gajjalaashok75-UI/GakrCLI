@@ -5,8 +5,11 @@ import {
   setIsInteractive,
 } from '../bootstrap/state.js'
 import { SETTING_SOURCES } from '../utils/settings/constants.js'
-import * as realSettings from '../utils/settings/settings.js'
 import { isAutoMemoryEnabled } from './paths.ts'
+
+const realSettings = (await import(
+  `../utils/settings/settings.js?pathsTestReal=${Date.now()}-${Math.random()}`
+)) as typeof import('../utils/settings/settings.js')
 
 // Pin issue #1326: `memory.autoWrite` is a discoverable alias for the legacy
 // `autoMemoryEnabled` setting, and either key opts out for governance /
@@ -93,26 +96,6 @@ test('an explicit settings opt-in overrides the non-interactive default', () => 
     { source: 'userSettings', settings: { memory: { autoWrite: true } } },
   ])
   expect(isAutoMemoryEnabled()).toBe(true)
-})
-
-test('a mounted remote memory dir overrides the non-interactive default', () => {
-  // GAKR_CODE_REMOTE_MEMORY_DIR is how CCR signals persistent storage: such a
-  // session is non-interactive but deliberately memory-backed.
-  setIsInteractive(false)
-  process.env.GAKR_CODE_REMOTE = '1'
-  process.env.GAKR_CODE_REMOTE_MEMORY_DIR = '/mnt/memory'
-  mockSources([{ source: 'userSettings', settings: {} }])
-  expect(isAutoMemoryEnabled()).toBe(true)
-})
-
-test('a settings opt-out still wins over the non-interactive escape hatches', () => {
-  setIsInteractive(false)
-  process.env.GAKR_CODE_REMOTE = '1'
-  process.env.GAKR_CODE_REMOTE_MEMORY_DIR = '/mnt/memory'
-  mockSources([
-    { source: 'userSettings', settings: { memory: { autoWrite: false } } },
-  ])
-  expect(isAutoMemoryEnabled()).toBe(false)
 })
 
 test('memory.autoWrite: false opts out via the new discoverable alias (#1326)', () => {

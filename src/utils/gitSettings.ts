@@ -23,9 +23,9 @@ export function shouldIncludeGitInstructions(): boolean {
   const configured = getInitialSettings().includeGitInstructions
   if (configured !== undefined) return configured
   // Default: ship the ~1.7k-token commit/PR protocol in the Bash tool
-  // description only when the session is inside a git repository — it is pure
-  // waste elsewhere. findGitRoot handles worktree/submodule .git files and is
-  // LRU-memoized; getCwd() tracks the session cwd (Bash `cd`, daemon/SDK
-  // sessions), which process.cwd() does not.
+  // description only when the session is inside a git repository — it is
+  // pure waste elsewhere. findGitRoot handles worktree/submodule .git files
+  // and is LRU-memoized; getCwd() tracks the session cwd (Bash `cd`,
+  // daemon/SDK sessions), which process.cwd() does not.
   return findGitRoot(getCwd()) !== null
 }
