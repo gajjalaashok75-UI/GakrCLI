@@ -223,6 +223,24 @@ function shouldPreserveThinkingBlocksForProviderReplay(): boolean {
   )
 }
 
+export function stripThinkingBlocksIfProviderAllows(
+  messages: NormalizedMessage[],
+): NormalizedMessage[] {
+  const provider = getAPIProvider()
+  const isAnthropicNativeTransport = usesAnthropicNativeMessageFormat({
+    processEnv: process.env,
+    model: process.env.OPENAI_MODEL,
+    providerCategory: provider as NonNullable<
+      Parameters<typeof usesAnthropicNativeMessageFormat>[0]
+    >['providerCategory'],
+  })
+  const isThirdPartyProvider = provider !== 'foundry' && !isAnthropicNativeTransport
+  if (isThirdPartyProvider && !shouldPreserveThinkingBlocksForProviderReplay()) {
+    return stripThinkingBlocks(messages)
+  }
+  return messages
+}
+
 /**
  * Deserializes messages from a log file into the format expected by the REPL.
  * Filters unresolved tool uses, orphaned thinking messages, and appends a

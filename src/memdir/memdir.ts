@@ -21,9 +21,9 @@ import { logForDebugging } from '../utils/debug.js'
 import { hasEmbeddedSearchTools } from '../utils/embeddedTools.js'
 import { getGakrCLIWorkspaceDir, isEnvTruthy } from '../utils/envUtils.js'
 import { formatFileSize } from '../utils/format.js'
+import { isMemoryWriteApprovalRequired } from '../utils/governancePolicy.js'
 import { getProjectDir } from '../utils/sessionStorage.js'
 import { getInitialSettings } from '../utils/settings/settings.js'
-import { isMemoryWriteApprovalRequired } from '../utils/governancePolicy.js'
 import {
   MEMORY_FRONTMATTER_EXAMPLE,
   TRUSTING_RECALL_SECTION,
@@ -242,6 +242,10 @@ export function buildMemoryLines(
   extraGuidelines?: string[],
   skipIndex = false,
 ): string[] {
+  const requiresApproval = isMemoryWriteApprovalRequired()
+  const dirGuidance = requiresApproval
+    ? 'Do not create or update files there until the user explicitly approves the specific memory write.'
+    : DIR_EXISTS_GUIDANCE
   const howToSave = skipIndex
     ? [
         '## How to save memories',
@@ -266,7 +270,7 @@ export function buildMemoryLines(
         '',
         `**Step 2** — add a pointer to that file in \`${ENTRYPOINT_NAME}\`. \`${ENTRYPOINT_NAME}\` is an index, not a memory — each entry should be one line, under ~150 characters: \`- [Title](file.md) — one-line hook\`. It has no frontmatter. Never write memory content directly into \`${ENTRYPOINT_NAME}\`.`,
         '',
-        `- \`${ENTRYPOINT_NAME}\` is always loaded into your conversation context — lines after ${MAX_ENTRYPOINT_LINES} will be truncated, so keep the index concise`,
+        `- \`${ENTRYPOINT_NAME}\` is always loaded into your conversation context — it is truncated after ${MAX_ENTRYPOINT_LINES} lines or ${formatFileSize(MAX_ENTRYPOINT_BYTES)}, whichever comes first, so keep the index concise (one short line per entry; long or many entries lose the tail)`,
         '- Keep the name, description, and type fields in memory files up-to-date with the content',
         '- Organize memory semantically by topic, not chronologically',
         '- Update or remove memories that turn out to be wrong or outdated',
@@ -276,10 +280,16 @@ export function buildMemoryLines(
   const lines: string[] = [
     `# ${displayName}`,
     '',
-    `You have a persistent, file-based memory system at \`${memoryDir}\`. ${DIR_EXISTS_GUIDANCE}`,
+    `You have a persistent, file-based memory system at \`${memoryDir}\`. ${dirGuidance}`,
     '',
     "You should build up this memory system over time so that future conversations can have a complete picture of who the user is, how they'd like to collaborate with you, what behaviors to avoid or repeat, and the context behind the work the user gives you.",
     '',
+    ...(requiresApproval
+      ? [
+          'Before creating, updating, or deleting persistent memory files, explicitly ask the user for approval and wait for confirmation.',
+          '',
+        ]
+      : []),
     'If the user explicitly asks you to remember something, save it immediately as whichever type fits best. If they ask you to forget something, find and remove the relevant entry.',
     '',
     ...TYPES_SECTION_INDIVIDUAL,
@@ -498,7 +508,9 @@ export async function loadMemoryPrompt(): Promise<string | null> {
       // creates the auto dir as a side effect. If the team dir ever moves
       // out from under the auto dir, add a second ensureMemoryDirExists call
       // for autoDir here.
-      await ensureMemoryDirExists(teamDir)
+      if (!isMemoryWriteApprovalRequired()) {
+        await ensureMemoryDirExists(teamDir)
+      }
       logMemoryDirCounts(autoDir, {
         memory_type:
           'auto' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -518,7 +530,9 @@ export async function loadMemoryPrompt(): Promise<string | null> {
     const autoDir = getAutoMemPath()
     // Harness guarantees the directory exists so the model can write without
     // checking. The prompt text reflects this ("already exists").
-    await ensureMemoryDirExists(autoDir)
+    if (!isMemoryWriteApprovalRequired()) {
+      await ensureMemoryDirExists(autoDir)
+    }
     logMemoryDirCounts(autoDir, {
       memory_type:
         'auto' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,

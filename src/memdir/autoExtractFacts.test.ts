@@ -3,12 +3,10 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync, existsSync, writeFileSy
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { extractFactsIntoMemdir } from './autoExtractFacts.js'
-import { getIsInteractive, setIsInteractive } from '../bootstrap/state.js'
 import { setGovernancePolicySettingsForSourceForTesting } from '../utils/governancePolicy.js'
 
 describe('autoExtractFacts', () => {
   let memDir: string
-  let originalInteractive = false
 
   beforeEach(() => {
     memDir = mkdtempSync(join(tmpdir(), 'auto-extract-facts-test-'))
@@ -16,13 +14,6 @@ describe('autoExtractFacts', () => {
     // facts are actually persisted.
     delete process.env.GAKR_CODE_DISABLE_AUTO_MEMORY
     delete process.env.GAKR_CODE_SIMPLE
-    // extractFactsIntoMemdir() also short-circuits on !isAutoMemoryEnabled(),
-    // which defaults OFF for non-interactive (-p) sessions. STATE.isInteractive
-    // starts false and only main.tsx ever sets it, so every test would take
-    // that early return and persist nothing. These cases assert the extraction
-    // logic itself, so declare the interactive session they exercise.
-    originalInteractive = getIsInteractive()
-    setIsInteractive(true)
     setGovernancePolicySettingsForSourceForTesting(() => ({
       memory: { requireApprovalBeforeWrite: false },
     }))
@@ -30,7 +21,6 @@ describe('autoExtractFacts', () => {
 
   afterEach(() => {
     setGovernancePolicySettingsForSourceForTesting(null)
-    setIsInteractive(originalInteractive)
     rmSync(memDir, { recursive: true, force: true })
   })
 
@@ -274,23 +264,15 @@ describe('autoExtractFacts', () => {
 
 describe('autoExtractFacts governance gate (P1#1, P2#6)', () => {
   let memDir: string
-  let originalInteractive = false
 
   beforeEach(() => {
     memDir = mkdtempSync(join(tmpdir(), 'auto-extract-gate-test-'))
     setGovernancePolicySettingsForSourceForTesting(null)
     delete process.env.GAKR_CODE_DISABLE_AUTO_MEMORY
-    // Declare an interactive session so each gate below is exercised for the
-    // reason it names. Auto-memory defaults off for non-interactive (-p) runs,
-    // which would make the expect(false) cases pass vacuously and would break
-    // the repeated-turn case that expects a first write to succeed.
-    originalInteractive = getIsInteractive()
-    setIsInteractive(true)
   })
 
   afterEach(() => {
     setGovernancePolicySettingsForSourceForTesting(null)
-    setIsInteractive(originalInteractive)
     rmSync(memDir, { recursive: true, force: true })
   })
 
