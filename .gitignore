@@ -8,8 +8,10 @@ cook/
 FEATURE-BUGS.md
 dist-d/
 .scout-it/
+MISSING-SDKS.md
 COOK.md
 compiled/
+gakrcli-web-ui/
 # Build outputs
 dist/
 *.tsbuildinfo

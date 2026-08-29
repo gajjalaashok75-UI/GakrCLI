@@ -115,6 +115,13 @@ export type SDKSessionOptions = {
   disallowedTools?: string[]
   /** Agent definitions to register with the session engine. */
   agents?: Record<string, SdkAgentDefinitionInput>
+  /**
+   * Initial reasoning-effort level for the session. Accepts a named level
+   * (`low`|`medium`|`high`|`xhigh`|`max`) or a numeric token budget. The engine
+   * clamps to the model's supported levels. `ultracode` is NOT accepted here —
+   * it is a multi-agent meta-mode, not an effort level.
+   */
+  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | number
 }
 
 /**
@@ -158,6 +165,8 @@ export interface SDKSession {
    * permission-request message and the host resolves it via this method.
    */
   respondToPermission(toolUseId: string, decision: PermissionResult): void
+  /** Set the reasoning-effort level (`low`|`medium`|`high`|`xhigh`|`max`) or a numeric token budget. */
+  setEffort(effort: NonNullable<SDKSessionOptions['effort']>): void
 }
 
 /**
@@ -503,6 +512,16 @@ class SDKSessionImpl implements SDKSession {
     }
     this.pendingPermissionPrompts.delete(toolUseId)
   }
+
+  setEffort(effort: NonNullable<SDKSessionOptions['effort']>): void {
+    // The engine resolves the applied effort from app state at submit time,
+    // clamping to the model's supported levels. `ultracode` is excluded from
+    // the SDK effort type because it is a multi-agent meta-mode, not a level.
+    this._appStateStore?.setState(prev => ({
+      ...prev,
+      effortValue: effort,
+    }))
+  }
 }
 
 // ============================================================================
@@ -531,6 +550,10 @@ function createEngineFromOptions(
     throw new Error('SDKSessionOptions requires cwd')
   }
 
+  if (!cwd) {
+    throw new Error('SDKSessionOptions requires cwd')
+  }
+
   // NOTE: cwd is NOT set on global state here. SDKSessionImpl.sendMessage()
   // sets/restores it per-message via the cwd mutex to prevent concurrent
   // sessions from overwriting each other's working directory.
@@ -552,6 +575,11 @@ function createEngineFromOptions(
   if (model) {
     stateWithPermissions.mainLoopModel = model
     stateWithPermissions.mainLoopModelForSession = model
+  }
+  // Wire initial effort level into app state so the engine applies it on the
+  // first turn. The engine clamps to the model's supported levels internally.
+  if (options.effort !== undefined) {
+    stateWithPermissions.effortValue = options.effort
   }
   const appStateStore = createStore<AppState>(stateWithPermissions)
 

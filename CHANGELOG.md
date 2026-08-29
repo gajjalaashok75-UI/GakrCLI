@@ -80,6 +80,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Reasoning/effort-control sync from upstream reference**: `utils/effort.ts` and `utils/model/modelSupportOverrides.ts` now carry the upstream reasoning-control refinements so `resolveModelReasoningControl` honors route-specific reasoning controls, preserves known model exclusions when effort is force-enabled, covers provider-scoped capability overrides (`get3PModelCapabilityOverride` gains an `apiProvider?` argument plus a first-party short-circuit), and honors the scoped routing environment (`modelSupportOverrides.ts` cache key now includes `ANTHROPIC_BASE_URL` and `USER_TYPE`). `src/services/api/client.ts` was intentionally **not** ported — root is ahead there (env-only apismart/concentrate routing, the bedrock `anthropic_beta` patch, and superior routeId-based provider resolution) and porting upstream would delete GakrCLI-only features. The effort test files are rebranded and adapted: `CLAUDE_CODE_USE_*` routing env vars are renamed to `GAKR_CODE_USE_*`, and the `xai/grok-4.5`/`xai/grok-4.6` catalog blocks (only present in the reference tree) are dropped since root carries `grok-4.3`. `log.md` records the skipped "address review feedback" item and the `client.ts` deferral.
 
+### Added
+- **SDK reasoning-effort control**: `Query` and `SDKSession` expose `setEffort(effort)` accepting a named level (`low`|`medium`|`high`|`xhigh`|`max`) or a numeric token budget, and `SDKSessionOptions`/`QueryOptions` accept an initial `effort` that is wired into app state on first turn. The engine resolves and clamps the applied level to the model's supported set at submit time; `ultracode` is excluded from the SDK effort type because it is a multi-agent meta-mode rather than a level.
+
+### Fixed
+- **Agent injection rejected MCP tools at validate time**: `injectAgents` checked every agent tool spec against the static tool list, but MCP tools (`mcp__<server>__<tool>`) are connected dynamically at runtime and are never in that list, so agents referencing a not-yet-connected MCP tool threw `agent references unknown tool`. Validation now skips `mcp__`-prefixed specs so such agents inject cleanly.
+
 ## [0.6.1] - 2026-08-21
 
 ### Added
