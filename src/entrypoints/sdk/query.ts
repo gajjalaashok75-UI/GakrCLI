@@ -205,6 +205,8 @@ export interface Query {
   accountInfo(): Promise<{ apiKeySource: ApiKeySource; [key: string]: unknown }>
   /** Set the thinking token budget. */
   setMaxThinkingTokens(tokens: number): void
+  /** Set the reasoning-effort level (`low`|`medium`|`high`|`xhigh`|`max`) or a numeric token budget. */
+  setEffort(effort: NonNullable<QueryOptions['effort']>): void
 }
 
 // ============================================================================
@@ -974,6 +976,16 @@ class QueryImpl implements Query {
       ? { type: 'enabled', budgetTokens: tokens }
       : { type: 'disabled' })
   }
+
+  setEffort(effort: NonNullable<QueryOptions['effort']>): void {
+    // The engine resolves the applied effort from app state at submit time,
+    // clamping to the model's supported levels. `ultracode` is excluded from
+    // the SDK effort type because it is a multi-agent meta-mode, not a level.
+    this.appStateStore.setState(prev => ({
+      ...prev,
+      effortValue: effort,
+    }))
+  }
 }
 
 // ============================================================================
@@ -1085,6 +1097,11 @@ export function query(params: {
   if (model) {
     stateWithPermissions.mainLoopModel = model
     stateWithPermissions.mainLoopModelForSession = model
+  }
+  // Wire initial effort level into app state so the engine applies it on the
+  // first turn. The engine clamps to the model's supported levels internally.
+  if (options.effort !== undefined) {
+    stateWithPermissions.effortValue = options.effort
   }
   const appStateStore = createStore<AppState>(stateWithPermissions)
 

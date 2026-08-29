@@ -1323,7 +1323,11 @@ export class QueryEngine {
           if (toolSpec === '*') continue
           // Parse tool spec to get base tool name (may contain permission rules)
           const toolName = toolSpec.split(':')[0] ?? toolSpec
-          if (!validToolNames.has(toolName)) {
+          // MCP tools (mcp__<server>__<tool>) are connected dynamically at
+          // runtime and are never present in the static tool list. Skip
+          // validation so agents referencing not-yet-connected MCP tools can
+          // still be injected.
+          if (!toolName.startsWith('mcp__') && !validToolNames.has(toolName)) {
             throw new TypeError(`agent references unknown tool '${toolSpec}'`)
           }
         }
