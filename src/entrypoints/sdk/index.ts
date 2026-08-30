@@ -17,7 +17,14 @@ import {
   safelyAccess,
   type CriticalImport,
 } from './stubLeakDetection.js'
+import { getAgentDefinitionsWithOverrides } from '../../tools/AgentTool/loadAgentsDir.js'
 
+// ============================================================================
+// Stub leak detection
+// ============================================================================
+
+// Re-export agent definition utilities
+export { getAgentDefinitionsWithOverrides } from '../../tools/AgentTool/loadAgentsDir.js'
 // ============================================================================
 // Stub leak detection
 // ============================================================================
