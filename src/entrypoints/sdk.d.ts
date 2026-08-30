@@ -53,6 +53,15 @@ export type SDKAssistantMessageError =
   | 'unknown'
   | 'max_output_tokens'
 
+export function getAgentDefinitionsWithOverrides(
+  cwd: string
+): Promise<{
+  activeAgents: AgentDefinition[]
+  allAgents: AgentDefinition[]
+  failedFiles?: Array<{ path: string; error: string }>
+  allowedAgentTypes?: string[]
+}>
+
 export function sdkErrorFromType(
   errorType: SDKAssistantMessageError,
   message?: string,
