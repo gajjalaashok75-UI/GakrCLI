@@ -2,7 +2,7 @@
 
 Current versions:
 
-- GakrCLI CLI/SDK: `0.5.7`
+- GakrCLI CLI/SDK: `0.6.0`
 - GakrCLI VS Code extension: `0.2.4`
 
 ## Native VS Code Webview Flow
