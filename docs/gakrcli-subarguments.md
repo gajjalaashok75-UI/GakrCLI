@@ -1041,7 +1041,7 @@ gakrcli upgrade
 gakrcli install
 gakrcli install stable
 gakrcli install latest
-gakrcli install 0.5.7
+gakrcli install 0.6.0
 gakrcli install --force
 ```
 

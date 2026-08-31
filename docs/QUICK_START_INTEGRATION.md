@@ -2,13 +2,13 @@
 
 This guide covers:
 
-- GakrCLI CLI package: `0.5.7`
+- GakrCLI CLI package: `0.6.0`
 - GakrCLI VS Code extension: `0.2.4`
 
 ## Install The CLI
 
 ```bash
-npm install -g @gakr-gakr/gakrcli@0.5.7
+npm install -g @gakr-gakr/gakrcli@0.6.0
 gakrcli --version
 ```
 

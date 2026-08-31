@@ -15,7 +15,7 @@ PS C:\Users\gajja\Documents\data-science\Gakrcli> gakrcli auth status --json
 ╠════════════════════════════════════════════════════════════╣
 │ ● cloud    Ready — type /help to begin                     │
 ╚════════════════════════════════════════════════════════════╝
-  gakrcli v0.5.7
+  gakrcli v0.6.0
 
 {
   "loggedIn": true,
@@ -39,7 +39,7 @@ PS C:\Users\gajja\Documents\data-science\Gakrcli> gakrcli -h
 ╠════════════════════════════════════════════════════════════╣
 │ ● cloud    Ready — type /help to begin                     │
 ╚════════════════════════════════════════════════════════════╝
-  gakrcli v0.5.7
+  gakrcli v0.6.0
 
 Usage: gakrcli [options] [command] [prompt]
 
@@ -1177,7 +1177,7 @@ gakrcli upgrade
 gakrcli install
 gakrcli install stable
 gakrcli install latest
-gakrcli install 0.5.7
+gakrcli install 0.6.0
 gakrcli install --force
 ```
 
