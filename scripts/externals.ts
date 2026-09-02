@@ -87,11 +87,13 @@ export const COMMON_EXTERNALS: string[] = [
   '@sentry/node',
   // Doubao speech recognition (native ASR client)
   'doubaoime-asr',
+  'react-dom',
 ]
 
 // Additional packages external only in the SDK bundle (TUI + heavy deps)
 export const SDK_ONLY_EXTERNALS: string[] = [
   'react',
+  'react-dom',
   'react-reconciler',
   '@anthropic-ai/sdk',
   '@modelcontextprotocol/sdk',
