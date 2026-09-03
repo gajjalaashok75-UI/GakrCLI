@@ -19,6 +19,7 @@ export type Terminal =
 
 export type Continue =
   | { reason: 'collapse_drain_retry'; committed: number }
+  | { reason: 'context_overflow_compact_retry' }
   | { reason: 'reactive_compact_retry' }
   | { reason: 'provider_max_tokens_retry'; cap: number }
   | { reason: 'provider_fallback_retry' }

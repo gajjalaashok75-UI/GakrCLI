@@ -1061,8 +1061,8 @@ async function* queryLoop(
         hasValidLegacyActiveMessageLimit)
     const activeMessageLimit = canForceCompact
       ? resolveMaxActiveMessagesLimit(
-          maxMessagesLimitSetting,
-          process.env.GAKR_MAX_ACTIVE_MESSAGES,
+          maxMessagesLimitSetting ?? '',
+          process.env.GAKR_MAX_ACTIVE_MESSAGES ?? '',
         )
       : 0
     if (canForceCompact) {

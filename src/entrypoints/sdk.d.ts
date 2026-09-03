@@ -243,6 +243,16 @@ export type QueryPermissionMode =
   | 'fullAccess'
   | 'acceptEdits'
 
+/** Reasoning-effort level (named) or numeric token budget. */
+export type EffortValue =
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'xhigh'
+  | 'max'
+  | 'ultracode'
+  | number
+
 export type QueryOptions = {
   cwd: string
   additionalDirectories?: string[]
@@ -316,6 +326,12 @@ export type QueryOptions = {
   /** @internal Timeout in ms for permission request resolution. Default 30000. */
   _permissionTimeoutMs?: number
   stderr?: (data: string) => void
+  /**
+   * Initial reasoning-effort level. Accepts a named level (`low`|`medium`|`high`|
+   * `xhigh`|`max`|`ultracode`) or a numeric token budget. The engine clamps the
+   * applied value to the model's supported set on each turn.
+   */
+  effort?: EffortValue
 }
 
 export interface Query {
@@ -396,6 +412,8 @@ export type SDKSessionOptions = {
   permissionMode?: QueryPermissionMode
   allowDangerouslySkipPermissions?: boolean
   abortController?: AbortController
+  /** Initial reasoning-effort level. See QueryOptions.effort. */
+  effort?: EffortValue
   /**
    * Callback invoked before each tool use. Return `{ behavior: 'allow' }` to
    * permit the call or `{ behavior: 'deny', message?: string }` to reject it.

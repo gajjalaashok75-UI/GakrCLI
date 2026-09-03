@@ -15,7 +15,7 @@ export type ToolFailureLoopGuardState = {
 }
 
 export type ToolFailureLoopGuardDecision =
-  | { tripped: false }
+  | { tripped: false; advisories?: AdvisoryDecision[] }
   | {
       tripped: true
       message: string
@@ -24,7 +24,13 @@ export type ToolFailureLoopGuardDecision =
       toolName?: string
       errorCategory?: string
       path?: string
+      advisories?: AdvisoryDecision[]
     }
+
+export type AdvisoryDecision = {
+  message: string
+  threshold: number
+}
 
 export function createToolFailureLoopGuardState(): ToolFailureLoopGuardState {
   return {
