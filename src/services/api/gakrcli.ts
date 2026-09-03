@@ -706,6 +706,7 @@ export function assistantMessageToMessageParam(
 export type Options = {
   getToolPermissionContext: () => Promise<ToolPermissionContext>
   model: string
+  requestModel?: string
   toolChoice?: BetaToolChoiceTool | BetaToolChoiceAuto | undefined
   isNonInteractiveSession: boolean
   extraToolSchemas?: BetaToolUnion[]
@@ -738,6 +739,7 @@ export type Options = {
   queryLifecycle?: QueryLifecycleOperationTracker
   langfuseTrace?: LangfuseSpan | null
   messageNormalizationTools?: Tools
+  onProviderRequestStart?: () => boolean
 }
 
 export async function queryModelWithoutStreaming({

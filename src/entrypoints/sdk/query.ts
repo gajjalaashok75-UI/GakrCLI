@@ -36,6 +36,9 @@ import {
   runWithSdkContext,
 } from '../../bootstrap/state.js'
 import type { SessionId } from '../../types/ids.js'
+import type { EffortValue } from '../../utils/effort.js'
+
+export type { EffortValue }
 import {
   getAgentDefinitionsWithOverrides,
   type AgentDefinitionsResult,
@@ -168,6 +171,8 @@ export type QueryOptions = {
   _permissionTimeoutMs?: number
   /** Callback for stderr output. */
   stderr?: (data: string) => void
+  /** Initial reasoning-effort level (named or numeric token budget). */
+  effort?: EffortValue
 }
 
 /**

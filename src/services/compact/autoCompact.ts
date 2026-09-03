@@ -77,7 +77,7 @@ export type AutoCompactTrackingState = {
   // When set, bypasses shouldAutoCompact() token threshold check.
   // Used by memory pressure and message count guards to force compaction
   // even when token usage is below the normal autocompact threshold.
-  forceReason?: 'memory-pressure' | 'message-count'
+  forceReason?: 'memory-pressure' | 'message-count' | 'context-overflow'
 }
 
 export const AUTOCOMPACT_BUFFER_TOKENS = 13_000

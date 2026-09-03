@@ -130,7 +130,7 @@ export {
 // Re-exports from query
 // ============================================================================
 
-export type { QueryOptions } from './query.js'
+export type { EffortValue, QueryOptions } from './query.js'
 export { query, queryAsync } from './query.js'
 export type { Query } from './query.js'
 

@@ -96,6 +96,7 @@ function makeMockTool(name: string, callResult: unknown = 'ok') {
     searchHint: '',
     userFacingName: () => name,
     renderToolUseMessage: () => `Running ${name}`,
+    requiresUserInteraction: () => false,
     mapToolResultToToolResultBlockParam: (content: unknown, id: string) => ({
       tool_use_id: id,
       type: 'tool_result',
