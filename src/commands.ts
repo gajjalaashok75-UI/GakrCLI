@@ -75,6 +75,8 @@ const agentsPlatform =
 /* eslint-enable @typescript-eslint/no-require-imports */
 import securityReview from './commands/security-review.js'
 import bughunter from './commands/bughunter/index.js'
+import bughunterSecurity from './commands/bughunter-security/index.js'
+import bughunterPerf from './commands/bughunter-perf/index.js'
 import terminalSetup from './commands/terminalSetup/index.js'
 import usage from './commands/usage/index.js'
 import autonomy from './commands/autonomy.js'
@@ -314,7 +316,6 @@ export { getCommandName, isCommandEnabled } from './types/command.js'
 export const INTERNAL_ONLY_COMMANDS = [
   backfillSessions,
   breakCache,
-  bughunter,
   commit,
   commitPushPr,
   goodgakrcli,
@@ -353,6 +354,9 @@ const COMMANDS = memoize((): Command[] => [
   autonomy,
   benchmark,
   branch,
+  bughunter,
+  bughunterPerf,
+  bughunterSecurity,
   btw,
   cacheProbe,
   cacheStats,

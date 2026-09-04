@@ -2,6 +2,7 @@
 import {
   builtInCommandNames,
   formatDescriptionWithSource,
+  INTERNAL_ONLY_COMMANDS,
 } from './commands.js'
 import { registerBatchSkill } from './skills/bundled/batch.js'
 import { registerDebugSkill } from './skills/bundled/debug.js'
@@ -58,6 +59,25 @@ describe('builtInCommandNames', () => {
 
   test.skip('includes the artifacts command', () => {
     expect(builtInCommandNames()).toContain('artifacts')
+  })
+
+  test('includes the bughunter command for normal users (USER_TYPE unset)', () => {
+    // Regression: bughunter was previously moved to INTERNAL_ONLY_COMMANDS,
+    // making it only available to ANT/dev builds. It must remain in the
+    // public COMMANDS list so normal users can invoke /bughunter.
+    expect(builtInCommandNames()).toContain('bughunter')
+  })
+
+  test('includes bughunter-security and bughunter-perf for normal users', () => {
+    expect(builtInCommandNames()).toContain('bughunter-security')
+    expect(builtInCommandNames()).toContain('bughunter-perf')
+  })
+
+  test('bughunter is NOT in INTERNAL_ONLY_COMMANDS', () => {
+    const internalNames = INTERNAL_ONLY_COMMANDS.map(c => c.name)
+    expect(internalNames).not.toContain('bughunter')
+    expect(internalNames).not.toContain('bughunter-security')
+    expect(internalNames).not.toContain('bughunter-perf')
   })
 })
 

@@ -227,7 +227,6 @@ Registered only when `process.env.USER_TYPE === 'ant' && !process.env.IS_DEMO`. 
 | Command | Type | Description |
 |---|---|---|
 | /break-cache | text | Manage prompt-cache breaking. Open actions or run: once, status, always, off |
-| /bughunter | text | Systematic four-phase bug hunt: map → hunt → skeptic pass → fix proposals |
 | /commit | prompt | Create a git commit |
 | /commit-push-pr | prompt | Commit, push, and open a PR |
 | /issue | local | Create a GitHub issue via gh CLI. Flags: --label <label>, --assignee <user> |
@@ -318,8 +317,6 @@ Cross-referencing every entry in `src/commands/` against the `COMMANDS` array fo
 | `memory-stores/` | `memory-stores` (aliases `mem`, `mstore`) | local-jsx | **orphan** | `isEnabled: () => true`, `availability: ['gakrcli-ai']`, hidden without API key |
 | `schedule/` | `triggers` (alias `cron`) | local-jsx | **orphan** | renamed `schedule` → `triggers` to avoid collision with the bundled `scheduleRemoteAgents` skill, but never added to `COMMANDS` |
 | `vault/` | `vault` (aliases `vaults`) | local-jsx | **orphan** | `isEnabled: () => true`, `availability: ['gakrcli-ai']`, hidden without API key |
-| `bughunter-perf/` | `bughunter-perf` | text | **orphan** | built via `createMovedToPluginCommand` (plugin-moved) — never registered |
-| `bughunter-security/` | `bughunter-security` | text | **orphan** | built via `createMovedToPluginCommand` (plugin-moved) — never registered |
 
 The three Pro/Max/Team commands (`memory-stores`, `triggers`, `vault`) are `availability: ['gakrcli-ai']`-gated, so even if registered they'd only appear for subscribers. `artifacts` is completely ungated (`isEnabled: () => true`, no availability) — it would work for everyone if wired into `COMMANDS`.
 
