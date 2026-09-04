@@ -465,15 +465,28 @@ export class RecordingSession {
    * REJECTS with the real error, caught below and surfaced verbatim in the
    * log rather than folded into a generic error code.
    */
-  private async waitForRrwebLoad(page: Page): Promise<WaitForRrwebResult> {
+   private async waitForRrwebLoad(page: Page): Promise<WaitForRrwebResult> {
     const timeoutMs = this.config.rrweb_load_timeout_ms;
 
     try {
-      return await withTimeout(
+      const result = await withTimeout(
         page.evaluate<WaitForRrwebResult>(getWaitForRrwebJs()),
         timeoutMs,
         () => ({ success: false, error: 'timeout' }),
       );
+
+      if (
+        !result ||
+        typeof result !== 'object' ||
+        typeof result.success !== 'boolean'
+      ) {
+        logger.warn(
+          `wait-for-rrweb unexpected response: ${JSON.stringify(result)}`,
+        );
+        return { success: false, error: 'unexpected_response' };
+      }
+
+      return result;
     } catch (e) {
       // ROUND 10: surface the REAL error, not a generic code - this is
       // exactly the diagnostic gap that made the previous universal
@@ -493,9 +506,12 @@ export class RecordingSession {
     this.storage.createSessionSubfolder();
   }
 
-  private async handleRrwebLoadFailure(page: Page, error: string): Promise<string> {
+   private async handleRrwebLoadFailure(page: Page, error: string): Promise<string> {
     this._isRecording = false;
-    await this.setRecordingFlag(page, false);
+    // Best-effort cleanup: set the flag without blocking error handling.
+    // Uses a short timeout so a hung page.evaluate() (e.g. in offline/no-network
+    // test environments) cannot stall the error return path.
+    this.setRecordingFlag(page, false).catch((e) => logger.debug(`setRecordingFlag cleanup failed: ${e}`));
 
     if (error === 'load_failed') {
       logger.info('Recording start failed: rrweb load_failed');
@@ -523,7 +539,7 @@ export class RecordingSession {
       );
     }
 
-    if (error.startsWith('evaluate_failed: ')) {
+     if (error.startsWith('evaluate_failed: ')) {
       // ROUND 10: this is the real page-side/Playwright error message,
       // not a guessed generic code - pass it straight through so it's
       // actually actionable.
@@ -532,12 +548,35 @@ export class RecordingSession {
       return `Error: Unable to start recording - ${detail}`;
     }
 
+    if (error === 'unexpected_response') {
+      logger.info('Recording start failed: rrweb unexpected_response');
+      return (
+        'Error: Unable to start recording. The rrweb loader returned an ' +
+        'unexpected response — this can happen on first load when the page ' +
+        'is still initializing. If retrying does not help, try navigating ' +
+        'to a stable page first, then run browser_get_state to confirm the ' +
+        'page is ready before invoking browser_start_recording.'
+      );
+    }
+
     logger.info(`Recording start failed: ${error}`);
     return `Error: Unable to start recording: ${error}`;
   }
 
-  private async ensureRrwebLoaded(page: Page): Promise<string | null> {
-    const loadResult = await this.waitForRrwebLoad(page);
+   private async ensureRrwebLoaded(page: Page): Promise<string | null> {
+    let loadResult = await this.waitForRrwebLoad(page);
+
+    if (!loadResult.success) {
+      const error = loadResult.error ?? 'unknown';
+
+      if (error === 'unexpected_response') {
+        logger.info(
+          'Recording start: retrying once on transient unexpected_response',
+        );
+        loadResult = await this.waitForRrwebLoad(page);
+      }
+    }
+
     if (!loadResult.success) {
       const error = loadResult.error ?? 'unknown';
       return this.handleRrwebLoadFailure(page, error);
