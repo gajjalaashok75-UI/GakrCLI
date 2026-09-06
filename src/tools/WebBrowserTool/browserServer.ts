@@ -49,10 +49,22 @@
  * is ported EXACTLY, since the LLM parses those tags.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page, type Response } from 'playwright';
 import { RecordingSession } from './recording.js';
 import { RefManager } from './refManager.js';
-import { EMPTY_BROWSER_LIVE_STATE, type BrowserConfig, type BrowserErrorCategory, type BrowserLiveState, type BrowserTabState } from './types.js';
+import {
+  BROWSER_RECORDING_OUTPUT_DIR,
+  EMPTY_BROWSER_LIVE_STATE,
+  type BrowserConfig,
+  type BrowserErrorCategory,
+  type BrowserLiveState,
+  type BrowserTabState,
+  buildScrollToTextExpression,
+  MAX_SCROLL_TEXT_QUERY_CHARS,
+  type ScrollToTextPageResult,
+} from './types.js';
 
 const logger = {
   debug: (...args: unknown[]) => { if (process.env.DEBUG) console.debug('[browserServer]', ...args); },
@@ -66,6 +78,27 @@ const MAX_CHAR_LIMIT = 30000;
 // click/typeText re-snapshots the current DOM and retries once before
 // surfacing the timeout.
 const ARIA_REF_TIMEOUT_MS = 10000;
+
+const MAX_ARTIFACT_NAME_LENGTH = 200;
+
+const PAPER_SIZES: Record<string, { width: number; height: number }> = {
+  letter: { width: 8.5, height: 11 },
+  a4: { width: 8.27, height: 11.69 },
+  legal: { width: 8.5, height: 14 },
+  a3: { width: 11.69, height: 16.54 },
+  tabloid: { width: 11, height: 17 },
+};
+
+let outputDirReady = false;
+const ensureOutputDir = (): void => {
+  if (outputDirReady) return;
+  try {
+    fs.mkdirSync(BROWSER_RECORDING_OUTPUT_DIR, { recursive: true });
+    outputDirReady = true;
+  } catch {
+    // Try again on the next call; mkdir failure is non-fatal here.
+  }
+};
 
 /**
  * Classifies a Playwright/Chromium error message into a coarse network
@@ -520,9 +553,44 @@ export class BrowserServer {
     return { httpStatus: response.status(), httpStatusText: response.statusText() || null };
   }
 
+  /** Throw a standard DOMException when the caller's AbortSignal has already fired. */
+  private assertNotAborted(signal?: AbortSignal): void {
+    if (signal?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }
+  }
+
+  /** Narrow an unknown caught value to a printable message, matching the existing repo convention. */
+  private errMessage(e: unknown): string {
+    return e instanceof Error ? e.message : String(e);
+  }
+
+  /** Bounded integer clamp with a fallback. Returns an integer in [min, max], defaulting to `fallback` for NaN/0. */
+  private clampInt(value: number, min: number, max: number, fallback: number): number {
+    const n = Math.trunc(value || fallback);
+    return Math.max(min, Math.min(max, n));
+  }
+
+  /** Sanitize a user-supplied filename and ensure the requested extension is present. */
+  private sanitizeFileName(input: string, extension: '.' | '.png' | '.pdf'): string {
+    const safe = String(input ?? '').trim().replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, MAX_ARTIFACT_NAME_LENGTH);
+    const stripped = safe.replace(/\.(png|pdf)$/i, '');
+    return `${stripped}${extension}`;
+  }
+
+  /** Write an in-memory artifact (PNG/PDF) to the configured output directory. */
+  private saveArtifact(buf: Buffer, requestedName: string, extension: '.png' | '.pdf'): string {
+    ensureOutputDir();
+    const safeName = this.sanitizeFileName(requestedName, extension);
+    const filePath = path.join(BROWSER_RECORDING_OUTPUT_DIR, safeName);
+    fs.writeFileSync(filePath, buf);
+    return filePath;
+  }
+
   // ── Navigation (Playwright direct) ──
 
-  async navigate(url: string, newTab: boolean): Promise<string> {
+  async navigate(url: string, newTab: boolean, signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
     if (!this.context) throw new Error('Browser session not initialized');
 
     // ROUND 8 FIX: previously this branch only handled `newTab: true`, and
@@ -565,7 +633,7 @@ export class BrowserServer {
       const statusNote = httpStatus !== null ? ` (${httpStatus}${httpStatusText ? ` ${httpStatusText}` : ''})` : '';
       return `Navigated to ${page.url()}${statusNote}`;
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
+      const message = this.errMessage(e);
       const { hint } = classifyNetworkError(message);
       const fullMessage = hint ? `${message}\nHint: ${hint}` : message;
       await this.refreshLiveState({ errorText: fullMessage, lastOperation: `navigate ${url}` });
@@ -573,7 +641,8 @@ export class BrowserServer {
     }
   }
 
-  async goBack(): Promise<string> {
+  async goBack(signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
     const page = this.requirePage();
     this.setLoading(true);
     try {
@@ -586,7 +655,7 @@ export class BrowserServer {
       await this.refreshLiveState({ lastOperation: 'go_back', httpStatus, httpStatusText, contentPreview });
       return `Navigated back to ${page.url()}`;
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
+      const message = this.errMessage(e);
       const { hint } = classifyNetworkError(message);
       const fullMessage = hint ? `${message}\nHint: ${hint}` : message;
       await this.refreshLiveState({ errorText: fullMessage, lastOperation: 'go_back' });
@@ -595,7 +664,8 @@ export class BrowserServer {
   }
 
   // ISSUE 8: refresh/reload the current page (Playwright direct).
-  async refresh(): Promise<string> {
+  async refresh(signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
     const page = this.requirePage();
     this.setLoading(true);
     try {
@@ -608,7 +678,7 @@ export class BrowserServer {
       await this.refreshLiveState({ lastOperation: 'refresh', httpStatus, httpStatusText, contentPreview });
       return `Refreshed ${page.url()}`;
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
+      const message = this.errMessage(e);
       const { hint } = classifyNetworkError(message);
       const fullMessage = hint ? `${message}\nHint: ${hint}` : message;
       await this.refreshLiveState({ errorText: fullMessage, lastOperation: 'refresh' });
@@ -617,7 +687,8 @@ export class BrowserServer {
   }
 
   // ISSUE 9: wait for a fixed duration (Playwright direct).
-  async wait(ms: number): Promise<string> {
+  async wait(ms: number, signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
     const page = this.requirePage();
     await page.waitForTimeout(ms);
     await this.refreshLiveState({ lastOperation: `wait ${ms}ms` });
@@ -625,7 +696,8 @@ export class BrowserServer {
   }
 
   // ISSUE 10: press a keyboard key not tied to a specific element (Playwright direct).
-  async pressKey(key: string): Promise<string> {
+  async pressKey(key: string, signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
     const page = this.requirePage();
     try {
       await page.keyboard.press(key);
@@ -633,7 +705,242 @@ export class BrowserServer {
       await this.refreshLiveState({ lastOperation: `press_key ${key}` });
       return `Pressed ${key}`;
     } catch (e) {
-      return `Error pressing key ${key}: ${e instanceof Error ? e.message : String(e)}`;
+      return `Error pressing key ${key}: ${this.errMessage(e)}`;
+    }
+  }
+
+  async sendKeys(keys: string, signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
+    const page = this.requirePage();
+    const keyboard = page?.keyboard;
+    if (!keyboard) {
+      return 'Error: Keyboard input is not available on the current page.';
+    }
+    const bounded = String(keys ?? '');
+    if (!bounded) {
+      return 'Error: Keys must not be empty.';
+    }
+    try {
+      await keyboard.press(bounded);
+    } catch (e) {
+      // Fallback: if the key combo/name is unrecognized, press each character
+      // individually so sequences of plain text still work.
+      const message = this.errMessage(e);
+      if (message.toLowerCase().includes('unknown key')) {
+        try {
+          for (const ch of bounded) {
+            await keyboard.press(ch);
+          }
+        } catch (e2) {
+          return `Error sending keys ${bounded}: ${e2 instanceof Error ? e2.message : String(e2)}`;
+        }
+      } else {
+        return `Error sending keys ${bounded}: ${message}`;
+      }
+    }
+    await this.refreshLiveState({ lastOperation: `send_keys ${bounded}` });
+    return `Sent keys ${bounded}`;
+  }
+
+  async takeScreenshot(fileName?: string, signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
+    const page = this.page;
+    if (!page || page.isClosed()) {
+      return 'Error: No active page available for screenshot.';
+    }
+    try {
+      const buf = await page.screenshot({ type: 'png' });
+      const data = buf.toString('base64');
+      if (fileName) {
+        const filePath = this.saveArtifact(buf, fileName, '.png');
+        await this.refreshLiveState({ lastOperation: `screenshot ${path.basename(filePath)}` });
+        return `Saved screenshot to ${filePath}`;
+      }
+      this.liveState = { ...this.liveState, lastScreenshot: data };
+      this.emitLiveState();
+      await this.refreshLiveState({ lastOperation: 'screenshot' });
+      return `data:image/png;base64,${data}`;
+    } catch (e) {
+      return `Error taking screenshot: ${this.errMessage(e)}`;
+    }
+  }
+
+  async getDropdownOptions(index: number, signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
+    const page = this.requirePage();
+    const target = this.resolveTarget(page, index, undefined);
+    if (target.kind === 'error') return target.message;
+    try {
+      const optionsJson = await (target.kind === 'selector'
+        ? target.locator
+        : page.locator(`aria-ref=${target.ref}`)
+      ).evaluate((el: HTMLElement) => {
+        if (el.tagName === 'SELECT') {
+          const opts = Array.from((el as HTMLSelectElement).options);
+          return JSON.stringify(
+            opts.map((o, i) => ({
+              index: i,
+              value: o.value,
+              text: o.textContent?.trim() ?? '',
+              selected: o.selected,
+              disabled: o.disabled,
+            })),
+          );
+        }
+        const items = Array.from(
+          el.querySelectorAll('[role="option"], [role="menuitem"]'),
+        );
+        return JSON.stringify(
+          items.map((item, i) => ({
+            index: i,
+            value: item.getAttribute('data-value') ?? item.getAttribute('value') ?? '',
+            text: (item.textContent ?? '').trim().slice(0, 200),
+            selected: item.getAttribute('aria-selected') === 'true',
+            disabled: item.getAttribute('aria-disabled') === 'true',
+          })),
+        );
+      });
+      const options = JSON.parse(optionsJson as string) as Array<{ index: number; value: string; text: string; selected: boolean; disabled: boolean }>;
+      if (options.length === 0) {
+        return 'Error: No dropdown options found for this element';
+      }
+      const lines = options.map((o) => `[${o.index}] value="${o.value}" text="${o.text}"${o.selected ? ' (selected)' : ''}${o.disabled ? ' (disabled)' : ''}`);
+      await this.refreshLiveState({ lastOperation: `dropdown_options [${index}]` });
+      return `${options.length} option(s):\n${lines.join('\n')}`;
+    } catch (e) {
+      return `Error getting dropdown options: ${this.errMessage(e)}`;
+    }
+  }
+
+  async selectDropdown(index: number, text: string, signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
+    const boundedText = String(text ?? '').trim();
+    if (!boundedText) {
+      return 'Error: Option text must not be empty.';
+    }
+    const page = this.requirePage();
+    const target = this.resolveTarget(page, index, undefined);
+    if (target.kind === 'error') return target.message;
+    try {
+      const locator = target.kind === 'selector'
+        ? target.locator
+        : page.locator(`aria-ref=${target.ref}`);
+      const matched = await locator.evaluate(
+        (el: HTMLElement, t: string) => {
+          if (el.tagName === 'SELECT') {
+            const sel = el as HTMLSelectElement;
+            for (const opt of Array.from(sel.options)) {
+              if (
+                opt.value === t ||
+                (opt.textContent ?? '').trim() === t
+              ) {
+                sel.value = opt.value;
+                sel.dispatchEvent(new Event('change', { bubbles: true }));
+                sel.dispatchEvent(new Event('input', { bubbles: true }));
+                return { found: true, value: opt.value, text: (opt.textContent ?? '').trim() };
+              }
+            }
+            return { found: false };
+          }
+          const items = Array.from(
+            el.querySelectorAll('[role="option"], [role="menuitem"]'),
+          );
+          for (const item of items) {
+            const itemText = (item.textContent ?? '').trim();
+            const itemValue = item.getAttribute('data-value') ?? item.getAttribute('value') ?? '';
+            if (itemText === t || itemValue === t) {
+              (item as HTMLElement).click();
+              return { found: true, value: itemValue, text: itemText };
+            }
+          }
+          return { found: false };
+        },
+        boundedText,
+      );
+      if (!matched || !(matched as { found: boolean }).found) {
+        return `Error: Option '${boundedText}' not found in dropdown`;
+      }
+      const m = matched as { value: string; text: string };
+      await this.refreshLiveState({ lastOperation: `select_dropdown [${index}] ${boundedText}` });
+      return `Selected '${m.text}' (value="${m.value}")`;
+    } catch (e) {
+      return `Error selecting dropdown option: ${this.errMessage(e)}`;
+    }
+  }
+
+  async uploadFile(index: number, filePath: string, signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
+    const boundedPath = String(filePath ?? '').trim();
+    if (!boundedPath) {
+      return 'Error: File path must not be empty.';
+    }
+    const page = this.requirePage();
+    const target = this.resolveTarget(page, index, undefined);
+    if (target.kind === 'error') return target.message;
+    try {
+      const locator = target.kind === 'selector'
+        ? target.locator
+        : page.locator(`aria-ref=${target.ref}`);
+      await locator.setInputFiles(boundedPath);
+      const fileName = path.basename(boundedPath);
+      await this.refreshLiveState({ lastOperation: `upload_file [${index}] ${fileName}` });
+      return `Uploaded file '${fileName}' to [${index}]`;
+    } catch (e) {
+      const message = this.errMessage(e);
+      if (/ENOENT|no such file|not found/i.test(message)) {
+        return `Error: File not found at ${boundedPath}`;
+      }
+      return `Error uploading file: ${message}`;
+    }
+  }
+
+  async searchGoogle(query: string, signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
+    const bounded = String(query ?? '').trim();
+    if (!bounded) {
+      return 'Error: Search query must not be empty.';
+    }
+    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(bounded)}&udm=14`;
+    return this.navigate(searchUrl, false);
+  }
+
+  async saveAsPdf(
+    fileName?: string,
+    printBackground = true,
+    landscape = false,
+    scale = 1.0,
+    paperFormat = 'Letter',
+    signal?: AbortSignal,
+  ): Promise<string> {
+    this.assertNotAborted(signal);
+    const page = this.page;
+    if (!page || page.isClosed()) {
+      return 'Error: No active page available for save_as_pdf.';
+    }
+    const paperKey = String(paperFormat ?? 'Letter').toLowerCase();
+    const paperSize = PAPER_SIZES[paperKey] ?? PAPER_SIZES.letter;
+    try {
+      const pdfBuf = await page.pdf({
+        printBackground,
+        landscape,
+        scale: Math.max(0.1, Math.min(2.0, scale)),
+        width: `${paperSize.width}in`,
+        height: `${paperSize.height}in`,
+        preferCSSPageSize: true,
+      });
+      let requestedName = String(fileName ?? '').trim();
+      if (!requestedName) {
+        try {
+          requestedName = (await page.title()).replace(/[^\w\s-]+/g, '').trim().slice(0, 50) || 'page';
+        } catch {
+          requestedName = 'page';
+        }
+      }
+      const filePath = this.saveArtifact(pdfBuf, requestedName, '.pdf');
+      await this.refreshLiveState({ lastOperation: `save_as_pdf ${path.basename(filePath)}` });
+      return `Saved PDF to ${filePath}`;
+    } catch (e) {
+      return `Error saving PDF: ${this.errMessage(e)}`;
     }
   }
 
@@ -719,8 +1026,42 @@ export class BrowserServer {
     return { kind: 'index', ref, label: `[${index}] (ref=${ref})` };
   }
 
-  async click(index: number | undefined, newTab: boolean, selector?: string): Promise<string> {
+  async click(
+    index: number | undefined,
+    newTab: boolean,
+    selector?: string,
+    coordinateX?: number,
+    coordinateY?: number,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    this.assertNotAborted(signal);
     const page = this.requirePage();
+
+    // TASK 7: coordinate-based click fallback. When both coordinates are
+    // provided and neither index nor selector is given, click at the
+    // absolute page position via page.mouse.click(). Useful for canvases,
+    // images, or any element not reachable via aria-ref/selector.
+    const hasCoords = coordinateX !== undefined && coordinateY !== undefined;
+    if (hasCoords && index === undefined && !selector) {
+      if (!page.mouse?.click) {
+        return 'Error: Unable to perform coordinate click on the current page.';
+      }
+      try {
+        await page.mouse.click(coordinateX, coordinateY);
+        await this.refreshLiveState({ lastOperation: `click coordinates (${coordinateX}, ${coordinateY})` });
+        return `Clicked at coordinates (${coordinateX}, ${coordinateY})`;
+      } catch (e) {
+        const message = this.errMessage(e);
+        return `Error clicking at coordinates (${coordinateX}, ${coordinateY}): ${message}`;
+      }
+    }
+
+    // If only one of coordinate_x/coordinate_y is provided, treat it as
+    // a misuse rather than silently falling through to element-based click.
+    if ((coordinateX !== undefined) !== (coordinateY !== undefined)) {
+      return 'Error: Both coordinate_x and coordinate_y must be provided together.';
+    }
+
     const target = this.resolveTarget(page, index, selector);
     if (target.kind === 'error') return target.message;
 
@@ -737,7 +1078,7 @@ export class BrowserServer {
       try {
         await target.locator.click({ timeout: ARIA_REF_TIMEOUT_MS });
       } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
+        const message = this.errMessage(e);
         const hint =
           message.toLowerCase().includes('timeout') && target.wasRefLike
             ? '\nHint: this ref may be stale (the page changed since the last browser_get_state). Call browser_get_state again for fresh refs, then retry with the new index.'
@@ -756,7 +1097,7 @@ export class BrowserServer {
     try {
       await page.locator(`aria-ref=${ref}`).click({ timeout: ARIA_REF_TIMEOUT_MS });
     } catch (e) {
-      const staleMessage = e instanceof Error ? e.message : String(e);
+      const staleMessage = this.errMessage(e);
       if (
         index !== undefined &&
         (await this.retryWithFreshRef(page, index, (freshRef) => {
@@ -791,7 +1132,8 @@ export class BrowserServer {
     return `Clicked [${index}] (ref=${ref})${newTabNote}`;
   }
 
-  async typeText(index: number | undefined, text: string, selector?: string): Promise<string> {
+  async typeText(index: number | undefined, text: string, selector?: string, signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
     const page = this.requirePage();
     const target = this.resolveTarget(page, index, selector);
     if (target.kind === 'error') return target.message;
@@ -802,7 +1144,7 @@ export class BrowserServer {
         await this.refreshLiveState({ lastOperation: `type ${target.label}` });
         return `Typed "${text}" into ${target.label}`;
       } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
+        const message = this.errMessage(e);
         const hint =
           message.toLowerCase().includes('timeout') && target.wasRefLike
             ? '\nHint: this ref may be stale (the page changed since the last browser_get_state). Call browser_get_state again for fresh refs, then retry with the new index.'
@@ -818,7 +1160,7 @@ export class BrowserServer {
       await this.refreshLiveState({ lastOperation: `type [${index}]` });
       return `Typed "${text}" into [${index}] (ref=${ref})`;
     } catch (e) {
-      const staleMessage = e instanceof Error ? e.message : String(e);
+      const staleMessage = this.errMessage(e);
       if (
         index !== undefined &&
         (await this.retryWithFreshRef(page, index, (freshRef) => {
@@ -835,7 +1177,8 @@ export class BrowserServer {
 
   // ── Get State (Playwright ariaSnapshot({ mode: 'ai' }) — deterministic, no LLM) ──
 
-  async getBrowserState(includeScreenshot: boolean): Promise<string> {
+  async getBrowserState(includeScreenshot: boolean, signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
     const page = this.requirePage();
     // Generates YAML like:
     //   - generic [ref=e1]:
@@ -861,7 +1204,8 @@ export class BrowserServer {
 
   // ── Get Content (page.innerText — no LLM — + EXACT truncation logic from server.py) ──
 
-  async getContent(extractLinks: boolean, startFromChar: number): Promise<string> {
+  async getContent(extractLinks: boolean, startFromChar: number, signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
     const page = this.requirePage();
     await this.refreshLiveState({ lastOperation: 'get_content' });
 
@@ -869,7 +1213,7 @@ export class BrowserServer {
     try {
       content = await page.innerText('body');
     } catch (e) {
-      return `Could not extract content from page: ${e instanceof Error ? e.message : String(e)}`;
+      return `Could not extract content from page: ${this.errMessage(e)}`;
     }
 
     // ENHANCEMENT 3: an empty page would otherwise flow through as a
@@ -942,15 +1286,251 @@ export class BrowserServer {
 
   // ── Scroll (Playwright direct) ──
 
-  async scroll(direction: 'up' | 'down'): Promise<string> {
+  async scroll(direction: 'up' | 'down', signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
     const page = this.requirePage();
-    // ENHANCEMENT 2: typed evaluate callback instead of string interpolation
-    // (no injection surface, and it's type-checked against `direction`).
     await page.evaluate((dir: 'up' | 'down') => {
       window.scrollBy(0, dir === 'down' ? window.innerHeight : -window.innerHeight);
     }, direction);
     await this.refreshLiveState({ lastOperation: `scroll ${direction}` });
     return `Scrolled ${direction}`;
+  }
+
+  async scrollToText(text: string, direction: 'up' | 'down', signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
+    const page = this.requirePage();
+    if (!page.evaluate) {
+      return 'Error: Unable to access page for scrolling.';
+    }
+    const boundedText = String(text).slice(0, MAX_SCROLL_TEXT_QUERY_CHARS);
+    if (!boundedText) {
+      return 'Error: Text to scroll to must not be empty.';
+    }
+    try {
+      const rawResult = await page.evaluate(buildScrollToTextExpression(boundedText, direction));
+      const result: ScrollToTextPageResult =
+        rawResult && typeof rawResult === 'object'
+          ? (rawResult as ScrollToTextPageResult)
+          : { found: rawResult === true, truncated: false, visitedNodes: 0, scannedChars: 0 };
+      if (!result.found) {
+        const suffix = result.truncated ? ' before the bounded page scan reached its safety limit' : '';
+        return `Error: Text '${boundedText}' not found on page${suffix}`;
+      }
+      await this.refreshLiveState({ lastOperation: `scroll_to_text ${boundedText}` });
+      return `Scrolled to text '${boundedText}'`;
+    } catch (e) {
+      const message = this.errMessage(e);
+      return `Error scrolling to text: ${message}`;
+    }
+  }
+
+  async evaluate(code: string, signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
+    const page = this.requirePage();
+    if (!page.evaluate) {
+      return 'Error: Unable to access page for evaluate.';
+    }
+    const trimmed = String(code ?? '').trim();
+    if (!trimmed) {
+      return 'Error: Code to evaluate must not be empty.';
+    }
+    const MAX_RESULT_CHARS = 20_000;
+    try {
+      const rawResult = await page.evaluate((src: string) => {
+        try {
+          // eslint-disable-next-line no-eval
+          return { ok: true, value: (0, eval)(src) };
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : String(err) };
+        }
+      }, code);
+      if (rawResult && typeof rawResult === 'object' && 'ok' in rawResult) {
+        const r = rawResult as { ok: boolean; value?: unknown; error?: string };
+        if (!r.ok) {
+          return `Error evaluating code: ${r.error ?? 'unknown error'}`;
+        }
+        let serialized: string;
+        if (r.value === undefined) serialized = 'undefined';
+        else if (typeof r.value === 'string') serialized = r.value;
+        else {
+          try {
+            serialized = JSON.stringify(r.value);
+          } catch {
+            serialized = '[Unserializable value]';
+          }
+        }
+        if (serialized.length > MAX_RESULT_CHARS) {
+          serialized = `${serialized.slice(0, MAX_RESULT_CHARS)}\n... (truncated, ${serialized.length} total chars)`;
+        }
+        await this.refreshLiveState({ lastOperation: 'evaluate' });
+        return serialized;
+      }
+      return `Error: Unexpected evaluate result shape`;
+    } catch (e) {
+      const message = this.errMessage(e);
+      return `Error evaluating code: ${message}`;
+    }
+  }
+
+  async findElements(
+    selector: string,
+    attributes?: string[],
+    maxResults: number = 50,
+    includeText: boolean = true,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    this.assertNotAborted(signal);
+    const page = this.requirePage();
+    if (!page.evaluate) {
+      return 'Error: Unable to access page for find_elements.';
+    }
+    const boundedSelector = String(selector ?? '').slice(0, 2048);
+    if (!boundedSelector) {
+      return 'Error: Selector must not be empty.';
+    }
+    const boundedMax = this.clampInt(maxResults, 1, 100, 50);
+    const attrAllow = attributes && attributes.length > 0 ? new Set(attributes) : null;
+    try {
+      // Single round-trip: count + per-node extraction + slice in one evaluate.
+      // Each node is visited once with the work it actually needs; attribute
+      // filter is applied at construction so we never ship unfiltered attrs
+      // back to Node.
+      const payload = await page.evaluate(
+        ({ sel, max, wantText, allowAttrs }) => {
+          const allow = allowAttrs && allowAttrs.length > 0 ? new Set(allowAttrs) : null;
+          const all = document.querySelectorAll(sel);
+          const total = all.length;
+          const nodes = Array.from(all).slice(0, max);
+          const elements = nodes.map((node, i) => {
+            const tag = node.tagName.toLowerCase();
+            const text = node.children.length === 0 ? (node.textContent ?? '').trim() : '';
+            const attrs: Record<string, string> = {};
+            for (const attr of Array.from(node.attributes)) {
+              if (!allow || allow.has(attr.name)) {
+                attrs[attr.name] = attr.value;
+              }
+            }
+            return {
+              index: i,
+              tag,
+              ...(wantText ? { text: text.slice(0, 500) } : {}),
+              attributes: attrs,
+            };
+          });
+          return { total, truncated: total > max, elements };
+        },
+        { sel: boundedSelector, max: boundedMax, wantText: includeText, allowAttrs: attrAllow ? Array.from(attrAllow) : null },
+      );
+      const result = { total: payload.total, returned: payload.elements.length, truncated: payload.truncated, elements: payload.elements };
+      await this.refreshLiveState({ lastOperation: `find_elements ${boundedSelector}` });
+      return JSON.stringify(result, null, 2);
+    } catch (e) {
+      const message = this.errMessage(e);
+      return `Error finding elements: ${message}`;
+    }
+  }
+
+  async searchPage(
+    pattern: string,
+    regex: boolean = false,
+    caseSensitive: boolean = false,
+    contextChars: number = 150,
+    cssScope?: string,
+    maxResults: number = 25,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    this.assertNotAborted(signal);
+    const page = this.requirePage();
+    if (!page.evaluate) {
+      return 'Error: Unable to access page for search_page.';
+    }
+    const boundedPattern = String(pattern ?? '').slice(0, 1000);
+    if (!boundedPattern) {
+      return 'Error: Pattern must not be empty.';
+    }
+    const boundedMax = this.clampInt(maxResults, 1, 100, 25);
+    const boundedContext = this.clampInt(contextChars, 0, 2000, 150);
+    try {
+      const rawResult = await page.evaluate(
+        ({ pat, isRegex, caseSens, ctx, scope, max }) => {
+          const skippedTags = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE']);
+          const root = scope ? document.querySelector(scope) : document.body;
+          if (scope && !root) return { error: `CSS scope not found: ${scope}`, matches: [] };
+          if (!root) return { error: 'No document body', matches: [] };
+          type Hit = { index: number; length: number };
+          let findHits: (text: string) => Hit[];
+          if (isRegex) {
+            let re: RegExp;
+            try {
+              re = new RegExp(pat, caseSens ? 'g' : 'gi');
+            } catch (e) {
+              return { error: `Invalid regex: ${String(e).slice(0, 500)}`, matches: [] };
+            }
+            // matchAll on a fresh RegExp per call avoids lastIndex state from
+            // shared global regexes.
+            findHits = (text) => {
+              const out: Hit[] = [];
+              for (const m of text.matchAll(re)) {
+                if (m.index === undefined) continue;
+                out.push({ index: m.index, length: m[0].length });
+              }
+              return out;
+            };
+          } else {
+            const needle = caseSens ? pat : pat.toLowerCase();
+            const matchLen = pat.length;
+            findHits = (text) => {
+              const hay = caseSens ? text : text.toLowerCase();
+              const out: Hit[] = [];
+              let idx = hay.indexOf(needle);
+              while (idx >= 0) {
+                out.push({ index: idx, length: matchLen });
+                idx = hay.indexOf(needle, idx + matchLen);
+              }
+              return out;
+            };
+          }
+          const isVisible = (n: Node): boolean => {
+            const el = n.parentElement;
+            if (!el) return true;
+            return el.offsetParent !== null || getComputedStyle(el).visibility !== 'hidden';
+          };
+          const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+            acceptNode: (n) => (isVisible(n) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT),
+          });
+          const matches: Array<{ context: string; offset: number }> = [];
+          let node = walker.nextNode();
+          while (node && matches.length < max) {
+            const parent = node.parentElement;
+            if (parent && !skippedTags.has(parent.tagName)) {
+              const text = node.nodeValue ?? '';
+              for (const hit of findHits(text)) {
+                if (matches.length >= max) break;
+                const start = Math.max(0, hit.index - ctx);
+                const end = Math.min(text.length, hit.index + hit.length + ctx);
+                matches.push({ context: text.slice(start, end), offset: hit.index });
+              }
+            }
+            node = walker.nextNode();
+          }
+          return { matches };
+        },
+        { pat: boundedPattern, isRegex: regex, caseSens: caseSensitive, ctx: boundedContext, scope: cssScope ?? null, max: boundedMax },
+      );
+      if (rawResult && typeof rawResult === 'object' && 'error' in rawResult && (rawResult as { error: string }).error) {
+        return `Error searching page: ${(rawResult as { error: string }).error}`;
+      }
+      const matches = (rawResult as { matches: Array<{ context: string; offset: number }> })?.matches ?? [];
+      if (matches.length === 0) {
+        return `No matches found for pattern '${boundedPattern}'`;
+      }
+      const lines = matches.map((m, i) => `[${i}] ...${m.context}...`);
+      await this.refreshLiveState({ lastOperation: `search_page ${boundedPattern}` });
+      return `${matches.length} match(es):\n${lines.join('\n')}`;
+    } catch (e) {
+      const message = this.errMessage(e);
+      return `Error searching page: ${message}`;
+    }
   }
 
   // ── Tab management (Playwright direct) ──
@@ -966,7 +1546,8 @@ export class BrowserServer {
     return hash.toString(16).padStart(4, '0').slice(0, 4);
   }
 
-  async listTabs(): Promise<string> {
+  async listTabs(signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
     const pages = this.requirePage().context().pages();
     // BUG 1 FIX: second field was `p.url()` twice; should be the page title.
     // Format: tabId | title | url (matches the OpenHands pattern).
@@ -980,7 +1561,8 @@ export class BrowserServer {
     return `Open tabs:\n${rows.join('\n')}`;
   }
 
-  async switchTab(tabId: string): Promise<string> {
+  async switchTab(tabId: string, signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
     const pages = this.requirePage().context().pages();
     const target = pages.find((p) => this.tabId(p) === tabId);
     if (!target) return `Error: Tab ${tabId} not found`;
@@ -991,7 +1573,8 @@ export class BrowserServer {
     return `Switched to tab ${tabId}`;
   }
 
-  async closeTab(tabId: string): Promise<string> {
+  async closeTab(tabId: string, signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
     const pages = this.requirePage().context().pages();
     const target = pages.find((p) => this.tabId(p) === tabId);
     if (!target) return `Error: Tab ${tabId} not found`;
@@ -1023,7 +1606,8 @@ export class BrowserServer {
    * ask). Safe now that navigate()/requirePage() both handle a zero-tab
    * state as a normal, recoverable condition rather than an error.
    */
-  async closeAllTabs(): Promise<string> {
+  async closeAllTabs(signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
     if (!this.context) return 'Error: No browser session active';
     const pages = this.context.pages();
     const count = pages.length;
@@ -1038,7 +1622,8 @@ export class BrowserServer {
 
   // ── Storage (Playwright + CDP — ported EXACTLY from server.py) ──
 
-  async getStorage(): Promise<string> {
+  async getStorage(signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
     try {
       const context = this.requirePage().context();
       const storageState = await context.storageState();
@@ -1049,7 +1634,8 @@ export class BrowserServer {
     }
   }
 
-  async setStorage(storageState: { cookies: any[]; origins: any[] }): Promise<string> {
+  async setStorage(storageState: { cookies: any[]; origins: any[] }, signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
     try {
       const page = this.requirePage();
       const context = page.context();
@@ -1103,7 +1689,8 @@ export class BrowserServer {
 
   // ── Recording (delegates to RecordingSession) ──
 
-  async startRecording(outputDir?: string): Promise<string> {
+  async startRecording(outputDir?: string, signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
     if (!this.page) return 'Error: No browser session active';
     this.recordingSession = new RecordingSession(outputDir ?? null);
     const result = await this.recordingSession.start(this.page);
@@ -1111,7 +1698,8 @@ export class BrowserServer {
     return result;
   }
 
-  async stopRecording(): Promise<string> {
+  async stopRecording(signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
     if (!this.page) return 'Error: No browser session active';
     if (!this.recordingSession || !this.recordingSession.isActive) {
       return 'Error: Not recording. Call browser_start_recording first.';
