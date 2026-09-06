@@ -27,6 +27,88 @@ export const MAX_CONSECUTIVE_FAILURES = 3;
 /** Shorter timeout used on the last retry before a reset would trigger. */
 export const DEGRADED_TIMEOUT_SECONDS = 30;
 
+// ── scroll_to_text constants (ported from browser-use text-search.ts) ──
+
+export const MAX_SCROLL_TEXT_QUERY_CHARS = 1_000;
+export const MAX_SCROLL_TEXT_NODES = 100_000;
+export const MAX_SCROLL_TEXT_CHARS = 2 * 1024 * 1024;
+const SCROLL_TEXT_CHUNK_CHARS = 64 * 1024;
+
+export type ScrollToTextPageResult = {
+  found: boolean;
+  truncated: boolean;
+  visitedNodes: number;
+  scannedChars: number;
+};
+
+const scriptSafeJson = (value: unknown): string =>
+  JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+
+export function buildScrollToTextExpression(
+  text: string,
+  direction: 'up' | 'down',
+): string {
+  const payload = scriptSafeJson({
+    text: String(text).slice(0, MAX_SCROLL_TEXT_QUERY_CHARS),
+    direction,
+    maxNodes: MAX_SCROLL_TEXT_NODES,
+    maxChars: MAX_SCROLL_TEXT_CHARS,
+    chunkChars: SCROLL_TEXT_CHUNK_CHARS,
+  });
+
+  return `(() => {
+    const payload = ${payload};
+    const query = payload.text.toLowerCase();
+    if (!query || !document.body) {
+      return { found: false, truncated: false, visitedNodes: 0, scannedChars: 0 };
+    }
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    const skippedTags = new Set(['script', 'style', 'noscript', 'template']);
+    const carryLength = Math.max(0, query.length - 1);
+    let carry = '';
+    let visitedNodes = 0;
+    let scannedChars = 0;
+    let node = walker.nextNode();
+    while (node && visitedNodes < payload.maxNodes && scannedChars < payload.maxChars) {
+      visitedNodes += 1;
+      const parent = node.parentElement;
+      const parentTag = parent?.tagName?.toLowerCase() ?? '';
+      if (parent && !skippedTags.has(parentTag)) {
+        const value = node.nodeValue ?? '';
+        let offset = 0;
+        while (offset < value.length && scannedChars < payload.maxChars) {
+          const remaining = payload.maxChars - scannedChars;
+          const chunk = value.slice(offset, offset + Math.min(payload.chunkChars, remaining));
+          const searchable = carry + chunk.toLowerCase();
+          if (searchable.includes(query)) {
+            parent.scrollIntoView({
+              behavior: 'smooth',
+              block: payload.direction === 'up' ? 'start' : 'center',
+            });
+            return { found: true, truncated: false, visitedNodes, scannedChars: scannedChars + chunk.length };
+          }
+          carry = carryLength > 0 ? searchable.slice(-carryLength) : '';
+          offset += chunk.length;
+          scannedChars += chunk.length;
+        }
+        if (offset < value.length) {
+          return { found: false, truncated: true, visitedNodes, scannedChars };
+        }
+      }
+      node = walker.nextNode();
+    }
+    return {
+      found: false,
+      truncated: Boolean(node),
+      visitedNodes,
+      scannedChars,
+    };
+  })()`;
+}
+
 /** Mapping of base64 prefixes to MIME types for image detection. */
 const BASE64_IMAGE_PREFIXES: Record<string, string> = {
   '/9j/': 'image/jpeg',
@@ -421,7 +503,7 @@ export const BrowserClickActionSchema = z.strictObject({
   index: looseNumber(z.number().int().min(0))
     .optional()
     .describe(
-      'The index of the element to click (from browser_get_state). Ignored if `selector` is provided.',
+      'The index of the element to click (from browser_get_state). Ignored if `selector` or coordinates are provided.',
     ),
   // LOG.MD ISSUE #3 FIX (LOW priority): the occurrence-index from
   // get_state is fragile — any DOM change between get_state and click
@@ -433,6 +515,16 @@ export const BrowserClickActionSchema = z.strictObject({
   // is required (enforced in browserServer.ts, not the schema, since zod
   // discriminated unions don't cleanly express "at least one of").
   selector: z.string().optional().describe('CSS selector to click directly, bypassing the element index.'),
+  // TASK 7: coordinate-based click fallback for when neither index nor
+  // selector is available (e.g. clicking on a canvas, image, or arbitrary
+  // page position). When both coordinate_x and coordinate_y are provided,
+  // uses page.mouse.click(x, y) instead of element-based clicking.
+  coordinate_x: looseNumber(z.number().int().min(0))
+    .optional()
+    .describe('X coordinate for a mouse click. Must be paired with coordinate_y.'),
+  coordinate_y: looseNumber(z.number().int().min(0))
+    .optional()
+    .describe('Y coordinate for a mouse click. Must be paired with coordinate_x.'),
   new_tab: looseBoolean(false).describe('Whether to open any resulting navigation in a new tab. Default: False'),
 });
 
@@ -466,6 +558,79 @@ export const BrowserScrollActionSchema = z.strictObject({
     .enum(['up', 'down'])
     .default('down')
     .describe("Direction to scroll. Options: 'up', 'down'. Default: 'down'"),
+});
+
+export const BrowserScrollToTextActionSchema = z.strictObject({
+  action: z.literal('scroll_to_text'),
+  text: z.string().min(1).max(MAX_SCROLL_TEXT_QUERY_CHARS).describe('The text to search for and scroll to'),
+  direction: z
+    .enum(['up', 'down'])
+    .default('down')
+    .describe("Direction to scroll when text is found. Options: 'up', 'down'. Default: 'down'"),
+});
+
+export const BrowserEvaluateActionSchema = z.strictObject({
+  action: z.literal('evaluate'),
+  code: z.string().describe('JavaScript code to execute in the page context. Return value is JSON-serialized.'),
+});
+
+export const BrowserFindElementsActionSchema = z.strictObject({
+  action: z.literal('find_elements'),
+  selector: z.string().min(1).max(2048).describe('CSS selector to query'),
+  attributes: z.array(z.string().min(1).max(256)).max(32).optional().describe('Specific attributes to include (default: all)'),
+  max_results: looseNumber(z.number().int().min(1).max(100)).default(50).describe('Maximum number of results (1-100, default: 50)'),
+  include_text: looseBoolean(true).describe('Include text content of elements (default: true)'),
+});
+
+export const BrowserSearchPageActionSchema = z.strictObject({
+  action: z.literal('search_page'),
+  pattern: z.string().min(1).max(1000).describe('Text pattern or regex to search for'),
+  regex: looseBoolean(false).describe('Treat pattern as regex (default: false)'),
+  case_sensitive: looseBoolean(false).describe('Case-sensitive search (default: false)'),
+  context_chars: looseNumber(z.number().int().min(0).max(2000)).default(150).describe('Context chars around match (0-2000, default: 150)'),
+  css_scope: z.string().min(1).max(2048).optional().describe('CSS selector to limit search scope'),
+  max_results: looseNumber(z.number().int().min(1).max(100)).default(25).describe('Maximum number of results (1-100, default: 25)'),
+});
+
+export const BrowserSendKeysActionSchema = z.strictObject({
+  action: z.literal('send_keys'),
+  keys: z.string().describe('Keys to press. Supports combos like "Control+a", "Shift+End", or sequences of characters.'),
+});
+
+export const BrowserScreenshotActionSchema = z.strictObject({
+  action: z.literal('screenshot'),
+  file_name: z.string().max(255).optional().describe('File name to save the screenshot to. If omitted, returns base64 data.'),
+});
+
+export const BrowserDropdownOptionsActionSchema = z.strictObject({
+  action: z.literal('dropdown_options'),
+  index: looseNumber(z.number().int().min(0)).describe('Element index from get_state'),
+});
+
+export const BrowserSelectDropdownActionSchema = z.strictObject({
+  action: z.literal('select_dropdown'),
+  index: looseNumber(z.number().int().min(0)).describe('Element index from get_state'),
+  text: z.string().min(1).max(2048).describe('Text of the option to select'),
+});
+
+export const BrowserUploadFileActionSchema = z.strictObject({
+  action: z.literal('upload_file'),
+  index: looseNumber(z.number().int().min(0)).describe('Element index from get_state'),
+  path: z.string().min(1).describe('Absolute path to the file to upload'),
+});
+
+export const BrowserSearchGoogleActionSchema = z.strictObject({
+  action: z.literal('search_google'),
+  query: z.string().min(1).describe('Search query string'),
+});
+
+export const BrowserSaveAsPdfActionSchema = z.strictObject({
+  action: z.literal('save_as_pdf'),
+  file_name: z.string().max(255).optional().describe('File name for the saved PDF (default: page title).'),
+  print_background: looseBoolean(true).describe('Print background graphics (default: true)'),
+  landscape: looseBoolean(false).describe('Landscape orientation (default: false)'),
+  scale: looseNumber(z.number().min(0.1).max(2.0)).default(1.0).describe('Scale factor (0.1-2.0, default: 1.0)'),
+  paper_format: z.enum(['Letter', 'Legal', 'A4', 'A3', 'Tabloid']).default('Letter').describe('Paper format (default: "Letter")'),
 });
 
 export const BrowserGoBackActionSchema = z.strictObject({
@@ -536,6 +701,17 @@ export const BrowserActionSchema = z.discriminatedUnion('action', [
   BrowserGetStateActionSchema,
   BrowserGetContentActionSchema,
   BrowserScrollActionSchema,
+  BrowserScrollToTextActionSchema,
+  BrowserEvaluateActionSchema,
+  BrowserFindElementsActionSchema,
+  BrowserSearchPageActionSchema,
+  BrowserSendKeysActionSchema,
+  BrowserScreenshotActionSchema,
+  BrowserDropdownOptionsActionSchema,
+  BrowserSelectDropdownActionSchema,
+  BrowserUploadFileActionSchema,
+  BrowserSearchGoogleActionSchema,
+  BrowserSaveAsPdfActionSchema,
   BrowserGoBackActionSchema,
   BrowserListTabsActionSchema,
   BrowserSwitchTabActionSchema,
@@ -570,6 +746,17 @@ export const BROWSER_ACTION_SCHEMA_BY_NAME = {
   get_state: BrowserGetStateActionSchema,
   get_content: BrowserGetContentActionSchema,
   scroll: BrowserScrollActionSchema,
+  scroll_to_text: BrowserScrollToTextActionSchema,
+  evaluate: BrowserEvaluateActionSchema,
+  find_elements: BrowserFindElementsActionSchema,
+  search_page: BrowserSearchPageActionSchema,
+  send_keys: BrowserSendKeysActionSchema,
+  screenshot: BrowserScreenshotActionSchema,
+  dropdown_options: BrowserDropdownOptionsActionSchema,
+  select_dropdown: BrowserSelectDropdownActionSchema,
+  upload_file: BrowserUploadFileActionSchema,
+  search_google: BrowserSearchGoogleActionSchema,
+  save_as_pdf: BrowserSaveAsPdfActionSchema,
   go_back: BrowserGoBackActionSchema,
   list_tabs: BrowserListTabsActionSchema,
   switch_tab: BrowserSwitchTabActionSchema,
@@ -585,7 +772,7 @@ export const BROWSER_ACTION_SCHEMA_BY_NAME = {
 } satisfies Record<BrowserAction['action'], z.ZodTypeAny>;
 
 /**
- * The 18 action names, in schema order. The cast is sound because the
+ * The 29 action names, in schema order. The cast is sound because the
  * `satisfies` clause above proves the keys are exactly `BrowserAction['action']`.
  */
 export const BROWSER_ACTION_NAMES = Object.keys(
@@ -604,7 +791,7 @@ export const BROWSER_ACTION_NAMES = Object.keys(
  * why the tool worked on one provider (which passed `anyOf` through) and broke
  * on every provider switched to afterwards.
  *
- * So the model is shown one flat object whose `action` enumerates all 18
+  * So the model is shown one flat object whose `action` enumerates all 29
  * operations and whose remaining fields are optional and documented with the
  * action they belong to, while BrowserActionSchema still does the real,
  * strict per-action validation in the tool's `validateInput`/`call`. This
@@ -631,8 +818,14 @@ export const BrowserActionFlatSchema = z.strictObject({
   selector: z
     .string()
     .optional()
-    .describe('[click, type] CSS selector to target directly, bypassing the element index.'),
-  text: z.string().optional().describe('[type] The text to type.'),
+    .describe('[click, type, find_elements] CSS selector to target (per-action schema validates its use).'),
+  coordinate_x: looseNumber(z.number().int().min(0))
+    .optional()
+    .describe('[click] X coordinate for a mouse click (must be paired with coordinate_y).'),
+  coordinate_y: looseNumber(z.number().int().min(0))
+    .optional()
+    .describe('[click] Y coordinate for a mouse click (must be paired with coordinate_x).'),
+  text: z.string().optional().describe('[type, scroll_to_text] The text to type / search for.'),
   include_screenshot: looseBoolean()
     .optional()
     .describe('[get_state] Include a screenshot of the current page. Default: false.'),
@@ -660,6 +853,58 @@ export const BrowserActionFlatSchema = z.strictObject({
     .string()
     .optional()
     .describe('[press_key] Key to press, e.g. "Enter", "Escape", "Tab", "ArrowDown".'),
+  code: z
+    .string()
+    .optional()
+    .describe('[evaluate] JavaScript code to execute in the page context.'),
+  attributes: z
+    .array(z.string())
+    .optional()
+    .describe('[find_elements] Specific attribute names to include.'),
+  max_results: looseNumber(z.number().int().min(1).max(100))
+    .optional()
+    .describe('[find_elements, search_page] Maximum number of results (1-100).'),
+  include_text: looseBoolean()
+    .optional()
+    .describe('[find_elements] Include text content of elements (default: true).'),
+  pattern: z
+    .string()
+    .optional()
+    .describe('[search_page] Text or regex pattern to search for.'),
+  regex: looseBoolean()
+    .optional()
+    .describe('[search_page] Treat pattern as regex (default: false).'),
+  case_sensitive: looseBoolean()
+    .optional()
+    .describe('[search_page] Case-sensitive search (default: false).'),
+  context_chars: looseNumber(z.number().int().min(0).max(2000))
+    .optional()
+    .describe('[search_page] Context chars around match (0-2000, default: 150).'),
+  css_scope: z
+    .string()
+    .optional()
+    .describe('[search_page] CSS selector to limit search scope.'),
+  keys: z
+    .string()
+    .optional()
+    .describe('[send_keys] Key combo or sequence, e.g. "Control+a", "Shift+End".'),
+  file_name: z
+    .string()
+    .max(255)
+    .optional()
+    .describe('[screenshot, save_as_pdf] File name for the saved artifact (optional).'),
+  path: z
+    .string()
+    .min(1)
+    .max(4096)
+    .optional()
+    .describe('[upload_file] Absolute path to the file to upload.'),
+  query: z
+    .string()
+    .min(1)
+    .max(1000)
+    .optional()
+    .describe('[search_google] Search query string.'),
 });
 
 export type BrowserActionFlat = z.infer<typeof BrowserActionFlatSchema>;
@@ -714,6 +959,17 @@ export type BrowserTypeAction = z.infer<typeof BrowserTypeActionSchema>;
 export type BrowserGetStateAction = z.infer<typeof BrowserGetStateActionSchema>;
 export type BrowserGetContentAction = z.infer<typeof BrowserGetContentActionSchema>;
 export type BrowserScrollAction = z.infer<typeof BrowserScrollActionSchema>;
+export type BrowserScrollToTextAction = z.infer<typeof BrowserScrollToTextActionSchema>;
+export type BrowserEvaluateAction = z.infer<typeof BrowserEvaluateActionSchema>;
+export type BrowserFindElementsAction = z.infer<typeof BrowserFindElementsActionSchema>;
+export type BrowserSearchPageAction = z.infer<typeof BrowserSearchPageActionSchema>;
+export type BrowserSendKeysAction = z.infer<typeof BrowserSendKeysActionSchema>;
+export type BrowserScreenshotAction = z.infer<typeof BrowserScreenshotActionSchema>;
+export type BrowserDropdownOptionsAction = z.infer<typeof BrowserDropdownOptionsActionSchema>;
+export type BrowserSelectDropdownAction = z.infer<typeof BrowserSelectDropdownActionSchema>;
+export type BrowserUploadFileAction = z.infer<typeof BrowserUploadFileActionSchema>;
+export type BrowserSearchGoogleAction = z.infer<typeof BrowserSearchGoogleActionSchema>;
+export type BrowserSaveAsPdfAction = z.infer<typeof BrowserSaveAsPdfActionSchema>;
 export type BrowserGoBackAction = z.infer<typeof BrowserGoBackActionSchema>;
 export type BrowserListTabsAction = z.infer<typeof BrowserListTabsActionSchema>;
 export type BrowserSwitchTabAction = z.infer<typeof BrowserSwitchTabActionSchema>;
@@ -819,6 +1075,121 @@ to see more content.
 
 Parameters:
 - direction: Direction to scroll - "up" or "down" (optional, default: "down")
+`;
+
+export const BROWSER_SCROLL_TO_TEXT_DESCRIPTION = `Scroll the page to the first occurrence of the given text.
+
+Use this tool when you know the text you are looking for and want the page to scroll
+directly to it. The search is case-insensitive and walks the visible text nodes of the
+current page.
+
+Parameters:
+- text: The text to search for (required)
+- direction: "up" or "down" (optional, default: "down")
+`;
+
+export const BROWSER_EVALUATE_DESCRIPTION = `Execute JavaScript in the current page and return the result.
+
+Use this tool to run arbitrary JS in the page context (query the DOM, compute values,
+inspect state). The return value is JSON-serialized. Large outputs are truncated.
+
+Parameters:
+- code: JavaScript code to execute (required)
+`;
+
+export const BROWSER_FIND_ELEMENTS_DESCRIPTION = `Query DOM elements by CSS selector (like find).
+
+Use this tool to list elements matching a CSS selector, optionally including their
+text and attributes. Zero LLM cost and instant.
+
+Parameters:
+- selector: CSS selector (required)
+- attributes: Specific attribute names to include (optional)
+- max_results: Max number of results (1-100, default: 50)
+- include_text: Include text content (default: true)
+`;
+
+export const BROWSER_SEARCH_PAGE_DESCRIPTION = `Search page text for a pattern (like grep).
+
+Use this tool to find occurrences of a text pattern in the visible page content.
+Returns context snippets around each match. Zero LLM cost and instant.
+
+Parameters:
+- pattern: Text or regex pattern (required)
+- regex: Treat as regex (default: false)
+- case_sensitive: Case-sensitive search (default: false)
+- context_chars: Context chars around match (0-2000, default: 150)
+- css_scope: CSS selector to limit search scope (optional)
+- max_results: Max number of results (1-100, default: 25)
+`;
+
+export const BROWSER_SEND_KEYS_DESCRIPTION = `Send keys to the active page (supports combos).
+
+Use this tool to press key combinations like "Control+a", "Shift+End", "Enter",
+or type a sequence of characters. Unlike press_key, this supports multi-key combos
+and falls back to typing individual characters if the key name is not recognized.
+
+Parameters:
+- keys: Key combo or sequence (required). Examples: "Control+a", "Shift+End", "Enter"
+`;
+
+export const BROWSER_SCREENSHOT_DESCRIPTION = `Take a screenshot of the current page.
+
+If file_name is provided, saves the screenshot to disk and returns the file path.
+Otherwise, returns a base64-encoded PNG data URL.
+
+Parameters:
+- file_name: File name to save to (optional, must end in .png)
+`;
+
+export const BROWSER_DROPDOWN_OPTIONS_DESCRIPTION = `Get all options from a native dropdown or ARIA menu.
+
+Use this tool to enumerate the available options in a <select> element or an ARIA
+menu/listbox before selecting one.
+
+Parameters:
+- index: Element index from get_state (required)
+`;
+
+export const BROWSER_SELECT_DROPDOWN_DESCRIPTION = `Select a dropdown option or ARIA menu item by text.
+
+Use this tool to pick an option from a <select> element or an ARIA menu by its
+visible text. Use dropdown_options first to see available options.
+
+Parameters:
+- index: Element index from get_state (required)
+- text: Text of the option to select (required)
+`;
+
+export const BROWSER_UPLOAD_FILE_DESCRIPTION = `Upload a file to a file input element.
+
+Use this tool to set files on a <input type="file"> element. The file must
+exist on the local filesystem and the path must be absolute.
+
+Parameters:
+- index: Element index from get_state (required)
+- path: Absolute path to the file to upload (required)
+`;
+
+export const BROWSER_SEARCH_GOOGLE_DESCRIPTION = `Search Google for a query.
+
+Navigates to https://www.google.com/search?q=... and returns the search
+results page. Use this as a quick way to look something up.
+
+Parameters:
+- query: Search query (required)
+`;
+
+export const BROWSER_SAVE_AS_PDF_DESCRIPTION = `Save the current page as a PDF.
+
+Uses Playwright's built-in PDF export. Returns the saved file path.
+
+Parameters:
+- file_name: File name for the PDF (optional, defaults to page title)
+- print_background: Include background graphics (default: true)
+- landscape: Use landscape orientation (default: false)
+- scale: Zoom scale 0.1-2.0 (default: 1.0)
+- paper_format: Paper format like "Letter", "A4" (default: "Letter")
 `;
 
 export const BROWSER_GO_BACK_DESCRIPTION = `Go back to the previous page in browser history.

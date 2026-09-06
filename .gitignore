@@ -13,6 +13,7 @@ MISSING-SDKS.md
 COOK.md
 compiled/
 gakrcli-web-ui/
+.agent_tmp/
 # Build outputs
 dist/
 *.tsbuildinfo

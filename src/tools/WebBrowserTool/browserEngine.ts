@@ -430,17 +430,24 @@ export class BrowserToolExecutor {
   }
 
   /** Submit an action and wait for the result, with timeout + crash-recovery tracking. */
-  async call(action: BrowserAction): Promise<BrowserObservation> {
+  async call(action: BrowserAction, signal?: AbortSignal): Promise<BrowserObservation> {
+    if (signal?.aborted) {
+      return BrowserObservation.fromText('Browser action aborted', true);
+    }
     const effectiveTimeout =
       this.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES - 1 ? DEGRADED_TIMEOUT_SECONDS : this.actionTimeoutSeconds;
 
     try {
-      const result = await withTimeout(this.executeAction(action), effectiveTimeout);
+      const result = await withTimeout(this.executeAction(action, signal), effectiveTimeout);
       this.consecutiveFailures = 0;
       return result;
     } catch (error) {
       if (error instanceof BrowserTimeoutError) {
         return this.handleTimeoutFailure(formatBrowserOperationError(error, effectiveTimeout));
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      if (/abort/i.test(message)) {
+        return BrowserObservation.fromText('Browser action aborted', true);
       }
       throw error;
     }
@@ -516,50 +523,133 @@ export class BrowserToolExecutor {
 
   // ── Navigation & control ──
 
-  private async navigate(url: string, newTab: boolean): Promise<string> {
+  private async navigate(url: string, newTab: boolean, signal?: AbortSignal): Promise<string> {
     await this.ensureInitialized();
-    return this.recordingAware('navigate', () => this.server.navigate(url, newTab));
+    return this.recordingAware('navigate', () => this.server.navigate(url, newTab, signal));
   }
 
-  private async goBack(): Promise<string> {
+  private async goBack(signal?: AbortSignal): Promise<string> {
     await this.ensureInitialized();
-    return this.recordingAware('go_back', () => this.server.goBack());
+    return this.recordingAware('go_back', () => this.server.goBack(signal));
   }
 
   // ISSUE 8/9/10: three new Playwright-direct actions.
-  private async refresh(): Promise<string> {
+  private async refresh(signal?: AbortSignal): Promise<string> {
     await this.ensureInitialized();
-    return this.recordingAware('refresh', () => this.server.refresh());
+    return this.recordingAware('refresh', () => this.server.refresh(signal));
   }
 
-  private async wait(ms: number): Promise<string> {
+  private async wait(ms: number, signal?: AbortSignal): Promise<string> {
     await this.ensureInitialized();
-    return this.server.wait(ms);
+    return this.server.wait(ms, signal);
   }
 
-  private async pressKey(key: string): Promise<string> {
+  private async pressKey(key: string, signal?: AbortSignal): Promise<string> {
     await this.ensureInitialized();
-    return this.server.pressKey(key);
+    return this.server.pressKey(key, signal);
   }
 
-  private async click(index: number | undefined, newTab: boolean, selector?: string): Promise<string> {
+  private async sendKeys(keys: string, signal?: AbortSignal): Promise<string> {
     await this.ensureInitialized();
-    return this.recordingAware('click', () => this.server.click(index, newTab, selector));
+    return this.server.sendKeys(keys, signal);
   }
 
-  private async typeText(index: number | undefined, text: string, selector?: string): Promise<string> {
+  private async takeScreenshot(fileName?: string, signal?: AbortSignal): Promise<string> {
     await this.ensureInitialized();
-    return this.server.typeText(index, text, selector);
+    return this.server.takeScreenshot(fileName, signal);
   }
 
-  private async scroll(direction: 'up' | 'down'): Promise<string> {
+  private async getDropdownOptions(index: number, signal?: AbortSignal): Promise<string> {
     await this.ensureInitialized();
-    return this.server.scroll(direction);
+    return this.server.getDropdownOptions(index, signal);
   }
 
-  private async getState(includeScreenshot: boolean): Promise<BrowserObservation> {
+  private async selectDropdown(index: number, text: string, signal?: AbortSignal): Promise<string> {
     await this.ensureInitialized();
-    const resultJson = await this.server.getBrowserState(includeScreenshot);
+    return this.server.selectDropdown(index, text, signal);
+  }
+
+  private async uploadFile(index: number, path: string, signal?: AbortSignal): Promise<string> {
+    await this.ensureInitialized();
+    return this.server.uploadFile(index, path, signal);
+  }
+
+  private async searchGoogle(query: string, signal?: AbortSignal): Promise<string> {
+    await this.ensureInitialized();
+    return this.server.searchGoogle(query, signal);
+  }
+
+  private async saveAsPdf(
+    fileName?: string,
+    printBackground?: boolean,
+    landscape?: boolean,
+    scale?: number,
+    paperFormat?: string,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    await this.ensureInitialized();
+    return this.server.saveAsPdf(fileName, printBackground, landscape, scale, paperFormat, signal);
+  }
+
+  private async click(
+    index: number | undefined,
+    newTab: boolean,
+    selector?: string,
+    coordinateX?: number,
+    coordinateY?: number,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    await this.ensureInitialized();
+    return this.recordingAware('click', () => this.server.click(index, newTab, selector, coordinateX, coordinateY, signal));
+  }
+
+  private async typeText(index: number | undefined, text: string, selector?: string, signal?: AbortSignal): Promise<string> {
+    await this.ensureInitialized();
+    return this.server.typeText(index, text, selector, signal);
+  }
+
+  private async scroll(direction: 'up' | 'down', signal?: AbortSignal): Promise<string> {
+    await this.ensureInitialized();
+    return this.server.scroll(direction, signal);
+  }
+
+  private async scrollToText(text: string, direction: 'up' | 'down', signal?: AbortSignal): Promise<string> {
+    await this.ensureInitialized();
+    return this.server.scrollToText(text, direction, signal);
+  }
+
+  private async evaluate(code: string, signal?: AbortSignal): Promise<string> {
+    await this.ensureInitialized();
+    return this.server.evaluate(code, signal);
+  }
+
+  private async findElements(
+    selector: string,
+    attributes?: string[],
+    maxResults?: number,
+    includeText?: boolean,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    await this.ensureInitialized();
+    return this.server.findElements(selector, attributes, maxResults, includeText, signal);
+  }
+
+  private async searchPage(
+    pattern: string,
+    regex?: boolean,
+    caseSensitive?: boolean,
+    contextChars?: number,
+    cssScope?: string,
+    maxResults?: number,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    await this.ensureInitialized();
+    return this.server.searchPage(pattern, regex, caseSensitive, contextChars, cssScope, maxResults, signal);
+  }
+
+  private async getState(includeScreenshot: boolean, signal?: AbortSignal): Promise<BrowserObservation> {
+    await this.ensureInitialized();
+    const resultJson = await this.server.getBrowserState(includeScreenshot, signal);
 
     if (includeScreenshot) {
       try {
@@ -578,109 +668,141 @@ export class BrowserToolExecutor {
     return BrowserObservation.fromText(resultJson, false, { fullOutputSaveDir: this.fullOutputSaveDir });
   }
 
-  private async getStorage(): Promise<string> {
+  private async getStorage(signal?: AbortSignal): Promise<string> {
     await this.ensureInitialized();
-    return this.server.getStorage();
+    return this.server.getStorage(signal);
   }
 
-  private async setStorage(storageState: { cookies: any[]; origins: any[] }): Promise<string> {
+  private async setStorage(storageState: { cookies: any[]; origins: any[] }, signal?: AbortSignal): Promise<string> {
     await this.ensureInitialized();
-    return this.server.setStorage(storageState);
+    return this.server.setStorage(storageState, signal);
   }
 
-  private async listTabs(): Promise<string> {
+  private async listTabs(signal?: AbortSignal): Promise<string> {
     await this.ensureInitialized();
-    return this.server.listTabs();
+    return this.server.listTabs(signal);
   }
 
-  private async switchTab(tabId: string): Promise<string> {
+  private async switchTab(tabId: string, signal?: AbortSignal): Promise<string> {
     await this.ensureInitialized();
-    return this.server.switchTab(tabId);
+    return this.server.switchTab(tabId, signal);
   }
 
-  private async closeTab(tabId: string): Promise<string> {
+  private async closeTab(tabId: string, signal?: AbortSignal): Promise<string> {
     await this.ensureInitialized();
-    return this.server.closeTab(tabId);
+    return this.server.closeTab(tabId, signal);
   }
 
-  private async closeAllTabs(): Promise<string> {
+  private async closeAllTabs(signal?: AbortSignal): Promise<string> {
     await this.ensureInitialized();
-    return this.server.closeAllTabs();
+    return this.server.closeAllTabs(signal);
   }
 
-  private async getContent(extractLinks: boolean, startFromChar: number): Promise<string> {
+  private async getContent(extractLinks: boolean, startFromChar: number, signal?: AbortSignal): Promise<string> {
     await this.ensureInitialized();
-    return this.server.getContent(extractLinks, startFromChar);
+    return this.server.getContent(extractLinks, startFromChar, signal);
   }
 
-  private async startRecording(): Promise<string> {
+  private async startRecording(signal?: AbortSignal): Promise<string> {
     await this.ensureInitialized();
-    return this.server.startRecording(BROWSER_RECORDING_OUTPUT_DIR);
+    return this.server.startRecording(BROWSER_RECORDING_OUTPUT_DIR, signal);
   }
 
-  private async stopRecording(): Promise<string> {
+  private async stopRecording(signal?: AbortSignal): Promise<string> {
     await this.ensureInitialized();
-    return this.server.stopRecording();
+    return this.server.stopRecording(signal);
   }
 
-  /** Route a BrowserAction to the appropriate method (ported from impl.py's `_execute_action`). */
-  private async executeAction(action: BrowserAction): Promise<BrowserObservation> {
+  private async executeAction(action: BrowserAction, signal?: AbortSignal): Promise<BrowserObservation> {
     try {
       let result: string;
 
       switch (action.action) {
         case 'navigate':
-          result = await this.navigate(action.url, action.new_tab);
+          result = await this.navigate(action.url, action.new_tab, signal);
           break;
         case 'click':
-          result = await this.click(action.index, action.new_tab, action.selector);
+          result = await this.click(action.index, action.new_tab, action.selector, action.coordinate_x, action.coordinate_y, signal);
           break;
         case 'type':
-          result = await this.typeText(action.index, action.text, action.selector);
+          result = await this.typeText(action.index, action.text, action.selector, signal);
           break;
         case 'get_state':
-          return this.getState(action.include_screenshot);
+          return this.getState(action.include_screenshot, signal);
         case 'get_storage':
-          result = await this.getStorage();
+          result = await this.getStorage(signal);
           break;
         case 'set_storage':
-          result = await this.setStorage(action.storage_state);
+          result = await this.setStorage(action.storage_state, signal);
           break;
         case 'get_content':
-          result = await this.getContent(action.extract_links, action.start_from_char);
+          result = await this.getContent(action.extract_links, action.start_from_char, signal);
           break;
         case 'scroll':
-          result = await this.scroll(action.direction);
+          result = await this.scroll(action.direction, signal);
+          break;
+        case 'scroll_to_text':
+          result = await this.scrollToText(action.text, action.direction, signal);
+          break;
+        case 'evaluate':
+          result = await this.evaluate(action.code, signal);
+          break;
+        case 'find_elements':
+          result = await this.findElements(action.selector, action.attributes, action.max_results, action.include_text, signal);
+          break;
+        case 'search_page':
+          result = await this.searchPage(action.pattern, action.regex, action.case_sensitive, action.context_chars, action.css_scope, action.max_results, signal);
           break;
         case 'go_back':
-          result = await this.goBack();
+          result = await this.goBack(signal);
           break;
         case 'list_tabs':
-          result = await this.listTabs();
+          result = await this.listTabs(signal);
           break;
         case 'switch_tab':
-          result = await this.switchTab(action.tab_id);
+          result = await this.switchTab(action.tab_id, signal);
           break;
         case 'close_tab':
-          result = await this.closeTab(action.tab_id);
+          result = await this.closeTab(action.tab_id, signal);
           break;
         case 'close_all_tabs':
-          result = await this.closeAllTabs();
+          result = await this.closeAllTabs(signal);
           break;
         case 'start_recording':
-          result = await this.startRecording();
+          result = await this.startRecording(signal);
           break;
         case 'stop_recording':
-          result = await this.stopRecording();
+          result = await this.stopRecording(signal);
           break;
         case 'refresh':
-          result = await this.refresh();
+          result = await this.refresh(signal);
           break;
         case 'wait':
-          result = await this.wait(action.ms);
+          result = await this.wait(action.ms, signal);
           break;
         case 'press_key':
-          result = await this.pressKey(action.key);
+          result = await this.pressKey(action.key, signal);
+          break;
+        case 'send_keys':
+          result = await this.sendKeys(action.keys, signal);
+          break;
+        case 'screenshot':
+          result = await this.takeScreenshot(action.file_name, signal);
+          break;
+        case 'dropdown_options':
+          result = await this.getDropdownOptions(action.index, signal);
+          break;
+        case 'select_dropdown':
+          result = await this.selectDropdown(action.index, action.text, signal);
+          break;
+        case 'upload_file':
+          result = await this.uploadFile(action.index, action.path, signal);
+          break;
+        case 'search_google':
+          result = await this.searchGoogle(action.query, signal);
+          break;
+        case 'save_as_pdf':
+          result = await this.saveAsPdf(action.file_name, action.print_background, action.landscape, action.scale, action.paper_format, signal);
           break;
         default:
           return BrowserObservation.fromText(

@@ -476,6 +476,649 @@ describe('ISSUE 10: pressKey()', () => {
   });
 });
 
+describe('scroll_to_text()', () => {
+  it('calls page.evaluate with the scroll-to-text expression and reports success', async () => {
+    const evaluate = mock(async () => ({ found: true, truncated: false, visitedNodes: 10, scannedChars: 500 }));
+    const fakePage: any = { evaluate, url: () => 'https://example.com/', isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.scrollToText('Hello World', 'down');
+    expect(evaluate).toHaveBeenCalledTimes(1);
+    expect(result).toContain("Scrolled to text 'Hello World'");
+  });
+
+  it('returns an error when the text is not found on the page', async () => {
+    const evaluate = mock(async () => ({ found: false, truncated: false, visitedNodes: 100, scannedChars: 2000 }));
+    const fakePage: any = { evaluate, url: () => 'https://example.com/', isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.scrollToText('NotHere', 'up');
+    expect(result).toContain("Text 'NotHere' not found on page");
+  });
+
+  it('returns an error when the text is empty', async () => {
+    const evaluate = mock(async () => ({ found: false, truncated: false, visitedNodes: 0, scannedChars: 0 }));
+    const fakePage: any = { evaluate, url: () => 'https://example.com/', isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.scrollToText('', 'down');
+    expect(result).toContain('Text to scroll to must not be empty');
+  });
+
+  it('returns a friendly error when page.evaluate throws', async () => {
+    const evaluate = mock(async () => {
+      throw new Error('Execution context was destroyed');
+    });
+    const fakePage: any = { evaluate, url: () => 'https://example.com/', isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.scrollToText('Hello', 'down');
+    expect(result).toContain('Error scrolling to text');
+    expect(result).toContain('Execution context was destroyed');
+  });
+});
+
+describe('evaluate()', () => {
+  it('returns a JSON-serialized result on success', async () => {
+    const evaluate = mock(async () => ({ ok: true, value: 42 }));
+    const fakePage: any = { evaluate, url: () => 'https://example.com/', isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.evaluate('1 + 41');
+    expect(result).toBe('42');
+  });
+
+  it('returns an object as JSON', async () => {
+    const evaluate = mock(async () => ({ ok: true, value: { name: 'Alice', age: 30 } }));
+    const fakePage: any = { evaluate, url: () => 'https://example.com/', isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.evaluate("({name:'Alice',age:30})");
+    expect(result).toContain('"name"');
+    expect(result).toContain('"Alice"');
+    expect(result).toContain('30');
+  });
+
+  it('returns "undefined" for undefined results', async () => {
+    const evaluate = mock(async () => ({ ok: true, value: undefined }));
+    const fakePage: any = { evaluate, url: () => 'https://example.com/', isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.evaluate('void 0');
+    expect(result).toBe('undefined');
+  });
+
+  it('returns an error string when the page-side eval throws', async () => {
+    const evaluate = mock(async () => ({ ok: false, error: 'ReferenceError: x is not defined' }));
+    const fakePage: any = { evaluate, url: () => 'https://example.com/', isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.evaluate('x');
+    expect(result).toContain('Error evaluating code');
+    expect(result).toContain('x is not defined');
+  });
+
+  it('returns a friendly error when page.evaluate throws', async () => {
+    const evaluate = mock(async () => {
+      throw new Error('Execution context was destroyed');
+    });
+    const fakePage: any = { evaluate, url: () => 'https://example.com/', isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.evaluate('1+1');
+    expect(result).toContain('Error evaluating code');
+    expect(result).toContain('Execution context was destroyed');
+  });
+
+  it('returns an error when the code is empty', async () => {
+    const evaluate = mock(async () => ({ ok: true, value: 1 }));
+    const fakePage: any = { evaluate, url: () => 'https://example.com/', isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.evaluate('   ');
+    expect(result).toContain('Code to evaluate must not be empty');
+  });
+
+  it('truncates very large results', async () => {
+    const bigString = 'x'.repeat(25_000);
+    const evaluate = mock(async () => ({ ok: true, value: bigString }));
+    const fakePage: any = { evaluate, url: () => 'https://example.com/', isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.evaluate("'x'.repeat(25000)");
+    expect(result).toContain('... (truncated');
+  });
+});
+
+describe('find_elements()', () => {
+  it('returns matching elements with tag, text, and attributes', async () => {
+    const fakeLocator1 = { evaluate: mock(async () => ({ tag: 'button', text: 'Login', attrs: { class: 'btn', id: 'submit' } })) };
+    const fakeLocator2 = { evaluate: mock(async () => ({ tag: 'button', text: 'Cancel', attrs: { class: 'btn' } })) };
+    const $$ = mock(async () => [fakeLocator1, fakeLocator2]);
+    const fakePage: any = { $$, isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.findElements('button', undefined, 50, true);
+    expect($$).toHaveBeenCalledWith('button');
+    const parsed = JSON.parse(result);
+    expect(parsed.total).toBe(2);
+    expect(parsed.returned).toBe(2);
+    expect(parsed.elements[0].tag).toBe('button');
+    expect(parsed.elements[0].text).toBe('Login');
+    expect(parsed.elements[0].attributes.id).toBe('submit');
+  });
+
+  it('respects max_results limit', async () => {
+    const fakeLocators = Array.from({ length: 5 }, () => ({
+      evaluate: mock(async () => ({ tag: 'div', text: '', attrs: {} })),
+    }));
+    const $$ = mock(async () => fakeLocators);
+    const fakePage: any = { $$, isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.findElements('div', undefined, 2, true);
+    const parsed = JSON.parse(result);
+    expect(parsed.total).toBe(5);
+    expect(parsed.returned).toBe(2);
+    expect(parsed.truncated).toBe(true);
+  });
+
+  it('filters attributes when requested', async () => {
+    const fakeLocator = { evaluate: mock(async () => ({ tag: 'a', text: 'Link', attrs: { href: 'https://example.com', class: 'link', id: 'main' } })) };
+    const $$ = mock(async () => [fakeLocator]);
+    const fakePage: any = { $$, isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.findElements('a', ['href'], 50, true);
+    const parsed = JSON.parse(result);
+    expect(parsed.elements[0].attributes).toEqual({ href: 'https://example.com' });
+  });
+
+  it('returns an error when selector is empty', async () => {
+    const $$ = mock(async () => []);
+    const fakePage: any = { $$, isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.findElements('', undefined, 50, true);
+    expect(result).toContain('Selector must not be empty');
+  });
+});
+
+describe('search_page()', () => {
+  it('finds text matches with context', async () => {
+    const evaluate = mock(async () => ({ matches: [{ context: '...Hello World...', offset: 3 }] }));
+    const fakePage: any = { evaluate, isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.searchPage('Hello', false, false, 50, undefined, 25);
+    expect(evaluate).toHaveBeenCalledTimes(1);
+    expect(result).toContain('1 match');
+    expect(result).toContain('Hello World');
+  });
+
+  it('returns "no matches" when nothing is found', async () => {
+    const evaluate = mock(async () => ({ matches: [] }));
+    const fakePage: any = { evaluate, isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.searchPage('NotHere', false, false, 50, undefined, 25);
+    expect(result).toContain('No matches found');
+  });
+
+  it('passes regex flag to the page-side evaluator', async () => {
+    const evaluate = mock(async () => ({ matches: [] }));
+    const fakePage: any = { evaluate, isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    await server.searchPage('foo\\d+', true, false, 50, undefined, 25);
+    expect(evaluate).toHaveBeenCalledTimes(1);
+    const call = evaluate.mock.calls[0] as unknown as unknown[];
+    expect(call[0]).toBeDefined();
+  });
+
+  it('returns an error when the regex is invalid', async () => {
+    const evaluate = mock(async () => ({ error: 'Invalid regex: Invalid regular expression', matches: [] }));
+    const fakePage: any = { evaluate, isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.searchPage('[unclosed', true, false, 50, undefined, 25);
+    expect(result).toContain('Invalid regex');
+  });
+
+  it('returns an error when pattern is empty', async () => {
+    const evaluate = mock(async () => ({ matches: [] }));
+    const fakePage: any = { evaluate, isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.searchPage('', false, false, 50, undefined, 25);
+    expect(result).toContain('Pattern must not be empty');
+  });
+});
+
+describe('send_keys()', () => {
+  it('presses a single key', async () => {
+    const press = mock(async () => {});
+    const fakePage: any = { keyboard: { press }, isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.sendKeys('Enter');
+    expect(press).toHaveBeenCalledWith('Enter');
+    expect(result).toContain('Sent keys Enter');
+  });
+
+  it('presses a key combo like Control+a', async () => {
+    const press = mock(async () => {});
+    const fakePage: any = { keyboard: { press }, isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.sendKeys('Control+a');
+    expect(press).toHaveBeenCalledWith('Control+a');
+    expect(result).toContain('Sent keys Control+a');
+  });
+
+  it('falls back to per-character press when the key name is unknown', async () => {
+    let callCount = 0;
+    const press = mock(async (key: string) => {
+      callCount += 1;
+      if (key === 'abc') throw new Error('Unknown key: "abc"');
+    });
+    const fakePage: any = { keyboard: { press }, isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.sendKeys('abc');
+    // 1 initial call that throws + 3 per-character calls (a, b, c) = 4 total
+    expect(callCount).toBe(4);
+    expect(result).toContain('Sent keys abc');
+  });
+
+  it('returns a friendly error when keyboard is unavailable', async () => {
+    const fakePage: any = { isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.sendKeys('Enter');
+    expect(result).toContain('Keyboard input is not available');
+  });
+
+  it('returns an error when keys is empty', async () => {
+    const press = mock(async () => {});
+    const fakePage: any = { keyboard: { press }, isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.sendKeys('');
+    expect(result).toContain('Keys must not be empty');
+  });
+});
+
+describe('takeScreenshot()', () => {
+  const makeFakeBuffer = () => Buffer.from('fake-png-data');
+
+  it('returns a base64 data URL when no file_name is given', async () => {
+    const fakeBuffer = makeFakeBuffer();
+    const screenshot = mock(async () => fakeBuffer);
+    const fakePage: any = { screenshot, isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.takeScreenshot();
+    expect(screenshot).toHaveBeenCalledWith({ type: 'png' });
+    expect(result).toContain('data:image/png;base64,');
+  });
+
+  it('saves to disk and returns path when file_name is given', async () => {
+    const fakeBuffer = makeFakeBuffer();
+    const screenshot = mock(async () => fakeBuffer);
+    const fakePage: any = { screenshot, isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.takeScreenshot('test-page.png');
+    expect(result).toContain('Saved screenshot to');
+    expect(result).toContain('test-page.png');
+  });
+
+  it('appends .png extension if missing', async () => {
+    const fakeBuffer = makeFakeBuffer();
+    const screenshot = mock(async () => fakeBuffer);
+    const fakePage: any = { screenshot, isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.takeScreenshot('my-screenshot');
+    expect(result).toContain('my-screenshot.png');
+  });
+
+  it('returns an error when page is closed', async () => {
+    const fakePage: any = { isClosed: () => true };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.takeScreenshot();
+    expect(result).toContain('No active page available');
+  });
+});
+
+describe('getDropdownOptions()', () => {
+  it('returns options for a SELECT element', async () => {
+    const evaluate = mock(async () =>
+      JSON.stringify([
+        { index: 0, value: 'us', text: 'United States', selected: true, disabled: false },
+        { index: 1, value: 'uk', text: 'United Kingdom', selected: false, disabled: false },
+      ]),
+    );
+    const locator = { evaluate };
+    const fakePage: any = {
+      locator: mock(() => locator),
+      isClosed: () => false,
+    };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+    (server as any).refManager.setSnapshot('- generic [ref=e1]:\n  - combobox "Country" [ref=e2]\n');
+
+    const result = await server.getDropdownOptions(0);
+    expect(result).toContain('2 option(s)');
+    expect(result).toContain('United States');
+    expect(result).toContain('United Kingdom');
+  });
+
+  it('returns an error when index is invalid', async () => {
+    const fakePage: any = { isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.getDropdownOptions(99);
+    expect(result).toContain('Invalid element index');
+  });
+});
+
+describe('selectDropdown()', () => {
+  it('selects an option by text in a SELECT element', async () => {
+    const evaluate = mock(async (_fn: unknown, t: string) => {
+      if (t === 'United Kingdom') {
+        return { found: true, value: 'uk', text: 'United Kingdom' };
+      }
+      return { found: false };
+    });
+    const locator = { evaluate };
+    const fakePage: any = {
+      locator: mock(() => locator),
+      isClosed: () => false,
+    };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+    (server as any).refManager.setSnapshot('- generic [ref=e1]:\n  - combobox "Country" [ref=e2]\n');
+
+    const result = await server.selectDropdown(0, 'United Kingdom');
+    expect(result).toContain("Selected 'United Kingdom'");
+    expect(result).toContain('value="uk"');
+  });
+
+  it('returns an error when the option is not found', async () => {
+    const evaluate = mock(async () => ({ found: false }));
+    const locator = { evaluate };
+    const fakePage: any = {
+      locator: mock(() => locator),
+      isClosed: () => false,
+    };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+    (server as any).refManager.setSnapshot('- generic [ref=e1]:\n  - combobox "Country" [ref=e2]\n');
+
+    const result = await server.selectDropdown(0, 'NotAnOption');
+    expect(result).toContain("Option 'NotAnOption' not found");
+  });
+
+  it('returns an error when text is empty', async () => {
+    const fakePage: any = { isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.selectDropdown(0, '');
+    expect(result).toContain('Option text must not be empty');
+  });
+});
+
+describe('uploadFile()', () => {
+  let tmpFile: string;
+  beforeEach(() => {
+    tmpFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'upload-file-test-')), 'test.txt');
+    fs.writeFileSync(tmpFile, 'hello');
+  });
+  afterEach(() => {
+    try { fs.unlinkSync(tmpFile); } catch {}
+  });
+
+  it('calls setInputFiles on the target element', async () => {
+    const setInputFiles = mock(async () => {});
+    const locator = { setInputFiles };
+    const fakePage: any = {
+      locator: mock(() => locator),
+      isClosed: () => false,
+    };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+    (server as any).refManager.setSnapshot('- generic [ref=e1]:\n  - button "Upload" [ref=e2]\n');
+
+    const result = await server.uploadFile(0, tmpFile);
+    expect(setInputFiles).toHaveBeenCalledWith(tmpFile);
+    expect(result).toContain("Uploaded file 'test.txt'");
+  });
+
+  it('returns an error when the file does not exist', async () => {
+    const fakePage: any = { isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.uploadFile(0, path.join(os.tmpdir(), 'definitely-nonexistent-' + Date.now() + '.txt'));
+    expect(result).toContain('File not found');
+  });
+
+  it('returns an error when path is empty', async () => {
+    const fakePage: any = { isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.uploadFile(0, '');
+    expect(result).toContain('File path must not be empty');
+  });
+
+  it('returns a friendly error when setInputFiles throws', async () => {
+    const setInputFiles = mock(async () => {
+      throw new Error('Element is not a file input');
+    });
+    const locator = { setInputFiles };
+    const fakePage: any = {
+      locator: mock(() => locator),
+      isClosed: () => false,
+    };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+    (server as any).refManager.setSnapshot('- generic [ref=e1]:\n  - button "Not a file input" [ref=e2]\n');
+
+    const result = await server.uploadFile(0, tmpFile);
+    expect(result).toContain('Error uploading file');
+    expect(result).toContain('Element is not a file input');
+  });
+});
+
+describe('searchGoogle()', () => {
+  it('navigates to a Google search URL', async () => {
+    const goto = mock(async () => null);
+    const fakePage: any = {
+      goto,
+      url: () => 'https://example.com/',
+      isClosed: () => false,
+    };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+    (server as any).context = { newPage: mock(async () => fakePage) };
+
+    const result = await server.searchGoogle('hello world');
+    expect(goto).toHaveBeenCalledTimes(1);
+    const url = (goto.mock.calls[0] as unknown as string[])[0];
+    expect(url).toContain('https://www.google.com/search');
+    expect(url).toContain('hello%20world');
+    expect(result).toContain('Navigated to');
+  });
+
+  it('URL-encodes special characters in the query', async () => {
+    const goto = mock(async () => null);
+    const fakePage: any = {
+      goto,
+      url: () => 'https://example.com/',
+      isClosed: () => false,
+    };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+    (server as any).context = { newPage: mock(async () => fakePage) };
+
+    await server.searchGoogle('a&b=c?d');
+    const url = (goto.mock.calls[0] as unknown as string[])[0];
+    expect(url).toContain('a%26b%3Dc%3Fd');
+  });
+
+  it('returns an error when query is empty', async () => {
+    const fakePage: any = { isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.searchGoogle('');
+    expect(result).toContain('Search query must not be empty');
+  });
+});
+
+describe('saveAsPdf()', () => {
+  it('saves a PDF and returns the file path', async () => {
+    const pdfBuffer = Buffer.from('fake-pdf');
+    const pdf = mock(async () => pdfBuffer);
+    const title = mock(async () => 'Test Page');
+    const fakePage: any = {
+      pdf,
+      title,
+      isClosed: () => false,
+    };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.saveAsPdf('my-report');
+    expect(pdf).toHaveBeenCalledWith(
+      expect.objectContaining({ printBackground: true, landscape: false, scale: 1.0 }),
+    );
+    expect(result).toContain('Saved PDF to');
+    expect(result).toContain('my-report.pdf');
+  });
+
+  it('uses page title as file name when none provided', async () => {
+    const pdfBuffer = Buffer.from('fake-pdf');
+    const pdf = mock(async () => pdfBuffer);
+    const title = mock(async () => 'My Document');
+    const fakePage: any = {
+      pdf,
+      title,
+      isClosed: () => false,
+    };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.saveAsPdf();
+    expect(result).toContain('My Document.pdf');
+  });
+
+  it('returns an error when page is closed', async () => {
+    const fakePage: any = { isClosed: () => true };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.saveAsPdf();
+    expect(result).toContain('No active page available');
+  });
+
+  it('returns a friendly error when page.pdf throws', async () => {
+    const pdf = mock(async () => {
+      throw new Error('PDF generation failed');
+    });
+    const fakePage: any = {
+      pdf,
+      isClosed: () => false,
+    };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.saveAsPdf();
+    expect(result).toContain('Error saving PDF');
+    expect(result).toContain('PDF generation failed');
+  });
+});
+
 describe('ISSUE 7: dialog auto-dismiss handler registration', () => {
   it('registers dialog and pageerror handlers on pages created in the context', async () => {
     const onCalls: Array<[string, unknown]> = [];
@@ -1290,6 +1933,65 @@ describe('REGRESSION: click() must not clobber autoSwitchedToNewTab set by the "
   });
 });
 
+describe('TASK 7: click with coordinates', () => {
+  it('clicks at the given coordinates when no index/selector is provided', async () => {
+    const mouseClick = mock(async () => {});
+    const fakePage: any = {
+      mouse: { click: mouseClick },
+      isClosed: () => false,
+    };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.click(undefined, false, undefined, 100, 200);
+    expect(mouseClick).toHaveBeenCalledWith(100, 200);
+    expect(result).toContain('Clicked at coordinates (100, 200)');
+  });
+
+  it('returns an error when only one coordinate is provided', async () => {
+    const mouseClick = mock(async () => {});
+    const fakePage: any = {
+      mouse: { click: mouseClick },
+      isClosed: () => false,
+    };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.click(undefined, false, undefined, 100, undefined);
+    expect(mouseClick).not.toHaveBeenCalled();
+    expect(result).toContain('Both coordinate_x and coordinate_y must be provided together');
+  });
+
+  it('returns a friendly error when page.mouse is unavailable', async () => {
+    const fakePage: any = { isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.click(undefined, false, undefined, 50, 75);
+    expect(result).toContain('Unable to perform coordinate click');
+  });
+
+  it('returns a friendly error when mouse.click throws', async () => {
+    const mouseClick = mock(async () => {
+      throw new Error('mouse not available');
+    });
+    const fakePage: any = {
+      mouse: { click: mouseClick },
+      isClosed: () => false,
+    };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.click(undefined, false, undefined, 10, 20);
+    expect(result).toContain('Error clicking at coordinates');
+    expect(result).toContain('mouse not available');
+  });
+});
+
 // ============================================================
 // ROUND 8: selector normalization for aria-ref values (E2E report finding)
 // ============================================================
@@ -1552,5 +2254,52 @@ describe('ROUND 10 screenshot finding: about:blank URL display', () => {
 
   it('shows file:// URLs verbatim (unaffected — this path was already correct)', () => {
     expect(parseDisplay('file:///C:/temp/test.html')).toBe('file:///C:/temp/test.html');
+  });
+});
+
+// ============================================================
+// Task 11: AbortSignal plumbing
+// ============================================================
+
+describe('AbortSignal plumbing', () => {
+  it('BrowserServer.navigate throws DOMException when signal is already aborted', async () => {
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(server.navigate('https://example.com', false, controller.signal)).rejects.toThrow(DOMException);
+    await expect(server.navigate('https://example.com', false, controller.signal)).rejects.toThrow('The operation was aborted.');
+  });
+
+  it('BrowserServer.click throws DOMException when signal is already aborted', async () => {
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(server.click(undefined, false, undefined, undefined, undefined, controller.signal)).rejects.toThrow(DOMException);
+    await expect(server.click(undefined, false, undefined, undefined, undefined, controller.signal)).rejects.toThrow('The operation was aborted.');
+  });
+
+  it('BrowserServer.evaluate throws DOMException when signal is already aborted', async () => {
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(server.evaluate('1+1', controller.signal)).rejects.toThrow(DOMException);
+    await expect(server.evaluate('1+1', controller.signal)).rejects.toThrow('The operation was aborted.');
+  });
+
+  it('BrowserToolExecutor.call returns clean aborted observation when signal is aborted before start', async () => {
+    const { BrowserToolExecutor } = await import('../browserEngine.js');
+    const executor = new BrowserToolExecutor({});
+    const controller = new AbortController();
+    controller.abort();
+
+    const result = await executor.call({ action: 'navigate', url: 'https://example.com' } as any, controller.signal);
+    expect(result.is_error).toBe(true);
+    expect(result.text).toContain('aborted');
   });
 });

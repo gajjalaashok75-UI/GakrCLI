@@ -68,6 +68,17 @@ import {
   BROWSER_PRESS_KEY_DESCRIPTION,
   BROWSER_REFRESH_DESCRIPTION,
   BROWSER_SCROLL_DESCRIPTION,
+  BROWSER_SCROLL_TO_TEXT_DESCRIPTION,
+  BROWSER_EVALUATE_DESCRIPTION,
+  BROWSER_FIND_ELEMENTS_DESCRIPTION,
+  BROWSER_SEARCH_PAGE_DESCRIPTION,
+  BROWSER_SEND_KEYS_DESCRIPTION,
+  BROWSER_SCREENSHOT_DESCRIPTION,
+  BROWSER_DROPDOWN_OPTIONS_DESCRIPTION,
+  BROWSER_SELECT_DROPDOWN_DESCRIPTION,
+  BROWSER_UPLOAD_FILE_DESCRIPTION,
+  BROWSER_SEARCH_GOOGLE_DESCRIPTION,
+  BROWSER_SAVE_AS_PDF_DESCRIPTION,
   BROWSER_SET_STORAGE_DESCRIPTION,
   BROWSER_START_RECORDING_DESCRIPTION,
   BROWSER_STOP_RECORDING_DESCRIPTION,
@@ -163,6 +174,28 @@ function buildPrompt(): string {
     BROWSER_GET_CONTENT_DESCRIPTION,
     '## scroll',
     BROWSER_SCROLL_DESCRIPTION,
+    '## scroll_to_text',
+    BROWSER_SCROLL_TO_TEXT_DESCRIPTION,
+    '## evaluate',
+    BROWSER_EVALUATE_DESCRIPTION,
+    '## find_elements',
+    BROWSER_FIND_ELEMENTS_DESCRIPTION,
+    '## search_page',
+    BROWSER_SEARCH_PAGE_DESCRIPTION,
+    '## send_keys',
+    BROWSER_SEND_KEYS_DESCRIPTION,
+    '## screenshot',
+    BROWSER_SCREENSHOT_DESCRIPTION,
+    '## dropdown_options',
+    BROWSER_DROPDOWN_OPTIONS_DESCRIPTION,
+    '## select_dropdown',
+    BROWSER_SELECT_DROPDOWN_DESCRIPTION,
+    '## upload_file',
+    BROWSER_UPLOAD_FILE_DESCRIPTION,
+    '## search_google',
+    BROWSER_SEARCH_GOOGLE_DESCRIPTION,
+    '## save_as_pdf',
+    BROWSER_SAVE_AS_PDF_DESCRIPTION,
     '## go_back',
     BROWSER_GO_BACK_DESCRIPTION,
     '## list_tabs',
@@ -231,6 +264,28 @@ export function shortActionResult(action: BrowserAction): string {
       return 'Page content read';
     case 'scroll':
       return `Scrolled ${action.direction ?? 'down'}`;
+    case 'scroll_to_text':
+      return `Scrolled to text '${action.text}'`;
+    case 'evaluate':
+      return `Evaluated JS expression`;
+    case 'find_elements':
+      return `Found elements matching ${action.selector}`;
+    case 'search_page':
+      return `Searched page for ${action.pattern}`;
+    case 'send_keys':
+      return `Sent keys ${action.keys}`;
+    case 'screenshot':
+      return action.file_name ? `Saved screenshot to ${action.file_name}` : 'Captured screenshot';
+    case 'dropdown_options':
+      return `Listed dropdown options for [${action.index}]`;
+    case 'select_dropdown':
+      return `Selected dropdown option '${action.text}' for [${action.index}]`;
+    case 'upload_file':
+      return `Uploaded file to [${action.index}]`;
+    case 'search_google':
+      return `Searched Google for '${action.query}'`;
+    case 'save_as_pdf':
+      return action.file_name ? `Saved PDF to ${action.file_name}` : 'Saved page as PDF';
     case 'go_back':
       return 'Went back';
     case 'list_tabs':
@@ -365,6 +420,28 @@ export const WebBrowserTool = buildTool({
         return 'Reading page content';
       case 'scroll':
         return `Scrolling ${input.direction ?? 'down'}`;
+      case 'scroll_to_text':
+        return `Scrolling to text '${input.text}'`;
+      case 'evaluate':
+        return `Evaluating JS expression`;
+      case 'find_elements':
+        return `Finding elements (${input.selector})`;
+      case 'search_page':
+        return `Searching page for '${input.pattern}'`;
+      case 'send_keys':
+        return `Sending keys ${input.keys}`;
+      case 'screenshot':
+        return input.file_name ? `Saving screenshot to ${input.file_name}` : 'Taking screenshot';
+      case 'dropdown_options':
+        return `Listing dropdown options for [${input.index}]`;
+      case 'select_dropdown':
+        return `Selecting dropdown option '${input.text}' for [${input.index}]`;
+      case 'upload_file':
+        return `Uploading file to [${input.index}]`;
+      case 'search_google':
+        return `Searching Google for '${input.query}'`;
+      case 'save_as_pdf':
+        return input.file_name ? `Saving PDF to ${input.file_name}` : 'Saving page as PDF';
       case 'go_back':
         return 'Going back';
       case 'list_tabs':
@@ -408,6 +485,28 @@ export const WebBrowserTool = buildTool({
         return 'set_storage';
       case 'type':
         return input.selector ? `type into (${input.selector})` : `type into [${input.index}]`;
+      case 'scroll_to_text':
+        return `scroll_to_text: ${input.text}`;
+      case 'evaluate':
+        return 'evaluate';
+      case 'find_elements':
+        return `find_elements: ${input.selector}`;
+      case 'search_page':
+        return `search_page: ${input.pattern}`;
+      case 'send_keys':
+        return `send_keys: ${input.keys}`;
+      case 'screenshot':
+        return input.file_name ? `screenshot: ${input.file_name}` : 'screenshot';
+      case 'dropdown_options':
+        return `dropdown_options: [${input.index}]`;
+      case 'select_dropdown':
+        return `select_dropdown: [${input.index}] '${input.text}'`;
+      case 'upload_file':
+        return `upload_file: [${input.index}] ${input.path}`;
+      case 'search_google':
+        return `search_google: ${input.query}`;
+      case 'save_as_pdf':
+        return `save_as_pdf${input.file_name ? `: ${input.file_name}` : ''}`;
       default:
         return `${input.action}`;
     }
@@ -436,7 +535,8 @@ export const WebBrowserTool = buildTool({
   ): Promise<ToolResult<WebBrowserOutput>> {
     const action = toBrowserAction(input);
     const executor = await BrowserToolExecutor.getShared();
-    const observation = await executor.call(action);
+    const signal = _context.abortController?.signal;
+    const observation = await executor.call(action, signal);
 
     // BUG 4 FIX: ToolResult<T> = { data: T; newMessages?; contextModifier?;
     // mcpMeta? } — there is no `content` field, and the previous
