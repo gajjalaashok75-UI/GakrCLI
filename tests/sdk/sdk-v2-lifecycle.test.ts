@@ -30,6 +30,7 @@ import {
   isExpectedDrainAbort,
   UUID_REGEX,
 } from './helpers/query-test-doubles.js'
+import { MockQueryEngine } from './helpers/mock-engine.js'
 
 // sendMessage drains trigger init(), which checks auth. Stub it for CI.
 const AUTH_KEY = 'ANTHROPIC_API_KEY'
@@ -45,6 +46,10 @@ let originalOriginalCwd: string
 
 // Collect temp dirs for cleanup
 const tempDirs: string[] = []
+
+function attachMockEngine(session: unknown, mockEngine: MockQueryEngine): void {
+  ;(session as { setEngine(engine: MockQueryEngine): void }).setEngine(mockEngine)
+}
 
 beforeAll(async () => {
   await acquireSharedMutationLock('sdk-v2-lifecycle')
@@ -312,5 +317,38 @@ describe('E2E: transcript placement — resume sets project dir and resolve stil
       expect(after).toBeDefined()
       expect(after!.filePath).toBe(before!.filePath)
     })
+  })
+})
+
+describe('V2: SDK context isolation for async generators', () => {
+  test('sendMessage() keeps each iteration bound to its own session context', async () => {
+    const sessionA = unstable_v2_createSession({ cwd: process.cwd() })
+    const sessionB = unstable_v2_createSession({ cwd: process.cwd() })
+
+    class ContextCapturingEngine extends MockQueryEngine {
+      observedSessionId: SessionId | undefined
+
+      override async *submitMessage(): AsyncGenerator<never, void, unknown> {
+        this.observedSessionId = getSessionId()
+      }
+    }
+
+    const engineA = new ContextCapturingEngine()
+    const engineB = new ContextCapturingEngine()
+    attachMockEngine(sessionA, engineA)
+    attachMockEngine(sessionB, engineB)
+
+    await Promise.all([
+      (async () => {
+        for await (const _msg of sessionA.sendMessage('a')) { /* drain */ }
+      })(),
+      (async () => {
+        for await (const _msg of sessionB.sendMessage('b')) { /* drain */ }
+      })(),
+    ])
+
+    expect(engineA.observedSessionId).toBe(sessionA.sessionId as SessionId)
+    expect(engineB.observedSessionId).toBe(sessionB.sessionId as SessionId)
+    expect(engineA.observedSessionId).not.toBe(engineB.observedSessionId)
   })
 })
