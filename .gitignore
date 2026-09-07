@@ -93,6 +93,9 @@ packages/mcp-chrome-shared
 # Remote control changes notes
 remote-control-changes.md
 
+# SDK context isolation port notes
+sdk-change.md
+
 # Provider credentials — never commit
 auth.json
 
