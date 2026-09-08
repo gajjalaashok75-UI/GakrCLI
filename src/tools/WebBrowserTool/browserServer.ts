@@ -1084,6 +1084,20 @@ export class BrowserServer {
     if (!fs.existsSync(boundedPath)) {
       return `Error: File not found at ${boundedPath}`;
     }
+    // Zero-byte guard (ported from browser-use upload_file): an empty file
+    // passes the existence check but fails setInputFiles with a confusing
+    // "could not find file" error from the browser side. Validate here.
+    try {
+      const stat = fs.statSync(boundedPath);
+      if (!stat.isFile()) {
+        return `Error: Path ${boundedPath} is not a regular file`;
+      }
+      if (stat.size === 0) {
+        return `Error: File ${boundedPath} is empty (0 bytes) — nothing to upload`;
+      }
+    } catch (e) {
+      return `Error: Unable to stat ${boundedPath}: ${errorMessage(e)}`;
+    }
     const page = this.requirePage();
     const target = this.resolveTarget(page, index, undefined);
     if (target.kind === 'error') return target.message;
@@ -1780,19 +1794,27 @@ export class BrowserServer {
     const boundedMax = this.clampInt(maxResults, 1, 100, 50);
     const attrAllow = attributes && attributes.length > 0 ? new Set(attributes) : null;
     try {
-      // Single round-trip: count + per-node extraction + slice in one evaluate.
-      // Each node is visited once with the work it actually needs; attribute
-      // filter is applied at construction so we never ship unfiltered attrs
-      // back to Node.
+      // Single round-trip: count + per-node extraction + slice + visibility
+      // check in one evaluate. Each node is visited once with the work it
+      // actually needs; attribute filter is applied at construction so we
+      // never ship unfiltered attrs back to Node. Visibility check (ported
+      // from browser-use find_elements): filters out display:none and
+      // visibility:hidden elements so the LLM doesn't waste a click on a
+      // hidden node.
       const payload = await page.evaluate(
         ({ sel, max, wantText, allowAttrs }) => {
           const allow = allowAttrs && allowAttrs.length > 0 ? new Set(allowAttrs) : null;
-          const all = document.querySelectorAll(sel);
+          const all = document.querySelectorAll<HTMLElement>(sel);
           const total = all.length;
           const nodes = Array.from(all).slice(0, max);
+          let hiddenCount = 0;
           const elements = nodes.map((node, i) => {
             const tag = node.tagName.toLowerCase();
             const text = node.children.length === 0 ? (node.textContent ?? '').trim() : '';
+            const visible =
+              node.offsetParent !== null ||
+              getComputedStyle(node).visibility !== 'hidden';
+            if (!visible) hiddenCount += 1;
             const attrs: Record<string, string> = {};
             for (const attr of Array.from(node.attributes)) {
               if (!allow || allow.has(attr.name)) {
@@ -1802,15 +1824,16 @@ export class BrowserServer {
             return {
               index: i,
               tag,
+              visible,
               ...(wantText ? { text: text.slice(0, 500) } : {}),
               attributes: attrs,
             };
           });
-          return { total, truncated: total > max, elements };
+          return { total, truncated: total > max, hiddenCount, elements };
         },
         { sel: boundedSelector, max: boundedMax, wantText: includeText, allowAttrs: attrAllow ? Array.from(attrAllow) : null },
       );
-      const result = { total: payload.total, returned: payload.elements.length, truncated: payload.truncated, elements: payload.elements };
+      const result = { total: payload.total, returned: payload.elements.length, truncated: payload.truncated, hidden_count: payload.hiddenCount, elements: payload.elements };
       await this.refreshLiveState({ lastOperation: `find_elements ${boundedSelector}` });
       return JSON.stringify(result, null, 2);
     } catch (e) {
@@ -1879,13 +1902,49 @@ export class BrowserServer {
               return out;
             };
           }
+          // Ancestor walk (ported from browser-use search_page): filters out
+          // text inside hidden ancestors. TreeWalker.acceptNode only checks
+          // the *direct* parent, so text inside a `display:none` grand­parent
+          // (e.g. collapsed sidebar, content-visibility:hidden article) was
+          // incorrectly included. Walk up the DOM and check every ancestor
+          // for `display:none`, `content-visibility:hidden`, or being inside
+          // a closed <details> element. Capped by MAX_STYLE_CHECKS to bound
+          // the work on deep trees.
+          const MAX_STYLE_CHECKS = 5_000;
+          let styleChecks = 0;
+          const isAncestorVisible = (n: Node): boolean => {
+            let el: Element | null = n.parentElement;
+            while (el) {
+              if (styleChecks >= MAX_STYLE_CHECKS) return true; // budget exhausted, accept (truncated flag set later)
+              const style = getComputedStyle(el);
+              styleChecks += 1;
+              if (style.display === 'none' || style.contentVisibility === 'hidden') {
+                return false;
+              }
+              if (el.tagName === 'DETAILS' && !(el as HTMLDetailsElement).open) {
+                const containingSummary = (n.parentElement || n as any).closest?.('summary');
+                if (containingSummary?.parentElement !== el) return false;
+                // Closed <details>: only the first <summary> is visible.
+                let sibling = el.firstElementChild;
+                while (sibling && sibling !== containingSummary) {
+                  if (sibling.tagName === 'SUMMARY') return false;
+                  sibling = sibling.nextElementSibling;
+                }
+              }
+              el = el.parentElement;
+            }
+            return true;
+          };
           const isVisible = (n: Node): boolean => {
             const el = n.parentElement;
             if (!el) return true;
             return el.offsetParent !== null || getComputedStyle(el).visibility !== 'hidden';
           };
           const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-            acceptNode: (n) => (isVisible(n) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT),
+            acceptNode: (n) =>
+              isVisible(n) && isAncestorVisible(n)
+                ? NodeFilter.FILTER_ACCEPT
+                : NodeFilter.FILTER_REJECT,
           });
           const matches: Array<{ context: string; offset: number }> = [];
           let node = walker.nextNode();
@@ -1902,7 +1961,7 @@ export class BrowserServer {
             }
             node = walker.nextNode();
           }
-          return { matches };
+          return { matches, styleChecks, styleChecksCapped: styleChecks >= MAX_STYLE_CHECKS };
         },
         { pat: boundedPattern, isRegex: regex, caseSens: caseSensitive, ctx: boundedContext, scope: cssScope ?? null, max: boundedMax },
       );
@@ -1910,12 +1969,15 @@ export class BrowserServer {
         return `Error searching page: ${(rawResult as { error: string }).error}`;
       }
       const matches = (rawResult as { matches: Array<{ context: string; offset: number }> })?.matches ?? [];
+      const styleChecksCapped = (rawResult as { styleChecksCapped?: boolean })?.styleChecksCapped === true;
       if (matches.length === 0) {
-        return `No matches found for pattern '${boundedPattern}'`;
+        const note = styleChecksCapped ? ' (style-check budget exhausted before completing the ancestor walk)' : '';
+        return `No matches found for pattern '${boundedPattern}'${note}`;
       }
       const lines = matches.map((m, i) => `[${i}] ...${m.context}...`);
       await this.refreshLiveState({ lastOperation: `search_page ${boundedPattern}` });
-      return `${matches.length} match(es):\n${lines.join('\n')}`;
+      const suffix = styleChecksCapped ? `\n(style-check budget exhausted — some hidden-ancestor nodes may not have been filtered)` : '';
+      return `${matches.length} match(es):\n${lines.join('\n')}${suffix}`;
     } catch (e) {
       const message = errorMessage(e);
       return `Error searching page: ${message}`;
