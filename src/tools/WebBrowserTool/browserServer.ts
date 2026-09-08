@@ -1108,9 +1108,27 @@ export class BrowserServer {
       await this.refreshLiveState({ lastOperation: `upload_file [${index}] ${fileName}` });
       return `Uploaded file '${fileName}' to [${index}]`;
     } catch (e) {
-      // The fs.existsSync check above already catches the "file not found"
-      // case up front; Playwright errors here are genuine upload failures.
-      return `Error uploading file: ${errorMessage(e)}`;
+      // The fs.existsSync + statSync checks above already handle the
+      // missing-file / not-a-file / zero-byte cases up front. Errors that
+      // surface here come from Playwright itself — usually a
+      // (a) `could not find file at <path>` from the browser sandbox (the
+      // host file is reachable from Node's fs but the Chromium subprocess
+      // can't see it — different mount namespace, sandbox, etc.), or
+      // (b) `element is not a file input`, or
+      // (c) a locator timeout waiting for the input to be actionable.
+      // We split those cases so the caller knows whether the problem is
+      // host-side reachability vs. a page/DOM issue.
+      const msg = errorMessage(e);
+      if (/could not find file/i.test(msg) || /ENOENT/i.test(msg)) {
+        return `Error: File exists on host but is not accessible from the browser sandbox: ${boundedPath}`;
+      }
+      if (/not a file input|is not a file input/i.test(msg)) {
+        return `Error: Target element at index ${index} is not a file input: ${msg}`;
+      }
+      if (/timeout/i.test(msg)) {
+        return `Error: Timed out waiting for file input at index ${index}: ${msg}`;
+      }
+      return `Error uploading file: ${msg}`;
     }
   }
 
@@ -2085,44 +2103,57 @@ export class BrowserServer {
     }
   }
 
-  async setStorage(storageState: { cookies: any[]; origins: any[] }, signal?: AbortSignal): Promise<string> {
+  async setStorage(storageState: { cookies?: unknown; origins?: unknown } | null | undefined, signal?: AbortSignal): Promise<string> {
     this.assertNotAborted(signal);
     try {
       const page = this.requirePage();
       const context = page.context();
 
-      const cookies = storageState.cookies ?? [];
+      // Defensive: callers occasionally pass non-array shapes (e.g. an object
+      // with a `cookies` key that isn't an array, or `null`). Earlier the
+      // `?? []` fallback didn't catch the non-array case and `cookies.length`
+      // then threw "object is not iterable" before any set happened. Guard
+      // every layer we iterate.
+      const cookies: unknown[] = Array.isArray(storageState?.cookies) ? storageState!.cookies : [];
       if (cookies.length) {
-        await context.addCookies(cookies);
+        await context.addCookies(cookies as Parameters<typeof context.addCookies>[0]);
       }
 
-      const origins = storageState.origins ?? [];
+      const origins: unknown[] = Array.isArray(storageState?.origins) ? storageState!.origins : [];
       if (origins.length) {
         const cdp = await context.newCDPSession(page);
         await cdp.send('DOMStorage.enable');
 
         try {
           for (const originData of origins) {
-            const origin = originData.origin;
-            if (!origin) continue;
+            if (!originData || typeof originData !== 'object') continue;
+            const od = originData as { origin?: unknown; localStorage?: unknown; sessionStorage?: unknown };
+            const origin = od.origin;
+            if (typeof origin !== 'string' || !origin) continue;
 
-            for (const item of originData.localStorage ?? []) {
-              const key = item.key ?? item.name;
+            const localItems: unknown[] = Array.isArray(od.localStorage) ? od.localStorage : [];
+            for (const item of localItems) {
+              if (!item || typeof item !== 'object') continue;
+              const it = item as { key?: unknown; name?: unknown; value?: unknown };
+              const key = (typeof it.key === 'string' && it.key) || (typeof it.name === 'string' && it.name);
               if (!key) continue;
               await cdp.send('DOMStorage.setDOMStorageItem', {
                 storageId: { securityOrigin: origin, isLocalStorage: true },
                 key,
-                value: item.value,
+                value: typeof it.value === 'string' ? it.value : it.value == null ? '' : String(it.value),
               });
             }
 
-            for (const item of originData.sessionStorage ?? []) {
-              const key = item.key ?? item.name;
+            const sessionItems: unknown[] = Array.isArray(od.sessionStorage) ? od.sessionStorage : [];
+            for (const item of sessionItems) {
+              if (!item || typeof item !== 'object') continue;
+              const it = item as { key?: unknown; name?: unknown; value?: unknown };
+              const key = (typeof it.key === 'string' && it.key) || (typeof it.name === 'string' && it.name);
               if (!key) continue;
               await cdp.send('DOMStorage.setDOMStorageItem', {
                 storageId: { securityOrigin: origin, isLocalStorage: false },
                 key,
-                value: item.value,
+                value: typeof it.value === 'string' ? it.value : it.value == null ? '' : String(it.value),
               });
             }
           }

@@ -563,9 +563,20 @@ export const WebBrowserTool = buildTool({
     // The content blocks are now carried inside `data` so
     // mapToolResultToToolResultBlockParam can assemble the real
     // ToolResultBlockParam from them.
+    // Recording start/stop return rich, live-state-accurate status strings
+    // (e.g. "Recording started", "Recording stopped. Captured 25 events…").
+    // For those, the server text IS the canonical outcome; emitting the
+    // static `shortActionResult(action)` label in addition would produce a
+    // confusing dual-message like "start_recording → Recording started"
+    // followed by the same line, or worse, by an error line. Use the server
+    // text directly for these and keep the static label for everything else.
+    const serverTextIsCanonical =
+      action.action === 'start_recording' || action.action === 'stop_recording';
     const resultText = observation.is_error
       ? observation.text
-      : `${action.action} → ${shortActionResult(action)}`;
+      : serverTextIsCanonical
+        ? observation.text
+        : `${action.action} → ${shortActionResult(action)}`;
     const contentBlocks = toContentBlocks(observation.toLLMContent());
     const terminalBlocks = contentBlocks.some(b => b.type === 'text' && b.text === observation.text)
       ? [{ type: 'text' as const, text: resultText }, ...contentBlocks]

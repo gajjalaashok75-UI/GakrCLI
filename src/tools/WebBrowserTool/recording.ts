@@ -62,6 +62,9 @@
  * never disrupt the user's primary browser workflow.
  */
 
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve as resolvePath } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Page } from 'playwright';
 import { AsyncMutex } from './asyncMutex.js';
 import { EventStorage } from './eventStorage.js';
@@ -92,34 +95,94 @@ export const DEFAULT_RECORDING_CONFIG: RecordingConfig = {
 // Inlined browser scripts (bundled by bun build into cli.mjs)
 // ============================================================
 
+// Vendor rrweb into the shipped package so recording works offline / cold start.
+// `assets/rrweb.umd.cjs` is read at module load and inlined as a string
+// below; the loader script then `eval`s it in-page instead of injecting a
+// <script src="https://unpkg.com/..."> tag. The CDN `cdn_url` is kept as a
+// final fallback in case the vendor file is ever missing at runtime.
+function findVendoredRrwebPath(): string | null {
+  // Walk up from this file looking for `assets/rrweb.umd.cjs`. Resolution
+  // order: (1) relative to this source file, (2) relative to cwd, (3)
+  // environment override. This handles both source and bundled layouts.
+  const here = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    resolvePath(here, '..', '..', '..', 'assets', 'rrweb.umd.cjs'),
+    resolvePath(here, '..', '..', 'assets', 'rrweb.umd.cjs'),
+    resolvePath(here, '..', 'assets', 'rrweb.umd.cjs'),
+    resolvePath(process.cwd(), 'assets', 'rrweb.umd.cjs'),
+  ];
+  if (process.env.GAKRCLI_RRWEB_PATH) candidates.unshift(process.env.GAKRCLI_RRWEB_PATH);
+  for (const c of candidates) {
+    if (c && existsSync(c)) return c;
+  }
+  return null;
+}
+
+function loadVendoredRrwebJs(): string | null {
+  const p = findVendoredRrwebPath();
+  if (!p) return null;
+  try {
+    return readFileSync(p, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+const VENDORED_RRWEB_JS = loadVendoredRrwebJs();
+
 // prettier-ignore
 const RRWEB_LOADER_JS = `(function() {
     if (window.__rrweb_loaded) return;
     window.__rrweb_loaded = true;
 
-    // Initialize storage for events (per-page, will be flushed to backend)
     window.__rrweb_events = window.__rrweb_events || [];
-    // Flag to indicate if recording should auto-start on new pages (cross-page)
-    // This is ONLY set after explicit start_recording call, not on initial load
     window.__rrweb_should_record = window.__rrweb_should_record || false;
-    // Flag to track if rrweb failed to load
     window.__rrweb_load_failed = false;
 
-    // Create a Promise that resolves when rrweb loads (event-driven waiting)
     var resolveReady;
     window.__rrweb_ready_promise = new Promise(function(resolve) {
         resolveReady = resolve;
     });
 
-    function loadRrweb() {
+    // rrweb UMD bundle, inlined at build time from assets/rrweb.umd.cjs.
+    // null only when the vendored asset is missing (e.g. dev env without it);
+    // in that case we fall back to the legacy <script src=CDN> path.
+    var INLINED_RRWEB_JS = ${JSON.stringify(VENDORED_RRWEB_JS ?? null)};
+
+    function loadFromInlinedBundle() {
+        try {
+            // Wrap the UMD body in a Function so its top-level vars don't
+            // pollute our scope. The UMD attaches \`rrweb\` to globalThis
+            // when it detects a browser, but we also fall back to reading
+            // it from the eval result in case the bundle's branch logic
+            // misses the in-page environment.
+            // eslint-disable-next-line no-new-func
+            var factory = new Function(INLINED_RRWEB_JS + '\\n;return (typeof rrweb !== "undefined") ? rrweb : (typeof rrwebRecord !== "undefined") ? {record: rrwebRecord.record} : null;');
+            var rrweb = factory();
+            if (!rrweb || typeof rrweb.record !== 'function') {
+                throw new Error('rrweb bundle did not expose record()');
+            }
+            window.rrweb = rrweb;
+            window.__rrweb_ready = true;
+            console.log('[rrweb] Loaded successfully from vendored bundle');
+            resolveReady({success: true, source: 'vendored'});
+            if (window.__rrweb_should_record && !window.__rrweb_stopFn) {
+                window.startRecordingInternal();
+            }
+        } catch (e) {
+            console.error('[rrweb] Vendored-bundle load failed:', e);
+            window.__rrweb_load_failed = true;
+            resolveReady({success: false, error: 'inlined_load_failed', detail: String((e && e.message) || e)});
+        }
+    }
+
+    function loadFromCdn() {
         var s = document.createElement('script');
         s.src = '{{CDN_URL}}';
         s.onload = function() {
             window.__rrweb_ready = true;
             console.log('[rrweb] Loaded successfully from CDN');
-            resolveReady({success: true});
-            // Auto-start recording ONLY if flag is set (for cross-page continuity)
-            // This flag is only true after an explicit start_recording call
+            resolveReady({success: true, source: 'cdn'});
             if (window.__rrweb_should_record && !window.__rrweb_stopFn) {
                 window.startRecordingInternal();
             }
@@ -127,12 +190,19 @@ const RRWEB_LOADER_JS = `(function() {
         s.onerror = function() {
             console.error('[rrweb] Failed to load from CDN');
             window.__rrweb_load_failed = true;
-            resolveReady({success: false, error: 'load_failed'});
+            resolveReady({success: false, error: 'cdn_load_failed'});
         };
         (document.head || document.documentElement).appendChild(s);
     }
 
-    // Internal function to start recording (used for auto-start on navigation)
+    function loadRrweb() {
+        if (INLINED_RRWEB_JS) {
+            loadFromInlinedBundle();
+        } else {
+            loadFromCdn();
+        }
+    }
+
     window.startRecordingInternal = function() {
         var recordFn = (typeof rrweb !== 'undefined' && rrweb.record) ||
                        (typeof rrwebRecord !== 'undefined' && rrwebRecord.record);
@@ -154,7 +224,6 @@ const RRWEB_LOADER_JS = `(function() {
     }
 })();
 `;
-
 // prettier-ignore
 const FLUSH_EVENTS_JS = `(function() {
     var events = window.__rrweb_events || [];
