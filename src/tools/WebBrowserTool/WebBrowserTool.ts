@@ -85,6 +85,7 @@ import {
   BROWSER_SWITCH_TAB_DESCRIPTION,
   BROWSER_TYPE_DESCRIPTION,
   BROWSER_WAIT_DESCRIPTION,
+  BROWSER_WAIT_FOR_ELEMENT_DESCRIPTION,
   BrowserActionFlatSchema,
   parseBrowserAction,
   type BrowserAction,
@@ -99,7 +100,7 @@ const TOOL_NAME = 'WebBrowser';
  * `BrowserActionSchema` — the exact kind of drift risk that bit this
  * project once already (this file's schema didn't get the `refresh`/`wait`/
  * `press_key` actions added to it in the same pass as types.ts, for a few
- * rounds). types.ts remains the single place that defines the 18 action
+ * rounds). types.ts remains the single place that defines the 30 action
  * shapes — including the `looseBoolean`/`looseNumber`/`looseObject` coercion
  * that fixes log.md's issue #1 (the XML tool-call harness stringifying
  * non-string params) and the `selector` field on click/type.
@@ -150,7 +151,8 @@ export interface WebBrowserOutput {
 
 // ISSUE 9 (RULE 9): `wait` is read-only; `refresh`/`press_key` are not.
 // close_all_tabs is destructive (closes pages) — not read-only.
-const READ_ONLY_ACTIONS = new Set(['get_state', 'get_content', 'list_tabs', 'get_storage', 'wait']);
+// wait_for_element (new action) only polls/observes — read-only, same as wait.
+const READ_ONLY_ACTIONS = new Set(['get_state', 'get_content', 'list_tabs', 'get_storage', 'wait', 'wait_for_element']);
 
 /** Combined prompt: one entry per action, using the verbatim Python descriptions
  * plus the non-OpenHands operations added in later rounds. */
@@ -160,7 +162,7 @@ function buildPrompt(): string {
     '',
     'Interact with a real Chromium browser: navigate, click, type, read page state and',
     'content, manage tabs, storage, and session recording. Every call takes an `action`',
-    "field selecting one of the 18 operations below; only that action's parameters apply.",
+    "field selecting one of the 30 operations below; only that action's parameters apply.",
     '',
     '## navigate',
     BROWSER_NAVIGATE_DESCRIPTION,
@@ -220,6 +222,8 @@ function buildPrompt(): string {
     BROWSER_WAIT_DESCRIPTION,
     '## press_key',
     BROWSER_PRESS_KEY_DESCRIPTION,
+    '## wait_for_element',
+    BROWSER_WAIT_FOR_ELEMENT_DESCRIPTION,
   ].join('\n');
 }
 
@@ -310,6 +314,8 @@ export function shortActionResult(action: BrowserAction): string {
       return `Waited ${action.ms}ms`;
     case 'press_key':
       return `Pressed key ${action.key}`;
+    case 'wait_for_element':
+      return `Waited for "${action.selector}" (${action.state})`;
     default:
       return 'Browser action completed';
   }
@@ -466,6 +472,8 @@ export const WebBrowserTool = buildTool({
         return `Waiting ${input.ms}ms`;
       case 'press_key':
         return `Pressing key ${input.key}`;
+      case 'wait_for_element':
+        return `Waiting for element (${input.selector})`;
       default:
         return 'Browser action';
     }
@@ -507,6 +515,8 @@ export const WebBrowserTool = buildTool({
         return `search_google: ${input.query}`;
       case 'save_as_pdf':
         return `save_as_pdf${input.file_name ? `: ${input.file_name}` : ''}`;
+      case 'wait_for_element':
+        return `wait_for_element: ${input.selector}`;
       default:
         return `${input.action}`;
     }

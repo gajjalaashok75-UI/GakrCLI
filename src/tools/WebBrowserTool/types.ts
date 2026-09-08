@@ -305,6 +305,26 @@ export interface BrowserConfig {
    * env-var fallback used when this isn't set explicitly.
    */
   proxy?: BrowserProxyConfig | null;
+  /**
+   * Secrets the LLM can reference with `<secret>key</secret>` placeholders
+   * in action parameters (e.g. `<secret>github_password</secret>`). Each
+   * entry is either a flat key/value (always available) or a
+   * domain-keyed object (only substituted when the browser's current URL
+   * matches the domain). Keys ending in `bu_2fa_code` or `totp` are
+   * treated as base32 TOTP secrets and a fresh 6-digit code is generated
+   * for each call.
+   */
+  sensitive_data?: Record<string, string | Record<string, string>> | null;
+  /**
+   * Real browser window size (headless: false only) in CSS pixels. Ignored
+   * when headless: true, where the viewport is sized instead (see
+   * `resolveLaunchConfig()` in browserServer.ts). Default: 1280x1024,
+   * matching Playwright's own headed-mode default so behavior is unchanged
+   * for callers who don't set this.
+   */
+  window_size?: { width: number; height: number } | null;
+  /** Real browser window position (headless: false only), in screen pixels from the top-left. Default: OS-placed. */
+  window_position?: { x: number; y: number } | null;
 }
 
 // ============================================================
@@ -694,6 +714,18 @@ export const BrowserPressKeyActionSchema = z.strictObject({
   key: z.string().describe('The key to press (e.g. "Enter", "Escape", "Tab", "ArrowDown")'),
 });
 
+export const BrowserWaitForElementActionSchema = z.strictObject({
+  action: z.literal('wait_for_element'),
+  selector: z.string().min(1).max(2048).describe('CSS selector for the element to wait on'),
+  state: z
+    .enum(['visible', 'hidden', 'attached', 'detached'])
+    .default('visible')
+    .describe('State to wait for (default: visible)'),
+  timeout_ms: looseNumber(z.number().int().min(100).max(60000))
+    .default(10000)
+    .describe('Max time to wait in milliseconds (100-60000, default: 10000)'),
+});
+
 export const BrowserActionSchema = z.discriminatedUnion('action', [
   BrowserNavigateActionSchema,
   BrowserClickActionSchema,
@@ -724,6 +756,7 @@ export const BrowserActionSchema = z.discriminatedUnion('action', [
   BrowserRefreshActionSchema,
   BrowserWaitActionSchema,
   BrowserPressKeyActionSchema,
+  BrowserWaitForElementActionSchema,
 ]);
 
 export type BrowserAction = z.infer<typeof BrowserActionSchema>;
@@ -769,10 +802,11 @@ export const BROWSER_ACTION_SCHEMA_BY_NAME = {
   refresh: BrowserRefreshActionSchema,
   wait: BrowserWaitActionSchema,
   press_key: BrowserPressKeyActionSchema,
+  wait_for_element: BrowserWaitForElementActionSchema,
 } satisfies Record<BrowserAction['action'], z.ZodTypeAny>;
 
 /**
- * The 29 action names, in schema order. The cast is sound because the
+ * The 30 action names, in schema order. The cast is sound because the
  * `satisfies` clause above proves the keys are exactly `BrowserAction['action']`.
  */
 export const BROWSER_ACTION_NAMES = Object.keys(
@@ -818,7 +852,7 @@ export const BrowserActionFlatSchema = z.strictObject({
   selector: z
     .string()
     .optional()
-    .describe('[click, type, find_elements] CSS selector to target (per-action schema validates its use).'),
+    .describe('[click, type, find_elements, wait_for_element] CSS selector to target (per-action schema validates its use).'),
   coordinate_x: looseNumber(z.number().int().min(0))
     .optional()
     .describe('[click] X coordinate for a mouse click (must be paired with coordinate_y).'),
@@ -905,6 +939,13 @@ export const BrowserActionFlatSchema = z.strictObject({
     .max(1000)
     .optional()
     .describe('[search_google] Search query string.'),
+  state: z
+    .enum(['visible', 'hidden', 'attached', 'detached'])
+    .optional()
+    .describe('[wait_for_element] State to wait for. Default: visible.'),
+  timeout_ms: looseNumber(z.number().int().min(100).max(60000))
+    .optional()
+    .describe('[wait_for_element] Max time to wait in milliseconds (100-60000). Default: 10000.'),
 });
 
 export type BrowserActionFlat = z.infer<typeof BrowserActionFlatSchema>;
@@ -982,6 +1023,7 @@ export type BrowserStopRecordingAction = z.infer<typeof BrowserStopRecordingActi
 export type BrowserRefreshAction = z.infer<typeof BrowserRefreshActionSchema>;
 export type BrowserWaitAction = z.infer<typeof BrowserWaitActionSchema>;
 export type BrowserPressKeyAction = z.infer<typeof BrowserPressKeyActionSchema>;
+export type BrowserWaitForElementAction = z.infer<typeof BrowserWaitForElementActionSchema>;
 
 // ============================================================
 // Tool prompt descriptions — copied VERBATIM from definition.py's
@@ -1305,4 +1347,18 @@ Not tied to a specific element — presses on the currently focused element.
 
 Parameters:
 - key: The key to press (e.g. "Enter", "Escape", "Tab", "ArrowDown")
+`;
+
+export const BROWSER_WAIT_FOR_ELEMENT_DESCRIPTION = `Wait for an element to reach a given state before continuing.
+
+Use this instead of a fixed \`wait\` when you're waiting on something to appear/
+disappear (e.g. a spinner, a modal, content that loads after an XHR) rather than
+an arbitrary delay — it returns as soon as the condition is met instead of
+always waiting the full duration, and fails with a clear timeout message if the
+element never reaches that state. Zero LLM cost.
+
+Parameters:
+- selector: CSS selector for the element to wait on (required)
+- state: One of "visible", "hidden", "attached", "detached" (default: "visible")
+- timeout_ms: Max time to wait, in milliseconds (100-60000, default: 10000)
 `;

@@ -6,7 +6,17 @@ export {
   resolveProxyFromEnv,
   type BrowserToolExecutorOptions,
 } from './browserEngine.js';
-export { BrowserServer, classifyNetworkError, detectPossibleCaptcha } from './browserServer.js';
+export { BrowserServer, classifyNetworkError, detectPossibleCaptcha, resolveLaunchConfig, isDisplayAvailable, type ResolvedLaunchConfig } from './browserServer.js';
+export { DomService, type BuildDomTreeOptions, type DomTreeMetadata } from './domService.js';
+export {
+  DOMElementNode,
+  DOMTextNode,
+  DOMState,
+  detectPaginationButtons,
+  DEFAULT_INCLUDE_ATTRIBUTES,
+  type SelectorMap,
+  type PaginationButton,
+} from './domTypes.js';
 export { RecordingSession, DEFAULT_RECORDING_CONFIG, type RecordingConfig } from './recording.js';
 export { EventStorage } from './eventStorage.js';
 export { RefManager } from './refManager.js';
@@ -38,6 +48,7 @@ export {
   type BrowserRefreshAction,
   type BrowserWaitAction,
   type BrowserPressKeyAction,
+  type BrowserWaitForElementAction,
   type BrowserLiveState,
   type BrowserTabState,
   type BrowserProxyConfig,

@@ -252,6 +252,17 @@ export interface BrowserToolExecutorOptions {
    * `null` even when those env vars are present.
    */
   proxy?: BrowserProxyConfig | null;
+  /**
+   * Secrets the LLM can reference via `<secret>key</secret>` placeholders in
+   * action parameters. See `secretRedaction.ts` for resolution rules and
+   * TOTP handling. Sensitive values never appear in returned observation
+   * text — they are redacted after each call.
+   */
+  sensitiveData?: Record<string, string | Record<string, string>> | null;
+  /** Real browser window size (headless: false only). Default: 1280x1024. See resolveLaunchConfig() in browserServer.ts. */
+  windowSize?: { width: number; height: number } | null;
+  /** Real browser window position (headless: false only). Default: OS-placed. */
+  windowPosition?: { x: number; y: number } | null;
 }
 
 /**
@@ -287,6 +298,20 @@ export class BrowserToolExecutor {
   private actionTimeoutSeconds: number;
   private initTimeoutSeconds: number;
   private fullOutputSaveDir: string | null;
+
+  /**
+   * Current page URL, or null if the browser is closed/never navigated.
+   * BUG FIX: this used to reach into `this.server.page` directly, a
+   * `private` field — see BrowserServer.getCurrentUrl()'s doc comment.
+   */
+  getCurrentUrl(): string | null {
+    return this.server?.getCurrentUrl() ?? null;
+  }
+
+  /** Effective sensitive_data config (URL filtering is applied by callers). */
+  getSensitiveData(): Record<string, string | Record<string, string>> | null {
+    return this.config.sensitive_data ?? null;
+  }
   /** MISSING 2 FIX: instance-level lock guarding close(), mirroring Python's `_close_lock`. */
   private closeLock = new AsyncMutex();
   /** MISSING 3 FIX: process-exit cleanup handler, registered once in the constructor. */
@@ -389,6 +414,9 @@ export class BrowserToolExecutor {
       // contradicting the documented "pass null to opt out" behavior.
       // `undefined` (key omitted) is the only case that should fall back.
       proxy: opts.proxy === undefined ? resolveProxyFromEnv() : opts.proxy,
+      sensitive_data: opts.sensitiveData ?? null,
+      window_size: opts.windowSize ?? null,
+      window_position: opts.windowPosition ?? null,
     };
 
     const initTimeoutSeconds = opts.initTimeoutSeconds ?? INIT_TIMEOUT_SECONDS;
@@ -547,6 +575,16 @@ export class BrowserToolExecutor {
   private async pressKey(key: string, signal?: AbortSignal): Promise<string> {
     await this.ensureInitialized();
     return this.server.pressKey(key, signal);
+  }
+
+  private async waitForElement(
+    selector: string,
+    state: 'visible' | 'hidden' | 'attached' | 'detached',
+    timeoutMs: number,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    await this.ensureInitialized();
+    return this.server.waitForElement(selector, state, timeoutMs, signal);
   }
 
   private async sendKeys(keys: string, signal?: AbortSignal): Promise<string> {
@@ -782,6 +820,9 @@ export class BrowserToolExecutor {
           break;
         case 'press_key':
           result = await this.pressKey(action.key, signal);
+          break;
+        case 'wait_for_element':
+          result = await this.waitForElement(action.selector, action.state, action.timeout_ms, signal);
           break;
         case 'send_keys':
           result = await this.sendKeys(action.keys, signal);
