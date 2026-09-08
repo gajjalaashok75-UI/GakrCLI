@@ -51,6 +51,7 @@ import type {
 import { buildTool } from 'src/Tool.js';
 import type { AssistantMessage } from 'src/types/message.js';
 import { lazySchema } from 'src/utils/lazySchema.js';
+import { getInitialSettings } from 'src/utils/settings/settings.js';
 import { z } from 'zod/v4';
 
 import { BrowserToolExecutor } from './browserEngine.js';
@@ -544,7 +545,13 @@ export const WebBrowserTool = buildTool({
     _onProgress?: ToolCallProgress<ToolProgressData>,
   ): Promise<ToolResult<WebBrowserOutput>> {
     const action = toBrowserAction(input);
-    const executor = await BrowserToolExecutor.getShared();
+    // Read `webBrowser.headless` from settings once per call. Passing
+    // `headless: undefined` lets BrowserToolExecutor's constructor default
+    // (`?? true`) win, so the absence of a setting keeps today's behavior.
+    const headlessFromSettings = getInitialSettings().webBrowser?.headless;
+    const executor = await BrowserToolExecutor.getShared(
+      headlessFromSettings === undefined ? undefined : { headless: headlessFromSettings },
+    );
     const signal = _context.abortController?.signal;
     const observation = await executor.call(action, signal);
 
