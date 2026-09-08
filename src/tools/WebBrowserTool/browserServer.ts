@@ -4,18 +4,27 @@
  * LAYER 1 — GakrCLI-AGNOSTIC. Ported from server.py (340 lines), with every
  * `browser_use` call replaced per the architecture decision:
  *   - navigate/back/scroll/tabs/storage      -> Playwright directly
- *   - click/type/get_state                   -> Playwright's ariaSnapshot({mode:'ai'})
- *                                                + page.locator('aria-ref=...') — NO LLM
- *   - get_content                            -> page.innerText('body') — NO LLM
+ *   - click/type/get_state                   -> a DOM-tree/highlight-index
+ *                                                system + page.locator('xpath=...') — NO LLM
+ *   - get_content                            -> single-pass in-browser markdown-ish
+ *                                                extraction — NO LLM
  *   - recording/set_storage DOMStorage       -> CDP directly (same commands as Python)
  *
  * ARCHITECTURE CHANGE (earlier revision): @browserbase/stagehand is REMOVED.
- * Playwright's own `page.ariaSnapshot({ mode: 'ai' })` generates an
- * accessibility-tree-with-refs output deterministically, with zero LLM
- * involvement — the same approach Microsoft's official Playwright MCP
- * server uses. Refs look like `[ref=e3]` (main frame) or `[ref=f1e3]`
- * (element 3 inside iframe 1) and resolve back to a Locator via
- * `page.locator('aria-ref=e3')`.
+ *
+ * ARCHITECTURE CHANGE (this revision): click/type/get_state moved OFF
+ * Playwright's `page.ariaSnapshot({ mode: 'ai' })` + `aria-ref=` locators
+ * and ONTO a ported version of browser-use's interactive-element DOM tree
+ * (see domTreeScript.ts/domService.ts/domTypes.ts) + `page.locator('xpath=...')`.
+ * Both approaches are zero-LLM and deterministic; the DOM-tree system was
+ * chosen for richer per-element data (bounding boxes, visibility/viewport
+ * flags, stable xpath) in a single `page.evaluate()` round trip, and for
+ * highlight-overlay screenshots. The `index` numbering the LLM sees/uses in
+ * click/type is unchanged in spirit (small integers from the latest
+ * get_state); only what backs an index changed, from an aria-ref lookup to
+ * a `SelectorMap` (`Record<number, DOMElementNode>`) lookup. `find_elements`
+ * (general CSS querying, not tied to interactivity) and the `selector`
+ * (CSS) bypass path on click/type are unaffected by this change.
  *
  * ROUND 7 — resolved real-world testing findings from log.md:
  *   - Issue #1 (HIGH): boolean/number/object params arriving as JSON-
@@ -50,10 +59,13 @@
  */
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page, type Response } from 'playwright';
 import { RecordingSession } from './recording.js';
-import { RefManager } from './refManager.js';
+import { DomService } from './domService.js';
+import { detectPaginationButtons, type DOMElementNode, type SelectorMap } from './domTypes.js';
+import { errorMessage } from '../../utils/errors.js';
 import {
   BROWSER_RECORDING_OUTPUT_DIR,
   EMPTY_BROWSER_LIVE_STATE,
@@ -71,13 +83,16 @@ const logger = {
 };
 
 const MAX_CHAR_LIMIT = 30000;
+const TRUNCATE_PARAGRAPH_LOOKBACK_CHARS = 500;
+const TRUNCATE_SENTENCE_LOOKBACK_CHARS = 200;
+const CAPTURE_PREVIEW_MAX_CHARS = 300;
 
-// How long to wait for an aria-ref locator before giving up. Playwright's
-// default is 30s; a stale ref (page changed since the last get_state)
+// How long to wait for an element locator before giving up. Playwright's
+// default is 30s; a stale index (page changed since the last get_state)
 // otherwise hangs the tool for half a minute. The self-healing retry in
-// click/typeText re-snapshots the current DOM and retries once before
-// surfacing the timeout.
-const ARIA_REF_TIMEOUT_MS = 10000;
+// click/typeText rebuilds the DOM tree and retries once before surfacing
+// the timeout.
+const ELEMENT_TIMEOUT_MS = 10000;
 
 const MAX_ARTIFACT_NAME_LENGTH = 200;
 
@@ -246,19 +261,120 @@ interface RefreshLiveStateOptions {
   isLoading?: boolean;
   httpStatus?: number | null;
   httpStatusText?: string | null;
-  autoSwitchedToNewTab?: boolean;
+  /**
+   * `true` to mark a new-tab-auto-switch event, `false` to clear the flag,
+   * `undefined` to leave the previous value alone. The tri-state prevents
+   * callers that don't know about the flag (every refresh except the
+   * context-'page' handler that sets it) from silently clobbering it to
+   * false, which used to force every caller that cared to read-modify-write
+   * the live state around their own refresh.
+   */
+  autoSwitchedToNewTab?: boolean | null;
   contentPreview?: string | null;
 }
 
-/** Best-effort ≤300-char plain-text excerpt for the panel's preview row. Never throws. */
+/** Best-effort plain-text excerpt for the panel's preview row. Never throws. */
 async function capturePreview(page: Page): Promise<string | null> {
   try {
     const text = (await page.innerText('body')).trim().replace(/\s+/g, ' ');
     if (!text) return null;
-    return text.length > 300 ? `${text.slice(0, 299)}…` : text;
+    return text.length > CAPTURE_PREVIEW_MAX_CHARS
+      ? `${text.slice(0, CAPTURE_PREVIEW_MAX_CHARS - 1)}…`
+      : text;
   } catch {
     return null;
   }
+}
+
+// ── Headless / headed launch resolution ──────────────────────────────────
+//
+// Ported semantics (simplified — no multi-profile/extension support, which
+// is out of scope for a tool executor) from browser-use-main's
+// `src/browser/profile.ts`: headless and headed mode want fundamentally
+// different things from Chromium.
+//   - headless: true  — no real window exists, so the VIEWPORT drives page
+//     dimensions. Playwright's own default (1280x720 fixed viewport) is
+//     kept for backward compatibility unless `window_size` overrides it.
+//     Extra flags harden it against the two most common "works on my
+//     machine, not in headless" classes of bug: automation-detection
+//     (`--disable-blink-features=AutomationControlled`) and background-tab
+//     throttling changing timer/animation behavior versus a real session.
+//   - headless: false — a REAL OS window is what should exist ("spawn the
+//     real Chrome tab"), so `viewport: null` on the context tells
+//     Playwright NOT to force a fixed device-metrics viewport — the page
+//     is sized by the actual window instead, exactly like a normal browser
+//     tab a person opened by hand. `--window-size`/`--window-position` set
+//     that real window's geometry.
+//
+// This was previously UNTESTED per the person's own report ("i never tried
+// headless false") — `newContext()` took no viewport override at all, so
+// headed mode got Playwright's fixed 1280x720 viewport-in-a-window rather
+// than a real, naturally-sized tab, and there was no up-front check for
+// the single most common way headed mode fails in a server/container
+// environment: no display server. `isDisplayAvailable()` + the launch-time
+// check below turn that failure from an opaque Chromium crash several
+// seconds into launch into an immediate, actionable error.
+
+const DEFAULT_HEADLESS_VIEWPORT = { width: 1280, height: 720 } as const;
+const DEFAULT_HEADED_WINDOW_SIZE = { width: 1280, height: 1024 } as const;
+
+/** Extra headless-only args: avoid the most common automation-detection + background-throttling classes of "headless behaves differently" bugs. */
+const HEADLESS_HARDENING_ARGS = [
+  '--disable-blink-features=AutomationControlled',
+  '--disable-background-timer-throttling',
+  '--disable-backgrounding-occluded-windows',
+  '--disable-renderer-backgrounding',
+  '--mute-audio',
+] as const;
+
+/**
+ * True when a display server is (or should be) available for a REAL,
+ * visible Chromium window. macOS/Windows always have one; on Linux this
+ * checks the env vars every windowing stack (X11 or Wayland) sets when a
+ * session is present — the same signal tools like `xvfb-run` exist to
+ * provide when there isn't a real one.
+ */
+export function isDisplayAvailable(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = os.platform()): boolean {
+  if (platform !== 'linux') return true;
+  return Boolean(env.DISPLAY || env.WAYLAND_DISPLAY);
+}
+
+export interface ResolvedLaunchConfig {
+  headless: boolean;
+  args: string[];
+  /** `null` for headed mode — see the section header above for why. */
+  viewport: { width: number; height: number } | null;
+}
+
+/**
+ * Pure function (no browser, no I/O) so it's cheaply unit-testable:
+ * given the requested config, what should we actually pass to
+ * `chromium.launch()`/`browser.newContext()`? Kept separate from
+ * `initBrowserSession()` so headless/headed behavior can be verified
+ * without spinning up a real Chromium process.
+ */
+export function resolveLaunchConfig(config: Pick<BrowserConfig, 'headless' | 'window_size' | 'window_position'>, isRoot: boolean): ResolvedLaunchConfig {
+  const args: string[] = [];
+  if (isRoot) args.push('--no-sandbox');
+  args.push('--disable-dev-shm-usage');
+
+  if (config.headless) {
+    args.push(...HEADLESS_HARDENING_ARGS);
+    const viewport = config.window_size ?? DEFAULT_HEADLESS_VIEWPORT;
+    return { headless: true, args, viewport };
+  }
+
+  const windowSize = config.window_size ?? DEFAULT_HEADED_WINDOW_SIZE;
+  args.push(`--window-size=${windowSize.width},${windowSize.height}`);
+  if (config.window_position) {
+    args.push(`--window-position=${config.window_position.x},${config.window_position.y}`);
+  }
+  // viewport: null is the whole point of headed mode here — it tells
+  // Playwright to let the real OS window's client area drive page
+  // dimensions instead of emulating a fixed device-metrics viewport
+  // inside it, i.e. behave like an actual browser tab, not a headless
+  // session wearing a window as a costume.
+  return { headless: false, args, viewport: null };
 }
 
 export class BrowserServer {
@@ -267,7 +383,15 @@ export class BrowserServer {
   private page: Page | null = null;
   private injectScriptsList: string[] = [];
   private recordingSession: RecordingSession | null = null;
-  private refManager = new RefManager();
+  private domSelectorMap: SelectorMap = {};
+  /** True when the last DOM tree build hit its safety budget (very large/complex page). */
+  private domTreeTruncated = false;
+
+  /** Drop the current index->element mapping (called on navigation/tab-switch, same trigger as the old aria-ref snapshot clear). */
+  private clearElementIndex(): void {
+    this.domSelectorMap = {};
+    this.domTreeTruncated = false;
+  }
 
   // ── Live state (for WebBrowserPanel.tsx) ──
   private liveState: BrowserLiveState = { ...EMPTY_BROWSER_LIVE_STATE };
@@ -294,7 +418,14 @@ export class BrowserServer {
 
   private emitLiveState(): void {
     for (const listener of this.liveStateSubscribers.values()) {
-      listener(this.liveState);
+      try {
+        listener(this.liveState);
+      } catch (e) {
+        // One bad listener must not break the loop (and the rest of
+        // refreshLiveState) — log and continue. Mirrors the safety net in
+        // BrowserToolExecutor.notifySharedChange.
+        logger.debug(`live-state listener threw: ${e}`);
+      }
     }
   }
 
@@ -311,10 +442,15 @@ export class BrowserServer {
       isLoading = false,
       httpStatus = null,
       httpStatusText = null,
-      autoSwitchedToNewTab = false,
+      autoSwitchedToNewTab = null,
       contentPreview = null,
     } = opts;
     const errorCategory = errorText ? classifyNetworkError(errorText).category : null;
+    // Tri-state: null = preserve previous, true = set, false = clear.
+    const nextAutoSwitched =
+      autoSwitchedToNewTab === null
+        ? this.liveState.autoSwitchedToNewTab
+        : autoSwitchedToNewTab;
 
     try {
       if (!this.page || this.page.isClosed()) {
@@ -346,7 +482,7 @@ export class BrowserServer {
           lastOperation: lastOperation ?? this.liveState.lastOperation,
           isLoading,
           lastErrorCategory: errorText ? errorCategory : this.liveState.lastErrorCategory,
-          autoSwitchedToNewTab,
+          autoSwitchedToNewTab: nextAutoSwitched,
           httpStatus: null,
           httpStatusText: null,
           possibleCaptcha: false,
@@ -386,7 +522,7 @@ export class BrowserServer {
         httpStatus: httpStatus !== null ? httpStatus : this.liveState.httpStatus,
         httpStatusText: httpStatusText !== null ? httpStatusText : this.liveState.httpStatusText,
         possibleCaptcha: detectPossibleCaptcha(currentTitle),
-        autoSwitchedToNewTab,
+        autoSwitchedToNewTab: nextAutoSwitched,
         contentPreview: contentPreview !== null ? contentPreview : this.liveState.contentPreview,
       };
       this.emitLiveState();
@@ -435,10 +571,24 @@ export class BrowserServer {
   async initBrowserSession(config: BrowserConfig): Promise<void> {
     const isRoot = typeof process.getuid === 'function' && process.getuid() === 0;
 
+    // HEADLESS/HEADED HARDENING: headless: false without a display server
+    // used to fail several seconds into `chromium.launch()` with an opaque
+    // Chromium-internal error (or, in some container setups, hang). Check
+    // up front and fail fast with something actionable instead.
+    if (!config.headless && !isDisplayAvailable()) {
+      throw new Error(
+        'headless: false requires a display server, and none was detected ' +
+          '(no DISPLAY or WAYLAND_DISPLAY env var). Either set headless: true, ' +
+          'or run this process under a virtual display, e.g. `xvfb-run -a <command>`.',
+      );
+    }
+
+    const launchConfig = resolveLaunchConfig(config, isRoot);
+
     this.browser = await chromium.launch({
-      headless: config.headless,
+      headless: launchConfig.headless,
       executablePath: config.executable_path,
-      args: [...(isRoot ? ['--no-sandbox'] : []), '--disable-dev-shm-usage'],
+      args: launchConfig.args,
       // Chromium does NOT automatically read HTTP_PROXY/HTTPS_PROXY env vars
       // the way `curl`/most CLI tools do — it must be told explicitly. This
       // is the single most common reason "my shell has internet but the
@@ -451,7 +601,10 @@ export class BrowserServer {
         : undefined,
     });
 
-    this.context = await this.browser.newContext();
+    // `viewport: null` (headed mode) tells Playwright to size the page from
+    // the real OS window instead of emulating a fixed device-metrics
+    // viewport — see resolveLaunchConfig()'s doc comment.
+    this.context = await this.browser.newContext({ viewport: launchConfig.viewport });
 
     // ISSUE 7 (carried over) + ROUND 7 new-tab tracking: the context-level
     // 'page' event fires for EVERY new page in this context — our own
@@ -480,7 +633,7 @@ export class BrowserServer {
 
       if (page !== this.page) {
         this.page = page;
-        this.refManager.clear();
+        this.clearElementIndex();
         // ROUND 10 FIX: previously passed lastOperation: 'new tab opened',
         // whose first word ("new") isn't a real action verb — the panel's
         // "Last Action: X()" formatting turned this into the nonsensical
@@ -526,6 +679,19 @@ export class BrowserServer {
     return this.recordingSession !== null && this.recordingSession.isActive;
   }
 
+  /**
+   * Public accessor for the current page's URL, or null when no page is
+   * open. BUG FIX: browserEngine.ts previously reached into `this.server.page`
+   * directly (`this.server?.page?.url()`) — `page` is `private`, so that
+   * compiled only because this project's Bun-based build transpiles
+   * TypeScript without type-checking it; a real `tsc --noEmit` (as run by
+   * this change's test harness) rejects it outright. This accessor is the
+   * fix.
+   */
+  getCurrentUrl(): string | null {
+    return this.page && !this.page.isClosed() ? this.page.url() : null;
+  }
+
   private requirePage(): Page {
     if (!this.page) {
       // ROUND 8 FIX: distinguish "browser never launched" from "browser is
@@ -560,11 +726,6 @@ export class BrowserServer {
     }
   }
 
-  /** Narrow an unknown caught value to a printable message, matching the existing repo convention. */
-  private errMessage(e: unknown): string {
-    return e instanceof Error ? e.message : String(e);
-  }
-
   /** Bounded integer clamp with a fallback. Returns an integer in [min, max], defaulting to `fallback` for NaN/0. */
   private clampInt(value: number, min: number, max: number, fallback: number): number {
     const n = Math.trunc(value || fallback);
@@ -591,8 +752,14 @@ export class BrowserServer {
 
   async navigate(url: string, newTab: boolean, signal?: AbortSignal): Promise<string> {
     this.assertNotAborted(signal);
-    if (!this.context) throw new Error('Browser session not initialized');
 
+    // BUG FIX: this guard used to run unconditionally before checking
+    // whether a new page was even needed, so navigate() on an already-open
+    // page refused to run if `this.context` was ever unset/lost for any
+    // reason — even though a plain `page.goto()` on an existing page never
+    // touches `this.context` at all. Scope the check to the ONE branch that
+    // actually calls `this.context.newPage()`.
+    //
     // ROUND 8 FIX: previously this branch only handled `newTab: true`, and
     // fell through to `requirePage()` otherwise — which THROWS if zero tabs
     // are open (now a normal, reachable state after close_all_tabs/
@@ -600,10 +767,11 @@ export class BrowserServer {
     // recover from a zero-tab state by opening a fresh page, exactly like
     // opening a new tab in a real browser when none exist yet.
     if (newTab || !this.page || this.page.isClosed()) {
+      if (!this.context) throw new Error('Browser session not initialized');
       this.page = await this.context.newPage();
       // A fresh (blank) page shares no DOM with the previous one, so any
-      // refs from the old snapshot are meaningless.
-      this.refManager.clear();
+      // element index from the old DOM tree is meaningless.
+      this.clearElementIndex();
     }
     const page = this.requirePage();
     this.setLoading(true);
@@ -612,28 +780,27 @@ export class BrowserServer {
     // instead of a raw Playwright error.
     try {
       const response = await page.goto(url, { waitUntil: 'domcontentloaded' });
-      // New document: refs from the previous page's snapshot no longer
-      // apply, so clear them. Click/type then fail fast with "call
-      // browser_get_state first" instead of hunting stale refs.
-      this.refManager.clear();
+      // New document: the element index from the previous page's DOM tree
+      // no longer applies, so clear it. Click/type then fail fast with
+      // "call browser_get_state first" instead of hunting stale indices.
+      this.clearElementIndex();
       const { httpStatus, httpStatusText } = this.responseStatusFields(response);
       const contentPreview = await capturePreview(page);
-      // See click()'s identical comment: preserve autoSwitchedToNewTab
-      // rather than letting this call's default (false) clobber whatever
-      // the context 'page' handler may have already set (relevant for
-      // `newTab: true` navigations, which also fire that event).
-      const wasAutoSwitched = this.liveState.autoSwitchedToNewTab;
+      // refreshLiveState preserves the previous autoSwitchedToNewTab when
+      // the caller doesn't override it — see RefreshLiveStateOptions. So we
+      // no longer read it out and pass it back in: if the context-'page'
+      // handler already set it (e.g. newTab navigation), this refresh keeps
+      // it; otherwise it stays whatever it was before.
       await this.refreshLiveState({
         lastOperation: `navigate ${url}`,
         httpStatus,
         httpStatusText,
         contentPreview,
-        autoSwitchedToNewTab: wasAutoSwitched,
       });
       const statusNote = httpStatus !== null ? ` (${httpStatus}${httpStatusText ? ` ${httpStatusText}` : ''})` : '';
       return `Navigated to ${page.url()}${statusNote}`;
     } catch (e) {
-      const message = this.errMessage(e);
+      const message = errorMessage(e);
       const { hint } = classifyNetworkError(message);
       const fullMessage = hint ? `${message}\nHint: ${hint}` : message;
       await this.refreshLiveState({ errorText: fullMessage, lastOperation: `navigate ${url}` });
@@ -649,13 +816,13 @@ export class BrowserServer {
       const response = await page.goBack();
       // goBack can land on a different document, so stored refs may not
       // apply to the new one.
-      this.refManager.clear();
+      this.clearElementIndex();
       const { httpStatus, httpStatusText } = this.responseStatusFields(response);
       const contentPreview = await capturePreview(page);
       await this.refreshLiveState({ lastOperation: 'go_back', httpStatus, httpStatusText, contentPreview });
       return `Navigated back to ${page.url()}`;
     } catch (e) {
-      const message = this.errMessage(e);
+      const message = errorMessage(e);
       const { hint } = classifyNetworkError(message);
       const fullMessage = hint ? `${message}\nHint: ${hint}` : message;
       await this.refreshLiveState({ errorText: fullMessage, lastOperation: 'go_back' });
@@ -672,13 +839,13 @@ export class BrowserServer {
       const response = await page.reload({ waitUntil: 'domcontentloaded' });
       // Reload produces a fresh document; refs captured before the reload
       // no longer apply.
-      this.refManager.clear();
+      this.clearElementIndex();
       const { httpStatus, httpStatusText } = this.responseStatusFields(response);
       const contentPreview = await capturePreview(page);
       await this.refreshLiveState({ lastOperation: 'refresh', httpStatus, httpStatusText, contentPreview });
       return `Refreshed ${page.url()}`;
     } catch (e) {
-      const message = this.errMessage(e);
+      const message = errorMessage(e);
       const { hint } = classifyNetworkError(message);
       const fullMessage = hint ? `${message}\nHint: ${hint}` : message;
       await this.refreshLiveState({ errorText: fullMessage, lastOperation: 'refresh' });
@@ -705,7 +872,41 @@ export class BrowserServer {
       await this.refreshLiveState({ lastOperation: `press_key ${key}` });
       return `Pressed ${key}`;
     } catch (e) {
-      return `Error pressing key ${key}: ${this.errMessage(e)}`;
+      return `Error pressing key ${key}: ${errorMessage(e)}`;
+    }
+  }
+
+  /**
+   * NEW ACTION: wait for a selector to reach a given state, instead of
+   * polling with fixed `wait` calls. Zero LLM, single Playwright call
+   * (`locator.waitFor()` already does the polling internally) — this is
+   * strictly cheaper than the alternative pattern of `wait` + `get_state`
+   * in a loop, and returns the moment the condition is met rather than
+   * always burning the full duration.
+   */
+  async waitForElement(
+    selector: string,
+    state: 'visible' | 'hidden' | 'attached' | 'detached' = 'visible',
+    timeoutMs: number = 10000,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    this.assertNotAborted(signal);
+    const boundedSelector = String(selector ?? '').trim().slice(0, 2048);
+    if (!boundedSelector) {
+      return 'Error: Selector must not be empty.';
+    }
+    const boundedTimeout = this.clampInt(timeoutMs, 100, 60000, 10000);
+    const page = this.requirePage();
+    try {
+      await page.locator(boundedSelector).first().waitFor({ state, timeout: boundedTimeout });
+      await this.refreshLiveState({ lastOperation: `wait_for_element "${boundedSelector}" (${state})` });
+      return `Element "${boundedSelector}" reached state "${state}"`;
+    } catch (e) {
+      const message = errorMessage(e);
+      const hint = message.toLowerCase().includes('timeout')
+        ? `\nHint: the element never reached "${state}" within ${boundedTimeout}ms. Double-check the selector with find_elements, or increase timeout_ms.`
+        : '';
+      return `Error waiting for "${boundedSelector}" to be "${state}": ${message}${hint}`;
     }
   }
 
@@ -725,7 +926,7 @@ export class BrowserServer {
     } catch (e) {
       // Fallback: if the key combo/name is unrecognized, press each character
       // individually so sequences of plain text still work.
-      const message = this.errMessage(e);
+      const message = errorMessage(e);
       if (message.toLowerCase().includes('unknown key')) {
         try {
           for (const ch of bounded) {
@@ -761,7 +962,7 @@ export class BrowserServer {
       await this.refreshLiveState({ lastOperation: 'screenshot' });
       return `data:image/png;base64,${data}`;
     } catch (e) {
-      return `Error taking screenshot: ${this.errMessage(e)}`;
+      return `Error taking screenshot: ${errorMessage(e)}`;
     }
   }
 
@@ -773,7 +974,7 @@ export class BrowserServer {
     try {
       const optionsJson = await (target.kind === 'selector'
         ? target.locator
-        : page.locator(`aria-ref=${target.ref}`)
+        : this.locatorForNode(page, target.node)
       ).evaluate((el: HTMLElement) => {
         if (el.tagName === 'SELECT') {
           const opts = Array.from((el as HTMLSelectElement).options);
@@ -808,7 +1009,7 @@ export class BrowserServer {
       await this.refreshLiveState({ lastOperation: `dropdown_options [${index}]` });
       return `${options.length} option(s):\n${lines.join('\n')}`;
     } catch (e) {
-      return `Error getting dropdown options: ${this.errMessage(e)}`;
+      return `Error getting dropdown options: ${errorMessage(e)}`;
     }
   }
 
@@ -824,7 +1025,7 @@ export class BrowserServer {
     try {
       const locator = target.kind === 'selector'
         ? target.locator
-        : page.locator(`aria-ref=${target.ref}`);
+        : this.locatorForNode(page, target.node);
       const matched = await locator.evaluate(
         (el: HTMLElement, t: string) => {
           if (el.tagName === 'SELECT') {
@@ -864,7 +1065,7 @@ export class BrowserServer {
       await this.refreshLiveState({ lastOperation: `select_dropdown [${index}] ${boundedText}` });
       return `Selected '${m.text}' (value="${m.value}")`;
     } catch (e) {
-      return `Error selecting dropdown option: ${this.errMessage(e)}`;
+      return `Error selecting dropdown option: ${errorMessage(e)}`;
     }
   }
 
@@ -874,23 +1075,28 @@ export class BrowserServer {
     if (!boundedPath) {
       return 'Error: File path must not be empty.';
     }
+    // BUG FIX: this used to resolve the element (index/selector) BEFORE
+    // checking the file existed locally, so a nonexistent file combined
+    // with an as-yet-unresolved index surfaced "Invalid element index"
+    // instead of the more fundamental, purely-local "File not found" —
+    // and it did so only after already touching the DOM for no reason.
+    // File existence is a cheap, page-independent check; do it first.
+    if (!fs.existsSync(boundedPath)) {
+      return `Error: File not found at ${boundedPath}`;
+    }
     const page = this.requirePage();
     const target = this.resolveTarget(page, index, undefined);
     if (target.kind === 'error') return target.message;
     try {
-      const locator = target.kind === 'selector'
-        ? target.locator
-        : page.locator(`aria-ref=${target.ref}`);
+      const locator = target.kind === 'selector' ? target.locator : this.locatorForNode(page, target.node);
       await locator.setInputFiles(boundedPath);
       const fileName = path.basename(boundedPath);
       await this.refreshLiveState({ lastOperation: `upload_file [${index}] ${fileName}` });
       return `Uploaded file '${fileName}' to [${index}]`;
     } catch (e) {
-      const message = this.errMessage(e);
-      if (/ENOENT|no such file|not found/i.test(message)) {
-        return `Error: File not found at ${boundedPath}`;
-      }
-      return `Error uploading file: ${message}`;
+      // The fs.existsSync check above already catches the "file not found"
+      // case up front; Playwright errors here are genuine upload failures.
+      return `Error uploading file: ${errorMessage(e)}`;
     }
   }
 
@@ -940,68 +1146,79 @@ export class BrowserServer {
       await this.refreshLiveState({ lastOperation: `save_as_pdf ${path.basename(filePath)}` });
       return `Saved PDF to ${filePath}`;
     } catch (e) {
-      return `Error saving PDF: ${this.errMessage(e)}`;
+      return `Error saving PDF: ${errorMessage(e)}`;
     }
   }
 
-  // ── Click / Type (Playwright aria-ref locators — deterministic, no LLM) ──
+  // ── Click / Type (DOM-tree/highlight-index locators — deterministic, no LLM) ──
 
-  /** Re-capture the aria snapshot from the CURRENT DOM and refill the ref manager. */
-  private async refreshAriaSnapshot(page: Page): Promise<string> {
-    const ariaSnapshot = await page.ariaSnapshot({ mode: 'ai' });
-    this.refManager.setSnapshot(ariaSnapshot);
-    return ariaSnapshot;
+  /** Rebuild the interactive-element index from the CURRENT DOM. */
+  private async refreshDomTree(
+    page: Page,
+    opts: { highlightElements?: boolean; focusElement?: number } = {},
+  ): Promise<import('./domTypes.js').DOMState> {
+    const { state, metadata } = await new DomService(page).getClickableElements({
+      highlightElements: opts.highlightElements ?? false,
+      focusElement: opts.focusElement ?? -1,
+    });
+    this.domSelectorMap = state.selector_map;
+    this.domTreeTruncated = metadata.truncated;
+    return state;
   }
 
   /**
-   * REFRESH-STATE GLITCH FIX: Playwright's ariaSnapshot refs are not stable
-   * across calls — the log showed an eN -> f1eN renumber on the same page —
-   * so the stored ref for an index can go stale even though the element
-   * still exists at that index. When the first attempt fails, re-snapshot
-   * the current DOM and re-run the action at the same index. Returns true
-   * when the retry succeeded; the caller reports the original error if not.
+   * REFRESH-STATE GLITCH FIX (carried over from the aria-ref system this
+   * replaced): an element's xpath is stable for THAT element, but the
+   * element an `index` points at is only as fresh as the last get_state —
+   * anything that changes the DOM (a re-render, a toast disappearing) can
+   * shift which element index K now refers to, even though the page didn't
+   * navigate. When the first attempt fails, rebuild the DOM tree and re-run
+   * the action at the same index. Returns true when the retry succeeded;
+   * the caller reports the original error if not.
    */
-  private async retryWithFreshRef(
+  private async retryWithFreshIndex(
     page: Page,
     index: number,
-    act: (freshRef: string) => Promise<unknown>,
+    act: (freshNode: DOMElementNode) => Promise<unknown>,
   ): Promise<boolean> {
     try {
-      await this.refreshAriaSnapshot(page);
-      const freshRef = this.refManager.getRefByIndex(index);
-      if (!freshRef) return false;
-      await act(freshRef);
+      await this.refreshDomTree(page);
+      const freshNode = this.domSelectorMap[index];
+      if (!freshNode) return false;
+      await act(freshNode);
       return true;
     } catch {
       return false;
     }
   }
 
+  private locatorForNode(page: Page, node: DOMElementNode): ReturnType<Page['locator']> {
+    return page.locator(`xpath=${node.xpath}`);
+  }
+
   /**
-   * LOG.MD ISSUE #3 FIX: resolve a click/type target either by `selector`
-   * (CSS, resolved directly via `page.locator()` — immune to occurrence-
-   * index drift) or by `index` (the existing aria-ref system). `selector`
-   * takes priority when both are given. Returns either a ready-to-use
-   * Locator (selector path — index-retry logic doesn't apply, since a CSS
-   * selector doesn't go stale the way a snapshot-order index does) or the
-   * resolved index+ref pair (index path, so the caller can still do the
-   * stale-ref retry dance).
+   * get_state's clickable-elements output shows each element as `[N]<tag
+   * ...`, so a model that means "the element at index N" naturally
+   * sometimes passes `selector: "[N]"` or `selector: "N"` instead of
+   * `index: N`. Left alone, Playwright treats `[N]` as a (never-matching)
+   * CSS attribute selector, and that guess times out silently for
+   * `ELEMENT_TIMEOUT_MS` with no useful signal why — redirect it to the
+   * index path instead, since it can be resolved with no ambiguity.
+   *
+   * A selector shaped like the OLD `[ref=eN]`/`aria-ref=eN` format (from
+   * before this tool moved off Playwright's ariaSnapshot onto the DOM-tree
+   * index) can no longer resolve to anything — fail fast with a clear
+   * message instead of a bogus CSS-selector timeout.
    */
-  /**
-   * LOG.MD (round 8 E2E report) FIX: `page.locator('[aria-ref=f1e46]')` is a
-   * plain CSS ATTRIBUTE selector (looks for a literal DOM attribute named
-   * `aria-ref`) — NOT Playwright's special `aria-ref=` locator ENGINE
-   * syntax, which requires no brackets (`page.locator('aria-ref=f1e46')`).
-   * An agent naturally guesses the bracketed CSS-attribute form when handed
-   * a `selector` param and a `[ref=e46]`-looking value from get_state's
-   * output, and that guess times out with no useful signal why. Normalize
-   * common wrong-but-understandable forms (`[ref=e46]`, `[aria-ref=e46]`,
-   * `ref=e46`) into the correct engine syntax rather than let them silently
-   * fail as a bogus CSS selector for 10 seconds.
-   */
-  private normalizeSelector(selector: string): { selector: string; wasRefLike: boolean } {
-    const match = selector.trim().match(/^\[?(?:aria-)?ref=((?:f\d+)?e\d+)\]?$/i);
-    return match ? { selector: `aria-ref=${match[1]}`, wasRefLike: true } : { selector, wasRefLike: false };
+  private interpretSelector(
+    selector: string,
+  ): { kind: 'index'; index: number } | { kind: 'legacy-ref' } | { kind: 'css'; selector: string } {
+    const trimmed = selector.trim();
+    const indexLike = trimmed.match(/^\[?(\d+)\]?$/);
+    if (indexLike) return { kind: 'index', index: Number(indexLike[1]) };
+    const legacyRef = trimmed.match(/^\[?(?:aria-)?ref=(?:f\d+)?e\d+\]?$/i);
+    if (legacyRef) return { kind: 'legacy-ref' };
+    return { kind: 'css', selector: trimmed };
   }
 
   private resolveTarget(
@@ -1009,21 +1226,34 @@ export class BrowserServer {
     index: number | undefined,
     rawSelector: string | undefined,
   ):
-    | { kind: 'selector'; locator: ReturnType<Page['locator']>; label: string; wasRefLike: boolean }
-    | { kind: 'index'; ref: string; label: string }
+    | { kind: 'selector'; locator: ReturnType<Page['locator']>; label: string }
+    | { kind: 'index'; node: DOMElementNode; index: number; label: string }
     | { kind: 'error'; message: string } {
     if (rawSelector) {
-      const { selector, wasRefLike } = this.normalizeSelector(rawSelector);
-      return { kind: 'selector', locator: page.locator(selector), label: `selector "${selector}"`, wasRefLike };
+      const interpreted = this.interpretSelector(rawSelector);
+      if (interpreted.kind === 'legacy-ref') {
+        return {
+          kind: 'error',
+          message: `Error: "${rawSelector}" looks like a ref from an older version of this tool. Call browser_get_state again and use its \`index\` field instead.`,
+        };
+      }
+      if (interpreted.kind === 'index') {
+        const node = this.domSelectorMap[interpreted.index];
+        if (!node) {
+          return { kind: 'error', message: `Error: Invalid element index ${interpreted.index}. Call browser_get_state first.` };
+        }
+        return { kind: 'index', node, index: interpreted.index, label: `[${interpreted.index}]` };
+      }
+      return { kind: 'selector', locator: page.locator(interpreted.selector), label: `selector "${interpreted.selector}"` };
     }
     if (index === undefined) {
       return { kind: 'error', message: 'Error: Either `index` or `selector` must be provided.' };
     }
-    const ref = this.refManager.getRefByIndex(index);
-    if (!ref) {
+    const node = this.domSelectorMap[index];
+    if (!node) {
       return { kind: 'error', message: `Error: Invalid element index ${index}. Call browser_get_state first.` };
     }
-    return { kind: 'index', ref, label: `[${index}] (ref=${ref})` };
+    return { kind: 'index', node, index, label: `[${index}]` };
   }
 
   async click(
@@ -1040,7 +1270,7 @@ export class BrowserServer {
     // TASK 7: coordinate-based click fallback. When both coordinates are
     // provided and neither index nor selector is given, click at the
     // absolute page position via page.mouse.click(). Useful for canvases,
-    // images, or any element not reachable via aria-ref/selector.
+    // images, or any element not reachable via the element index/selector.
     const hasCoords = coordinateX !== undefined && coordinateY !== undefined;
     if (hasCoords && index === undefined && !selector) {
       if (!page.mouse?.click) {
@@ -1051,7 +1281,7 @@ export class BrowserServer {
         await this.refreshLiveState({ lastOperation: `click coordinates (${coordinateX}, ${coordinateY})` });
         return `Clicked at coordinates (${coordinateX}, ${coordinateY})`;
       } catch (e) {
-        const message = this.errMessage(e);
+        const message = errorMessage(e);
         return `Error clicking at coordinates (${coordinateX}, ${coordinateY}): ${message}`;
       }
     }
@@ -1066,7 +1296,7 @@ export class BrowserServer {
     if (target.kind === 'error') return target.message;
 
     if (newTab) {
-      const locatorForHref = target.kind === 'selector' ? target.locator : page.locator(`aria-ref=${target.ref}`);
+      const locatorForHref = target.kind === 'selector' ? target.locator : this.locatorForNode(page, target.node);
       const href = await locatorForHref
         .first()
         .evaluate((el: any) => el.href)
@@ -1076,60 +1306,56 @@ export class BrowserServer {
 
     if (target.kind === 'selector') {
       try {
-        await target.locator.click({ timeout: ARIA_REF_TIMEOUT_MS });
+        await target.locator.click({ timeout: ELEMENT_TIMEOUT_MS });
       } catch (e) {
-        const message = this.errMessage(e);
-        const hint =
-          message.toLowerCase().includes('timeout') && target.wasRefLike
-            ? '\nHint: this ref may be stale (the page changed since the last browser_get_state). Call browser_get_state again for fresh refs, then retry with the new index.'
-            : '';
+        const message = errorMessage(e);
         await this.refreshLiveState({ errorText: `click: ${message}`, lastOperation: `click ${target.label}` });
-        return `Error clicking ${target.label}: ${message}${hint}`;
+        return `Error clicking ${target.label}: ${message}`;
       }
-      const wasAutoSwitched = this.liveState.autoSwitchedToNewTab;
-      await this.refreshLiveState({ lastOperation: `click ${target.label}`, autoSwitchedToNewTab: wasAutoSwitched });
-      const newTabNote = wasAutoSwitched ? ' — opened in a new tab, now active' : '';
+      // The new-tab note reads the live state set by the context-'page'
+      // handler (if any) BEFORE the refresh — the refresh itself
+      // preserves that value rather than clobbering it.
+      const newTabNote = this.liveState.autoSwitchedToNewTab ? ' — opened in a new tab, now active' : '';
+      await this.refreshLiveState({ lastOperation: `click ${target.label}` });
       return `Clicked ${target.label}${newTabNote}`;
     }
 
-    // index path — carries the stale-ref self-healing retry.
-    let ref = target.ref;
+    // index path — carries the stale-index self-healing retry. Use
+    // `target.index` (not the outer `index` param) below: a `selector`
+    // that turned out to be index-shaped (e.g. "[3]") resolves through
+    // `target.index` while the outer `index` param stays `undefined`.
+    const resolvedIndex = target.index;
     try {
-      await page.locator(`aria-ref=${ref}`).click({ timeout: ARIA_REF_TIMEOUT_MS });
+      await this.locatorForNode(page, target.node).click({ timeout: ELEMENT_TIMEOUT_MS });
     } catch (e) {
-      const staleMessage = this.errMessage(e);
-      if (
-        index !== undefined &&
-        (await this.retryWithFreshRef(page, index, (freshRef) => {
-          ref = freshRef;
-          return page.locator(`aria-ref=${freshRef}`).click({ timeout: ARIA_REF_TIMEOUT_MS });
-        }))
-      ) {
-        await this.refreshLiveState({ lastOperation: `click [${index}]` });
-        return `Clicked [${index}] (ref=${ref}) [retried after state refresh]`;
+      const staleMessage = errorMessage(e);
+      if (await this.retryWithFreshIndex(page, resolvedIndex, (freshNode) => this.locatorForNode(page, freshNode).click({ timeout: ELEMENT_TIMEOUT_MS }))) {
+        await this.refreshLiveState({ lastOperation: `click [${resolvedIndex}]` });
+        return `Clicked [${resolvedIndex}] [retried after state refresh]`;
       }
-      await this.refreshLiveState({ errorText: `click: ${staleMessage}`, lastOperation: `click [${index}]` });
-      return `Error clicking [${index}] (ref=${ref}): ${staleMessage}`;
+      const hint = staleMessage.toLowerCase().includes('timeout')
+        ? '\nHint: this index may be stale (the page changed since the last browser_get_state). Call browser_get_state again for a fresh index, then retry.'
+        : '';
+      await this.refreshLiveState({ errorText: `click: ${staleMessage}`, lastOperation: `click [${resolvedIndex}]` });
+      return `Error clicking [${resolvedIndex}]: ${staleMessage}${hint}`;
     }
 
     // Click can trigger navigation, so refresh the live-state snapshot
     // (url/title/tabs) regardless of success/failure. If it opened a new
     // tab, the context-level 'page' handler's fire-and-forget
     // refreshLiveState() may ALREADY have run and set
-    // `autoSwitchedToNewTab` — capture that BEFORE our own refresh call so
-    // we don't immediately clobber it back to false (refreshLiveState()'s
-    // options default `autoSwitchedToNewTab` to false, same as any other
-    // "not a new-tab event" call). NOTE: this is inherently racy — the
-    // event handler's async update might not have landed yet when we read
-    // it here, in which case THIS call's return text won't mention the new
+    // `autoSwitchedToNewTab` — refreshLiveState preserves that value
+    // (see RefreshLiveStateOptions) so we just read it once for the
+    // return-text annotation. NOTE: this is inherently racy — the event
+    // handler's async update might not have landed yet when we read it
+    // here, in which case THIS call's return text won't mention the new
     // tab even though it happened. The panel doesn't have this problem
-    // (it's driven by the live subscription, which will pick up the
-    // event handler's update whenever it actually lands), so this is a
+    // (it's driven by the live subscription, which will pick up the event
+    // handler's update whenever it actually lands), so this is a
     // best-effort improvement to the return message, not a guarantee.
-    const wasAutoSwitched = this.liveState.autoSwitchedToNewTab;
-    await this.refreshLiveState({ lastOperation: `click [${index}]`, autoSwitchedToNewTab: wasAutoSwitched });
-    const newTabNote = wasAutoSwitched ? ' — opened in a new tab, now active' : '';
-    return `Clicked [${index}] (ref=${ref})${newTabNote}`;
+    const newTabNote = this.liveState.autoSwitchedToNewTab ? ' — opened in a new tab, now active' : '';
+    await this.refreshLiveState({ lastOperation: `click [${resolvedIndex}]` });
+    return `Clicked [${resolvedIndex}]${newTabNote}`;
   }
 
   async typeText(index: number | undefined, text: string, selector?: string, signal?: AbortSignal): Promise<string> {
@@ -1140,69 +1366,227 @@ export class BrowserServer {
 
     if (target.kind === 'selector') {
       try {
-        await target.locator.fill(text, { timeout: ARIA_REF_TIMEOUT_MS });
+        await target.locator.fill(text, { timeout: ELEMENT_TIMEOUT_MS });
         await this.refreshLiveState({ lastOperation: `type ${target.label}` });
         return `Typed "${text}" into ${target.label}`;
       } catch (e) {
-        const message = this.errMessage(e);
-        const hint =
-          message.toLowerCase().includes('timeout') && target.wasRefLike
-            ? '\nHint: this ref may be stale (the page changed since the last browser_get_state). Call browser_get_state again for fresh refs, then retry with the new index.'
-            : '';
-        return `Error typing into ${target.label}: ${message}${hint}`;
+        const message = errorMessage(e);
+        return `Error typing into ${target.label}: ${message}`;
       }
     }
 
-    // index path — carries the stale-ref self-healing retry.
-    let ref = target.ref;
+    // index path — carries the stale-index self-healing retry. Use
+    // `target.index` (not the outer `index` param) below — see click()'s
+    // identical comment for why.
+    const resolvedIndex = target.index;
     try {
-      await page.locator(`aria-ref=${ref}`).fill(text, { timeout: ARIA_REF_TIMEOUT_MS });
-      await this.refreshLiveState({ lastOperation: `type [${index}]` });
-      return `Typed "${text}" into [${index}] (ref=${ref})`;
+      await this.locatorForNode(page, target.node).fill(text, { timeout: ELEMENT_TIMEOUT_MS });
+      await this.refreshLiveState({ lastOperation: `type [${resolvedIndex}]` });
+      return `Typed "${text}" into [${resolvedIndex}]`;
     } catch (e) {
-      const staleMessage = this.errMessage(e);
-      if (
-        index !== undefined &&
-        (await this.retryWithFreshRef(page, index, (freshRef) => {
-          ref = freshRef;
-          return page.locator(`aria-ref=${freshRef}`).fill(text, { timeout: ARIA_REF_TIMEOUT_MS });
-        }))
-      ) {
-        await this.refreshLiveState({ lastOperation: `type [${index}]` });
-        return `Typed "${text}" into [${index}] (ref=${ref}) [retried after state refresh]`;
+      const staleMessage = errorMessage(e);
+      if (await this.retryWithFreshIndex(page, resolvedIndex, (freshNode) => this.locatorForNode(page, freshNode).fill(text, { timeout: ELEMENT_TIMEOUT_MS }))) {
+        await this.refreshLiveState({ lastOperation: `type [${resolvedIndex}]` });
+        return `Typed "${text}" into [${resolvedIndex}] [retried after state refresh]`;
       }
-      return `Error typing into [${index}] (ref=${ref}): ${staleMessage}`;
+      const hint = staleMessage.toLowerCase().includes('timeout')
+        ? '\nHint: this index may be stale (the page changed since the last browser_get_state). Call browser_get_state again for a fresh index, then retry.'
+        : '';
+      return `Error typing into [${resolvedIndex}]: ${staleMessage}${hint}`;
     }
   }
 
-  // ── Get State (Playwright ariaSnapshot({ mode: 'ai' }) — deterministic, no LLM) ──
+  // ── Get State (DOM-tree/highlight-index system — deterministic, no LLM) ──
+
+  private async getScrollMetadata(
+    page: Page,
+  ): Promise<{ pixelsAbove: number; pixelsBelow: number; viewportWidth: number; viewportHeight: number }> {
+    try {
+      const raw = await page.evaluate(() => ({
+        scrollY: window.scrollY,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        scrollHeight: document.documentElement.scrollHeight,
+      }));
+      return {
+        pixelsAbove: Math.round(raw.scrollY),
+        pixelsBelow: Math.max(0, Math.round(raw.scrollHeight - raw.scrollY - raw.viewportHeight)),
+        viewportWidth: Math.round(raw.viewportWidth),
+        viewportHeight: Math.round(raw.viewportHeight),
+      };
+    } catch {
+      return { pixelsAbove: 0, pixelsBelow: 0, viewportWidth: 0, viewportHeight: 0 };
+    }
+  }
 
   async getBrowserState(includeScreenshot: boolean, signal?: AbortSignal): Promise<string> {
     this.assertNotAborted(signal);
     const page = this.requirePage();
-    // Generates YAML like:
-    //   - generic [ref=e1]:
-    //     - heading "Welcome" [ref=e2]
-    //     - button "Login" [ref=e3]
-    // `mode: 'ai'` is what produces the [ref=eN] tags; requires Playwright >=1.50.
-    await this.refreshAriaSnapshot(page);
-    // ROUND 9 FIX: return the [index=K]-annotated version (K matching
-    // exactly what click()/type() expect), not the raw [ref=eN] snapshot —
-    // see RefManager.getAnnotatedSnapshotText()'s doc comment for why this
-    // was a real, reproduced bug (index vs. ref confusion causing type()
-    // to land on the wrong element).
-    const annotatedSnapshot = this.refManager.getAnnotatedSnapshotText();
+
+    // Only draw highlight overlays when we're about to screenshot them —
+    // no reason to touch the page's DOM (even transiently, even just to
+    // add/remove an overlay container) on a text-only get_state call.
+    // Run the cheap evaluates in parallel with the DOM-tree build so their
+    // wall-clock cost overlaps with it instead of being sequenced behind it.
+    const [domState, scrollMeta, tabCount] = await Promise.all([
+      this.refreshDomTree(page, { highlightElements: includeScreenshot }),
+      this.getScrollMetadata(page),
+      Promise.resolve(page.context().pages().length),
+    ]);
+    const elements = domState.llm_representation();
+    const pagination = detectPaginationButtons(this.domSelectorMap);
+
     await this.refreshLiveState({ lastOperation: 'get_state' });
 
-    if (includeScreenshot) {
-      const screenshot = await page.screenshot({ type: 'png' });
-      const screenshotData = screenshot.toString('base64');
-      return JSON.stringify({ elements: annotatedSnapshot, screenshot: screenshotData, url: page.url() }, null, 2);
+    // Additive envelope: `elements`/`url` are unchanged from the previous
+    // aria-ref-based format, so existing callers that only read those two
+    // fields see no change. `tabs_count`/`scroll`/`truncated*`/`pagination`
+    // are new, cheap (one extra evaluate + a pure scan of the already-built
+    // selector map — no additional page round trip) context that used to
+    // require a separate list_tabs/scroll_to_text/find_elements call.
+    const envelope: Record<string, unknown> = {
+      elements,
+      url: page.url(),
+      tabs_count: tabCount,
+      scroll: {
+        pixels_above: scrollMeta.pixelsAbove,
+        pixels_below: scrollMeta.pixelsBelow,
+        viewport: `${scrollMeta.viewportWidth}x${scrollMeta.viewportHeight}`,
+      },
+    };
+    if (this.domTreeTruncated) {
+      envelope.truncated = true;
+      envelope.truncated_note = 'This page is very large — the element list may be incomplete. Consider scrolling or narrowing your search with find_elements.';
     }
-    return JSON.stringify({ elements: annotatedSnapshot, url: page.url() }, null, 2);
+    if (pagination.length) {
+      envelope.pagination = pagination.map((b) => ({ index: b.index, type: b.button_type, text: b.text, disabled: b.is_disabled }));
+    }
+
+    if (includeScreenshot) {
+      try {
+        const screenshot = await page.screenshot({ type: 'png' });
+        envelope.screenshot = screenshot.toString('base64');
+      } finally {
+        // Highlight overlays are only useful for the screenshot we just
+        // took — leave the live page as we found it.
+        await new DomService(page).removeHighlights();
+      }
+    }
+    return JSON.stringify(envelope, null, 2);
   }
 
-  // ── Get Content (page.innerText — no LLM — + EXACT truncation logic from server.py) ──
+  // ── Get Content (single-pass in-browser markdown-ish extraction — no LLM — + EXACT truncation logic from server.py) ──
+
+  /**
+   * Structure-aware content extraction: headings become `#`..`######`, list
+   * items become `- `, links become `[text](href)`, code/pre become
+   * fenced/backtick spans — evaluated in ONE page round trip (same
+   * single-call philosophy as findElements/searchPage/the DOM tree
+   * builder), with no new dependency (a `turndown`-based conversion was
+   * considered — browser-use's own `markdown-extractor.ts` uses it — but
+   * pulling in an HTML-to-markdown library is a bigger footprint change
+   * than this tool's existing dependency-free, in-browser style, so this
+   * ships a compact purpose-built walker instead). Replaces the previous
+   * flat `page.innerText('body')` call; the extraction result flows into
+   * the SAME truncation/stats/link-stripping pipeline below, unchanged.
+   */
+  private async extractMarkdownContent(page: Page): Promise<string> {
+    return page.evaluate(() => {
+      const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'SVG']);
+      const BLOCK_TAGS = new Set([
+        'P', 'DIV', 'SECTION', 'ARTICLE', 'HEADER', 'FOOTER', 'MAIN', 'ASIDE',
+        'UL', 'OL', 'TABLE', 'TR', 'FORM', 'FIELDSET', 'BLOCKQUOTE', 'FIGURE',
+        'HR', 'ADDRESS',
+      ]);
+      const HEADING_LEVEL: Record<string, number> = { H1: 1, H2: 2, H3: 3, H4: 4, H5: 5, H6: 6 };
+
+      const isHidden = (el: Element): boolean => {
+        if (!(el instanceof HTMLElement)) return false;
+        if (el.hidden) return true;
+        if (el.getAttribute('aria-hidden') === 'true') return true;
+        const style = window.getComputedStyle(el);
+        return style.display === 'none' || style.visibility === 'hidden';
+      };
+
+      const out: string[] = [];
+      let lastWasBreak = true;
+      const emit = (text: string) => {
+        if (!text) return;
+        out.push(text);
+        lastWasBreak = /\n$/.test(text);
+      };
+      const breakParagraph = () => {
+        if (!lastWasBreak) emit('\n\n');
+      };
+
+      const walk = (node: Node) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          const text = (node.textContent ?? '').replace(/\s+/g, ' ');
+          if (text.trim()) emit(text);
+          return;
+        }
+        if (node.nodeType !== Node.ELEMENT_NODE) return;
+        const el = node as Element;
+        if (SKIP_TAGS.has(el.tagName) || isHidden(el)) return;
+
+        if (el.tagName === 'BR') {
+          emit('\n');
+          return;
+        }
+        if (HEADING_LEVEL[el.tagName]) {
+          breakParagraph();
+          emit(`${'#'.repeat(HEADING_LEVEL[el.tagName])} ${(el.textContent ?? '').trim()}`);
+          emit('\n\n');
+          lastWasBreak = true;
+          return;
+        }
+        if (el.tagName === 'LI') {
+          breakParagraph();
+          emit('- ');
+          for (const child of Array.from(el.childNodes)) walk(child);
+          emit('\n');
+          return;
+        }
+        if (el.tagName === 'A' && el.hasAttribute('href')) {
+          const text = (el.textContent ?? '').trim();
+          const href = el.getAttribute('href') ?? '';
+          if (text && href && !href.startsWith('javascript:')) {
+            emit(`[${text}](${href})`);
+          } else if (text) {
+            emit(text);
+          }
+          return;
+        }
+        if (el.tagName === 'PRE') {
+          breakParagraph();
+          emit('```\n' + (el.textContent ?? '').replace(/\s+$/, '') + '\n```');
+          emit('\n\n');
+          lastWasBreak = true;
+          return;
+        }
+        if (el.tagName === 'CODE' && el.parentElement?.tagName !== 'PRE') {
+          emit('`' + (el.textContent ?? '').trim() + '`');
+          return;
+        }
+        if (el.tagName === 'IMG') {
+          const alt = el.getAttribute('alt');
+          if (alt) emit(`[image: ${alt}]`);
+          return;
+        }
+
+        if (BLOCK_TAGS.has(el.tagName)) breakParagraph();
+        for (const child of Array.from(el.childNodes)) walk(child);
+        if (BLOCK_TAGS.has(el.tagName)) breakParagraph();
+      };
+
+      walk(document.body);
+      return out
+        .join('')
+        .replace(/[ \t]+\n/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+    });
+  }
 
   async getContent(extractLinks: boolean, startFromChar: number, signal?: AbortSignal): Promise<string> {
     this.assertNotAborted(signal);
@@ -1211,9 +1595,9 @@ export class BrowserServer {
 
     let content: string;
     try {
-      content = await page.innerText('body');
+      content = await this.extractMarkdownContent(page);
     } catch (e) {
-      return `Could not extract content from page: ${this.errMessage(e)}`;
+      return `Could not extract content from page: ${errorMessage(e)}`;
     }
 
     // ENHANCEMENT 3: an empty page would otherwise flow through as a
@@ -1226,10 +1610,9 @@ export class BrowserServer {
     const initialMarkdownLength = content.length;
 
     // BUG 3 FIX (carried over): when extractLinks is false, strip markdown
-    // links (this project's convention treats the extracted text as
-    // markdown-flavored even though it now comes from innerText()). Applied
-    // right after extraction, before start_from_char/truncation, so
-    // pagination offsets are computed against the already-filtered content.
+    // links. Applied right after extraction, before start_from_char/
+    // truncation, so pagination offsets are computed against the already-
+    // filtered content.
     let charsFiltered = 0;
     if (!extractLinks) {
       const beforeLen = content.length;
@@ -1249,14 +1632,15 @@ export class BrowserServer {
     let truncateAt = MAX_CHAR_LIMIT;
 
     if (content.length > MAX_CHAR_LIMIT) {
-      // Look for a paragraph break in the last 500 chars of the limit window.
-      const windowStart = Math.max(0, MAX_CHAR_LIMIT - 500);
+      // Look for a paragraph break in the last TRUNCATE_PARAGRAPH_LOOKBACK_CHARS
+      // of the limit window, then fall back to a sentence break in the last
+      // TRUNCATE_SENTENCE_LOOKBACK_CHARS, matching the Python server.
+      const paragraphWindowStart = Math.max(0, MAX_CHAR_LIMIT - TRUNCATE_PARAGRAPH_LOOKBACK_CHARS);
       const paragraphBreak = content.lastIndexOf('\n\n', MAX_CHAR_LIMIT);
-      if (paragraphBreak >= windowStart && paragraphBreak < MAX_CHAR_LIMIT) {
+      if (paragraphBreak >= paragraphWindowStart && paragraphBreak < MAX_CHAR_LIMIT) {
         truncateAt = paragraphBreak;
       } else {
-        // Fall back to a sentence break in the last 200 chars of the limit window.
-        const sentenceWindowStart = Math.max(0, MAX_CHAR_LIMIT - 200);
+        const sentenceWindowStart = Math.max(0, MAX_CHAR_LIMIT - TRUNCATE_SENTENCE_LOOKBACK_CHARS);
         const sentenceBreak = content.lastIndexOf('.', MAX_CHAR_LIMIT);
         if (sentenceBreak >= sentenceWindowStart && sentenceBreak < MAX_CHAR_LIMIT) {
           truncateAt = sentenceBreak + 1;
@@ -1319,7 +1703,7 @@ export class BrowserServer {
       await this.refreshLiveState({ lastOperation: `scroll_to_text ${boundedText}` });
       return `Scrolled to text '${boundedText}'`;
     } catch (e) {
-      const message = this.errMessage(e);
+      const message = errorMessage(e);
       return `Error scrolling to text: ${message}`;
     }
   }
@@ -1367,7 +1751,7 @@ export class BrowserServer {
       }
       return `Error: Unexpected evaluate result shape`;
     } catch (e) {
-      const message = this.errMessage(e);
+      const message = errorMessage(e);
       return `Error evaluating code: ${message}`;
     }
   }
@@ -1381,12 +1765,17 @@ export class BrowserServer {
   ): Promise<string> {
     this.assertNotAborted(signal);
     const page = this.requirePage();
-    if (!page.evaluate) {
-      return 'Error: Unable to access page for find_elements.';
-    }
+    // BUG FIX: this used to check `!page.evaluate` before validating that
+    // `selector` was non-empty, so an empty-selector call surfaced the
+    // generic "unable to access page" message instead of the specific,
+    // actionable "selector must not be empty" — validate the cheap,
+    // page-independent input first.
     const boundedSelector = String(selector ?? '').slice(0, 2048);
     if (!boundedSelector) {
       return 'Error: Selector must not be empty.';
+    }
+    if (!page.evaluate) {
+      return 'Error: Unable to access page for find_elements.';
     }
     const boundedMax = this.clampInt(maxResults, 1, 100, 50);
     const attrAllow = attributes && attributes.length > 0 ? new Set(attributes) : null;
@@ -1425,7 +1814,7 @@ export class BrowserServer {
       await this.refreshLiveState({ lastOperation: `find_elements ${boundedSelector}` });
       return JSON.stringify(result, null, 2);
     } catch (e) {
-      const message = this.errMessage(e);
+      const message = errorMessage(e);
       return `Error finding elements: ${message}`;
     }
   }
@@ -1528,7 +1917,7 @@ export class BrowserServer {
       await this.refreshLiveState({ lastOperation: `search_page ${boundedPattern}` });
       return `${matches.length} match(es):\n${lines.join('\n')}`;
     } catch (e) {
-      const message = this.errMessage(e);
+      const message = errorMessage(e);
       return `Error searching page: ${message}`;
     }
   }
@@ -1589,7 +1978,7 @@ export class BrowserServer {
     if (this.page === target) {
       const remaining = pages.filter((p) => p !== target);
       this.page = remaining[0] ?? null;
-      if (!this.page) this.refManager.clear();
+      if (!this.page) this.clearElementIndex();
     }
     await this.refreshLiveState({ lastOperation: `close_tab ${tabId} ${targetUrl}` });
     const remainingCount = pages.length - 1;
@@ -1615,7 +2004,7 @@ export class BrowserServer {
       await p.close().catch(() => {});
     }
     this.page = null;
-    this.refManager.clear();
+    this.clearElementIndex();
     await this.refreshLiveState({ lastOperation: 'close_all_tabs' });
     return `Closed ${count} tab(s). No tabs remain open — call browser_navigate to open a new one.`;
   }

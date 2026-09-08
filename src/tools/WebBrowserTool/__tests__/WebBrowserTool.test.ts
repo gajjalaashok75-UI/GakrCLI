@@ -19,6 +19,81 @@ import { RecordingSession } from '../recording.js';
 import { BrowserObservation } from '../types.js';
 
 // ============================================================
+// Shared DOM-tree test fixtures for the click/type/get_state index system
+// (see domService.ts/domTypes.ts). `fakeDomTreeResult()` builds a
+// SerializedDOMTree fixture in the exact shape DomService.getClickableElements()
+// expects back from `page.evaluate()`: `{ rootId, map, metadata }`, where
+// `map` is a flat id -> node dict and a node's `highlightIndex` is what
+// becomes its key in the resulting SelectorMap. `seedElementIndex()` runs
+// that fixture through the REAL DomService parser (not a hand-rolled
+// shortcut) so seeded test state can't drift from how production actually
+// builds the index.
+// ============================================================
+
+interface FakeDomElement {
+  index: number;
+  tag: string;
+  xpath: string;
+  attributes?: Record<string, string>;
+  text?: string;
+}
+
+function fakeDomTreeResult(elements: FakeDomElement[]) {
+  const map: Record<string, unknown> = {
+    root: {
+      tagName: 'body',
+      xpath: '/html/body',
+      attributes: {},
+      children: elements.map((_, i) => `el${i}`),
+      isVisible: true,
+      isTopElement: true,
+      isInViewport: true,
+    },
+  };
+  elements.forEach((el, i) => {
+    const childIds: string[] = [];
+    if (el.text) {
+      map[`text${i}`] = { type: 'TEXT_NODE', text: el.text, isVisible: true };
+      childIds.push(`text${i}`);
+    }
+    map[`el${i}`] = {
+      tagName: el.tag,
+      xpath: el.xpath,
+      attributes: el.attributes ?? {},
+      children: childIds,
+      isVisible: true,
+      isInteractive: true,
+      isTopElement: true,
+      isInViewport: true,
+      highlightIndex: el.index,
+    };
+  });
+  return {
+    rootId: 'root',
+    map,
+    metadata: { truncated: false, visitedNodeCount: elements.length + 1, serializedNodeCount: elements.length + 1 },
+  };
+}
+
+/**
+ * Directly populates a BrowserServer's internal index->element map,
+ * bypassing any page interaction — the DOM-tree-system equivalent of the
+ * old `refManager.setSnapshot(...)` seed used before click()/typeText()
+ * tests. Use this for tests that want an index to already resolve WITHOUT
+ * exercising `page.evaluate` (the happy-path click/type/dropdown/upload
+ * tests below); use `fakeDomTreeResult()` + a `page.evaluate` mock instead
+ * when the test needs to exercise the rebuild-from-live-DOM path
+ * (get_state, find_elements, or the stale-index retry).
+ */
+async function seedElementIndex(server: unknown, elements: FakeDomElement[]): Promise<void> {
+  const { DomService } = await import('../domService.js');
+  const throwawayPage = { url: () => 'https://example.com/', evaluate: async () => fakeDomTreeResult(elements) };
+  const svc = new DomService(throwawayPage as any);
+  const { state } = await svc.getClickableElements();
+  (server as any).domSelectorMap = state.selector_map;
+}
+
+// ============================================================
 // EventStorage — file writing + timestamp format
 // ============================================================
 
@@ -614,16 +689,24 @@ describe('evaluate()', () => {
 
 describe('find_elements()', () => {
   it('returns matching elements with tag, text, and attributes', async () => {
-    const fakeLocator1 = { evaluate: mock(async () => ({ tag: 'button', text: 'Login', attrs: { class: 'btn', id: 'submit' } })) };
-    const fakeLocator2 = { evaluate: mock(async () => ({ tag: 'button', text: 'Cancel', attrs: { class: 'btn' } })) };
-    const $$ = mock(async () => [fakeLocator1, fakeLocator2]);
-    const fakePage: any = { $$, isClosed: () => false };
+    // Matches the CURRENT (single-round-trip) implementation: one
+    // page.evaluate() call does count + per-node extraction + slicing
+    // inside the browser, returning { total, truncated, elements }.
+    const evaluate = mock(async () => ({
+      total: 2,
+      truncated: false,
+      elements: [
+        { index: 0, tag: 'button', text: 'Login', attributes: { class: 'btn', id: 'submit' } },
+        { index: 1, tag: 'button', text: 'Cancel', attributes: { class: 'btn' } },
+      ],
+    }));
+    const fakePage: any = { evaluate, isClosed: () => false };
     const { BrowserServer } = await import('../browserServer.js');
     const server = new BrowserServer();
     (server as any).page = fakePage;
 
     const result = await server.findElements('button', undefined, 50, true);
-    expect($$).toHaveBeenCalledWith('button');
+    expect(evaluate).toHaveBeenCalledTimes(1);
     const parsed = JSON.parse(result);
     expect(parsed.total).toBe(2);
     expect(parsed.returned).toBe(2);
@@ -633,11 +716,18 @@ describe('find_elements()', () => {
   });
 
   it('respects max_results limit', async () => {
-    const fakeLocators = Array.from({ length: 5 }, () => ({
-      evaluate: mock(async () => ({ tag: 'div', text: '', attrs: {} })),
+    // Truncation happens INSIDE the evaluate call (the browser slices to
+    // `max` before returning), so the fixture reflects that directly
+    // rather than a Node-side slice.
+    const evaluate = mock(async () => ({
+      total: 5,
+      truncated: true,
+      elements: [
+        { index: 0, tag: 'div', text: '', attributes: {} },
+        { index: 1, tag: 'div', text: '', attributes: {} },
+      ],
     }));
-    const $$ = mock(async () => fakeLocators);
-    const fakePage: any = { $$, isClosed: () => false };
+    const fakePage: any = { evaluate, isClosed: () => false };
     const { BrowserServer } = await import('../browserServer.js');
     const server = new BrowserServer();
     (server as any).page = fakePage;
@@ -650,9 +740,15 @@ describe('find_elements()', () => {
   });
 
   it('filters attributes when requested', async () => {
-    const fakeLocator = { evaluate: mock(async () => ({ tag: 'a', text: 'Link', attrs: { href: 'https://example.com', class: 'link', id: 'main' } })) };
-    const $$ = mock(async () => [fakeLocator]);
-    const fakePage: any = { $$, isClosed: () => false };
+    // The attribute allow-list is applied INSIDE the evaluate call (see
+    // findElements()'s `allowAttrs` arg) — the fixture returns only the
+    // already-filtered attribute the real script would have kept.
+    const evaluate = mock(async () => ({
+      total: 1,
+      truncated: false,
+      elements: [{ index: 0, tag: 'a', text: 'Link', attributes: { href: 'https://example.com' } }],
+    }));
+    const fakePage: any = { evaluate, isClosed: () => false };
     const { BrowserServer } = await import('../browserServer.js');
     const server = new BrowserServer();
     (server as any).page = fakePage;
@@ -663,14 +759,17 @@ describe('find_elements()', () => {
   });
 
   it('returns an error when selector is empty', async () => {
-    const $$ = mock(async () => []);
-    const fakePage: any = { $$, isClosed: () => false };
+    const evaluate = mock(async () => ({ total: 0, truncated: false, elements: [] }));
+    const fakePage: any = { evaluate, isClosed: () => false };
     const { BrowserServer } = await import('../browserServer.js');
     const server = new BrowserServer();
     (server as any).page = fakePage;
 
     const result = await server.findElements('', undefined, 50, true);
     expect(result).toContain('Selector must not be empty');
+    // BUG FIX regression guard: this must be rejected BEFORE evaluate() is
+    // ever called — validating the cheap, page-independent input first.
+    expect(evaluate).not.toHaveBeenCalled();
   });
 });
 
@@ -867,7 +966,7 @@ describe('getDropdownOptions()', () => {
     const { BrowserServer } = await import('../browserServer.js');
     const server = new BrowserServer();
     (server as any).page = fakePage;
-    (server as any).refManager.setSnapshot('- generic [ref=e1]:\n  - combobox "Country" [ref=e2]\n');
+    await seedElementIndex(server, [{ index: 0, tag: 'select', xpath: '/html/body/select[1]', text: 'Country' }]);
 
     const result = await server.getDropdownOptions(0);
     expect(result).toContain('2 option(s)');
@@ -902,7 +1001,7 @@ describe('selectDropdown()', () => {
     const { BrowserServer } = await import('../browserServer.js');
     const server = new BrowserServer();
     (server as any).page = fakePage;
-    (server as any).refManager.setSnapshot('- generic [ref=e1]:\n  - combobox "Country" [ref=e2]\n');
+    await seedElementIndex(server, [{ index: 0, tag: 'select', xpath: '/html/body/select[1]', text: 'Country' }]);
 
     const result = await server.selectDropdown(0, 'United Kingdom');
     expect(result).toContain("Selected 'United Kingdom'");
@@ -919,7 +1018,7 @@ describe('selectDropdown()', () => {
     const { BrowserServer } = await import('../browserServer.js');
     const server = new BrowserServer();
     (server as any).page = fakePage;
-    (server as any).refManager.setSnapshot('- generic [ref=e1]:\n  - combobox "Country" [ref=e2]\n');
+    await seedElementIndex(server, [{ index: 0, tag: 'select', xpath: '/html/body/select[1]', text: 'Country' }]);
 
     const result = await server.selectDropdown(0, 'NotAnOption');
     expect(result).toContain("Option 'NotAnOption' not found");
@@ -956,7 +1055,7 @@ describe('uploadFile()', () => {
     const { BrowserServer } = await import('../browserServer.js');
     const server = new BrowserServer();
     (server as any).page = fakePage;
-    (server as any).refManager.setSnapshot('- generic [ref=e1]:\n  - button "Upload" [ref=e2]\n');
+    await seedElementIndex(server, [{ index: 0, tag: 'button', xpath: '/html/body/button[1]', text: 'Upload' }]);
 
     const result = await server.uploadFile(0, tmpFile);
     expect(setInputFiles).toHaveBeenCalledWith(tmpFile);
@@ -995,7 +1094,7 @@ describe('uploadFile()', () => {
     const { BrowserServer } = await import('../browserServer.js');
     const server = new BrowserServer();
     (server as any).page = fakePage;
-    (server as any).refManager.setSnapshot('- generic [ref=e1]:\n  - button "Not a file input" [ref=e2]\n');
+    await seedElementIndex(server, [{ index: 0, tag: 'button', xpath: '/html/body/button[1]', text: 'Not a file input' }]);
 
     const result = await server.uploadFile(0, tmpFile);
     expect(result).toContain('Error uploading file');
@@ -1088,7 +1187,10 @@ describe('saveAsPdf()', () => {
     (server as any).page = fakePage;
 
     const result = await server.saveAsPdf();
-    expect(result).toContain('My Document.pdf');
+    // sanitizeFileName() replaces disallowed characters (including spaces)
+    // with `_` for filesystem safety — this was a stale test expectation
+    // (predates that sanitization step), not an implementation bug.
+    expect(result).toContain('My_Document.pdf');
   });
 
   it('returns an error when page is closed', async () => {
@@ -1198,10 +1300,10 @@ describe('ISSUE 3/4/6: browserServer error wrapping returns friendly messages', 
     const { BrowserServer } = await import('../browserServer.js');
     const server = new BrowserServer();
     (server as any).page = fakePage;
-    (server as any).refManager.setSnapshot('- generic [ref=e1]:\n  - textbox "Field" [ref=e2]');
+    await seedElementIndex(server, [{ index: 0, tag: 'input', xpath: '/html/body/input[1]', text: 'Field' }]);
 
-    const result = await server.typeText(1, 'hello');
-    expect(result).toContain('Error typing into [1] (ref=e2)');
+    const result = await server.typeText(0, 'hello');
+    expect(result).toContain('Error typing into [0]');
     expect(result).toContain('not visible');
   });
 
@@ -1282,10 +1384,19 @@ describe('BrowserServer live state', () => {
       calls += 1;
     });
     await server.navigate('https://example.com/', false);
+    const callsAfterFirstNavigate = calls;
+    expect(callsAfterFirstNavigate).toBeGreaterThan(0);
     unsubscribe();
     await server.navigate('https://example.com/', false);
 
-    expect(calls).toBe(1);
+    // The exact per-navigate() emit count is an implementation detail
+    // (setLoading(true) emits once immediately, then refreshLiveState()
+    // emits again once goto() resolves — see the sibling "notifies
+    // subscribers" test above, which deliberately only asserts
+    // `> 0` for the same reason). What this test actually cares about is
+    // that unsubscribe() stops ALL further notifications, so assert on
+    // that directly instead of pinning a call count.
+    expect(calls).toBe(callsAfterFirstNavigate);
   });
 
   it('closeBrowser() resets live state back to empty and notifies', async () => {
@@ -1341,23 +1452,26 @@ describe('BrowserToolExecutor.getSharedIfExists()', () => {
   });
 });
 
-describe('REFRESH-STATE GLITCH: stale aria refs self-heal', () => {
-  // Playwright's ariaSnapshot renumbers refs between calls (eN -> f1eN on
-  // the same page), so a ref stored from the last get_state can go stale
-  // even though the element still exists at the same index. click/typeText
-  // must re-snapshot the current DOM and retry once at the same index.
+describe('REFRESH-STATE GLITCH: stale index self-heals', () => {
+  // The DOM can change between get_state and the next click/type even
+  // without a full navigation (a re-render, a toast disappearing), so the
+  // element an index points at can go stale. click/typeText must rebuild
+  // the DOM tree and retry once at the same index.
 
-  function makeStaleRefPage() {
-    // The ref manager is seeded externally with index 1 = e2. The first
-    // ariaSnapshot() call happens inside the retry and reflects the
-    // renumbered DOM, where index 1 has become f1e2.
+  function makeStaleIndexPage() {
+    // Index 1 is seeded directly to resolve at xpath .../input[1]. The
+    // retry rebuilds the tree via page.evaluate(), which reflects a DOM
+    // where index 1 now resolves to a different xpath — mirroring the old
+    // aria-ref system's eN -> f1eN renumbering, just via a fresh element
+    // lookup instead of a fresh ref string.
     const locators = new Map<string, { click?: Function; fill?: Function }>([
-      ['aria-ref=e2', {}],
-      ['aria-ref=f1e2', {}],
+      ['xpath=/html/body/input[1]', {}],
+      ['xpath=/html/body/form/input[1]', {}],
     ]);
     const page: any = {
-      ariaSnapshot: mock(async () =>
-        '- generic [ref=f1e1]:\n  - textbox "Search" [ref=f1e2]\n',
+      url: () => 'https://example.com/',
+      evaluate: mock(async () =>
+        fakeDomTreeResult([{ index: 1, tag: 'input', xpath: '/html/body/form/input[1]', text: 'Search' }]),
       ),
       locator: mock((selector: string) => {
         let entry = locators.get(selector);
@@ -1372,56 +1486,55 @@ describe('REFRESH-STATE GLITCH: stale aria refs self-heal', () => {
     return { page, locators };
   }
 
-  it('click() re-snapshots and retries the same index when the stored ref goes stale', async () => {
-    const { page, locators } = makeStaleRefPage();
-    locators.get('aria-ref=e2')!.click = mock(async () => {
+  it('click() rebuilds the DOM tree and retries the same index when the stored element goes stale', async () => {
+    const { page, locators } = makeStaleIndexPage();
+    locators.get('xpath=/html/body/input[1]')!.click = mock(async () => {
       throw new Error('element is stale');
     });
-    locators.get('aria-ref=f1e2')!.click = mock(async () => {});
+    locators.get('xpath=/html/body/form/input[1]')!.click = mock(async () => {});
 
     const { BrowserServer } = await import('../browserServer.js');
     const server = new BrowserServer();
     (server as any).page = page;
-    (server as any).refManager.setSnapshot('- generic [ref=e1]:\n  - textbox "Search" [ref=e2]\n');
+    await seedElementIndex(server, [{ index: 1, tag: 'input', xpath: '/html/body/input[1]', text: 'Search' }]);
 
     const result = await server.click(1, false);
     expect(result).toContain('retried after state refresh');
-    expect(result).toContain('f1e2');
-    expect(locators.get('aria-ref=f1e2')!.click).toHaveBeenCalledTimes(1);
+    expect(locators.get('xpath=/html/body/form/input[1]')!.click).toHaveBeenCalledTimes(1);
   });
 
-  it('typeText() re-snapshots and retries the same index when the stored ref goes stale', async () => {
-    const { page, locators } = makeStaleRefPage();
-    locators.get('aria-ref=e2')!.fill = mock(async () => {
+  it('typeText() rebuilds the DOM tree and retries the same index when the stored element goes stale', async () => {
+    const { page, locators } = makeStaleIndexPage();
+    locators.get('xpath=/html/body/input[1]')!.fill = mock(async () => {
       throw new Error('element is detached');
     });
-    locators.get('aria-ref=f1e2')!.fill = mock(async () => {});
+    locators.get('xpath=/html/body/form/input[1]')!.fill = mock(async () => {});
 
     const { BrowserServer } = await import('../browserServer.js');
     const server = new BrowserServer();
     (server as any).page = page;
-    (server as any).refManager.setSnapshot('- generic [ref=e1]:\n  - textbox "Search" [ref=e2]\n');
+    await seedElementIndex(server, [{ index: 1, tag: 'input', xpath: '/html/body/input[1]', text: 'Search' }]);
 
     const result = await server.typeText(1, 'hello');
     expect(result).toContain('retried after state refresh');
-    expect(result).toContain('f1e2');
-    expect(locators.get('aria-ref=f1e2')!.fill).toHaveBeenCalledTimes(1);
+    expect(locators.get('xpath=/html/body/form/input[1]')!.fill).toHaveBeenCalledTimes(1);
   });
 
   it('click() reports the original error when the retry also fails', async () => {
-    const { page, locators } = makeStaleRefPage();
-    locators.get('aria-ref=e2')!.click = mock(async () => {
+    const { page, locators } = makeStaleIndexPage();
+    locators.get('xpath=/html/body/input[1]')!.click = mock(async () => {
       throw new Error('element is stale');
     });
-    // Retry re-snapshots (index 1 = f1e2 now), but the fresh ref also fails.
-    locators.get('aria-ref=f1e2')!.click = mock(async () => {
+    // Retry rebuilds the tree (index 1 now resolves to .../form/input[1]),
+    // but the fresh element also fails.
+    locators.get('xpath=/html/body/form/input[1]')!.click = mock(async () => {
       throw new Error('element is gone');
     });
 
     const { BrowserServer } = await import('../browserServer.js');
     const server = new BrowserServer();
     (server as any).page = page;
-    (server as any).refManager.setSnapshot('- generic [ref=e1]:\n  - textbox "Search" [ref=e2]\n');
+    await seedElementIndex(server, [{ index: 1, tag: 'input', xpath: '/html/body/input[1]', text: 'Search' }]);
 
     const result = await server.click(1, false);
     expect(result).toContain('Error clicking');
@@ -1430,8 +1543,8 @@ describe('REFRESH-STATE GLITCH: stale aria refs self-heal', () => {
   });
 });
 
-describe('REFRESH-STATE GLITCH: navigation invalidates stored refs', () => {
-  it('navigate() clears the ref snapshot after a successful goto', async () => {
+describe('REFRESH-STATE GLITCH: navigation invalidates the element index', () => {
+  it('navigate() clears the element index after a successful goto', async () => {
     const fakePage: any = {
       goto: mock(async () => {}),
       url: () => 'https://example.com/new',
@@ -1440,15 +1553,15 @@ describe('REFRESH-STATE GLITCH: navigation invalidates stored refs', () => {
     const { BrowserServer } = await import('../browserServer.js');
     const server = new BrowserServer();
     (server as any).page = fakePage;
-    (server as any).refManager.setSnapshot('- generic [ref=e1]:\n  - button "Login" [ref=e2]\n');
+    await seedElementIndex(server, [{ index: 0, tag: 'button', xpath: '/html/body/button[1]', text: 'Login' }]);
 
     const result = await server.navigate('https://example.com/new', false);
     expect(result).toContain('Navigated to');
-    expect((server as any).refManager.count).toBe(0);
-    expect((server as any).refManager.getRefByIndex(0)).toBeNull();
+    expect(Object.keys((server as any).domSelectorMap).length).toBe(0);
+    expect((server as any).domSelectorMap[0]).toBeUndefined();
   });
 
-  it('refresh() clears the ref snapshot after a successful reload', async () => {
+  it('refresh() clears the element index after a successful reload', async () => {
     const fakePage: any = {
       reload: mock(async () => {}),
       url: () => 'https://example.com/',
@@ -1457,14 +1570,14 @@ describe('REFRESH-STATE GLITCH: navigation invalidates stored refs', () => {
     const { BrowserServer } = await import('../browserServer.js');
     const server = new BrowserServer();
     (server as any).page = fakePage;
-    (server as any).refManager.setSnapshot('- generic [ref=e1]:\n  - button "Login" [ref=e2]\n');
+    await seedElementIndex(server, [{ index: 0, tag: 'button', xpath: '/html/body/button[1]', text: 'Login' }]);
 
     const result = await server.refresh();
     expect(result).toContain('Refreshed');
-    expect((server as any).refManager.count).toBe(0);
+    expect(Object.keys((server as any).domSelectorMap).length).toBe(0);
   });
 
-  it('goBack() clears the ref snapshot after success', async () => {
+  it('goBack() clears the element index after success', async () => {
     const fakePage: any = {
       goBack: mock(async () => {}),
       url: () => 'https://example.com/',
@@ -1473,11 +1586,11 @@ describe('REFRESH-STATE GLITCH: navigation invalidates stored refs', () => {
     const { BrowserServer } = await import('../browserServer.js');
     const server = new BrowserServer();
     (server as any).page = fakePage;
-    (server as any).refManager.setSnapshot('- generic [ref=e1]:\n  - button "Login" [ref=e2]\n');
+    await seedElementIndex(server, [{ index: 0, tag: 'button', xpath: '/html/body/button[1]', text: 'Login' }]);
 
     const result = await server.goBack();
     expect(result).toContain('Navigated back');
-    expect((server as any).refManager.count).toBe(0);
+    expect(Object.keys((server as any).domSelectorMap).length).toBe(0);
   });
 });
 
@@ -1800,13 +1913,13 @@ describe('LOG.MD ISSUE #3: selector-based click/type fallback', () => {
     const { BrowserServer } = await import('../browserServer.js');
     const server = new BrowserServer();
     (server as any).page = fakePage;
-    (server as any).refManager.setSnapshot('- button "Other" [ref=e1]'); // index 0 would resolve to e1
+    await seedElementIndex(server, [{ index: 0, tag: 'button', xpath: '/html/body/button[1]', text: 'Other' }]); // index 0 would resolve to this xpath
 
     await server.click(0, false, '#priority-selector');
-    // Only the selector-based locator call should have happened, not aria-ref.
+    // Only the selector-based locator call should have happened, not the index/xpath path.
     expect(fakePage.locator).toHaveBeenCalledWith('#priority-selector');
-    const calledWithAriaRef = fakePage.locator.mock.calls.some((c: any[]) => String(c[0]).startsWith('aria-ref='));
-    expect(calledWithAriaRef).toBe(false);
+    const calledWithXpath = fakePage.locator.mock.calls.some((c: any[]) => String(c[0]).startsWith('xpath='));
+    expect(calledWithXpath).toBe(false);
   });
 });
 
@@ -1839,7 +1952,7 @@ describe("ROUND 8: close_all_tabs / close_tab now allow zero tabs", () => {
   });
 
   it('closeTab() can now close the last remaining tab, leaving zero tabs open', async () => {
-    const onlyPage: any = { isClosed: () => false, close: mock(async () => {}) };
+    const onlyPage: any = { isClosed: () => false, close: mock(async () => {}), url: () => 'https://example.com/' };
     onlyPage.context = () => ({ pages: () => [onlyPage] });
     const { BrowserServer } = await import('../browserServer.js');
     const server = new BrowserServer();
@@ -1922,7 +2035,7 @@ describe('REGRESSION: click() must not clobber autoSwitchedToNewTab set by the "
     const { BrowserServer } = await import('../browserServer.js');
     const server = new BrowserServer();
     (server as any).page = fakePage;
-    (server as any).refManager.setSnapshot('- link "Open in new tab" [ref=e1]');
+    await seedElementIndex(server, [{ index: 0, tag: 'a', xpath: '/html/body/a[1]', text: 'Open in new tab' }]);
 
     const result = await server.click(0, false);
     // Bug (pre-fix): click()'s own refreshLiveState() call defaulted
@@ -1996,8 +2109,8 @@ describe('TASK 7: click with coordinates', () => {
 // ROUND 8: selector normalization for aria-ref values (E2E report finding)
 // ============================================================
 
-describe('ROUND 8 E2E finding: [aria-ref=N]/[ref=N] selector normalization', () => {
-  it('normalizes [ref=e46] into the correct aria-ref=e46 locator engine syntax', async () => {
+describe('selector interpretation: index-like and legacy-ref guesses', () => {
+  it('a legacy [ref=e46]-shaped selector fails fast with a clear message instead of a bogus CSS timeout', async () => {
     const clickMock = mock(async () => {});
     const fakeLocator = { click: clickMock, first: () => fakeLocator, evaluate: async () => null };
     const fakePage: any = {
@@ -2011,26 +2124,21 @@ describe('ROUND 8 E2E finding: [aria-ref=N]/[ref=N] selector normalization', () 
     const server = new BrowserServer();
     (server as any).page = fakePage;
 
-    await server.click(undefined, false, '[ref=e46]');
-    expect(fakePage.locator).toHaveBeenCalledWith('aria-ref=e46');
+    const result = await server.click(undefined, false, '[ref=e46]');
+    expect(result).toContain('older version of this tool');
+    expect(result).toContain('browser_get_state again');
+    expect(clickMock).not.toHaveBeenCalled();
   });
 
-  it('normalizes [aria-ref=f1e46] (iframe ref, bracketed) the same way', async () => {
-    const clickMock = mock(async () => {});
-    const fakeLocator = { click: clickMock, first: () => fakeLocator, evaluate: async () => null };
-    const fakePage: any = {
-      isClosed: () => false,
-      locator: mock(() => fakeLocator),
-      context: () => ({ pages: () => [fakePage] }),
-      url: () => 'https://example.com/',
-      title: async () => 'Example',
-    };
+  it('normalizes [aria-ref=f1e46] (legacy iframe ref, bracketed) the same way', async () => {
+    const fakePage: any = { isClosed: () => false, locator: mock(() => ({})) };
     const { BrowserServer } = await import('../browserServer.js');
     const server = new BrowserServer();
     (server as any).page = fakePage;
 
-    await server.click(undefined, false, '[aria-ref=f1e46]');
-    expect(fakePage.locator).toHaveBeenCalledWith('aria-ref=f1e46');
+    const result = await server.click(undefined, false, '[aria-ref=f1e46]');
+    expect(result).toContain('older version of this tool');
+    expect(fakePage.locator).not.toHaveBeenCalled();
   });
 
   it('leaves a genuine CSS selector untouched', async () => {
@@ -2051,32 +2159,20 @@ describe('ROUND 8 E2E finding: [aria-ref=N]/[ref=N] selector normalization', () 
     expect(fakePage.locator).toHaveBeenCalledWith('input[name="q"]');
   });
 
-  it('typeText() also normalizes ref-like selectors', async () => {
-    const fillMock = mock(async () => {});
-    const fakeLocator = { fill: fillMock };
-    const fakePage: any = {
-      isClosed: () => false,
-      locator: mock(() => fakeLocator),
-      context: () => ({ pages: () => [fakePage] }),
-      url: () => 'https://example.com/',
-      title: async () => 'Example',
-    };
+  it('typeText() also rejects legacy ref-like selectors', async () => {
+    const fakePage: any = { isClosed: () => false, locator: mock(() => ({})) };
     const { BrowserServer } = await import('../browserServer.js');
     const server = new BrowserServer();
     (server as any).page = fakePage;
 
-    await server.typeText(undefined, 'hello', 'ref=e12');
-    expect(fakePage.locator).toHaveBeenCalledWith('aria-ref=e12');
+    const result = await server.typeText(undefined, 'hello', 'ref=e12');
+    expect(result).toContain('older version of this tool');
+    expect(fakePage.locator).not.toHaveBeenCalled();
   });
 
-  it('a still-timing-out normalized ref includes a "stale ref" hint, not a generic error', async () => {
-    const fakeLocator = {
-      click: mock(async () => {
-        throw new Error('Timeout 10000ms exceeded.');
-      }),
-      first: () => fakeLocator,
-      evaluate: async () => null,
-    };
+  it('a bracketed index-like selector ("[3]") redirects to the index path instead of a bogus CSS lookup', async () => {
+    const clickMock = mock(async () => {});
+    const fakeLocator = { click: clickMock, first: () => fakeLocator, evaluate: async () => null };
     const fakePage: any = {
       isClosed: () => false,
       locator: mock(() => fakeLocator),
@@ -2087,8 +2183,32 @@ describe('ROUND 8 E2E finding: [aria-ref=N]/[ref=N] selector normalization', () 
     const { BrowserServer } = await import('../browserServer.js');
     const server = new BrowserServer();
     (server as any).page = fakePage;
+    await seedElementIndex(server, [{ index: 3, tag: 'button', xpath: '/html/body/button[3]', text: 'Submit' }]);
 
-    const result = await server.click(undefined, false, '[ref=e46]');
+    const result = await server.click(undefined, false, '[3]');
+    expect(fakePage.locator).toHaveBeenCalledWith('xpath=/html/body/button[3]');
+    expect(result).toContain('[3]');
+    expect(result).not.toContain('Error');
+  });
+
+  it('a still-timing-out index includes a "stale index" hint, not a generic error', async () => {
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    const fakePage: any = {
+      isClosed: () => false,
+      url: () => 'https://example.com/',
+      // Every locator (initial attempt AND the rebuild-retry attempt) times out.
+      locator: mock(() => ({
+        click: async () => {
+          throw new Error('Timeout 10000ms exceeded.');
+        },
+      })),
+      evaluate: mock(async () => fakeDomTreeResult([{ index: 3, tag: 'button', xpath: '/html/body/button[3]', text: 'Submit' }])),
+    };
+    (server as any).page = fakePage;
+    await seedElementIndex(server, [{ index: 3, tag: 'button', xpath: '/html/body/button[3]', text: 'Submit' }]);
+
+    const result = await server.click(3, false);
     expect(result).toContain('stale');
     expect(result).toContain('browser_get_state again');
   });
@@ -2149,13 +2269,24 @@ describe('ROUND 9 E2E finding: get_state index annotation (index vs ref confusio
     expect(annotated).toContain('button "Inside iframe" [index=2]');
   });
 
-  it('getBrowserState() returns the annotated (not raw ref) snapshot', async () => {
+  it('getBrowserState() returns the index-annotated ([N]<tag>) element list, not raw refs', async () => {
     const fakePage: any = {
       isClosed: () => false,
-      ariaSnapshot: async () => '- textbox "Name" [ref=e4]\n- button "Submit" [ref=e6]',
       url: () => 'http://localhost:8765/sample.html',
       title: async () => 'Sample Test Page',
       context: () => ({ pages: () => [fakePage] }),
+      evaluate: mock(async (_fn: unknown, arg?: any) => {
+        // domService.ts calls evaluate with a { script, evaluateArgs } second
+        // argument; getScrollMetadata() calls it with none — branch on that
+        // to serve each caller its own fixture from a single mock.
+        if (arg && typeof arg === 'object' && 'script' in arg) {
+          return fakeDomTreeResult([
+            { index: 0, tag: 'input', xpath: '/html/body/input[1]', attributes: { type: 'text' }, text: 'Name' },
+            { index: 1, tag: 'button', xpath: '/html/body/button[1]', text: 'Submit' },
+          ]);
+        }
+        return { scrollY: 0, viewportWidth: 1280, viewportHeight: 720, scrollHeight: 720 };
+      }),
     };
     const { BrowserServer } = await import('../browserServer.js');
     const server = new BrowserServer();
@@ -2163,10 +2294,13 @@ describe('ROUND 9 E2E finding: get_state index annotation (index vs ref confusio
 
     const result = await server.getBrowserState(false);
     const parsed = JSON.parse(result);
-    expect(parsed.elements).toContain('[index=0]');
-    expect(parsed.elements).toContain('[index=1]');
-    expect(parsed.elements).not.toContain('[ref=e4]');
-    expect(parsed.elements).not.toContain('[ref=e6]');
+    expect(parsed.elements).toContain('[0]<input');
+    expect(parsed.elements).toContain('[1]<button');
+    expect(parsed.elements).not.toContain('[ref=');
+    expect(parsed.elements).not.toContain('[index=');
+    expect(parsed.url).toBe('http://localhost:8765/sample.html');
+    expect(parsed.tabs_count).toBe(1);
+    expect(parsed.scroll).toBeDefined();
   });
 });
 
@@ -2294,12 +2428,164 @@ describe('AbortSignal plumbing', () => {
 
   it('BrowserToolExecutor.call returns clean aborted observation when signal is aborted before start', async () => {
     const { BrowserToolExecutor } = await import('../browserEngine.js');
-    const executor = new BrowserToolExecutor({});
-    const controller = new AbortController();
-    controller.abort();
+    // Same chromium-availability stub the "proxy config resolution" tests
+    // above use — without it, this test depends on a real Chromium binary
+    // being installed on whatever machine runs the suite.
+    const originalCheck = BrowserToolExecutor.checkChromiumAvailable;
+    BrowserToolExecutor.checkChromiumAvailable = () => '/fake/chromium';
+    try {
+      const executor = new BrowserToolExecutor({});
+      const controller = new AbortController();
+      controller.abort();
 
-    const result = await executor.call({ action: 'navigate', url: 'https://example.com' } as any, controller.signal);
-    expect(result.is_error).toBe(true);
-    expect(result.text).toContain('aborted');
+      const result = await executor.call({ action: 'navigate', url: 'https://example.com' } as any, controller.signal);
+      expect(result.is_error).toBe(true);
+      expect(result.text).toContain('aborted');
+    } finally {
+      BrowserToolExecutor.checkChromiumAvailable = originalCheck;
+    }
+  });
+});
+
+// ============================================================
+// NEW ACTION: wait_for_element
+// ============================================================
+
+describe('waitForElement()', () => {
+  it('resolves once the element reaches the requested state', async () => {
+    const waitFor = mock(async () => {});
+    const locator = { first: () => ({ waitFor }) };
+    const fakePage: any = { locator: mock(() => locator), isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.waitForElement('#spinner', 'hidden', 5000);
+    expect(fakePage.locator).toHaveBeenCalledWith('#spinner');
+    expect(waitFor).toHaveBeenCalledWith({ state: 'hidden', timeout: 5000 });
+    expect(result).toContain('reached state "hidden"');
+  });
+
+  it('defaults to state "visible" and 10000ms timeout', async () => {
+    const waitFor = mock(async () => {});
+    const locator = { first: () => ({ waitFor }) };
+    const fakePage: any = { locator: mock(() => locator), isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    await server.waitForElement('#modal', undefined as any, undefined as any);
+    expect(waitFor).toHaveBeenCalledWith({ state: 'visible', timeout: 10000 });
+  });
+
+  it('returns an error when selector is empty', async () => {
+    const fakePage: any = { locator: mock(() => ({})), isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.waitForElement('', 'visible', 5000);
+    expect(result).toContain('Selector must not be empty');
+    expect(fakePage.locator).not.toHaveBeenCalled();
+  });
+
+  it('clamps timeout_ms to the 100-60000 range', async () => {
+    const waitFor = mock(async () => {});
+    const locator = { first: () => ({ waitFor }) };
+    const fakePage: any = { locator: mock(() => locator), isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    await server.waitForElement('#x', 'visible', 999999);
+    expect(waitFor).toHaveBeenCalledWith({ state: 'visible', timeout: 60000 });
+  });
+
+  it('returns a "stale/wrong selector" hint on timeout, not a raw error dump', async () => {
+    const waitFor = mock(async () => {
+      throw new Error('Timeout 5000ms exceeded.');
+    });
+    const locator = { first: () => ({ waitFor }) };
+    const fakePage: any = { locator: mock(() => locator), isClosed: () => false };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.waitForElement('#never-appears', 'visible', 5000);
+    expect(result).toContain('Error waiting for');
+    expect(result).toContain('find_elements');
+  });
+});
+
+// ============================================================
+// get_content: richer in-browser structural extraction
+// (replaces the previous flat page.innerText('body') call — see
+// extractMarkdownContent()'s doc comment in browserServer.ts)
+// ============================================================
+
+describe('getContent() with the structural markdown extractor', () => {
+  it('passes the extracted content through the existing truncation/stats pipeline unchanged', async () => {
+    const fakePage: any = {
+      isClosed: () => false,
+      evaluate: mock(async () => '# Welcome\n\nSome body text with a [link](https://example.com/page).'),
+      content: mock(async () => '<html><body><h1>Welcome</h1><p>Some body text with a <a href="https://example.com/page">link</a>.</p></body></html>'),
+      url: () => 'https://example.com/',
+    };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.getContent(true, 0);
+    expect(result).toContain('# Welcome');
+    expect(result).toContain('[link](https://example.com/page)');
+    expect(result).toContain('<content_stats>');
+  });
+
+  it('strips markdown links when extract_links is false, same as before', async () => {
+    const fakePage: any = {
+      isClosed: () => false,
+      evaluate: mock(async () => 'Check out [our docs](https://example.com/docs) for more.'),
+      content: mock(async () => '<html><body>Check out <a href="https://example.com/docs">our docs</a> for more.</body></html>'),
+      url: () => 'https://example.com/',
+    };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.getContent(false, 0);
+    expect(result).toContain('Check out our docs for more.');
+    expect(result).not.toContain('](https://example.com/docs)');
+  });
+
+  it('reports "no content" cleanly instead of a zeroed-out stats block on an empty page', async () => {
+    const fakePage: any = {
+      isClosed: () => false,
+      evaluate: mock(async () => ''),
+      content: mock(async () => '<html><body></body></html>'),
+      url: () => 'https://example.com/blank',
+    };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.getContent(true, 0);
+    expect(result).toContain('No content could be extracted');
+  });
+
+  it('returns a friendly error instead of throwing when extraction itself fails', async () => {
+    const fakePage: any = {
+      isClosed: () => false,
+      evaluate: mock(async () => {
+        throw new Error('execution context was destroyed');
+      }),
+      url: () => 'https://example.com/',
+    };
+    const { BrowserServer } = await import('../browserServer.js');
+    const server = new BrowserServer();
+    (server as any).page = fakePage;
+
+    const result = await server.getContent(true, 0);
+    expect(result).toContain('Could not extract content');
+    expect(result).toContain('execution context was destroyed');
   });
 });
