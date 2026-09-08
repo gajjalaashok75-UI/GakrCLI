@@ -505,6 +505,28 @@ export const SettingsSchema = lazySchema(() =>
             'If undefined, all models are available. If empty array, only the default model is available. ' +
             'Typically set in managed settings by enterprise administrators.',
         ),
+      webBrowser: z
+        .object({
+          /**
+           * Run the local Playwright-based WebBrowserTool in headed mode
+           * (real OS window) instead of headless. Requires a display server;
+           * the tool fails fast with an actionable error if none is available.
+           * The `OH_ENABLE_VNC` env var still forces this on regardless of
+           * this setting.
+           */
+          headless: z
+            .boolean()
+            .optional()
+            .describe(
+              'Run the local browser tool in headed mode (default: true, headless). ' +
+                'Requires a display server when set to false.',
+            ),
+        })
+        .optional()
+        .describe(
+          'Local WebBrowserTool options. Today only `headless` is exposed; ' +
+            'additional per-tool options will be added here as they land.',
+        ),
       providerProfileModelPickerMode: z
         .enum(['auto', 'profile', 'provider'])
         .optional()
