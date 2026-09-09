@@ -8,11 +8,11 @@ Browser automation for GakrCLI — navigate pages, execute JavaScript, read cons
 |--------|--------|
 | **npm package** | `@gakr-gakr/gakrcli-for-chrome-mcp` v0.1.0 |
 | **MCP server name** | `gakrcli-in-chrome` |
-| **Chrome extension** | [Claude in Chrome](https://chromewebstore.google.com/detail/claude/fcoeoabgfenejglbffodgkkbkcdhcgfn) by Anthropic (10M+ users) |
+| **Chrome extension** | `@gakr-gakr/chrome-extension` (built from `packages/chrome-extension/`, GakrCLI-owned, no subscription required) |
 | **Native host** | `com.gakr.chrome.bridge` |
 | **Default transport** | Unix socket → Native messaging host → Chrome extension |
 | **Alternative transport** | WebSocket bridge (for remote Chrome) |
-| **Auth** | Requires a Claude/Anthropic subscription for the Chrome extension |
+| **Auth** | None — extension and MCP server are both open-source MIT |
 | **CLI flags** | `--gakrcli-in-chrome-mcp`, `--chrome-native-host` |
 | **Slash command** | `/chrome` (interactive TUI menu) |
 | **Skill** | `gakrcli-in-chrome` (bundled, gated by subscription) |
