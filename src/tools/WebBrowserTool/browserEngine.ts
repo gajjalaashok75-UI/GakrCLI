@@ -587,6 +587,35 @@ export class BrowserToolExecutor {
     return this.server.waitForElement(selector, state, timeoutMs, signal);
   }
 
+  private async readConsoleMessages(
+    opts: { level: 'all' | 'error' | 'warn' | 'info' | 'log' | 'debug'; tail: number },
+    signal?: AbortSignal,
+  ): Promise<string> {
+    await this.ensureInitialized();
+    return this.server.readConsoleMessages(opts, signal);
+  }
+
+  private async readNetworkRequests(
+    opts: { urlPattern?: string; failedOnly?: boolean; tail: number },
+    signal?: AbortSignal,
+  ): Promise<string> {
+    await this.ensureInitialized();
+    return this.server.readNetworkRequests(opts, signal);
+  }
+
+  private async fillForm(
+    fields: Array<{ selector: string; value: string; action?: 'type' | 'select' | 'check' | 'uncheck' }>,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    await this.ensureInitialized();
+    return this.server.fillForm(fields, signal);
+  }
+
+  private async resizeWindow(width: number, height: number, signal?: AbortSignal): Promise<string> {
+    await this.ensureInitialized();
+    return this.server.resizeWindow(width, height, signal);
+  }
+
   private async sendKeys(keys: string, signal?: AbortSignal): Promise<string> {
     await this.ensureInitialized();
     return this.server.sendKeys(keys, signal);
@@ -823,6 +852,31 @@ export class BrowserToolExecutor {
           break;
         case 'wait_for_element':
           result = await this.waitForElement(action.selector, action.state, action.timeout_ms, signal);
+          break;
+        case 'read_console_messages':
+          result = await this.readConsoleMessages(
+            {
+              level: action.only_errors ? 'error' : action.level,
+              tail: action.tail,
+            },
+            signal,
+          );
+          break;
+        case 'read_network_requests':
+          result = await this.readNetworkRequests(
+            {
+              urlPattern: action.url_pattern,
+              failedOnly: action.failed_only,
+              tail: action.tail,
+            },
+            signal,
+          );
+          break;
+        case 'fill_form':
+          result = await this.fillForm(action.fields, signal);
+          break;
+        case 'resize_window':
+          result = await this.resizeWindow(action.width, action.height, signal);
           break;
         case 'send_keys':
           result = await this.sendKeys(action.keys, signal);

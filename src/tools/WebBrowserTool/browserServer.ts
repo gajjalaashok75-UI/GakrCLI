@@ -403,6 +403,92 @@ export class BrowserServer {
   private liveStateSubscribers = new Map<number, (state: BrowserLiveState) => void>();
   private nextSubscriberId = 0;
 
+  // ── Ported from gakrcli-for-chrome-mcp: console + network ring buffers ──
+  // Per-page ring buffer of console messages (capped to 500). Listening is
+  // wired inside `initBrowserSession` after `this.page` is created; the
+  // listeners survive across in-page SPA navigations because Playwright
+  // attaches them at the page level, not the navigation level.
+  private consoleBuffer: Array<{
+    level: 'log' | 'warn' | 'error' | 'info' | 'debug' | 'pageerror';
+    text: string;
+    location?: { url: string; lineNumber: number; columnNumber: number };
+    timestamp: number;
+  }> = [];
+  private consoleBufferCap = 500;
+
+  // Per-page ring buffer of completed/failed network requests. Status is
+  // recorded once the response is received (or the request errors). Cap
+  // matches the console buffer to keep the two filter semantics symmetric.
+  private networkBuffer: Array<{
+    method: string;
+    url: string;
+    resourceType: string;
+    status: number | null;
+    statusText?: string;
+    failed: boolean;
+    timestamp: number;
+  }> = [];
+  private networkBufferCap = 500;
+
+  /** Wire console + network listeners onto a freshly-created page. Idempotent:
+   * a second call replaces the previous listener set. */
+  private wireObservationListeners(page: Page): void {
+    page.on('console', msg => {
+      const t = msg.type();
+      const level: 'log' | 'warn' | 'error' | 'info' | 'debug' =
+        t === 'warning' ? 'warn' : t === 'error' ? 'error' : (t as 'log' | 'info' | 'debug');
+      this.consoleBuffer.push({
+        level,
+        text: msg.text(),
+        location: msg.location(),
+        timestamp: Date.now(),
+      });
+      if (this.consoleBuffer.length > this.consoleBufferCap) {
+        this.consoleBuffer.splice(0, this.consoleBuffer.length - this.consoleBufferCap);
+      }
+    });
+    page.on('pageerror', err => {
+      this.consoleBuffer.push({
+        level: 'pageerror' as const,
+        text: err.message,
+        timestamp: Date.now(),
+      });
+      if (this.consoleBuffer.length > this.consoleBufferCap) {
+        this.consoleBuffer.splice(0, this.consoleBuffer.length - this.consoleBufferCap);
+      }
+    });
+    page.on('requestfinished', async req => {
+      const resp = await req.response();
+      const status = resp?.status() ?? null;
+      const failed = status === null || status >= 400;
+      this.networkBuffer.push({
+        method: req.method(),
+        url: req.url(),
+        resourceType: req.resourceType(),
+        status,
+        statusText: resp?.statusText() ?? undefined,
+        failed,
+        timestamp: Date.now(),
+      });
+      if (this.networkBuffer.length > this.networkBufferCap) {
+        this.networkBuffer.splice(0, this.networkBuffer.length - this.networkBufferCap);
+      }
+    });
+    page.on('requestfailed', req => {
+      this.networkBuffer.push({
+        method: req.method(),
+        url: req.url(),
+        resourceType: req.resourceType(),
+        status: null,
+        failed: true,
+        timestamp: Date.now(),
+      });
+      if (this.networkBuffer.length > this.networkBufferCap) {
+        this.networkBuffer.splice(0, this.networkBuffer.length - this.networkBufferCap);
+      }
+    });
+  }
+
   getLiveState(): BrowserLiveState {
     return this.liveState;
   }
@@ -672,6 +758,14 @@ export class BrowserServer {
 
     this.page = await this.context.newPage();
 
+    // Ported from gakrcli-for-chrome-mcp: fresh page means fresh ring buffers
+    // (otherwise a long-lived session would surface stale entries from a
+    // previous page after a `navigate`). Listeners are re-attached on every
+    // new page so the buffer always tracks the active page.
+    this.consoleBuffer = [];
+    this.networkBuffer = [];
+    this.wireObservationListeners(this.page);
+
     await this.refreshLiveState({ lastOperation: 'init' });
   }
 
@@ -772,6 +866,12 @@ export class BrowserServer {
       // A fresh (blank) page shares no DOM with the previous one, so any
       // element index from the old DOM tree is meaningless.
       this.clearElementIndex();
+      // Ported from gakrcli-for-chrome-mcp: a new page resets the console +
+      // network ring buffers and re-attaches listeners (otherwise stale
+      // entries from the previous page would still be returned).
+      this.consoleBuffer = [];
+      this.networkBuffer = [];
+      this.wireObservationListeners(this.page);
     }
     const page = this.requirePage();
     this.setLoading(true);
@@ -908,6 +1008,160 @@ export class BrowserServer {
         : '';
       return `Error waiting for "${boundedSelector}" to be "${state}": ${message}${hint}`;
     }
+  }
+
+  /**
+   * Ported from gakrcli-for-chrome-mcp `read_console_messages`.
+   *
+   * Returns the most recent N console messages (default 100, hard max 500)
+   * from the per-page ring buffer, optionally filtered by minimum level.
+   * The buffer is wired in `initBrowserSession` / `navigate` and survives
+   * in-page SPA navigations because the listeners are attached to the page
+   * itself.
+   */
+  async readConsoleMessages(
+    opts: { level: 'all' | 'error' | 'warn' | 'info' | 'log' | 'debug'; tail: number },
+    signal?: AbortSignal,
+  ): Promise<string> {
+    this.assertNotAborted(signal);
+    this.requirePage();
+    const tail = Math.max(1, Math.min(500, opts.tail));
+    // 'all' returns every entry; otherwise filter by minimum level using the
+    // console-level ordering (debug < info|log < warn < error|pageerror).
+    // 'warn' is treated as the floor of error so the LLM asking for "all
+    // warnings and worse" gets the right set.
+    const minRank: Record<typeof opts.level, number> = {
+      all: -1,
+      debug: 0,
+      info: 1,
+      log: 1,
+      warn: 2,
+      error: 3,
+    };
+    const wantRank = minRank[opts.level];
+    const filtered = this.consoleBuffer.filter(m => {
+      if (opts.level === 'all') return true;
+      const mRank = minRank[m.level as 'debug' | 'info' | 'log' | 'warn' | 'error'];
+      return mRank >= wantRank;
+    });
+    const slice = filtered.slice(-tail);
+    if (slice.length === 0) {
+      return `(no console messages buffered at level "${opts.level}")`;
+    }
+    const lines = slice.map(m => {
+      const ts = new Date(m.timestamp).toISOString();
+      return `[${ts}] [${m.level}] ${m.text}`;
+    });
+    return `Captured ${slice.length} console message${slice.length === 1 ? '' : 's'} (level=${opts.level}):\n${lines.join('\n')}`;
+  }
+
+  /**
+   * Ported from gakrcli-for-chrome-mcp `read_network_requests`.
+   *
+   * Returns the most recent N completed/failed network requests, optionally
+   * filtered by URL substring (case-insensitive) and/or `failedOnly`.
+   * Status is recorded when the response arrives; the buffer is reset on
+   * every fresh page.
+   */
+  async readNetworkRequests(
+    opts: { urlPattern?: string; failedOnly?: boolean; tail: number },
+    signal?: AbortSignal,
+  ): Promise<string> {
+    this.assertNotAborted(signal);
+    this.requirePage();
+    const tail = Math.max(1, Math.min(500, opts.tail));
+    const pattern = opts.urlPattern?.toLowerCase();
+    const filtered = this.networkBuffer.filter(r => {
+      if (opts.failedOnly && !r.failed) return false;
+      if (pattern && !r.url.toLowerCase().includes(pattern)) return false;
+      return true;
+    });
+    const slice = filtered.slice(-tail);
+    if (slice.length === 0) {
+      return `(no network requests matched: ${opts.failedOnly ? 'failed_only=true' : 'all'} ${pattern ? `url_pattern="${pattern}"` : ''})`;
+    }
+    const lines = slice.map(r => {
+      const ts = new Date(r.timestamp).toISOString();
+      const status = r.status === null ? 'ERR' : String(r.status);
+      return `[${ts}] ${r.method} ${status} ${r.resourceType} ${r.url}`;
+    });
+    const summary = `Captured ${slice.length} network request${slice.length === 1 ? '' : 's'} (failedOnly=${!!opts.failedOnly}${pattern ? `, url~="${pattern}"` : ''}):`;
+    return `${summary}\n${lines.join('\n')}`;
+  }
+
+  /**
+   * Ported from gakrcli-for-chrome-mcp as a thin batch wrapper over
+   * `type`/`select_dropdown`/checkbox toggles. Fails fast on the first field
+   * so the LLM gets a clear per-field error rather than a partial state
+   * across 5 inputs.
+   */
+  async fillForm(
+    fields: Array<{ selector: string; value: string; action?: 'type' | 'select' | 'check' | 'uncheck' }>,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    this.assertNotAborted(signal);
+    const page = this.requirePage();
+    if (fields.length === 0) {
+      return 'Error: fill_form requires at least one field.';
+    }
+    const results: string[] = [];
+    for (let i = 0; i < fields.length; i++) {
+      const f = fields[i];
+      if (!f.selector) {
+        return `Error: field[${i}] is missing required 'selector'.`;
+      }
+      const action = f.action ?? 'type';
+      try {
+        const loc = page.locator(f.selector).first();
+        await loc.waitFor({ state: 'visible', timeout: 5000 });
+        switch (action) {
+          case 'type':
+            await loc.fill(f.value);
+            results.push(`[${i}] type → "${f.selector}" = "${f.value}"`);
+            break;
+          case 'select': {
+            // Mirror `selectDropdown` behaviour: choose by exact visible text
+            // first, fall back to value attribute.
+            const picked = await loc
+              .locator(`option:has-text("${f.value.replace(/"/g, '\\"')}"), option[value="${f.value.replace(/"/g, '\\"')}"]`)
+              .first()
+              .getAttribute('value')
+              .catch(() => null);
+            const choice = picked ?? f.value;
+            await loc.selectOption(choice);
+            results.push(`[${i}] select → "${f.selector}" = "${f.value}"`);
+            break;
+          }
+          case 'check':
+            await loc.check();
+            results.push(`[${i}] check → "${f.selector}"`);
+            break;
+          case 'uncheck':
+            await loc.uncheck();
+            results.push(`[${i}] uncheck → "${f.selector}"`);
+            break;
+        }
+      } catch (e) {
+        return `Error on field[${i}] "${f.selector}" (action=${action}): ${errorMessage(e)}\nCompleted ${results.length}/${fields.length} fields before failure.`;
+      }
+    }
+    await this.refreshLiveState({ lastOperation: `fill_form (${fields.length} fields)` });
+    return `Filled ${fields.length} field${fields.length === 1 ? '' : 's'}:\n${results.join('\n')}`;
+  }
+
+  /**
+   * Ported from gakrcli-for-chrome-mcp `resize_page`. We deliberately resize
+   * the viewport (not the host OS window) so the change survives across
+   * headed/headless launches and never produces a jarring window-level
+   * resize. This is what the LLM actually wants: it changes layout/CSS
+   * breakpoint and the dimensions of subsequent screenshots.
+   */
+  async resizeWindow(width: number, height: number, signal?: AbortSignal): Promise<string> {
+    this.assertNotAborted(signal);
+    const page = this.requirePage();
+    await page.setViewportSize({ width, height });
+    await this.refreshLiveState({ lastOperation: `resize_window ${width}x${height}` });
+    return `Viewport resized to ${width}x${height}`;
   }
 
   async sendKeys(keys: string, signal?: AbortSignal): Promise<string> {

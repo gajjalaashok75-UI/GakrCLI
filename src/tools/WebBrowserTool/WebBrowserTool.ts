@@ -153,7 +153,16 @@ export interface WebBrowserOutput {
 // ISSUE 9 (RULE 9): `wait` is read-only; `refresh`/`press_key` are not.
 // close_all_tabs is destructive (closes pages) — not read-only.
 // wait_for_element (new action) only polls/observes — read-only, same as wait.
-const READ_ONLY_ACTIONS = new Set(['get_state', 'get_content', 'list_tabs', 'get_storage', 'wait', 'wait_for_element']);
+const READ_ONLY_ACTIONS = new Set([
+  'get_state',
+  'get_content',
+  'list_tabs',
+  'get_storage',
+  'wait',
+  'wait_for_element',
+  'read_console_messages',
+  'read_network_requests',
+]);
 
 /** Combined prompt: one entry per action, using the verbatim Python descriptions
  * plus the non-OpenHands operations added in later rounds. */
@@ -317,6 +326,20 @@ export function shortActionResult(action: BrowserAction): string {
       return `Pressed key ${action.key}`;
     case 'wait_for_element':
       return `Waited for "${action.selector}" (${action.state})`;
+    case 'read_console_messages':
+      return action.only_errors
+        ? 'Read error console messages'
+        : action.level === 'all'
+          ? `Read console messages (tail=${action.tail})`
+          : `Read ${action.level}-level console messages (tail=${action.tail})`;
+    case 'read_network_requests':
+      return action.failed_only
+        ? 'Read failed network requests'
+        : `Read network requests (tail=${action.tail})`;
+    case 'fill_form':
+      return `Filled ${action.fields.length} form field${action.fields.length === 1 ? '' : 's'}`;
+    case 'resize_window':
+      return `Resized viewport to ${action.width}x${action.height}`;
     default:
       return 'Browser action completed';
   }
@@ -475,6 +498,22 @@ export const WebBrowserTool = buildTool({
         return `Pressing key ${input.key}`;
       case 'wait_for_element':
         return `Waiting for element (${input.selector})`;
+      case 'read_console_messages':
+        return input.only_errors
+          ? 'Reading error console messages'
+          : input.level === 'all'
+            ? 'Reading console messages'
+            : `Reading ${input.level}-level console messages`;
+      case 'read_network_requests':
+        return input.failed_only
+          ? 'Reading failed network requests'
+          : input.url_pattern
+            ? `Reading network requests matching '${input.url_pattern}'`
+            : 'Reading network requests';
+      case 'fill_form':
+        return `Filling ${input.fields?.length ?? 0} form field${(input.fields?.length ?? 0) === 1 ? '' : 's'}`;
+      case 'resize_window':
+        return `Resizing viewport to ${input.width}x${input.height}`;
       default:
         return 'Browser action';
     }
@@ -518,6 +557,20 @@ export const WebBrowserTool = buildTool({
         return `save_as_pdf${input.file_name ? `: ${input.file_name}` : ''}`;
       case 'wait_for_element':
         return `wait_for_element: ${input.selector}`;
+      case 'read_console_messages':
+        return input.only_errors
+          ? 'read_console_messages: errors only'
+          : `read_console_messages: level=${input.level ?? 'all'}`;
+      case 'read_network_requests':
+        return input.failed_only
+          ? 'read_network_requests: failed only'
+          : input.url_pattern
+            ? `read_network_requests: url~'${input.url_pattern}'`
+            : 'read_network_requests';
+      case 'fill_form':
+        return `fill_form: ${input.fields?.length ?? 0} field${(input.fields?.length ?? 0) === 1 ? '' : 's'}`;
+      case 'resize_window':
+        return `resize_window: ${input.width}x${input.height}`;
       default:
         return `${input.action}`;
     }

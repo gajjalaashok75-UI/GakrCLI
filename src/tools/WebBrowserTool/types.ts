@@ -726,6 +726,93 @@ export const BrowserWaitForElementActionSchema = z.strictObject({
     .describe('Max time to wait in milliseconds (100-60000, default: 10000)'),
 });
 
+// Ported from gakrcli-for-chrome-mcp `read_console_messages` tool.
+// Level scope: 'all' returns every level; 'error' matches only error and
+// pageerror; otherwise the level is exact-matched. onlyErrors is sugar for
+// `level === 'error'`. tail caps the returned slice to the most recent N
+// messages (default 100, hard max 500) — older entries are dropped first.
+export const BrowserReadConsoleMessagesActionSchema = z.strictObject({
+  action: z.literal('read_console_messages'),
+  level: z
+    .enum(['all', 'error', 'warn', 'info', 'log', 'debug'])
+    .default('all')
+    .describe('Minimum level to include. "all" returns every level (default: all).'),
+  only_errors: looseBoolean(false)
+    .describe('When true, restrict to error-level messages only. Shorthand for level="error" (default: false).'),
+  tail: looseNumber(z.number().int().min(1).max(500))
+    .default(100)
+    .describe('Return the most recent N messages (1-500, default: 100).'),
+});
+
+// Ported from gakrcli-for-chrome-mcp `read_network_requests` tool.
+// urlPattern is a substring filter against request.url() (case-insensitive).
+// failedOnly restricts to requests whose response was >= 400 or that errored.
+// tail caps the returned slice to the most recent N entries (default 100, hard
+// max 500) — older entries are dropped first.
+export const BrowserReadNetworkRequestsActionSchema = z.strictObject({
+  action: z.literal('read_network_requests'),
+  url_pattern: z
+    .string()
+    .min(1)
+    .max(2048)
+    .optional()
+    .describe('Substring filter for request URL (case-insensitive).'),
+  failed_only: looseBoolean(false)
+    .describe('When true, restrict to requests with status >= 400 or that errored (default: false).'),
+  tail: looseNumber(z.number().int().min(1).max(500))
+    .default(100)
+    .describe('Return the most recent N requests (1-500, default: 100).'),
+});
+
+// Ported from gakrcli-for-chrome-mcp — `fill_form` is a thin batch wrapper
+// around `form_input`-style typing/selection. It is NOT meant to replace
+// per-field control: the LLM can still call `type`/`select_dropdown` for any
+// individual field. The batch action saves round-trips when filling >2
+// unrelated fields (login forms, multi-input search filters, etc.).
+//
+// Per-field `selector` is required (CSS only — no `index` to keep the schema
+// small and avoid stale-ref retries). `action` is optional; default 'type'
+// fills text via Playwright's `locator.fill`. The other modes are tiny
+// shortcuts for the common case of checkbox/radio/select on a known form.
+export const BrowserFillFormFieldSchema = z.strictObject({
+  selector: z
+    .string()
+    .min(1)
+    .max(2048)
+    .describe('CSS selector of the input/select/checkbox/radio field.'),
+  value: z
+    .string()
+    .describe('Value to enter / option to select / label text. Ignored for uncheck.'),
+  action: z
+    .enum(['type', 'select', 'check', 'uncheck'])
+    .default('type')
+    .describe('How to interact with the field (default: type).'),
+});
+
+export const BrowserFillFormActionSchema = z.strictObject({
+  action: z.literal('fill_form'),
+  fields: z
+    .array(BrowserFillFormFieldSchema)
+    .min(1)
+    .max(50)
+    .describe('Fields to fill, in order. Each entry is one (selector, value, action) tuple.'),
+});
+
+// Ported from gakrcli-for-chrome-mcp `resize_page` tool, scoped to the
+// viewport (Playwright `page.setViewportSize`). We deliberately do NOT resize
+// the host OS window — the browser is a long-lived subprocess per
+// `BrowserToolExecutor.getShared`, and resizing its window would be both
+// jarring and unreliable across headless/headed launches. Viewport-only is
+// what the LLM actually wants: it changes layout/CSS breakpoint, page
+// rendering, and screenshot output dimensions.
+export const BrowserResizeWindowActionSchema = z.strictObject({
+  action: z.literal('resize_window'),
+  width: looseNumber(z.number().int().min(320).max(8192))
+    .describe('Viewport width in pixels (320-8192).'),
+  height: looseNumber(z.number().int().min(240).max(8192))
+    .describe('Viewport height in pixels (240-8192).'),
+});
+
 export const BrowserActionSchema = z.discriminatedUnion('action', [
   BrowserNavigateActionSchema,
   BrowserClickActionSchema,
@@ -757,6 +844,10 @@ export const BrowserActionSchema = z.discriminatedUnion('action', [
   BrowserWaitActionSchema,
   BrowserPressKeyActionSchema,
   BrowserWaitForElementActionSchema,
+  BrowserReadConsoleMessagesActionSchema,
+  BrowserReadNetworkRequestsActionSchema,
+  BrowserFillFormActionSchema,
+  BrowserResizeWindowActionSchema,
 ]);
 
 export type BrowserAction = z.infer<typeof BrowserActionSchema>;
@@ -803,6 +894,10 @@ export const BROWSER_ACTION_SCHEMA_BY_NAME = {
   wait: BrowserWaitActionSchema,
   press_key: BrowserPressKeyActionSchema,
   wait_for_element: BrowserWaitForElementActionSchema,
+  read_console_messages: BrowserReadConsoleMessagesActionSchema,
+  read_network_requests: BrowserReadNetworkRequestsActionSchema,
+  fill_form: BrowserFillFormActionSchema,
+  resize_window: BrowserResizeWindowActionSchema,
 } satisfies Record<BrowserAction['action'], z.ZodTypeAny>;
 
 /**
@@ -946,6 +1041,38 @@ export const BrowserActionFlatSchema = z.strictObject({
   timeout_ms: looseNumber(z.number().int().min(100).max(60000))
     .optional()
     .describe('[wait_for_element] Max time to wait in milliseconds (100-60000). Default: 10000.'),
+  level: z
+    .enum(['all', 'error', 'warn', 'info', 'log', 'debug'])
+    .optional()
+    .describe('[read_console_messages] Minimum level to include. Default: all.'),
+  only_errors: looseBoolean()
+    .optional()
+    .describe('[read_console_messages] Restrict to error-level messages only. Default: false.'),
+  url_pattern: z
+    .string()
+    .min(1)
+    .max(2048)
+    .optional()
+    .describe('[read_network_requests] Substring filter for request URL (case-insensitive).'),
+  failed_only: looseBoolean()
+    .optional()
+    .describe('[read_network_requests] Restrict to failed requests (status >= 400 or errored). Default: false.'),
+  width: looseNumber(z.number().int().min(320).max(8192))
+    .optional()
+    .describe('[resize_window] Viewport width in pixels (320-8192).'),
+  height: looseNumber(z.number().int().min(240).max(8192))
+    .optional()
+    .describe('[resize_window] Viewport height in pixels (240-8192).'),
+  fields: z
+    .array(
+      z.strictObject({
+        selector: z.string().min(1).max(2048),
+        value: z.string(),
+        action: z.enum(['type', 'select', 'check', 'uncheck']).optional(),
+      }),
+    )
+    .optional()
+    .describe('[fill_form] Fields to fill, in order.'),
 });
 
 export type BrowserActionFlat = z.infer<typeof BrowserActionFlatSchema>;
@@ -1024,6 +1151,11 @@ export type BrowserRefreshAction = z.infer<typeof BrowserRefreshActionSchema>;
 export type BrowserWaitAction = z.infer<typeof BrowserWaitActionSchema>;
 export type BrowserPressKeyAction = z.infer<typeof BrowserPressKeyActionSchema>;
 export type BrowserWaitForElementAction = z.infer<typeof BrowserWaitForElementActionSchema>;
+export type BrowserReadConsoleMessagesAction = z.infer<typeof BrowserReadConsoleMessagesActionSchema>;
+export type BrowserReadNetworkRequestsAction = z.infer<typeof BrowserReadNetworkRequestsActionSchema>;
+export type BrowserFillFormField = z.infer<typeof BrowserFillFormFieldSchema>;
+export type BrowserFillFormAction = z.infer<typeof BrowserFillFormActionSchema>;
+export type BrowserResizeWindowAction = z.infer<typeof BrowserResizeWindowActionSchema>;
 
 // ============================================================
 // Tool prompt descriptions — copied VERBATIM from definition.py's
@@ -1361,4 +1493,55 @@ Parameters:
 - selector: CSS selector for the element to wait on (required)
 - state: One of "visible", "hidden", "attached", "detached" (default: "visible")
 - timeout_ms: Max time to wait, in milliseconds (100-60000, default: 10000)
+`;
+
+export const BROWSER_READ_CONSOLE_MESSAGES_DESCRIPTION = `Read recent console messages (log/warn/error/debug) from the page.
+
+Useful for debugging failed interactions, catching unhandled promise rejections, or
+verifying that an event handler ran. Returns the buffered messages, optionally
+filtered by minimum level, with the most recent N entries kept (older ones are
+dropped first).
+
+Parameters:
+- level: Minimum level to include — "all" returns every level, "error" matches
+  only error and pageerror, others are exact-matched. Default: "all".
+- only_errors: Shorthand for level="error". Default: false.
+- tail: Most-recent N messages to return (1-500, default: 100).
+`;
+
+export const BROWSER_READ_NETWORK_REQUESTS_DESCRIPTION = `Read network request logs from the page, optionally filtered by URL or failure.
+
+Each entry includes the request method, URL, resource type, status (or error),
+and timing. Use \`failed_only\` to surface only broken requests (status >= 400
+or that errored at the network layer).
+
+Parameters:
+- url_pattern: Substring filter for request URL (case-insensitive). Optional.
+- failed_only: When true, restrict to failed requests. Default: false.
+- tail: Most-recent N requests to return (1-500, default: 100).
+`;
+
+export const BROWSER_FILL_FORM_DESCRIPTION = `Fill multiple form fields in a single call.
+
+A thin batch wrapper around \`type\`/\`select_dropdown\` — call it instead of N
+separate \`type\` calls when you have >2 unrelated fields to fill on the same
+form (login pages, multi-input search filters, etc.). Per-field behavior is
+identical to \`type\` for text inputs, and to \`select_dropdown\` for selects.
+
+Parameters:
+- fields: Array of {selector, value, action} tuples. action is one of
+  "type" (default — fill text), "select" (choose option by value/label),
+  "check" (set checkbox), "uncheck" (clear checkbox).
+`;
+
+export const BROWSER_RESIZE_WINDOW_DESCRIPTION = `Resize the browser viewport to the specified width and height.
+
+This changes the page's CSS layout, breakpoint, and the dimensions of subsequent
+screenshots. It does NOT resize the host OS window — the browser is a
+long-lived subprocess, and we deliberately keep viewport-only behavior to
+avoid jarring window-level resize on every page interaction.
+
+Parameters:
+- width: Viewport width in pixels (320-8192, required)
+- height: Viewport height in pixels (240-8192, required)
 `;
