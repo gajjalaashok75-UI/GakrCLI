@@ -13,6 +13,8 @@
  * - Disappears when the window is unbound
  */
 
+import { bunSpawn } from '../bunCompat.js'
+
 import * as fs from 'fs'
 import * as path from 'path'
 import { validateHwnd, getTmpDir } from './shared.js'
@@ -23,7 +25,7 @@ const CURSOR_COLOR_G = 50
 const CURSOR_COLOR_B = 50
 const CURSOR_OPACITY = 0.9
 
-let cursorProc: ReturnType<typeof Bun.spawn> | null = null
+let cursorProc: ReturnType<typeof bunSpawn> | null = null
 let cursorStopFile: string | null = null
 let cursorScriptFile: string | null = null
 
@@ -198,7 +200,7 @@ export function showVirtualCursor(hwnd: string): boolean {
     const script = buildCursorScript(hwnd, stopFile)
     fs.writeFileSync(scriptFile, script, 'utf-8')
 
-    cursorProc = Bun.spawn(
+    cursorProc = bunSpawn(
       [
         'powershell',
         '-NoProfile',

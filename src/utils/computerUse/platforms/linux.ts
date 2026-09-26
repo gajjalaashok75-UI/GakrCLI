@@ -11,6 +11,8 @@
  * so we pipe through ImageMagick `convert` to produce JPEG.
  */
 
+import { bunSpawn, bunSpawnSync, bunFile } from '../bunCompat.js'
+
 import type { Platform } from './index.js'
 import type {
   InputPlatform,
@@ -29,19 +31,19 @@ import type {
 // ---------------------------------------------------------------------------
 
 function run(cmd: string[]): string {
-  const result = Bun.spawnSync({ cmd, stdout: 'pipe', stderr: 'pipe' })
+  const result = bunSpawnSync({ cmd, stdout: 'pipe', stderr: 'pipe' })
   return new TextDecoder().decode(result.stdout).trim()
 }
 
 async function runAsync(cmd: string[]): Promise<string> {
-  const proc = Bun.spawn(cmd, { stdout: 'pipe', stderr: 'pipe' })
+  const proc = bunSpawn(cmd, { stdout: 'pipe', stderr: 'pipe' })
   const out = await new Response(proc.stdout).text()
   await proc.exited
   return out.trim()
 }
 
 function commandExists(name: string): boolean {
-  const result = Bun.spawnSync({
+  const result = bunSpawnSync({
     cmd: ['which', name],
     stdout: 'pipe',
     stderr: 'pipe',
@@ -231,7 +233,7 @@ async function pngToJpegBase64(
   // Try ImageMagick convert first
   if (commandExists('convert')) {
     await runAsync(['convert', pngPath, '-quality', '75', SCREENSHOT_JPG])
-    const file = Bun.file(SCREENSHOT_JPG)
+    const file = bunFile(SCREENSHOT_JPG)
     const buffer = await file.arrayBuffer()
     return { base64: Buffer.from(buffer).toString('base64'), width, height }
   }
@@ -239,13 +241,13 @@ async function pngToJpegBase64(
   // Fallback: ffmpeg
   if (commandExists('ffmpeg')) {
     await runAsync(['ffmpeg', '-y', '-i', pngPath, '-q:v', '5', SCREENSHOT_JPG])
-    const file = Bun.file(SCREENSHOT_JPG)
+    const file = bunFile(SCREENSHOT_JPG)
     const buffer = await file.arrayBuffer()
     return { base64: Buffer.from(buffer).toString('base64'), width, height }
   }
 
   // Last resort: return PNG base64 (caller should be aware)
-  const file = Bun.file(pngPath)
+  const file = bunFile(pngPath)
   const buffer = await file.arrayBuffer()
   return { base64: Buffer.from(buffer).toString('base64'), width, height }
 }
@@ -290,7 +292,7 @@ const screenshot: ScreenshotPlatform = {
         const width = wMatch ? Number(wMatch[1]) : 0
         const height = hMatch ? Number(hMatch[1]) : 0
 
-        const file = Bun.file(jpgPath)
+        const file = bunFile(jpgPath)
         const buffer = await file.arrayBuffer()
         return { base64: Buffer.from(buffer).toString('base64'), width, height }
       }

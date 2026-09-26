@@ -4,10 +4,14 @@
  * ALL text/keyboard operations target a specific HWND via SendMessageW.
  * No SendInput / keybd_event / SendKeys — those are global and conflict with the user.
  *
- * Text input strategy:
- * 1. Short text (≤ CLIPBOARD_THRESHOLD chars): SendMessageW(WM_CHAR) per codepoint
- * 2. Long text (> threshold): Clipboard.SetText() + SendMessageW(Ctrl+V) paste
- * Both paths support full Unicode (Chinese, emoji, etc.) without IME involvement.
+ * Text input strategy: SendMessageW(WM_CHAR) per Unicode codepoint, always —
+ * see sendText. Covers the full UTF-16 range (including CJK and emoji via
+ * surrogate pairs) without IME involvement.
+ *
+ * There is deliberately no clipboard path here. An earlier revision planned a
+ * Clipboard.SetText() + Ctrl+V paste for long text; it was never implemented,
+ * and the global clipboard write would have bypassed the clipboardWrite grant
+ * flag, so sendText deliberately stays on WM_CHAR for every length.
  */
 
 import { validateHwnd, runPs, VK_MAP, MODIFIER_KEYS } from './shared.js'

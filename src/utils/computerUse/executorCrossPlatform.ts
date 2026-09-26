@@ -24,6 +24,8 @@
  *     so WM_LBUTTONDOWN receives client-relative coords
  */
 
+import { bunSpawn, bunSpawnSync } from './bunCompat.js'
+
 import type {
   ComputerExecutor,
   DisplayGeometry,
@@ -76,7 +78,7 @@ function getNonClientOffset(): { dx: number; dy: number } {
 
     validateHwnd(hwnd)
 
-    const result = Bun.spawnSync({
+    const result = bunSpawnSync({
       cmd: [
         'powershell',
         '-NoProfile',
@@ -318,14 +320,14 @@ export function createCrossPlatformExecutor(_opts: {
 
     async readClipboard(): Promise<string> {
       if (process.platform === 'win32') {
-        const result = Bun.spawnSync({
+        const result = bunSpawnSync({
           cmd: ['powershell', '-NoProfile', '-Command', 'Get-Clipboard'],
           stdout: 'pipe',
         })
         return new TextDecoder().decode(result.stdout).trim()
       }
       // Linux
-      const result = Bun.spawnSync({
+      const result = bunSpawnSync({
         cmd: ['xclip', '-selection', 'clipboard', '-o'],
         stdout: 'pipe',
       })
@@ -335,7 +337,7 @@ export function createCrossPlatformExecutor(_opts: {
     async writeClipboard(text: string): Promise<void> {
       if (process.platform === 'win32') {
         const escaped = text.replace(/'/g, "''")
-        Bun.spawnSync({
+        bunSpawnSync({
           cmd: [
             'powershell',
             '-NoProfile',
@@ -346,7 +348,7 @@ export function createCrossPlatformExecutor(_opts: {
         return
       }
       // Linux
-      const proc = Bun.spawn(['xclip', '-selection', 'clipboard'], {
+      const proc = bunSpawn(['xclip', '-selection', 'clipboard'], {
         stdin: 'pipe',
       })
       proc.stdin.write(text)
@@ -401,7 +403,7 @@ export function createCrossPlatformExecutor(_opts: {
       }
       // Unbound: SendInput with MOUSEEVENTF_LEFTDOWN
       if (process.platform === 'win32') {
-        Bun.spawnSync({
+        bunSpawnSync({
           cmd: [
             'powershell',
             '-NoProfile',
@@ -435,7 +437,7 @@ $i = New-Object MDown+INPUT; $i.type=0; $i.mi.dwFlags=0x0002; [MDown]::SendInput
       }
       // Unbound: SendInput with MOUSEEVENTF_LEFTUP
       if (process.platform === 'win32') {
-        Bun.spawnSync({
+        bunSpawnSync({
           cmd: [
             'powershell',
             '-NoProfile',
@@ -533,6 +535,7 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
         bundleId: a.id,
         displayName: a.displayName,
         path: a.path,
+        exePath: a.exePath,
       }))
     },
 
@@ -603,7 +606,7 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
         const escapedCwd = cwd.replace(/'/g, "''")
 
         // Start-Process powershell opens a NEW visible PowerShell window
-        Bun.spawnSync({
+        bunSpawnSync({
           cmd: [
             'powershell',
             '-Command',
@@ -696,16 +699,22 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
         require('./platforms/win32.js') as typeof import('./platforms/win32.js')
       const hwnd = getBoundHwnd()
       if (!hwnd) return { bound: false }
-      const { listWindows: enumWindows } =
+      const { listWindows: enumWindows, getProcessImagePath } =
         require('./win32/windowEnum.js') as typeof import('./win32/windowEnum.js')
       const windows = enumWindows()
       const win = windows.find(w => w.hwnd === hwnd)
       const rect = platform.windowManagement?.getWindowRect() ?? undefined
+      // Executable path is the authorization identity — a window title is
+      // attacker-settable, so it must never decide which grant a bound window
+      // matches. May be null for elevated/undescribable processes; the gate
+      // treats a missing identity as "not granted".
+      const exePath = win?.pid ? getProcessImagePath(win.pid) : null
       return {
         bound: true,
         hwnd,
         title: win?.title,
         pid: win?.pid,
+        exePath: exePath ?? undefined,
         rect: rect ?? undefined,
       }
     },
@@ -910,7 +919,7 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
       try {
         const hwnd = getBoundHwndStr()
         if (!hwnd) return false
-        // Try Python Bridge first (via bridgeClient directly)
+        // Try bridge first (via bridgeClient directly)
         try {
           const bridge =
             require('./win32/bridgeClient.js') as typeof import('./win32/bridgeClient.js')

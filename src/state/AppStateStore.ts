@@ -274,10 +274,15 @@ export type AppState = DeepImmutable<{
   // populated when feature('CHICAGO_MCP') is active.
   computerUseMcpState?: {
     // Session-scoped app allowlist. NOT persisted across resume.
+    // `tier` / `exePath` are part of the grant: the bound-window gate authorizes
+    // on `exePath` (a window title is attacker-settable), and an omitted field
+    // here would let a grant lose its identity on any state round-trip.
     allowedApps?: readonly {
       bundleId: string
       displayName: string
       grantedAt: number
+      tier?: 'read' | 'click' | 'full'
+      exePath?: string
     }[]
     // Clipboard/system-key grant flags (orthogonal to allowlist).
     grantFlags?: {

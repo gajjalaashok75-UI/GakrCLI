@@ -4,6 +4,8 @@
  * Each operation opens and closes Excel to avoid orphaned processes.
  */
 
+import { bunSpawnSync } from '../bunCompat.js'
+
 export interface CellInfo {
   row: number
   col: number
@@ -23,7 +25,7 @@ export interface ExcelInfo {
 }
 
 function ps(script: string): string {
-  const result = Bun.spawnSync({
+  const result = bunSpawnSync({
     cmd: ['powershell', '-NoProfile', '-NonInteractive', '-Command', script],
     stdout: 'pipe',
     stderr: 'pipe',

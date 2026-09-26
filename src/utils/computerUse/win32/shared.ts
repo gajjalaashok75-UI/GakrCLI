@@ -3,7 +3,9 @@
  * Single source of truth — no more duplication across files.
  */
 
-/** Validate HWND is a pure numeric string — prevents PowerShell/Python injection. */
+import { bunSpawn, bunSpawnSync } from '../bunCompat.js'
+
+/** Validate HWND is a pure numeric string — prevents PowerShell injection. */
 export function validateHwnd(hwnd: string): string {
   if (!/^\d+$/.test(hwnd)) {
     throw new Error(`Invalid HWND: "${hwnd}" — must be numeric`)
@@ -13,7 +15,7 @@ export function validateHwnd(hwnd: string): string {
 
 /** Run a PowerShell script synchronously, return stdout trimmed. */
 export function ps(script: string): string {
-  const result = Bun.spawnSync({
+  const result = bunSpawnSync({
     cmd: ['powershell', '-NoProfile', '-NonInteractive', '-Command', script],
     stdout: 'pipe',
     stderr: 'pipe',
@@ -24,7 +26,7 @@ export function ps(script: string): string {
 /** Run a PowerShell script synchronously, return null on failure. */
 export function runPs(script: string): string | null {
   try {
-    const result = Bun.spawnSync({
+    const result = bunSpawnSync({
       cmd: ['powershell', '-NoProfile', '-NonInteractive', '-Command', script],
       stdout: 'pipe',
       stderr: 'pipe',
@@ -38,7 +40,7 @@ export function runPs(script: string): string | null {
 
 /** Run a PowerShell script asynchronously. */
 export async function psAsync(script: string): Promise<string> {
-  const proc = Bun.spawn(
+  const proc = bunSpawn(
     ['powershell', '-NoProfile', '-NonInteractive', '-Command', script],
     { stdout: 'pipe', stderr: 'pipe' },
   )

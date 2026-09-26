@@ -13,6 +13,8 @@
  * Click-through, TOPMOST, no taskbar icon.
  */
 
+import { bunSpawn } from '../bunCompat.js'
+
 import * as fs from 'fs'
 import * as path from 'path'
 import { validateHwnd, getTmpDir } from './shared.js'
@@ -23,7 +25,7 @@ const FADE_AFTER_MS = 2000
 const BG_COLOR = '30, 30, 30' // dark background
 const TEXT_COLOR = '220, 220, 220' // light text
 
-let indicatorProc: ReturnType<typeof Bun.spawn> | null = null
+let indicatorProc: ReturnType<typeof bunSpawn> | null = null
 let stopFile: string | null = null
 let scriptFile: string | null = null
 let msgFile: string | null = null
@@ -163,7 +165,7 @@ export function showIndicator(hwnd: string): boolean {
     scriptFile = path.join(tmpDir, `cu_indicator_${ts}.ps1`)
     msgFile = stopFile + '.msg'
     fs.writeFileSync(scriptFile, buildIndicatorScript(hwnd, stopFile), 'utf-8')
-    indicatorProc = Bun.spawn(
+    indicatorProc = bunSpawn(
       [
         'powershell',
         '-NoProfile',

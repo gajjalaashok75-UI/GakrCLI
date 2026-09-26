@@ -1,12 +1,14 @@
 /**
  * Word COM automation module for Windows.
  * Uses PowerShell to drive Word.Application COM object — fully headless (Visible=false).
- * Each function builds a PowerShell script, runs it via Bun.spawnSync, and parses JSON output.
+ * Each function builds a PowerShell script, runs it via bunSpawnSync, and parses JSON output.
  */
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+import { bunSpawnSync } from '../bunCompat.js'
 
 export interface WordParagraph {
   text: string
@@ -41,7 +43,7 @@ export interface AppendTextOptions {
 // ---------------------------------------------------------------------------
 
 function runPs(script: string): string {
-  const result = Bun.spawnSync({
+  const result = bunSpawnSync({
     cmd: ['powershell', '-NoProfile', '-NonInteractive', '-Command', script],
     stdout: 'pipe',
     stderr: 'pipe',

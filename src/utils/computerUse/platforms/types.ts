@@ -34,6 +34,9 @@ export interface InstalledApp {
   id: string // macOS: bundleId, Windows: exe path or package family, Linux: .desktop name
   displayName: string
   path: string
+  /** Resolved executable path when known (Windows: DisplayIcon / install dir
+   *  scan). Used as the bound-window authorization identity. */
+  exePath?: string
 }
 
 export interface FrontmostAppInfo {

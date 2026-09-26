@@ -4,9 +4,9 @@
  * Combines:
  * - PowerShell SetCursorPos/SendInput for global input (fallback)
  * - win32/windowMessage.ts for window-bound SendMessage input (preferred)
- * - Python Bridge (bridge.py) for screenshots (mss + ctypes PrintWindow)
+ * - TypeScript Bridge (bridge.ts) for screenshots (koffi + raw GDI capture)
  * - win32/windowEnum.ts for EnumWindows app listing
- * - No PowerShell for screenshots (Python Bridge only, no PS fallback)
+ * - No PowerShell for screenshots (TypeScript Bridge only, no PS fallback)
  * - PowerShell Screen.AllScreens for display enumeration
  *
  * CRITICAL: All screenshots output JPEG (ImageFormat::Jpeg), not PNG.
@@ -534,7 +534,32 @@ $paths = @(
 )
 foreach ($p in $paths) {
   Get-ItemProperty $p -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName } | ForEach-Object {
-    $apps += "$($_.DisplayName)|$($_.InstallLocation)|$($_.PSChildName)"
+    # Resolve an executable path: DisplayIcon usually points at the exe; else
+    # scan InstallLocation. This is the authorization identity against a bound
+    # window's process image, so it must be a real file or left empty.
+    $exe = $null
+    if ($_.DisplayIcon -and $_.DisplayIcon -match '[.]exe') {
+      $cand = ($_.DisplayIcon -split ',')[0].Trim('"')
+      if (Test-Path $cand) { $exe = (Resolve-Path $cand).Path }
+    }
+    if (-not $exe -and $_.InstallLocation -and (Test-Path $_.InstallLocation)) {
+      # Pick the exe that looks like the app's main binary, not an arbitrary
+      # one: taking the first match can select an uninstaller/updater, which
+      # then never equals the launched process image and denies a valid grant.
+      $cands = Get-ChildItem $_.InstallLocation -Filter '*.exe' -ErrorAction SilentlyContinue
+      if ($cands) {
+        $disp = ($_.DisplayName -replace '[^A-Za-z0-9]', '').ToLower()
+        $best = $cands | Sort-Object {
+          $n = ($_.BaseName -replace '[^A-Za-z0-9]', '').ToLower()
+          if ($n -eq $disp) { 0 }
+          elseif (($n -and $disp.Contains($n)) -or ($n -and $n.Contains($disp))) { 1 }
+          elseif ($n -match 'unins|setup|update|installer|crashpad|helper|report') { 3 }
+          else { 2 }
+        } | Select-Object -First 1
+        if ($best) { $exe = $best.FullName }
+      }
+    }
+    $apps += "$($_.DisplayName)|$($_.InstallLocation)|$($_.PSChildName)|$exe"
   }
 }
 
@@ -550,11 +575,12 @@ $apps | Select-Object -Unique | Select-Object -First 300
         .split('\n')
         .filter(Boolean)
         .map(line => {
-          const [name, path, id] = line.trim().split('|', 3)
+          const [name, path, id, exe] = line.trim().split('|', 4)
           return {
             id: (id ?? name ?? '').trim(),
             displayName: (name ?? '').trim(),
             path: (path ?? '').trim(),
+            exePath: (exe ?? '').trim() || undefined,
           }
         })
     } catch {

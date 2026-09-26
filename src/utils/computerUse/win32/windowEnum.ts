@@ -3,6 +3,8 @@
  * Returns visible windows with their HWND, PID, and title.
  */
 
+import { bunSpawnSync } from '../bunCompat.js'
+
 export interface WindowInfo {
   hwnd: string
   pid: number
@@ -53,12 +55,72 @@ public class WinEnum {
 [WinEnum]::results | ForEach-Object { $_ }
 `
 
+const PROCESS_IMAGE_PS = (pid: number) => `
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public class CuProcImage {
+    [DllImport("kernel32.dll", SetLastError=true)]
+    static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
+    [DllImport("kernel32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
+    static extern bool QueryFullProcessImageName(IntPtr h, uint flags, StringBuilder sb, ref uint size);
+    [DllImport("kernel32.dll", SetLastError=true)]
+    static extern bool CloseHandle(IntPtr h);
+    public static string Get(uint pid) {
+        // PROCESS_QUERY_LIMITED_INFORMATION (0x1000) is granted for
+        // higher-integrity processes too, unlike PROCESS_QUERY_INFORMATION.
+        IntPtr h = OpenProcess(0x1000, false, pid);
+        if (h == IntPtr.Zero) return "";
+        try {
+            uint size = 1024;
+            StringBuilder sb = new StringBuilder((int)size);
+            if (!QueryFullProcessImageName(h, 0, sb, ref size)) return "";
+            return sb.ToString();
+        } finally { CloseHandle(h); }
+    }
+}
+'@
+[CuProcImage]::Get(${pid})
+`
+
+/**
+ * Full executable path of a PID, or null when it can't be read (elevated
+ * process without rights, exited process). This is the authorization identity
+ * for bound windows: unlike a window title, it cannot be set by page content.
+ */
+// Deliberately uncached. An exe path is stable for a process's lifetime, but a
+// PID can be recycled, so a cached entry could authorize a *different* process
+// after the original exits. Authorization correctness is worth the extra
+// PowerShell spawn, which is the same order of cost as the window enumeration
+// this already performs.
+export function getProcessImagePath(pid: number): string | null {
+  if (!Number.isInteger(pid) || pid <= 0) return null
+  try {
+    const result = bunSpawnSync({
+      cmd: [
+        'powershell',
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        PROCESS_IMAGE_PS(pid),
+      ],
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
+    const raw = new TextDecoder().decode(result.stdout).trim()
+    return raw || null
+  } catch {
+    return null
+  }
+}
+
 /**
  * List all visible windows with non-empty titles.
  * Returns HWND, PID, and window title for each.
  */
 export function listWindows(): WindowInfo[] {
-  const result = Bun.spawnSync({
+  const result = bunSpawnSync({
     cmd: [
       'powershell',
       '-NoProfile',

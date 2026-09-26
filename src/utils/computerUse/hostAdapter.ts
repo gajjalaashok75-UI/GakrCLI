@@ -1,3 +1,5 @@
+import { bunSpawnSync } from './bunCompat.js'
+
 import type {
   ComputerUseHostAdapter,
   Logger,
@@ -36,7 +38,7 @@ class DebugLogger implements Logger {
 /** Probe accessibility by asking System Events for a process list. */
 function checkAccessibilityJXA(): boolean {
   try {
-    const result = Bun.spawnSync({
+    const result = bunSpawnSync({
       cmd: [
         'osascript',
         '-e',
@@ -54,7 +56,7 @@ function checkAccessibilityJXA(): boolean {
 /** Probe screen recording by attempting a 1x1 screencapture. */
 function checkScreenRecordingJXA(): boolean {
   try {
-    const result = Bun.spawnSync({
+    const result = bunSpawnSync({
       cmd: ['screencapture', '-x', '-R', '0,0,1,1', '/dev/null'],
       stdout: 'pipe',
       stderr: 'pipe',
