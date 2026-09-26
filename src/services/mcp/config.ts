@@ -1,4 +1,3 @@
-import { feature } from 'bun:bundle'
 import { chmod, open, rename, stat, unlink } from 'fs/promises'
 import mapValues from 'lodash-es/mapValues.js'
 import memoize from 'lodash-es/memoize.js'
@@ -42,6 +41,11 @@ import {
 } from '../analytics/index.js'
 import { fetchGakrCLIAIMcpConfigsIfEligible } from './gakrcliai.js'
 import { expandEnvVarsInString } from './envExpansion.js'
+import {
+  getBuiltinMcpServerConfigs,
+  isBuiltinMcpServerName,
+  isDefaultDisabledBuiltinMcpServer,
+} from './builtinMcpServers.js'
 import {
   type ConfigScope,
   type McpHTTPServerConfig,
@@ -638,13 +642,8 @@ export async function addMcpConfig(
     throw new Error(`Cannot add MCP server "${name}": this name is reserved.`)
   }
 
-  if (feature('CHICAGO_MCP')) {
-    const { isComputerUseMCPServer } = await import(
-      '../../utils/computerUse/common.js'
-    )
-    if (isComputerUseMCPServer(name)) {
-      throw new Error(`Cannot add MCP server "${name}": this name is reserved.`)
-    }
+  if (isBuiltinMcpServerName(name)) {
+    throw new Error(`Cannot add MCP server "${name}": this name is reserved.`)
   }
 
   // Block adding servers when enterprise MCP config exists (it has exclusive control)
@@ -1056,6 +1055,13 @@ export function getMcpConfigByName(name: string): ScopedMcpServerConfig | null {
     return userServers[name]
   }
 
+  // Built-in servers aren't file-backed; without this the /mcp detail view
+  // can't resolve them, so "Config location" renders empty for computer-use.
+  const builtin = getBuiltinMcpServerConfigs()[name]
+  if (builtin) {
+    return builtin
+  }
+
   return null
 }
 
@@ -1245,6 +1251,19 @@ export async function getGakrCLICodeMcpConfigs(
       continue
     }
     filtered[name] = serverConfig as ScopedMcpServerConfig
+  }
+
+  // Register built-in MCP servers AFTER policy filtering. Built-ins ship with
+  // the CLI and are not user-authored, so they must not be subject to admin
+  // allow/deny/plugin-only policy — the same exemption dynamic MCP entries
+  // already enjoy (they merge after filtering in
+  // useManageMCPConnections). They stay visible in /mcp while disabled and
+  // remain opt-in via enabledMcpServers (see isDefaultDisabledBuiltin).
+  const builtinServers = getBuiltinMcpServerConfigs()
+  for (const [name, config] of Object.entries(builtinServers)) {
+    if (!(name in filtered)) {
+      filtered[name] = config
+    }
   }
 
   return { servers: filtered, errors: mcpErrors }
@@ -1504,20 +1523,13 @@ export function areMcpConfigsAllowedWithEnterpriseMcpConfig(
 }
 
 /**
- * Built-in MCP server that defaults to disabled. Unlike user-configured servers
- * (opt-out via disabledMcpServers), this requires explicit opt-in via
- * enabledMcpServers. Shows up in /mcp as disabled until the user enables it.
+ * Built-in MCP servers that default to disabled. Unlike user-configured servers
+ * (opt-out via disabledMcpServers), these require explicit opt-in via
+ * enabledMcpServers. They show up in /mcp as disabled until the user enables
+ * them. Membership comes from the registry (defaultEnabled: false).
  */
-/* eslint-disable @typescript-eslint/no-require-imports */
-const DEFAULT_DISABLED_BUILTIN = feature('CHICAGO_MCP')
-  ? (
-      require('../../utils/computerUse/common.js') as typeof import('../../utils/computerUse/common.js')
-    ).COMPUTER_USE_MCP_SERVER_NAME
-  : null
-/* eslint-enable @typescript-eslint/no-require-imports */
-
 function isDefaultDisabledBuiltin(name: string): boolean {
-  return DEFAULT_DISABLED_BUILTIN !== null && name === DEFAULT_DISABLED_BUILTIN
+  return isDefaultDisabledBuiltinMcpServer(name)
 }
 
 /**

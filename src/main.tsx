@@ -129,6 +129,7 @@ import { launchAssistantInstallWizard, launchAssistantSessionChooser, launchInva
 import { SHOW_CURSOR } from './ink/termio/dec.js';
 import { exitWithError, exitWithMessage, getRenderContext, renderAndRun, showSetupScreens } from './interactiveHelpers.js';
 import { initBuiltinPlugins } from './plugins/bundled/index.js';
+import { initBuiltinMcpServers } from './services/mcp/bundled/index.js';
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { checkQuotaStatus } from './services/gakrcliAiLimits.js';
 import { getMcpToolsCommandsAndResources, prefetchAllMcpResources } from './services/mcp/client.js';
@@ -1422,13 +1423,13 @@ async function run(): Promise<CommanderCommand> {
         let reservedNameError: string | null = null;
         if (nonSdkConfigNames.some(isGakrCLIInChromeMCPServer)) {
           reservedNameError = `Invalid MCP configuration: "${GAKR_IN_CHROME_MCP_SERVER_NAME}" is a reserved MCP name.`;
-        } else if (feature('CHICAGO_MCP')) {
-          const {
-            isComputerUseMCPServer,
-            COMPUTER_USE_MCP_SERVER_NAME
-          } = await import('src/utils/computerUse/common.js');
-          if (nonSdkConfigNames.some(isComputerUseMCPServer)) {
-            reservedNameError = `Invalid MCP configuration: "${COMPUTER_USE_MCP_SERVER_NAME}" is a reserved MCP name.`;
+        } else {
+          // Built-in MCP names are looked up from the registry rather than
+          // hardcoded, so a newly registered built-in is reserved automatically.
+          const { findReservedBuiltinMcpServerName } = await import('src/services/mcp/builtinMcpServers.js');
+          const reservedBuiltin = findReservedBuiltinMcpServerName(nonSdkConfigNames);
+          if (reservedBuiltin) {
+            reservedNameError = `Invalid MCP configuration: "${reservedBuiltin}" is a reserved MCP name.`;
           }
         }
         if (reservedNameError) {
@@ -1556,17 +1557,24 @@ async function run(): Promise<CommanderCommand> {
     }
 
     // chicago MCP: guarded Computer Use (app allowlist + frontmost gate +
-    // SCContentFilter screenshots). Ant-only, GrowthBook-gated — failures
-    // are silent (this is dogfooding). Platform + interactive checks inline
-    // so non-macOS / print-mode ants skip the heavy @ant/computer-use-mcp
-    // import entirely. gates.js is light (type-only package import).
+    // SCContentFilter screenshots). GrowthBook-gated — failures are silent.
+    //
+    // Available on macOS, Linux, and Windows; the per-platform executor is
+    // chosen in hostAdapter.ts. No interactive-session requirement: the
+    // built-in server is registered in the MCP config layer regardless, so
+    // it enumerates under "Built-in MCPs" in /mcp even in print mode.
+    //
+    // allowedTools are pushed whenever the gate is on, independent of whether
+    // the user has enabled the server this session. Without that, enabling
+    // mid-session from /mcp would require an extra permission prompt that a
+    // startup-enabled session never sees.
     //
     // Placed AFTER the enterprise-MCP-config check: that check rejects any
     // dynamicMcpConfig entry with `type !== 'sdk'`, and our config is
-    // `type: 'stdio'`. An enterprise-config ant with the GB gate on would
+    // `type: 'stdio'`. An enterprise-config user with the GB gate on would
     // otherwise process.exit(1). Chrome has the same latent issue but has
     // shipped without incident; chicago places itself correctly.
-    if (feature('CHICAGO_MCP') && getPlatform() === 'macos' && !getIsNonInteractiveSession()) {
+    if (feature('CHICAGO_MCP')) {
       try {
         const {
           getChicagoEnabled
@@ -1876,6 +1884,7 @@ async function run(): Promise<CommanderCommand> {
     // await points, so the parallel getCommands() memoized an empty list.
     if (process.env.GAKR_CODE_ENTRYPOINT !== 'local-agent') {
       initBuiltinPlugins();
+      initBuiltinMcpServers();
       initBundledSkills();
     }
     const setupPromise = setup(preSetupCwd, permissionMode, allowDangerouslySkipPermissions, worktreeEnabled, worktreeName, tmuxEnabled, sessionId ? validateUuid(sessionId) : undefined, worktreePRNumber, messagingSocketPath);
