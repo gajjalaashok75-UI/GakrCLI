@@ -52,7 +52,7 @@ const featureFlags: Record<string, boolean> = {
   TEMPLATES: false,               // Template jobs (new/list/reply subcommands)
   BG_SESSIONS: true,              // Local detached background sessions
   WEB_BROWSER_TOOL: true,        // Built-in browser navigation/screenshot (panel UI fully implemented)
-  CHICAGO_MCP: false,             // Computer-use MCP (native Swift modules stubbed)
+  CHICAGO_MCP: true,              // Computer-use MCP (pure-TS @ant packages, no native modules needed)
   ACP: false,                     // ACP agent protocol (requires @agentclientprotocol/sdk)
   COWORKER_TYPE_TELEMETRY: true,  // Telemetry for agent/coworker type classification
   AGENT_TRIGGERS_REMOTE: false,   // Remote agent trigger delivery (requires cloud infra)
@@ -266,6 +266,36 @@ for (const [specifier, resolvedPath] of productionReactModules) {
   }
 }
 
+/**
+ * Resolve bare `src/...` specifiers to the repo's own `src/` tree.
+ *
+ * Vendored packages under `node_modules/@ant/*` are copies of a monorepo where
+ * `src/*` was a tsconfig `paths` alias. Bun applies the root tsconfig to project
+ * sources but NOT to files under `node_modules`, so those specifiers fail to
+ * resolve unless the importer happens to sit at the right relative depth. The
+ * depth differs between `vendor/` (pre-install) and `node_modules/` (post-
+ * install), so no relative rewrite works for both. Anchor to the project root.
+ */
+const srcAliasPlugin = {
+  name: 'src-alias',
+  setup(build: Bun.PluginBuilder) {
+    build.onResolve({ filter: /^src\// }, args => {
+      const base = resolve(__dirname, '..', args.path)
+      const candidates = [
+        base,
+        `${base}.ts`,
+        `${base}.tsx`,
+        base.replace(/\.js$/, '.ts'),
+        base.replace(/\.js$/, '.tsx'),
+        join(base, 'index.ts'),
+        join(base, 'index.tsx'),
+      ]
+      const hit = candidates.find(c => existsSync(c))
+      return hit ? { path: hit } : null
+    })
+  },
+}
+
 const productionReactPlugin = {
   name: 'production-react-bundle',
   setup(build: Bun.PluginBuilder) {
@@ -316,6 +346,7 @@ result = await Bun.build({
     noTelemetryPlugin,
     featureFlagPreprocessPlugin,
     productionReactPlugin,
+    srcAliasPlugin,
     {
       name: 'bun-bundle-shim',
       setup(build) {
@@ -410,11 +441,6 @@ export const Trace = noop;
 
         // Known missing external packages
         for (const pkg of [
-          '@ant/computer-use-mcp',
-          '@ant/computer-use-mcp/sentinelApps',
-          '@ant/computer-use-mcp/types',
-          '@ant/computer-use-swift',
-          '@ant/computer-use-input',
           '@smithy/node-http-handler',
           '@smithy/core',
           '@aws-sdk/credential-provider-node',
@@ -611,15 +637,13 @@ sdkResult = await Bun.build({
   plugins: [
     noTelemetryPlugin,
     featureFlagPreprocessPlugin,
+    srcAliasPlugin,
     // Stub missing internal/optional modules (same pattern as CLI build)
     {
       name: 'sdk-missing-stub',
       setup(build) {
         const missingModules = [
           '@anthropic-ai/mcpb',
-          '@ant/computer-use-mcp',
-          '@ant/computer-use-swift',
-          '@ant/computer-use-input',
           '@anthropic-ai/sandbox-runtime',
           'audio-capture-napi', 'audio-capture.node',
           'image-processor-napi', 'modifiers-napi', 'url-handler-napi', 'color-diff-napi',
@@ -1021,6 +1045,38 @@ if (!sdkResult.success) {
 
 } finally {
   console.log(`  🔄 feature-flags: transformed ${featureFlagTransformedFiles.size} files during bundling`)
+}
+
+// ── Compile the Windows TypeScript Bridge (standalone, not bundled into cli) ──
+// bridge.ts is a standalone subprocess script (spawned by bridgeClient.ts), not
+// part of the CLI module graph. It lives outside src/entrypoints/* so Bun.build
+// won't pick it up as a transitive module. Compile it separately so dist/ ships
+// a runnable bridge.js alongside the CLI bundle.
+//
+// koffi (native FFI) and sharp (native image processing) are kept external so
+// they resolve from node_modules at runtime on the target Windows machine.
+console.log('Compiling bridge.ts → dist/computerUse/bridge.js...')
+const bridgeResult = await Bun.build({
+  entrypoints: ['./src/utils/computerUse/win32/bridge.ts'],
+  outdir: './dist/computerUse',
+  naming: 'bridge.js',
+  target: 'node',
+  format: 'esm',
+  splitting: false,
+  sourcemap: 'external',
+  minify: false,
+  external: ['koffi', 'sharp', 'node:readline'],
+  plugins: [noTelemetryPlugin],
+})
+
+if (!bridgeResult.success) {
+  console.error('Bridge build failed:')
+  for (const log of bridgeResult.logs) {
+    console.error(log)
+  }
+  process.exitCode = 1
+} else {
+  console.log(`✓ Compiled Windows bridge → dist/computerUse/bridge.js`)
 }
 
 // ── Validate SDK bundle for React/Ink leakage ──────────────────────────────

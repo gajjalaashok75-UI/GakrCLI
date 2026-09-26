@@ -84,6 +84,9 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^1.1.0",
+    "@ant/computer-use-input": "file:vendor/computer-use-input",
+    "@ant/computer-use-mcp": "file:vendor/computer-use-mcp",
+    "@ant/computer-use-swift": "file:vendor/computer-use-swift",
     "@alcalzone/ansi-tokenize": "0.3.0",
     "@anthropic-ai/bedrock-sdk": "0.29.1",
     "@anthropic-ai/foundry-sdk": "0.2.3",
@@ -257,11 +260,13 @@
   },
   "allowScripts": {
     "protobufjs@7.6.4": true,
-    "sharp@0.34.5": true
+    "sharp@0.34.5": true,
+    "koffi@3.1.1": true
   },
   "optionalDependencies": {
     "@aws-sdk/client-bedrock": "^3.1075.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1075.0",
-    "@aws-sdk/client-sts": "^3.1075.0"
+    "@aws-sdk/client-sts": "^3.1075.0",
+    "koffi": "^3.1.1"
   }
 }

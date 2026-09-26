@@ -65,4 +65,64 @@ check and conform and verify and then tests , proceed and continue
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
+---
+
+## Repo Notes
+
+### Test suite
+
+`bun run test` runs ~10.8k tests in a single long-lived process and, on a
+16 GB container, accumulates enough memory to OOM-restart the machine. Run it
+as bounded chunks in separate processes instead:
+
+```bash
+i=0; for f in $(find src -name '*.test.ts' -o -name '*.test.tsx' | sort); do
+  bun test --feature=UNATTENDED_RETRY --max-concurrency=1 "$f"   # or shard by dir
+done
+```
+
+A chunk that spawns the CLI can hang indefinitely; wrap each chunk in
+`timeout`. There are ~380 pre-existing failures on the `e4a97aa` baseline
+(unrelated areas: Gemini store field, openaiShim SSE timeout, Swarm polling,
+`usage` command metadata, autoCompact circuit breaker). Compare failure sets
+against a baseline worktree rather than expecting a green suite.
+
+### `feature()` flags at dev runtime
+
+`import { feature } from 'bun:bundle'` resolves to `false` for every flag
+outside a real build. `scripts/build.ts` papers over this by transforming
+`feature('FLAG')` calls into boolean literals at bundle time, so a dev-runtime
+smoke test that needs a flag on must replicate that plugin (replace the
+`bun:bundle` import and the `feature(...)` call) via `bun --preload`.
+Note: a dev-time `onLoad` hook must return `{ contents, loader }`, not `null`.
+
+### Config persistence
+
+Project config lives in `~/.gakrcli.json` under `projects[<abs path>]`, not at
+the top level. `setMcpServerEnabled` writes there and survives process restarts.
 `
+
+## Built-in registries
+
+Adding a feature follows a `register*` + Map pattern, one registry per surface:
+
+- Slash commands: `src/commands.ts`
+- Tools: `src/tools.ts`
+- Skills: `src/skills/bundledSkills.ts` (`registerBundledSkill`), wired in `src/skills/bundled/index.ts`
+- Plugins: `src/plugins/builtinPlugins.ts` (`registerBuiltinPlugin`), wired in `src/plugins/bundled/index.ts`
+- MCP servers: `src/services/mcp/builtinMcpServers.ts` (`registerBuiltinMcpServer`), wired in `src/services/mcp/bundled/index.ts`
+
+To add a built-in MCP server, create `src/services/mcp/bundled/<name>.ts` exporting a
+`register<Name>McpServer()` helper and call it from `initBuiltinMcpServers()`. No edits to
+`services/mcp/config.ts` or `main.tsx` are needed — enumeration, the reserved-name guard, and
+default-disabled semantics are all registry-driven.
+
+Registration happens lazily on first read (`ensureBuiltinMcpServersRegistered`) as well as
+explicitly via `initBuiltinMcpServers()` at startup. This matters because the reserved-name check
+in `main.tsx` runs BEFORE the startup block, and entrypoints other than `main.tsx` (print/headless,
+standalone MCP mode, sub-agent runs) read the MCP config layer without running startup at all.
+
+Note: `normalizeNameForMCP` replaces invalid characters with underscores but does NOT lowercase —
+built-in name matching is case-sensitive.
+
