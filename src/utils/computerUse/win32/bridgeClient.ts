@@ -1,15 +1,18 @@
 /**
- * Python Bridge Client — manages a long-lived Python subprocess for Windows
- * Computer Use operations.
+ * Bridge Client — manages a long-lived subprocess for the TypeScript Bridge
+ * (bridge.ts/bridge.js) used by Windows Computer Use operations.
  *
- * Replaces per-call PowerShell spawning with a persistent Python process
+ * Replaces per-call PowerShell spawning with a persistent Node process
  * that communicates via JSON lines over stdin/stdout.
  *
  * Performance: ~1-5ms per call vs ~200-500ms per PowerShell spawn.
  */
 
-import * as path from 'path'
+import { bunSpawn, bunSpawnSync } from '../bunCompat.js'
+
 import type { Writable } from 'stream'
+
+import { resolveBridgeScript } from './bridgeAsset.js'
 
 interface BridgeRequest {
   id: number
@@ -23,7 +26,7 @@ interface BridgeResponse {
   error?: string
 }
 
-let bridgeProc: ReturnType<typeof Bun.spawn> | null = null
+let bridgeProc: ReturnType<typeof bunSpawn> | null = null
 let requestId = 0
 const pendingRequests = new Map<
   number,
@@ -34,14 +37,23 @@ const pendingRequests = new Map<
 >()
 let outputBuffer = ''
 
+/** Determine the spawn command for the bridge script based on its extension. */
+function bridgeCommand(scriptPath: string): string[] {
+  if (scriptPath.endsWith('.ts')) {
+    return ['bun', 'run', scriptPath]
+  }
+  return ['node', scriptPath]
+}
+
 /**
- * Start the Python bridge process if not already running.
+ * Start the bridge process if not already running.
  */
 export function ensureBridge(): boolean {
   if (bridgeProc) return true
   try {
-    const scriptPath = path.join(__dirname, 'bridge.py')
-    bridgeProc = Bun.spawn(['python', '-u', scriptPath], {
+    const scriptPath = resolveBridgeScript()
+    if (!scriptPath) return false
+    bridgeProc = bunSpawn(bridgeCommand(scriptPath), {
       stdin: 'pipe',
       stdout: 'pipe',
       stderr: 'ignore',
@@ -147,20 +159,20 @@ export async function call<T = unknown>(
 
 /**
  * Synchronous call — blocks the event loop. Use sparingly.
- * Falls back to PowerShell if bridge is not available.
+ * Spawns a one-shot process for sync calls.
  */
 export function callSync<T = unknown>(
   method: string,
   params: Record<string, unknown> = {},
   timeoutMs: number = 10000,
 ): T | null {
-  // For sync calls, spawn a one-shot Python process.
   // SECURITY: JSON is passed via stdin (not embedded in -c) to prevent code injection.
   try {
-    const scriptPath = path.join(__dirname, 'bridge.py')
+    const scriptPath = resolveBridgeScript()
+    if (!scriptPath) return null
     const req = JSON.stringify({ id: 1, method, params })
-    const result = Bun.spawnSync({
-      cmd: ['python', '-u', scriptPath],
+    const result = bunSpawnSync({
+      cmd: bridgeCommand(scriptPath),
       stdin: Buffer.from(req + '\n'),
       stdout: 'pipe',
       stderr: 'pipe',
