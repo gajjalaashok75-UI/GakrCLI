@@ -67,3 +67,17 @@ test('execFileNoThrowWithCwd preserves Windows .cmd compatibility', async () => 
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('execFileNoThrowWithCwd resolves (never throws) for a missing binary', async () => {
+  const { execFileNoThrowWithCwd } = await importFreshExecFileNoThrowModule()
+
+  // ENOENT must surface as a normal handled result — callers probe optional
+  // binaries (gh, clip, ...) and treat code!==0 as "not available".
+  const result = await execFileNoThrowWithCwd('gakrcli-definitely-not-a-binary', [
+    '--version',
+  ])
+
+  expect(result.code).toBe(1)
+  expect(result.stdout).toBe('')
+  expect(result.error).toContain('ENOENT')
+})

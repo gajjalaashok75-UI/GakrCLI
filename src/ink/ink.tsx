@@ -180,6 +180,16 @@ export default class Ink {
   private reportRenderError = (label: string, error: unknown): void => {
     const message =
       error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+    if (label === 'recoverable') {
+      // onRecoverableError fires when React already recovered (e.g. the
+      // minified #520: concurrent render failed, root re-rendered
+      // synchronously and succeeded). The user sees no failure, so this is
+      // diagnostic noise, not an error — and logError here also pushed it
+      // into in-memory error reports. Warn-level debug only; no stderr
+      // write, which would bypass the frame buffer and glitch the TUI.
+      logForDebugging(`[Ink:${label}] ${message}`, { level: 'warn' });
+      return;
+    }
     logForDebugging(`[Ink:${label}] ${message}`, {
       level: 'error',
     });

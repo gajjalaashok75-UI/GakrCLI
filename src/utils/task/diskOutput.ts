@@ -437,7 +437,17 @@ export function initTaskOutputAsSymlink(
         try {
           await symlink(targetPath, outputPath)
         } catch {
-          await unlink(outputPath)
+          // Clear the way for the retry. ENOENT is fine (nothing to remove —
+          // e.g. the file vanished between the failed symlink and here);
+          // previously it rode up to the outer catch and logged an [ERROR]
+          // even though the initTaskOutput fallback below handled it.
+          try {
+            await unlink(outputPath)
+          } catch (e) {
+            if (getErrnoCode(e) !== 'ENOENT') {
+              throw e
+            }
+          }
           await symlink(targetPath, outputPath)
         }
 

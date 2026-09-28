@@ -10,6 +10,7 @@ import { useAppStateMaybeOutsideOfProvider } from '../../state/AppState.js';
 import { findToolByName, type Tool, type ToolProgressData, type Tools } from '../../Tool.js';
 import type { ProgressMessage } from '../../types/message.js';
 import { useIsClassifierChecking } from '../../utils/classifierApprovalsHook.js';
+import { logForDebugging } from '../../utils/debug.js';
 import { logError } from '../../utils/log.js';
 import type { buildMessageLookups } from '../../utils/messages.js';
 import { MessageResponse } from '../MessageResponse.js';
@@ -33,6 +34,9 @@ type Props = {
   isTranscriptMode?: boolean;
   defaultCollapsed?: boolean;
 };
+
+// One debug line per distinct unknown-tool message, not per render.
+const loggedUnknownToolMessages = new Set<string>();
 
 export function AssistantToolUseMessage({
   param,
@@ -86,8 +90,19 @@ export function AssistantToolUseMessage({
   }, [tools, param]);
 
   if (!parsed) {
-    // Guard against undefined tools (required prop) or unknown tool name
-    logError(new Error(tools ? `Tool ${param.name} not found` : `Tools array is undefined for tool ${param.name}`));
+    // Guard against undefined tools (required prop) or unknown tool name.
+    // An unknown name is expected, not an error: transcripts replay tool_use
+    // blocks from servers that are no longer loaded (dynamic MCP tools,
+    // deferred/dynamic tool loading). It also re-runs on every render, so a
+    // hard logError here spam-logged 'Tool mcp__computer-use__type not
+    // found' dozens of times per session. Debug level, deduped per message.
+    const message = tools
+      ? `Tool ${param.name} not found in registry; rendering nothing`
+      : `Tools array is undefined for tool ${param.name}`;
+    if (!loggedUnknownToolMessages.has(message)) {
+      loggedUnknownToolMessages.add(message);
+      logForDebugging(message, { level: 'debug' });
+    }
     return null;
   }
 

@@ -6,7 +6,7 @@
 import { spawn } from 'cross-spawn'
 import path from 'node:path'
 import { getCwd } from '../utils/cwd.js'
-import { logError } from './log.js'
+import { logForDebugging } from './debug.js'
 
 export { execSyncWithDefaults_DEPRECATED } from './execFileNoThrowPortable.js'
 
@@ -279,7 +279,15 @@ export function execFileNoThrowWithCwd(
     })
 
     child.once('error', error => {
-      logError(error)
+      // The promise still resolves with { code: 1, error } below — callers
+      // treat spawn failures (ENOENT, EACCES, ...) as normal handled results
+      // (e.g. capability probes like `gh pr view`). Logging at ERROR level
+      // turned every probe of a not-installed binary into a debug-log error
+      // (369x "spawn gh ENOENT" in one session). Debug level is enough.
+      logForDebugging(
+        `execFileNoThrow: spawn failed for "${file}": ${error.message}`,
+        { level: 'error' },
+      )
       finish({ stdout: '', stderr: '', code: 1, error: error.message })
     })
 
