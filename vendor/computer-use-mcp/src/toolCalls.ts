@@ -75,6 +75,7 @@ import type {
   ScreenshotResult,
 } from './executor.js'
 import { isSystemKeyCombo } from './keyBlocklist.js'
+import { saveScreenshotArtifact } from './artifacts.js'
 import { validateClickTarget } from './pixelCompare.js'
 import { SENTINEL_BUNDLE_IDS } from './sentinelApps.js'
 import type {
@@ -2250,6 +2251,40 @@ async function buildMonitorNote(
   return undefined
 }
 
+/**
+ * Honour `save_to_disk` on a screenshot result. Applied at dispatch rather
+ * than inside handleScreenshot so both of its return paths are covered once.
+ * A write failure degrades to a warning — the pixels are already in the
+ * result, so the model still gets its image.
+ */
+function persistScreenshot(
+  result: CuCallToolResult,
+  save: boolean,
+): CuCallToolResult {
+  if (!save || !result.screenshot?.base64) return result
+  try {
+    const filePath = saveScreenshotArtifact(result.screenshot.base64)
+    return {
+      ...result,
+      content: [
+        ...result.content,
+        { type: 'text' as const, text: `Saved screenshot to ${filePath}` },
+      ],
+    }
+  } catch (err) {
+    return {
+      ...result,
+      content: [
+        ...result.content,
+        {
+          type: 'text' as const,
+          text: `Could not save screenshot to disk: ${err instanceof Error ? err.message : String(err)}`,
+        },
+      ],
+    }
+  }
+}
+
 async function handleScreenshot(
   adapter: ComputerUseHostAdapter,
   overrides: ComputerUseOverrides,
@@ -4404,7 +4439,10 @@ async function dispatchAction(
   // ── Standard dispatch (unbound or tools not rerouted above) ────────
   switch (name) {
     case 'screenshot':
-      return handleScreenshot(adapter, overrides, subGates)
+      return persistScreenshot(
+        await handleScreenshot(adapter, overrides, subGates),
+        a.save_to_disk === true,
+      )
 
     case 'zoom':
       return handleZoom(adapter, a, overrides)
