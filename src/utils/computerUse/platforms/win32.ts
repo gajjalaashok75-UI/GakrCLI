@@ -217,6 +217,13 @@ if ($prev -ne [IntPtr]::Zero -and $prev -ne $target) {
   markBound(hwnd)
   showVirtualCursor(hwnd)
   showIndicator(hwnd)
+
+  // 3. Operator-only bind-time diagnostic dump. Read-only on the bridge
+  //    side (no SetForegroundWindow/ShowWindow calls). Logs a single line
+  //    to stderr with hwnd/pid/title/visible/iconic/cloaked/rect so a
+  //    failure mode like a cloaked or offscreen window is observable in
+  //    the GakrCLI log without the model seeing the data.
+  logBoundWindowState(hwnd)
 }
 
 /** Bind to a COM-controlled file (Excel/Word — no window needed) */
@@ -453,10 +460,30 @@ const screenshot: ScreenshotPlatform = {
 
   async captureWindow(hwnd) {
     // Capture bridge (ctypes PrintWindow + GDI → JPEG, ~300ms)
-    const bridgeResult = bridgeCallSync<ScreenshotResult>('screenshot_window', {
-      hwnd: String(hwnd),
-    })
+    const bridgeResult = bridgeCallSync<ScreenshotResult & { _diagnostics?: Record<string, unknown> }>(
+      'screenshot_window',
+      { hwnd: String(hwnd) },
+    )
     if (bridgeResult && bridgeResult.base64) {
+      // Operator-only diagnostic: surface the per-capture state without
+      // changing the model-visible result. The _diagnostics field is
+      // stripped before the result leaves this function.
+      const diag = bridgeResult._diagnostics
+      if (diag) {
+        // eslint-disable-next-line no-console
+        console.error(
+          `[computer-use] screenshot_window hwnd=${diag.hwnd} pid=${diag.pid} ` +
+            `pw_result=${diag.print_window_result} pw_err=${diag.print_window_error} ` +
+            `cloaked=${diag.cloaked} title="${diag.title}" ` +
+            `rect=${(diag.rect as { x: number; y: number; width: number; height: number })?.x},${
+              (diag.rect as { x: number; y: number; width: number; height: number })?.y
+            } ` +
+            `${(diag.rect as { x: number; y: number; width: number; height: number })?.width}x${
+              (diag.rect as { x: number; y: number; width: number; height: number })?.height
+            } minimized=${diag.was_minimized_restored}`,
+        )
+        delete (bridgeResult as { _diagnostics?: unknown })._diagnostics
+      }
       return bridgeResult
     }
 
@@ -466,6 +493,40 @@ const screenshot: ScreenshotPlatform = {
         '. The bridge needs python with mss and Pillow (pip install mss Pillow).',
     )
   },
+}
+
+/** Fire-and-forget read-only window-state dump for bind-time diagnostics.
+ *  Logs a single line to stderr and never throws. */
+function logBoundWindowState(hwnd: string): void {
+  try {
+    const b = getBridge()
+    if (!b) return
+    // callSync keeps it simple — the read-only path is fast (~5ms) and
+    // we want the log line to land before the model sees the next tool
+    // result.
+    const state = b.callSync<{
+      hwnd: string
+      pid: number
+      title: string
+      is_window: boolean
+      is_visible: boolean
+      is_iconic: boolean
+      cloaked: number
+      rect: { x: number; y: number; width: number; height: number }
+    }>('get_window_state', { hwnd })
+    if (state) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[computer-use] bind_window hwnd=${state.hwnd} pid=${state.pid} ` +
+          `is_window=${state.is_window} is_visible=${state.is_visible} ` +
+          `is_iconic=${state.is_iconic} cloaked=${state.cloaked} ` +
+          `rect=(${state.rect.x},${state.rect.y} ${state.rect.width}x${state.rect.height}) ` +
+          `title="${state.title}"`,
+      )
+    }
+  } catch {
+    // Diagnostics must never break the bind path.
+  }
 }
 
 // ---------------------------------------------------------------------------

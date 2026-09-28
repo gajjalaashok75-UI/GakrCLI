@@ -88,8 +88,69 @@ def screenshot_full(display_id=0):
             'height': shot.height,
         }
 
+def _cloaked(hwnd):
+    """DWMWA_CLOAKED — 0 = not cloaked, 1 = cloaked by app, 2 = cloaked by shell.
+
+    Read-only DWM attribute. -1 means the call failed (DWM not running or
+    attribute unsupported on this platform).
+    """
+    try:
+        v = ctypes.c_uint32(0)
+        hr = ctypes.windll.dwmapi.DwmGetWindowAttribute(
+            hwnd, 14, ctypes.byref(v), ctypes.sizeof(v)
+        )  # DWMWA_CLOAKED = 14
+        return int(v.value) if hr == 0 else -1
+    except Exception:
+        return -1
+
+def _pid_for_hwnd(hwnd):
+    pid = ctypes.c_uint32(0)
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    return int(pid.value)
+
+def _title_for_hwnd(hwnd):
+    length = user32.GetWindowTextLengthW(hwnd)
+    if length <= 0:
+        return ''
+    buf = ctypes.create_unicode_buffer(length + 1)
+    user32.GetWindowTextW(hwnd, buf, length + 1)
+    return buf.value
+
+def _rect_dict(hwnd):
+    rect = RECT()
+    user32.GetWindowRect(hwnd, ctypes.byref(rect))
+    return {
+        'x': int(rect.left), 'y': int(rect.top),
+        'width': int(rect.right - rect.left),
+        'height': int(rect.bottom - rect.top),
+    }
+
+def _window_diagnostics(hwnd):
+    """Read-only window state snapshot for diagnostics.
+
+    Intentionally does NOT call SetForegroundWindow, ShowWindow, or any
+    state-mutating API. The whole point is to observe without altering.
+    """
+    return {
+        'hwnd': str(hwnd),
+        'pid': _pid_for_hwnd(hwnd),
+        'title': _title_for_hwnd(hwnd),
+        'is_window': bool(user32.IsWindow(hwnd)),
+        'is_visible': bool(user32.IsWindowVisible(hwnd)),
+        'is_iconic': bool(user32.IsIconic(hwnd)),
+        'cloaked': _cloaked(hwnd),
+        'rect': _rect_dict(hwnd),
+    }
+
+def get_window_state(hwnd_str):
+    """Read-only window state — for bind-time diagnostics dump."""
+    return _window_diagnostics(int(hwnd_str))
+
 def screenshot_window(hwnd_str):
-    """Window screenshot via PrintWindow, returns JPEG base64."""
+    """Window screenshot via PrintWindow. Captures PrintWindow return value
+    and GetLastError() into a _diagnostics field. The TS bridge strips that
+    field before the result is exposed to the model — operators see it via
+    console.error logs."""
     from PIL import Image
     hwnd = int(hwnd_str)
     if not user32.IsWindow(hwnd):
@@ -119,9 +180,12 @@ def screenshot_window(hwnd_str):
     gdi32.SelectObject(hdc_mem, hbm)
 
     # PrintWindow with PW_RENDERFULLCONTENT
-    result = ctypes.windll.user32.PrintWindow(hwnd, hdc_mem, 2)
+    pw_result = ctypes.windll.user32.PrintWindow(hwnd, hdc_mem, 2)
+    # GetLastError right after — the only place to read it before another
+    # Win32 call clobbers the thread-local slot.
+    pw_err = ctypes.get_last_error() if not pw_result else 0
 
-    if not result:
+    if not pw_result:
         # Fallback to BitBlt
         gdi32.BitBlt(hdc_mem, 0, 0, w, h, hdc_window, 0, 0, 0x00CC0020)  # SRCCOPY
 
@@ -166,6 +230,20 @@ def screenshot_window(hwnd_str):
         'base64': base64.b64encode(out.getvalue()).decode(),
         'width': w,
         'height': h,
+        '_diagnostics': {
+            'hwnd': str(hwnd),
+            'pid': _pid_for_hwnd(hwnd),
+            'title': _title_for_hwnd(hwnd),
+            'print_window_result': bool(pw_result),
+            'print_window_error': int(pw_err),
+            'was_minimized_restored': was_minimized,
+            'cloaked': _cloaked(hwnd),
+            'rect': {
+                'x': int(rect.left), 'y': int(rect.top),
+                'width': int(rect.right - rect.left),
+                'height': int(rect.bottom - rect.top),
+            },
+        },
     }
 
 # ---------------------------------------------------------------------------
@@ -478,6 +556,7 @@ METHODS = {
     'screenshot_window': lambda p: screenshot_window(p['hwnd']),
     'list_windows': lambda p: list_windows(),
     'get_window_rect': lambda p: get_window_rect(p['hwnd']),
+    'get_window_state': lambda p: get_window_state(p['hwnd']),
     'get_client_offset': lambda p: get_client_offset(p['hwnd']),
     'manage_window': lambda p: manage_window(p['hwnd'], p['action']),
     'send_click': lambda p: send_click(p['hwnd'], p['x'], p['y'], p.get('button', 'left')),
