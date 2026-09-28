@@ -50,13 +50,19 @@ import { logForDebugging } from '../../debug.js'
 // Python Bridge (lazy-loaded, preferred over PowerShell for screenshots)
 // ---------------------------------------------------------------------------
 
+/** Last bridge failure, so the throw sites below can report the real cause
+ *  instead of a generic "returned no data". */
+let _lastBridgeError: string | undefined
+
 let _bridge: typeof import('../win32/bridgeClient.js') | undefined
 function getBridge() {
   if (!_bridge) {
     try {
       _bridge =
         require('../win32/bridgeClient.js') as typeof import('../win32/bridgeClient.js')
-    } catch {}
+    } catch (err) {
+      _lastBridgeError = err instanceof Error ? err.message : String(err)
+    }
   }
   return _bridge
 }
@@ -68,9 +74,24 @@ function bridgeCallSync<T>(
 ): T | null {
   try {
     const b = getBridge()
-    if (!b) return null
-    return b.callSync<T>(method, params)
-  } catch {
+    if (!b) {
+      _lastBridgeError = 'bridge module failed to load'
+      return null
+    }
+    const result = b.callSync<T>(method, params)
+    if (result) {
+      _lastBridgeError = undefined
+    } else {
+      // The bridge wrote no stdout; its stderr is the only real diagnostic.
+      const stderr = b.getLastBridgeStderr?.()?.trim()
+      _lastBridgeError = stderr
+        ? stderr
+        : 'bridge returned an empty result'
+    }
+    return result
+  } catch (err) {
+    _lastBridgeError = err instanceof Error ? err.message : String(err)
+    logForDebugging?.(`[computer-use] bridge ${method} failed: ${_lastBridgeError}`)
     return null
   }
 }
@@ -406,7 +427,7 @@ const screenshot: ScreenshotPlatform = {
       if (result) return result
     }
 
-    // Python Bridge (mss + Pillow, ~300ms)
+    // Capture bridge (mss-equivalent virtual screen, ~300ms)
     const bridgeResult = bridgeCallSync<ScreenshotResult>('screenshot', {
       display_id: displayId ?? 0,
     })
@@ -415,8 +436,9 @@ const screenshot: ScreenshotPlatform = {
     }
 
     throw new Error(
-      '[computer-use] Screenshot failed: Python bridge returned no data. ' +
-        'Ensure python3 + mss + Pillow are installed (pip install mss Pillow).',
+      '[computer-use] Screenshot failed: the capture bridge returned no data' +
+        (_lastBridgeError ? ` (${_lastBridgeError})` : '') +
+        '. The bridge needs python with mss and Pillow (pip install mss Pillow).',
     )
   },
 
@@ -430,7 +452,7 @@ const screenshot: ScreenshotPlatform = {
   },
 
   async captureWindow(hwnd) {
-    // Python Bridge (ctypes PrintWindow + GDI → Pillow JPEG, ~300ms)
+    // Capture bridge (ctypes PrintWindow + GDI → JPEG, ~300ms)
     const bridgeResult = bridgeCallSync<ScreenshotResult>('screenshot_window', {
       hwnd: String(hwnd),
     })
@@ -439,7 +461,9 @@ const screenshot: ScreenshotPlatform = {
     }
 
     throw new Error(
-      `[computer-use] Window screenshot failed for HWND ${hwnd}: Python bridge returned no data.`,
+      `[computer-use] Window screenshot failed for HWND ${hwnd}: the capture bridge returned no data` +
+        (_lastBridgeError ? ` (${_lastBridgeError})` : '') +
+        '. The bridge needs python with mss and Pillow (pip install mss Pillow).',
     )
   },
 }
@@ -566,7 +590,35 @@ foreach ($p in $paths) {
 # UWP/MSIX apps (Windows 10/11 Store apps)
 Get-AppxPackage -ErrorAction SilentlyContinue | Where-Object { $_.IsFramework -eq $false -and $_.SignatureKind -eq 'Store' } | ForEach-Object {
   $cleanName = $_.Name -replace '^Microsoft\\.Windows', '' -replace '^Microsoft\\.', ''
-  $apps += "$cleanName|$($_.InstallLocation)|$($_.PackageFamilyName)"
+  # Store apps need an executable path too, or their grant can never authorize
+  # a bound window (which reports the running process image, not the package).
+  # The manifest's Executable attribute is relative to the package dir and is
+  # exact; a flat scan misses apps whose binary sits in a subfolder (Notepad).
+  $exe = $null
+  $manifest = Join-Path $_.InstallLocation 'AppxManifest.xml'
+  if (Test-Path $manifest) {
+    $m = Select-String -Path $manifest -Pattern 'Executable="([^"]+)"' -AllMatches |
+      Select-Object -First 1
+    if ($m) {
+      $cand = Join-Path $_.InstallLocation ($m.Matches[0].Groups[1].Value -replace '/', '\\')
+      if (Test-Path $cand) { $exe = (Resolve-Path $cand).Path }
+    }
+  }
+  if (-not $exe -and $_.InstallLocation -and (Test-Path $_.InstallLocation)) {
+    $cands = Get-ChildItem $_.InstallLocation -Filter '*.exe' -ErrorAction SilentlyContinue
+    if ($cands) {
+      $disp = ($cleanName -replace '[^A-Za-z0-9]', '').ToLower()
+      $best = $cands | Sort-Object {
+        $n = ($_.BaseName -replace '[^A-Za-z0-9]', '').ToLower()
+        if ($n -eq $disp) { 0 }
+        elseif (($n -and $disp.Contains($n)) -or ($n -and $n.Contains($disp))) { 1 }
+        elseif ($n -match 'unins|setup|update|installer|crashpad|helper|report') { 3 }
+        else { 2 }
+      } | Select-Object -First 1
+      if ($best) { $exe = $best.FullName }
+    }
+  }
+  $apps += "$cleanName|$($_.InstallLocation)|$($_.PackageFamilyName)|$exe"
 }
 
 $apps | Select-Object -Unique | Select-Object -First 300

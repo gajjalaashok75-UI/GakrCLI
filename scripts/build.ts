@@ -1047,36 +1047,22 @@ if (!sdkResult.success) {
   console.log(`  🔄 feature-flags: transformed ${featureFlagTransformedFiles.size} files during bundling`)
 }
 
-// ── Compile the Windows TypeScript Bridge (standalone, not bundled into cli) ──
-// bridge.ts is a standalone subprocess script (spawned by bridgeClient.ts), not
-// part of the CLI module graph. It lives outside src/entrypoints/* so Bun.build
-// won't pick it up as a transitive module. Compile it separately so dist/ ships
-// a runnable bridge.js alongside the CLI bundle.
-//
-// koffi (native FFI) and sharp (native image processing) are kept external so
-// they resolve from node_modules at runtime on the target Windows machine.
-console.log('Compiling bridge.ts → dist/computerUse/bridge.js...')
-const bridgeResult = await Bun.build({
-  entrypoints: ['./src/utils/computerUse/win32/bridge.ts'],
-  outdir: './dist/computerUse',
-  naming: 'bridge.js',
-  target: 'node',
-  format: 'esm',
-  splitting: false,
-  sourcemap: 'external',
-  minify: false,
-  external: ['koffi', 'sharp', 'node:readline'],
-  plugins: [noTelemetryPlugin],
-})
-
-if (!bridgeResult.success) {
-  console.error('Bridge build failed:')
-  for (const log of bridgeResult.logs) {
-    console.error(log)
-  }
+// ── Ship the Windows Python Bridge (standalone, not bundled into cli) ──
+// bridge.py is a standalone subprocess script (spawned by bridgeClient.ts), not
+// part of the CLI module graph, so dist/ must ship it verbatim alongside the
+// CLI bundle. It is copied rather than compiled: it is Python, and the previous
+// JS/koffi port could not load its native addon (abort during module init),
+// which made every capture call fail.
+const BRIDGE_PY_SRC = './src/utils/computerUse/win32/bridge.py'
+const BRIDGE_PY_DEST = './dist/computerUse/bridge.py'
+console.log('Copying bridge.py → dist/computerUse/bridge.py...')
+try {
+  mkdirSync('./dist/computerUse', { recursive: true })
+  await Bun.write(BRIDGE_PY_DEST, Bun.file(BRIDGE_PY_SRC))
+  console.log(`✓ Copied Windows bridge → dist/computerUse/bridge.py`)
+} catch (err) {
+  console.error('Bridge copy failed:', err)
   process.exitCode = 1
-} else {
-  console.log(`✓ Compiled Windows bridge → dist/computerUse/bridge.js`)
 }
 
 // ── Validate SDK bundle for React/Ink leakage ──────────────────────────────

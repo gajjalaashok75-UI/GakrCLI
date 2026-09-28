@@ -1,11 +1,9 @@
 /**
- * Bridge Client — manages a long-lived subprocess for the TypeScript Bridge
- * (bridge.ts/bridge.js) used by Windows Computer Use operations.
+ * Bridge Client — manages a long-lived subprocess for the Python Bridge
+ * (bridge.py) used by Windows Computer Use operations.
  *
- * Replaces per-call PowerShell spawning with a persistent Node process
- * that communicates via JSON lines over stdin/stdout.
- *
- * Performance: ~1-5ms per call vs ~200-500ms per PowerShell spawn.
+ * Speaks JSON lines over stdin/stdout. Keeping one process alive replaces
+ * per-call PowerShell spawning (~1-5ms per call vs ~200-500ms per spawn).
  */
 
 import { bunSpawn, bunSpawnSync } from '../bunCompat.js'
@@ -37,12 +35,35 @@ const pendingRequests = new Map<
 >()
 let outputBuffer = ''
 
-/** Determine the spawn command for the bridge script based on its extension. */
+/**
+ * Tail of the bridge's stderr. Python tracebacks (missing module, COM failure,
+ * bad HWND) land here; without this they are invisible, because a bridge that
+ * dies mid-call yields no stdout and every layer collapses to "no data".
+ */
+let lastBridgeStderr = ''
+
+const MAX_STDERR_TAIL = 2000
+
+function setLastBridgeStderr(text: string): void {
+  lastBridgeStderr = text.slice(-MAX_STDERR_TAIL)
+}
+
+/** Most recent bridge stderr output, for diagnostics. */
+export function getLastBridgeStderr(): string {
+  return lastBridgeStderr
+}
+
+/**
+ * Spawn command for the bridge script.
+ *
+ * The bridge is Python (bridge.py): it drives Win32 through ctypes and does
+ * capture via mss/PIL, which the previous koffi-based JS port could not
+ * reproduce (its native addon aborts on load, and callSync then swallowed the
+ * crash and reported an empty result). `-u` keeps the JSON-lines protocol
+ * unbuffered, which is required for request/response over stdin.
+ */
 function bridgeCommand(scriptPath: string): string[] {
-  if (scriptPath.endsWith('.ts')) {
-    return ['bun', 'run', scriptPath]
-  }
-  return ['node', scriptPath]
+  return ['python', '-u', scriptPath]
 }
 
 /**
@@ -56,9 +77,27 @@ export function ensureBridge(): boolean {
     bridgeProc = bunSpawn(bridgeCommand(scriptPath), {
       stdin: 'pipe',
       stdout: 'pipe',
-      stderr: 'ignore',
+      stderr: 'pipe',
       env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUNBUFFERED: '1' },
     })
+
+    // Drain stderr so Python warnings/tracebacks surface in diagnostics
+    // instead of being discarded. Never left unconsumed, which would block.
+    const errStream = (bridgeProc.stderr as ReadableStream<Uint8Array> | null)
+    if (errStream) {
+      const errReader = errStream.getReader()
+      const errDecoder = new TextDecoder()
+      const errLoop = async () => {
+        try {
+          while (true) {
+            const { done, value } = await errReader.read()
+            if (done) break
+            if (value) setLastBridgeStderr(errDecoder.decode(value))
+          }
+        } catch {}
+      }
+      errLoop()
+    }
 
     // Read stdout lines asynchronously
     const reader = (bridgeProc.stdout as ReadableStream<Uint8Array>).getReader()
@@ -180,11 +219,15 @@ export function callSync<T = unknown>(
       timeout: timeoutMs,
     })
     const out = new TextDecoder().decode(result.stdout).trim()
+    setLastBridgeStderr(new TextDecoder().decode(result.stderr ?? new Uint8Array()).trim())
     if (!out) return null
     const resp: BridgeResponse = JSON.parse(out)
     if (resp.error) throw new Error(resp.error)
     return resp.result as T
-  } catch {
+  } catch (err) {
+    // Preserve the cause for the caller's error message; returning a bare
+    // null is what previously made every bridge failure indistinguishable.
+    if (err instanceof Error && !lastBridgeStderr) setLastBridgeStderr(err.message)
     return null
   }
 }

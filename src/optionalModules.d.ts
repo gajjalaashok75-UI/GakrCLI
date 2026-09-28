@@ -275,6 +275,10 @@ declare module '@ant/computer-use-mcp/types' {
 
   export type AppGrant = FrontmostApp & {
     grantedAt: number
+    /** Undefined → "full" (back-compat for pre-tier grants). */
+    tier?: CuAppPermTier
+    /** Authorization identity for a bound window; must survive round-trips. */
+    exePath?: string
   }
 
   export type DisplayGeometry = {
@@ -290,6 +294,8 @@ declare module '@ant/computer-use-mcp/types' {
   export type InstalledApp = FrontmostApp & {
     path?: string
     iconDataUrl?: string
+    /** Resolved executable path when known; the bound-window grant identity. */
+    exePath?: string
   }
 
   export type RunningApp = FrontmostApp

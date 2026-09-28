@@ -1,5 +1,5 @@
 import { getSentinelCategory } from '@ant/computer-use-mcp/sentinelApps';
-import type { CuPermissionRequest, CuPermissionResponse } from '@ant/computer-use-mcp/types';
+import type { CuPermissionRequest, CuPermissionResponse, InstalledApp } from '@ant/computer-use-mcp/types';
 import { DEFAULT_GRANT_FLAGS } from '@ant/computer-use-mcp/types';
 import figures from 'figures';
 import * as React from 'react';
@@ -22,6 +22,22 @@ const DENY_ALL_RESPONSE: CuPermissionResponse = {
   denied: [],
   flags: DEFAULT_GRANT_FLAGS,
 };
+
+/**
+ * Build the grant the dialog returns for an approved app.
+ *
+ * `exePath` is the authorization identity the host matches a bound window's
+ * process image against. Omitting it produces a grant that passes the UI but
+ * can never authorize an input call, so it must always be carried through.
+ */
+export function toGrant(app: InstalledApp, grantedAt: number): CuPermissionResponse['granted'][number] {
+  return {
+    bundleId: app.bundleId,
+    displayName: app.displayName,
+    grantedAt,
+    exePath: app.exePath,
+  };
+}
 
 /**
  * Two-panel dispatcher. When `request.tccState` is present, macOS permissions
@@ -163,13 +179,7 @@ function ComputerUseAppListPanel({ request, onDone }: ComputerUseApprovalProps):
     const now = Date.now();
     const granted = request.apps.flatMap(a =>
       a.resolved && checked.has(a.resolved.bundleId)
-        ? [
-            {
-              bundleId: a.resolved.bundleId,
-              displayName: a.resolved.displayName,
-              grantedAt: now,
-            },
-          ]
+        ? [toGrant(a.resolved, now)]
         : [],
     );
     const denied = request.apps

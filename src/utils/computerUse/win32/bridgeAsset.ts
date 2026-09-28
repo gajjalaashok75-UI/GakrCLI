@@ -23,8 +23,7 @@ import { isInBundledMode } from '../../bundledMode.js'
 import { distRoot } from '../../distRoot.js'
 import { bunEmbeddedFiles } from '../bunCompat.js'
 
-const BRIDGE_BASENAME_JS = 'bridge.js'
-const BRIDGE_BASENAME_TS = 'bridge.ts'
+const BRIDGE_BASENAME_PY = 'bridge.py'
 
 let cachedPath: string | null | undefined
 
@@ -35,12 +34,12 @@ function devPath(): string {
     'utils',
     'computerUse',
     'win32',
-    BRIDGE_BASENAME_TS,
+    BRIDGE_BASENAME_PY,
   )
 }
 
 function distPath(): string {
-  return path.join(distRoot, 'computerUse', BRIDGE_BASENAME_JS)
+  return path.join(distRoot, 'computerUse', BRIDGE_BASENAME_PY)
 }
 
 /**
@@ -53,9 +52,7 @@ function extractEmbedded(): string | null {
   if (!embedded) return null
 
   const match = embedded.find(
-    f =>
-      path.basename(f.name) === BRIDGE_BASENAME_JS ||
-      path.basename(f.name) === BRIDGE_BASENAME_TS,
+    f => path.basename(f.name) === BRIDGE_BASENAME_PY,
   )
   if (!match) return null
 
@@ -114,4 +111,4 @@ export function readBridgeScript(): string | null {
 /** Read the bridge script contents (alias for backward compatibility). */
 export const readBridgePy = readBridgeScript
 
-export { BRIDGE_BASENAME_JS as BRIDGE_BASENAME }
+export { BRIDGE_BASENAME_PY as BRIDGE_BASENAME }
