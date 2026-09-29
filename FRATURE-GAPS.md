@@ -43,9 +43,39 @@ or move it to a real on-screen position (e.g. `CW_USEDEFAULT`).
 
 ## G2 — `mcp__computer-use__key` with modifier combinations cannot trigger accelerators
 
-**Symptom:** Plain keys via `mcp__computer-use__key` work (`key("a")` inserts
-an `a`), but `key("ctrl+t")`, `key("ctrl+n")`, `key("ctrl+shift+n")` have
-no effect — no new tab, no new window, no shortcut action.
+**Symptom:** Plain keys via `mcp__computer-use__key` mostly work (`key("a")`
+inserts an `a`), but the result is non-deterministic: sometimes no
+character is inserted, sometimes multiple characters, sometimes the
+wrong ones. Modifier shortcuts (`Ctrl+T`, `Ctrl+N`, `Ctrl+A`,
+`Ctrl+Shift+T`) have no effect — no new tab, no new window, no
+Select All, no shortcut action.
+
+**Evidence (live, 2026-09-29, HWND 657172, fresh `Untitled - Notepad`,
+rect `-26214,-26214`, `is_iconic=false`, `cloaked=0` throughout):**
+
+Sequence of `key()` calls and document text after each:
+
+| Call | Title before | Title after | Chars added |
+|---|---|---|---|
+| `key("a")` | `Untitled` | `*a` | `a` (1) |
+| `key("A")` | `*a` | `*a` | (0) |
+| `key("ctrl+a")` | `*a` | `*aaa` | `aa` (2) |
+| `key("ctrl+t")` | `*aaa` | `*aaa` | (0) |
+| `key("ctrl+n")` | `*aaa` | `*aaa` | (0) |
+| `key("t")` | `*aaa` | `*aaa` | (0) |
+| `key("a")` | `*aaa` | `*aaatnta` | `tnt` + `a` (4) |
+
+Two distinct anomalies:
+
+1. **Plain keys are non-deterministic.** `key("a")` adds 1 char, then
+   `key("A")` adds 0, then `key("ctrl+a")` adds 2 (the Ctrl was
+   completely ignored and `a` was inserted twice), then `key("t")` adds
+   0, then `key("a")` adds 4 chars including a `tnt` substring that
+   came from nowhere.
+
+2. **All modifier combinations are completely ignored.** `Ctrl+T`,
+   `Ctrl+N`, `Ctrl+A` do nothing. The character is not inserted, the
+   shortcut does not fire. Ctrl is dropped on the floor.
 
 **Evidence (live, 2026-09-29):**
 - `mcp__computer-use__key("a")` on a fresh `Untitled - Notepad` (HWND
@@ -58,8 +88,11 @@ no effect — no new tab, no new window, no shortcut action.
   `SetForegroundWindow` reports success but the keystroke still does
   nothing. **FAILS even with focus attempt.**
 
-**Root cause:** Both `type` and `key` already target the bound HWND
-directly — neither uses `SendInput`. The trace:
+**Root cause:** Two interacting issues.
+
+**Issue A — Modifier state never registered.** Both `type` and `key`
+already target the bound HWND directly — neither uses `SendInput`. The
+trace:
 
 ```
 mcp__computer-use__key("ctrl+t")
@@ -78,51 +111,65 @@ messages to the bound HWND. `PostMessageW` queues messages but
 **does not update the global keyboard input state** that accelerator
 tables query via `GetKeyState(VK_CONTROL)` / `GetAsyncKeyState(VK_*)`.
 When Notepad's `TranslateAccelerator` runs, it sees "Ctrl not held" and
-treats the `T` `WM_KEYDOWN` as a plain `T` (which would insert a `t`),
-but in practice the modifier release message may already have been
-flushed in the same pump cycle, leaving the WndProc with no net effect.
+treats the `T` `WM_KEYDOWN` as a plain `T`. The WndProc's character
+handler may insert a `t`, but the modifier-conditional shortcut path
+never fires.
 
-The 2026-09-29 `key("a")` test confirms the WndProc receives the
-events — the problem is specifically that the **modifier state never
-gets registered with the global input system**, so accelerator-driven
-shortcuts (Ctrl+T → NewTab) cannot fire. Plain keys work because they
-go directly to the WndProc's `WM_CHAR` handler without an accelerator
-check.
+**Issue B — `PostMessageW` is non-deterministic on offscreen windows.**
+The character insertion counts (1, 0, 2, 0, 0, 4) suggest the WndProc
+is processing the queued `PostMessageW` events asynchronously, with
+possible unpaired `WM_KEYDOWN` events being interpreted as autorepeat
+keystrokes (the WndProc's default `WM_KEYDOWN` handler generates
+`WM_CHAR` based on the held-key state). The interleaving between
+modifier-down, key-down, key-up, modifier-up messages and the WndProc's
+own message pump produces non-deterministic insertion counts.
 
-This is a deliberate design constraint — `platforms/win32.ts:266-271`
-explicitly disables global `SendInput`/`keybd_event`:
+The `key("a") → tnt` interleaving is the smoking gun: the user
+sent `key("t")` (which posted `t` down, `t` up) and `key("ctrl+n")`
+(which posted `Ctrl` down, `n` down, `n` up, `Ctrl` up). Then later
+`key("a")` was sent, and between the prior call and this one, `tnt`
+appeared in the document. The WndProc appears to be reprocessing
+`WM_KEYDOWN` events from the queue as autorepeat, generating
+additional `WM_CHAR` insertions asynchronously.
 
-> "Global SendInput/keybd_event is DISABLED to avoid interfering with
-> user. NO global API (SetCursorPos/SendInput/keybd_event/SendKeys) is
-> used."
+**Why this is hard to fix without changing the design:**
 
-— and `windowMessage.ts:295-298` chose `PostMessageW` over `SendMessageW`
-specifically for Windows Terminal / ConPTY compatibility (where
-`SendMessage` doesn't reach the raw console input buffer). The
-constraint makes sense for terminals but is wrong for normal app
-shortcuts.
+The 2026-09-29 prior session (commit `1e9d79f`) hypothesized only
+Issue A. The 2026-09-29 follow-up test exposed Issue B as well: even
+plain keys (no modifiers) have non-deterministic insertion counts.
+This means the underlying `PostMessageW`-only design is broken for
+all keystroke delivery to offscreen bound windows, not just for
+modifier combinations.
 
-**Smallest fix:** Three options, in order of surgical scope:
+The original design constraint — "Global SendInput/keybd_event is
+DISABLED to avoid interfering with user" (`platforms/win32.ts:266-271`)
+and `PostMessageW` over `SendMessageW` for Windows Terminal / ConPTY
+compatibility (`windowMessage.ts:295-298`) — predates the diagnostic
+instrumentation that revealed these issues. The constraint made sense
+for terminals but is wrong for normal app keystrokes.
 
-1. **Hybrid: post modifier events via `SendInput` (global) and the
-   main key via `SendMessageW` to the bound HWND.** This updates the
-   global keyboard state for the modifier (so accelerators fire) while
-   keeping the main key bound. Requires re-enabling a tightly-scoped
-   `SendInput` path for modifier events only. Side effect: briefly
-   sets the global Ctrl/Shift/Alt state, which other apps on the same
-   desktop would see — minimal in practice because the modifier is
-   held for milliseconds.
-2. **Move `key` and `type` to a single `SendMessageW`-only path for
-   non-terminal apps.** Breaks terminal compatibility for `Ctrl+C` /
-   `Ctrl+V` paste into Windows Terminal — would need a per-target
-   detection path.
-3. **Use `sendInput` for the entire combo, with a virtual keyboard
-   that scopes its events to the bound HWND's process.** Requires
-   more work (input scoping via `AttachThreadInput`).
+**Smallest fix:** Replace the offscreen-Win32 input path with a hybrid
+that uses the right delivery mechanism per target:
 
-Option 1 is the smallest, most direct fix that preserves both
-terminal compatibility and the user's "no global input" guarantee
-for non-modifier events. Recommend it.
+1. **`SendMessageW(WM_CHAR, cp)` for printable text** — synchronous,
+   per-codepoint, no autorepeat. Already the existing `sendText` path
+   (`windowMessage.ts:285-292`). Works on the offscreen bound Notepad
+   per the `type()` success in prior sessions.
+2. **`SendInput` for synthetic keystrokes** when the bound HWND's
+   thread is not actively pumping messages (i.e. the offscreen case).
+   This updates the global keyboard input state (`GetKeyState` /
+   `GetAsyncKeyState`) so accelerator tables fire correctly. Single
+   `keybd_event` for modifier down/up + `WM_KEYDOWN/UP` for the main
+   key (or full `SendInput` for the whole combo).
+3. **Keep `PostMessageW` for terminal / ConPTY targets** behind a
+   per-target detection path (e.g. `IsWindowClass("ConsoleWindowClass")`).
+
+The trade-off: `SendInput` does update global state, so other apps on
+the same desktop briefly see the synthetic modifier held for ~10 ms.
+For a headless agent scenario where the user is not actively typing,
+this is negligible. The current prohibition exists to prevent the
+agent from "stealing" the user's keyboard, but the user has already
+granted the app via `request_access` for the session.
 
 ---
 
