@@ -482,6 +482,11 @@ const screenshot: ScreenshotPlatform = {
               (diag.rect as { x: number; y: number; width: number; height: number })?.height
             } minimized=${diag.was_minimized_restored}`,
         )
+        // Continuous-state monitor: emit a diff line when any tracked
+        // field changes between consecutive captures of the same HWND.
+        // Purely operator-visible; the cache is module-scope and dies
+        // with the process.
+        logStateTransition(String(hwnd), diag as unknown as StateSnapshot)
         delete (bridgeResult as { _diagnostics?: unknown })._diagnostics
       }
       return bridgeResult
@@ -526,6 +531,66 @@ function logBoundWindowState(hwnd: string): void {
     }
   } catch {
     // Diagnostics must never break the bind path.
+  }
+}
+
+/** Module-scope cache of the last-seen window state per HWND.
+ *  Used to emit a diff line when any tracked field changes between
+ *  consecutive captures, so user-driven transitions (minimize, move,
+ *  focus) are observable in the operator log even when no MCP call
+ *  fires. Cleared implicitly on process restart. */
+interface StateSnapshot {
+  pid: number
+  title: string
+  cloaked: number
+  was_minimized_restored: boolean
+  rect: { x: number; y: number; width: number; height: number }
+}
+
+const _lastSeenState = new Map<
+  string,
+  {
+    pid: number
+    title: string
+    cloaked: number
+    was_minimized_restored: boolean
+    x: number
+    y: number
+    width: number
+    height: number
+  }
+>()
+
+function logStateTransition(hwnd: string, diag: StateSnapshot): void {
+  const rect = diag.rect ?? { x: 0, y: 0, width: 0, height: 0 }
+  const prev = _lastSeenState.get(hwnd)
+  const cur = {
+    pid: diag.pid,
+    title: diag.title,
+    cloaked: diag.cloaked,
+    was_minimized_restored: !!diag.was_minimized_restored,
+    x: rect.x,
+    y: rect.y,
+    width: rect.width,
+    height: rect.height,
+  }
+  if (!prev) {
+    _lastSeenState.set(hwnd, cur)
+    return
+  }
+  const changes: string[] = []
+  if (prev.pid !== cur.pid) changes.push(`pid:${prev.pid}->${cur.pid}`)
+  if (prev.title !== cur.title) changes.push(`title:${JSON.stringify(prev.title)}->${JSON.stringify(cur.title)}`)
+  if (prev.cloaked !== cur.cloaked) changes.push(`cloaked:${prev.cloaked}->${cur.cloaked}`)
+  if (prev.was_minimized_restored !== cur.was_minimized_restored)
+    changes.push(`minimized_restored:${prev.was_minimized_restored}->${cur.was_minimized_restored}`)
+  if (prev.x !== cur.x || prev.y !== cur.y) changes.push(`pos:(${prev.x},${prev.y})->(${cur.x},${cur.y})`)
+  if (prev.width !== cur.width || prev.height !== cur.height)
+    changes.push(`size:${prev.width}x${prev.height}->${cur.width}x${cur.height}`)
+  _lastSeenState.set(hwnd, cur)
+  if (changes.length > 0) {
+    // eslint-disable-next-line no-console
+    console.error(`[computer-use] state_transition hwnd=${hwnd} ${changes.join(' ')}`)
   }
 }
 
