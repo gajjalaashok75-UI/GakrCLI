@@ -409,7 +409,7 @@ def _get_uia():
             pass
     return _uia_client
 
-def accessibility_snapshot(hwnd_str, max_depth=4):
+def accessibility_snapshot(hwnd_str, max_depth=6):
     """Get the accessibility tree using pywinauto (more reliable than raw comtypes)."""
     try:
         from pywinauto import Desktop
@@ -447,7 +447,13 @@ def accessibility_snapshot(hwnd_str, max_depth=4):
                     rect = child.rectangle()
                     w = rect.right - rect.left
                     h = rect.bottom - rect.top
-                    if w <= 0 or h <= 0 or rect.left < -10000:
+                    # Skip zero-size elements (minimized, hidden, never-rendered).
+                    # The previous < -10000 filter was also dropping legitimate
+                    # elements of the bound window because the bound window
+                    # itself is placed at (-32000, -32000), so every direct
+                    # child inherited an offscreen left. Filter only on size
+                    # here; visibility is checked separately via ct/name flags.
+                    if w <= 0 or h <= 0:
                         continue
                     enabled = child.is_enabled()
                     value = None
@@ -464,6 +470,50 @@ def accessibility_snapshot(hwnd_str, max_depth=4):
                         }
                         if value:
                             node['v'] = str(value)[:100]
+                        # G-UIA-2: pull UIA pattern data so the agent can read
+                        # document state without a screenshot. TextPattern for
+                        # Document/Edit, SelectionPattern for Tab/List controls.
+                        try:
+                            iface_text = child.iface_text
+                        except Exception:
+                            iface_text = None
+                        if iface_text is not None:
+                            try:
+                                t = iface_text.DocumentRange.GetText(500)
+                                if t:
+                                    node['text'] = t
+                            except Exception:
+                                pass
+                            try:
+                                sel = iface_text.GetSelection()
+                                if sel and sel.Length > 0:
+                                    parts = []
+                                    for i in range(min(sel.Length, 5)):
+                                        try:
+                                            parts.append(sel.GetElement(i).GetText(200))
+                                        except Exception:
+                                            pass
+                                    node['selText'] = ''.join(parts)
+                            except Exception:
+                                pass
+                        try:
+                            iface_selection = child.iface_selection
+                        except Exception:
+                            iface_selection = None
+                        if iface_selection is not None and ct in ('Tab', 'List', 'ListView', 'Tree'):
+                            try:
+                                cur = iface_selection.GetCurrentSelection()
+                                if cur and cur.Length > 0:
+                                    sel_names = []
+                                    for i in range(min(cur.Length, 10)):
+                                        try:
+                                            sel_names.append(cur.GetElement(i).CurrentName)
+                                        except Exception:
+                                            pass
+                                    if sel_names:
+                                        node['selected'] = sel_names
+                            except Exception:
+                                pass
                         if sub:
                             node['c'] = sub
                         nodes.append(node)

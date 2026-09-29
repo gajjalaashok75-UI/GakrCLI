@@ -332,3 +332,210 @@ Recommended next steps, in priority order:
    `force_repaint` before `screenshot_window`.
 4. **G5** is a larger change requiring child-window enumeration.
 5. **G6, G7** are documentation/UX fixes.
+
+---
+
+## UIA investigation (2026-09-29) — accessibility tree quality
+
+Live measurement against the bound Notepad (HWND `1508120`,
+rect `(-26214, -26214)`, fresh `Untitled - Notepad` with the
+`aaatnta` leftover from G2 testing). All measurements taken via
+pywinauto `backend='uia'` directly so the bridge's own walk is
+isolated for comparison.
+
+### Capability summary
+
+| Dimension | Available via UIA | Visible to MCP via `accessibility_snapshot` |
+|---|---|---|
+| Total descendants | 107 | 6 |
+| `Document` (text area) | 1 (named "Text editor", `(-31992, -31907, 774x835)`) | **0** |
+| `Tab` (tab strip) | 1 (`automationId='Tabs'`) | **0** |
+| `TabItem` (open tabs) | 34 across 4 visible tabs | **0** |
+| `Button` (toolbar) | 13 incl. `AddButton`, `RewriteDropDownButton`, `OverflowButton` | **0** |
+| `MenuItem` (File/Edit/View) | 4 | **0** |
+| Status bar `Text` blocks | 6 (Line/Col, char count, encoding, line endings, Zoom) | **0** |
+| Tab selection | 1 (name="aaatnta. Modified.") | **0** |
+| Document text via `TextPattern` | "aaatnta" (7 chars) | not returned |
+| Document selection | `sel[0]` empty (collapsed caret at column 8) | not returned |
+
+### G-UIA-1 — `accessibility_snapshot` drops every interactive element when window is offscreen
+
+**Symptom:** The bridge's `walk` function in
+`src/utils/computerUse/win32/bridge.py:434-472` filters every child
+whose `rect.left < -10000`. The bound Notepad's HWND is at
+`(-26214, -26214)`. Every direct child of the top-level window has
+`rect.left` in the `-31000` to `-32000` range, so the entire
+non-TitleBar subtree is dropped on the first iteration of the walk.
+
+**Evidence (live, 2026-09-29):**
+- `accessibility_snapshot(hwnd='1508120', max_depth=4)` returned
+  only the 6 nodes shown in the table above
+- The agent's view of the bound Notepad via the MCP is: TitleBar
+  (empty name), System MenuBar, Minimize/Maximize/Close buttons
+- The agent cannot see: the document, the tabs, the toolbar, the
+  menu bar contents, the status bar
+- A real `pywinauto` walk on the same HWND returns 107 descendants
+  with 32 interactive elements
+
+**Root cause:** Line 450:
+```python
+if w <= 0 or h <= 0 or rect.left < -10000:
+    continue
+```
+The `< -10000` heuristic is intended to skip window-minimization
+artifacts but is applied at every depth, including the top level
+where the bound window itself is at `(-26214, -26214)`.
+
+**Smallest fix:** Apply the offscreen check only when the bound
+HWND itself is on-screen (i.e. not in the `move_offscreen` mode).
+For the bound-window case, the right comparison is "is the element
+visible relative to the parent's visible region," not "is the
+element's left edge above a fixed threshold." Two-line change: only
+apply `rect.left < -10000` when `bound_hwnd_is_onscreen == True`
+(track this from `manage_window move_offscreen` calls).
+
+### G-UIA-2 — No `Selection`/`Text`/cursor info returned in tree
+
+**Symptom:** The bridge's tree nodes carry `role`, `name`, `id`,
+`x/y/w/h`, `on`, `v`, and `c` — but not the document selection,
+the caret position, or the focus path. The model has to call
+`accessibility_snapshot` and infer the active tab from
+positional guesses.
+
+**Evidence (live, 2026-09-29):**
+- `iface_text.DocumentRange.GetText(200)` returns `"aaatnta"`
+- `iface_text.GetSelection()` returns one empty range (collapsed
+  caret at column 8)
+- `iface_selection.GetCurrentSelection()` on the `Tabs` element
+  returns 1 item, name `"aaatnta. Modified."`
+- The Status bar's `ContentTextBlock` reads
+  `"Line 1,\nColumn 8"` — the cursor position is right there
+  in UIA, not returned by the bridge
+
+**Root cause:** The `walk` function in
+`bridge.py:434-472` doesn't call any of the UIA patterns. It only
+reads `element_info` (name, automation_id, control_type, rect,
+enabled, value). Patterns like `TextPattern` (`GetText`,
+`GetSelection`), `SelectionPattern` (`GetCurrentSelection`),
+`SelectionItemPattern`, and `InvokePattern` are not exercised.
+
+**Smallest fix:** For `Document` and `Edit` control types, call
+`TextPattern.DocumentRange.GetText(max_chars)` and include as
+`text` field. For `Tab` controls, call
+`SelectionPattern.GetCurrentSelection()` and include selected
+`TabItem` names as `selected`. For any control with a `Selection`
+pattern, include the count. This is a per-control-type
+post-process in `walk`.
+
+### G-UIA-3 — No `get_current_state` endpoint; full tree is the only observation source
+
+**Symptom:** Every state observation costs a full tree walk +
+`PrintWindow` + `get_window_state` = 3 round-trips. The model
+asks the same questions on every step: "Where is the caret?
+What tab is active? What does the document say? Is the
+Save dialog open?"
+
+**Evidence (live, 2026-09-29):**
+- The 6 status-bar `ContentTextBlock` values (Line/Col, char
+  count, encoding, line endings, zoom) are individually
+  retrievable but the model must ask for the full tree to get
+  any one of them
+- The Document text is available via `TextPattern` but requires
+  a separate find+query path
+
+**Root cause:** The MCP exposes `accessibility_snapshot` and
+`screenshot_window` but no compact state endpoint.
+
+**Smallest fix:** Add a `get_current_state(hwnd_str)` bridge
+method that returns a flat dict:
+```python
+{
+  'window': {'title': ..., 'class': ..., 'rect': ...},
+  'focused': {'name': ..., 'type': ..., 'auto_id': ...},
+  'document': {
+    'text': '...',          # TextPattern.DocumentRange.GetText
+    'selection_text': '...',# TextPattern.GetSelection
+    'caret': {'line': 1, 'col': 8},  # parsed from status bar
+  },
+  'tabs': {'selected': 'aaatnta. Modified.', 'count': 4},
+  'status_bar': {'line_col': 'Line 1, Column 8', 'chars': '7', ...},
+  'actionable': [{'role': ..., 'name': ..., 'id': ..., 'rect': ...}, ...],
+}
+```
+This is a single UIA pass with no recursion and no `PrintWindow`.
+Cost: ~10× less than a full tree dump.
+
+### G-UIA-4 — Focused element not retrievable while window is offscreen
+
+**Symptom:** `UIA.GetFocusedElement()` from the top-level
+`CUIAutomation` returns the user's foreground app (here: a
+top-level "View" with `hasFocus=0`), not the bound Notepad's
+focused descendant. The bound window has no OS-level foreground
+rights, so its UIA subtree reports `CurrentHasKeyboardFocus=False`
+on every element.
+
+**Evidence (live, 2026-09-29):**
+- `IUIAutomation.GetFocusedElement()` returned a Chrome
+  WebView's "View" element with `hasFocus=0` — not the
+  Notepad's Document
+- Walking the bound Notepad's `descendants()`, no element has
+  `hasFocus=True` (Document, Tabs, TabItem, etc. all show `False`)
+- The OS foreground is whichever app the user last clicked
+
+**Root cause:** `CurrentHasKeyboardFocus` reflects OS-foreground
+focus, not logical UIA focus. When the bound window is offscreen
+and not foregrounded, the UIA tree is logically "focused" (the
+caret is at column 8, "aaatnta" is the active document) but
+OS-level focus is elsewhere.
+
+**Smallest fix:** Replace the focus signal with the
+"logically-focused" element derived from:
+- `Tabs` element's `SelectionPattern.GetCurrentSelection()` →
+  active tab
+- That tab's `Document` child's `TextPattern.GetSelection()` →
+  caret position
+- The Document's enclosing window's title → window-level state
+
+This is what the model actually wants: "where would input go
+if I sent it?" not "which window does the OS think is
+foregrounded?"
+
+### Priority re-ranking after UIA investigation
+
+G-UIA findings change the priority order because UIA-based
+navigation **replaces** the keyboard-shortcut path that G1+G2
+are trying to fix.
+
+| Gap | Original priority | After UIA finding |
+|---|---|---|
+| G1 (offscreen blocking) | 1 | **deferred** — G-UIA-1 already lets the agent operate without ever moving the window |
+| G2 (key/type) | 1 | **lowered** — `key("a")` works for single keys; the modifier-shortcut problem is real but the agent can avoid it via UIA clicks on `Tabs`/`AddButton` |
+| G3 (substring match) | 2 | 2 (unchanged) |
+| G4 (stale GDI) | 3 | 3 (unchanged) |
+| G5 (caret unknown) | 4 | **subsumed by G-UIA-3** — `get_current_state` reports caret |
+| G6, G7 (UX) | 5 | 5 (unchanged) |
+| **G-UIA-1** (tree filter) | new | **1** — one-line fix unblocks 32 currently-hidden interactive elements |
+| **G-UIA-2** (patterns) | new | **2** — Document/Tab patterns make the snapshot actually useful |
+| **G-UIA-3** (state endpoint) | new | **3** — single new bridge method, large UX improvement |
+| **G-UIA-4** (logical focus) | new | 4 — only needed if G-UIA-3 still wants a focus signal |
+
+**Recommended next commit:** G-UIA-1 + G-UIA-2 as a single
+diagnostic-and-fix commit. G-UIA-1 is the one-line filter fix;
+G-UIA-2 is a per-control-type post-process in `walk`. Both
+are read-only from the user's perspective (the bridge already
+has the data; the filter just drops it). After that, measure
+again — if the agent can drive Notepad entirely via UIA clicks,
+G1+G2 keyboard work drops to medium priority.
+
+---
+
+## Status of all gaps (post UIA investigation)
+
+- G1: deferred — likely subsumed by G-UIA fixes
+- G2: lowered — modifier shortcuts still broken, but the agent
+  has a UIA-based workaround for the common cases (tab switch,
+  new tab, menu, save)
+- G3–G7: unchanged
+- G-UIA-1 through G-UIA-4: documented above, G-UIA-1 + G-UIA-2
+  recommended as the next commit
+
