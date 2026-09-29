@@ -41,39 +41,88 @@ or move it to a real on-screen position (e.g. `CW_USEDEFAULT`).
 
 ---
 
-## G2 — Bound HWND's `mcp__computer-use__type`/`mcp__computer-use__key` go to the user's foreground, not the bound window
+## G2 — `mcp__computer-use__key` with modifier combinations cannot trigger accelerators
 
-**Symptom:** `mcp__computer-use__type` and `mcp__computer-use__key` use
-`SendInput` (real OS keystrokes). When the bound HWND is at
-`(-26214, -26214)` and Windows 11 rejects `SetForegroundWindow`, the
-keystrokes either (a) go to the user's actual foreground window (e.g.
-Visual Studio Code, a browser tab), or (b) are silently dropped if no
-window is foregrounded.
+**Symptom:** Plain keys via `mcp__computer-use__key` work (`key("a")` inserts
+an `a`), but `key("ctrl+t")`, `key("ctrl+n")`, `key("ctrl+shift+n")` have
+no effect — no new tab, no new window, no shortcut action.
 
 **Evidence (live, 2026-09-29):**
-- `mcp__computer-use__type` on a bound offscreen Notepad: title bar
-  does not update; document content may or may not change depending on
-  what window the user's foreground is at that moment
-- `mcp__computer-use__key ctrl+n` to open a new Notepad tab: no new
-  tab appears (the keystroke went elsewhere)
-- `mcp__computer-use__key ctrl+t`, `ctrl+shift+n`: same — no new tab
+- `mcp__computer-use__key("a")` on a fresh `Untitled - Notepad` (HWND
+  657172, PID 23872, rect `-26214,-26214`): title bar changed to
+  `*a - Notepad`, screenshot shows a single `a` in the document. **WORKS.**
+- `mcp__computer-use__key("ctrl+t")` on the same bound Notepad: no new
+  tab, no state change, `cloaked=0`, `is_iconic=false` throughout.
+  `key("ctrl+n")` and `key("ctrl+shift+t")` likewise. **FAILS.**
+- `mcp__computer-use__key("ctrl+n")` after `manage_window focus`:
+  `SetForegroundWindow` reports success but the keystroke still does
+  nothing. **FAILS even with focus attempt.**
 
-**Root cause:** Same as G1. The `mcp__computer-use__type` action
-ultimately uses `SendInput` (`win32.ts:133-134`). For the keystrokes
-to reach the bound HWND's WndProc, that HWND must be the OS-foreground
-window, which is not achievable with the current `(-26214, -26214)`
-positioning and missing `AllowSetForegroundWindow` call.
+**Root cause:** Both `type` and `key` already target the bound HWND
+directly — neither uses `SendInput`. The trace:
 
-**Smallest fix:** Two options, in order of scope:
-1. **Same as G1** — fix the foreground-activation path so
-   `SetForegroundWindow` actually works, and `SendInput` routes correctly.
-2. **Switch `mcp__computer-use__type`/`key` to use the bound HWND's
-   `WndProc` via `SendMessageW`** (the `send_text` helper already
-   exists in `bridge.py:343-356`). This bypasses `SendInput` entirely
-   and works regardless of where the window is positioned, at the cost
-   of breaking for windows that don't handle `WM_CHAR`/`WM_KEYDOWN`
-   in their top-level WndProc (most modern Edit-based controls do,
-   but some don't).
+```
+mcp__computer-use__key("ctrl+t")
+  → vendor toolCalls.ts: handleKey (2766)
+    → adapter.executor.key("ctrl+t")
+      → executorCrossPlatform.ts:298 key()
+        → platform.input.keys(["ctrl","t"])
+          → platforms/win32.ts:362 keys()
+            → getWm().sendKeys(boundHwnd, ["ctrl","t"])
+              → windowMessage.ts:319 sendKeys() — PostMessageW × 4
+                (ctrl down, t down, t up, ctrl up)
+```
+
+The implementation posts four `PostMessageW(WM_KEYDOWN/WM_KEYUP)`
+messages to the bound HWND. `PostMessageW` queues messages but
+**does not update the global keyboard input state** that accelerator
+tables query via `GetKeyState(VK_CONTROL)` / `GetAsyncKeyState(VK_*)`.
+When Notepad's `TranslateAccelerator` runs, it sees "Ctrl not held" and
+treats the `T` `WM_KEYDOWN` as a plain `T` (which would insert a `t`),
+but in practice the modifier release message may already have been
+flushed in the same pump cycle, leaving the WndProc with no net effect.
+
+The 2026-09-29 `key("a")` test confirms the WndProc receives the
+events — the problem is specifically that the **modifier state never
+gets registered with the global input system**, so accelerator-driven
+shortcuts (Ctrl+T → NewTab) cannot fire. Plain keys work because they
+go directly to the WndProc's `WM_CHAR` handler without an accelerator
+check.
+
+This is a deliberate design constraint — `platforms/win32.ts:266-271`
+explicitly disables global `SendInput`/`keybd_event`:
+
+> "Global SendInput/keybd_event is DISABLED to avoid interfering with
+> user. NO global API (SetCursorPos/SendInput/keybd_event/SendKeys) is
+> used."
+
+— and `windowMessage.ts:295-298` chose `PostMessageW` over `SendMessageW`
+specifically for Windows Terminal / ConPTY compatibility (where
+`SendMessage` doesn't reach the raw console input buffer). The
+constraint makes sense for terminals but is wrong for normal app
+shortcuts.
+
+**Smallest fix:** Three options, in order of surgical scope:
+
+1. **Hybrid: post modifier events via `SendInput` (global) and the
+   main key via `SendMessageW` to the bound HWND.** This updates the
+   global keyboard state for the modifier (so accelerators fire) while
+   keeping the main key bound. Requires re-enabling a tightly-scoped
+   `SendInput` path for modifier events only. Side effect: briefly
+   sets the global Ctrl/Shift/Alt state, which other apps on the same
+   desktop would see — minimal in practice because the modifier is
+   held for milliseconds.
+2. **Move `key` and `type` to a single `SendMessageW`-only path for
+   non-terminal apps.** Breaks terminal compatibility for `Ctrl+C` /
+   `Ctrl+V` paste into Windows Terminal — would need a per-target
+   detection path.
+3. **Use `sendInput` for the entire combo, with a virtual keyboard
+   that scopes its events to the bound HWND's process.** Requires
+   more work (input scoping via `AttachThreadInput`).
+
+Option 1 is the smallest, most direct fix that preserves both
+terminal compatibility and the user's "no global input" guarantee
+for non-modifier events. Recommend it.
 
 ---
 
