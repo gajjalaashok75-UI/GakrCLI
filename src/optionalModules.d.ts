@@ -342,6 +342,13 @@ declare module '@ant/computer-use-mcp/types' {
     /** Bundle IDs the user unchecked, or apps that weren't installed. */
     denied: Array<{ bundleId: string; reason: 'user_denied' | 'not_installed' }>
     flags: CuGrantFlags
+    /**
+     * Whether the user clicked Allow in THIS dialog. Only set by UI paths
+     * that know — `false` lets the request_access handler tell the model
+     * the user refused instead of returning an ambiguous empty-success.
+     * Undefined → legacy/teach path, do not gate on it.
+     */
+    userConsented?: boolean
   }
 
   export type LoggerDetail = Error | NodeJS.ErrnoException

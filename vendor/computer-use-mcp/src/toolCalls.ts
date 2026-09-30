@@ -1163,6 +1163,27 @@ async function handleRequestAccess(
       }),
     }
     const response = await overrides.onPermissionRequest(req)
+
+    // Explicit user deny (userConsented === false, set by the approval UI).
+    // Must not fall through to the okJson success path: with a pre-existing
+    // allowlist, granted=[...skipDialogGrants] made Deny look like an
+    // approval (denied_count=0, no signal the user said no). Surface an
+    // error the model can act on instead — retry with a better reason, or
+    // pick a different approach. Undefined userConsented → legacy hosts,
+    // keep the old behavior.
+    if (response.userConsented === false) {
+      const names = needDialog
+        .filter(a => a.resolved)
+        .map(a => a.resolved!.displayName)
+      const listed = names.length > 0 ? names.join(', ') : apps.join(', ')
+      return errorResult(
+        `The user DENIED access to ${listed}. Do not retry request_access ` +
+          'with the same apps unless the user explicitly asks to grant them. ' +
+          'Ask the user how to proceed or use a different approach.',
+        'app_denied',
+      )
+    }
+
     dialogGranted = response.granted
     dialogDenied = response.denied
     dialogFlags = response.flags

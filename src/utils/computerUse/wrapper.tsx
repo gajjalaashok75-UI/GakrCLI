@@ -341,8 +341,10 @@ async function runPermissionDialog(req: CuPermissionRequest): Promise<CuPermissi
   const context = tuc();
   const setToolJSX = context.setToolJSX;
   if (!setToolJSX) {
-    // Shouldn't happen — main.tsx gate excludes non-interactive. Fail safe.
-    return { granted: [], denied: [], flags: DEFAULT_GRANT_FLAGS };
+    // Shouldn't happen — main.tsx gate excludes non-interactive. Fail safe:
+    // a deny-shaped response (no grants, explicit non-consent) so the vendor
+    // handler reports refusal to the model instead of an ambiguous success.
+    return { granted: [], denied: [], flags: DEFAULT_GRANT_FLAGS, userConsented: false };
   }
 
   try {

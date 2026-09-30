@@ -17,11 +17,54 @@ type ComputerUseApprovalProps = {
   onDone: (response: CuPermissionResponse) => void;
 };
 
-const DENY_ALL_RESPONSE: CuPermissionResponse = {
-  granted: [],
-  denied: [],
-  flags: DEFAULT_GRANT_FLAGS,
-};
+/**
+ * Build the response for a Deny click. `userConsented: false` is the load-bearing
+ * field: without it, Deny and Allow-of-nothing produce structurally identical
+ * `{granted:[], denied:[]}` payloads, and handleRequestAccess cannot tell the
+ * model "the user said no" — it returned a success result whose granted list
+ * (pre-existing skipDialogGrants) read like an approval.
+ */
+export function buildDenyResponse(request: CuPermissionRequest): CuPermissionResponse {
+  return {
+    granted: [],
+    denied: request.apps.map(a => ({
+      bundleId: a.resolved?.bundleId ?? a.requestedName,
+      reason: a.resolved ? ('user_denied' as const) : ('not_installed' as const),
+    })),
+    flags: DEFAULT_GRANT_FLAGS,
+    userConsented: false,
+  };
+}
+
+/**
+ * Build the response for an Allow click: a grant per checked app plus all
+ * requested flags (per-flag toggles are a follow-up).
+ */
+export function buildAllowResponse(
+  request: CuPermissionRequest,
+  checked: ReadonlySet<string>,
+): CuPermissionResponse {
+  const now = Date.now();
+  const granted = request.apps.flatMap(a =>
+    a.resolved && checked.has(a.resolved.bundleId)
+      ? [toGrant(a.resolved, now)]
+      : [],
+  );
+  const denied = request.apps
+    .filter(a => !a.resolved || !checked.has(a.resolved.bundleId))
+    .map(a => ({
+      bundleId: a.resolved?.bundleId ?? a.requestedName,
+      reason: a.resolved ? ('user_denied' as const) : ('not_installed' as const),
+    }));
+  const requestedFlagKeys = (
+    Object.keys(request.requestedFlags) as Array<keyof typeof DEFAULT_GRANT_FLAGS>
+  ).filter(k => request.requestedFlags[k]);
+  const flags = {
+    ...DEFAULT_GRANT_FLAGS,
+    ...Object.fromEntries(requestedFlagKeys.map(k => [k, true] as const)),
+  };
+  return { granted, denied, flags, userConsented: true };
+}
 
 /**
  * Build the grant the dialog returns for an approved app.
@@ -47,7 +90,7 @@ export function toGrant(app: InstalledApp, grantedAt: number): CuPermissionRespo
  */
 export function ComputerUseApproval({ request, onDone }: ComputerUseApprovalProps): React.ReactNode {
   return request.tccState ? (
-    <ComputerUseTccPanel tccState={request.tccState} onDone={() => onDone(DENY_ALL_RESPONSE)} />
+    <ComputerUseTccPanel tccState={request.tccState} onDone={() => onDone(buildDenyResponse(request))} />
   ) : (
     <ComputerUseAppListPanel request={request} onDone={onDone} />
   );
@@ -172,28 +215,7 @@ function ComputerUseAppListPanel({ request, onDone }: ComputerUseApprovalProps):
   );
 
   function respond(allow: boolean): void {
-    if (!allow) {
-      onDone(DENY_ALL_RESPONSE);
-      return;
-    }
-    const now = Date.now();
-    const granted = request.apps.flatMap(a =>
-      a.resolved && checked.has(a.resolved.bundleId)
-        ? [toGrant(a.resolved, now)]
-        : [],
-    );
-    const denied = request.apps
-      .filter(a => !a.resolved || !checked.has(a.resolved.bundleId))
-      .map(a => ({
-        bundleId: a.resolved?.bundleId ?? a.requestedName,
-        reason: a.resolved ? ('user_denied' as const) : ('not_installed' as const),
-      }));
-    // Grant all requested flags on allow — per-flag toggles are a follow-up.
-    const flags = {
-      ...DEFAULT_GRANT_FLAGS,
-      ...Object.fromEntries(requestedFlagKeys.map(k => [k, true] as const)),
-    };
-    onDone({ granted, denied, flags });
+    onDone(allow ? buildAllowResponse(request, checked) : buildDenyResponse(request));
   }
 
   return (
