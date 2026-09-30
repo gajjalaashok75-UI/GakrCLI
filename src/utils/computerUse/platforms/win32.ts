@@ -4,9 +4,9 @@
  * Combines:
  * - PowerShell SetCursorPos/SendInput for global input (fallback)
  * - win32/windowMessage.ts for window-bound SendMessage input (preferred)
- * - TypeScript Bridge (bridge.ts) for screenshots (koffi + raw GDI capture)
+ * - bridge.py (Python ctypes) for screenshots (PrintWindow + GDI -> JPEG)
  * - win32/windowEnum.ts for EnumWindows app listing
- * - No PowerShell for screenshots (TypeScript Bridge only, no PS fallback)
+ * - No PowerShell for screenshots (Python bridge only, no PS fallback)
  * - PowerShell Screen.AllScreens for display enumeration
  *
  * CRITICAL: All screenshots output JPEG (ImageFormat::Jpeg), not PNG.

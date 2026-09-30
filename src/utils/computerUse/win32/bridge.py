@@ -748,7 +748,9 @@ def accessibility_snapshot(hwnd_str, max_depth=6):
                        # reported nothing until an interactive descendant
                        # existed beneath it.
                        'DataGrid', 'ScrollBar', 'Tree', 'Spinner',
-                       'ToggleButton'}
+                       'ToggleButton',
+                       # Date pickers are clickable interactive surfaces.
+                       'Calendar'}
 
         def walk(element, depth):
             if depth >= max_depth:
@@ -1015,7 +1017,8 @@ _UIA_EXPAND_STATE = 30051  # ExpandCollapsePattern.ExpandCollapseState
 
 # Roles surfaced in the flat `actionable` target list.
 _ACTIONABLE_ROLES = {'Button', 'TabItem', 'MenuItem', 'ListItem', 'CheckBox',
-                     'RadioButton', 'Hyperlink', 'ComboBox', 'Edit', 'SplitButton'}
+                     'RadioButton', 'Hyperlink', 'ComboBox', 'Edit', 'SplitButton',
+                     'DataGrid', 'Calendar'}
 
 
 def _strip_dirty_suffix(name):
