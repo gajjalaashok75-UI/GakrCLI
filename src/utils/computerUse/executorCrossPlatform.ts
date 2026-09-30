@@ -317,6 +317,36 @@ export function createCrossPlatformExecutor(_opts: {
     async key(keySequence: string, repeat?: number): Promise<void> {
       const parts = keySequence.split('+').filter(p => p.length > 0)
       const n = repeat ?? 1
+
+      // FRATURE-GAPS G2 fix — modifier chords on a bound Windows window go
+      // through the bridge's keybd_event path: PostMessageW(WM_KEYDOWN)
+      // never updates the global key state that TranslateAccelerator
+      // consults, so ctrl+t / ctrl+shift+tab etc. were silently treated as
+      // the plain key. The bridge briefly foregrounds the bound window,
+      // injects the chord, and restores the user's foreground. Failure or
+      // an old bridge asset falls through to the legacy PostMessage path.
+      if (process.platform === 'win32' && isBound() && parts.length > 1) {
+        try {
+          const { getBoundHwnd } =
+            require('./platforms/win32.js') as typeof import('./platforms/win32.js')
+          const hwnd = getBoundHwnd()
+          if (hwnd) {
+            const { call } =
+              require('./win32/bridgeClient.js') as typeof import('./win32/bridgeClient.js')
+            for (let i = 0; i < n; i++) {
+              const ok = await call('send_key_chord', { hwnd, keys: parts })
+              if (ok !== true) break
+            }
+            // Delivered (or exhausted retries) via the chord path — do not
+            // also post the same chord through the legacy path, which would
+            // double-fire plain keys when modifiers get dropped there.
+            return
+          }
+        } catch {
+          // fall through to the legacy path
+        }
+      }
+
       for (let i = 0; i < n; i++) {
         if (i > 0) await sleep(8)
         await platform.input.keys(parts)
@@ -386,7 +416,7 @@ export function createCrossPlatformExecutor(_opts: {
       y: number,
       button: 'left' | 'right' | 'middle',
       count: 1 | 2 | 3,
-      _modifiers?: string[],
+      modifiers?: string[],
     ): Promise<void> {
       let clickX = Math.round(x)
       let clickY = Math.round(y)
@@ -400,6 +430,34 @@ export function createCrossPlatformExecutor(_opts: {
         logForDebugging(
           `[computer-use] click(${Math.round(x)},${Math.round(y)}) → client(${clickX},${clickY}) [nc offset: ${nc.dx},${nc.dy}]`,
         )
+
+        // Bridge path when on Windows: one call handles count (real
+        // WM_*BUTTONDBLCLK for double/triple — N separate down/up pairs do
+        // not register as multi-clicks) and modifier MK_ flags, which the
+        // per-iteration platform path below drops on the floor. Failure or
+        // an old bridge asset falls through to the legacy loop.
+        if (process.platform === 'win32') {
+          try {
+            const { getBoundHwnd } =
+              require('./platforms/win32.js') as typeof import('./platforms/win32.js')
+            const hwnd = getBoundHwnd()
+            const { call } =
+              require('./win32/bridgeClient.js') as typeof import('./win32/bridgeClient.js')
+            if (hwnd && (count > 1 || (modifiers && modifiers.length > 0))) {
+              const ok = await call('send_multi_click', {
+                hwnd,
+                x: clickX,
+                y: clickY,
+                button: button === 'middle' ? 'middle' : button,
+                count,
+                modifiers: modifiers ?? [],
+              })
+              if (ok === true) return
+            }
+          } catch {
+            // fall through to the legacy per-iteration path
+          }
+        }
       }
 
       for (let i = 0; i < count; i++) {

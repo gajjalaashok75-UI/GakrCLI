@@ -547,11 +547,21 @@ export function sendClick(
   hwnd: string,
   x: number,
   y: number,
-  button: 'left' | 'right',
+  button: 'left' | 'right' | 'middle',
 ): boolean {
   hwnd = resolveInputHwnd(hwnd)
-  const downMsg = button === 'left' ? '0x0201' : '0x0204'
-  const upMsg = button === 'left' ? '0x0202' : '0x0205'
+  const downMsg =
+    button === 'left'
+      ? '0x0201'
+      : button === 'middle'
+        ? '0x0207' // WM_MBUTTONDOWN — was previously routed to WM_RBUTTONDOWN
+        : '0x0204'
+  const upMsg =
+    button === 'left'
+      ? '0x0202'
+      : button === 'middle'
+        ? '0x0208' // WM_MBUTTONUP
+        : '0x0205'
   const hwndExpr = `[IntPtr]::new([long]${hwnd})`
 
   const script = `${WINMSG_TYPE}

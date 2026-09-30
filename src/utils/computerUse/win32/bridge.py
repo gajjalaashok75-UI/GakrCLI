@@ -41,9 +41,21 @@ WM_KEYUP = 0x0101
 WM_CLOSE = 0x0010
 WM_LBUTTONDOWN = 0x0201
 WM_LBUTTONUP = 0x0202
+WM_LBUTTONDBLCLK = 0x0203
 WM_RBUTTONDOWN = 0x0204
 WM_RBUTTONUP = 0x0205
+WM_RBUTTONDBLCLK = 0x0206
+WM_MBUTTONDOWN = 0x0207
+WM_MBUTTONUP = 0x0208
+WM_MBUTTONDBLCLK = 0x0209
 WM_MOUSEMOVE = 0x0200
+
+# wParam key-state flags for WM_*BUTTON* messages
+MK_LBUTTON = 0x0001
+MK_RBUTTON = 0x0002
+MK_SHIFT = 0x0004
+MK_CONTROL = 0x0008
+MK_MBUTTON = 0x0010
 
 SW_MINIMIZE = 6
 SW_MAXIMIZE = 3
@@ -310,16 +322,142 @@ def manage_window(hwnd_str, action):
 def make_lparam(x, y):
     return (y << 16) | (x & 0xFFFF)
 
-def send_click(hwnd_str, x, y, button='left'):
+_CLICK_MSGS = {
+    'left': (WM_LBUTTONDOWN, WM_LBUTTONUP, WM_LBUTTONDBLCLK, MK_LBUTTON),
+    'right': (WM_RBUTTONDOWN, WM_RBUTTONUP, WM_RBUTTONDBLCLK, MK_RBUTTON),
+    'middle': (WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MBUTTONDBLCLK, MK_MBUTTON),
+}
+
+def _mk_flags(modifiers):
+    """wParam key-state flags (MK_CONTROL/MK_SHIFT) for button messages."""
+    flags = 0
+    for m in (modifiers or []):
+        ml = str(m).lower()
+        if ml in ('ctrl', 'control'):
+            flags |= MK_CONTROL
+        elif ml == 'shift':
+            flags |= MK_SHIFT
+    return flags
+
+def send_click(hwnd_str, x, y, button='left', modifiers=None):
     hwnd = int(hwnd_str)
+    if not user32.IsWindow(hwnd):
+        return False
     lp = make_lparam(x, y)
-    if button == 'left':
-        SendMessageW(hwnd, WM_LBUTTONDOWN, 0, lp)
-        SendMessageW(hwnd, WM_LBUTTONUP, 0, lp)
-    elif button == 'right':
-        SendMessageW(hwnd, WM_RBUTTONDOWN, 0, lp)
-        SendMessageW(hwnd, WM_RBUTTONUP, 0, lp)
+    down, up, _dbl, mk = _CLICK_MSGS.get(button, _CLICK_MSGS['left'])
+    wp = _mk_flags(modifiers) | mk
+    SendMessageW(hwnd, down, wp, lp)
+    SendMessageW(hwnd, up, wp, lp)
     return True
+
+def send_multi_click(hwnd_str, x, y, button='left', count=1, modifiers=None):
+    """Multi-click at client coords. count>1 sends real WM_*BUTTONDBLCLK.
+
+    N consecutive WM_LBUTTONDOWN/UP pairs do NOT register as a double-click:
+    the target decides via GetDoubleClickTime, and synthesised pairs carry
+    identical message timestamps. WM_*DBLCLK is what the WndProc actually
+    switches on (word-select / line-select in editors), so double and
+    triple clicks must be sent explicitly. Works identically for onscreen
+    and offscreen-parked windows — everything is window-targeted.
+    """
+    if count <= 1:
+        return send_click(hwnd_str, x, y, button, modifiers)
+    hwnd = int(hwnd_str)
+    if not user32.IsWindow(hwnd):
+        return False
+    lp = make_lparam(x, y)
+    down, up, dbl, mk = _CLICK_MSGS.get(button, _CLICK_MSGS['left'])
+    wp = _mk_flags(modifiers) | mk
+    for i in range(int(count)):
+        if i == 0:
+            SendMessageW(hwnd, down, wp, lp)
+        else:
+            SendMessageW(hwnd, dbl, wp, lp)
+        SendMessageW(hwnd, up, wp, lp)
+        time.sleep(0.03)
+    return True
+
+def send_key_chord(hwnd_str, keys):
+    """FRATURE-GAPS G2 fix — deliver a key combo with real keyboard state.
+
+    PostMessageW(WM_KEYDOWN) queues messages but never updates the global
+    key state that TranslateAccelerator consults via GetKeyState, so
+    modifier chords (ctrl+t, ctrl+shift+tab, ...) are silently treated as
+    the plain key. This path briefly brings the bound window to the
+    foreground, injects the full chord via keybd_event (which updates that
+    state), then restores the user's previous foreground window. Works the
+    same for onscreen and offscreen-parked bound windows.
+    """
+    VK = {
+        'ctrl': 0x11, 'control': 0x11, 'shift': 0x10, 'alt': 0x12, 'menu': 0x12,
+        'enter': 0x0D, 'return': 0x0D, 'tab': 0x09, 'escape': 0x1B, 'esc': 0x1B,
+        'backspace': 0x08, 'delete': 0x2E, 'del': 0x2E, 'insert': 0x2D,
+        'ins': 0x2D, 'space': 0x20,
+        'left': 0x25, 'up': 0x26, 'right': 0x27, 'down': 0x28,
+        'home': 0x24, 'end': 0x23, 'pageup': 0x21, 'pagedown': 0x22,
+        'f1': 0x70, 'f2': 0x71, 'f3': 0x72, 'f4': 0x73, 'f5': 0x74,
+        'f6': 0x75, 'f7': 0x76, 'f8': 0x77, 'f9': 0x78, 'f10': 0x79,
+        'f11': 0x7A, 'f12': 0x7B,
+    }
+    MODIFIERS = {'ctrl', 'control', 'shift', 'alt', 'menu'}
+    # Navigation keys emit the wrong character without Shift held.
+    SHIFTED_NAV = {'left', 'up', 'right', 'down', 'home', 'end',
+                   'pageup', 'pagedown', 'insert', 'ins', 'delete', 'del'}
+    mods = []
+    main_vk = None
+    for k in keys:
+        kl = str(k).lower()
+        if kl in MODIFIERS:
+            vk = VK[kl]
+            if vk not in mods:
+                mods.append(vk)
+        elif kl in VK:
+            main_vk = VK[kl]
+            if kl in SHIFTED_NAV and 0x10 not in mods:
+                mods.insert(0, 0x10)
+        elif len(kl) == 1:
+            main_vk = ord(kl.upper())
+    if main_vk is None:
+        return False
+    hwnd = int(hwnd_str)
+    # Refuse BEFORE touching global input: with a stale/invalid hwnd the
+    # keybd_event chord below would land in whatever window the USER has
+    # foreground. Window-targeted SendMessage paths degrade harmlessly on a
+    # dead hwnd; global injection does not.
+    if not user32.IsWindow(hwnd):
+        return False
+    prev_fg = user32.GetForegroundWindow()
+    try:
+        if user32.IsIconic(hwnd):
+            user32.ShowWindow(hwnd, SW_RESTORE)
+        user32.SetForegroundWindow(hwnd)
+        time.sleep(0.05)
+        # ALT tap: makes this thread eligible for SetForegroundWindow even
+        # when the caller has no foreground rights.
+        try:
+            user32.keybd_event(0x12, 0, 0, 0)       # ALT down
+            user32.keybd_event(0x12, 0, 0x0002, 0)  # ALT up
+        except Exception:
+            pass
+        user32.SetForegroundWindow(hwnd)
+        time.sleep(0.05)
+        KEYEVENTF_KEYUP = 0x0002
+        for m in mods:
+            user32.keybd_event(m, 0, 0, 0)
+        user32.keybd_event(main_vk, 0, 0, 0)
+        user32.keybd_event(main_vk, 0, KEYEVENTF_KEYUP, 0)
+        for m in reversed(mods):
+            user32.keybd_event(m, 0, KEYEVENTF_KEYUP, 0)
+        time.sleep(0.05)
+        # Give the user's foreground back — the chord must not steal it.
+        try:
+            if prev_fg and prev_fg != hwnd and user32.IsWindow(prev_fg):
+                user32.SetForegroundWindow(prev_fg)
+        except Exception:
+            pass
+        return True
+    except Exception:
+        return False
 
 def send_text(hwnd_str, text):
     """Send text via WM_CHAR (Unicode). Handles surrogate pairs."""
@@ -1313,10 +1451,12 @@ METHODS = {
     'get_window_state': lambda p: get_window_state(p['hwnd']),
     'get_client_offset': lambda p: get_client_offset(p['hwnd']),
     'manage_window': lambda p: manage_window(p['hwnd'], p['action']),
-    'send_click': lambda p: send_click(p['hwnd'], p['x'], p['y'], p.get('button', 'left')),
+    'send_click': lambda p: send_click(p['hwnd'], p['x'], p['y'], p.get('button', 'left'), p.get('modifiers')),
+    'send_multi_click': lambda p: send_multi_click(p['hwnd'], p['x'], p['y'], p.get('button', 'left'), int(p.get('count', 1)), p.get('modifiers')),
     'send_text': lambda p: send_text(p['hwnd'], p['text']),
     'send_key': lambda p: send_key(p['hwnd'], p['vk'], p.get('action', 'down')),
     'send_keys': lambda p: send_keys_combo(p['hwnd'], p['keys']),
+    'send_key_chord': lambda p: send_key_chord(p['hwnd'], p['keys']),
     'send_mouse_down': lambda p: send_mouse_down(p['hwnd'], p['x'], p['y']),
     'send_mouse_up': lambda p: send_mouse_up(p['hwnd'], p['x'], p['y']),
     'send_mouse_move': lambda p: send_mouse_move(p['hwnd'], p['x'], p['y']),

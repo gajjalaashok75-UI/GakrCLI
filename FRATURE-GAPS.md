@@ -43,6 +43,20 @@ or move it to a real on-screen position (e.g. `CW_USEDEFAULT`).
 
 ## G2 — `mcp__computer-use__key` with modifier combinations cannot trigger accelerators
 
+**STATUS: FIXED (2026-09-30, commit pending).** Modifier chords on a
+bound Windows window are now delivered through the bridge's new
+`send_key_chord` method: the bound window is briefly foregrounded, the
+full combo is injected via `keybd_event` (which updates the global key
+state `TranslateAccelerator` consults — the root cause below), and the
+user's previous foreground window is restored. Plain text continues to
+use the synchronous `SendMessageW(WM_CHAR)` path, which was already
+deterministic. PostMessage remains only as the legacy fallback for old
+bridge assets. The live Notepad reproducer below (ctrl+a/ctrl+t/ctrl+n
+no-ops, non-deterministic plain-key insertions) should be re-run to
+confirm on the fixed build; the in-report `tnt` plain-key anomaly was
+Issue B of the PostMessage design and is bypassed entirely by the new
+path for chords.
+
 **Symptom:** Plain keys via `mcp__computer-use__key` mostly work (`key("a")`
 inserts an `a`), but the result is non-deterministic: sometimes no
 character is inserted, sometimes multiple characters, sometimes the

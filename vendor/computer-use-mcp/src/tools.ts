@@ -535,9 +535,13 @@ export function buildComputerUseTools(
             name: 'get_current_state',
             description:
               'Read the bound window\'s logical state without a screenshot or tree walk. ' +
-              'Returns a flat snapshot: window title/rect/minimized, active tab, document text and selection, ' +
-              'caret position (line/column), character count, input fields with current values, status bar fields, ' +
-              'named clickable controls, and logical focus. ' +
+              'Returns a flat snapshot: window title/rect/minimized, tabs ' +
+              '(tabCount, selectedTabIndex, tabs[] with per-tab selected flags), input fields with ' +
+              'current values and focused flag, selectedItems, treeItems with expand state, menus, ' +
+              'named buttons, document text/selection/caret (line/column), characterCount, encoding, ' +
+              'lineEndings, fileType, statusBar fields, a bounded actionable control list with center ' +
+              'coordinates for direct left_click targeting, and logicalFocus. ' +
+              'Field groups are omitted when the UIA tree does not expose them. ' +
               'Much cheaper than screenshot for questions like "what file is open", "what tab is active", ' +
               '"where is the caret", or "what is in the address bar". ' +
               'The window must have been bound via open_application first.',
