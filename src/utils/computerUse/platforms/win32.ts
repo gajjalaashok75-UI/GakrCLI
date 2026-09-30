@@ -24,7 +24,7 @@ import type {
   InstalledApp,
   FrontmostAppInfo,
 } from './types.js'
-import { listWindows } from '../win32/windowEnum.js'
+import { listWindows, getProcessImagePath } from '../win32/windowEnum.js'
 import { detectAppType, openWithController } from '../win32/appDispatcher.js'
 import {
   markBound,
@@ -647,14 +647,80 @@ function findExistingWindow(
 ): { hwnd: string; pid: number } | null {
   const windows = listWindows()
   const lower = hint.toLowerCase()
-  // Match by window title containing the hint
+  // Substring match on window title is dangerous: any tab / document /
+  // dialog containing the hint text matches (e.g. a Chrome tab titled
+  // "Investigate Notepad" would hijack open_application("Notepad")).
+  // Resolve the hint to a known process image name; if we find a candidate
+  // window with that image, accept it. If the hint is unknown, fall back to
+  // title matching but verify the candidate's process image is not from a
+  // browser / Office / IDE — those are the apps whose tab content tends to
+  // match arbitrary hints.
+  const knownImages = PROCESS_IMAGE_FOR_HINT[lower]
+  if (knownImages && knownImages.length > 0) {
+    for (const w of windows) {
+      const img = getProcessImageBaseName(w.pid)
+      if (img && knownImages.includes(img)) {
+        return { hwnd: w.hwnd, pid: w.pid }
+      }
+    }
+    // We resolved the hint to a process but no running instance matched;
+    // do NOT fall back to title matching — the user asked for a specific
+    // app and the right behavior is to launch a new one, not bind to a
+    // similarly-named window in another app.
+    return null
+  }
   for (const w of windows) {
     const titleLower = (w.title ?? '').toLowerCase()
-    if (titleLower.includes(lower)) {
-      return { hwnd: w.hwnd, pid: w.pid }
-    }
+    if (!titleLower.includes(lower)) continue
+    // No known image to match against — accept the title hit.
+    return { hwnd: w.hwnd, pid: w.pid }
   }
   return null
+}
+
+// Last segment of the executable path for a PID, or null when it can't be
+// read. This is the safer authorization identity than a window title because
+// page content / tab labels cannot set it. Only called for window candidates
+// we are about to bind to, so the per-call PowerShell cost is acceptable.
+function getProcessImageBaseName(pid: number): string | null {
+  const path = getProcessImagePath(pid)
+  if (!path) return null
+  const sep = path.lastIndexOf('\\') >= 0
+    ? path.lastIndexOf('\\')
+    : path.lastIndexOf('/')
+  const name = sep >= 0 ? path.slice(sep + 1) : path
+  return name.toLowerCase()
+}
+
+// Map a launch hint (display name or "Name" returned by listInstalled) to
+// the process image names that the running app actually uses. Keep this
+// narrow on purpose — falling through to substring title match is unsafe.
+const PROCESS_IMAGE_FOR_HINT: Record<string, string[]> = {
+  notepad: ['notepad.exe'],
+  'word pad': ['wordpad.exe'],
+  'wordpad': ['wordpad.exe'],
+  calculator: ['calculator.exe', 'win32calc.exe'],
+  'windows terminal': ['windowsterminal.exe', 'wt.exe'],
+  terminal: ['windowsterminal.exe', 'wt.exe'],
+  cmd: ['cmd.exe'],
+  'command prompt': ['cmd.exe'],
+  powershell: ['powershell.exe', 'pwsh.exe'],
+  explorer: ['explorer.exe'],
+  'file explorer': ['explorer.exe'],
+  chrome: ['chrome.exe'],
+  'google chrome': ['chrome.exe'],
+  firefox: ['firefox.exe'],
+  edge: ['msedge.exe'],
+  code: ['code.exe'],
+  'visual studio code': ['code.exe'],
+  'vs code': ['code.exe'],
+  slack: ['slack.exe'],
+  discord: ['discord.exe'],
+  'visual studio': ['devenv.exe'],
+  'outlook': ['outlook.exe'],
+  excel: ['excel.exe'],
+  word: ['winword.exe'],
+  powerpoint: ['powerpnt.exe'],
 }
 
 // ---------------------------------------------------------------------------

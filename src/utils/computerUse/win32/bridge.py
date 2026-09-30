@@ -599,6 +599,265 @@ def send_mouse_wheel(hwnd_str, x, y, delta, horizontal=False):
     return True
 
 # ---------------------------------------------------------------------------
+# Compact current-state snapshot (G-UIA-3)
+# ---------------------------------------------------------------------------
+def get_current_state(hwnd_str):
+    """Return a flat dict describing the bound window's logical state.
+
+    Cheaper than accessibility_snapshot for the common "where is the
+    user, what's the document, what's the cursor, what tab is active"
+    query pattern. Walks the UIA tree once but only collects targeted
+    fields.
+    """
+    out = {'hwnd': int(hwnd_str)}
+    try:
+        from pywinauto import Desktop
+        hwnd = int(hwnd_str)
+        app = Desktop(backend='uia')
+        win = None
+        for w in app.windows():
+            if w.handle == hwnd:
+                win = w
+                break
+        if win is None:
+            out['error'] = 'window not found'
+            return out
+
+        out['title'] = win.element_info.name or ''
+        out['class'] = win.class_name() or ''
+        try:
+            r = win.rectangle()
+            out['rect'] = {'left': r.left, 'top': r.top,
+                           'width': r.width(), 'height': r.height()}
+        except Exception:
+            pass
+
+        # Walk descendants once, find: Document, Tabs (SelectionPattern),
+        # TabItems, status bar ContentTextBlocks, modified indicator.
+        document = None
+        tabs_root = None
+        modified = None
+        status_blocks = []
+        # Track the bound window's PID so we can reject descendants that
+        # belong to a different top-level window (pywinauto occasionally
+        # surfaces off-subtree elements via UIA virtualization / IME, and
+        # top_level_parent() is unreliable for HWND-less UIA elements like
+        # Document / TabItem / MenuItem).
+        _bound_pid = int(win.process_id())
+
+        def _belongs_to_bound(elem):
+            try:
+                pid = elem.element_info.process_id
+                if pid is None:
+                    return True  # UIA didn't report a PID; be permissive
+                return int(pid) == _bound_pid
+            except Exception:
+                return True
+
+        for d in win.descendants():
+            # Restrict to the bound window's process. pywinauto can surface
+            # elements from sibling top-level windows through UIA
+            # virtualization / IME popups, and we don't want to attribute
+            # their state to the bound window.
+            if not _belongs_to_bound(d):
+                continue
+            try:
+                ct = d.element_info.control_type
+            except Exception:
+                continue
+            if ct == 'Document' and document is None:
+                document = d
+            elif ct == 'Tab' and tabs_root is None:
+                if (d.element_info.automation_id or '') == 'Tabs':
+                    tabs_root = d
+            elif ct == 'Text':
+                nm = d.element_info.name or ''
+                if nm and ('Modified' in nm or nm.lower() == 'modified'):
+                    modified = nm
+            if (d.element_info.automation_id or '') == 'ContentTextBlock':
+                nm = d.element_info.name or ''
+                if nm:
+                    status_blocks.append(nm)
+
+        # Document text + selection + caret
+        if document is not None:
+            try:
+                tp = document.iface_text
+                if tp is not None:
+                    txt = tp.DocumentRange.GetText(2000) or ''
+                    out['documentText'] = txt
+                    sel = tp.GetSelection()
+                    if sel and sel.Length:
+                        try:
+                            sel_text = sel.GetElement(0).GetText(500)
+                            out['documentSelection'] = sel_text
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+        # Active tab + tab list
+        if tabs_root is not None:
+            try:
+                sel = tabs_root.iface_selection.GetCurrentSelection()
+                if sel and sel.Length:
+                    raw = sel.GetElement(0).CurrentName or ''
+                    # Notepad concatenates ". Modified." / ". Unmodified."
+                    # onto the tab name; strip it so callers get the real name.
+                    for suffix in ('. Modified.', '. Unmodified.'):
+                        if raw.endswith(suffix):
+                            raw = raw[:-len(suffix)]
+                            break
+                    out['selectedTab'] = raw
+            except Exception:
+                pass
+            tab_names = []
+            try:
+                for c in tabs_root.children():
+                    try:
+                        if c.element_info.control_type == 'TabItem':
+                            tname = c.element_info.name or ''
+                            for suffix in ('. Modified.', '. Unmodified.'):
+                                if tname.endswith(suffix):
+                                    tname = tname[:-len(suffix)]
+                                    break
+                            tab_names.append(tname)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            if tab_names:
+                out['tabs'] = tab_names
+
+        if modified is not None:
+            out['modified'] = 'Modified' in modified
+        # Fallback: Notepad doesn't expose a UIA "Modified" Text element;
+        # it encodes the dirty marker as a leading "*" in the window title.
+        if 'modified' not in out:
+            t = (out.get('title') or '').lstrip()
+            if t.startswith('*'):
+                out['modified'] = True
+            elif t:
+                out['modified'] = False
+
+        # Caret from status bar "Line X, Column Y"
+        for s in status_blocks:
+            sl = s.lower().replace('\n', ' ')
+            if 'line' in sl and 'col' in sl:
+                try:
+                    parts = s.replace('\n', ' ').split(',')
+                    line_part = parts[0].strip()
+                    col_part = parts[1].strip() if len(parts) > 1 else ''
+                    out['caretLine'] = int(line_part.split()[-1])
+                    out['caretColumn'] = int(col_part.split()[-1])
+                except Exception:
+                    pass
+                break
+
+        # Other status bar fields: character count, encoding, line endings,
+        # file type. Notepad emits them as separate ContentTextBlock names.
+        for s in status_blocks:
+            sl = s.strip()
+            if not sl or '\n' in sl:
+                # skip multi-line caret+char strings like "Line 1,\nColumn 8"
+                continue
+            low = sl.lower()
+            import re as _re
+            m = _re.match(r'^(\d+)\s+characters?$', sl, _re.IGNORECASE)
+            if m and 'characterCount' not in out:
+                out['characterCount'] = int(m.group(1))
+                continue
+            if low.startswith('utf-') or low in ('ansi', 'unicode', 'utf-8', 'utf-16'):
+                out['encoding'] = sl
+                continue
+            if low in ('windows (crlf)', 'unix (lf)', 'mac (cr)'):
+                out['lineEndings'] = sl
+                continue
+            if 'plain text' in low or 'rich text' in low or low.endswith(' text'):
+                out['fileType'] = sl
+                continue
+
+        # Actionable controls: buttons, tabs, menu items, list items with a
+        # non-empty name. Same walk as above — collect during the descendant
+        # pass to avoid a second tree traversal.
+        actionable = []
+        interactive_ct = {'Button', 'TabItem', 'MenuItem', 'ListItem',
+                          'CheckBox', 'RadioButton', 'Hyperlink', 'ComboBox',
+                          'Edit', 'SplitButton'}
+        try:
+            for d in win.descendants():
+                # Same subtree guard as the first walk: keep only elements
+                # that belong to the bound window's process.
+                if not _belongs_to_bound(d):
+                    continue
+                # Secondary gate: many UIA-virtualized / HWND-less elements
+                # (Documents, TabItems) have no process_id, so the PID check
+                # can't authoritatively reject them. A degenerate rect
+                # (0×0) is a strong signal that the element isn't a
+                # clickable, on-subtree control — drop it.
+                try:
+                    r = d.rectangle()
+                    if r.width() <= 0 or r.height() <= 0:
+                        continue
+                except Exception:
+                    pass
+                try:
+                    ct = d.element_info.control_type
+                    if ct not in interactive_ct:
+                        continue
+                    nm = d.element_info.name or ''
+                    ai = d.element_info.automation_id or ''
+                    if not (nm or ai):
+                        continue
+                    try:
+                        rect = d.rectangle()
+                        r = {'x': rect.left, 'y': rect.top,
+                             'w': rect.width(), 'h': rect.height()}
+                        cx = rect.left + rect.width() // 2
+                        cy = rect.top + rect.height() // 2
+                    except Exception:
+                        r = None
+                        cx = cy = None
+                    actionable.append({
+                        'name': nm,
+                        'role': ct,
+                        'id': ai,
+                        'rect': r,
+                        'center': [cx, cy] if cx is not None else None,
+                    })
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        if actionable:
+            out['actionable'] = actionable
+
+        # Logical focus (G-UIA-4): derive from selectedTab + documentSelection
+        # + caretLine/Column, never from UIA.GetFocusedElement (which returns
+        # the user's actual foreground app and is wrong for a bound offscreen
+        # window).
+        focus = {}
+        if 'selectedTab' in out:
+            focus['tab'] = out['selectedTab']
+        if 'documentSelection' in out and out['documentSelection']:
+            focus['selection'] = out['documentSelection']
+        if 'caretLine' in out:
+            focus['position'] = {
+                'line': out['caretLine'],
+                'column': out['caretColumn'] if 'caretColumn' in out else None,
+            }
+        if focus:
+            out['logicalFocus'] = focus
+
+        # Other status bar fields
+        if status_blocks:
+            out['statusBar'] = status_blocks
+    except Exception as e:
+        out['error'] = str(e)
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Dispatch
 # ---------------------------------------------------------------------------
 METHODS = {
@@ -619,7 +878,8 @@ METHODS = {
     'paste_text': lambda p: paste_text(p['hwnd'], p['text']),
     'send_mouse_wheel': lambda p: send_mouse_wheel(p['hwnd'], p['x'], p['y'], p['delta'], p.get('horizontal', False)),
     'find_edit_child': lambda p: find_edit_child(p['hwnd']),
-    'accessibility_snapshot': lambda p: accessibility_snapshot(p['hwnd'], p.get('max_depth', 4)),
+    'accessibility_snapshot': lambda p: accessibility_snapshot(p['hwnd'], p.get('max_depth', 6)),
+    'get_current_state': lambda p: get_current_state(p['hwnd']),
     'ping': lambda p: {'ok': True, 'pid': os.getpid()},
 }
 
