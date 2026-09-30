@@ -1093,6 +1093,27 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
         const node = findNodeInSnapshot(bridgeToAccessibilityNodes(raw), query)
         if (!node) return false
 
+        // Preferred: InvokePattern through the bridge — same long-lived
+        // process as the snapshot itself, hwnd-addressed, no PowerShell
+        // cold start and no title matching. An old bridge asset without
+        // the method rejects -> treated as "not handled" so the legacy
+        // paths below still run.
+        if (node.automationId) {
+          const invoked = await (async () => {
+            try {
+              const r = await call('uia_invoke', {
+                hwnd,
+                automation_id: node.automationId,
+              })
+              return r === true
+            } catch {
+              return false
+            }
+          })()
+          if (invoked) return true
+        }
+
+        // Legacy fallback 1: InvokePattern via title-matched PowerShell.
         // Try InvokePattern first (Button, MenuItem, Link)
         const { clickElement: uiaClick } =
           require('./win32/uiAutomation.js') as typeof import('./win32/uiAutomation.js')
@@ -1106,7 +1127,7 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
           if (uiaClick(win.title, node.automationId)) return true
         }
 
-        // Fallback: click center of bounding rect via SendMessage
+        // Legacy fallback 2: click center of bounding rect via SendMessage
         const cx = node.bounds.x + Math.round(node.bounds.w / 2)
         const cy = node.bounds.y + Math.round(node.bounds.h / 2)
         // Convert screen coords to client coords
@@ -1132,6 +1153,20 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
         const hwnd = getBoundHwnd()
         if (!hwnd) return false
 
+        // Preferred: ValuePattern.SetValue through the bridge — hwnd-addressed,
+        // no PowerShell cold start, no title matching. An old bridge asset
+        // without the method rejects -> treated as "not handled" so the
+        // legacy paths below still run.
+        const bridgeSetValue = async (automationId: string): Promise<boolean> => {
+          try {
+            const r = await call('uia_set_value', { hwnd, automation_id: automationId, value: text })
+            return r === true
+          } catch {
+            return false
+          }
+        }
+
+        // Legacy fallback 1: ValuePattern via title-matched PowerShell.
         // Try UIA ValuePattern directly
         const windows = require('./win32/windowEnum.js').listWindows() as {
           hwnd: string
@@ -1143,12 +1178,12 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
             require('./win32/uiAutomation.js') as typeof import('./win32/uiAutomation.js')
           // Try by automationId first, then by name+role
           if (query.automationId) {
-            if (setValue(win.title, query.automationId, text)) return true
+            if (await bridgeSetValue(query.automationId)) return true
           }
           if (query.name) {
             const el = findElement(win.title, query)
             if (el && el.automationId) {
-              if (setValue(win.title, el.automationId, text)) return true
+              if (await bridgeSetValue(el.automationId)) return true
             }
           }
         }

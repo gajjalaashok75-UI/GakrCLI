@@ -526,11 +526,38 @@ def _nudge_suspended_uwp(hwnd, win):
             descendants = win.descendants()
         except Exception:
             return False
-        if descendants:
+        # A suspended packaged app can expose a handful of chrome elements
+        # while its real content tree is still collapsed, so "thin" (not just
+        # empty) counts as suspended. Real windows have dozens of elements.
+        if len(descendants) >= 5:
             return False  # tree already alive
-        user32.SetForegroundWindow(hwnd)
-        time.sleep(0.6)
-        return True
+        # Resume can take longer than a single 0.6 s wait; SetForegroundWindow
+        # also fails silently when the caller lacks foreground rights. The
+        # classic unlock is a bare ALT tap (keybd_event) which makes the OS
+        # treat this thread as recent input; user focus is restored after.
+        prev_fg = user32.GetForegroundWindow()
+        try:
+            user32.keybd_event(0x12, 0, 0, 0)       # ALT down
+            user32.keybd_event(0x12, 0, 0x0002, 0)  # ALT up
+        except Exception:
+            pass
+        woke = False
+        for _attempt in range(3):
+            user32.SetForegroundWindow(hwnd)
+            time.sleep(0.6)
+            try:
+                if len(win.descendants()) >= 5:
+                    woke = True
+                    break
+            except Exception:
+                pass
+        # Give the user's foreground back — the nudge must not steal it.
+        try:
+            if prev_fg and user32.IsWindow(prev_fg):
+                user32.SetForegroundWindow(prev_fg)
+        except Exception:
+            pass
+        return woke
     except Exception:
         return False
 
@@ -576,7 +603,14 @@ def accessibility_snapshot(hwnd_str, max_depth=6):
         INTERACTIVE = {'Button', 'Edit', 'ComboBox', 'CheckBox', 'RadioButton',
                        'MenuItem', 'Menu', 'MenuBar', 'Hyperlink', 'Slider',
                        'Tab', 'TabItem', 'List', 'ListItem', 'Document',
-                       'TreeItem', 'DataItem', 'ToolBar', 'SplitButton'}
+                       'TreeItem', 'DataItem', 'ToolBar', 'SplitButton',
+                       # Legacy/structural interactive types the pre-bridge
+                       # PowerShell walker also surfaced. Without them a
+                       # ScrollBar-heavy legacy app or a bare Tree/Spinner
+                       # reported nothing until an interactive descendant
+                       # existed beneath it.
+                       'DataGrid', 'ScrollBar', 'Tree', 'Spinner',
+                       'ToggleButton'}
 
         def walk(element, depth):
             if depth >= max_depth:
@@ -714,6 +748,66 @@ def find_edit_child(hwnd_str):
     return None
 
 # ---------------------------------------------------------------------------
+# Element-targeted UIA actions (InvokePattern / ValuePattern)
+# ---------------------------------------------------------------------------
+def _uia_find_element(win, automation_id):
+    """Find a descendant of `win` by exact automation_id (the same semantics
+    as the old PowerShell AutomationIdProperty PropertyCondition lookup)."""
+    for d in win.descendants():
+        try:
+            if (d.element_info.automation_id or '') == automation_id:
+                return d
+        except Exception:
+            continue
+    return None
+
+
+def uia_invoke(hwnd_str, automation_id):
+    """InvokePattern.Invoke on the descendant with the given automation_id.
+
+    Replaces uiAutomation.ts's title-matched PowerShell clickElement: same
+    long-lived process as every other UIA call, hwnd-addressed, no PS cold
+    start and no fragile title lookup. Returns False when the window or the
+    element cannot be resolved or carries no InvokePattern.
+    """
+    try:
+        hwnd = int(hwnd_str)
+        win = resolve_top_window(hwnd)
+        if win is None:
+            return False
+        _nudge_suspended_uwp(hwnd, win)
+        el = _uia_find_element(win, automation_id)
+        if el is None:
+            return False
+        el.iface_invoke.Invoke()
+        return True
+    except Exception:
+        return False
+
+
+def uia_set_value(hwnd_str, automation_id, value):
+    """ValuePattern.SetValue on the descendant with the given automation_id.
+
+    Same rationale as uia_invoke: replaces uiAutomation.ts's title-matched
+    PowerShell setValue. Returns False when no element matches or the match
+    exposes no ValuePattern (read-only controls raise a COM error -> False).
+    """
+    try:
+        hwnd = int(hwnd_str)
+        win = resolve_top_window(hwnd)
+        if win is None:
+            return False
+        _nudge_suspended_uwp(hwnd, win)
+        el = _uia_find_element(win, automation_id)
+        if el is None:
+            return False
+        el.iface_value.SetValue(str(value))
+        return True
+    except Exception:
+        return False
+
+
+# ---------------------------------------------------------------------------
 # Clipboard paste (for large text)
 # ---------------------------------------------------------------------------
 def paste_text(hwnd_str, text):
@@ -764,13 +858,367 @@ def send_mouse_wheel(hwnd_str, x, y, delta, horizontal=False):
 # ---------------------------------------------------------------------------
 # Compact current-state snapshot (G-UIA-3)
 # ---------------------------------------------------------------------------
-def get_current_state(hwnd_str):
-    """Return a flat dict describing the bound window's logical state.
+# ---------------------------------------------------------------------------
+# Generic structured UI state extraction.
+#
+# Everything below derives from UIA ControlTypes, patterns and properties
+# only — there are deliberately NO application-name checks. The same code
+# path serves Win32, WinUI/XAML, UWP, Electron, Chromium, terminal and
+# document apps alike. Result fields are omitted when the UIA tree does
+# not provide them; values are never fabricated.
+# ---------------------------------------------------------------------------
 
-    Cheaper than accessibility_snapshot for the common "where is the
-    user, what's the document, what's the cursor, what tab is active"
-    query pattern. Walks the UIA tree once but only collects targeted
-    fields.
+# Dirty-marker suffixes some editors concatenate onto tab/window titles.
+_TITLE_DIRTY_SUFFIXES = ('. Modified.', '. Unmodified.')
+
+# UIA property IDs (pywinauto 0.6.9 does not expose them as constants)
+_UIA_IS_SELECTED = 30022   # SelectionItemPattern.IsSelected
+_UIA_EXPAND_STATE = 30051  # ExpandCollapsePattern.ExpandCollapseState
+
+# Roles surfaced in the flat `actionable` target list.
+_ACTIONABLE_ROLES = {'Button', 'TabItem', 'MenuItem', 'ListItem', 'CheckBox',
+                     'RadioButton', 'Hyperlink', 'ComboBox', 'Edit', 'SplitButton'}
+
+
+def _strip_dirty_suffix(name):
+    for suffix in _TITLE_DIRTY_SUFFIXES:
+        if name.endswith(suffix):
+            return name[:-len(suffix)]
+    return name
+
+
+def _is_selected(elem):
+    """SelectionItemPattern.IsSelected via the raw UIA property."""
+    try:
+        return bool(elem.element_info._element.GetCurrentPropertyValue(_UIA_IS_SELECTED))
+    except Exception:
+        return False
+
+
+def _expand_state(elem):
+    """ExpandCollapsePattern.ExpandCollapseState (0=collapsed, 1=expanded)."""
+    try:
+        return int(elem.iface_expand_collapse.CurrentExpandCollapseState)
+    except Exception:
+        pass
+    try:
+        return int(elem.element_info._element.GetCurrentPropertyValue(_UIA_EXPAND_STATE))
+    except Exception:
+        return None
+
+
+def _is_focused(elem):
+    try:
+        return bool(elem.has_keyboard_focus())
+    except Exception:
+        return False
+
+
+def _rect_ok(elem):
+    """True when the element reports a non-degenerate bounding rect."""
+    try:
+        r = elem.rectangle()
+        return r.width() > 0 and r.height() > 0
+    except Exception:
+        return False
+
+
+def extract_tabs(scan):
+    """Tab strip state from TabItems (SelectionItemPattern), with a
+    SelectionPattern container fallback for hosts that don't enumerate
+    individual TabItems or don't set IsSelected on them."""
+    items = [{'title': _strip_dirty_suffix(t['name']), 'selected': t['selected']}
+             for t in scan['tab_items'][:30]]
+    selected_names = [t['name'] for t in scan['tab_items'][:30] if t['selected']]
+    if not selected_names:
+        # Chromium/Electron set IsSelected=False on every TabItem but expose
+        # the active tab through the Tab container's SelectionPattern.
+        root = scan['tabs_root']
+        if root is not None:
+            try:
+                sel = root.iface_selection.GetCurrentSelection()
+                if sel and sel.Length:
+                    for i in range(min(sel.Length, 10)):
+                        try:
+                            nm = sel.GetElement(i).CurrentName or ''
+                            if nm:
+                                selected_names.append(nm)
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+    if items and selected_names:
+        for it in items:
+            it['selected'] = _names_match(it['title'], selected_names)
+    if items:
+        selected_index = next((i for i, t in enumerate(items) if t['selected']), None)
+        return {'tabCount': len(items), 'selectedTabIndex': selected_index, 'tabs': items}
+    root = scan['tabs_root']
+    if root is not None:
+        try:
+            sel = root.iface_selection.GetCurrentSelection()
+            if sel and sel.Length:
+                # GetCurrentSelection returns only the selected elements, so
+                # every name here is genuinely selected.
+                names = []
+                for i in range(min(sel.Length, 30)):
+                    try:
+                        names.append(_strip_dirty_suffix(sel.GetElement(i).CurrentName or ''))
+                    except Exception:
+                        pass
+                if names:
+                    return {'tabCount': len(names), 'selectedTabIndex': 0,
+                            'tabs': [{'title': n, 'selected': True} for n in names]}
+        except Exception:
+            pass
+    return None
+
+
+def _names_match(title, candidates):
+    """True when `title` equals or overlaps one of `candidates"'.
+    UIA truncates long tab titles, so compare both exactly and by
+    bidirectional containment after whitespace normalization."""
+    import re as _re
+    norm = lambda s: _re.sub(r'\s+', ' ', (s or '').strip()).lower()
+    t = norm(title)
+    if not t:
+        return False
+    for c in candidates:
+        cn = norm(_strip_dirty_suffix(c))
+        if not cn:
+            continue
+        if t == cn or t in cn or cn in t:
+            return True
+    return False
+
+
+def extract_inputs(scan):
+    """Edit/ComboBox fields with current value, focus and enabled state."""
+    out = []
+    for entry in scan['inputs'][:12]:
+        d = entry['el']
+        value = None
+        try:
+            value = d.get_value()
+        except Exception:
+            pass
+        try:
+            enabled = d.is_enabled()
+        except Exception:
+            enabled = True
+        out.append({
+            'name': entry['name'],
+            'id': entry['id'],
+            'value': (str(value)[:200] if value else ''),
+            'focused': _is_focused(d),
+            'enabled': enabled,
+        })
+    return out or None
+
+
+def extract_selection(scan):
+    """Currently selected list/tree items (SelectionItemPattern.IsSelected)."""
+    out = []
+    for d in scan['list_items'] + scan['tree_items']:
+        if len(out) >= 20:
+            break
+        if d['selected'] and d['name']:
+            out.append({'name': d['name'], 'role': d['role']})
+    return out or None
+
+
+def extract_treeview(scan):
+    """Tree items with expand/collapse state (ExpandCollapsePattern)."""
+    out = []
+    for d in scan['tree_items'][:30]:
+        entry = {'name': d['name']}
+        if d['expand'] is not None:
+            entry['expanded'] = (d['expand'] == 1)
+        out.append(entry)
+    return out or None
+
+
+def extract_menus(scan):
+    """Menu bars, menus, menu items and toolbars visible in the window."""
+    out = [{'name': d['name'], 'role': d['role'], 'id': d['id']}
+           for d in scan['menus'][:20] if d['name'] or d['id']]
+    return out or None
+
+
+def extract_buttons(scan):
+    """Named buttons with enabled state (InvokePattern carriers)."""
+    out = [{'name': d['name'], 'id': d['id'], 'enabled': d['enabled']}
+           for d in scan['buttons'][:30]]
+    return out or None
+
+
+def extract_document(scan):
+    """Document text state: content, selection, caret, character count."""
+    doc = scan['document']
+    if doc is None:
+        return None
+    out = {}
+    try:
+        tp = doc.iface_text
+        if tp is not None:
+            txt = tp.DocumentRange.GetText(2000) or ''
+            if txt:
+                out['text'] = txt
+            sel = tp.GetSelection()
+            if sel and sel.Length:
+                try:
+                    sel_text = sel.GetElement(0).GetText(500)
+                    if sel_text:
+                        out['selection'] = sel_text
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    if scan['caretLine'] is not None:
+        out['caretLine'] = scan['caretLine']
+    if scan['caretColumn'] is not None:
+        out['caretColumn'] = scan['caretColumn']
+    if scan['characterCount'] is not None:
+        out['characterCount'] = scan['characterCount']
+    return out or None
+
+
+def extract_status_bar(scan):
+    return list(scan['status_blocks']) if scan['status_blocks'] else None
+
+
+def _parse_status_fields(scan):
+    """Derive caret position, character count, encoding, line endings and
+    file type from status-bar text fields. Purely string-shape driven."""
+    import re as _re
+
+    for s in scan['status_blocks']:
+        sl = s.lower().replace('\n', ' ')
+        if 'line' in sl and 'col' in sl and scan['caretLine'] is None:
+            try:
+                parts = s.replace('\n', ' ').split(',')
+                scan['caretLine'] = int(parts[0].strip().split()[-1])
+                if len(parts) > 1:
+                    scan['caretColumn'] = int(parts[1].strip().split()[-1])
+            except Exception:
+                pass
+        sst = s.strip()
+        if not sst or '\n' in s:
+            continue
+        low = sst.lower()
+        m = _re.match(r'^(\d+)\s+characters?$', sst, _re.IGNORECASE)
+        if m and scan['characterCount'] is None:
+            scan['characterCount'] = int(m.group(1))
+            continue
+        if low.startswith('utf-') or low in ('ansi', 'unicode'):
+            if 'encoding' not in scan:
+                scan['encoding'] = sst
+            continue
+        if low in ('windows (crlf)', 'unix (lf)', 'mac (cr)'):
+            if 'lineEndings' not in scan:
+                scan['lineEndings'] = sst
+            continue
+        if 'plain text' in low or 'rich text' in low or low.endswith(' text'):
+            if 'fileType' not in scan:
+                scan['fileType'] = sst
+            continue
+
+
+def _scan_elements(win):
+    """ONE descendants() pass classifying every element the extractors need."""
+    scan = {
+        'document': None, 'tabs_root': None, 'tab_items': [], 'inputs': [],
+        'list_items': [], 'tree_items': [], 'menus': [], 'buttons': [],
+        'status_blocks': [], 'actionable': [],
+        'caretLine': None, 'caretColumn': None, 'characterCount': None,
+    }
+    _bound_pid = int(win.process_id())
+
+    def _belongs(elem):
+        try:
+            pid = elem.element_info.process_id
+            return pid is None or int(pid) == _bound_pid
+        except Exception:
+            return True
+
+    for d in win.descendants():
+        if not _belongs(d):
+            continue
+        try:
+            ct = d.element_info.control_type
+        except Exception:
+            continue
+        try:
+            name = d.element_info.name or ''
+            auto_id = d.element_info.automation_id or ''
+        except Exception:
+            name, auto_id = '', ''
+
+        # Flat actionable target list (bounded): any interactive role with a
+        # name or automationId and a non-degenerate rect.
+        if ct in _ACTIONABLE_ROLES and (name or auto_id) and len(scan['actionable']) < 60:
+            try:
+                r = d.rectangle()
+                if r.width() > 0 and r.height() > 0:
+                    scan['actionable'].append({
+                        'name': name, 'role': ct, 'id': auto_id,
+                        'rect': {'x': r.left, 'y': r.top,
+                                 'w': r.width(), 'h': r.height()},
+                        'center': [r.left + r.width() // 2, r.top + r.height() // 2],
+                    })
+            except Exception:
+                pass
+
+        try:
+            if ct == 'Document':
+                if scan['document'] is None and _rect_ok(d):
+                    scan['document'] = d
+            elif ct == 'Tab':
+                if scan['tabs_root'] is None:
+                    scan['tabs_root'] = d
+            elif ct == 'TabItem':
+                scan['tab_items'].append({'name': name, 'selected': _is_selected(d)})
+            elif ct in ('Edit', 'ComboBox'):
+                if len(scan['inputs']) < 12 and _rect_ok(d):
+                    scan['inputs'].append({'el': d, 'name': name, 'id': auto_id})
+            elif ct == 'ListItem':
+                scan['list_items'].append({'name': name, 'role': ct,
+                                           'selected': _is_selected(d)})
+            elif ct == 'TreeItem':
+                scan['tree_items'].append({'name': name, 'role': ct,
+                                           'selected': _is_selected(d),
+                                           'expand': _expand_state(d)})
+            elif ct in ('MenuItem', 'Menu', 'MenuBar', 'ToolBar'):
+                scan['menus'].append({'name': name, 'role': ct, 'id': auto_id})
+            elif ct == 'Button' and name and _rect_ok(d):
+                try:
+                    enabled = d.is_enabled()
+                except Exception:
+                    enabled = True
+                scan['buttons'].append({'name': name, 'id': auto_id, 'enabled': enabled})
+        except Exception:
+            continue
+
+        if auto_id == 'ContentTextBlock' and name:
+            scan['status_blocks'].append(name)
+        elif ct == 'StatusBar':
+            try:
+                for c in d.children():
+                    cn = (c.element_info.name or '').strip()
+                    if cn:
+                        scan['status_blocks'].append(cn)
+            except Exception:
+                pass
+    return scan
+
+
+def get_current_state(hwnd_str):
+    """Return the bound window's generic structured UI state.
+
+    Built entirely from UIA ControlTypes and patterns — no application-name
+    checks anywhere. Field groups (tabs, inputs, selectedItems, treeItems,
+    menus, buttons, document, statusBar) are omitted when the UIA tree does
+    not expose them.
     """
     out = {'hwnd': int(hwnd_str)}
     try:
@@ -802,260 +1250,61 @@ def get_current_state(hwnd_str):
                               or out['rect'].get('top', 0) <= -30000):
             out['offscreen'] = True
 
-        # Walk descendants once, find: Document, Tabs (SelectionPattern),
-        # TabItems, status bar ContentTextBlocks, modified indicator.
-        document = None
-        tabs_root = None
-        modified = None
-        status_blocks = []
-        inputs = []
-        # Track the bound window's PID so we can reject descendants that
-        # belong to a different top-level window (pywinauto occasionally
-        # surfaces off-subtree elements via UIA virtualization / IME, and
-        # top_level_parent() is unreliable for HWND-less UIA elements like
-        # Document / TabItem / MenuItem).
-        _bound_pid = int(win.process_id())
+        scan = _scan_elements(win)
+        _parse_status_fields(scan)
 
-        def _belongs_to_bound(elem):
-            try:
-                pid = elem.element_info.process_id
-                if pid is None:
-                    return True  # UIA didn't report a PID; be permissive
-                return int(pid) == _bound_pid
-            except Exception:
-                return True
+        for key, val in (
+            ('tabs', extract_tabs(scan)),
+            ('inputs', extract_inputs(scan)),
+            ('selectedItems', extract_selection(scan)),
+            ('treeItems', extract_treeview(scan)),
+            ('menus', extract_menus(scan)),
+            ('buttons', extract_buttons(scan)),
+            ('document', extract_document(scan)),
+            ('statusBar', extract_status_bar(scan)),
+        ):
+            if val:
+                out[key] = val
 
-        for d in win.descendants():
-            # Restrict to the bound window's process. pywinauto can surface
-            # elements from sibling top-level windows through UIA
-            # virtualization / IME popups, and we don't want to attribute
-            # their state to the bound window.
-            if not _belongs_to_bound(d):
-                continue
-            try:
-                ct = d.element_info.control_type
-            except Exception:
-                continue
-            if ct == 'Document' and document is None:
-                document = d
-            elif ct == 'Tab' and tabs_root is None:
-                tabs_root = d
-            elif ct == 'Text':
-                nm = d.element_info.name or ''
-                if nm and ('Modified' in nm or nm.lower() == 'modified'):
-                    modified = nm
-            if (d.element_info.automation_id or '') == 'ContentTextBlock':
-                nm = d.element_info.name or ''
-                if nm:
-                    status_blocks.append(nm)
-            # Universal input discovery (any app class): Edit/ComboBox with
-            # their current values — forms, address bars, terminal prompts.
-            if ct in ('Edit', 'ComboBox') and len(inputs) < 8:
-                try:
-                    r = d.rectangle()
-                    if r.width() > 0 and r.height() > 0:
-                        iv = None
-                        try:
-                            iv = d.get_value()
-                        except Exception:
-                            pass
-                        inputs.append({
-                            'name': d.element_info.name or '',
-                            'id': d.element_info.automation_id or '',
-                            'value': (str(iv)[:100] if iv else ''),
-                        })
-                except Exception:
-                    pass
+        for key in ('encoding', 'lineEndings', 'fileType'):
+            if key in scan:
+                out[key] = scan[key]
 
-        # Document text + selection + caret
-        if document is not None:
-            try:
-                tp = document.iface_text
-                if tp is not None:
-                    txt = tp.DocumentRange.GetText(2000) or ''
-                    out['documentText'] = txt
-                    sel = tp.GetSelection()
-                    if sel and sel.Length:
-                        try:
-                            sel_text = sel.GetElement(0).GetText(500)
-                            out['documentSelection'] = sel_text
-                        except Exception:
-                            pass
-            except Exception:
-                pass
+        # Dirty-marker: a leading '*' in the title is the conventional
+        # unsaved-changes signal (UIA has no cross-app modified property).
+        out['modified'] = (out.get('title') or '').lstrip().startswith('*')
 
-        # Active tab + tab list
-        if tabs_root is not None:
-            try:
-                sel = tabs_root.iface_selection.GetCurrentSelection()
-                if sel and sel.Length:
-                    raw = sel.GetElement(0).CurrentName or ''
-                    # Notepad concatenates ". Modified." / ". Unmodified."
-                    # onto the tab name; strip it so callers get the real name.
-                    for suffix in ('. Modified.', '. Unmodified.'):
-                        if raw.endswith(suffix):
-                            raw = raw[:-len(suffix)]
-                            break
-                    out['selectedTab'] = raw
-            except Exception:
-                pass
-            tab_names = []
-            try:
-                for c in tabs_root.children():
-                    try:
-                        if c.element_info.control_type == 'TabItem':
-                            tname = c.element_info.name or ''
-                            for suffix in ('. Modified.', '. Unmodified.'):
-                                if tname.endswith(suffix):
-                                    tname = tname[:-len(suffix)]
-                                    break
-                            tab_names.append(tname)
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-            if tab_names:
-                out['tabs'] = tab_names
+        if scan['actionable']:
+            out['actionable'] = scan['actionable']
 
-        if modified is not None:
-            out['modified'] = 'Modified' in modified
-        # Fallback: Notepad doesn't expose a UIA "Modified" Text element;
-        # it encodes the dirty marker as a leading "*" in the window title.
-        if 'modified' not in out:
-            t = (out.get('title') or '').lstrip()
-            if t.startswith('*'):
-                out['modified'] = True
-            elif t:
-                out['modified'] = False
-
-        # Caret from status bar "Line X, Column Y"
-        for s in status_blocks:
-            sl = s.lower().replace('\n', ' ')
-            if 'line' in sl and 'col' in sl:
-                try:
-                    parts = s.replace('\n', ' ').split(',')
-                    line_part = parts[0].strip()
-                    col_part = parts[1].strip() if len(parts) > 1 else ''
-                    out['caretLine'] = int(line_part.split()[-1])
-                    out['caretColumn'] = int(col_part.split()[-1])
-                except Exception:
-                    pass
-                break
-
-        # Other status bar fields: character count, encoding, line endings,
-        # file type. Notepad emits them as separate ContentTextBlock names.
-        for s in status_blocks:
-            sl = s.strip()
-            if not sl or '\n' in sl:
-                # skip multi-line caret+char strings like "Line 1,\nColumn 8"
-                continue
-            low = sl.lower()
-            import re as _re
-            m = _re.match(r'^(\d+)\s+characters?$', sl, _re.IGNORECASE)
-            if m and 'characterCount' not in out:
-                out['characterCount'] = int(m.group(1))
-                continue
-            if low.startswith('utf-') or low in ('ansi', 'unicode', 'utf-8', 'utf-16'):
-                out['encoding'] = sl
-                continue
-            if low in ('windows (crlf)', 'unix (lf)', 'mac (cr)'):
-                out['lineEndings'] = sl
-                continue
-            if 'plain text' in low or 'rich text' in low or low.endswith(' text'):
-                out['fileType'] = sl
-                continue
-
-        # Actionable controls: buttons, tabs, menu items, list items with a
-        # non-empty name. Same walk as above — collect during the descendant
-        # pass to avoid a second tree traversal.
-        actionable = []
-        interactive_ct = {'Button', 'TabItem', 'MenuItem', 'ListItem',
-                          'CheckBox', 'RadioButton', 'Hyperlink', 'ComboBox',
-                          'Edit', 'SplitButton'}
-        try:
-            for d in win.descendants():
-                # Same subtree guard as the first walk: keep only elements
-                # that belong to the bound window's process.
-                if not _belongs_to_bound(d):
-                    continue
-                # Secondary gate: many UIA-virtualized / HWND-less elements
-                # (Documents, TabItems) have no process_id, so the PID check
-                # can't authoritatively reject them. A degenerate rect
-                # (0×0) is a strong signal that the element isn't a
-                # clickable, on-subtree control — drop it.
-                try:
-                    r = d.rectangle()
-                    if r.width() <= 0 or r.height() <= 0:
-                        continue
-                except Exception:
-                    pass
-                try:
-                    ct = d.element_info.control_type
-                    if ct not in interactive_ct:
-                        continue
-                    nm = d.element_info.name or ''
-                    ai = d.element_info.automation_id or ''
-                    if not (nm or ai):
-                        continue
-                    try:
-                        rect = d.rectangle()
-                        r = {'x': rect.left, 'y': rect.top,
-                             'w': rect.width(), 'h': rect.height()}
-                        cx = rect.left + rect.width() // 2
-                        cy = rect.top + rect.height() // 2
-                    except Exception:
-                        r = None
-                        cx = cy = None
-                    actionable.append({
-                        'name': nm,
-                        'role': ct,
-                        'id': ai,
-                        'rect': r,
-                        'center': [cx, cy] if cx is not None else None,
-                    })
-                except Exception:
-                    continue
-        except Exception:
-            pass
-        if actionable:
-            out['actionable'] = actionable[:60]
-
-        # Universal window fields (any app class)
         try:
             out['minimized'] = bool(user32.IsIconic(hwnd))
         except Exception:
             pass
-        if inputs:
-            out['inputs'] = inputs
 
-        # Logical focus (G-UIA-4): derive from selectedTab + documentSelection
-        # + caretLine/Column, never from UIA.GetFocusedElement (which returns
-        # the user's actual foreground app and is wrong for a bound offscreen
-        # window).
+        # Logical focus (G-UIA-4): derived from selection state, never from
+        # UIA.GetFocusedElement (which reports the user's foreground app and
+        # is wrong for a bound offscreen window).
         focus = {}
-        if 'selectedTab' in out:
-            focus['tab'] = out['selectedTab']
-        if 'documentSelection' in out and out['documentSelection']:
-            focus['selection'] = out['documentSelection']
-        if 'caretLine' in out:
-            focus['position'] = {
-                'line': out['caretLine'],
-                'column': out['caretColumn'] if 'caretColumn' in out else None,
-            }
+        tabs = out.get('tabs')
+        if tabs and tabs.get('selectedTabIndex') is not None:
+            sel_items = tabs.get('tabs') or []
+            idx = tabs['selectedTabIndex']
+            if 0 <= idx < len(sel_items):
+                focus['tab'] = sel_items[idx]['title']
+        doc = out.get('document') or {}
+        if doc.get('selection'):
+            focus['selection'] = doc['selection']
+        if doc.get('caretLine') is not None:
+            focus['position'] = {'line': doc['caretLine'],
+                                 'column': doc.get('caretColumn')}
         if focus:
             out['logicalFocus'] = focus
-
-        # Other status bar fields
-        if status_blocks:
-            out['statusBar'] = status_blocks
     except Exception as e:
         out['error'] = str(e)
     return out
 
 
-# ---------------------------------------------------------------------------
-# Dispatch
-# ---------------------------------------------------------------------------
 METHODS = {
     'screenshot': lambda p: screenshot_full(p.get('display_id', 0)),
     'screenshot_window': lambda p: screenshot_window(p['hwnd']),
@@ -1074,6 +1323,8 @@ METHODS = {
     'paste_text': lambda p: paste_text(p['hwnd'], p['text']),
     'send_mouse_wheel': lambda p: send_mouse_wheel(p['hwnd'], p['x'], p['y'], p['delta'], p.get('horizontal', False)),
     'find_edit_child': lambda p: find_edit_child(p['hwnd']),
+    'uia_invoke': lambda p: uia_invoke(p['hwnd'], p['automation_id']),
+    'uia_set_value': lambda p: uia_set_value(p['hwnd'], p['automation_id'], p.get('value', '')),
     'accessibility_snapshot': lambda p: accessibility_snapshot(p['hwnd'], p.get('max_depth', 6)),
     'get_current_state': lambda p: get_current_state(p['hwnd']),
     'ping': lambda p: {'ok': True, 'pid': os.getpid()},
