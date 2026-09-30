@@ -5,6 +5,14 @@
  * GetForegroundWindow) to control mouse and keyboard.
  *
  * All P/Invoke types are compiled once at module load and reused across calls.
+ *
+ * ⚠ NOT THE LIVE WINDOWS INPUT PATH — see hostAdapter.ts: Windows uses
+ * createCrossPlatformExecutor (bridge.py + windowMessage.ts), which is
+ * window-targeted (SendMessageW to a bound HWND, offscreen-safe, restores
+ * foreground after chords). THIS backend is global-input by design:
+ * keybd_event/SendInput with no HWND targeting means every keystroke lands
+ * in whatever window the user has foreground. Do not wire it into the
+ * executor without porting the window-bound semantics first.
  */
 
 import type { FrontmostAppInfo, InputBackend } from '../types.js'
@@ -282,9 +290,25 @@ export const keys: InputBackend['keys'] = async parts => {
 }
 
 export const typeText: InputBackend['typeText'] = async text => {
-  const escaped = text.replace(/'/g, "''")
+  // SendKeys treats ^ % + ~ ( ) [ ] { } as syntax, not text: "100% done"
+  // would type "100" then fire Alt+D, "f(x)" loses the parens, "Total^2"
+  // fires Ctrl+2. Escape each special character into its {...} literal form
+  // ({} for braces) so arbitrary text round-trips. Single pass, order-free.
+  const SENDKEYS_SPECIALS: Record<string, string> = {
+    '+': '{+}',
+    '^': '{^}',
+    '%': '{%}',
+    '~': '{~}',
+    '(': '{(}',
+    ')': '{)}',
+    '[': '{[}',
+    ']': '{]}',
+    '{': '{{}',
+    '}': '{}}',
+  }
+  const escaped = text.replace(/[+^%~()[\]{}]/g, ch => SENDKEYS_SPECIALS[ch]!)
   ps(
-    `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${escaped}')`,
+    `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${escaped.replace(/'/g, "''")}')`,
   )
 }
 
