@@ -3556,6 +3556,28 @@ async function handleClickElement(
   )
 }
 
+async function handleGetCurrentState(
+  adapter: ComputerUseHostAdapter,
+): Promise<CuCallToolResult> {
+  if (!adapter.executor.getCurrentState) {
+    return errorResult(
+      'get_current_state is only available on Windows with a bound window.',
+      'feature_unavailable',
+    )
+  }
+  const state = await adapter.executor.getCurrentState()
+  if (!state) {
+    return errorResult(
+      'No window is currently bound. Call open_application first.',
+      'bad_args',
+    )
+  }
+  if (typeof state.error === 'string') {
+    return errorResult(`Window state unavailable: ${state.error}`, 'bad_args')
+  }
+  return okText(JSON.stringify(state, null, 2))
+}
+
 async function handleTypeIntoElement(
   adapter: ComputerUseHostAdapter,
   args: Record<string, unknown>,
@@ -4303,6 +4325,10 @@ function boundWindowActionKind(
       // Not input injection, but close/move_offscreen on an ungranted window
       // is still interference. Require at least click-tier.
       return 'mouse'
+    case 'get_current_state':
+      // Read-only, bound-window-scoped. Same tier as reading a window rect:
+      // the window must resolve to a grant, but no input is injected.
+      return 'mouse_position'
     default:
       return null
   }
@@ -4511,6 +4537,9 @@ async function dispatchAction(
 
     case 'virtual_keyboard':
       return handleVirtualKeyboard(adapter, a, overrides)
+
+    case 'get_current_state':
+      return handleGetCurrentState(adapter)
 
     case 'status_indicator':
       return handleStatusIndicator(adapter, a)

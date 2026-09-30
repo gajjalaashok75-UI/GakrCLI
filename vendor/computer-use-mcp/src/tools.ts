@@ -532,6 +532,22 @@ export function buildComputerUseTools(
             },
           } as Tool,
           {
+            name: 'get_current_state',
+            description:
+              'Read the bound window\'s logical state without a screenshot or tree walk. ' +
+              'Returns a flat snapshot: window title/rect/minimized, active tab, document text and selection, ' +
+              'caret position (line/column), character count, input fields with current values, status bar fields, ' +
+              'named clickable controls, and logical focus. ' +
+              'Much cheaper than screenshot for questions like "what file is open", "what tab is active", ' +
+              '"where is the caret", or "what is in the address bar". ' +
+              'The window must have been bound via open_application first.',
+            inputSchema: {
+              type: 'object' as const,
+              properties: {},
+              required: [],
+            },
+          } as Tool,
+          {
             name: 'open_terminal',
             description:
               'Open a new terminal window and launch an AI agent CLI. ' +

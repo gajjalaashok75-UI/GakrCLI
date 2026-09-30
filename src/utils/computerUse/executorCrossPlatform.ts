@@ -38,6 +38,11 @@ import type {
 
 import { logForDebugging } from '../debug.js'
 import { sleep } from '../sleep.js'
+import {
+  bridgeToAccessibilityNodes,
+  formatForModel,
+  type BridgeUiaNode,
+} from './win32/bridgeUia.js'
 import { CLI_CU_CAPABILITIES, CLI_HOST_BUNDLE_ID } from './common.js'
 import { validateHwnd } from './win32/shared.js'
 import { loadPlatform } from './platforms/index.js'
@@ -142,20 +147,34 @@ function getCachedNcOffset(): { dx: number; dy: number } {
 
 /**
  * Capture the accessibility tree for the bound window (Windows only).
+ * Cached for 500ms so back-to-back screenshots don't re-walk the tree.
  * Returns compact text for the model, or undefined if not available.
  */
-function getAccessibilityText(): string | undefined {
+let lastAccessibilityFetch = 0
+let lastAccessibilityText: string | undefined
+async function getAccessibilityText(): Promise<string | undefined> {
   if (process.platform !== 'win32' || !isBound()) return undefined
+  const now = Date.now()
+  if (lastAccessibilityText !== undefined && now - lastAccessibilityFetch < 500) {
+    return lastAccessibilityText
+  }
   try {
     const { getBoundHwnd } =
       require('./platforms/win32.js') as typeof import('./platforms/win32.js')
     const hwnd = getBoundHwnd()
     if (!hwnd) return undefined
-    const { captureAccessibilitySnapshot } =
-      require('./win32/accessibilitySnapshot.js') as typeof import('./win32/accessibilitySnapshot.js')
-    const snap = captureAccessibilitySnapshot(hwnd)
-    if (!snap || !snap.text) return undefined
-    return snap.text
+    const { call } =
+      require('./win32/bridgeClient.js') as typeof import('./win32/bridgeClient.js')
+    const raw = (await call('accessibility_snapshot', {
+      hwnd,
+      max_depth: 6,
+    })) as BridgeUiaNode[] | null
+    if (!raw || !Array.isArray(raw)) return undefined
+    const nodes = bridgeToAccessibilityNodes(raw)
+    const text = formatForModel(nodes)
+    lastAccessibilityFetch = now
+    lastAccessibilityText = text
+    return text
   } catch {
     return undefined
   }
@@ -166,12 +185,12 @@ function getAccessibilityText(): string | undefined {
  * When HWND-bound: set displayWidth = imageWidth so coords map 1:1.
  * Also captures accessibility snapshot on Windows for GUI element awareness.
  */
-function augmentScreenshot(
+async function augmentScreenshot(
   raw: { base64: string; width: number; height: number },
   display: { width: number; height: number; displayId?: number },
-): ScreenshotResult {
+): Promise<ScreenshotResult> {
   if (isBound()) {
-    const accessibilityText = getAccessibilityText()
+    const accessibilityText = await getAccessibilityText()
     return {
       base64: raw.base64,
       width: raw.width,
@@ -263,7 +282,7 @@ export function createCrossPlatformExecutor(_opts: {
       const raw = await platform.screenshot.captureScreen(
         opts.preferredDisplayId,
       )
-      const shot = augmentScreenshot(raw, d)
+      const shot = await augmentScreenshot(raw, d)
       return {
         ...shot,
         hidden: [],
@@ -1062,11 +1081,16 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
           require('./platforms/win32.js') as typeof import('./platforms/win32.js')
         const hwnd = getBoundHwnd()
         if (!hwnd) return false
-        const { captureAccessibilitySnapshot, findNodeInSnapshot } =
+        const { call } =
+          require('./win32/bridgeClient.js') as typeof import('./win32/bridgeClient.js')
+        const raw = (await call('accessibility_snapshot', {
+          hwnd,
+          max_depth: 6,
+        })) as BridgeUiaNode[] | null
+        if (!raw || !Array.isArray(raw)) return false
+        const { findNodeInSnapshot } =
           require('./win32/accessibilitySnapshot.js') as typeof import('./win32/accessibilitySnapshot.js')
-        const snap = captureAccessibilitySnapshot(hwnd)
-        if (!snap) return false
-        const node = findNodeInSnapshot(snap.nodes, query)
+        const node = findNodeInSnapshot(bridgeToAccessibilityNodes(raw), query)
         if (!node) return false
 
         // Try InvokePattern first (Button, MenuItem, Link)
@@ -1130,11 +1154,16 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
         }
 
         // Fallback: find the element, click it, then sendText
-        const { captureAccessibilitySnapshot, findNodeInSnapshot } =
+        const { call } =
+          require('./win32/bridgeClient.js') as typeof import('./win32/bridgeClient.js')
+        const raw = (await call('accessibility_snapshot', {
+          hwnd,
+          max_depth: 6,
+        })) as BridgeUiaNode[] | null
+        if (!raw || !Array.isArray(raw)) return false
+        const { findNodeInSnapshot } =
           require('./win32/accessibilitySnapshot.js') as typeof import('./win32/accessibilitySnapshot.js')
-        const snap = captureAccessibilitySnapshot(hwnd)
-        if (!snap) return false
-        const node = findNodeInSnapshot(snap.nodes, query)
+        const node = findNodeInSnapshot(bridgeToAccessibilityNodes(raw), query)
         if (!node) return false
 
         // Click to focus, then type
@@ -1148,6 +1177,24 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
         return sendText(hwnd, text)
       } catch {
         return false
+      }
+    },
+
+    async getCurrentState(): Promise<Record<string, unknown> | null> {
+      if (process.platform !== 'win32' || !isBound()) return null
+      try {
+        const { getBoundHwnd } =
+          require('./platforms/win32.js') as typeof import('./platforms/win32.js')
+        const hwnd = getBoundHwnd()
+        if (!hwnd) return null
+        const { call } =
+          require('./win32/bridgeClient.js') as typeof import('./win32/bridgeClient.js')
+        const state = (await call('get_current_state', {
+          hwnd,
+        })) as Record<string, unknown> | null
+        return state ?? null
+      } catch {
+        return null
       }
     },
   }

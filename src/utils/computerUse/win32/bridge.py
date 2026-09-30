@@ -409,6 +409,157 @@ def _get_uia():
             pass
     return _uia_client
 
+def snapshot_flat_fallback(win):
+    """Flat accessibility snapshot built from a one-shot descendants() query.
+
+    Chromium apps (Chrome, Electron VS Code) don't answer TreeScope_Children
+    walks even after their accessibility tree is fully materialized, while a
+    single TreeScope_Descendants find_all returns every element. Used only
+    when the normal recursive walk comes back empty. Hierarchy is lost, but
+    role/name/id/rect/pattern fields survive — everything click_element /
+    type_into_element need for name-based targeting.
+    """
+    INTERACTIVE = {'Button', 'Edit', 'ComboBox', 'CheckBox', 'RadioButton',
+                   'MenuItem', 'Menu', 'MenuBar', 'Hyperlink', 'Slider',
+                   'Tab', 'TabItem', 'List', 'ListItem', 'Document',
+                   'TreeItem', 'DataItem', 'ToolBar', 'SplitButton'}
+    # Structural roles kept for context (document text, regions) but yielded
+    # after interactive controls so a node cap never hides clickable targets.
+    INTERACTIVE_EXTRA = {'Pane', 'Group', 'Text', 'TitleBar'}
+    # Token budget: this text is embedded in every screenshot response.
+    MAX_NODES = 120
+
+    try:
+        descendants = win.descendants()
+    except Exception:
+        return None
+
+    def build_node(d):
+        try:
+            ct = d.element_info.control_type or ''
+            if ct not in INTERACTIVE and ct not in INTERACTIVE_EXTRA:
+                return None
+            rect = d.rectangle()
+            w = rect.right - rect.left
+            h = rect.bottom - rect.top
+            if w <= 0 or h <= 0:
+                return None
+            node = {
+                'role': ct, 'name': d.element_info.name or '',
+                'id': d.element_info.automation_id or '',
+                'x': rect.left, 'y': rect.top, 'w': w, 'h': h,
+                'on': d.is_enabled(),
+            }
+            value = None
+            try:
+                value = d.get_value()
+            except Exception:
+                pass
+            if value:
+                node['v'] = str(value)[:100]
+            # G-UIA-2 fields on the controls that carry them
+            if ct in ('Document', 'Edit', 'Text'):
+                try:
+                    iface_text = d.iface_text
+                except Exception:
+                    iface_text = None
+                if iface_text is not None:
+                    try:
+                        t = iface_text.DocumentRange.GetText(500)
+                        if t:
+                            node['text'] = t
+                    except Exception:
+                        pass
+            if ct in ('Tab', 'List'):
+                try:
+                    iface_selection = d.iface_selection
+                    cur = iface_selection.GetCurrentSelection()
+                    if cur and cur.Length > 0:
+                        sel_names = []
+                        for i in range(min(cur.Length, 10)):
+                            try:
+                                sel_names.append(cur.GetElement(i).CurrentName)
+                            except Exception:
+                                pass
+                        if sel_names:
+                            node['selected'] = sel_names
+                except Exception:
+                    pass
+            return node
+        except Exception:
+            return None
+
+    interactive_nodes = []
+    structural_nodes = []
+    for d in descendants:
+        node = build_node(d)
+        if node is None:
+            continue
+        if node['role'] in INTERACTIVE:
+            interactive_nodes.append(node)
+        else:
+            structural_nodes.append(node)
+
+    nodes = (interactive_nodes + structural_nodes)[:MAX_NODES]
+    return nodes if nodes else None
+
+def _nudge_suspended_uwp(hwnd, win):
+    """Wake a suspended UWP/packaged app whose UIA tree has collapsed.
+
+    Packaged apps are suspended when they lose focus; Windows then empties
+    their UIA tree (descendants() -> 0). A brief SetForegroundWindow nudge
+    resumes the process and the tree repopulates. Guarded so it can never
+    steal focus from the user: only fires for windows that are visible and
+    onscreen — never for offscreen-parked (bound) windows.
+    """
+    try:
+        wr = get_window_rect(str(hwnd))
+        if not wr:
+            return False
+        x, y, w, h = wr['x'], wr['y'], wr['width'], wr['height']
+        # Offscreen-parked (-32000) or fully out of any monitor: leave it.
+        if x <= -30000 or y <= -30000 or w <= 0 or h <= 0:
+            return False
+        if user32.IsIconic(hwnd):
+            return False
+        try:
+            descendants = win.descendants()
+        except Exception:
+            return False
+        if descendants:
+            return False  # tree already alive
+        user32.SetForegroundWindow(hwnd)
+        time.sleep(0.6)
+        return True
+    except Exception:
+        return False
+
+def resolve_top_window(hwnd):
+    """Resolve a top-level hwnd to a pywinauto UIA wrapper.
+
+    Normal path: match against Desktop(backend='uia').windows(). Fallback:
+    some hosts (e.g. UWP apps inside ApplicationFrameHost) never appear in
+    the desktop's top-level enumeration, so the handle match fails; wrap the
+    hwnd directly via UIAWrapper — the element still exists and answers
+    descendants()/children() normally.
+    """
+    try:
+        from pywinauto import Desktop
+        from pywinauto.controls.uiawrapper import UIAWrapper
+
+        app = Desktop(backend='uia')
+        for w in app.windows():
+            if w.handle == hwnd:
+                return w
+    except Exception:
+        pass
+    try:
+        from pywinauto.controls.uiawrapper import UIAWrapper
+        from pywinauto.uia_element_info import UIAElementInfo
+        return UIAWrapper(UIAElementInfo(hwnd))
+    except Exception:
+        return None
+
 def accessibility_snapshot(hwnd_str, max_depth=6):
     """Get the accessibility tree using pywinauto (more reliable than raw comtypes)."""
     try:
@@ -416,15 +567,11 @@ def accessibility_snapshot(hwnd_str, max_depth=6):
         from pywinauto.controls.uiawrapper import UIAWrapper
 
         hwnd = int(hwnd_str)
-        app = Desktop(backend='uia')
-        # Find window by handle
-        win = None
-        for w in app.windows():
-            if w.handle == hwnd:
-                win = w
-                break
+        win = resolve_top_window(hwnd)
         if win is None:
             return None
+        # Suspended UWP apps expose an empty tree until resumed.
+        _nudge_suspended_uwp(hwnd, win)
 
         INTERACTIVE = {'Button', 'Edit', 'ComboBox', 'CheckBox', 'RadioButton',
                        'MenuItem', 'Menu', 'MenuBar', 'Hyperlink', 'Slider',
@@ -493,7 +640,11 @@ def accessibility_snapshot(hwnd_str, max_depth=6):
                                             parts.append(sel.GetElement(i).GetText(200))
                                         except Exception:
                                             pass
-                                    node['selText'] = ''.join(parts)
+                                    # Caret-only selections report Length > 0 but no
+                                    # text; sel='' is pure noise for the model.
+                                    joined = ''.join(parts)
+                                    if joined:
+                                        node['selText'] = joined
                             except Exception:
                                 pass
                         try:
@@ -521,7 +672,19 @@ def accessibility_snapshot(hwnd_str, max_depth=6):
                     continue
             return nodes
 
+        def count_tree(nodes):
+            return sum(1 + count_tree(n.get('c', [])) for n in nodes)
+
         tree = walk(win, 0)
+        if count_tree(tree) >= 10:
+            return tree
+        # Thin-or-empty children() walk: Chromium apps (Chrome, Electron VS
+        # Code) expose their window chrome but not the content tree to
+        # TreeScope_Children navigation, while a one-shot descendants()
+        # query returns everything. Use the flat rebuild when it finds more.
+        flat = snapshot_flat_fallback(win)
+        if flat and count_tree(flat) > count_tree(tree):
+            return flat
         return tree if tree else None
     except Exception as e:
         return None
@@ -613,24 +776,31 @@ def get_current_state(hwnd_str):
     try:
         from pywinauto import Desktop
         hwnd = int(hwnd_str)
-        app = Desktop(backend='uia')
-        win = None
-        for w in app.windows():
-            if w.handle == hwnd:
-                win = w
-                break
+        win = resolve_top_window(hwnd)
         if win is None:
             out['error'] = 'window not found'
             return out
+        _nudge_suspended_uwp(hwnd, win)
 
         out['title'] = win.element_info.name or ''
         out['class'] = win.class_name() or ''
         try:
             r = win.rectangle()
-            out['rect'] = {'left': r.left, 'top': r.top,
-                           'width': r.width(), 'height': r.height()}
+            if r.width() > 0 and r.height() > 0:
+                out['rect'] = {'left': r.left, 'top': r.top,
+                               'width': r.width(), 'height': r.height()}
         except Exception:
             pass
+        if 'rect' not in out:
+            # Offscreen-bound windows (parked at -32000) report a zero-size
+            # UIA rect; Win32 GetWindowRect still knows the real geometry.
+            wr = get_window_rect(hwnd_str)
+            if wr:
+                out['rect'] = {'left': wr['x'], 'top': wr['y'],
+                               'width': wr['width'], 'height': wr['height']}
+        if 'rect' in out and (out['rect'].get('left', 0) <= -30000
+                              or out['rect'].get('top', 0) <= -30000):
+            out['offscreen'] = True
 
         # Walk descendants once, find: Document, Tabs (SelectionPattern),
         # TabItems, status bar ContentTextBlocks, modified indicator.
@@ -638,6 +808,7 @@ def get_current_state(hwnd_str):
         tabs_root = None
         modified = None
         status_blocks = []
+        inputs = []
         # Track the bound window's PID so we can reject descendants that
         # belong to a different top-level window (pywinauto occasionally
         # surfaces off-subtree elements via UIA virtualization / IME, and
@@ -668,8 +839,7 @@ def get_current_state(hwnd_str):
             if ct == 'Document' and document is None:
                 document = d
             elif ct == 'Tab' and tabs_root is None:
-                if (d.element_info.automation_id or '') == 'Tabs':
-                    tabs_root = d
+                tabs_root = d
             elif ct == 'Text':
                 nm = d.element_info.name or ''
                 if nm and ('Modified' in nm or nm.lower() == 'modified'):
@@ -678,6 +848,24 @@ def get_current_state(hwnd_str):
                 nm = d.element_info.name or ''
                 if nm:
                     status_blocks.append(nm)
+            # Universal input discovery (any app class): Edit/ComboBox with
+            # their current values — forms, address bars, terminal prompts.
+            if ct in ('Edit', 'ComboBox') and len(inputs) < 8:
+                try:
+                    r = d.rectangle()
+                    if r.width() > 0 and r.height() > 0:
+                        iv = None
+                        try:
+                            iv = d.get_value()
+                        except Exception:
+                            pass
+                        inputs.append({
+                            'name': d.element_info.name or '',
+                            'id': d.element_info.automation_id or '',
+                            'value': (str(iv)[:100] if iv else ''),
+                        })
+                except Exception:
+                    pass
 
         # Document text + selection + caret
         if document is not None:
@@ -830,7 +1018,15 @@ def get_current_state(hwnd_str):
         except Exception:
             pass
         if actionable:
-            out['actionable'] = actionable
+            out['actionable'] = actionable[:60]
+
+        # Universal window fields (any app class)
+        try:
+            out['minimized'] = bool(user32.IsIconic(hwnd))
+        except Exception:
+            pass
+        if inputs:
+            out['inputs'] = inputs
 
         # Logical focus (G-UIA-4): derive from selectedTab + documentSelection
         # + caretLine/Column, never from UIA.GetFocusedElement (which returns

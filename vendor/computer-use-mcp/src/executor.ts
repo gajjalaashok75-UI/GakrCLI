@@ -220,4 +220,6 @@ export interface ComputerExecutor {
     query: { name?: string; role?: string; automationId?: string },
     text: string,
   ): Promise<boolean>
+  /** Flat logical state of the bound window (tab, document, caret, inputs). Windows only. */
+  getCurrentState?(): Promise<Record<string, unknown> | null>
 }

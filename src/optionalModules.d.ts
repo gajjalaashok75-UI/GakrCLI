@@ -497,6 +497,7 @@ declare module '@ant/computer-use-mcp/types' {
       query: { name?: string; role?: string; automationId?: string },
       text: string,
     ): Promise<boolean>
+    getCurrentState?(): Promise<Record<string, unknown> | null>
   }
 
   export type ComputerUseHostAdapter = {
