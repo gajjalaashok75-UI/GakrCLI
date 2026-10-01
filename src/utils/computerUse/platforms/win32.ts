@@ -343,20 +343,72 @@ const input: InputPlatform = {
       }
       return
     }
-    throw new Error(
-      'typeText requires a bound window or file. Call open() first.',
+    // Unbound fallback: global SendKeys with full special-char escaping.
+    // Raw SendKeys treats ^ % + ~ ( ) [ ] { } as chord syntax — "100% done"
+    // would type "100" then fire Alt+D. Escaping into {...} literals makes
+    // arbitrary text round-trip. Specials are escaped FIRST so the braces
+    // introduced by the {ENTER}/{TAB} substitutions below stay literal.
+    const SENDKEYS_SPECIALS: Record<string, string> = {
+      '+': '{+}',
+      '^': '{^}',
+      '%': '{%}',
+      '~': '{~}',
+      '(': '{(}',
+      ')': '{)}',
+      '[': '{[}',
+      ']': '{]}',
+      '{': '{{}',
+      '}': '{}}',
+    }
+    const escaped = text
+      .replace(/[+^%~()[\]{}]/g, ch => SENDKEYS_SPECIALS[ch] ?? ch)
+      .replace(/\r?\n/g, '{ENTER}')
+      .replace(/\t/g, '{TAB}')
+    ps(
+      `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${escaped.replace(/'/g, "''")}')`,
     )
   },
 
   async key(name, action) {
     if (boundHwnd) {
       const lower = name.toLowerCase()
-      const vk = VK_MAP[lower] ?? (name.length === 1 ? name.charCodeAt(0) : 0)
+      // Single letters/digits must resolve to their uppercase VK code —
+      // 'a'.charCodeAt(0) is 0x61 (VK_NUMPAD1), not VK_A (0x41).
+      const vk =
+        VK_MAP[lower] ??
+        (name.length === 1 ? name.toUpperCase().charCodeAt(0) : 0)
       if (vk)
         getWm().sendKey(boundHwnd, vk, action === 'release' ? 'up' : 'down')
       return
     }
-    throw new Error('key requires a bound window HWND. Call open() first.')
+    // Unbound fallback: global keybd_event. Reachable only after the
+    // vendor gates passed (frontmost allowlist, tier >= full for keyboard,
+    // systemKeyCombos blocklist), so the granted frontmost app receives it.
+    const lower = name.toLowerCase()
+    const vk = VK_MAP[lower]
+    if (vk !== undefined) {
+      ps(
+        `${WIN32_TYPES}; [CuWin32]::keybd_event(${vk}, 0, ${action === 'release' ? 2 : 0}, [UIntPtr]::Zero) | Out-Null`,
+      )
+      return
+    }
+    if (name.length === 1) {
+      // Layout-specific characters (punctuation etc.) resolve via VkKeyScan.
+      // The high byte carries shift/ctrl/alt state — a lone `!` must hold
+      // Shift or it types `1`. Down-order: shift, key; up-order reversed.
+      const cp = name.charCodeAt(0)
+      if (action === 'release') {
+        ps(
+          `${WIN32_TYPES}; $r = [CuWin32]::VkKeyScan([char]${cp}); $vk = $r -band 0xFF; [CuWin32]::keybd_event([byte]$vk, 0, 2, [UIntPtr]::Zero) | Out-Null; if ($r -band 0x100) { [CuWin32]::keybd_event(0x10, 0, 2, [UIntPtr]::Zero) | Out-Null }`,
+        )
+      } else {
+        ps(
+          `${WIN32_TYPES}; $r = [CuWin32]::VkKeyScan([char]${cp}); $vk = $r -band 0xFF; if ($r -band 0x100) { [CuWin32]::keybd_event(0x10, 0, 0, [UIntPtr]::Zero) | Out-Null }; [CuWin32]::keybd_event([byte]$vk, 0, 0, [UIntPtr]::Zero) | Out-Null`,
+        )
+      }
+      return
+    }
+    throw new Error(`key: unknown key name "${name}"`)
   },
 
   async keys(parts) {
@@ -367,7 +419,50 @@ const input: InputPlatform = {
       }
       return
     }
-    throw new Error('keys requires a bound window HWND. Call open() first.')
+    // Unbound fallback: global keybd_event chord — modifiers down, main key
+    // down+up, modifiers up in reverse. Same shape as the vendored global
+    // backend; gated upstream by the frontmost/tier/blocklist gates.
+    const mods: number[] = []
+    let mainVk: number | undefined
+    let mainChar: string | undefined
+    for (const part of parts) {
+      const lower = part.toLowerCase()
+      if (MODIFIER_KEYS.has(lower)) {
+        const mvk = VK_MAP[lower]
+        if (mvk !== undefined) mods.push(mvk)
+        continue
+      }
+      if (mainVk !== undefined || mainChar !== undefined) continue
+      const vk = VK_MAP[lower]
+      if (vk !== undefined) {
+        mainVk = vk
+      } else if (part.length === 1) {
+        if (/[a-z0-9]/i.test(part)) {
+          mainVk = part.toUpperCase().charCodeAt(0)
+        } else {
+          mainChar = part
+        }
+      } else {
+        throw new Error(`keys: unknown key "${part}"`)
+      }
+    }
+    let script = WIN32_TYPES + '; '
+    for (const m of mods) {
+      script += `[CuWin32]::keybd_event(${m}, 0, 0, [UIntPtr]::Zero); `
+    }
+    if (mainVk !== undefined) {
+      script += `[CuWin32]::keybd_event(${mainVk}, 0, 0, [UIntPtr]::Zero); [CuWin32]::keybd_event(${mainVk}, 0, 2, [UIntPtr]::Zero); `
+    } else if (mainChar !== undefined) {
+      // VkKeyScan high byte carries shift state — hold Shift around the
+      // key tap when the character requires it (`!` must not type `1`).
+      script += `$r = [CuWin32]::VkKeyScan([char]${mainChar.charCodeAt(0)}); $vk = $r -band 0xFF; if ($r -band 0x100) { [CuWin32]::keybd_event(0x10, 0, 0, [UIntPtr]::Zero) }; [CuWin32]::keybd_event([byte]$vk, 0, 0, [UIntPtr]::Zero); [CuWin32]::keybd_event([byte]$vk, 0, 2, [UIntPtr]::Zero); if ($r -band 0x100) { [CuWin32]::keybd_event(0x10, 0, 2, [UIntPtr]::Zero) } `
+    } else if (mods.length === 0) {
+      return
+    }
+    for (const m of [...mods].reverse()) {
+      script += `[CuWin32]::keybd_event(${m}, 0, 2, [UIntPtr]::Zero); `
+    }
+    ps(script)
   },
 
   async scroll(amount, direction) {
@@ -561,6 +656,18 @@ const _lastSeenState = new Map<
   }
 >()
 
+/** Model-visible one-shot note describing the last observed state change
+ *  of the bound window (set by logStateTransition, consumed by the
+ *  executor's screenshot augmentation). Cleared on read. */
+let _pendingStateTransition: string | null = null
+
+/** Return and clear the pending window-state transition note, if any. */
+export function consumeStateTransitionNote(): string | null {
+  const note = _pendingStateTransition
+  _pendingStateTransition = null
+  return note
+}
+
 function logStateTransition(hwnd: string, diag: StateSnapshot): void {
   const rect = diag.rect ?? { x: 0, y: 0, width: 0, height: 0 }
   const prev = _lastSeenState.get(hwnd)
@@ -591,6 +698,10 @@ function logStateTransition(hwnd: string, diag: StateSnapshot): void {
   if (changes.length > 0) {
     // eslint-disable-next-line no-console
     console.error(`[computer-use] state_transition hwnd=${hwnd} ${changes.join(' ')}`)
+    // Also surface to the model: the next screenshot's accessibility text
+    // carries this note so the agent notices user-driven changes (title
+    // flip, minimize, move) without a dedicated round trip.
+    _pendingStateTransition = changes.join(' ')
   }
 }
 

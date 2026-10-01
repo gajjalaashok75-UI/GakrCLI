@@ -190,7 +190,20 @@ async function augmentScreenshot(
   display: { width: number; height: number; displayId?: number },
 ): Promise<ScreenshotResult> {
   if (isBound()) {
-    const accessibilityText = await getAccessibilityText()
+    let accessibilityText = await getAccessibilityText()
+    // Surface user-driven window-state changes (title/minimize/move) that
+    // happened since the last capture — one-shot note, cleared on read.
+    try {
+      const { consumeStateTransitionNote } =
+        require('./platforms/win32.js') as typeof import('./platforms/win32.js')
+      const note = consumeStateTransitionNote()
+      if (note) {
+        accessibilityText = `Window state changed since last capture: ${note}` +
+          (accessibilityText ? `\n${accessibilityText}` : '')
+      }
+    } catch {
+      // never let diagnostics break the capture path
+    }
     return {
       base64: raw.base64,
       width: raw.width,
@@ -318,14 +331,16 @@ export function createCrossPlatformExecutor(_opts: {
       const parts = keySequence.split('+').filter(p => p.length > 0)
       const n = repeat ?? 1
 
-      // FRATURE-GAPS G2 fix — modifier chords on a bound Windows window go
-      // through the bridge's keybd_event path: PostMessageW(WM_KEYDOWN)
-      // never updates the global key state that TranslateAccelerator
-      // consults, so ctrl+t / ctrl+shift+tab etc. were silently treated as
-      // the plain key. The bridge briefly foregrounds the bound window,
-      // injects the chord, and restores the user's foreground. Failure or
-      // an old bridge asset falls through to the legacy PostMessage path.
+      // Modifier chords on a bound Windows window go through the bridge's
+      // keybd_event path: PostMessageW(WM_KEYDOWN) never updates the global
+      // key state that TranslateAccelerator consults, so ctrl+t /
+      // ctrl+shift+tab etc. were silently treated as the plain key. The
+      // bridge briefly foregrounds the bound window, injects the chord, and
+      // restores the user's foreground. Works on-screen and off-screen alike.
+      // Failure or an old bridge asset falls through to the legacy
+      // PostMessage path.
       if (process.platform === 'win32' && isBound() && parts.length > 1) {
+        let delivered: number | null = null
         try {
           const { getBoundHwnd } =
             require('./platforms/win32.js') as typeof import('./platforms/win32.js')
@@ -333,18 +348,32 @@ export function createCrossPlatformExecutor(_opts: {
           if (hwnd) {
             const { call } =
               require('./win32/bridgeClient.js') as typeof import('./win32/bridgeClient.js')
-            for (let i = 0; i < n; i++) {
+            delivered = 0
+            while (delivered < n) {
               const ok = await call('send_key_chord', { hwnd, keys: parts })
               if (ok !== true) break
+              delivered++
             }
-            // Delivered (or exhausted retries) via the chord path — do not
-            // also post the same chord through the legacy path, which would
-            // double-fire plain keys when modifiers get dropped there.
-            return
           }
         } catch {
-          // fall through to the legacy path
+          // Bridge unavailable/refused: `delivered` keeps its partial count
+          // (or stays null if we never got a bound HWND). Handled below.
         }
+        if (delivered !== null) {
+          if (delivered === n) return
+          // Partial delivery: send only the remainder through the legacy
+          // path, which drops modifiers — re-sending delivered chords would
+          // inject the plain key a second time. The remainder loop runs
+          // OUTSIDE the try above so a legacy throw cannot re-enter it.
+          for (let i = delivered; i < n; i++) {
+            if (i > 0) await sleep(8)
+            await platform.input.keys(parts)
+          }
+          return
+        }
+        // delivered === null: getBoundHwnd returned nothing although
+        // isBound() was just true — treat the chord as unattempted and let
+        // the generic loop below run exactly once for the full count.
       }
 
       for (let i = 0; i < n; i++) {
@@ -860,6 +889,30 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
                 .split('+')
                 .map(k => k.trim())
                 .filter(Boolean)
+              // Modifier chords must update the global key state that
+              // TranslateAccelerator consults, which PostMessage cannot do.
+              // Prefer the bridge's keybd_event chord (same delivery as
+              // executor.key()); PostMessage remains the fallback for an
+              // unavailable bridge. A single non-modifier key still goes
+              // through PostMessage — window-targeted, no foreground steal.
+              // One chord per outer-loop iteration: `repeat` is handled by
+              // the enclosing for-loop, not here.
+              if (parts.length > 1 && process.platform === 'win32') {
+                try {
+                  const hwndForChord = getBoundHwndStr()
+                  if (hwndForChord) {
+                    const { call } =
+                      require('./win32/bridgeClient.js') as typeof import('./win32/bridgeClient.js')
+                    const sent = await call('send_key_chord', {
+                      hwnd: hwndForChord,
+                      keys: parts,
+                    })
+                    if (sent === true) break
+                  }
+                } catch {
+                  // fall through to the PostMessage path
+                }
+              }
               wm.sendKeys(hwnd, parts)
               break
             }

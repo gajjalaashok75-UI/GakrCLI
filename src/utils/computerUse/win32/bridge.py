@@ -185,6 +185,22 @@ def screenshot_window(hwnd_str):
         w = rect.right - rect.left
         h = rect.bottom - rect.top
 
+    # Ask the window to repaint synchronously before capturing. An
+    # offscreen-parked window receives no OS-triggered repaints (nothing is
+    # visible, so nothing schedules a paint), and PrintWindow reads the last
+    # painted GDI surface — which can be a stale initial frame. RDW_UPDATENOW
+    # forces the WndProc to paint now; combined with PW_RENDERFULLCONTENT
+    # (flag 2 below) even DWM-composited content comes through current.
+    try:
+        RDW_INVALIDATE = 0x0001
+        RDW_ALLCHILDREN = 0x0080
+        RDW_UPDATENOW = 0x0100
+        user32.RedrawWindow(hwnd, None, None,
+                            RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW)
+        time.sleep(0.02)
+    except Exception:
+        pass
+
     # Create DC and bitmap
     hdc_window = user32.GetDC(hwnd)
     hdc_mem = gdi32.CreateCompatibleDC(hdc_window)
@@ -1089,8 +1105,41 @@ def extract_tabs(scan):
             except Exception:
                 pass
     if items and selected_names:
+        # Pass 1 — exact normalized match only. UIA commonly reports several
+        # TabItems as IsSelected=True (multi-select quirk on tab controls),
+        # so the per-tab flag alone over-marks. Substring matching makes
+        # this worse: short titles ("system_prompt = (") are contained in
+        # many other titles. Exact matches are trustworthy as-is.
+        exact = False
         for it in items:
-            it['selected'] = _names_match(it['title'], selected_names)
+            it['selected'] = _names_match(it['title'], selected_names,
+                                          exact_only=True)
+            if it['selected']:
+                exact = True
+        # Pass 2 — only when nothing matched exactly: allow containment,
+        # but elect a single winner (the longest overlap with a selected
+        # name) instead of marking every overlapping item.
+        if not exact:
+            import re as _re2
+            norm = lambda s: _re2.sub(r'\s+', ' ', (s or '')).strip().lower()
+            best_item = None
+            best_overlap = 0
+            for it in items:
+                t = norm(it['title'])
+                if not t:
+                    continue
+                for cn_raw in selected_names:
+                    cn = norm(_strip_dirty_suffix(cn_raw))
+                    if not cn:
+                        continue
+                    if t == cn or t in cn or cn in t:
+                        overlap = min(len(t), len(cn))
+                        if overlap > best_overlap:
+                            best_overlap = overlap
+                            best_item = it
+            if best_item is not None:
+                for it in items:
+                    it['selected'] = it is best_item
     if items:
         selected_index = next((i for i, t in enumerate(items) if t['selected']), None)
         return {'tabCount': len(items), 'selectedTabIndex': selected_index, 'tabs': items}
@@ -1115,10 +1164,16 @@ def extract_tabs(scan):
     return None
 
 
-def _names_match(title, candidates):
-    """True when `title` equals or overlaps one of `candidates"'.
-    UIA truncates long tab titles, so compare both exactly and by
-    bidirectional containment after whitespace normalization."""
+def _names_match(title, candidates, exact_only=False):
+    """True when `title` equals (or, unless `exact_only`, overlaps) one of
+    `candidates' after whitespace normalization.
+
+    With exact_only=False this predicate is per-item and may match several
+    candidates: UIA truncates long tab titles, so containment is the only
+    way to bridge a truncated TabItem name to its full container-selection
+    name. Callers that need a single selected tab must run an exact pass
+    first and fall back to containment with their own winner election.
+    """
     import re as _re
     norm = lambda s: _re.sub(r'\s+', ' ', (s or '').strip()).lower()
     t = norm(title)
@@ -1128,7 +1183,9 @@ def _names_match(title, candidates):
         cn = norm(_strip_dirty_suffix(c))
         if not cn:
             continue
-        if t == cn or t in cn or cn in t:
+        if t == cn:
+            return True
+        if not exact_only and (t in cn or cn in t):
             return True
     return False
 

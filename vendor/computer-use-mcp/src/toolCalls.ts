@@ -4450,22 +4450,14 @@ async function dispatchAction(
             text: a.text,
           }, overrides)
         break
-      case 'key':
-        if (typeof a.text === 'string')
-          return handleVirtualKeyboard(adapter, {
-            action: 'combo',
-            text: a.text,
-            repeat: a.repeat,
-          }, overrides)
-        break
-      case 'hold_key':
-        if (typeof a.text === 'string')
-          return handleVirtualKeyboard(adapter, {
-            action: 'hold',
-            text: a.text,
-            duration: typeof a.duration === 'number' ? a.duration : 1,
-          }, overrides)
-        break
+      // key / hold_key are deliberately NOT rerouted to virtual_keyboard.
+      // virtual_keyboard('combo') posts bare WM_KEYDOWN/WM_KEYUP, which never
+      // updates the global key state that TranslateAccelerator consults —
+      // modifier chords (ctrl+t, ctrl+n, ...) silently degrade to the plain
+      // key. The standard dispatch's executor.key() path delivers chords via
+      // the bridge's send_key_chord (keybd_event with real global key state)
+      // and falls back to PostMessage only when the bridge is unavailable.
+      // Plain 'type' stays rerouted: WM_CHAR is synchronous and correct.
       case 'scroll':
         if (coord)
           return handleMouseWheel(adapter, {
