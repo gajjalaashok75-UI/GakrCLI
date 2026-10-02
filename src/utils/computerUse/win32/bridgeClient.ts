@@ -36,6 +36,13 @@ const pendingRequests = new Map<
 let outputBuffer = ''
 
 /**
+ * Cap on the incomplete-line accumulator. One oversized response (an
+ * unbounded tree walk) must not grow the heap without limit — past this cap
+ * the request is failed and the bridge restarted rather than buffering on.
+ */
+const MAX_OUTPUT_BUFFER = 8 * 1024 * 1024
+
+/**
  * Tail of the bridge's stderr. Python tracebacks (missing module, COM failure,
  * bad HWND) land here; without this they are invisible, because a bridge that
  * dies mid-call yields no stdout and every layer collapses to "no data".
@@ -68,9 +75,25 @@ function bridgeCommand(scriptPath: string): string[] {
 
 /**
  * Start the bridge process if not already running.
+ *
+ * Health semantics: a spawned-but-dead handle no longer reports healthy.
+ * If the child has already exited, it is dropped here and a fresh one is
+ * spawned; after spawning, a `ping` probe detects a bridge that died on
+ * import (its response can only arrive through the same stdin/stdout loop
+ * real calls use, so a successful ping validates the whole pipe).
  */
 export function ensureBridge(): boolean {
-  if (bridgeProc) return true
+  if (bridgeProc) {
+    // A non-null handle can outlive a dead interpreter. If the child has an
+    // exit code, it is gone — drop it and respawn below instead of failing
+    // forever on a broken pipe.
+    const exitCode = (bridgeProc as unknown as { exitCode?: number | null }).exitCode
+    if (typeof exitCode === 'number') {
+      bridgeProc = null
+    } else {
+      return true
+    }
+  }
   try {
     const scriptPath = resolveBridgeScript()
     if (!scriptPath) return false
@@ -107,6 +130,18 @@ export function ensureBridge(): boolean {
           const { done, value } = await reader.read()
           if (done) break
           outputBuffer += new TextDecoder().decode(value)
+          if (outputBuffer.length > MAX_OUTPUT_BUFFER) {
+            // Unbounded response (e.g. a runaway tree walk). Fail every
+            // pending request and recycle the bridge; the accumulator would
+            // otherwise grow without limit.
+            const overflowErr = new Error(
+              `Bridge response exceeded ${MAX_OUTPUT_BUFFER} bytes without a complete line`,
+            )
+            for (const p of pendingRequests.values()) p.reject(overflowErr)
+            pendingRequests.clear()
+            stopBridge()
+            return
+          }
           // Process complete lines
           let newlineIdx: number
           while ((newlineIdx = outputBuffer.indexOf('\n')) !== -1) {
@@ -130,6 +165,13 @@ export function ensureBridge(): boolean {
       } catch {}
     }
     readLoop()
+
+    // Fire-and-forget health probe. A bridge that spawned but died on import
+    // (missing module, COM failure) can never answer; dropping the handle on
+    // ping failure lets the next ensureBridge() respawn a clean one.
+    void call('ping', {}, 3000).catch(() => {
+      stopBridge()
+    })
 
     return true
   } catch {
@@ -191,6 +233,10 @@ export async function call<T = unknown>(
     } catch (err) {
       clearTimeout(timer)
       pendingRequests.delete(id)
+      // The handle is unusable (broken pipe — bridge died mid-session).
+      // Drop it so the next call spawns a fresh bridge instead of failing
+      // on every subsequent write until process exit.
+      stopBridge()
       reject(new Error(`Bridge write failed: ${err}`))
     }
   })

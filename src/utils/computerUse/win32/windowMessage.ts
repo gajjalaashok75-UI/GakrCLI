@@ -29,12 +29,50 @@ export function clearEditChildCache(hwnd?: string): void {
 }
 
 /**
+ * Drop cache entries whose target HWND is no longer alive. The cache is
+ * otherwise valid for the lifetime of a binding, but a cached child can be
+ * destroyed while the parent survives (tab close, pane collapse), and a dead
+ * entry would silently redirect input into nothing. One PowerShell probe
+ * validates every cached hwnd in a single call; negative (null) entries are
+ * kept — "no edit child" stays true until a rebind clears the cache.
+ * Throttled: at most one probe per 5s so per-keystroke callers stay cheap.
+ */
+let lastEditChildPrune = 0
+function pruneDeadEditChildren(): void {
+  const now = Date.now()
+  if (now - lastEditChildPrune < 5000) return
+  lastEditChildPrune = now
+  const hwnds: string[] = []
+  for (const v of editChildCache.values()) {
+    if (v !== null) hwnds.push(v)
+  }
+  if (hwnds.length === 0) return
+  const script = `${WINMSG_TYPE}\n[WinMsg]::CheckAlive(@(${hwnds.join(',')})) | ForEach-Object { $_ }\n`
+  const out = runPs(script)
+  if (out === null) return // probe failed — keep cache, same behavior as before
+  const alive = new Set(
+    out
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .filter(line => line.endsWith('|1'))
+      .map(line => line.slice(0, -2)),
+  )
+  for (const [parent, child] of editChildCache) {
+    if (child !== null && !alive.has(child)) {
+      editChildCache.delete(parent)
+    }
+  }
+}
+
+/**
  * Resolve the HWND that should actually receive input messages.
  * For WinUI 3 apps, returns the InputSite child window.
  * For traditional Win32 apps, returns the edit control or the original HWND.
  */
 export function resolveInputHwnd(hwnd: string): string {
   hwnd = validateHwnd(hwnd)
+  pruneDeadEditChildren()
   return findEditChild(hwnd) ?? hwnd
 }
 
@@ -89,6 +127,18 @@ public class WinMsg {
     public const uint WM_RBUTTONUP = 0x0205;
 
     public static List<string> childResults = new List<string>();
+
+    [DllImport("user32.dll")]
+    public static extern bool IsWindow(IntPtr hWnd);
+
+    // Batch liveness probe: "<hwnd>|1" for live, "<hwnd>|0" for destroyed.
+    public static List<string> CheckAlive(List<IntPtr> hwnds) {
+        var res = new List<string>();
+        foreach (var h in hwnds) {
+            res.Add(h.ToInt64() + "|" + (IsWindow(h) ? "1" : "0"));
+        }
+        return res;
+    }
 
     public static void FindChildren(IntPtr parent) {
         childResults.Clear();

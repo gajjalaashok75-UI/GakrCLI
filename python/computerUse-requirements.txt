@@ -1,0 +1,7 @@
+# Dependencies for the Windows computer-use Python bridge (bridge.py).
+# The main python/requirements.txt covers the LLM-provider tests only;
+# bridge.py needs the packages below at runtime.
+pywinauto>=0.6.8
+comtypes>=1.2.1
+mss>=9.0.0
+Pillow>=10.0.0

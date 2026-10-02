@@ -13,12 +13,20 @@ export interface AccessibilityNode {
   automationId: string
   bounds: { x: number; y: number; w: number; h: number }
   enabled: boolean
+  /** Element reports IsOffscreen but is kept (marked, not filtered). */
+  offscreen?: boolean
+  /** Per-snapshot node id (bridge `k`). Unique within ONE snapshot only. */
+  nodeId?: number
+  /** UIA RuntimeId — consumed by the *_id bridge action methods. */
+  runtimeId?: number[]
   value?: string
   children?: AccessibilityNode[]
 }
 
 /** Shape returned by bridge.py accessibility_snapshot / get_current_state. */
 export interface BridgeUiaNode {
+  /** Per-snapshot node id (-1 on the truncation note = not an element). */
+  k?: number
   role: string
   name: string
   id: string
@@ -27,6 +35,10 @@ export interface BridgeUiaNode {
   w: number
   h: number
   on: boolean
+  /** IsOffscreen=true, emitted only outside the Edit/Document carve-out. */
+  off?: boolean
+  /** UIA RuntimeId (list of ints) — element identity for *_id actions. */
+  rid?: number[]
   v?: string
   text?: string
   selText?: string
@@ -50,6 +62,9 @@ export function bridgeToAccessibilityNodes(raw: BridgeUiaNode[]): AccessibilityN
     automationId: n.id || '',
     bounds: { x: n.x || 0, y: n.y || 0, w: n.w || 0, h: n.h || 0 },
     enabled: n.on !== false,
+    offscreen: n.off === true || undefined,
+    nodeId: typeof n.k === 'number' && n.k > 0 ? n.k : undefined,
+    runtimeId: Array.isArray(n.rid) && n.rid.length ? n.rid : undefined,
     value: nodeValue(n),
     children: n.c?.length ? bridgeToAccessibilityNodes(n.c) : undefined,
   }))
@@ -67,8 +82,13 @@ export function formatForModel(nodes: AccessibilityNode[], indent = 0): string {
     if (node.name) line += ` "${truncate(node.name, 40)}"`
     line += ` (${node.bounds.x},${node.bounds.y} ${node.bounds.w}x${node.bounds.h})`
     if (!node.enabled) line += ' DISABLED'
+    if (node.offscreen) line += ' OFFSCREEN'
     if (node.value) line += ` value="${truncate(node.value, 80)}"`
     if (node.automationId) line += ` id=${node.automationId}`
+    // Per-snapshot node id — the most precise selector for click_element /
+    // type_into_element / interact_element (an old bridge without ids just
+    // omits it and callers fall back to name/automationId).
+    if (node.nodeId !== undefined) line += ` n=${node.nodeId}`
     lines.push(line)
     if (node.children) lines.push(formatForModel(node.children, indent + 1))
   }

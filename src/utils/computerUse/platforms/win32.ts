@@ -540,7 +540,8 @@ const screenshot: ScreenshotPlatform = {
     throw new Error(
       '[computer-use] Screenshot failed: the capture bridge returned no data' +
         (_lastBridgeError ? ` (${_lastBridgeError})` : '') +
-        '. The bridge needs python with mss and Pillow (pip install mss Pillow).',
+        '. The bridge needs python with pywinauto, comtypes, mss, and Pillow '
+          + '(pip install -r python/computerUse-requirements.txt).',
     )
   },
 
@@ -590,7 +591,8 @@ const screenshot: ScreenshotPlatform = {
     throw new Error(
       `[computer-use] Window screenshot failed for HWND ${hwnd}: the capture bridge returned no data` +
         (_lastBridgeError ? ` (${_lastBridgeError})` : '') +
-        '. The bridge needs python with mss and Pillow (pip install mss Pillow).',
+        '. The bridge needs python with pywinauto, comtypes, mss, and Pillow '
+          + '(pip install -r python/computerUse-requirements.txt).',
     )
   },
 }

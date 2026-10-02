@@ -476,13 +476,18 @@ export function buildComputerUseTools(
           {
             name: 'click_element',
             description:
-              'Click a GUI element by its accessible name, role, or automationId — no pixel coordinates needed. ' +
+              'Click a GUI element by its accessible name, role, automationId, or tree node id (n=) — no pixel coordinates needed. ' +
               'Uses Windows UI Automation to find the element and InvokePattern to click it. ' +
               'Prefer this over left_click when the element name is visible in the accessibility snapshot. ' +
               'Falls back to BoundingRect center-click if InvokePattern is not supported.',
             inputSchema: {
               type: 'object' as const,
               properties: {
+                nodeId: {
+                  type: 'integer',
+                  description:
+                    'Per-snapshot node id from the accessibility tree (n= in the element list). Most precise selector.',
+                },
                 name: {
                   type: 'string',
                   description:
@@ -506,11 +511,16 @@ export function buildComputerUseTools(
             name: 'type_into_element',
             description:
               'Type text into a named GUI element using Windows UI Automation ValuePattern. ' +
-              'Finds the element by name/role/automationId, then sets its value directly — ' +
+              'Finds the element by node id (n=), name/role/automationId, then sets its value directly — ' +
               'no need to click first or use pixel coordinates. Works on Edit, ComboBox, and other value-holding controls.',
             inputSchema: {
               type: 'object' as const,
               properties: {
+                nodeId: {
+                  type: 'integer',
+                  description:
+                    'Per-snapshot node id from the accessibility tree (n= in the element list). Most precise selector.',
+                },
                 name: {
                   type: 'string',
                   description: 'Accessible name of the target element.',
@@ -529,6 +539,48 @@ export function buildComputerUseTools(
                 },
               },
               required: ['text'],
+            },
+          } as Tool,
+          {
+            name: 'interact_element',
+            description:
+              'Run a UI Automation pattern action on a GUI element without clicking it: ' +
+              'expand or collapse a TreeItem/MenuItem/ComboBox, toggle a ToggleButton or CheckBox, ' +
+              'select a ListItem/TabItem, scroll an offscreen item into view, or set a Slider/ProgressBar ' +
+              'value through RangeValue. Finds the element by node id (n=), name, role, or automationId. ' +
+              'set_range requires value (0.0–100.0). Returns an error naming the pattern when the element ' +
+              'does not support the requested action.',
+            inputSchema: {
+              type: 'object' as const,
+              properties: {
+                action: {
+                  type: 'string',
+                  enum: ['expand', 'collapse', 'toggle', 'select', 'scroll_into_view', 'set_range'],
+                  description: 'Pattern action to perform on the element.',
+                },
+                value: {
+                  type: 'number',
+                  description: 'Numeric value for the set_range action (e.g. slider position).',
+                },
+                nodeId: {
+                  type: 'integer',
+                  description:
+                    'Per-snapshot node id from the accessibility tree (n= in the element list). Most precise selector.',
+                },
+                name: {
+                  type: 'string',
+                  description: 'Accessible name of the target element (case-insensitive partial match).',
+                },
+                role: {
+                  type: 'string',
+                  description: 'Control type (optional, e.g. "TreeItem").',
+                },
+                automationId: {
+                  type: 'string',
+                  description: 'Exact automationId.',
+                },
+              },
+              required: ['action'],
             },
           } as Tool,
           {

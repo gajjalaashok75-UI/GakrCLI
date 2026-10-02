@@ -499,10 +499,16 @@ declare module '@ant/computer-use-mcp/types' {
       name?: string
       role?: string
       automationId?: string
+      nodeId?: number
     }): Promise<boolean>
     typeIntoElement?(
-      query: { name?: string; role?: string; automationId?: string },
+      query: { name?: string; role?: string; automationId?: string; nodeId?: number },
       text: string,
+    ): Promise<boolean>
+    interactElement?( // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      query: { name?: string; role?: string; automationId?: string; nodeId?: number },
+      action: 'expand' | 'collapse' | 'toggle' | 'select' | 'scroll_into_view' | 'set_range',
+      value?: number,
     ): Promise<boolean>
     getCurrentState?(): Promise<Record<string, unknown> | null>
   }

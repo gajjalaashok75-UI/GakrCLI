@@ -209,16 +209,23 @@ export interface ComputerExecutor {
     arrowCount?: number
     text?: string
   }): Promise<boolean>
-  /** Click an element by name/role/automationId via UI Automation */
+  /** Click an element by name/role/automationId/per-snapshot node id via UI Automation */
   clickElement?(query: {
     name?: string
     role?: string
     automationId?: string
+    nodeId?: number
   }): Promise<boolean>
-  /** Type text into an element by name/role/automationId via UI Automation ValuePattern */
+  /** Type text into an element by name/role/automationId/node id via UI Automation ValuePattern */
   typeIntoElement?(
-    query: { name?: string; role?: string; automationId?: string },
+    query: { name?: string; role?: string; automationId?: string; nodeId?: number },
     text: string,
+  ): Promise<boolean>
+  /** Run a UIA pattern action on an element (expand/collapse/toggle/select/scroll/set_range). */
+  interactElement?( // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    query: { name?: string; role?: string; automationId?: string; nodeId?: number },
+    action: 'expand' | 'collapse' | 'toggle' | 'select' | 'scroll_into_view' | 'set_range',
+    value?: number,
   ): Promise<boolean>
   /** Flat logical state of the bound window (tab, document, caret, inputs). Windows only. */
   getCurrentState?(): Promise<Record<string, unknown> | null>

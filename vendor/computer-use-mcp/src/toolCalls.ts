@@ -3559,21 +3559,25 @@ async function handleClickElement(
   const role = typeof args.role === 'string' ? args.role : undefined
   const automationId =
     typeof args.automationId === 'string' ? args.automationId : undefined
-  if (!name && !role && !automationId) {
+  const nodeId =
+    typeof args.nodeId === 'number' && Number.isFinite(args.nodeId)
+      ? Math.trunc(args.nodeId)
+      : undefined
+  if (!name && !role && !automationId && nodeId === undefined) {
     return errorResult(
-      'At least one of name, role, or automationId is required.',
+      'At least one of nodeId, name, role, or automationId is required.',
       'bad_args',
     )
   }
-  const ok = await adapter.executor.clickElement({ name, role, automationId })
+  const ok = await adapter.executor.clickElement({ name, role, automationId, nodeId })
   if (!ok) {
     return errorResult(
-      `Element not found: ${[name && `name="${name}"`, role && `role=${role}`, automationId && `id=${automationId}`].filter(Boolean).join(', ')}. Take a screenshot to see current GUI elements.`,
+      `Element not found: ${[nodeId !== undefined && `n=${nodeId}`, name && `name="${name}"`, role && `role=${role}`, automationId && `id=${automationId}`].filter(Boolean).join(', ')}. Take a screenshot to see current GUI elements.`,
       'element_not_found',
     )
   }
   return okText(
-    `Clicked element: ${[name && `"${name}"`, role, automationId].filter(Boolean).join(' ')}`,
+    `Clicked element: ${[nodeId !== undefined && `n=${nodeId}`, name && `"${name}"`, role, automationId].filter(Boolean).join(' ')}`,
   )
 }
 
@@ -3615,18 +3619,85 @@ async function handleTypeIntoElement(
   const role = typeof args.role === 'string' ? args.role : undefined
   const automationId =
     typeof args.automationId === 'string' ? args.automationId : undefined
+  const nodeId =
+    typeof args.nodeId === 'number' && Number.isFinite(args.nodeId)
+      ? Math.trunc(args.nodeId)
+      : undefined
   const ok = await adapter.executor.typeIntoElement(
-    { name, role, automationId },
+    { name, role, automationId, nodeId },
     text,
   )
   if (!ok) {
     return errorResult(
-      `Could not type into element: ${[name && `name="${name}"`, role && `role=${role}`, automationId && `id=${automationId}`].filter(Boolean).join(', ')}. The element was not found or doesn't support text input.`,
+      `Could not type into element: ${[nodeId !== undefined && `n=${nodeId}`, name && `name="${name}"`, role && `role=${role}`, automationId && `id=${automationId}`].filter(Boolean).join(', ')}. The element was not found or doesn't support text input.`,
       'element_not_found',
     )
   }
   return okText(
-    `Typed ${text.length} chars into: ${[name && `"${name}"`, role, automationId].filter(Boolean).join(' ')}`,
+    `Typed ${text.length} chars into: ${[nodeId !== undefined && `n=${nodeId}`, name && `"${name}"`, role, automationId].filter(Boolean).join(' ')}`,
+  )
+}
+
+async function handleInteractElement(
+  adapter: ComputerUseHostAdapter,
+  args: Record<string, unknown>,
+): Promise<CuCallToolResult> {
+  if (!adapter.executor.interactElement) {
+    return errorResult(
+      'interact_element is only available on Windows with a bound window.',
+      'feature_unavailable',
+    )
+  }
+  const action = requireString(args, 'action')
+  if (action instanceof Error) return errorResult(action.message, 'bad_args')
+  const VALID_ACTIONS = new Set([
+    'expand',
+    'collapse',
+    'toggle',
+    'select',
+    'scroll_into_view',
+    'set_range',
+  ])
+  if (!VALID_ACTIONS.has(action)) {
+    return errorResult(
+      `Unknown interact_element action "${action}". Valid: ${[...VALID_ACTIONS].join(', ')}`,
+      'bad_args',
+    )
+  }
+  const name = typeof args.name === 'string' ? args.name : undefined
+  const role = typeof args.role === 'string' ? args.role : undefined
+  const automationId =
+    typeof args.automationId === 'string' ? args.automationId : undefined
+  const nodeId =
+    typeof args.nodeId === 'number' && Number.isFinite(args.nodeId)
+      ? Math.trunc(args.nodeId)
+      : undefined
+  if (!name && !role && !automationId && nodeId === undefined) {
+    return errorResult(
+      'At least one of nodeId, name, role, or automationId is required.',
+      'bad_args',
+    )
+  }
+  let value: number | undefined
+  if (action === 'set_range') {
+    if (typeof args.value !== 'number' || !Number.isFinite(args.value)) {
+      return errorResult('set_range requires a numeric value.', 'bad_args')
+    }
+    value = args.value
+  }
+  const ok = await adapter.executor.interactElement(
+    { name, role, automationId, nodeId },
+    action as 'expand' | 'collapse' | 'toggle' | 'select' | 'scroll_into_view' | 'set_range',
+    value,
+  )
+  if (!ok) {
+    return errorResult(
+      `Could not ${action} element: ${[nodeId !== undefined && `n=${nodeId}`, name && `name="${name}"`, role && `role=${role}`, automationId && `id=${automationId}`].filter(Boolean).join(', ')}. The element was not found or doesn't support the ${action} pattern (re-capture the accessibility snapshot if the UI changed).`,
+      'element_not_found',
+    )
+  }
+  return okText(
+    `${action} applied to: ${[nodeId !== undefined && `n=${nodeId}`, name && `"${name}"`, role, automationId].filter(Boolean).join(' ')}`,
   )
 }
 
@@ -4330,6 +4401,17 @@ function boundWindowActionKind(
     case 'type_into_element':
     case 'virtual_keyboard':
       return 'keyboard'
+    case 'interact_element': {
+      // Tier follows the action's risk: scroll_into_view only moves the
+      // viewport (position-tier), expand/collapse/toggle/select act like a
+      // click on the element; set_range injects a value (keyboard-tier like
+      // type_into_element).
+      return a.action === 'scroll_into_view'
+        ? 'mouse_position'
+        : a.action === 'set_range'
+          ? 'keyboard'
+          : 'mouse'
+    }
     case 'virtual_mouse': {
       const action = a.action
       if (action === 'right_click' || action === 'drag') return 'mouse_full'
@@ -4538,6 +4620,9 @@ async function dispatchAction(
 
     case 'type_into_element':
       return handleTypeIntoElement(adapter, a)
+
+    case 'interact_element':
+      return handleInteractElement(adapter, a)
 
     case 'open_terminal':
       return handleOpenTerminal(adapter, a)

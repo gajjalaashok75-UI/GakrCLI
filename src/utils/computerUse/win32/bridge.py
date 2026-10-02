@@ -546,22 +546,8 @@ def send_mouse_move(hwnd_str, x, y):
     return True
 
 # ---------------------------------------------------------------------------
-# Accessibility snapshot (UI Automation via comtypes)
+# Accessibility snapshot (UI Automation via pywinauto)
 # ---------------------------------------------------------------------------
-_uia_client = None
-
-def _get_uia():
-    global _uia_client
-    if _uia_client is None:
-        try:
-            import comtypes.client
-            comtypes.client.GetModule('UIAutomationCore.dll')
-            from comtypes.gen.UIAutomationClient import CUIAutomation
-            _uia_client = comtypes.client.CreateObject(CUIAutomation)
-        except Exception:
-            # Fallback: use pywinauto
-            pass
-    return _uia_client
 
 def snapshot_flat_fallback(win):
     """Flat accessibility snapshot built from a one-shot descendants() query.
@@ -573,14 +559,8 @@ def snapshot_flat_fallback(win):
     role/name/id/rect/pattern fields survive — everything click_element /
     type_into_element need for name-based targeting.
     """
-    INTERACTIVE = {'Button', 'Edit', 'ComboBox', 'CheckBox', 'RadioButton',
-                   'MenuItem', 'Menu', 'MenuBar', 'Hyperlink', 'Slider',
-                   'Tab', 'TabItem', 'List', 'ListItem', 'Document',
-                   'TreeItem', 'DataItem', 'ToolBar', 'SplitButton'}
-    # Structural roles kept for context (document text, regions) but yielded
-    # after interactive controls so a node cap never hides clickable targets.
-    INTERACTIVE_EXTRA = {'Pane', 'Group', 'Text', 'TitleBar'}
     # Token budget: this text is embedded in every screenshot response.
+    # Role filtering uses the shared module-level INTERACTIVE_ROLES set.
     MAX_NODES = 120
 
     try:
@@ -591,18 +571,29 @@ def snapshot_flat_fallback(win):
     def build_node(d):
         try:
             ct = d.element_info.control_type or ''
-            if ct not in INTERACTIVE and ct not in INTERACTIVE_EXTRA:
+            if ct not in INTERACTIVE_ROLES:
                 return None
             rect = d.rectangle()
             w = rect.right - rect.left
             h = rect.bottom - rect.top
             if w <= 0 or h <= 0:
                 return None
+            # Phase 2.2: carry the RuntimeId so *_id bridge methods can
+            # re-resolve THIS element later without relying on automation_id
+            # strings (often empty or duplicated). `k` is assigned by the
+            # caller in final node order.
+            try:
+                rid = [int(x) for x in (d.element_info.runtime_id or [])]
+            except Exception:
+                rid = None
+            if rid is None:
+                return None
             node = {
                 'role': ct, 'name': d.element_info.name or '',
                 'id': d.element_info.automation_id or '',
                 'x': rect.left, 'y': rect.top, 'w': w, 'h': h,
                 'on': d.is_enabled(),
+                'rid': rid,
             }
             value = None
             try:
@@ -649,12 +640,15 @@ def snapshot_flat_fallback(win):
         node = build_node(d)
         if node is None:
             continue
-        if node['role'] in INTERACTIVE:
+        if node['role'] in INTERACTIVE_ROLES:
             interactive_nodes.append(node)
         else:
             structural_nodes.append(node)
 
     nodes = (interactive_nodes + structural_nodes)[:MAX_NODES]
+    # Phase 2.2: per-snapshot node ids (1-based, unique within THIS snapshot).
+    for i, node in enumerate(nodes, 1):
+        node['k'] = i
     return nodes if nodes else None
 
 def _nudge_suspended_uwp(hwnd, win):
@@ -742,7 +736,14 @@ def resolve_top_window(hwnd):
         return None
 
 def accessibility_snapshot(hwnd_str, max_depth=6):
-    """Get the accessibility tree using pywinauto (more reliable than raw comtypes)."""
+    """Snapshot the bound window's UIA tree as a pruned node list.
+
+    Returns None when the tree cannot be walked at all (reason goes to
+    stderr, where the TS client keeps a diagnostics tail). Per-node COM
+    failures during the walk are skipped and tallied — never silent.
+    A hard element budget caps the output; when it is hit, a marker node is
+    appended that tells the model how to recover (scroll / get_current_state).
+    """
     try:
         from pywinauto import Desktop
         from pywinauto.controls.uiawrapper import UIAWrapper
@@ -754,19 +755,22 @@ def accessibility_snapshot(hwnd_str, max_depth=6):
         # Suspended UWP apps expose an empty tree until resumed.
         _nudge_suspended_uwp(hwnd, win)
 
-        INTERACTIVE = {'Button', 'Edit', 'ComboBox', 'CheckBox', 'RadioButton',
-                       'MenuItem', 'Menu', 'MenuBar', 'Hyperlink', 'Slider',
-                       'Tab', 'TabItem', 'List', 'ListItem', 'Document',
-                       'TreeItem', 'DataItem', 'ToolBar', 'SplitButton',
-                       # Legacy/structural interactive types the pre-bridge
-                       # PowerShell walker also surfaced. Without them a
-                       # ScrollBar-heavy legacy app or a bare Tree/Spinner
-                       # reported nothing until an interactive descendant
-                       # existed beneath it.
-                       'DataGrid', 'ScrollBar', 'Tree', 'Spinner',
-                       'ToggleButton',
-                       # Date pickers are clickable interactive surfaces.
-                       'Calendar'}
+        # Walker-break lock: this hwnd's provider already failed child
+        # navigation once (lock set below) — go straight to the flat path.
+        if _FLAT_WALK_ONLY[0] == hwnd:
+            flat = snapshot_flat_fallback(win)
+            return flat if flat else None
+
+        # Hard node budget (Windows-MCP-style TreeElementBudget): this text is
+        # embedded in every screenshot response, so an unbounded walk on a
+        # dense UI can flood it. When the budget is hit the walk stops early
+        # and a truncation marker node is appended below.
+        element_budget = [500]
+        budget_hit = [False]
+        walk_errors = []
+        # Phase 2.2: per-snapshot node id counter — unique within THIS
+        # snapshot; ids are never meaningful across snapshots.
+        node_counter = [0]
 
         def walk(element, depth):
             if depth >= max_depth:
@@ -774,7 +778,8 @@ def accessibility_snapshot(hwnd_str, max_depth=6):
             nodes = []
             try:
                 children = element.children()
-            except Exception:
+            except Exception as e:
+                walk_errors.append(f'{type(e).__name__} at depth {depth}')
                 return []
             for child in children:
                 try:
@@ -789,22 +794,46 @@ def accessibility_snapshot(hwnd_str, max_depth=6):
                     # elements of the bound window because the bound window
                     # itself is placed at (-32000, -32000), so every direct
                     # child inherited an offscreen left. Filter only on size
-                    # here; visibility is checked separately via ct/name flags.
+                    # here; per-node visibility is read via IsOffscreen below
+                    # and MARKED (never filtered) so the agent can scroll to
+                    # content that exists out of view.
                     if w <= 0 or h <= 0:
                         continue
+                    if element_budget[0] <= 0:
+                        budget_hit[0] = True
+                        return nodes
+                    element_budget[0] -= 1
                     enabled = child.is_enabled()
+                    off = _is_offscreen(child)
                     value = None
                     try:
                         value = child.get_value()
                     except Exception:
                         pass
                     sub = walk(child, depth + 1)
-                    if ct in INTERACTIVE or sub:
+                    if ct in INTERACTIVE_ROLES or sub:
+                        # Phase 2.2: k identifies the node within THIS snapshot
+                        # (per-snapshot identity — elements die between calls,
+                        # so ids are never reused across snapshots); rid is the
+                        # UIA RuntimeId, consumed by the *_id action methods.
+                        node_counter[0] += 1
+                        try:
+                            rid = [int(x) for x in (child.element_info.runtime_id or [])]
+                        except Exception:
+                            rid = None
                         node = {
+                            'k': node_counter[0],
                             'role': ct, 'name': name, 'id': auto_id,
                             'x': rect.left, 'y': rect.top, 'w': w, 'h': h,
                             'on': enabled,
                         }
+                        if rid:
+                            node['rid'] = rid
+                        if off and ct not in ('Edit', 'Document'):
+                            # Carve-outs: a focused Edit with a scrolled caret
+                            # reports IsOffscreen while being the primary
+                            # target; Document content is virtualized text.
+                            node['off'] = True
                         if value:
                             node['v'] = str(value)[:100]
                         # G-UIA-2: pull UIA pattern data so the agent can read
@@ -858,7 +887,8 @@ def accessibility_snapshot(hwnd_str, max_depth=6):
                         if sub:
                             node['c'] = sub
                         nodes.append(node)
-                except Exception:
+                except Exception as e:
+                    walk_errors.append(f'{type(e).__name__} on {ct or "?"} at depth {depth}')
                     continue
             return nodes
 
@@ -866,6 +896,21 @@ def accessibility_snapshot(hwnd_str, max_depth=6):
             return sum(1 + count_tree(n.get('c', [])) for n in nodes)
 
         tree = walk(win, 0)
+        if walk_errors:
+            sys.stderr.write(
+                f'[bridge] accessibility_snapshot: {len(walk_errors)} nodes skipped: '
+                + '; '.join(walk_errors[:5])
+                + (' …' if len(walk_errors) > 5 else '') + '\n')
+        if budget_hit[0]:
+            tree.append({
+                'k': -1,  # sentinel: the truncation note is not a real element
+                'role': 'Note',
+                'name': 'Accessibility tree truncated: element budget (500) reached. '
+                        'Content below the cut is missing. Use get_current_state for a '
+                        'derived summary, or scroll to bring more content onscreen, '
+                        'then re-capture.',
+                'id': '', 'x': 0, 'y': 0, 'w': 0, 'h': 0, 'on': True,
+            })
         if count_tree(tree) >= 10:
             return tree
         # Thin-or-empty children() walk: Chromium apps (Chrome, Electron VS
@@ -874,9 +919,22 @@ def accessibility_snapshot(hwnd_str, max_depth=6):
         # query returns everything. Use the flat rebuild when it finds more.
         flat = snapshot_flat_fallback(win)
         if flat and count_tree(flat) > count_tree(tree):
+            # Phase 2.5: a window with real content (>= 5 elements via
+            # descendants()) whose child walk came back thin is a broken
+            # provider — lock this hwnd into the flat path for the rest of
+            # the bridge process so future snapshots skip the doomed walk.
+            try:
+                if len(win.descendants()) >= 5:
+                    _FLAT_WALK_ONLY[0] = hwnd
+            except Exception:
+                pass
             return flat
         return tree if tree else None
     except Exception as e:
+        # Diagnosed, not swallowed: the TS client keeps a stderr tail and
+        # operators read it when every snapshot comes back empty.
+        sys.stderr.write(
+            f'[bridge] accessibility_snapshot failed: {type(e).__name__}: {e}\n')
         return None
 
 # ---------------------------------------------------------------------------
@@ -918,6 +976,170 @@ def _uia_find_element(win, automation_id):
     return None
 
 
+# ---------------------------------------------------------------------------
+# Element identity: RuntimeId re-resolution (Phase 2.2, Touchpoint tier-4 port)
+# ---------------------------------------------------------------------------
+# The snapshot in this process is one-shot and stateless: it cannot hand a
+# live element pointer to the next call. Instead every snapshot node carries
+# its UIA RuntimeId, and the *_id action methods below RE-RESOLVE that id by
+# re-walking the bound window with a bounded DFS. Touchpoint's 4-tier chain
+# (cache map + liveness probe + ElementFromHandle + bounded DFS) collapses
+# into this single walk when there is no cross-call cache to consult.
+_RID_DFS_NODE_CAP = 10000  # same bound as Touchpoint's re-resolution walk
+
+# Phase 2.5: walker-break lock (Windows-MCP uia/controls.py port). Some
+# providers (Chromium/Electron) answer a one-shot descendants() query but
+# return nothing for TreeScope_Children navigation. Once a window proves
+# broken that way, the bound hwnd is recorded here and every later snapshot
+# of it skips the doomed recursive walk — a one-way, per-hwnd switch.
+_FLAT_WALK_ONLY = [None]  # holds an int hwnd or None
+
+
+def _element_runtime_id(elem):
+    """Normalized RuntimeId ([int, ...]) or None when unreadable."""
+    try:
+        return [int(x) for x in (elem.element_info.runtime_id or [])]
+    except Exception:
+        return None
+
+
+def _find_by_runtime_id(win, target_rid):
+    """Bounded DFS from `win` matching the element whose RuntimeId equals
+    `target_rid`. Walk order mirrors the snapshot walk so the id sequence is
+    deterministic. Cyclic-provider guard (Phase 2.3): a child whose RuntimeId
+    equals any ANCESTOR's is skipped — Edge <select> providers report
+    themselves as their own parent and would recurse forever.
+    """
+    if not target_rid:
+        return None
+    target = [int(x) for x in target_rid]
+    visited = 0
+
+    def dfs(elem, ancestor_ids):
+        nonlocal visited
+        visited += 1
+        if visited > _RID_DFS_NODE_CAP:
+            raise StopIteration  # budget exceeded — abort the whole walk
+        rid = _element_runtime_id(elem)
+        if rid is not None and rid == target:
+            return elem
+        if rid is not None and rid in ancestor_ids:
+            return None  # cyclic provider: never descend into yourself
+        try:
+            children = elem.children()
+        except Exception:
+            return None
+        child_ancestors = ancestor_ids + ([rid] if rid else [])
+        for c in children:
+            found = dfs(c, child_ancestors)
+            if found is not None:
+                return found
+        return None
+
+    try:
+        return dfs(win, [])
+    except StopIteration:
+        return None
+    except Exception:
+        return None
+
+
+def _resolve_by_rid(hwnd_str, rid):
+    """Resolve the bound window + the element identified by RuntimeId.
+    Returns (win, elem) or (None, reason-string)."""
+    try:
+        hwnd = int(hwnd_str)
+    except Exception:
+        return None, 'invalid hwnd'
+    win = resolve_top_window(hwnd)
+    if win is None:
+        return None, 'window not found'
+    _nudge_suspended_uwp(hwnd, win)
+    el = _find_by_runtime_id(win, rid)
+    if el is None:
+        return None, ('element with RuntimeId %s not found — the UI changed since '
+                      'the last snapshot; re-capture accessibility_snapshot' % (rid,))
+    return el, None
+
+
+def _uia_invoke_rid(hwnd_str, rid):
+    """InvokePattern.Invoke on the element with the given RuntimeId."""
+    el, err = _resolve_by_rid(hwnd_str, rid)
+    if el is None:
+        sys.stderr.write(f'[bridge] uia_invoke_id failed: {err}\n')
+        return False
+    try:
+        el.iface_invoke.Invoke()
+        return True
+    except Exception as e:
+        sys.stderr.write(f'[bridge] uia_invoke_id: InvokePattern unavailable: {e}\n')
+        return False
+
+
+def _uia_set_value_rid(hwnd_str, rid, value):
+    """ValuePattern.SetValue on the element with the given RuntimeId."""
+    el, err = _resolve_by_rid(hwnd_str, rid)
+    if el is None:
+        sys.stderr.write(f'[bridge] uia_set_value_id failed: {err}\n')
+        return False
+    try:
+        el.iface_value.SetValue(str(value))
+        return True
+    except Exception as e:
+        sys.stderr.write(f'[bridge] uia_set_value_id: ValuePattern unavailable: {e}\n')
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Pattern interactions (Phase 3.1 — Touchpoint _PATTERN_MAP, the 5 we take)
+# ---------------------------------------------------------------------------
+
+def _pattern_act(hwnd_str, rid, act):
+    """Run one pattern action on the element with the given RuntimeId.
+
+    act is (attr-name, method-name, args) resolved on a pywinauto wrapper;
+    a missing or failing pattern returns False with the reason on stderr
+    (diagnosed, not swallowed).
+    """
+    el, err = _resolve_by_rid(hwnd_str, rid)
+    if el is None:
+        sys.stderr.write(f'[bridge] pattern action failed: {err}\n')
+        return False
+    attr, meth, args = act
+    try:
+        iface = getattr(el, attr)
+        getattr(iface, meth)(*args)
+        return True
+    except AttributeError:
+        sys.stderr.write(f'[bridge] pattern action: element has no {attr}\n')
+        return False
+    except Exception as e:
+        sys.stderr.write(f'[bridge] pattern action {attr}.{meth} failed: {e}\n')
+        return False
+
+
+def _pattern_expand(hwnd_str, rid, expand):
+    return _pattern_act(hwnd_str, rid, ('iface_expand_collapse',
+                                        'Expand' if expand else 'Collapse', ()))
+
+
+def _pattern_toggle(hwnd_str, rid):
+    return _pattern_act(hwnd_str, rid, ('iface_toggle', 'Toggle', ()))
+
+
+def _pattern_select(hwnd_str, rid):
+    return _pattern_act(hwnd_str, rid, ('iface_selection_item', 'Select', ()))
+
+
+def _pattern_scroll_into_view(hwnd_str, rid):
+    return _pattern_act(hwnd_str, rid, ('iface_scroll_item', 'ScrollIntoView', ()))
+
+
+def _pattern_set_range(hwnd_str, rid, value):
+    return _pattern_act(hwnd_str, rid, ('iface_range_value', 'SetValue',
+                                        (float(value),)))
+
+
 def uia_invoke(hwnd_str, automation_id):
     """InvokePattern.Invoke on the descendant with the given automation_id.
 
@@ -939,6 +1161,33 @@ def uia_invoke(hwnd_str, automation_id):
         return True
     except Exception:
         return False
+
+
+def click_element_center(hwnd_str, x, y):
+    """Left-click at PHYSICAL screen coords inside the bound window.
+
+    Used by clickElement's rect-center fallback: the accessibility snapshot
+    exposes physical BoundingRect coordinates, and with per-monitor-v2 DPI
+    active the WM_LBUTTONDOWN lParam must be client-relative PHYSICAL pixels.
+    The legacy TS-side conversion (screen minus NC offset) is only correct at
+    100% scaling; GetWindowRect/ClientToScreen pair stays physical under
+    per-monitor-v2, so dividing the screen-space delta by the window's DPI
+    scale would be wrong — instead the NC offset itself is measured here via
+    the same physical APIs, keeping the whole chain physical.
+    """
+    hwnd = int(hwnd_str)
+    if not user32.IsWindow(hwnd):
+        return False
+    wr = RECT()
+    user32.GetWindowRect(hwnd, ctypes.byref(wr))
+    pt = POINT(0, 0)
+    user32.ClientToScreen(hwnd, ctypes.byref(pt))
+    dx = pt.x - wr.left
+    dy = pt.y - wr.top
+    lp = make_lparam(int(x) - dx, int(y) - dy)
+    SendMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lp)
+    SendMessageW(hwnd, WM_LBUTTONUP, MK_LBUTTON, lp)
+    return True
 
 
 def uia_set_value(hwnd_str, automation_id, value):
@@ -1035,6 +1284,96 @@ _UIA_EXPAND_STATE = 30051  # ExpandCollapsePattern.ExpandCollapseState
 _ACTIONABLE_ROLES = {'Button', 'TabItem', 'MenuItem', 'ListItem', 'CheckBox',
                      'RadioButton', 'Hyperlink', 'ComboBox', 'Edit', 'SplitButton',
                      'DataGrid', 'Calendar'}
+
+# Single source of truth for "interactive" control types. Both the recursive
+# walk (accessibility_snapshot) and the flat fallback (snapshot_flat_fallback)
+# previously carried their own disagreeing literals; they must agree because
+# a control clickable through one path but invisible to the other silently
+# breaks click_element targeting.
+INTERACTIVE_ROLES = {'Button', 'Edit', 'ComboBox', 'CheckBox', 'RadioButton',
+                     'MenuItem', 'Menu', 'MenuBar', 'Hyperlink', 'Slider',
+                     'Tab', 'TabItem', 'List', 'ListItem', 'Document',
+                     'TreeItem', 'DataItem', 'ToolBar', 'SplitButton',
+                     # Legacy/structural interactive types the pre-bridge
+                     # PowerShell walker also surfaced. Without them a
+                     # ScrollBar-heavy legacy app or a bare Tree/Spinner
+                     # reported nothing until an interactive descendant
+                     # existed beneath it.
+                     'DataGrid', 'ScrollBar', 'Tree', 'Spinner',
+                     'ToggleButton',
+                     # Date pickers are clickable interactive surfaces.
+                     'Calendar'}
+
+_UIA_IS_OFFSCREEN = 30007  # IsOffscreen (UIA property id, not in pywinauto 0.6.9)
+
+# RuntimeId property (UIA_RuntimeIdPropertyId) — element identity, Phase 2.2.
+# Read raw like IsOffscreen because pywinauto 0.6.9 does not expose it either.
+_UIA_RUNTIME_ID = 30000
+
+# Per-monitor-v2 DPI awareness for the bridge process (Phase 2.4). The value
+# is DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2; declared as a raw context
+# handle because user32.SetProcessDpiAwarenessContext has no ctypes wart.
+_DPI_CONTEXT_PER_MONITOR_AWARE_V2 = -4
+user32.GetDpiForWindow = getattr(user32, 'GetDpiForWindow', None)
+if user32.GetDpiForWindow is not None:
+    user32.GetDpiForWindow.restype = ctypes.c_uint
+    user32.GetDpiForWindow.argtypes = [ctypes.c_void_p]
+
+
+def _window_scale(hwnd):
+    """Physical→logical scale for the given window's monitor (96 dpi = 1.0).
+
+    GetDpiForWindow needs Windows 10 1607+; on older systems GetDpiForSystem
+    is tried, then a neutral 1.0. Only used by the rect-center click fallback
+    below — elsewhere coordinates are already physical and consistent.
+    """
+    try:
+        dpi = (user32.GetDpiForWindow(hwnd) if user32.GetDpiForWindow
+               else user32.GetDpiForSystem())
+        if dpi and dpi > 0:
+            return dpi / 96.0
+    except Exception:
+        pass
+    return 1.0
+
+
+def _is_offscreen(elem):
+    """IsOffscreen via the raw UIA property, guarded per element.
+
+    Marked, never filtered: for a screenshot-driven agent "this tab exists
+    but is scrolled out of view" is the actionable fact. A failed read must
+    not kill the node (the zero-size filter remains the hard gate), so this
+    catches broadly by design.
+    """
+    try:
+        return bool(elem.element_info._element.GetCurrentPropertyValue(_UIA_IS_OFFSCREEN))
+    except Exception:
+        return False
+
+
+def _repair_strings(obj):
+    """Replace lone UTF-16 surrogates and private-use characters with U+FFFD.
+
+    json.dumps escapes a lone surrogate into the response line and a
+    downstream JSON parser then rejects the WHOLE response — one emoji in a
+    window title would kill every bridge call. Repairing at the response
+    boundary is cheaper than losing the call. PUA codepoints render as
+    nothing useful to the model and are repaired alongside.
+    """
+    if isinstance(obj, str):
+        out = []
+        for ch in obj:
+            cp = ord(ch)
+            if 0xD800 <= cp <= 0xDFFF or 0xE000 <= cp <= 0xF8FF:
+                out.append('\ufffd')
+            else:
+                out.append(ch)
+        return ''.join(out)
+    if isinstance(obj, dict):
+        return {k: _repair_strings(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_repair_strings(v) for v in obj]
+    return obj
 
 
 def _strip_dirty_suffix(name):
@@ -1525,13 +1864,66 @@ METHODS = {
     'find_edit_child': lambda p: find_edit_child(p['hwnd']),
     'uia_invoke': lambda p: uia_invoke(p['hwnd'], p['automation_id']),
     'uia_set_value': lambda p: uia_set_value(p['hwnd'], p['automation_id'], p.get('value', '')),
+    # RuntimeId-targeted actions (Phase 2.2/3.1). rid = list of ints from a
+    # snapshot node's `rid` field.
+    'uia_invoke_id': lambda p: _uia_invoke_rid(p['hwnd'], p.get('rid')),
+    'uia_set_value_id': lambda p: _uia_set_value_rid(p['hwnd'], p.get('rid'), p.get('value', '')),
+    'expand_id': lambda p: _pattern_expand(p['hwnd'], p.get('rid'), bool(p.get('expand', True))),
+    'toggle_id': lambda p: _pattern_toggle(p['hwnd'], p.get('rid')),
+    'select_id': lambda p: _pattern_select(p['hwnd'], p.get('rid')),
+    'scroll_into_view_id': lambda p: _pattern_scroll_into_view(p['hwnd'], p.get('rid')),
+    'set_range_id': lambda p: _pattern_set_range(p['hwnd'], p.get('rid'), p.get('value', 0)),
+    'click_element_center': lambda p: click_element_center(p['hwnd'], p['x'], p['y']),
     'accessibility_snapshot': lambda p: accessibility_snapshot(p['hwnd'], p.get('max_depth', 6)),
     'get_current_state': lambda p: get_current_state(p['hwnd']),
     'ping': lambda p: {'ok': True, 'pid': os.getpid()},
 }
 
+def _init_com():
+    """Initialize the COM apartment for this thread (STA) before any UIA work.
+
+    Without an explicit init, comtypes initializes lazily and a nested STA/MTA
+    mismatch surfaces later as RPC_E_CHANGED_MODE — which every bare except
+    on the walk path then swallowed as "no data". RPC_E_CHANGED_MODE here is
+    benign (already initialized in another model) and is deliberately not an
+    error. Runs once, at process start, before the dispatch loop.
+    """
+    # Phase 2.4: per-monitor-v2 DPI awareness BEFORE any UIA/window call.
+    # Without it GetWindowRect/ClientToScreen are virtualized on scaled
+    # monitors and every physical coordinate read is a lie. E_NOTIMPL /
+    # already-set contexts are benign.
+    try:
+        hr = user32.SetProcessDpiAwarenessContext(
+            ctypes.c_void_p(_DPI_CONTEXT_PER_MONITOR_AWARE_V2))
+        if not hr:
+            # Fallback for pre-1607 Windows: per-monitor v1, then system-aware.
+            try:
+                ctypes.windll.shcore.SetProcessDpiAwareness(2)
+            except Exception:
+                try:
+                    user32.SetProcessDPIAware()
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    try:
+        import pythoncom
+        pythoncom.CoInitializeEx(pythoncom.COINIT_APARTMENTTHREADED)
+    except ImportError:
+        # pythoncom ships with pywin32; comtypes brings its own CoInitialize.
+        try:
+            import comtypes
+            comtypes.CoInitializeEx(comtypes.COINIT_APARTMENTTHREADED)
+        except Exception:
+            pass
+    except Exception:
+        # RPC_E_CHANGED_MODE = already initialized with the other model — fine.
+        pass
+
+
 def main():
     """Main loop: read JSON lines from stdin, dispatch, write JSON lines to stdout."""
+    _init_com()
     for line in sys.stdin:
         line = line.strip()
         if not line:
@@ -1547,7 +1939,10 @@ def main():
             else:
                 try:
                     result = METHODS[method](params)
-                    resp = {'id': req_id, 'result': result}
+                    # Surrogate/PUA repair at the response boundary: a lone
+                    # surrogate in any result string would otherwise produce
+                    # a response line the TS JSON parser rejects wholesale.
+                    resp = {'id': req_id, 'result': _repair_strings(result)}
                 except Exception as e:
                     resp = {'id': req_id, 'error': str(e)}
 

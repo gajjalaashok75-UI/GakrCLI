@@ -152,6 +152,17 @@ function getCachedNcOffset(): { dx: number; dy: number } {
  */
 let lastAccessibilityFetch = 0
 let lastAccessibilityText: string | undefined
+
+/**
+ * Invalidate the 500ms accessibility-text cache. The TTL alone can serve a
+ * tree captured against a DIFFERENT window across a bind/unbind/rebind or a
+ * window-state change, so the cache is cleared at the same sites that reset
+ * the NC-offset cache.
+ */
+function resetAccessibilityCache(): void {
+  lastAccessibilityFetch = 0
+  lastAccessibilityText = undefined
+}
 async function getAccessibilityText(): Promise<string | undefined> {
   if (process.platform !== 'win32' || !isBound()) return undefined
   const now = Date.now()
@@ -661,6 +672,7 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
       // Invalidate NC offset cache on new bind
       _ncOffset = null
       _ncOffsetHwnd = null
+      resetAccessibilityCache()
     },
 
     // ── Window management (Windows only) ──────────────────────────────
@@ -670,6 +682,7 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
       // Invalidate NC offset cache on window state change
       _ncOffset = null
       _ncOffsetHwnd = null
+      resetAccessibilityCache()
       return result
     },
 
@@ -751,6 +764,7 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
         bindWindow(newHwnd, win?.pid)
         _ncOffset = null
         _ncOffsetHwnd = null
+        resetAccessibilityCache()
 
         // Wait for agent to initialize
         await sleep(2000)
@@ -783,6 +797,7 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
       bindWindow(target.hwnd, target.pid)
       _ncOffset = null
       _ncOffsetHwnd = null
+      resetAccessibilityCache()
       return target
     },
 
@@ -793,6 +808,7 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
       unbindWindow()
       _ncOffset = null
       _ncOffsetHwnd = null
+      resetAccessibilityCache()
     },
 
     async hasBoundWindow() {
@@ -1180,11 +1196,13 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
       }
     },
 
-    // ── Element-targeted actions (Windows UIA) ──────────────────────────
+    // ── Element-targeted actions (Windows UIA) ──────────────────────────────
     async clickElement(query: {
       name?: string
       role?: string
       automationId?: string
+      /** Per-snapshot node id from the accessibility tree (most precise). */
+      nodeId?: number
     }): Promise<boolean> {
       if (process.platform !== 'win32' || !isBound()) return false
       try {
@@ -1204,11 +1222,27 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
         const node = findNodeInSnapshot(bridgeToAccessibilityNodes(raw), query)
         if (!node) return false
 
-        // Preferred: InvokePattern through the bridge — same long-lived
-        // process as the snapshot itself, hwnd-addressed, no PowerShell
-        // cold start and no title matching. An old bridge asset without
-        // the method rejects -> treated as "not handled" so the legacy
-        // paths below still run.
+        // Preferred: RuntimeId-targeted InvokePattern through the bridge
+        // (Phase 2.2). The node's RuntimeId is re-resolved bridge-side with a
+        // bounded DFS — no title matching and no automationId-string lookup,
+        // which fails on empty/duplicated ids. An old bridge without the
+        // method rejects -> treated as "not handled" so the paths below run.
+        if (node.runtimeId?.length) {
+          const invoked = await (async () => {
+            try {
+              const r = await call('uia_invoke_id', {
+                hwnd,
+                rid: node.runtimeId,
+              })
+              return r === true
+            } catch {
+              return false
+            }
+          })()
+          if (invoked) return true
+        }
+
+        // Fallback 1: InvokePattern by automationId (pre-bridge-id path).
         if (node.automationId) {
           const invoked = await (async () => {
             try {
@@ -1224,24 +1258,25 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
           if (invoked) return true
         }
 
-        // Legacy fallback 1: InvokePattern via title-matched PowerShell.
-        // Try InvokePattern first (Button, MenuItem, Link)
-        const { clickElement: uiaClick } =
-          require('./win32/uiAutomation.js') as typeof import('./win32/uiAutomation.js')
-        // Get window title for UIA lookup
-        const windows = require('./win32/windowEnum.js').listWindows() as {
-          hwnd: string
-          title: string
-        }[]
-        const win = windows.find((w: any) => w.hwnd === hwnd)
-        if (win && node.automationId) {
-          if (uiaClick(win.title, node.automationId)) return true
-        }
-
-        // Legacy fallback 2: click center of bounding rect via SendMessage
+        // Fallback 2: click the center of the element's bounding rect. The
+        // snapshot reports PHYSICAL screen coords, so the conversion to
+        // client coords happens bridge-side (click_element_center) where
+        // per-monitor-v2 DPI awareness keeps everything physical and the NC
+        // offset is measured with the same physical APIs (Phase 2.4). The
+        // previous TS-side screen-minus-NC-offset math was only correct at
+        // 100% scaling.
         const cx = node.bounds.x + Math.round(node.bounds.w / 2)
         const cy = node.bounds.y + Math.round(node.bounds.h / 2)
-        // Convert screen coords to client coords
+        try {
+          const r = await call('click_element_center', {
+            hwnd,
+            x: cx,
+            y: cy,
+          })
+          if (r === true) return true
+        } catch {
+          // Old bridge asset without the method -> legacy path below.
+        }
         const nc = getCachedNcOffset()
         const { sendClick } =
           require('./win32/windowMessage.js') as typeof import('./win32/windowMessage.js')
@@ -1254,7 +1289,7 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
     },
 
     async typeIntoElement(
-      query: { name?: string; role?: string; automationId?: string },
+      query: { name?: string; role?: string; automationId?: string; nodeId?: number },
       text: string,
     ): Promise<boolean> {
       if (process.platform !== 'win32' || !isBound()) return false
@@ -1263,11 +1298,35 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
           require('./platforms/win32.js') as typeof import('./platforms/win32.js')
         const hwnd = getBoundHwnd()
         if (!hwnd) return false
+        const { call } =
+          require('./win32/bridgeClient.js') as typeof import('./win32/bridgeClient.js')
 
-        // Preferred: ValuePattern.SetValue through the bridge — hwnd-addressed,
-        // no PowerShell cold start, no title matching. An old bridge asset
-        // without the method rejects -> treated as "not handled" so the
-        // legacy paths below still run.
+        // Preferred: RuntimeId-targeted ValuePattern (Phase 2.2) after
+        // locating the node in a fresh snapshot. Node targeting avoids the
+        // empty/duplicated-automationId trap entirely.
+        const raw = (await call('accessibility_snapshot', {
+          hwnd,
+          max_depth: 6,
+        })) as BridgeUiaNode[] | null
+        const nodes = raw && Array.isArray(raw) ? bridgeToAccessibilityNodes(raw) : []
+        const { findNodeInSnapshot } =
+          require('./win32/accessibilitySnapshot.js') as typeof import('./win32/accessibilitySnapshot.js')
+        const node = findNodeInSnapshot(nodes, query)
+
+        if (node?.runtimeId?.length) {
+          try {
+            const r = await call('uia_set_value_id', {
+              hwnd,
+              rid: node.runtimeId,
+              value: text,
+            })
+            if (r === true) return true
+          } catch {
+            // Old bridge without the method -> fall through.
+          }
+        }
+
+        // Fallback 1: ValuePattern by automationId (pre-bridge-id path).
         const bridgeSetValue = async (automationId: string): Promise<boolean> => {
           try {
             const r = await call('uia_set_value', { hwnd, automation_id: automationId, value: text })
@@ -1276,30 +1335,47 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
             return false
           }
         }
+        if (node?.automationId && (await bridgeSetValue(node.automationId))) return true
+        if (!node && query.automationId && (await bridgeSetValue(query.automationId)))
+          return true
 
-        // Legacy fallback 1: ValuePattern via title-matched PowerShell.
-        // Try UIA ValuePattern directly
-        const windows = require('./win32/windowEnum.js').listWindows() as {
-          hwnd: string
-          title: string
-        }[]
-        const win = windows.find((w: any) => w.hwnd === hwnd)
-        if (win) {
-          const { setValue, findElement } =
-            require('./win32/uiAutomation.js') as typeof import('./win32/uiAutomation.js')
-          // Try by automationId first, then by name+role
-          if (query.automationId) {
-            if (await bridgeSetValue(query.automationId)) return true
-          }
-          if (query.name) {
-            const el = findElement(win.title, query)
-            if (el && el.automationId) {
-              if (await bridgeSetValue(el.automationId)) return true
-            }
-          }
+        if (!node) return false
+
+        // Fallback 2: focus the element, then sendText. The center click
+        // goes through the bridge's physical-coordinate conversion (Phase
+        // 2.4); the legacy NC-offset math stays as the old-bridge fallback.
+        const cx = node.bounds.x + Math.round(node.bounds.w / 2)
+        const cy = node.bounds.y + Math.round(node.bounds.h / 2)
+        try {
+          const r = await call('click_element_center', { hwnd, x: cx, y: cy })
+          if (r !== true) throw new Error('center click not handled')
+        } catch {
+          const nc = getCachedNcOffset()
+          const { sendClick: legacyClick } =
+            require('./win32/windowMessage.js') as typeof import('./win32/windowMessage.js')
+          legacyClick(hwnd, cx - nc.dx, cy - nc.dy, 'left')
         }
+        await sleep(50)
+        const { sendText } =
+          require('./win32/windowMessage.js') as typeof import('./win32/windowMessage.js')
+        return sendText(hwnd, text)
+      } catch {
+        return false
+      }
+    },
 
-        // Fallback: find the element, click it, then sendText
+    // ── Pattern interactions (Phase 3.1) ──────────────────────────────────
+    async interactElement(
+      query: { name?: string; role?: string; automationId?: string; nodeId?: number },
+      action: 'expand' | 'collapse' | 'toggle' | 'select' | 'scroll_into_view' | 'set_range',
+      value?: number,
+    ): Promise<boolean> {
+      if (process.platform !== 'win32' || !isBound()) return false
+      try {
+        const { getBoundHwnd } =
+          require('./platforms/win32.js') as typeof import('./platforms/win32.js')
+        const hwnd = getBoundHwnd()
+        if (!hwnd) return false
         const { call } =
           require('./win32/bridgeClient.js') as typeof import('./win32/bridgeClient.js')
         const raw = (await call('accessibility_snapshot', {
@@ -1310,17 +1386,20 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
         const { findNodeInSnapshot } =
           require('./win32/accessibilitySnapshot.js') as typeof import('./win32/accessibilitySnapshot.js')
         const node = findNodeInSnapshot(bridgeToAccessibilityNodes(raw), query)
-        if (!node) return false
-
-        // Click to focus, then type
-        const nc = getCachedNcOffset()
-        const cx = node.bounds.x + Math.round(node.bounds.w / 2) - nc.dx
-        const cy = node.bounds.y + Math.round(node.bounds.h / 2) - nc.dy
-        const { sendClick, sendText } =
-          require('./win32/windowMessage.js') as typeof import('./win32/windowMessage.js')
-        sendClick(hwnd, cx, cy, 'left')
-        await sleep(50)
-        return sendText(hwnd, text)
+        if (!node?.runtimeId?.length) return false
+        const method = {
+          expand: 'expand_id',
+          collapse: 'expand_id',
+          toggle: 'toggle_id',
+          select: 'select_id',
+          scroll_into_view: 'scroll_into_view_id',
+          set_range: 'set_range_id',
+        }[action]
+        const params: Record<string, unknown> = { hwnd, rid: node.runtimeId }
+        if (action === 'collapse') params.expand = false
+        if (action === 'set_range') params.value = value ?? 0
+        const r = await call(method, params)
+        return r === true
       } catch {
         return false
       }
