@@ -4,7 +4,7 @@
  * LAYER 2 — GakrCLI-SPECIFIC. This is the ONLY file in this directory that
  * imports from GakrCLI's src/Tool.ts. Everything else (types.ts,
  * browserServer.ts, browserEngine.ts, recording.ts, eventStorage.ts,
- * refManager.ts, asyncMutex.ts) is framework-agnostic and portable as-is.
+ * asyncMutex.ts) is framework-agnostic and portable as-is.
  *
  * Written against the VERIFIED real src/Tool.ts (fetched directly from the
  * GakrCLI repo), not the earlier inferred conventions. Notably:

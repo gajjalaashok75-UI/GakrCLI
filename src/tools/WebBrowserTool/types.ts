@@ -1191,8 +1191,8 @@ Parameters:
   click directly instead of an index — more robust when the page has changed since the last
   browser_get_state call, or on element-dense pages where counting the right occurrence by hand
   is error-prone. Provide either index or selector (selector takes priority if both are given).
-  Do NOT put a get_state ref (the "e46"/"f1e46" you see in [ref=e46] tags) in brackets like
-  "[ref=e46]" — that is not valid CSS and will time out. Use the numeric index instead for refs.
+  Do NOT wrap a get_state index in brackets and pass it as the selector (e.g. selector="[3]") —
+  that is not valid CSS and will time out. Use the index parameter for get_state indices.
 - new_tab: Whether to open any resulting navigation in a new tab (optional)
 
 Important: Only use indices that appear in your current browser_get_state output —
@@ -1208,8 +1208,8 @@ Parameters:
 - index: The index of the input element (from browser_get_state). Ignored if selector is given.
 - selector: A standard CSS selector (e.g. "input[name='q']", "textarea[aria-label='Search']") to
   type into directly instead of an index — see browser_click's selector parameter for when this
-  is preferable. Provide either index or selector. Do NOT put a get_state ref in brackets like
-  "[ref=e46]" — use the numeric index instead for refs.
+  is preferable. Provide either index or selector. Do NOT wrap a get_state index in brackets and
+  pass it as the selector (e.g. "[3]") — use the index parameter for get_state indices.
 - text: The text to type
 
 Important: Only use indices that appear in your current browser_get_state output —
@@ -1218,16 +1218,18 @@ if the page may have changed since then, prefer selector or call browser_get_sta
 
 export const BROWSER_GET_STATE_DESCRIPTION = `Get the current state of the page including all interactive elements.
 
-Returns the page's accessibility tree as YAML, with every element tagged
-"[index=N]" — N is EXACTLY the number to pass as browser_click's or
-browser_type's \`index\` parameter for that element. Do not count elements
-yourself or use any other number from the output; use the "[index=N]" value
-verbatim. Example output:
-  - generic [index=0]:
-    - heading "Welcome" [index=1]
-    - textbox "Name" [index=2]
-    - button "Submit" [index=3]
-Here, browser_click with index=3 clicks the Submit button.
+Returns a numbered list of the page's interactive elements, one per line in
+the form "[N]<tag attributes>text />". N is EXACTLY the number to pass as
+browser_click's or browser_type's index parameter for that element. Do not
+count elements yourself or use any other number from the output; use the
+"[N]" value verbatim. Example output:
+  [0]<input type=search name=q />
+  [1]<button aria-label=Search>Search />
+  [2]<a href=/about>About />
+Here, browser_click with index=1 clicks the Search button.
+
+Each element may include an ax_name attribute — its computed accessible
+name — so a control whose visible label is empty can still be identified.
 
 Call this frequently — indices are only valid until the next get_state call
 or the next navigation/click/type that changes the page (they are NOT

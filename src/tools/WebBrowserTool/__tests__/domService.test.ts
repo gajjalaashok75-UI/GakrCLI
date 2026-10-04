@@ -119,6 +119,61 @@ describe('DomService.getClickableElements()', () => {
     expect(state.llm_representation().startsWith('[0]')).toBe(true); // never "*[0]"
   });
 
+  it('surfaces a computed ax_name for a control with no visible text (accessible-name gap)', async () => {
+    const tree = {
+      rootId: 'root',
+      map: {
+        root: { tagName: 'body', xpath: '/html/body', attributes: {}, children: ['btn'], isVisible: true, isTopElement: true },
+        btn: {
+          tagName: 'button',
+          xpath: '/html/body/button[1]',
+          // DOM_TREE_SCRIPT now fills ax_name via getAccessibleName for a
+          // label-less control (e.g. one labelled only by aria-labelledby).
+          attributes: { ax_name: 'Close dialog' },
+          children: [],
+          isVisible: true,
+          isInteractive: true,
+          isTopElement: true,
+          isInViewport: true,
+          highlightIndex: 0,
+        },
+      },
+      metadata: {},
+    };
+
+    const { state } = await new DomService(fakePage(tree)).getClickableElements();
+    const text = state.llm_representation();
+    expect(text).toContain('[0]<button');
+    expect(text).toContain('ax_name=Close dialog');
+  });
+
+  it('drops ax_name when it merely duplicates the element visible text', async () => {
+    const tree = {
+      rootId: 'root',
+      map: {
+        root: { tagName: 'body', xpath: '/html/body', attributes: {}, children: ['btn'], isVisible: true, isTopElement: true },
+        btn: {
+          tagName: 'button',
+          xpath: '/html/body/button[1]',
+          attributes: { ax_name: 'Search' },
+          children: ['btnText'],
+          isVisible: true,
+          isInteractive: true,
+          isTopElement: true,
+          isInViewport: true,
+          highlightIndex: 0,
+        },
+        btnText: { type: 'TEXT_NODE', text: 'Search', isVisible: true },
+      },
+      metadata: {},
+    };
+
+    const { state } = await new DomService(fakePage(tree)).getClickableElements();
+    const text = state.llm_representation();
+    expect(text).toContain('Search');
+    expect(text).not.toContain('ax_name=Search');
+  });
+
   it('returns an empty tree for about:blank without evaluating the page', async () => {
     let evaluateCalled = false;
     const page = { url: () => 'about:blank', evaluate: async () => { evaluateCalled = true; return {}; } } as any;

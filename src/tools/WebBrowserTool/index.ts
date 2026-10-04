@@ -19,7 +19,6 @@ export {
 } from './domTypes.js';
 export { RecordingSession, DEFAULT_RECORDING_CONFIG, type RecordingConfig } from './recording.js';
 export { EventStorage } from './eventStorage.js';
-export { RefManager } from './refManager.js';
 export { AsyncMutex } from './asyncMutex.js';
 export {
   BrowserObservation,

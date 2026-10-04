@@ -14,7 +14,6 @@ import path from 'node:path';
 
 import { AsyncMutex } from '../asyncMutex.js';
 import { EventStorage } from '../eventStorage.js';
-import { RefManager } from '../refManager.js';
 import { RecordingSession } from '../recording.js';
 import { BrowserObservation } from '../types.js';
 
@@ -78,7 +77,7 @@ function fakeDomTreeResult(elements: FakeDomElement[]) {
 /**
  * Directly populates a BrowserServer's internal index->element map,
  * bypassing any page interaction — the DOM-tree-system equivalent of the
- * old `refManager.setSnapshot(...)` seed used before click()/typeText()
+ * old aria-snapshot index seed used before click()/typeText()
  * tests. Use this for tests that want an index to already resolve WITHOUT
  * exercising `page.evaluate` (the happy-path click/type/dropdown/upload
  * tests below); use `fakeDomTreeResult()` + a `page.evaluate` mock instead
@@ -145,78 +144,6 @@ describe('EventStorage', () => {
     expect(storage.sessionDir).toBeNull();
     expect(storage.fileCount).toBe(0);
     expect(storage.totalEvents).toBe(0);
-  });
-});
-
-// ============================================================
-// RefManager — index -> Action resolution
-// ============================================================
-
-describe('RefManager — ariaSnapshot ref parsing', () => {
-  it('extracts refs from realistic aria snapshot YAML', () => {
-    const yaml = `- generic [ref=e1]:
-  - heading "Welcome to Example" [ref=e2]
-  - navigation [ref=e3]:
-    - link "Home" [ref=e4]
-    - link "About" [ref=e5]
-  - main [ref=e6]:
-    - textbox "Search" [ref=e7]
-    - button "Search" [ref=e8]`;
-
-    const rm = new RefManager();
-    rm.setSnapshot(yaml);
-
-    expect(rm.getRefByIndex(0)).toBe('e1');
-    expect(rm.getRefByIndex(3)).toBe('e4');
-    expect(rm.getRefByIndex(7)).toBe('e8');
-    expect(rm.getRefByIndex(8)).toBeNull();
-    expect(rm.count).toBe(8);
-  });
-
-  it('handles iframe refs (fNeM format)', () => {
-    const yaml = `- generic [ref=e1]:
-  - iframe [ref=f1e1]:
-    - button "Inside iframe" [ref=f1e2]`;
-
-    const rm = new RefManager();
-    rm.setSnapshot(yaml);
-
-    expect(rm.getRefByIndex(0)).toBe('e1');
-    expect(rm.getRefByIndex(1)).toBe('f1e1');
-    expect(rm.getRefByIndex(2)).toBe('f1e2');
-  });
-
-  it('getSnapshotText() returns the stored YAML verbatim', () => {
-    const yaml = `- generic [ref=e1]:\n  - button "X" [ref=e2]`;
-    const rm = new RefManager();
-    rm.setSnapshot(yaml);
-    expect(rm.getSnapshotText()).toBe(yaml);
-  });
-
-  it('returns 0 refs and null lookups for YAML with no refs', () => {
-    const rm = new RefManager();
-    rm.setSnapshot('- generic:\n  - text "no interactive elements"');
-    expect(rm.count).toBe(0);
-    expect(rm.getRefByIndex(0)).toBeNull();
-  });
-
-  it('re-parsing (setSnapshot called again) replaces the previous refs entirely', () => {
-    const rm = new RefManager();
-    rm.setSnapshot('- generic [ref=e1]:\n  - button "A" [ref=e2]');
-    expect(rm.count).toBe(2);
-
-    rm.setSnapshot('- generic [ref=e1]:\n  - button "B" [ref=e2]\n  - button "C" [ref=e3]');
-    expect(rm.count).toBe(3);
-    expect(rm.getRefByIndex(2)).toBe('e3');
-  });
-
-  it('clear() empties refs and snapshot text', () => {
-    const rm = new RefManager();
-    rm.setSnapshot('- generic [ref=e1]');
-    rm.clear();
-    expect(rm.getRefByIndex(0)).toBeNull();
-    expect(rm.count).toBe(0);
-    expect(rm.getSnapshotText()).toBe('');
   });
 });
 
@@ -1849,7 +1776,7 @@ describe('LOG.MD ISSUE #1: coercion of stringified params (BrowserActionSchema)'
 });
 
 describe('LOG.MD ISSUE #3: selector-based click/type fallback', () => {
-  it('click() resolves via selector directly, bypassing the index/refManager', async () => {
+  it('click() resolves via selector directly, bypassing the index map', async () => {
     const clickMock = mock(async () => {});
     const fakeLocator = { click: clickMock, first: () => fakeLocator, evaluate: async () => null };
     const fakePage: any = {
@@ -1862,7 +1789,7 @@ describe('LOG.MD ISSUE #3: selector-based click/type fallback', () => {
     const { BrowserServer } = await import('../browserServer.js');
     const server = new BrowserServer();
     (server as any).page = fakePage;
-    // Deliberately do NOT populate refManager — proves selector bypasses it.
+    // Deliberately do NOT populate the index map — proves selector bypasses it.
 
     const result = await server.click(undefined, false, '#submit-button');
     expect(clickMock).toHaveBeenCalled();
@@ -1870,7 +1797,7 @@ describe('LOG.MD ISSUE #3: selector-based click/type fallback', () => {
     expect(result).toContain('#submit-button');
   });
 
-  it('typeText() resolves via selector directly, bypassing the index/refManager', async () => {
+  it('typeText() resolves via selector directly, bypassing the index map', async () => {
     const fillMock = mock(async () => {});
     const fakeLocator = { fill: fillMock };
     const fakePage: any = {
@@ -2218,57 +2145,7 @@ describe('selector interpretation: index-like and legacy-ref guesses', () => {
 // ROUND 9: real-world E2E findings (index/ref mapping, panel color)
 // ============================================================
 
-describe('ROUND 9 E2E finding: get_state index annotation (index vs ref confusion)', () => {
-  it('getAnnotatedSnapshotText() rewrites [ref=eN] to [index=K] in document order', async () => {
-    const { RefManager } = await import('../refManager.js');
-    const rm = new RefManager();
-    const yaml = `- generic [ref=e1]:
-  - heading "Sample Test Page" [ref=e2]
-  - paragraph "This is a local test page." [ref=e3]
-  - textbox "Name" [ref=e4]
-  - textbox "Message" [ref=e5]
-  - button "Submit" [ref=e6]`;
-    rm.setSnapshot(yaml);
-
-    const annotated = rm.getAnnotatedSnapshotText();
-    expect(annotated).toContain('generic [index=0]');
-    expect(annotated).toContain('heading "Sample Test Page" [index=1]');
-    expect(annotated).toContain('textbox "Name" [index=3]');
-    expect(annotated).toContain('textbox "Message" [index=4]');
-    expect(annotated).toContain('button "Submit" [index=5]');
-    // Regression guard for the exact reported bug: index=5 (Submit) must
-    // NOT be reachable by miscounting to index=4 (that's "Message").
-    expect(annotated).not.toContain('button "Submit" [index=4]');
-  });
-
-  it('getRefByIndex(K) resolves to the exact ref the annotation shows for [index=K]', async () => {
-    const { RefManager } = await import('../refManager.js');
-    const rm = new RefManager();
-    const yaml = `- textbox "Name" [ref=e4]
-- button "Submit" [ref=e6]`;
-    rm.setSnapshot(yaml);
-
-    // index=0 in THIS snapshot is e4 (Name), index=1 is e6 (Submit) —
-    // whatever the annotation displays as [index=K] must be exactly what
-    // getRefByIndex(K) resolves for click()/typeText() to use.
-    expect(rm.getRefByIndex(0)).toBe('e4');
-    expect(rm.getRefByIndex(1)).toBe('e6');
-  });
-
-  it('handles iframe refs (fNeM format) in annotation the same way', async () => {
-    const { RefManager } = await import('../refManager.js');
-    const rm = new RefManager();
-    const yaml = `- generic [ref=e1]:
-  - iframe [ref=f1e1]:
-    - button "Inside iframe" [ref=f1e2]`;
-    rm.setSnapshot(yaml);
-
-    const annotated = rm.getAnnotatedSnapshotText();
-    expect(annotated).toContain('generic [index=0]');
-    expect(annotated).toContain('iframe [index=1]');
-    expect(annotated).toContain('button "Inside iframe" [index=2]');
-  });
-
+describe('ROUND 9 E2E finding: get_state output shape', () => {
   it('getBrowserState() returns the index-annotated ([N]<tag>) element list, not raw refs', async () => {
     const fakePage: any = {
       isClosed: () => false,

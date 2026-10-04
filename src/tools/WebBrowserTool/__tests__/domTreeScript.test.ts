@@ -42,4 +42,13 @@ describe('DOM_TREE_SCRIPT', () => {
     expect(/\brequire\s*\(/.test(DOM_TREE_SCRIPT)).toBe(false);
     expect(/\bmodule\.exports\b/.test(DOM_TREE_SCRIPT)).toBe(false);
   });
+
+  it('annotates interactive nodes with a computed accessible name (getAccessibleName -> ax_name)', () => {
+    // The tree builder resolves a per-element accessible name (aria-labelledby
+    // -> aria-label -> label/alt/value -> visible text -> title -> placeholder)
+    // and stores it as `ax_name`, which DEFAULT_INCLUDE_ATTRIBUTES already
+    // lists. Guards the enhancement that closes the label-less-control gap.
+    expect(DOM_TREE_SCRIPT).toContain('getAccessibleName');
+    expect(DOM_TREE_SCRIPT).toContain('ax_name');
+  });
 });

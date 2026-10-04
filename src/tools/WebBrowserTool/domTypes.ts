@@ -178,7 +178,7 @@ export class DOMElementNode extends DOMBaseNode {
               for (const key of remove) delete included[key];
             }
             if (node.tag_name === included.role) delete included.role;
-            for (const attr of ['aria-label', 'placeholder', 'title']) {
+            for (const attr of ['aria-label', 'placeholder', 'title', 'ax_name']) {
               if (included[attr] && included[attr].trim().toLowerCase() === text.trim().toLowerCase()) {
                 delete included[attr];
               }
