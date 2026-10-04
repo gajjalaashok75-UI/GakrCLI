@@ -87,10 +87,7 @@ assets/skills/test-checker/
 
 
 
-#ignore for some days
-packages/chrome-extension
-packages/mcp-chrome-bridge
-packages/mcp-chrome-shared
+
 
 # Remote control changes notes
 remote-control-changes.md
