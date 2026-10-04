@@ -185,6 +185,53 @@ test('offscreen flag flows through bridgeUia to the model as OFFSCREEN', () => {
   expect(src).toContain("if (node.offscreen) line += ' OFFSCREEN'")
 })
 
+test('the tree keeps named content/structure nodes, not just interactives', () => {
+  const py = read(BRIDGE)
+  // Content roles are a first-class part of the walk condition on BOTH
+  // paths, so static text, cells, headers and images survive.
+  expect(py).toContain('CONTENT_ROLES = {')
+  expect(py).toContain('ct in CONTENT_ROLES and name')
+  // The flat path no longer drops nodes that have no RuntimeId (they are
+  // still usable by name/rect) and it marks offscreen state.
+  expect(py).not.toContain('if rid is None:\n                return None')
+  expect(py).toContain("node['off'] = True")
+})
+
+test('related top-level windows (menus/dialogs) are folded into the snapshot', () => {
+  const py = read(BRIDGE)
+  expect(py).toContain('def _related_popup_windows(hwnd):')
+  expect(py).toContain('_RELATED_WINDOW_CAP = 5')
+  // Owned popups and other same-process top-level windows are enumerated
+  // and their trees appended as Window roots.
+  expect(py).toContain('int(owner or 0) == int(hwnd) or (not owner and same_proc)')
+  expect(py).toContain("'role': 'Window',")
+  // The bound-window representation is decided BEFORE appending related
+  // windows, so popups cannot mask a thin bound tree.
+  expect(py).toMatch(/count_tree\(tree\) >= 10[\s\S]*?_related_popup_windows\(hwnd\)/)
+})
+
+test('real focus and expand/collapse state are carried on interactive nodes', () => {
+  const py = read(BRIDGE)
+  expect(py).toContain("node['focus'] = True")
+  expect(py).toContain("node['exp'] = exp")
+  const src = read(BRIDGE_UIA)
+  expect(src).toContain('focus?: boolean')
+  expect(src).toContain('exp?: number')
+  expect(src).toContain('focused?: boolean')
+  expect(src).toContain('expanded?: boolean')
+  expect(src).toContain("if (node.focused) line += ' FOCUSED'")
+  expect(src).toContain("line += ' EXPANDED'")
+  expect(src).toContain("line += ' COLLAPSED'")
+})
+
+test('walk depth default is raised to 10 across the bridge and TS call sites', () => {
+  const py = read(BRIDGE)
+  expect(py).toContain('def accessibility_snapshot(hwnd_str, max_depth=10):')
+  const exec = read(EXECUTOR)
+  expect(exec).not.toContain('max_depth: 6,')
+  expect(exec.match(/max_depth: 10,/g)?.length).toBeGreaterThanOrEqual(4)
+})
+
 test('vendor toolCalls still has no key/hold_key reroute and screenshot attaches a11y text', () => {
   const src = read(VENDOR_TOOLCALLS)
   // Regression guard carried over from chordRouting: the reroute stays gone
@@ -238,11 +285,17 @@ test('the bridge is per-monitor-v2 DPI aware before COM init, and center clicks 
   expect(py).toContain("'click_element_center':")
 })
 
-test('a provider that ignores child navigation is locked into the flat walk', () => {
+test('a provider that ignores child navigation gets a flat-walk cooldown, not a permanent lock', () => {
   const py = read(BRIDGE)
-  expect(py).toContain('_FLAT_WALK_ONLY = [None]')
+  // Per-hwnd cooldown map + retry interval. A one-way lock froze Chromium/
+  // Electron into a hierarchy-less flat tree for the whole process lifetime,
+  // even though their accessibility tree materializes asynchronously.
+  expect(py).toContain('_FLAT_WALK_ONLY = {}')
+  expect(py).toContain('_FLAT_WALK_RETRY_SECONDS = 5.0')
   // Set at the fallback take-over site and checked at snapshot entry.
-  expect(py.match(/_FLAT_WALK_ONLY\[0\]/g)?.length).toBeGreaterThanOrEqual(2)
+  expect(py.match(/_FLAT_WALK_ONLY\./g)?.length).toBeGreaterThanOrEqual(2)
+  // Healthy recursive walks clear a stale cooldown.
+  expect(py).toContain('_FLAT_WALK_ONLY.pop(hwnd, None)')
 })
 
 // ── Phase 3 ─────────────────────────────────────────────────────────────────

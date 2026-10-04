@@ -15,6 +15,10 @@ export interface AccessibilityNode {
   enabled: boolean
   /** Element reports IsOffscreen but is kept (marked, not filtered). */
   offscreen?: boolean
+  /** UIA keyboard focus is on this element (true focus, not a heuristic). */
+  focused?: boolean
+  /** ExpandCollapsePattern state: true = expanded, false = collapsed. */
+  expanded?: boolean
   /** Per-snapshot node id (bridge `k`). Unique within ONE snapshot only. */
   nodeId?: number
   /** UIA RuntimeId — consumed by the *_id bridge action methods. */
@@ -37,6 +41,10 @@ export interface BridgeUiaNode {
   on: boolean
   /** IsOffscreen=true, emitted only outside the Edit/Document carve-out. */
   off?: boolean
+  /** Keyboard focus is on this element (interactive roles only). */
+  focus?: boolean
+  /** ExpandCollapsePattern state: 0 = collapsed, 1 = expanded. */
+  exp?: number
   /** UIA RuntimeId (list of ints) — element identity for *_id actions. */
   rid?: number[]
   v?: string
@@ -63,6 +71,8 @@ export function bridgeToAccessibilityNodes(raw: BridgeUiaNode[]): AccessibilityN
     bounds: { x: n.x || 0, y: n.y || 0, w: n.w || 0, h: n.h || 0 },
     enabled: n.on !== false,
     offscreen: n.off === true || undefined,
+    focused: n.focus === true || undefined,
+    expanded: typeof n.exp === 'number' ? n.exp === 1 : undefined,
     nodeId: typeof n.k === 'number' && n.k > 0 ? n.k : undefined,
     runtimeId: Array.isArray(n.rid) && n.rid.length ? n.rid : undefined,
     value: nodeValue(n),
@@ -82,6 +92,9 @@ export function formatForModel(nodes: AccessibilityNode[], indent = 0): string {
     if (node.name) line += ` "${truncate(node.name, 40)}"`
     line += ` (${node.bounds.x},${node.bounds.y} ${node.bounds.w}x${node.bounds.h})`
     if (!node.enabled) line += ' DISABLED'
+    if (node.focused) line += ' FOCUSED'
+    if (node.expanded === true) line += ' EXPANDED'
+    else if (node.expanded === false) line += ' COLLAPSED'
     if (node.offscreen) line += ' OFFSCREEN'
     if (node.value) line += ` value="${truncate(node.value, 80)}"`
     if (node.automationId) line += ` id=${node.automationId}`

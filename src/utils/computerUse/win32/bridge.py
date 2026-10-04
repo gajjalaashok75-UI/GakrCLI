@@ -560,8 +560,11 @@ def snapshot_flat_fallback(win):
     type_into_element need for name-based targeting.
     """
     # Token budget: this text is embedded in every screenshot response.
-    # Role filtering uses the shared module-level INTERACTIVE_ROLES set.
-    MAX_NODES = 120
+    # Role filtering uses the shared module-level INTERACTIVE_ROLES /
+    # CONTENT_ROLES sets. Raised from 120 after the flat path became the
+    # ONLY tree for Chromium/Electron windows: 120 dropped the lower half of
+    # any real page. The budget is still bounded (it is per-screenshot text).
+    MAX_NODES = 300
 
     try:
         descendants = win.descendants()
@@ -571,7 +574,13 @@ def snapshot_flat_fallback(win):
     def build_node(d):
         try:
             ct = d.element_info.control_type or ''
-            if ct not in INTERACTIVE_ROLES:
+            name = d.element_info.name or ''
+            # Keep interactive controls AND content/structure nodes that
+            # carry a name (labels, text, cells, headers). The flat path
+            # previously dropped every non-interactive node, so on the
+            # Chromium/Electron windows that depend on it the model lost
+            # all readable text — only clickable chrome survived.
+            if ct not in INTERACTIVE_ROLES and not (ct in CONTENT_ROLES and name):
                 return None
             rect = d.rectangle()
             w = rect.right - rect.left
@@ -581,20 +590,21 @@ def snapshot_flat_fallback(win):
             # Phase 2.2: carry the RuntimeId so *_id bridge methods can
             # re-resolve THIS element later without relying on automation_id
             # strings (often empty or duplicated). `k` is assigned by the
-            # caller in final node order.
+            # caller in final node order. A missing RuntimeId is NOT fatal:
+            # the node is still usable by name/rect targeting, so it is kept
+            # with `rid` simply absent (dropping it lost real elements).
             try:
                 rid = [int(x) for x in (d.element_info.runtime_id or [])]
             except Exception:
                 rid = None
-            if rid is None:
-                return None
             node = {
-                'role': ct, 'name': d.element_info.name or '',
+                'role': ct, 'name': name,
                 'id': d.element_info.automation_id or '',
                 'x': rect.left, 'y': rect.top, 'w': w, 'h': h,
                 'on': d.is_enabled(),
-                'rid': rid,
             }
+            if rid:
+                node['rid'] = rid
             value = None
             try:
                 value = d.get_value()
@@ -602,6 +612,17 @@ def snapshot_flat_fallback(win):
                 pass
             if value:
                 node['v'] = str(value)[:100]
+            # Visibility + state are marked, never filtered (same contract
+            # as the recursive walk). The flat path previously carried no
+            # offscreen flag at all, so scrolled-off content looked live.
+            if _is_offscreen(d):
+                node['off'] = True
+            if ct in INTERACTIVE_ROLES:
+                if _is_focused(d):
+                    node['focus'] = True
+                exp = _expand_state(d)
+                if exp is not None:
+                    node['exp'] = exp
             # G-UIA-2 fields on the controls that carry them
             if ct in ('Document', 'Edit', 'Text'):
                 try:
@@ -735,7 +756,50 @@ def resolve_top_window(hwnd):
     except Exception:
         return None
 
-def accessibility_snapshot(hwnd_str, max_depth=6):
+_RELATED_WINDOW_CAP = 5
+_GW_OWNER = 4
+
+
+def _related_popup_windows(hwnd):
+    """Top-level windows related to `hwnd`: popups/menus/dialogs it owns, plus
+    other visible top-level windows of the same process (secondary windows).
+
+    These are SEPARATE HWNDs — they never appear under the bound window's
+    children()/descendants(), so context menus, dropdowns, tooltips and modal
+    dialogs were previously invisible to the accessibility tree entirely.
+    Read-only enumeration; bounded by _RELATED_WINDOW_CAP at the call site.
+    """
+    result = []
+    try:
+        bound_pid = _pid_for_hwnd(hwnd)
+        get_window = user32.GetWindow
+        get_window.argtypes = [ctypes.c_void_p, ctypes.c_uint]
+        get_window.restype = ctypes.c_void_p
+
+        def cb(h, _):
+            try:
+                if not h or int(h) == int(hwnd):
+                    return True
+                if not user32.IsWindowVisible(h):
+                    return True
+                owner = get_window(h, _GW_OWNER)
+                same_proc = (_pid_for_hwnd(h) == bound_pid)
+                if int(owner or 0) == int(hwnd) or (not owner and same_proc):
+                    r = RECT()
+                    user32.GetWindowRect(h, ctypes.byref(r))
+                    if r.right - r.left > 0 and r.bottom - r.top > 0:
+                        result.append(int(h))
+            except Exception:
+                pass
+            return True
+
+        user32.EnumWindows(WNDENUMPROC(cb), 0)
+    except Exception:
+        pass
+    return result
+
+
+def accessibility_snapshot(hwnd_str, max_depth=10):
     """Snapshot the bound window's UIA tree as a pruned node list.
 
     Returns None when the tree cannot be walked at all (reason goes to
@@ -755,9 +819,15 @@ def accessibility_snapshot(hwnd_str, max_depth=6):
         # Suspended UWP apps expose an empty tree until resumed.
         _nudge_suspended_uwp(hwnd, win)
 
-        # Walker-break lock: this hwnd's provider already failed child
-        # navigation once (lock set below) — go straight to the flat path.
-        if _FLAT_WALK_ONLY[0] == hwnd:
+        # Walker-break cooldown: this hwnd's provider recently failed child
+        # navigation (marker set below) — use the flat path until the
+        # cooldown expires, then retry the recursive walk. A PERMANENT lock
+        # was wrong: Chromium/Electron materialize their accessibility tree
+        # asynchronously after the first UIA client connects, so a window
+        # that answered nothing on snapshot #1 usually answers fully on
+        # snapshot #2. A one-way switch froze those apps into a flat,
+        # hierarchy-less tree for the whole bridge-process lifetime.
+        if _FLAT_WALK_ONLY.get(hwnd, 0) > time.monotonic():
             flat = snapshot_flat_fallback(win)
             return flat if flat else None
 
@@ -811,7 +881,11 @@ def accessibility_snapshot(hwnd_str, max_depth=6):
                     except Exception:
                         pass
                     sub = walk(child, depth + 1)
-                    if ct in INTERACTIVE_ROLES or sub:
+                    # Keep interactive controls, anything with children (it
+                    # structures the tree), and named content/structure nodes
+                    # (text labels, cells, headers, images) so the tree is a
+                    # real accessibility tree rather than only clickables.
+                    if ct in INTERACTIVE_ROLES or sub or (ct in CONTENT_ROLES and name):
                         # Phase 2.2: k identifies the node within THIS snapshot
                         # (per-snapshot identity — elements die between calls,
                         # so ids are never reused across snapshots); rid is the
@@ -836,6 +910,15 @@ def accessibility_snapshot(hwnd_str, max_depth=6):
                             node['off'] = True
                         if value:
                             node['v'] = str(value)[:100]
+                        # Focus + expand/collapse state are read only for
+                        # interactive roles (one COM property read each) so
+                        # the walk stays cheap on dense pages.
+                        if ct in INTERACTIVE_ROLES:
+                            if _is_focused(child):
+                                node['focus'] = True
+                            exp_state = _expand_state(child)
+                            if exp_state is not None:
+                                node['exp'] = exp_state
                         # G-UIA-2: pull UIA pattern data so the agent can read
                         # document state without a screenshot. TextPattern for
                         # Document/Edit, SelectionPattern for Tab/List controls.
@@ -911,25 +994,69 @@ def accessibility_snapshot(hwnd_str, max_depth=6):
                         'then re-capture.',
                 'id': '', 'x': 0, 'y': 0, 'w': 0, 'h': 0, 'on': True,
             })
+        # Decide the BOUND window's representation first, then append related
+        # top-level windows — otherwise popups would inflate count_tree and
+        # wrongly suppress the flat fallback for a genuinely thin bound tree.
         if count_tree(tree) >= 10:
-            return tree
-        # Thin-or-empty children() walk: Chromium apps (Chrome, Electron VS
-        # Code) expose their window chrome but not the content tree to
-        # TreeScope_Children navigation, while a one-shot descendants()
-        # query returns everything. Use the flat rebuild when it finds more.
-        flat = snapshot_flat_fallback(win)
-        if flat and count_tree(flat) > count_tree(tree):
-            # Phase 2.5: a window with real content (>= 5 elements via
-            # descendants()) whose child walk came back thin is a broken
-            # provider — lock this hwnd into the flat path for the rest of
-            # the bridge process so future snapshots skip the doomed walk.
-            try:
-                if len(win.descendants()) >= 5:
-                    _FLAT_WALK_ONLY[0] = hwnd
-            except Exception:
-                pass
-            return flat
-        return tree if tree else None
+            # Recursive walk is healthy again — clear any stale cooldown so
+            # a transient thin walk does not keep this hwnd on the flat path.
+            _FLAT_WALK_ONLY.pop(hwnd, None)
+            result = tree
+        else:
+            # Thin-or-empty children() walk: Chromium apps (Chrome, Electron VS
+            # Code) expose their window chrome but not the content tree to
+            # TreeScope_Children navigation, while a one-shot descendants()
+            # query returns everything. Use the flat rebuild when it finds more.
+            flat = snapshot_flat_fallback(win)
+            if flat and count_tree(flat) > count_tree(tree):
+                # Phase 2.5: a window with real content (>= 5 elements via
+                # descendants()) whose child walk came back thin is a broken
+                # provider — put this hwnd on a flat-walk COOLDOWN (per-hwnd,
+                # expires, retried) rather than a permanent lock, because
+                # Chromium/Electron materialize their tree asynchronously.
+                try:
+                    if len(win.descendants()) >= 5:
+                        _FLAT_WALK_ONLY[hwnd] = (time.monotonic()
+                                                 + _FLAT_WALK_RETRY_SECONDS)
+                except Exception:
+                    pass
+                result = flat
+            else:
+                result = tree
+
+        # Related top-level windows (context menus, dropdowns, tooltips, modal
+        # dialogs, secondary windows) live in separate HWNDs and are invisible
+        # to the bound window's child walk. Append their trees so the model can
+        # see what is open over/alongside the bound window. Best-effort and
+        # bounded by the same element budget as the primary walk.
+        if result is not None and not budget_hit[0]:
+            appended = 0
+            for r_hwnd in _related_popup_windows(hwnd):
+                if appended >= _RELATED_WINDOW_CAP or element_budget[0] <= 0:
+                    break
+                try:
+                    rwin = resolve_top_window(r_hwnd)
+                    if rwin is None:
+                        continue
+                    rtree = walk(rwin, 0)
+                    if not rtree:
+                        continue
+                    rr = get_window_rect(str(r_hwnd)) or {}
+                    root = {
+                        'role': 'Window',
+                        'name': _title_for_hwnd(r_hwnd),
+                        'id': '',
+                        'x': rr.get('x', 0), 'y': rr.get('y', 0),
+                        'w': rr.get('width', 0), 'h': rr.get('height', 0),
+                        'on': True,
+                    }
+                    root['c'] = rtree
+                    result.append(root)
+                    appended += 1
+                except Exception as e:
+                    walk_errors.append(f'{type(e).__name__} on related window')
+
+        return result if result else None
     except Exception as e:
         # Diagnosed, not swallowed: the TS client keeps a stderr tail and
         # operators read it when every snapshot comes back empty.
@@ -992,7 +1119,12 @@ _RID_DFS_NODE_CAP = 10000  # same bound as Touchpoint's re-resolution walk
 # return nothing for TreeScope_Children navigation. Once a window proves
 # broken that way, the bound hwnd is recorded here and every later snapshot
 # of it skips the doomed recursive walk — a one-way, per-hwnd switch.
-_FLAT_WALK_ONLY = [None]  # holds an int hwnd or None
+# hwnd -> monotonic deadline. A window that answers descendants() but not
+# children() navigation is walked flat until the deadline, after which the
+# recursive walk is retried (providers usually recover once their tree has
+# been materialized by the first UIA connection).
+_FLAT_WALK_ONLY = {}
+_FLAT_WALK_RETRY_SECONDS = 5.0
 
 
 def _element_runtime_id(elem):
@@ -1303,6 +1435,16 @@ INTERACTIVE_ROLES = {'Button', 'Edit', 'ComboBox', 'CheckBox', 'RadioButton',
                      'ToggleButton',
                      # Date pickers are clickable interactive surfaces.
                      'Calendar'}
+
+# Non-interactive roles that still carry meaning the model needs to SEE:
+# static labels, document text, table cells/headers/rows, images, tooltips
+# and status/progress surfaces. These were previously dropped entirely, so
+# the tree read as a grid of buttons with no surrounding text or structure.
+# A content node is only kept when it has a name (or children) — a nameless
+# Pane/Group would just be noise — which is enforced by the walk.
+CONTENT_ROLES = {'Text', 'Image', 'Group', 'Pane', 'Header', 'HeaderItem',
+                 'Cell', 'Row', 'Table', 'TitleBar', 'ToolTip', 'StatusBar',
+                 'ProgressBar', 'Separator', 'Custom', 'Window', 'Unknown'}
 
 _UIA_IS_OFFSCREEN = 30007  # IsOffscreen (UIA property id, not in pywinauto 0.6.9)
 
@@ -1874,7 +2016,7 @@ METHODS = {
     'scroll_into_view_id': lambda p: _pattern_scroll_into_view(p['hwnd'], p.get('rid')),
     'set_range_id': lambda p: _pattern_set_range(p['hwnd'], p.get('rid'), p.get('value', 0)),
     'click_element_center': lambda p: click_element_center(p['hwnd'], p['x'], p['y']),
-    'accessibility_snapshot': lambda p: accessibility_snapshot(p['hwnd'], p.get('max_depth', 6)),
+    'accessibility_snapshot': lambda p: accessibility_snapshot(p['hwnd'], p.get('max_depth', 10)),
     'get_current_state': lambda p: get_current_state(p['hwnd']),
     'ping': lambda p: {'ok': True, 'pid': os.getpid()},
 }

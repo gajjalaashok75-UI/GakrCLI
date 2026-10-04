@@ -178,7 +178,7 @@ async function getAccessibilityText(): Promise<string | undefined> {
       require('./win32/bridgeClient.js') as typeof import('./win32/bridgeClient.js')
     const raw = (await call('accessibility_snapshot', {
       hwnd,
-      max_depth: 6,
+      max_depth: 10,
     })) as BridgeUiaNode[] | null
     if (!raw || !Array.isArray(raw)) return undefined
     const nodes = bridgeToAccessibilityNodes(raw)
@@ -1214,7 +1214,7 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
           require('./win32/bridgeClient.js') as typeof import('./win32/bridgeClient.js')
         const raw = (await call('accessibility_snapshot', {
           hwnd,
-          max_depth: 6,
+          max_depth: 10,
         })) as BridgeUiaNode[] | null
         if (!raw || !Array.isArray(raw)) return false
         const { findNodeInSnapshot } =
@@ -1306,7 +1306,7 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
         // empty/duplicated-automationId trap entirely.
         const raw = (await call('accessibility_snapshot', {
           hwnd,
-          max_depth: 6,
+          max_depth: 10,
         })) as BridgeUiaNode[] | null
         const nodes = raw && Array.isArray(raw) ? bridgeToAccessibilityNodes(raw) : []
         const { findNodeInSnapshot } =
@@ -1380,7 +1380,7 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
           require('./win32/bridgeClient.js') as typeof import('./win32/bridgeClient.js')
         const raw = (await call('accessibility_snapshot', {
           hwnd,
-          max_depth: 6,
+          max_depth: 10,
         })) as BridgeUiaNode[] | null
         if (!raw || !Array.isArray(raw)) return false
         const { findNodeInSnapshot } =
