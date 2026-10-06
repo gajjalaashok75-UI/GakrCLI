@@ -42,7 +42,7 @@ A secondary **Session Memory** system maintains a compact markdown summary of th
 
 ### Scale
 
-A typical project accumulates **100+ session JSONL files** (this project has 125). Each file can grow to multiple GB on long-running sessions. A **50 MB read threshold** (`MAX_TRANSCRIPT_READ_BYTES`) protects against OOM during resume — transcripts larger than this are rejected with `ResumeTranscriptTooLargeError`.
+A typical project accumulates **100+ session JSONL files**. Each file can grow large on long-running sessions. A **50 MB read threshold** (`MAX_TRANSCRIPT_READ_BYTES = 50 * 1024 * 1024`, `sessionStorage.ts`) protects against OOM during resume — transcripts larger than this are rejected with `ResumeTranscriptTooLargeError` (`conversationRecovery.ts`).
 
 ### Write Queue Architecture
 
@@ -182,7 +182,7 @@ Beyond message entries, the JSONL contains metadata entries for state persistenc
 
 ### Writing (Real-Time)
 
-Every message `push` to the conversation array triggers an append to the JSONL via `appendMessagesToLogFile()` in `sessionStorage.ts`. The write is asynchronous and non-blocking.
+Every message `push` to the conversation array is appended to the JSONL through the `Project` class (`sessionStorage.ts`): entries are queued per session file and written via `appendEntryToFile()` (append-only async writes; there is no `appendMessagesToLogFile()` function). Session metadata (custom title, tag, AI title) is re-appended at EOF by `reAppendSessionMetadata()` on cleanup / process exit.
 
 Session persistence is skipped when:
 - `NODE_ENV === 'test'` (unless `TEST_ENABLE_SESSION_PERSISTENCE` is set)
@@ -337,7 +337,7 @@ Beyond per-tool persistence, `enforceToolResultBudget()` enforces a **per-messag
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `MAX_TOOL_RESULTS_PER_MESSAGE_CHARS` | ~2M chars | Hardcoded fallback |
+| `MAX_TOOL_RESULTS_PER_MESSAGE_CHARS` | 200,000 | Hardcoded fallback (`constants/toolLimits.ts`) |
 | GrowthBook `tengu_hawthorn_window` | `null` | Override (finite positive number) |
 
 **Flow:**
@@ -398,20 +398,21 @@ Where `<configHome>` is `GAKR_CONFIG_DIR` if set, otherwise `~/.gakrcli`.
 
 **Schema**:
 ```typescript
-interface JsonSession {
+interface Session {          // exported name in sessionPersistence.ts
   id: string
   messages: SessionMessage[]
   config: SessionConfig
-  createdAt: string
-  updatedAt: string
+  createdAt: number          // epoch ms, not ISO string
+  updatedAt: number          // epoch ms
   deviceId?: string
+  pagination?: { hasMore: boolean; lastId: string | null }
 }
 
 interface SessionMessage {
-  role?: string
-  content?: unknown
-  timestamp?: string
-  tool_calls?: unknown
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  timestamp: number          // epoch ms
+  tool_calls?: unknown[]
   tool_use_id?: string
 }
 
@@ -424,7 +425,7 @@ interface SessionConfig {
 }
 ```
 
-Source: `src/utils/sessionPersistence.ts`. This store is separate from and independent of the primary JSONL transcript system.
+Source: `src/utils/sessionPersistence.ts`. This store is separate from and independent of the primary JSONL transcript system, and is currently exercised only by its own tests — no runtime call sites import it.
 
 ---
 
@@ -455,14 +456,14 @@ A separate system that maintains a **compact markdown summary** of the current c
 
 | Step | Detail |
 |------|--------|
-| **Trigger** | Post-sampling hook, fires after N tool calls + token threshold |
-| **Gate** | GrowthBook feature flag `tengu_session_memory` |
-| **Extraction** | `runForkedAgent()` with a prompt to summarize key decisions, blockers, and next steps |
-| **Storage** | Writes/updates `summary.md` via `FileEditTool` (only tool allowed) |
-| **Retrieval** | Loaded into system prompt on `/resume` |
-| **Config** | `minimumMessageTokensToInit`, `minimumTokensBetweenUpdate`, `toolCallsBetweenUpdates` |
+| **Trigger** | Post-sampling hook, fires after N tool calls + token thresholds (init 10k context tokens, then 5k growth + 3 tool calls between updates) |
+| **Gate** | GrowthBook flag `tengu_session_memory` — **default OFF in the open build**; additionally requires auto-compact enabled and skips remote mode. The `/summary` command bypasses these gates |
+| **Extraction** | `runForkedAgent()` with a prompt to summarize key decisions, blockers, and next steps (template customizable at `~/.gakrcli/session-memory/config/{template.md,prompt.md}`) |
+| **Storage** | File is created from the template up front; the forked agent updates it via `FileEditTool` — the **only** tool its `canUseTool` allows (Edit on the exact `summary.md` path) |
+| **Retrieval** | Used as the post-compact summary by session-memory compaction (`tengu_sm_compact`), shown by `/summary`, and used as context by the away-recap |
+| **Config** | `minimumMessageTokensToInit` (10k), `minimumTokensBetweenUpdate` (5k), `toolCallsBetweenUpdates` (3) |
 
-The forked agent has severely restricted tool access — it can only read and edit the single `summary.md` file. This prevents side effects during memory extraction.
+The forked agent has severely restricted tool access — its permission hook allows only `FileEditTool` against the exact `summary.md` path; the current file contents are pre-read by the harness and provided in the prompt. This prevents side effects during memory extraction.
 
 ---
 
