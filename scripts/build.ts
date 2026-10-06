@@ -52,7 +52,7 @@ const featureFlags: Record<string, boolean> = {
   TEMPLATES: false,               // Template jobs (new/list/reply subcommands)
   BG_SESSIONS: true,              // Local detached background sessions
   WEB_BROWSER_TOOL: true,        // Built-in browser navigation/screenshot (panel UI fully implemented)
-  CHICAGO_MCP: true,              // Computer-use MCP (pure-TS @ant packages, no native modules needed)
+  CHICAGO_MCP: false,              // Computer-use MCP (pure-TS @ant packages, no native modules needed)
   ACP: false,                     // ACP agent protocol (requires @agentclientprotocol/sdk)
   COWORKER_TYPE_TELEMETRY: true,  // Telemetry for agent/coworker type classification
   AGENT_TRIGGERS_REMOTE: false,   // Remote agent trigger delivery (requires cloud infra)
