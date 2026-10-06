@@ -604,6 +604,13 @@ export async function main(
     } = await import('../utils/gakrcliInChrome/mcpServer.js');
     await runGakrCLIInChromeMcpServer();
     return;
+  } else if (process.argv[2] === '--chrome-extension') {
+    profileCheckpoint('cli_chrome_extension_agent_server_path');
+    const {
+      runChromeAgentServer
+    } = await import('../utils/gakrcliInChrome/agentServer/index.js');
+    await runChromeAgentServer();
+    return;
   } else if (process.argv[2] === '--chrome-native-host') {
     profileCheckpoint('cli_chrome_native_host_path');
     const {

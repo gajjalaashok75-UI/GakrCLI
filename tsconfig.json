@@ -17,7 +17,8 @@
     "outDir": "./dist",
     "baseUrl": ".",
     "paths": {
-      "src/*": ["./src/*"]
+      "src/*": ["./src/*"],
+      "@gakr-gakr/mcp-chrome-shared": ["./packages/mcp-chrome-shared/src/index.ts"]
     }
   },
   "include": ["src/**/*"],

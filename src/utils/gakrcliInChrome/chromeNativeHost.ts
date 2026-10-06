@@ -23,11 +23,32 @@ import { lazySchema } from '../lazySchema.js'
 import { jsonParse, jsonStringify } from '../slowOperations.js'
 import { getSecureSocketPath, getSocketDir } from './common.js'
 
+/**
+ * Look up the port published by a running agent server.
+ *
+ * Imported lazily to keep the host's module graph free of the server, which in
+ * turn pulls in the SDK.
+ */
+async function readPublishedAgentServerPort(): Promise<number | null> {
+  try {
+    const { readPublishedPort } = await import(
+      './agentServer/portFile.js'
+    )
+    return await readPublishedPort()
+  } catch (e) {
+    log('Failed to read published agent server port:', e)
+    return null
+  }
+}
+
 const VERSION = '1.0.0'
 const MAX_MESSAGE_SIZE = 1024 * 1024 // 1MB - Max message size that can be sent to Chrome
 
+// NOTE: previously only written for `USER_TYPE === 'ant'`, so a normal user
+// debugging the Chrome handshake had nothing to read. Now opt-in for everyone
+// via GAKR_CHROME_HOST_LOG=1, since the native host is otherwise silent.
 const LOG_FILE =
-  process.env.USER_TYPE === 'ant'
+  process.env.GAKR_CHROME_HOST_LOG === '1'
     ? join(homedir(), '.gakrcli', 'debug', 'chrome-native-host.txt')
     : undefined
 
@@ -84,7 +105,11 @@ export async function runChromeNativeHost(): Promise<void> {
 const messageSchema = lazySchema(() =>
   z
     .object({
-      type: z.string(),
+      // Optional because the extension answers a `call_tool` with a bare
+      // `{ responseToRequestId, payload }` and no `type` at all. Requiring it
+      // made every tool result fail validation before it could be correlated
+      // back to its caller.
+      type: z.string().optional(),
     })
     .passthrough(),
 )
@@ -106,6 +131,8 @@ class ChromeNativeHost {
   private server: Server | null = null
   private running = false
   private socketPath: string | null = null
+  /** requestId → socket client awaiting that tool result from Chrome. */
+  private pendingToolCalls = new Map<string, number>()
 
   async start(): Promise<void> {
     if (this.running) {
@@ -271,6 +298,24 @@ class ChromeNativeHost {
 
     log(`Handling Chrome message type: ${message.type}`)
 
+    // The extension answers a `call_tool` with `responseToRequestId` and no
+    // `type` field. Route it to the one socket client that asked for that id —
+    // broadcasting it would let concurrent calls pick up each other's results.
+    const responseTo = (message as { responseToRequestId?: string })
+      .responseToRequestId
+    if (responseTo && this.pendingToolCalls.has(responseTo)) {
+      const clientId = this.pendingToolCalls.get(responseTo)!
+      this.pendingToolCalls.delete(responseTo)
+      const client = this.mcpClients.get(clientId)
+      if (client) {
+        const body = Buffer.from(jsonStringify(message), 'utf-8')
+        const header = Buffer.alloc(4)
+        header.writeUInt32LE(body.length, 0)
+        client.socket.write(Buffer.concat([header, body]))
+      }
+      return
+    }
+
     switch (message.type) {
       case 'ping':
         log('Responding to ping')
@@ -288,6 +333,46 @@ class ChromeNativeHost {
           jsonStringify({
             type: 'status_response',
             native_host_version: VERSION,
+          }),
+        )
+        break
+
+      // The side panel's agent server runs in the CLI process, not here. It
+      // publishes its port to a file; this host is the only component that
+      // talks to both, so it performs the handshake on the extension's behalf.
+      case 'start': {
+        const requested = (message as { payload?: { port?: unknown } }).payload
+          ?.port
+        const port = await readPublishedAgentServerPort()
+        if (port) {
+          log(`Reporting agent server on port ${port}`)
+          sendChromeMessage(
+            jsonStringify({
+              type: 'server_started',
+              payload: { port, requestedPort: requested ?? null },
+            }),
+          )
+        } else {
+          log('No agent server is running (start gakrcli --chrome-extension)')
+          sendChromeMessage(
+            jsonStringify({
+              type: 'error_from_native_host',
+              payload: {
+                message:
+                  'No GakrCLI agent server is running. Start one with: gakrcli --chrome-extension',
+              },
+            }),
+          )
+        }
+        break
+      }
+
+      case 'stop':
+        log('Reporting agent server stopped')
+        sendChromeMessage(
+          jsonStringify({
+            type: 'server_stopped',
+            payload: {},
           }),
         )
         break
@@ -394,10 +479,24 @@ class ChromeNativeHost {
         try {
           const request = jsonParse(
             messageBytes.toString('utf-8'),
-          ) as ToolRequest
+          ) as ToolRequest & { requestId?: string }
           log(
             `Forwarding tool request from MCP client ${clientId}: ${request.method}`,
           )
+
+          // The extension dispatches on `call_tool` and correlates the reply by
+          // requestId; it has no handler for the legacy `tool_request` shape.
+          if (request.method === 'call_tool' && request.requestId) {
+            this.pendingToolCalls.set(request.requestId, clientId)
+            sendChromeMessage(
+              jsonStringify({
+                type: 'call_tool',
+                requestId: request.requestId,
+                payload: request.params,
+              }),
+            )
+            continue
+          }
 
           // Forward to Chrome
           sendChromeMessage(

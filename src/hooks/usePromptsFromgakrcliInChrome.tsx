@@ -40,8 +40,10 @@ export function usePromptsFromGakrCLIInChrome(
   const mcpClientRef = useRef<ConnectedMCPServer | undefined>(undefined);
 
   useEffect(() => {
-    if (process.env.USER_TYPE !== 'ant') return;
-
+    // NOTE: previously gated on `USER_TYPE === 'ant'`, which made this hook
+    // dead for every shipped configuration. Removed while the Chrome surface is
+    // being brought up; the extension still does not emit this notification,
+    // so the handler below currently never fires.
     const mcpClient = findChromeClient(mcpClients);
     if (mcpClientRef.current !== mcpClient) {
       mcpClientRef.current = mcpClient;
