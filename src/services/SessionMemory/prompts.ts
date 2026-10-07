@@ -7,8 +7,8 @@ import { getDisplayedEffortLevel } from '../../utils/effort.js'
 import { getMainLoopModel } from '../../utils/model/model.js'
 import { logError } from '../../utils/log.js'
 
-const MAX_SECTION_LENGTH = 2000
-const MAX_TOTAL_SESSION_MEMORY_TOKENS = 12000
+const MAX_SECTION_LENGTH = 2500
+const MAX_TOTAL_SESSION_MEMORY_TOKENS = 15000
 
 export const DEFAULT_SESSION_MEMORY_TEMPLATE = `
 # Session Title
