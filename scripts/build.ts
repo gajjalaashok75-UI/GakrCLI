@@ -77,8 +77,8 @@ const featureFlags: Record<string, boolean> = {
   CCR_MIRROR: false,                  // CCR mirror mode (requires bridge mode)
   COMPACTION_REMINDERS: true,         // Compaction reminder notifications
   CONNECTOR_TEXT: true,               // Connector text processing
-  KNOWLEDGE: true,                    // Knowledge graph slash command
-  CONVERSATION_ARC: true,             // Conversation arc analysis (experimental)
+  KNOWLEDGE: false,                    // Knowledge graph slash command
+  CONVERSATION_ARC: false,             // Conversation arc analysis (experimental)
   DIRECT_CONNECT: true,               // Direct connect mode
   DOWNLOAD_USER_SETTINGS: false,      // Download settings from cloud
   FILE_PERSISTENCE: true,             // File persistence (experimental)
