@@ -180,8 +180,18 @@ export function hasMetInitializationThreshold(
  * Check if we've met the threshold for the next update.
  * Measures actual context window growth since last extraction
  * (same metric as autocompact and initialization threshold).
+ *
+ * If the context has SHRUNK below the last extraction's baseline, a
+ * compaction happened (auto-compact, /compact, microcompact, snip).
+ * Re-anchor the baseline to the post-compaction size — otherwise the
+ * growth threshold stays unreachable until the context regrows past its
+ * pre-compaction peak (which is past the next auto-compact point), so
+ * automatic updates would silently stop for the rest of the session.
  */
 export function hasMetUpdateThreshold(currentTokenCount: number): boolean {
+  if (currentTokenCount < tokensAtLastExtraction) {
+    tokensAtLastExtraction = currentTokenCount
+  }
   const tokensSinceLastExtraction = currentTokenCount - tokensAtLastExtraction
   return (
     tokensSinceLastExtraction >= sessionMemoryConfig.minimumTokensBetweenUpdate
