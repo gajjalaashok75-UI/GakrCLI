@@ -456,12 +456,12 @@ A separate system that maintains a **compact markdown summary** of the current c
 
 | Step | Detail |
 |------|--------|
-| **Trigger** | Post-sampling hook, fires after N tool calls + token thresholds (init 10k context tokens, then 5k growth + 3 tool calls between updates) |
-| **Gate** | GrowthBook flag `tengu_session_memory` — **default OFF in the open build**; additionally requires auto-compact enabled and skips remote mode. The `/summary` command bypasses these gates |
+| **Trigger** | Post-sampling hook, fires after N tool calls + token thresholds (init at `minimumMessageTokensToInit` context tokens, then `minimumTokensBetweenUpdate` growth + 3 tool calls between updates; code defaults 10k/5k/3, overridable via `tengu_sm_config` — the reference deployment sets 35k init / 20k growth). After a compact shrinks context, the growth baseline re-anchors to the current token count so updates keep flowing. `/summary` bypasses the thresholds entirely |
+| **Gate** | GrowthBook flag `tengu_session_memory` — **default OFF in the open build** but user-enableable via `~/.gakrcli/feature-flags.json`; additionally requires auto-compact enabled and skips remote mode. The `/summary` command has no gate — it is registered as a regular slash command (no longer INTERNAL/ant-only) and updates the file directly |
 | **Extraction** | `runForkedAgent()` with a prompt to summarize key decisions, blockers, and next steps (template customizable at `~/.gakrcli/session-memory/config/{template.md,prompt.md}`) |
 | **Storage** | File is created from the template up front; the forked agent updates it via `FileEditTool` — the **only** tool its `canUseTool` allows (Edit on the exact `summary.md` path) |
 | **Retrieval** | Used as the post-compact summary by session-memory compaction (`tengu_sm_compact`), shown by `/summary`, and used as context by the away-recap |
-| **Config** | `minimumMessageTokensToInit` (10k), `minimumTokensBetweenUpdate` (5k), `toolCallsBetweenUpdates` (3) |
+| **Config** | `minimumMessageTokensToInit`, `minimumTokensBetweenUpdate`, `toolCallsBetweenUpdates` (code defaults 10k / 5k / 3; override via `tengu_sm_config` in `~/.gakrcli/feature-flags.json`). Size caps live in `prompts.ts`: `MAX_SECTION_LENGTH` = 2,500 chars per section, `MAX_TOTAL_SESSION_MEMORY_TOKENS` = 15,000 tokens for the whole file — prompt-enforced self-condensing (prioritizing Current State + Errors & Corrections), not a hard disk cap |
 
 The forked agent has severely restricted tool access — its permission hook allows only `FileEditTool` against the exact `summary.md` path; the current file contents are pre-read by the harness and provided in the prompt. This prevents side effects during memory extraction.
 

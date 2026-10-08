@@ -237,8 +237,8 @@ Registered only when `process.env.USER_TYPE === 'ant' && !process.env.IS_DEMO`. 
 | /subscribe-pr | text | Subscribe to GitHub PR activity (comments, CI, reviews) |
 | /onboarding | local-jsx | Re-run the first-run setup (theme, trust, model, MCP) |
 | /share | local | Upload the current session log to GitHub Gist. Flags: --public, --private (default), --mask-secrets, --summary-only, --allow-public-fallback |
-| /summary | text | Generate and display a session summary |
-| /recap | text | Generate a one-line session recap now |
+| /summary | text | Generate and update the session-memory `summary.md`, then display the full content (un-gated; was INTERNAL/ant-only) |
+| /recap | text | Generate a one-line session recap now (≤40 words; un-gated registration — was INTERNAL/ant-only; still gated on AWAY_SUMMARY + `tengu_sedge_lantern`, both ON; REPL-only) |
 | /teleport | local-jsx | Resume a GakrCLI Code session from gakrcli.ai |
 | /tui | text | Manage flicker-free TUI mode. Open actions or run: status, on, off, toggle |
 | /perf-issue | tool_use | Capture a performance + token-usage snapshot. Flags: --format=json\|csv\|md (default md) |

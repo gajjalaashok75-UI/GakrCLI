@@ -320,15 +320,18 @@ GrowthBook feature flag `tengu_session_memory` — **default OFF in the open bui
 - `initSessionMemory()` returns early unless **auto-compact is enabled** (`isAutoCompactEnabled()`), and in remote mode
 - The hook itself only runs on the main REPL thread (`querySource === 'repl_main_thread'`), skips poor mode, and is token-thresholded (config from `tengu_sm_config`)
 
-The **`/summary` command** calls `manuallyExtractSessionMemory()` directly and bypasses the automatic thresholds — it works regardless of the automatic gate.
+The **`/summary` command** is registered as a regular slash command (no gate): it calls `manuallyExtractSessionMemory()` directly, which bypasses the automatic thresholds and re-anchors the growth baseline (`recordExtractionTokenCount`) so the next automatic update is measured from the fresh extraction point.
 
 ### Extraction Thresholds
 
 | Threshold | Default | Description |
 |-----------|---------|-------------|
-| `minimumMessageTokensToInit` | 10,000 | Min context tokens before first extraction |
-| `minimumTokensBetweenUpdate` | 5,000 | Min context growth between subsequent extractions (same metric as autocompact) |
+| `minimumMessageTokensToInit` | 10,000 (code default; overridable via `tengu_sm_config` — the reference deployment sets 35,000) | Min context tokens before first extraction |
+| `minimumTokensBetweenUpdate` | 5,000 (code default; overridable via `tengu_sm_config` — the reference deployment sets 20,000) | Min context growth between subsequent extractions (same metric as autocompact) |
 | `toolCallsBetweenUpdates` | 3 | Min tool calls between extractions |
+| Size caps | `MAX_SECTION_LENGTH` = 2,500 chars/section, `MAX_TOTAL_SESSION_MEMORY_TOKENS` = 15,000 tokens whole file | Enforced by the extraction prompt (self-condense); no hard disk cap |
+
+After a context compact shrinks the conversation, `hasMetUpdateThreshold()` re-anchors `tokensAtLastExtraction` down to the current token count so the growth cadence restarts instead of going permanently stale.
 
 ### Storage
 
@@ -462,8 +465,8 @@ Snapshots can initialize or replace local agent memory when newer than the last 
 |---------|--------------|
 | `/memory` | Picker dialog: open any memory layer in `$EDITOR` + toggles for auto-memory and auto-dream (writes `settings.json`), shows last-dream time |
 | `/dream` (command + bundled skill) | Manual consolidation run with full tool permissions; stamps the consolidation lock so auto-dream resets its timer |
-| `/summary` | Manual session-memory extraction + display (bypasses auto thresholds) |
-| `/recap` (`/away`, `/catchup`) | One-line session recap (AWAY_SUMMARY build flag + `tengu_sedge_lantern`, both ON) |
+| `/summary` | Registered as a regular command (was INTERNAL/ant-only). Manual session-memory extraction + display; updates `summary.md` on disk and prints the full content; bridge-safe and works in `-p` mode (filters messages to API-safe types) |
+| `/recap` (`/away`, `/catchup`) | Registered as a regular command (was INTERNAL/ant-only). One-line ≤40-word recap via a fork sharing the prompt-cache prefix; does **not** write `summary.md`; gated on `AWAY_SUMMARY` build flag + `tengu_sedge_lantern` (both ON in production builds); REPL-only, not bridge-safe |
 | `/remember` (bundled skill) | Memory review/promotion proposals — **gated on `USER_TYPE === 'ant'`**, inert for everyone else |
 | `/knowledge` | Knowledge Graph layer status/clear/list (see `knowledge-store.md`) |
 | `/local-memory`, `LocalMemoryRecall` tool | Local KV memory stores — **disabled**: `LOCAL_MEMORY` build flag is false |
