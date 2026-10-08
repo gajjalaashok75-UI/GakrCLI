@@ -92,7 +92,7 @@ const featureFlags: Record<string, boolean> = {
   LODESTONE: false,                   // Lodestone integration (Anthropic internal)
   MCP_RICH_OUTPUT: true,              // MCP rich output formatting
   MEMORY_SHAPE_TELEMETRY: true,       // Memory shape telemetry
-  MULTI_TURN_CONTEXT: true,           // Multi-turn context window (experimental)
+  MULTI_TURN_CONTEXT: false,          // Multi-turn context tracking — OFF: its only consumer (arc system-prompt injection) is disabled (CONVERSATION_ARC: false), so collection is write-only. Re-enable together with arc or a new RAG injection point
   NATIVE_CLIENT_ATTESTATION: false,   // Client attestation (native)
   NATIVE_CLIPBOARD_IMAGE: false,      // Native clipboard image support
   NEW_INIT: true,                     // New init flow (experimental)
