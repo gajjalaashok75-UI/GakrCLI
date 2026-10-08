@@ -1022,16 +1022,16 @@ async function* queryLoop(
       messagesForQuery = collapseResult.messages
     }
 
-    // arcSummary must be a separate array element; concatenating it into a
+    // Retrieved memory must be a separate array element; concatenating it into a
     // template string makes [...systemPrompt] spread chars, shredding the prompt.
-    let promptWithArc: readonly string[] = systemPrompt
-    if (feature('CONVERSATION_ARC')) {
-      const { appendArcToSystemPrompt } = await import('./utils/conversationArc.js')
-      promptWithArc = await appendArcToSystemPrompt(systemPrompt, messagesForQuery)
+    let promptWithMemory: readonly string[] = systemPrompt
+    if (feature('MEMORY_RETRIEVAL')) {
+      const { retrieveMemoryBlock } = await import('./memdir/retrieval.js')
+      promptWithMemory = await retrieveMemoryBlock(systemPrompt, messagesForQuery)
     }
 
     const fullSystemPrompt = asSystemPrompt(
-      appendSystemContext(asSystemPrompt(promptWithArc), systemContext),
+      appendSystemContext(asSystemPrompt(promptWithMemory), systemContext),
     )
 
     // Force compaction if memory pressure detected or message count exceeded.

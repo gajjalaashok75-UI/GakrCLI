@@ -91,6 +91,7 @@ const featureFlags: Record<string, boolean> = {
   LAN_PIPES: true,                    // LAN pipe IPC (experimental)
   LODESTONE: false,                   // Lodestone integration (Anthropic internal)
   MCP_RICH_OUTPUT: true,              // MCP rich output formatting
+  MEMORY_RETRIEVAL: true,             // Memory recall into system prompt via Orama index (memdir/retrieval.ts)
   MEMORY_SHAPE_TELEMETRY: true,       // Memory shape telemetry
   MULTI_TURN_CONTEXT: false,          // Multi-turn context tracking — OFF: its only consumer (arc system-prompt injection) is disabled (CONVERSATION_ARC: false), so collection is write-only. Re-enable together with arc or a new RAG injection point
   NATIVE_CLIENT_ATTESTATION: false,   // Client attestation (native)
