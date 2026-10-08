@@ -7,7 +7,7 @@ The Auto-Memory system is an **LLM-powered persistent memory layer** that writes
 Four writers touch this memory layer:
 
 1. **ExtractMemories** — background forked agent that extracts memories at the end of each complete query loop (stop hook)
-2. **Auto-Dream** — cross-session consolidation (24h + 5 new sessions gates; OFF by default in the open build — see Auto-Dream below)
+2. **Auto-Dream** — cross-session consolidation (24h + 5 new sessions gates; OFF by default in the open build — see Auto-Dream below; the reference deployment enables it with 12h / 3-session cadence)
 3. **Auto fact extraction** — regex-based fact scraping into `.facts/` (zero LLM cost; part of the Knowledge Graph layer, see `knowledge-store.md`)
 4. **The main agent itself** — direct memory writes are always available via the system-prompt instructions
 
@@ -245,8 +245,8 @@ All gates are ANDed (cheapest first), checked from the stop hook on every turn:
 |---------|-----------|
 | **Enabled** | `isAutoDreamEnabled()`: settings.json `autoDreamEnabled` overrides when set; otherwise GrowthBook `tengu_onyx_plover.enabled` — default **OFF** in the open build (set `autoDreamEnabled: true` in settings.json or add the flag to `~/.gakrcli/feature-flags.json`) |
 | **Mode** | Skipped when KAIROS assistant mode is active (it uses the disk-skill dream) or in remote mode; requires auto-memory enabled |
-| **Time-based** | ≥ `minHours` since last consolidation (default 24 h; knob inside `tengu_onyx_plover` config) |
-| **Session-based** | ≥ `minSessions` transcripts touched since last consolidation, excluding the current session (default 5; same config); session scan throttled to once per 10 min |
+| **Time-based** | ≥ `minHours` since last consolidation (default 24 h; knob inside `tengu_onyx_plover` config — the reference deployment sets 12) |
+| **Session-based** | ≥ `minSessions` transcripts touched since last consolidation, excluding the current session (default 5; same config — the reference deployment sets 3); session scan throttled to once per 10 min |
 | **One-at-a-time** | Cross-process `consolidationLock.ts` prevents concurrent dreams |
 
 ### Gate
