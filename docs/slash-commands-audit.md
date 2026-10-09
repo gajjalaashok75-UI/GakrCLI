@@ -70,7 +70,7 @@ Command types: `local-jsx`×80, `text`×6, `prompt`×6, `local`×34
 | 37 | /lang | local-jsx | always | — | ✅ | Set display language (en/zh/auto) |
 | 38 | /local-memory | local-jsx | OFF (flag) | `LOCAL_MEMORY`→false | ✅ | Manage local memory stores for notes and context. Stored in ~/.gakrcli/local-memory/ — no API key required. |
 | 39 | /local-vault | local-jsx | OFF (flag) | `LOCAL_VAULT`→false | ✅ | Manage local encrypted secrets. Stored in OS keychain or encrypted file fallback — no API key required. |
-| 40 | /knowledge | local | ON (flag) | `KNOWLEDGE`→true | ✅ | Manage native Knowledge Graph |
+| 40 | ~~/knowledge~~ | — | removed | — | ❌ | Removed: Knowledge Graph slash command (see `storage/knowledge-store.md`) |
 | 41 | /lsp | local | always | — | ✅ | Inspect and set up Language Server Protocol code intelligence |
 | 42 | /install-github-app | local-jsx | always | — | ✅ | Set up GakrCLI GitHub Actions for a repository |
 | 43 | /install-slack-app | local | always | — | ✅ | Install the GakrCLI Slack app |
@@ -187,7 +187,6 @@ These are gated by build flags set to `false`, so they are not registered in the
 
 | Command | Type | Gate | Description |
 |---|---|---|---|
-| /knowledge | local | `KNOWLEDGE`=true | Manage native Knowledge Graph |
 | /fork | local-jsx | `FORK_SUBAGENT`=true | Fork the current session into a new sub-agent |
 | /poor | local | `POOR`=true | Toggle poor mode — disable extract_memories and prompt_suggestion to save tokens |
 | /daemon | local-jsx | `DAEMON`=false · `BG_SESSIONS`=true | Manage background sessions and daemon |
@@ -260,7 +259,6 @@ Registered only when `process.env.USER_TYPE === 'ant' && !process.env.IS_DEMO`. 
 | `KAIROS` | `false` | /proactive, /brief, /assistant | Persistent assistant/session mode (cloud backend) |
 | `KAIROS_BRIEF` | `false` | /brief | Brief mode toggle (KAIROS sub-feature) |
 | `KAIROS_GITHUB_WEBHOOKS` | `false` | /subscribe-pr | GitHub webhook PR subscription (KAIROS sub-feature) |
-| `KNOWLEDGE` | `true` | /knowledge | Knowledge graph slash command |
 | `LOCAL_MEMORY` | `false` | /local-memory | Local memory recall tool & command |
 | `LOCAL_VAULT` | `false` | /local-vault | Local vault HTTP fetch tool & command |
 | `MONITOR_TOOL` | `true` | /monitor | MCP server monitoring/streaming tool |

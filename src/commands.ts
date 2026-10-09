@@ -197,9 +197,6 @@ const localMemoryCommand = feature('LOCAL_MEMORY')
 const localVaultCommand = feature('LOCAL_VAULT')
   ? require('./commands/local-vault/index.js').default
   : null
-const knowledge = feature('KNOWLEDGE')
-  ? require('./commands/knowledge/index.js').default
-  : null
 /* eslint-enable @typescript-eslint/no-require-imports */
 import thinkback from './commands/thinkback/index.js'
 import thinkbackPlay from './commands/thinkback-play/index.js'
@@ -388,7 +385,6 @@ const COMMANDS = memoize((): Command[] => [
   lang,
   ...(localMemoryCommand ? [localMemoryCommand] : []),
   ...(localVaultCommand ? [localVaultCommand] : []),
-  ...(knowledge ? [knowledge] : []),
   lsp,
   installGitHubApp,
   installSlackApp,

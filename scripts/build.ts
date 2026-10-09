@@ -77,8 +77,6 @@ const featureFlags: Record<string, boolean> = {
   CCR_MIRROR: false,                  // CCR mirror mode (requires bridge mode)
   COMPACTION_REMINDERS: true,         // Compaction reminder notifications
   CONNECTOR_TEXT: true,               // Connector text processing
-  KNOWLEDGE: false,                    // Knowledge graph slash command
-  CONVERSATION_ARC: false,             // Conversation arc analysis (experimental)
   DIRECT_CONNECT: true,               // Direct connect mode
   DOWNLOAD_USER_SETTINGS: false,      // Download settings from cloud
   FILE_PERSISTENCE: true,             // File persistence (experimental)
@@ -93,7 +91,6 @@ const featureFlags: Record<string, boolean> = {
   MCP_RICH_OUTPUT: true,              // MCP rich output formatting
   MEMORY_RETRIEVAL: true,             // Memory recall into system prompt via Orama index (memdir/retrieval.ts)
   MEMORY_SHAPE_TELEMETRY: true,       // Memory shape telemetry
-  MULTI_TURN_CONTEXT: false,          // Multi-turn context tracking — OFF: its only consumer (arc system-prompt injection) is disabled (CONVERSATION_ARC: false), so collection is write-only. Re-enable together with arc or a new RAG injection point
   NATIVE_CLIENT_ATTESTATION: false,   // Client attestation (native)
   NATIVE_CLIPBOARD_IMAGE: false,      // Native clipboard image support
   NEW_INIT: true,                     // New init flow (experimental)

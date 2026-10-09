@@ -692,15 +692,6 @@ async function* queryLoop(
   const { resetDoomLoop } = await import('./utils/doomLoop.js')
   resetDoomLoop(params.toolUseContext.agentId)
 
-  // Start a new turn for multi-turn context tracking
-  if (
-    feature('MULTI_TURN_CONTEXT') &&
-    getGlobalConfig().knowledgeGraphEnabled
-  ) {
-    const { startNewTurn } = await import('./utils/multiTurnContext.js')
-    startNewTurn()
-  }
-
   // Immutable params — never reassigned during the query loop.
   const {
     systemPrompt,
@@ -910,16 +901,6 @@ async function* queryLoop(
       messagesForQuery.push(
         ...pendingToolFailureAdvisories.map(advisory => advisory.message),
       )
-    }
-
-    // Extract facts and update phase from the latest message (user input or tool result)
-    if (
-      feature('CONVERSATION_ARC') &&
-      getGlobalConfig().knowledgeGraphEnabled &&
-      messagesForQuery.length > 0
-    ) {
-      const { updateArcPhase } = await import('./utils/conversationArc.js')
-      await updateArcPhase([messagesForQuery[messagesForQuery.length - 1]])
     }
 
     let tracking = autoCompactTracking
@@ -2783,39 +2764,6 @@ async function* queryLoop(
     }
 
     queryCheckpoint('query_tool_execution_end')
-
-    // Track multi-turn context after tool execution
-    if (
-      feature('MULTI_TURN_CONTEXT') &&
-      getGlobalConfig().knowledgeGraphEnabled
-    ) {
-      const { addMessageToTurn, addToolCallToTurn } = await import(
-        './utils/multiTurnContext.js'
-      )
-      for (const assistantMessage of assistantMessages) {
-        addMessageToTurn(assistantMessage)
-      }
-      for (const toolUse of toolUseBlocks) {
-        addToolCallToTurn({
-          id: toolUse.id,
-          name: toolUse.name,
-          input: toolUse.input as Record<string, unknown>,
-          timestamp: Date.now(),
-        })
-      }
-    }
-
-    // Update conversation arc phase
-    if (
-      feature('CONVERSATION_ARC') &&
-      getGlobalConfig().knowledgeGraphEnabled
-    ) {
-      const { updateArcPhase, finalizeArcTurn } = await import(
-        './utils/conversationArc.js'
-      )
-      await updateArcPhase(assistantMessages)
-      await finalizeArcTurn()
-    }
 
     // We were aborted during tool calls
     if (toolUseContext.abortController.signal.aborted) {

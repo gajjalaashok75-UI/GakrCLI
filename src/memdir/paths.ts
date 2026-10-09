@@ -1,6 +1,6 @@
 import memoize from 'lodash-es/memoize.js'
 import { homedir } from 'os'
-import { isAbsolute, join, normalize, sep } from 'path'
+import { dirname, isAbsolute, join, normalize, sep } from 'path'
 import {
   getIsNonInteractiveSession,
   getProjectRoot,
@@ -292,6 +292,26 @@ export function getAutoMemDailyLogPath(date: Date = new Date()): string {
  */
 export function getAutoMemEntrypoint(): string {
   return join(getAutoMemPath(), AUTO_MEM_ENTRYPOINT_NAME)
+}
+
+const MEMORY_DB_FILENAME = 'memory.db'
+
+/**
+ * Path of the persistent index database for a memory directory.
+ *
+ * The database sits NEXT TO the memory directory rather than inside it, so the
+ * `.db`, `-wal`, and `-shm` artifacts never appear in the indexed corpus (and
+ * so a project's derived index lives beside its memory dir, e.g.
+ * `~/.gakrcli/projects/<sanitized-git-root>/memory.db`). It is a rebuildable
+ * cache of the markdown sources, never the source of truth.
+ */
+export function getMemoryDbPathForDir(memoryDir: string): string {
+  return join(dirname(memoryDir), MEMORY_DB_FILENAME)
+}
+
+/** Index database path for the resolved auto-memory directory. */
+export function getMemoryDbPath(): string {
+  return getMemoryDbPathForDir(getAutoMemPath())
 }
 
 /**

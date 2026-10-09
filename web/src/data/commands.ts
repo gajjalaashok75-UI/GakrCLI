@@ -82,7 +82,6 @@ export const commands: SlashCommand[] = [
   { name: 'init', description: 'Initialize a new project instruction file with codebase documentation', category: 'context' },
   { name: 'memory', description: 'Edit persistent memory files', category: 'context' },
   { name: 'dream', description: 'Run memory consolidation — synthesize recent sessions into durable memories', category: 'context' },
-  { name: 'knowledge', description: 'Manage the native Knowledge Graph', category: 'context', args: 'enable <yes|no> | clear | status | list' },
   { name: 'wiki', description: 'Initialize and inspect the GakrCLI project wiki', category: 'context', args: '[init|status]' },
   { name: 'cost', description: 'Show the total cost and duration of the current session', category: 'context' },
   { name: 'request-size', description: 'Show estimated request context load and top contributors', category: 'context' },

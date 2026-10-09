@@ -10,7 +10,7 @@ The main agent does not receive one single `context.md` file. It receives a laye
 
 ```ts
 deps.callModel({
-  systemPrompt: promptWithArc,
+  systemPrompt: promptWithMemory,
   messages: prependUserContext(messagesForQuery, userContext),
   tools: toolUseContext.options.tools,
   thinkingConfig: toolUseContext.options.thinkingConfig,
@@ -33,11 +33,11 @@ deps.callModel({
 Before this call, `query.ts` builds:
 
 - `fullSystemPrompt = appendSystemContext(systemPrompt, systemContext)` for context accounting and compaction.
-- `promptWithArc = systemPrompt` plus optional conversation arc summary.
+- `promptWithMemory = systemPrompt` plus optional retrieved project memory (the memdir `memory.db` index, behind `feature('MEMORY_RETRIEVAL')`).
 - `messagesForQuery` after compact-boundary filtering, optional context-collapse projection, microcompact, autocompact, and current attachments.
 - `prependUserContext(messagesForQuery, userContext)` as the actual message array sent to `callModel`.
 
-Important implementation detail: the `fullSystemPrompt` variable is used for context-limit and compaction paths, but the final `deps.callModel` call passes `systemPrompt: promptWithArc`. As of the current code, `systemContext` is accounted and passed into compaction/fork context, but it is not directly passed as the `systemPrompt` argument in the main `deps.callModel` call from `query.ts`. The hidden user context is definitely prepended in `query.ts` immediately before the model call.
+Important implementation detail: the `fullSystemPrompt` variable is used for context-limit and compaction paths, but the final `deps.callModel` call passes `systemPrompt: promptWithMemory`. As of the current code, `systemContext` is accounted and passed into compaction/fork context, but it is not directly passed as the `systemPrompt` argument in the main `deps.callModel` call from `query.ts`. The hidden user context is definitely prepended in `query.ts` immediately before the model call.
 
 ## Primary Code Path
 
@@ -167,7 +167,7 @@ cacheBreaker: [CACHE_BREAKER: <debug value>]
 
 Git status is skipped when remote mode is active or git instructions are disabled. The value is memoized for the conversation, so it does not update live after file edits.
 
-Current code caveat: `systemContext` is included in context accounting and compaction inputs. In the main `query.ts` streaming call, the direct `systemPrompt` argument remains `promptWithArc`; check this area before assuming the git snapshot is serialized into the provider request for every path.
+Current code caveat: `systemContext` is included in context accounting and compaction inputs. In the main `query.ts` streaming call, the direct `systemPrompt` argument remains `promptWithMemory`; check this area before assuming the git snapshot is serialized into the provider request for every path.
 
 ## User Context
 

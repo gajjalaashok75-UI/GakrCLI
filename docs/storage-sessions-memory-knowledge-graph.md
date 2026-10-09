@@ -1,8 +1,16 @@
-# Storage, Sessions, Memory, and Knowledge Graph Architecture
+# Storage, Sessions, and Memory Architecture
+
+> **Scope note.** This is an inventory of where GakrCLI keeps state on disk. The
+> Knowledge Graph subsystem it once documented — the JSON/SQLite/Orama graph
+> tiers, the conversation arc, multi-turn context, and the `/knowledge` command —
+> has been **removed**. Those sections are kept below as a clearly labelled
+> historical record. The current retrieval store is documented in
+> [storage/knowledge-store.md](storage/knowledge-store.md): `memory.db`, SQLite
+> FTS5 BM25, over `memory/**` and every session's `session-memory/summary.md`.
 
 This document maps the persistent and semi-persistent storage used by GakrCLI:
-sessions, transcripts, subagents, tool results, memory, knowledge graph files,
-SQLite, Orama, JSON configuration, wiki files, tasks, and team/subagent data.
+sessions, transcripts, subagents, tool results, memory, retrieval-index files,
+SQLite, JSON configuration, wiki files, tasks, and team/subagent data.
 
 The implementation is path-driven. Most runtime state is outside the repository
 checkout and is keyed by the current project path, session UUID, or team/task
@@ -18,8 +26,11 @@ identifier.
 - `<sessionId>` is the active session UUID.
 - `<cwd>` is the current project checkout unless a specific code path says it
   uses `getOriginalCwd()` or `getCwd()`.
-- Runtime-created `.db` and `.orama` files are not checked into this repository.
-  They are created under `<projectDir>` when the knowledge graph is used.
+- Runtime-created databases are not checked into this repository. The live one is
+  the memdir retrieval index (`memory.db` under
+  `<memoryBase>/projects/<sanitized-git-root>/`), documented in
+  [storage/knowledge-store.md](storage/knowledge-store.md). The legacy
+  `<projectDir>/knowledge.db` and `knowledge.orama` files are no longer written.
 
 Primary source files:
 
@@ -30,11 +41,8 @@ Primary source files:
 - `src/utils/sessionPersistence.ts`
 - `src/types/logs.ts`
 - `src/utils/toolResultStorage.ts`
-- `src/utils/knowledgeGraph.ts`
-- `src/utils/storage/JSONProvider.ts`
-- `src/utils/storage/SQLiteProvider.ts`
-- `src/utils/conversationArc.ts`
-- `src/memdir/*`
+- `src/utils/knowledgeGraph.ts` (legacy migration shim only; the graph getters are test-only)
+- `src/memdir/*` (`memoryStore.ts`, `memoryChunk.ts`, `vectorIndex.ts`, `retrieval.ts`, `paths.ts`)
 - `src/services/extractMemories/*`
 - `src/services/autoDream/*`
 - `src/services/SessionMemory/*`
@@ -64,9 +72,10 @@ Primary source files:
 | Remote agent metadata | `<projectDir>/<sessionId>/remote-agents/remote-agent-<taskId>.meta.json` | Remote/background agent restore metadata. |
 | Tool results | `<projectDir>/<sessionId>/tool-results/<toolUseId>.json|.txt` | Full persisted output for large tool results. |
 | Session memory | `<projectDir>/<sessionId>/session-memory/summary.md` | Current-session rolling summary. |
-| Knowledge JSON | `<projectDir>/knowledge_graph.json` | Human-readable graph backing store. |
-| Knowledge SQLite | `<projectDir>/knowledge.db`, `knowledge.db-wal`, `knowledge.db-shm` | Working store for graph data. |
-| Knowledge Orama | `<projectDir>/knowledge.orama` | Persisted Orama search index. |
+| Knowledge JSON (legacy) | `<projectDir>/knowledge_graph.json` | Removed graph backing store; read once for migration, then retired. |
+| Knowledge SQLite (legacy) | `<projectDir>/knowledge.db`, `knowledge.db-wal`, `knowledge.db-shm` | Removed graph working store; read once for migration. |
+| Knowledge Orama (legacy) | `<projectDir>/knowledge.orama` | Removed Orama search index. |
+| Memory retrieval index | `<memoryBase>/projects/<sanitized-git-root>/memory.db` (+ `-wal`, `-shm`) | SQLite FTS5 BM25 index over `memory/**` + session summaries. Derived and rebuildable. |
 | Auto memory | `<memoryBase>/projects/<sanitized-project-root>/memory/` | Durable semantic memory topic files and `MEMORY.md` index. |
 | Team memory | `<autoMemory>/team/` | Shared project/team memory topic files and index. |
 | Agent user memory | `<memoryBase>/agent-memory/<agentType>/` | User-level persistent agent memory. |
@@ -1014,17 +1023,25 @@ Session-memory compaction can use `summary.md` as the compact summary and keep
 messages after the last summarized message ID. It expands kept messages to
 preserve API invariants such as tool-use/tool-result pairs.
 
-## Knowledge Graph
+## Knowledge Graph (REMOVED — historical record)
 
-The project knowledge graph has three storage layers:
+> **Everything from here to `## Project Wiki` describes a removed subsystem.** The
+> knowledge graph, its JSON/SQLite/Orama tiers, the conversation arc, multi-turn
+> context, and the `/knowledge` command no longer exist: `src/utils/conversationArc.ts`,
+> `src/utils/multiTurnContext.ts`, `src/memdir/autoExtractFacts.ts`, the three
+> `src/commands/knowledge/*` files, and `src/utils/storage/{JSONProvider,SQLiteProvider}.ts`
+> are deleted, along with the `KNOWLEDGE` / `CONVERSATION_ARC` / `MULTI_TURN_CONTEXT`
+> build flags and the `knowledgeGraphEnabled` global config key. Retrieval now runs
+> on `memory.db` — see [storage/knowledge-store.md](storage/knowledge-store.md).
+> Migrated legacy graph content survives as markdown in `memory/.facts/`.
+
+The removed graph had three storage layers, all keyed by `<projectDir>`:
 
 1. JSON audit/readable store.
 2. SQLite working store.
 3. Orama search index.
 
-All three are keyed by `<projectDir>`.
-
-### Paths
+### Paths (legacy — no longer written)
 
 ```text
 <projectDir>/knowledge_graph.json
@@ -1218,17 +1235,18 @@ Reset deletes or clears:
 - provider cache
 - in-memory graph
 
-### Search Flow
+### Search Flow (REMOVED)
 
-`getOrchestratedMemory(query)` searches Orama first. If Orama is unavailable or
-fails, it falls back to native keyword/BM25-style search over the graph.
+The old flow searched Orama first and fell back to native keyword search over the
+graph, emitting `PERSISTENT PROJECT MEMORY (ORAMA RAG)` / `(NATIVE RAG)` banners.
 
-Returned prompt section names:
+**Current:** `searchMemdirIndex()` runs SQLite FTS5 BM25 over `memory.db`, applies
+the query-term coverage gate (1 of ≤2 terms, 2 of longer queries), dedupes, and
+injects the survivors as `PERSISTENT PROJECT MEMORY (VECTOR RAG)` inside the
+`--- BEGIN RETRIEVED MEMORY (DATA ONLY) ---` fence. Unrelated prompts inject
+nothing at all.
 
-- `PERSISTENT PROJECT MEMORY (ORAMA RAG)`
-- `PERSISTENT PROJECT MEMORY (NATIVE RAG)`
-
-### Conversation Arc Auto Updates
+### Conversation Arc Auto Updates (REMOVED)
 
 `conversationArc.ts` maintains a runtime `ConversationArc`:
 
@@ -1282,20 +1300,13 @@ Recent messages are scanned for facts such as:
 At turn finalization, arc summaries, facts, rules, and entities can be written
 into the global graph.
 
-### `/knowledge` Command
+### `/knowledge` Command (REMOVED)
 
-`/knowledge status` reports:
-
-- whether the feature is enabled
-- entity/relation/summary/rule counts
-- JSON/SQLite/Orama path existence
-- SQLite availability/runtime state
-
-`/knowledge enable yes|no` writes `knowledgeGraphEnabled` to global config.
-
-`/knowledge clear` resets the arc and graph.
-
-`/knowledge list` prints the arc summary.
+The command and its handler (`src/commands/knowledge/*`) were deleted, together
+with the `KNOWLEDGE` build flag and the `knowledgeGraphEnabled` global config key
+it toggled. There is no replacement command: retrieval runs automatically for each
+user prompt, and the index is rebuilt by deleting `memory.db` (or calling
+`rebuildIndex()` from memory code).
 
 ## Project Wiki
 
@@ -1412,18 +1423,19 @@ Given a session UUID:
 5. For large outputs, check `<projectDir>/<sessionId>/tool-results/`.
 6. For session summary, check `<projectDir>/<sessionId>/session-memory/summary.md`.
 
-### How To Inspect Knowledge Graph State
+### How To Inspect The Retrieval Index
 
 Check:
 
 ```text
-<projectDir>/knowledge_graph.json
-<projectDir>/knowledge.db
-<projectDir>/knowledge.orama
+<memoryBase>/projects/<sanitized-git-root>/memory.db   (+ -wal, -shm)
 ```
 
-If `knowledge_graph.json` exists but SQLite does not, SQLite may be unavailable
-or not initialized yet. If Orama is missing, it can be rebuilt from JSON/SQLite.
+It is a derived cache: delete it and the next prompt re-indexes from the markdown
+sources. A SQLite client with FTS5 shows what is indexed
+(`select count(*) from chunks`), and `pragma user_version` shows the schema
+version. To back it up while a session may be running, use
+`VACUUM INTO 'backup.db'` rather than copying the file (WAL mode).
 
 ### Which Storage Is Append-Only
 
@@ -1497,9 +1509,10 @@ Relevant tests for this document's storage areas:
 - `tests/sdk/sdk-context-isolation.test.ts`
 - `tests/sdk/sdk-preserved-segment.test.ts`
 - `src/utils/toolResultStorage.test.ts`
-- `src/utils/storage/JSONProvider.test.ts`
-- `src/utils/storage/SQLiteProvider.test.ts`
-- `src/commands/knowledge/knowledge.test.ts`
+- `src/memdir/memoryStore.test.ts`
+- `src/memdir/memoryChunk.test.ts`
+- `src/memdir/vectorIndex.test.ts`
+- `src/memdir/retrieval.test.ts`
 - `src/memdir/memoryScan.test.ts`
 - `src/services/wiki/init.test.ts`
 - `src/services/wiki/ingest.test.ts`

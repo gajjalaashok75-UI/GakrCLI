@@ -10,7 +10,7 @@
 import { readFileSync, existsSync, readdirSync, rmSync, mkdirSync, writeFileSync, statSync } from 'fs'
 import { join, basename } from 'path'
 import { getAutoMemPath } from '../memdir/paths.js'
-import { clearIndex, getIndexPath, getIndexMetaPath } from '../memdir/vectorIndex.js'
+import { clearIndex, getIndexPath } from '../memdir/vectorIndex.js'
 import { parseFrontmatter } from './frontmatterParser.js'
 import { getProjectsDir } from './envUtils.js'
 import { findCanonicalGitRoot } from './git.js'
@@ -59,27 +59,6 @@ const FACTS_SUBDIR = '.facts'
 function getFactsDir(): string {
   const memDir = getAutoMemPath()
   return memDir ? join(memDir, FACTS_SUBDIR) : ''
-}
-
-export function extractKeywords(text: string): string[] {
-  const words = text
-    .toLowerCase()
-    .split(/[\s,;:()\"'`?]+/)
-    .filter(word => word.length >= 2)
-    .map(word => {
-      if (/^\d+\.\d+/.test(word)) return word
-      return word.replace(/\.$/g, '')
-    })
-    .filter(word => word.length >= 2)
-
-  const extraWords: string[] = []
-  for (const w of words) {
-    if (w.endsWith('s') && w.length > 3) {
-      extraWords.push(w.slice(0, -1))
-    }
-  }
-
-  return Array.from(new Set([...words, ...extraWords]))
 }
 
 // Track migration completion per project. The legacy JSON/SQLite paths are
@@ -861,43 +840,6 @@ export function getGlobalGraph(): KnowledgeGraph {
   }
 }
 
-/**
- * @deprecated This export is dead and no longer used in active code paths.
- */
-export function getGlobalGraphSummary(): string {
-  const graph = getGlobalGraph()
-  const entities = Object.values(graph.entities)
-  if (entities.length === 0) return ''
-
-  let summary = '\nKnowledge Graph Snapshot (Most Recent):\n'
-  const recentEntities = entities.slice(-10)
-
-  for (const entity of recentEntities) {
-    summary += `- [${entity.type}] ${entity.name}`
-    const attrs = Object.entries(entity.attributes)
-    if (attrs.length > 0) {
-      summary += ` (${attrs.map(([k, v]) => `${k}: ${v}`).join(', ')})`
-    }
-    summary += '\n'
-  }
-
-  return summary
-}
-
-// Re-export: the retrieval layer lives in memdir/retrieval.ts now. Local
-// binding (not `export { x } from`) because searchGlobalGraph below calls it.
-import { getOrchestratedMemory } from '../memdir/retrieval.js'
-export { getOrchestratedMemory }
-
-/**
- * @deprecated This export is dead and no longer used in active code paths.
- */
-export async function searchGlobalGraph(query: string): Promise<string> {
-  const queryWords = extractKeywords(query)
-  if (queryWords.length === 0) return ''
-  return getOrchestratedMemory(query)
-}
-
 function pruneLegacyGraphArtifacts(projectDir: string): void {
   try {
     if (!existsSync(projectDir)) return
@@ -982,14 +924,14 @@ export function resetGlobalGraph(): { archived: string[]; failures: string[] } {
     try { rmSync(factsDir, { recursive: true, force: true }) } catch { /* ignore */ }
   }
 
-  // 2. Remove index files
+  // 2. Remove the derived index database and its WAL/SHM sidecars. Close the
+  // handle first — the files stay locked while a connection is open (Windows).
+  clearIndex(memDir)
   const indexPath = getIndexPath(memDir)
-  if (existsSync(indexPath)) {
-    try { rmSync(indexPath, { force: true }) } catch { /* ignore */ }
-  }
-  const metaPath = getIndexMetaPath(memDir)
-  if (existsSync(metaPath)) {
-    try { rmSync(metaPath, { force: true }) } catch { /* ignore */ }
+  for (const artifact of [indexPath, `${indexPath}-wal`, `${indexPath}-shm`]) {
+    if (existsSync(artifact)) {
+      try { rmSync(artifact, { force: true }) } catch { /* ignore */ }
+    }
   }
 
   // 3. Prune any legacy backups and cleared files (M9). Probe every candidate
@@ -1018,8 +960,4 @@ export function resetGlobalGraph(): { archived: string[]; failures: string[] } {
   clearIndex(memDir)
 
   return { archived, failures }
-}
-
-export function clearMemoryOnly(): void {
-  // no-op: memdir is file-based, no in-memory cache to clear
 }

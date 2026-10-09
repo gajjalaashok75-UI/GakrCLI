@@ -2,7 +2,7 @@
 
 ## What It Is
 
-The Auto-Memory system is an **LLM-powered persistent memory layer** that writes, reads, and retrieves human-readable markdown memory files. Unlike the Knowledge Graph layer (which uses regex extraction + Orama full-text search), Auto-Memory uses the actual model itself to understand conversation context and decide what's worth remembering. It is the "long-term memory" of the agent — durable across sessions, projects, and workspace restarts.
+The Auto-Memory system is an **LLM-powered persistent memory layer** that writes, reads, and retrieves human-readable markdown memory files. Unlike the legacy Knowledge Graph layer (regex extraction + `/knowledge` command — removed; retrieval now runs on the SQLite `memory.db` FTS5 index, see `storage/knowledge-store.md`), Auto-Memory uses the actual model itself to understand conversation context and decide what's worth remembering. It is the "long-term memory" of the agent — durable across sessions, projects, and workspace restarts.
 
 Four writers touch this memory layer:
 
@@ -36,14 +36,12 @@ Auto-memory lives in one tree per project. Default base is the config home (`~/.
 
 ```
 ~/.gakrcli/projects/<sanitized-git-root>/
+├── memory.db                            ← SQLite FTS5 retrieval index for memory/ + session summaries (derived)
 └── memory/
     ├── MEMORY.md                        ← Index file (one line per entry; loaded into context)
-    ├── topic-file.md                    ← Topic files (any depth ≤ 3 is scanned)
-    ├── .facts/                          ← Regex-extracted facts (Knowledge Graph layer)
+    ├── topic-file.md                    ← Topic files (any depth ≤ 4 is indexed)
+    ├── .facts/                          ← Migrated legacy facts (indexed like any memory file)
     │   └── fact-concept-*.md
-    ├── .arc.json                        ← Conversation Arc state (goals/decisions/milestones)
-    ├── .vector-index                    ← Orama search index (derived, rebuildable)
-    ├── .vector-index-meta.json          ← Index freshness metadata (checksums)
     ├── .consolidate-lock                ← Auto-dream lock (mtime = lastConsolidatedAt)
     ├── logs/YYYY/MM/YYYY-MM-DD.md       ← KAIROS assistant-mode daily logs (append-only)
     └── team/                            ← Team memory (TEAMMEM flag)
@@ -451,8 +449,10 @@ Snapshots can initialize or replace local agent memory when newer than the last 
 | `memdir/teamMemPaths.ts` | Team memory paths + symlink-safe path validation |
 | `memdir/teamMemPrompts.ts` | Team memory prompt sections |
 | `memdir/findRelevantMemories.ts` | LLM-powered relevant memory selection (dormant by default) |
-| `memdir/vectorIndex.ts` | Orama full-text index over memory `.md` files (incl. `.facts/`), persisted + checksummed |
-| `memdir/autoExtractFacts.ts` | Regex-based fact extraction into `.facts/` (Knowledge Graph layer) |
+| `memdir/vectorIndex.ts` | Discovery + incremental-indexing façade over `memory.db` — memory files plus every session summary (see `storage/knowledge-store.md`) |
+| `memdir/memoryStore.ts` | SQLite store: versioned schema, FTS5 sync, BM25 `recall()` |
+| `memdir/memoryChunk.ts` | Heading-aware markdown chunker |
+| `memdir/retrieval.ts` | Per-prompt retrieval + system-prompt injection (DATA-ONLY fence) |
 | `services/extractMemories/prompts.ts` | Extraction prompt templates |
 | `services/autoDream/consolidationPrompt.ts` | Dream prompt |
 | `services/teamMemorySync/` | Team memory pull/push sync + watcher + secret scanner |
@@ -468,6 +468,5 @@ Snapshots can initialize or replace local agent memory when newer than the last 
 | `/summary` | Registered as a regular command (was INTERNAL/ant-only). Manual session-memory extraction + display; updates `summary.md` on disk and prints the full content; bridge-safe and works in `-p` mode (filters messages to API-safe types) |
 | `/recap` (`/away`, `/catchup`) | Registered as a regular command (was INTERNAL/ant-only). One-line ≤40-word recap via a fork sharing the prompt-cache prefix; does **not** write `summary.md`; gated on `AWAY_SUMMARY` build flag + `tengu_sedge_lantern` (both ON in production builds); REPL-only, not bridge-safe |
 | `/remember` (bundled skill) | Memory review/promotion proposals — **gated on `USER_TYPE === 'ant'`**, inert for everyone else |
-| `/knowledge` | Knowledge Graph layer status/clear/list (see `knowledge-store.md`) |
 | `/local-memory`, `LocalMemoryRecall` tool | Local KV memory stores — **disabled**: `LOCAL_MEMORY` build flag is false |
 | `/memory-stores` (cloud API) | Fully implemented client but **not registered** in `commands.ts` (see `ISSUES.md`) |

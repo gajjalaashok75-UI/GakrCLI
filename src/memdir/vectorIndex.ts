@@ -1,388 +1,442 @@
 /**
- * Orama vector search index over memory/ .md files.
- * Provides semantic search across the auto-memory directory.
+ * Memdir lexical index — discovery, incremental indexing, and search.
+ *
+ * The index lives in a `memory.db` SQLite database (see ./memoryStore.ts) that
+ * sits beside the memory directory. Markdown files under `memory/` and every
+ * session's `session-memory/summary.md` are the sources of truth; the database
+ * is a derived cache and can be deleted and rebuilt at any time.
+ *
+ * Change detection is per file: the file is read and hashed, and the stored
+ * hash decides whether its chunks are rewritten. A stat-only corpus fingerprint
+ * short-circuits the whole indexing pass while the corpus is unchanged, so the
+ * common case (many model requests within one turn) costs a few stat calls
+ * rather than a re-index.
  */
 
 import { createHash } from 'crypto'
-import { readFileSync, existsSync, writeFileSync, readdirSync, statSync, Dirent } from 'fs'
-import { join, relative } from 'path'
-import { create, insert, search, type Orama as OramaDb } from '@orama/orama'
-import { persist, restore } from '@orama/plugin-data-persistence'
+import { readFileSync, existsSync, readdirSync, statSync, Dirent } from 'fs'
+import { join, relative, basename } from 'path'
 import { parseFrontmatter } from '../utils/frontmatterParser.js'
-import { isMemoryWriteApprovalRequired } from '../utils/governancePolicy.js'
-import { isAutoMemoryEnabled } from './paths.js'
+import { getCwd } from '../utils/cwd.js'
+import { getProjectDir } from '../utils/sessionStoragePortable.js'
+import { logForDebugging } from '../utils/debug.js'
+import { chunkMarkdown, type MemoryChunk } from './memoryChunk.js'
+import {
+  getMemoryIndexDiagnostic,
+  openMemoryStore,
+  type MemoryStore,
+  type StoredSourceStats,
+} from './memoryStore.js'
+import { getMemoryDbPathForDir } from './paths.js'
 
-const ORAMA_SCHEMA = {
-  filename: 'string',
-  path: 'string',
-  title: 'string',
-  type: 'string',
-  description: 'string',
-  content: 'string',
-} as const
+export const SOURCE_TYPE_MEMORY = 'memory_markdown'
+export const SOURCE_TYPE_SESSION_SUMMARY = 'session_summary'
 
-interface MdStats {
-  count: number
-  totalSize: number
-  latestMtime: number
-  fileFingerprint: string
-  contentHash: string
-}
+const MAX_MEMORY_DEPTH = 4
+const MAX_SESSION_SUMMARIES = 200
 
-interface DirIndex {
-  db: OramaDb<typeof ORAMA_SCHEMA> | null
-  pending: Promise<void> | null
-  lastBuiltStats?: MdStats
-}
-
-const indices = new Map<string, DirIndex>()
-
-const INDEX_FILENAME = '.vector-index'
-const INDEX_META_FILENAME = '.vector-index-meta.json'
-
-export function getIndexPath(memoryDir: string): string {
-  return join(memoryDir, INDEX_FILENAME)
-}
-
-export function getIndexMetaPath(memoryDir: string): string {
-  return join(memoryDir, INDEX_META_FILENAME)
-}
-
-interface FileInfo {
+interface DiscoveredFile {
   fullPath: string
-  relPath: string
-  name: string
-  size: number
+  sizeBytes: number
+  mtimeNs: string
+  ctimeNs: string
+  /** Modification time in epoch ms — the source timestamp recorded on chunks. */
   mtimeMs: number
 }
 
-function getSortedMdFiles(memoryDir: string): FileInfo[] {
-  const files: FileInfo[] = []
+interface DiscoveredSource extends DiscoveredFile {
+  sourceType: string
+  /** Path shown in retrieval results; never an absolute home-dir path. */
+  relPath: string
+  sessionId: string | null
+}
+
+export interface MemdirIndexStats {
+  indexed: number
+  skipped: number
+  removed: number
+  errors: number
+}
+
+const EMPTY_STATS: MemdirIndexStats = { indexed: 0, skipped: 0, removed: 0, errors: 0 }
+
+// ---------------------------------------------------------------------------
+// Discovery
+// ---------------------------------------------------------------------------
+
+function statFile(fullPath: string): DiscoveredFile | null {
+  try {
+    const st = statSync(fullPath, { bigint: true })
+    return {
+      fullPath,
+      sizeBytes: Number(st.size),
+      mtimeNs: st.mtimeNs.toString(),
+      ctimeNs: st.ctimeNs.toString(),
+      mtimeMs: Number(st.mtimeMs),
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Collect indexable markdown files under `memory/`. Symlinked entries are
+ * skipped — a symlink could point outside the memory root and leak content.
+ * `MEMORY.md` is the index entrypoint, not content, so it is excluded.
+ */
+export function discoverMemoryFiles(memoryDir: string): DiscoveredFile[] {
+  const files: DiscoveredFile[] = []
+
   function walk(dir: string, depth: number) {
-    if (depth > 4) return
+    if (depth > MAX_MEMORY_DEPTH) return
     let entries: Dirent[]
     try {
       entries = readdirSync(dir, { withFileTypes: true })
     } catch {
       return
     }
-    // Sort entries by name to guarantee deterministic traversal order (L10)
+    // Deterministic traversal order.
     entries.sort((a, b) => a.name.localeCompare(b.name))
 
     for (const entry of entries) {
       const fullPath = join(dir, entry.name)
-
       if (entry.isSymbolicLink()) continue
 
       if (entry.isDirectory()) {
         if (!entry.name.startsWith('.') || entry.name === '.facts') {
           walk(fullPath, depth + 1)
         }
-      } else if (entry.name.endsWith('.md') && entry.name !== 'MEMORY.md' && !entry.name.startsWith('.')) {
-        try {
-          const st = statSync(fullPath)
-          files.push({
-            fullPath,
-            relPath: relative(memoryDir, fullPath),
-            name: entry.name,
-            size: st.size,
-            mtimeMs: st.mtimeMs,
-          })
-        } catch {
-          // Skip unreadable files
-        }
+        continue
       }
+      if (!entry.name.endsWith('.md') || entry.name === 'MEMORY.md' || entry.name.startsWith('.')) {
+        continue
+      }
+      const info = statFile(fullPath)
+      if (info) files.push(info)
     }
   }
+
   walk(memoryDir, 0)
-  files.sort((a, b) => a.relPath.localeCompare(b.relPath))
-  return files
+  return files.sort((a, b) => a.fullPath.localeCompare(b.fullPath))
 }
 
-function getMdStats(memoryDir: string): MdStats {
-  const files = getSortedMdFiles(memoryDir)
-  const count = files.length
-  let totalSize = 0
-  let latestMtime = 0
-  const fingerprint = createHash('sha256')
-
-  for (const f of files) {
-    totalSize += f.size
-    if (f.mtimeMs > latestMtime) latestMtime = f.mtimeMs
-    fingerprint.update(`${f.fullPath}:${f.size}:${f.mtimeMs}\0`)
+/**
+ * Every session summary belonging to the current project, newest first. The
+ * session id is taken from the authoritative directory name
+ * (`<projectDir>/<sessionId>/session-memory/summary.md`), never guessed from
+ * file contents.
+ */
+export function discoverSessionSummaries(): DiscoveredSource[] {
+  let projectDir: string
+  try {
+    projectDir = getProjectDir(getCwd())
+  } catch {
+    return []
   }
 
-  const fileFingerprint = fingerprint.digest('hex')
-
-  // The path/size/mtime fingerprint is a fast-change signal, NOT a validity
-  // guarantee: an equal-length rewrite with a restored mtime (coarse
-  // timestamp filesystems, restores, editors that preserve stat times) leaves
-  // the fingerprint identical while the corpus content differs. The content
-  // hash is the authoritative digest, so it is always recomputed before a
-  // cached stat set may be trusted (P1). Returning a cached contentHash on
-  // fingerprint match alone would serve stale vector results.
-  const contentHasher = createHash('sha256')
-  for (const f of files) {
-    try {
-      contentHasher.update(readFileSync(f.fullPath))
-    } catch { /* skip */ }
+  let sessionIds: string[]
+  try {
+    sessionIds = readdirSync(projectDir, { withFileTypes: true })
+      .filter(entry => entry.isDirectory() && !entry.isSymbolicLink() && !entry.name.startsWith('.'))
+      .map(entry => entry.name)
+  } catch {
+    return []
   }
-  const contentHash = contentHasher.digest('hex')
 
-  return { count, totalSize, latestMtime, fileFingerprint, contentHash }
+  const found: DiscoveredSource[] = []
+  for (const sessionId of sessionIds) {
+    const fullPath = join(projectDir, sessionId, 'session-memory', 'summary.md')
+    if (!existsSync(fullPath)) continue
+    const info = statFile(fullPath)
+    if (!info) continue
+    found.push({
+      ...info,
+      sourceType: SOURCE_TYPE_SESSION_SUMMARY,
+      relPath: join('session-summary', sessionId, 'summary.md'),
+      sessionId,
+    })
+  }
+
+  // Newest first, then bounded so a long-lived project can't flood the index.
+  found.sort((a, b) => b.mtimeMs - a.mtimeMs)
+  return found.slice(0, MAX_SESSION_SUMMARIES)
 }
 
-async function scanMdFiles(
-  memoryDir: string,
-): Promise<Array<{ filename: string; path: string; title: string; type: string; description: string; content: string }>> {
-  const files = getSortedMdFiles(memoryDir)
-  const results: Array<{ filename: string; path: string; title: string; type: string; description: string; content: string }> = []
-  for (const f of files) {
-    try {
-      const raw = readFileSync(f.fullPath, 'utf-8')
-      const parsed = parseFrontmatter(raw)
-      const fm = parsed?.frontmatter
-      results.push({
-        filename: f.name,
-        path: f.relPath,
-        title: typeof fm?.title === 'string' ? fm.title : f.name.replace(/\.md$/, ''),
-        type: typeof fm?.type === 'string' ? fm.type : 'reference',
-        description: typeof fm?.description === 'string' ? fm.description : '',
-        content: parsed?.content ?? '',
-      })
-    } catch {
-      // skip unreadable files
-    }
-  }
-  return results
+function discoverAllSources(memoryDir: string): DiscoveredSource[] {
+  const memory = discoverMemoryFiles(memoryDir).map<DiscoveredSource>(file => ({
+    ...file,
+    sourceType: SOURCE_TYPE_MEMORY,
+    relPath: relative(memoryDir, file.fullPath),
+    sessionId: null,
+  }))
+  return [...memory, ...discoverSessionSummaries()]
 }
 
-function getOrCreateDirState(memoryDir: string): DirIndex {
-  let state = indices.get(memoryDir)
+/**
+ * Stat-only fingerprint of the whole corpus (memory files + session
+ * summaries). Never reads file bodies, so it is the cheap "did anything change"
+ * signal used to skip the indexing pass entirely.
+ */
+export function getMemdirFingerprint(memoryDir: string): string {
+  const hash = createHash('sha256')
+  for (const source of discoverAllSources(memoryDir)) {
+    hash.update(
+      `${source.fullPath}\0${source.sizeBytes}\0${source.mtimeNs}\0${source.ctimeNs}\0${source.sessionId ?? ''}\0`,
+    )
+  }
+  return hash.digest('hex')
+}
+
+// ---------------------------------------------------------------------------
+// Indexing
+// ---------------------------------------------------------------------------
+
+interface DirState {
+  lastFingerprint: string | null
+}
+
+const states = new Map<string, DirState>()
+const stores = new Map<string, MemoryStore>()
+let unavailableDiagnosticLogged = false
+
+function getState(memoryDir: string): DirState {
+  let state = states.get(memoryDir)
   if (!state) {
-    state = { db: null, pending: null }
-    indices.set(memoryDir, state)
+    state = { lastFingerprint: null }
+    states.set(memoryDir, state)
   }
   return state
 }
 
-export async function initMemdirIndex(memoryDir: string): Promise<void> {
-  const state = getOrCreateDirState(memoryDir)
-  if (state.pending) {
-    await state.pending
+function getStore(memoryDir: string): MemoryStore | null {
+  const dbPath = getMemoryDbPathForDir(memoryDir)
+  const existing = stores.get(dbPath)
+  if (existing) return existing
+  const store = openMemoryStore(dbPath)
+  if (!store) return null
+  stores.set(dbPath, store)
+  return store
+}
+
+function reportUnavailable(): void {
+  if (unavailableDiagnosticLogged) return
+  unavailableDiagnosticLogged = true
+  const diagnostic = getMemoryIndexDiagnostic()
+  if (diagnostic) {
+    // Never logs memory text — the diagnostic describes the index, not content.
+    logForDebugging(`[memdir] ${diagnostic}`, { level: 'warn' })
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function frontmatterString(frontmatter: Record<string, unknown> | undefined, key: string): string | null {
+  const value = frontmatter?.[key]
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function firstHeading(body: string): string | null {
+  for (const line of body.split('\n')) {
+    const match = /^#{1,6}\s+(.+?)\s*#*\s*$/.exec(line)
+    if (match) return match[1].trim() || null
+    if (line.trim()) return null
+  }
+  return null
+}
+
+function indexOne(
+  store: MemoryStore,
+  source: DiscoveredSource,
+  known: Map<string, StoredSourceStats>,
+  force: boolean,
+  stats: MemdirIndexStats,
+): void {
+  let raw: string
+  try {
+    raw = readFileSync(source.fullPath, 'utf-8')
+  } catch (error) {
+    // One unreadable file must not stop the run; record it and move on.
+    stats.errors++
+    store.markSourceError({ ...source, absPath: source.fullPath }, errorMessage(error))
     return
   }
 
-  state.pending = (async () => {
-    const indexPath = getIndexPath(memoryDir)
-    const metaPath = getIndexMetaPath(memoryDir)
-    const stats = getMdStats(memoryDir)
-
-    if (existsSync(indexPath) && existsSync(metaPath)) {
-      const indexMtime = statSync(indexPath).mtimeMs
-      let storedFileCount = -1
-      let storedTotalSize = -1
-      let storedFileFingerprint = ''
-      let storedContentHash = ''
-      let storedIndexHash = ''
-      try {
-        const meta = JSON.parse(readFileSync(metaPath, 'utf-8'))
-        storedFileCount = typeof meta.fileCount === 'number' ? meta.fileCount : -1
-        storedTotalSize = typeof meta.totalSize === 'number' ? meta.totalSize : -1
-        storedFileFingerprint = typeof meta.fileFingerprint === 'string' ? meta.fileFingerprint : (typeof meta.contentHash === 'string' ? meta.contentHash : '')
-        storedContentHash = typeof meta.contentHash === 'string' ? meta.contentHash : ''
-        storedIndexHash = typeof meta.indexHash === 'string' ? meta.indexHash : ''
-      } catch { /* missing or corrupt meta — rebuild */ }
-
-      if (stats.latestMtime <= indexMtime && stats.count === storedFileCount && stats.totalSize === storedTotalSize && stats.fileFingerprint === storedFileFingerprint && stats.contentHash === storedContentHash) {
-        try {
-          const data = readFileSync(indexPath)
-          if (!storedIndexHash || createHash('sha256').update(data).digest('hex') !== storedIndexHash) {
-            throw new Error('persisted vector index checksum mismatch')
-          }
-          const restored = await restore('binary', data) as OramaDb<typeof ORAMA_SCHEMA>
-          const schema = restored.schema
-          const expectedFields = Object.keys(ORAMA_SCHEMA) as Array<keyof typeof ORAMA_SCHEMA>
-          let isCompatible = !!schema
-          if (schema) {
-            for (const key of expectedFields) {
-              if (schema[key] !== ORAMA_SCHEMA[key]) {
-                isCompatible = false
-                break
-              }
-            }
-          }
-          if (isCompatible) {
-            state.db = restored
-            state.lastBuiltStats = stats
-            return
-          }
-        } catch {
-          // Corrupted index — rebuild
-        }
-      }
-    }
-
-    await performRebuildIndex(memoryDir, state, stats)
-  })()
+  const contentHash = createHash('sha256').update(raw).digest('hex')
+  const previous = known.get(source.fullPath)
+  if (!force && previous?.status === 'ok' && previous.contentHash === contentHash) {
+    stats.skipped++
+    return
+  }
 
   try {
-    await state.pending
-  } finally {
-    state.pending = null
+    const parsed = parseFrontmatter(raw)
+    const frontmatter = parsed?.frontmatter as Record<string, unknown> | undefined
+    const body = parsed?.content ?? ''
+    const isSessionSummary = source.sourceType === SOURCE_TYPE_SESSION_SUMMARY
+
+    const title = isSessionSummary
+      ? frontmatterString(frontmatter, 'title') ??
+        frontmatterString(frontmatter, 'name') ??
+        firstHeading(body) ??
+        `Session summary ${source.sessionId?.slice(0, 8) ?? ''}`.trim()
+      : frontmatterString(frontmatter, 'title') ??
+        frontmatterString(frontmatter, 'name') ??
+        basename(source.fullPath).replace(/\.md$/, '')
+    const description = frontmatterString(frontmatter, 'description') ?? ''
+
+    let chunks: MemoryChunk[] = chunkMarkdown(body)
+    if (chunks.length === 0 && (title || description)) {
+      // Frontmatter-only file: keep the headline/description searchable without
+      // inventing body text. (An empty `text` renders no excerpt.)
+      chunks = [{ index: 0, key: 'frontmatter#0', text: '', heading: null }]
+    }
+
+    store.upsertSource(
+      {
+        sourceType: source.sourceType,
+        relPath: source.relPath,
+        absPath: source.fullPath,
+        sessionId: source.sessionId,
+        contentHash,
+        sizeBytes: source.sizeBytes,
+        mtimeNs: source.mtimeNs,
+        ctimeNs: source.ctimeNs,
+        title,
+        description,
+        sourceTs: source.mtimeMs,
+      },
+      chunks,
+    )
+    stats.indexed++
+  } catch (error) {
+    stats.errors++
+    store.markSourceError({ ...source, absPath: source.fullPath }, errorMessage(error))
   }
 }
 
-async function performRebuildIndex(
-  memoryDir: string,
-  state: DirIndex,
-  knownStats?: MdStats,
-): Promise<void> {
-  const stats = knownStats ?? getMdStats(memoryDir)
-  const newDb = await create({ schema: ORAMA_SCHEMA }) as OramaDb<typeof ORAMA_SCHEMA>
-  const docs = await scanMdFiles(memoryDir)
+/**
+ * Bring the index in line with the corpus, then return what changed in THIS
+ * call. An unchanged corpus fingerprint skips the pass entirely (no work, so
+ * all counters stay 0); `force` drops every row first (full rebuild).
+ */
+export function ensureMemdirIndex(memoryDir: string, force = false): MemdirIndexStats {
+  const state = getState(memoryDir)
+  const fingerprint = getMemdirFingerprint(memoryDir)
+  if (!force && state.lastFingerprint === fingerprint) return EMPTY_STATS
 
-  for (const doc of docs) {
-    await insert(newDb, {
-      filename: doc.filename,
-      path: doc.path,
-      title: doc.title,
-      type: doc.type,
-      description: doc.description,
-      content: doc.content,
-    })
+  const store = getStore(memoryDir)
+  if (!store) {
+    reportUnavailable()
+    state.lastFingerprint = fingerprint
+    return EMPTY_STATS
   }
 
-  state.db = newDb
-  state.lastBuiltStats = stats
-  await saveIndexWithStats(memoryDir, stats)
+  if (force) store.clearAll()
+
+  const stats: MemdirIndexStats = { ...EMPTY_STATS }
+  const memorySources = discoverMemoryFiles(memoryDir).map<DiscoveredSource>(file => ({
+    ...file,
+    sourceType: SOURCE_TYPE_MEMORY,
+    relPath: relative(memoryDir, file.fullPath),
+    sessionId: null,
+  }))
+  const memoryKnown = store.listSourceStats(SOURCE_TYPE_MEMORY)
+  for (const source of memorySources) {
+    indexOne(store, source, memoryKnown, force, stats)
+  }
+  stats.removed += store.pruneMissingSources(
+    SOURCE_TYPE_MEMORY,
+    new Set(memorySources.map(source => source.fullPath)),
+  )
+
+  const sessionSources = discoverSessionSummaries()
+  const sessionKnown = store.listSourceStats(SOURCE_TYPE_SESSION_SUMMARY)
+  for (const source of sessionSources) {
+    indexOne(store, source, sessionKnown, force, stats)
+  }
+  stats.removed += store.pruneMissingSources(
+    SOURCE_TYPE_SESSION_SUMMARY,
+    new Set(sessionSources.map(source => source.fullPath)),
+  )
+
+  state.lastFingerprint = getMemdirFingerprint(memoryDir)
+  return stats
+}
+
+// ---------------------------------------------------------------------------
+// Public API (kept stable for callers and tests)
+// ---------------------------------------------------------------------------
+
+/** Path of the persistent index database for a memory directory. */
+export function getIndexPath(memoryDir: string): string {
+  return getMemoryDbPathForDir(memoryDir)
+}
+
+export async function initMemdirIndex(memoryDir: string): Promise<void> {
+  ensureMemdirIndex(memoryDir, false)
 }
 
 export async function rebuildIndex(memoryDir: string): Promise<void> {
-  const state = getOrCreateDirState(memoryDir)
-  const inFlight = state.pending
-  if (inFlight) {
-    // An init/rebuild is in flight. Await it, then chain a fresh rebuild:
-    // the in-flight scan may have started before the triggering fact write
-    // landed, so returning without rebuilding would leave the index stale (P2).
-    await inFlight
-  }
-  const rebuild = performRebuildIndex(memoryDir, state)
-  state.pending = rebuild
+  ensureMemdirIndex(memoryDir, true)
+}
 
-  try {
-    await rebuild
-  } finally {
-    if (state.pending === rebuild) {
-      state.pending = null
-    }
-  }
+export interface MemdirSearchHit {
+  /** Display path: relative for memory files, `session-summary/<id>/summary.md`. */
+  path: string
+  title: string
+  description: string
+  /** The chunk text (may be empty for a frontmatter-only file). */
+  content: string
+  heading: string | null
+  sessionId: string | null
+  sourceType: string
+  timestamp: number | null
+  /** Higher is better (`-bm25`). */
+  score: number
+  matchedTerms: number
 }
 
 export async function searchMemdirIndex(
   query: string,
   memoryDir: string,
   limit = 10,
-): Promise<Array<{ path: string; filename: string; title: string; type: string; description: string; content: string; score: number }>> {
-  const state = getOrCreateDirState(memoryDir)
-
-  if (state.pending) {
-    await state.pending
-  }
-
-  if (!state.db) {
-    await initMemdirIndex(memoryDir)
-  }
-
-  if (state.db) {
-    const stats = getMdStats(memoryDir)
-    if (state.lastBuiltStats) {
-      if (
-        stats.count !== state.lastBuiltStats.count ||
-        stats.totalSize !== state.lastBuiltStats.totalSize ||
-        stats.fileFingerprint !== state.lastBuiltStats.fileFingerprint ||
-        stats.contentHash !== state.lastBuiltStats.contentHash
-      ) {
-        await initMemdirIndex(memoryDir)
-      }
-    } else {
-      const indexPath = getIndexPath(memoryDir)
-      const metaPath = getIndexMetaPath(memoryDir)
-      if (!existsSync(indexPath) || !existsSync(metaPath)) {
-        await initMemdirIndex(memoryDir)
-      } else {
-        const indexMtime = statSync(indexPath).mtimeMs
-        let storedFileCount = -1
-        let storedTotalSize = -1
-        let storedFileFingerprint = ''
-        let storedContentHash = ''
-        try {
-          const meta = JSON.parse(readFileSync(metaPath, 'utf-8'))
-          storedFileCount = typeof meta.fileCount === 'number' ? meta.fileCount : -1
-          storedTotalSize = typeof meta.totalSize === 'number' ? meta.totalSize : -1
-          storedFileFingerprint = typeof meta.fileFingerprint === 'string' ? meta.fileFingerprint : (typeof meta.contentHash === 'string' ? meta.contentHash : '')
-          storedContentHash = typeof meta.contentHash === 'string' ? meta.contentHash : ''
-        } catch { /* ignore */ }
-        if (stats.latestMtime > indexMtime || stats.count !== storedFileCount || stats.totalSize !== storedTotalSize || stats.fileFingerprint !== storedFileFingerprint || stats.contentHash !== storedContentHash) {
-          await initMemdirIndex(memoryDir)
-        }
-      }
-    }
-  }
-
-  if (!state.db) return []
+): Promise<MemdirSearchHit[]> {
+  ensureMemdirIndex(memoryDir, false)
+  const store = getStore(memoryDir)
+  if (!store) return []
 
   try {
-    const results = await search(state.db, { term: query, limit })
-    return results.hits.map(hit => {
-      const doc = hit.document
-      return {
-        path: doc.path,
-        filename: doc.filename,
-        title: doc.title,
-        type: doc.type,
-        description: doc.description,
-        content: doc.content ?? '',
-        score: hit.score || 0,
-      }
-    })
-  } catch {
+    return store.recall(query, { limit }).map(result => ({
+      path: result.sourcePath,
+      title: result.title ?? '',
+      description: result.description ?? '',
+      content: result.text,
+      heading: result.heading,
+      sessionId: result.sessionId,
+      sourceType: result.sourceType,
+      timestamp: result.sourceTimestamp,
+      score: result.score,
+      matchedTerms: result.matchedTerms,
+    }))
+  } catch (error) {
+    logForDebugging(`[memdir] memory search failed: ${errorMessage(error)}`, { level: 'warn' })
     return []
   }
 }
 
-async function saveIndexWithStats(memoryDir: string, knownStats?: MdStats): Promise<void> {
-  const state = indices.get(memoryDir)
-  if (!state?.db) return
-  if (!isAutoMemoryEnabled() || isMemoryWriteApprovalRequired()) return
-  const indexPath = getIndexPath(memoryDir)
-  const metaPath = getIndexMetaPath(memoryDir)
-  try {
-    const data = await persist(state.db, 'binary')
-    const indexData = Buffer.from(data as Uint8Array)
-    writeFileSync(indexPath, indexData)
-    const stats = knownStats ?? getMdStats(memoryDir)
-    const meta = {
-      fileCount: stats.count,
-      totalSize: stats.totalSize,
-      fileFingerprint: stats.fileFingerprint,
-      contentHash: stats.contentHash,
-      indexHash: createHash('sha256').update(indexData).digest('hex'),
-    }
-    writeFileSync(metaPath, JSON.stringify(meta), 'utf-8')
-  } catch {
-    // persist failed — non-fatal
-  }
-}
-
-export async function saveIndex(memoryDir: string): Promise<void> {
-  await saveIndexWithStats(memoryDir)
-}
-
+/** Close and forget the index for one memory directory. */
 export function clearIndex(memoryDir: string): void {
-  indices.delete(memoryDir)
+  const dbPath = getMemoryDbPathForDir(memoryDir)
+  stores.get(dbPath)?.close()
+  stores.delete(dbPath)
+  states.delete(memoryDir)
 }
 
 export function clearAllIndices(): void {
-  indices.clear()
+  for (const store of stores.values()) store.close()
+  stores.clear()
+  states.clear()
+  unavailableDiagnosticLogged = false
 }

@@ -363,8 +363,8 @@
     // "disable": "disable"  ← uncomment to fully turn off auto mode
   },
 
-  // ── 23. KNOWLEDGE GRAPH / SESSIONS ──────────────────────────────────────────
-  // Spatial tiles and knowledge graph behaviour (used by conversationRecovery.ts).
+  // ── 23. SESSIONS ──────────────────────────────────────────
+  // Spatial tiles and session history behaviour (used by conversationRecovery.ts).
   // Leave empty unless you've enabled those experimental paths.
   "spatialLayout": [],
   "historyLayout": [],

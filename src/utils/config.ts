@@ -677,9 +677,6 @@ export type GlobalConfig = {
   // (avoiding 11× saveGlobalConfig lock+re-read on every startup).
   migrationVersion?: number
 
-  // Knowledge Graph configuration
-  knowledgeGraphEnabled: boolean
-
   // Startup splash logo color scheme — set via /logo. See
   // src/components/StartupScreen.palettes.ts for valid values. Stored as a
   // plain string (validated on read) to avoid pulling a UI module into the
@@ -740,7 +737,6 @@ function createDefaultGlobalConfig(): GlobalConfig {
     copyFullResponse: false,
     providerProfiles: [],
     openaiAdditionalModelOptionsCacheByProfile: {},
-    knowledgeGraphEnabled: true,
     maxMessagesCompactionThreshold: 'off',
   }
   return config
@@ -792,7 +788,6 @@ export const GLOBAL_CONFIG_KEYS = [
   'defaultStatusLineEnabled',
   'remoteControlAtStartup',
   'remoteDialogSeen',
-  'knowledgeGraphEnabled',
   'logoColor',
   'maxMessagesCompactionThreshold',
 ] as const
@@ -903,7 +898,6 @@ function getTestGlobalConfigForTesting(): GlobalConfig {
     testGlobalConfigForTesting = {
       ...DEFAULT_GLOBAL_CONFIG,
       autoUpdates: false,
-      knowledgeGraphEnabled: true,
     }
   }
   return testGlobalConfigForTesting

@@ -180,7 +180,7 @@ messages
   → callModel({ systemPrompt, messages, tools, ... })
 ```
 
-Important: `fullSystemPrompt` (used for context accounting and compaction) includes `appendSystemContext(systemPrompt, systemContext)`, but the final API call passes `systemPrompt: promptWithArc` which may differ. The hidden user context is always prepended immediately before the model call.
+Important: `fullSystemPrompt` (used for context accounting and compaction) includes `appendSystemContext(systemPrompt, systemContext)`, but the final API call passes `systemPrompt: promptWithMemory` which may differ. The hidden user context is always prepended immediately before the model call.
 
 ---
 

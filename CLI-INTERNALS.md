@@ -1550,10 +1550,6 @@ Edit persistent memory files
 
 Run memory consolidation — synthesize recent sessions into durable memories
 
-### `/knowledge enable <yes|no> | clear | status | list`[#](https://gakrcli.netlify.app/#cmd-knowledge)
-
-Manage the native Knowledge Graph
-
 ### `/wiki [init|status]`[#](https://gakrcli.netlify.app/#cmd-wiki)
 
 Initialize and inspect the GakrCLI project wiki
