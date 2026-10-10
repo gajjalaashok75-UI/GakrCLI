@@ -128,6 +128,9 @@ const GoalTool = feature('GOAL')
 const LocalMemoryRecallTool = feature('LOCAL_MEMORY')
   ? require('./tools/LocalMemoryRecallTool/LocalMemoryRecallTool.js').LocalMemoryRecallTool
   : null
+const MemoryRecallTool = feature('MEMORY_RETRIEVAL')
+  ? require('./tools/MemoryRecallTool/MemoryRecallTool.js').MemoryRecallTool
+  : null
 const VaultHttpFetchTool = feature('LOCAL_VAULT')
   ? require('./tools/VaultHttpFetchTool/VaultHttpFetchTool.js').VaultHttpFetchTool
   : null
@@ -227,6 +230,7 @@ export function getAllBaseTools(): Tools {
     SkillTool,
     EnterPlanModeTool,
     ...(LocalMemoryRecallTool ? [LocalMemoryRecallTool] : []),
+    ...(MemoryRecallTool ? [MemoryRecallTool] : []),
     ...(VaultHttpFetchTool ? [VaultHttpFetchTool] : []),
     ...(SuggestBackgroundPRTool ? [SuggestBackgroundPRTool] : []),
     ...(WebBrowserTool ? [WebBrowserTool] : []),

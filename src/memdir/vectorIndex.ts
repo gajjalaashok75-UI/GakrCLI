@@ -232,6 +232,11 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+/** One-line byte size for debug logs (never logs content). */
+function chunksNote(raw: string): string {
+  return `${raw.length} bytes`
+}
+
 function frontmatterString(frontmatter: Record<string, unknown> | undefined, key: string): string | null {
   const value = frontmatter?.[key]
   return typeof value === 'string' && value.trim() ? value.trim() : null
@@ -259,6 +264,7 @@ function indexOne(
   } catch (error) {
     // One unreadable file must not stop the run; record it and move on.
     stats.errors++
+    logForDebugging(`[memdir] index error (unreadable): ${source.relPath}: ${errorMessage(error)}`, { level: 'warn' })
     store.markSourceError({ ...source, absPath: source.fullPath }, errorMessage(error))
     return
   }
@@ -269,6 +275,8 @@ function indexOne(
     stats.skipped++
     return
   }
+  const changed = Boolean(previous) || force
+  logForDebugging(`[memdir] indexing (${previous ? 'changed' : force ? 'forced' : 'new'}): ${source.relPath} (${chunksNote(raw)})`)
 
   try {
     const parsed = parseFrontmatter(raw)
@@ -310,8 +318,10 @@ function indexOne(
       chunks,
     )
     stats.indexed++
+    logForDebugging(`[memdir] indexed: ${source.relPath}`)
   } catch (error) {
     stats.errors++
+    logForDebugging(`[memdir] index error: ${source.relPath}: ${errorMessage(error)}`, { level: 'warn' })
     store.markSourceError({ ...source, absPath: source.fullPath }, errorMessage(error))
   }
 }
@@ -362,6 +372,10 @@ export function ensureMemdirIndex(memoryDir: string, force = false): MemdirIndex
   )
 
   state.lastFingerprint = getMemdirFingerprint(memoryDir)
+  logForDebugging(
+    `[memdir] index pass done (${force ? 'forced' : 'corpus changed'}): indexed=${stats.indexed}` +
+      ` skipped=${stats.skipped} removed=${stats.removed} errors=${stats.errors}`,
+  )
   return stats
 }
 
@@ -408,7 +422,16 @@ export async function searchMemdirIndex(
   if (!store) return []
 
   try {
-    return store.recall(query, { limit }).map(result => ({
+    const { results, debug } = store.recallWithDebug(query, { limit })
+    logForDebugging(
+      `[memdir] search: ${debug.terms.length} term(s), candidates=${debug.candidates}` +
+        ` rejectedByCoverage=${debug.rejectedByCoverage} duplicates=${debug.duplicates}` +
+        ` → ${results.length} result(s)` +
+        (results.length > 0
+          ? ` topScore=${results[0]!.score.toFixed(2)}`
+          : ''),
+    )
+    return results.map(result => ({
       path: result.sourcePath,
       title: result.title ?? '',
       description: result.description ?? '',

@@ -69,6 +69,7 @@ import {
 // on GrowthBook initialization. Values may be stale but are updated in background.
 
 import { errorMessage, getErrnoCode } from '../../utils/errors.js'
+import { logForDebugging } from '../../utils/debug.js'
 import {
   getDynamicConfig_CACHED_MAY_BE_STALE,
   getFeatureValue_CACHED_MAY_BE_STALE,
@@ -170,6 +171,14 @@ export function shouldExtractMemory(messages: Message[]): boolean {
     (hasMetTokenThreshold && hasMetToolCallThreshold) ||
     (hasMetTokenThreshold && !hasToolCallsInLastTurn)
 
+  logForDebugging(
+    `[sessionMemory] shouldExtract=${shouldExtract}` +
+      ` (${currentTokenCount} tokens; tokenThresholdMet=${hasMetTokenThreshold}` +
+      ` toolCallsSinceLastUpdate=${toolCallsSinceLastUpdate}` +
+      ` toolCallThresholdMet=${hasMetToolCallThreshold}` +
+      ` toolCallsInLastTurn=${hasToolCallsInLastTurn})`,
+  )
+
   if (shouldExtract) {
     const lastMessage = messages[messages.length - 1]
     if (lastMessage?.uuid) {
@@ -205,6 +214,7 @@ async function setupSessionMemoryFile(
       encoding: 'utf-8',
       mode: 0o600,
     })
+    logForDebugging(`[sessionMemory] summary file created: ${memoryPath}`)
   } catch (e: unknown) {
     const code = getErrnoCode(e)
     if (code !== 'EEXIST') {
@@ -312,6 +322,9 @@ const extractSessionMemory = sequential(async function (
   // Set up file system and read current state with isolated context
   const { memoryPath, currentMemory } =
     await setupSessionMemoryFile(setupContext)
+  logForDebugging(
+    `[sessionMemory] extracting (auto): path=${memoryPath}, current=${currentMemory.length} chars`,
+  )
 
   // Create extraction message
   const userPrompt = await buildSessionMemoryUpdatePrompt(
@@ -330,6 +343,8 @@ const extractSessionMemory = sequential(async function (
     forkLabel: 'session_memory',
     overrides: { readFileState: setupContext.readFileState },
   })
+
+  logForDebugging('[sessionMemory] extraction (auto) finished')
 
   // Log extraction event for tracking frequency
   // Use the token usage from the last message in the conversation
@@ -399,6 +414,9 @@ export async function manuallyExtractSessionMemory(
     return { success: false, error: 'No messages to summarize' }
   }
   markExtractionStarted()
+  logForDebugging(
+    `[sessionMemory] extracting (manual /summary): ${messages.length} messages`,
+  )
 
   try {
     // Create isolated context for setup to avoid polluting parent's cache
@@ -441,6 +459,7 @@ export async function manuallyExtractSessionMemory(
 
     // Log manual extraction event
     logEvent('tengu_session_memory_manual_extraction', {})
+    logForDebugging('[sessionMemory] extraction (manual /summary) finished')
 
     // Record the context size at extraction for tracking minimumTokensBetweenUpdate
     recordExtractionTokenCount(tokenCountWithEstimation(messages))

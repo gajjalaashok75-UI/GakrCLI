@@ -201,6 +201,23 @@ passes through `sanitizeMemoryText()` (whole-secret entries are dropped).
 > The banner still reads `PERSISTENT PROJECT MEMORY (VECTOR RAG)` for continuity.
 > The retrieval is lexical; there are no embeddings.
 
+### Debug Logging (`--debug`)
+
+Every stage of the pipeline emits `logForDebugging()` lines (prefix `[memdir]`,
+or `[sessionMemory]` for session summaries) that appear in
+`~/.gakrcli/debug/<sessionId>.txt` when run with `--debug` (or `/debug` / a
+`--debug-file`):
+
+| Stage | Line(s) |
+|-------|---------|
+| Indexing | `indexing (new/changed/forced): <relPath> (N bytes)`, `indexed: <relPath>`, warn on unreadable/failed sources, and `index pass done (corpus changed/forced): indexed=N skipped=N removed=N errors=N` |
+| BM25 search | `search: N term(s), candidates=N rejectedByCoverage=N duplicates=N → N result(s) topScore=X.XX` |
+| Injection | `retrieval: cache miss, searching (query=N chars)` / `retrieval: cache hit`, `injection: 0 hits → injecting nothing`, `injection: rendered X/Y hit(s), N chars` |
+| `memory_recall` tool | `memory_recall: query="…" N chunk hit(s) → N source(s) in Nms` |
+| Session summary | `summary file created: <path>`, `extracting (auto/manual): path=…, current=N chars`, `extraction finished`, and the per-turn `shouldExtract=… (N tokens; tokenThresholdMet=… toolCallsSinceLastUpdate=… toolCallsInLastTurn=…)` decision |
+
+Memory content is never logged — only paths, counts, byte lengths, and scores.
+
 ## Legacy Knowledge Migration (`utils/knowledgeGraph.ts`)
 
 `migrateLegacyKnowledgeGraph()` still runs before each retrieval so a user with
@@ -219,7 +236,7 @@ index handle and removes `memory.db` (plus `-wal`/`-shm`).
 
 | Gate | Where | Default | Effect |
 |------|-------|---------|--------|
-| `MEMORY_RETRIEVAL` | build (`scripts/build.ts`) | `true` | Retrieval + prompt injection call site in `query.ts` |
+| `MEMORY_RETRIEVAL` | build (`scripts/build.ts`) | `true` | Retrieval + prompt injection call site in `query.ts`; also gates registration of the `memory_recall` tool |
 | `EXTRACT_MEMORIES` | build | `true` | LLM memory extraction (see `autoupdate-store.md`) |
 | `isAutoMemoryEnabled()` | env/settings | on (interactive) | Gates injection; one-shot `-p` runs default off unless memory is provisioned |
 | `autoMemoryDirectory` | trusted settings | — | Overrides the memory dir (and therefore where `memory.db` lives) |
@@ -238,6 +255,7 @@ gating a derived cache on it forced a full rebuild on every process).
 | `src/memdir/memoryChunk.ts` | Heading-aware markdown chunker (pure; no I/O) |
 | `src/memdir/vectorIndex.ts` | Discovery (memory + all session summaries), fingerprint, incremental indexing, public façade (`initMemdirIndex`, `rebuildIndex`, `searchMemdirIndex`, `ensureMemdirIndex`) |
 | `src/memdir/retrieval.ts` | Query extraction, relevance-block rendering, block cache, `retrieveMemoryBlock` |
+| `src/tools/MemoryRecallTool/MemoryRecallTool.ts` | `memory_recall` tool: grouped, provenance-tagged search over the same index (gated on `MEMORY_RETRIEVAL`) |
 | `src/memdir/paths.ts` | `getAutoMemPath()`, `getMemoryDbPath()` / `getMemoryDbPathForDir()`, `isAutoMemoryEnabled()` |
 | `src/memdir/memorySecurity.ts` | Secret redaction for everything injected |
 | `src/utils/knowledgeGraph.ts` | Legacy migration shim (writes `.facts/`); graph getters kept for tests only |
@@ -251,6 +269,7 @@ gating a derived cache on it forced a full rebuild on every process).
 | `src/memdir/memoryStore.test.ts` | schema version, FTS sync on insert/update/delete, ranking, degenerate/quoted/punctuation queries, relevance gate, dedupe, provenance, filters, transaction atomicity, error bookkeeping, corrupt DB, newer schema, FTS5-unavailable diagnostics |
 | `src/memdir/vectorIndex.test.ts` | recursive discovery + exclusions, symlink boundaries, incremental add/edit/equal-size-edit/delete/rename, full rebuild, session-summary discovery + session ids, unreadable source handling, per-directory isolation, index placement |
 | `src/memdir/retrieval.test.ts` | block rendering + fence, no-junk on unrelated prompts, term-coverage rejection, cross-session summary injection, block-cache invalidation (edit/add/delete/session change) |
+| `src/tools/MemoryRecallTool/MemoryRecallTool.test.ts` | permissions/read-only, `limit` validation, grouped hits, session-summary provenance, empty result, `tool_result` serialization |
 
 Run them with the bounded per-file pattern used in `AGENTS.md`:
 
@@ -277,6 +296,27 @@ These no longer exist; do not look for them in the source tree or in the UI:
 dependencies (and in the build's external lists) but are no longer imported by
 production code.
 
+## On-Demand Tool: `memory_recall`
+
+The same search used for per-turn injection is exposed to the model as a tool
+(`src/tools/MemoryRecallTool/`, registered in `getAllBaseTools()` behind
+`feature('MEMORY_RETRIEVAL')`):
+
+- **Schema** — `query: string` (required), `limit?: number` (1–20, default 8).
+- **Read-only, concurrency-safe**, auto-allow permissions, strict schema.
+- **Behavior** — `call()` runs `searchMemdirIndex(query, memDir, limit)`,
+  groups chunk hits by source path (best score first), sanitizes titles and
+  excerpts, and returns `{ query, totalHits, hits[] }` with path, heading,
+  session id, source type, score, and a bounded excerpt per source. The
+  `tool_result` block renders `# title — heading (path) [session xxxxxxxx]`
+  plus the excerpt; an empty result explains the lexical (non-semantic) nature
+  of the search so the model reformulates rather than giving up.
+- **Gating** — visible only when the build flag is on **and** auto-memory is
+  enabled, so the tool never appears while the injection pipeline itself is off.
+- **Tests** — `src/tools/MemoryRecallTool/MemoryRecallTool.test.ts` covers
+  permissions/read-only, limit validation, grouped hits, session-summary
+  provenance, the empty result, and `tool_result` serialization.
+
 ## Deferred (Not Implemented)
 
 - **Semantic/embedding search** — no vector dependency, no embeddings. The schema
@@ -288,10 +328,6 @@ production code.
   calls/results are *not* indexed. The `sources.source_type` column exists so new
   record kinds can be added without a redesign, and event timestamps would flow
   into `chunks.source_ts`.
-- **`memory_recall` agent tool** — not registered. Retrieval is already a clean
-  internal service (`MemoryStore.recall()` → text, path, heading, session id,
-  timestamp, score, matched terms), so a future tool should call it rather than
-  duplicate the search.
 
 ## Comparison with Auto-Memory (ExtractMemories)
 
@@ -299,6 +335,6 @@ production code.
 |--------|---------------------------|-------------------------------|
 | **Engine** | SQLite FTS5 BM25 | Full LLM (forked agent) |
 | **Storage** | Getter/index only — markdown files stay the source of truth | Markdown topic files + `MEMORY.md` |
-| **Retrieval** | `searchMemdirIndex()` per user prompt, injected under a DATA-ONLY fence | `MEMORY.md` index + Read tool + (dormant) LLM recall |
+| **Retrieval** | `searchMemdirIndex()` per user prompt, injected under a DATA-ONLY fence, plus on-demand `memory_recall` tool | `MEMORY.md` index + Read tool + (dormant) LLM recall |
 | **Cost** | Local computation, no tokens | Token cost per extraction |
 | **Failure mode** | Degrades to "no injection" with a diagnostic | No memory written |
