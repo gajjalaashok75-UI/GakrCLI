@@ -45,9 +45,6 @@ export const COMMON_EXTERNALS: string[] = [
   // tree-sitter-wasms ships per-language .wasm files resolved via
   // require.resolve at runtime — same bundling concern as web-tree-sitter.
   'tree-sitter-wasms',
-  // Orama search engine
-  '@orama/orama',
-  '@orama/plugin-data-persistence',
   // Bun runtime and package manager
   'bun',
   'byn',

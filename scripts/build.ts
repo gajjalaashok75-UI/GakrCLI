@@ -89,7 +89,7 @@ const featureFlags: Record<string, boolean> = {
   LAN_PIPES: true,                    // LAN pipe IPC (experimental)
   LODESTONE: false,                   // Lodestone integration (Anthropic internal)
   MCP_RICH_OUTPUT: true,              // MCP rich output formatting
-  MEMORY_RETRIEVAL: true,             // Memory recall into system prompt via Orama index (memdir/retrieval.ts)
+  MEMORY_RETRIEVAL: true,             // Memory recall into system prompt via memory.db FTS5 index (memdir/retrieval.ts)
   MEMORY_SHAPE_TELEMETRY: true,       // Memory shape telemetry
   NATIVE_CLIENT_ATTESTATION: false,   // Client attestation (native)
   NATIVE_CLIPBOARD_IMAGE: false,      // Native clipboard image support

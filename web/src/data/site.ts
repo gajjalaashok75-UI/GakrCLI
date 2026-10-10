@@ -7,7 +7,7 @@ export const SITE = {
   installCommand: 'npm install -g @gakr-gakr/gakrcli@latest',
   npmUrl: 'https://www.npmjs.com/package/@gakr-gakr/gakrcli',
   github: 'https://github.com/gajjalaashok75-UI/gakrcli',
-  version: '0.5.8',
+  version: '0.6.1',
   ogDefault: '/og/default.png',
   ogDocs: '/og/docs.png',
 } as const

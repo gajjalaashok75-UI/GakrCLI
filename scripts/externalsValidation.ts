@@ -34,8 +34,6 @@ export type PkgInstallHygiene = PkgDeps & {
  * itself, never papered over with an override.
  */
 export const RUNTIME_DEPENDENCY_CONTRACT: Readonly<Record<string, string>> = {
-  '@orama/orama': '3.1.18',
-  '@orama/plugin-data-persistence': '3.1.18',
   '@vscode/ripgrep': '1.18.0',
 }
 

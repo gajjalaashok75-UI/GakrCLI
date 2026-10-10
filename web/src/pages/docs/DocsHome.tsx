@@ -37,7 +37,9 @@ export default function DocsHome() {
 
       <h2 id="features">features</h2>
       <ul>
-        <li><strong>Real tools, not just chat</strong> — Bash, file edits, grep, glob, MCP servers, skills, and plugins — all wired into the agent loop</li>
+        <li><strong>Real tools, not just chat</strong> — Bash, file edits, grep, glob, a full <a href="/docs/tools/">browser automation tool</a>, MCP servers, skills, and plugins — all wired into the agent loop</li>
+        <li><strong>Subagents &amp; goals</strong> — delegate to specialized <a href="/docs/agents/">agents</a>, run teams in parallel, and set proactive <code>/goal</code> conditions the agent drives toward autonomously</li>
+        <li><strong>Persistent memory</strong> — auto-memory files with a local full-text index recall project knowledge across sessions; <code>/dream</code> consolidates it in the background</li>
         <li><strong>Streaming diffs</strong> — Watch the agent think, call tools, and produce diffs live. Every change stays reviewable</li>
         <li><strong>Non-interactive mode</strong> — <code>--print</code> mode with JSON and <code>stream-json</code> output, tool allowlists, budgets, and session control</li>
         <li><strong>Session management</strong> — Resume, branch, and rewind conversations. Background tasks, worktree isolation, remote session from your phone</li>

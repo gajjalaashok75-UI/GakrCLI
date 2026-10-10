@@ -292,9 +292,9 @@ These no longer exist; do not look for them in the source tree or in the UI:
 | Orama persistence (`.vector-index`, `.vector-index-meta.json`) | the previous index format, replaced by `memory.db` |
 | `KNOWLEDGE`, `CONVERSATION_ARC`, `MULTI_TURN_CONTEXT` build flags | build-time gates for the above |
 
-`@orama/orama` and `@orama/plugin-data-persistence` are still listed as
-dependencies (and in the build's external lists) but are no longer imported by
-production code.
+The `@orama/orama` and `@orama/plugin-data-persistence` packages have been
+removed from `package.json` and the build's external lists — nothing in the
+source tree imports them any more.
 
 ## On-Demand Tool: `memory_recall`
 

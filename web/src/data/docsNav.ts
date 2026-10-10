@@ -22,6 +22,8 @@ export const docsNav: DocsNavGroup[] = [
     group: 'reference',
     items: [
       { title: 'Slash commands', href: '/docs/slash-commands/' },
+      { title: 'Tools', href: '/docs/tools/' },
+      { title: 'Agents', href: '/docs/agents/' },
       { title: 'CLI reference', href: '/docs/cli-reference/' },
       { title: 'Configuration', href: '/docs/configuration/' },
       { title: 'Keybindings', href: '/docs/keybindings/' },

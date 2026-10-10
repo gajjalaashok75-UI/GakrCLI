@@ -4,6 +4,7 @@ import { settingsFiles, settingOptions, envVars } from '../../data/configuration
 const toc = [
   { id: 'settings-files', label: 'settings files' },
   { id: 'common-options', label: 'common options' },
+  { id: 'memory', label: 'memory & auto-dream' },
   { id: 'environment-variables', label: 'environment variables' },
   { id: 'project-instructions', label: 'project instructions' },
 ]
@@ -61,6 +62,45 @@ export default function Configuration() {
         </table>
       </div>
       <p>One-off overrides beat files: <code>--settings</code> accepts a path or inline JSON, and <code>--setting-sources</code> restricts which layers load — see the <a href="/docs/cli-reference/#config">CLI reference</a>.</p>
+
+      <h2 id="memory">memory &amp; auto-dream</h2>
+      <p>
+        GakrCLI maintains a per-project auto-memory: markdown files the agent writes as it
+        learns about your codebase (conventions, gotchas, architecture notes), plus a
+        session summary per conversation. Everything is stored locally under
+        <code>~/.gakrcli/</code> — nothing leaves the machine.
+      </p>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">key</th>
+              <th scope="col">what it does</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>autoMemoryEnabled</code></td>
+              <td>Set to <code>false</code> to disable auto-memory reads and writes for a project (e.g. regulated or client-sensitive repos). If both this and its alias are set, the more restrictive value wins.</td>
+            </tr>
+            <tr>
+              <td><code>autoMemoryDirectory</code></td>
+              <td>Override where the memory directory lives (defaults beside the project&rsquo;s git root so worktrees share one memory).</td>
+            </tr>
+            <tr>
+              <td><code>autoDreamEnabled</code></td>
+              <td>Enable background memory consolidation (&ldquo;auto-dream&rdquo;): once enough time and new sessions have accumulated, a forked subagent runs the /dream prompt to review, merge, and prune memory files automatically.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Memory is searchable: relevant notes are recalled into context automatically, and
+        the model can search on demand with the <code>memory_recall</code> tool (enabled
+        whenever auto-memory is on). Edit memory directly with <code>/memory</code>, or run
+        consolidation manually with <code>/dream</code>. You can also disable all
+        non-essential traffic with <code>GAKR_CODE_DISABLE_NONESSENTIAL_TRAFFIC</code>.
+      </p>
 
       <h2 id="environment-variables">environment variables</h2>
       <p>Auth and transport are driven by environment variables, which makes CI and <code>--print</code> scripting straightforward:</p>

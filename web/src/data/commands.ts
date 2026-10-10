@@ -17,6 +17,8 @@ export interface SlashCommand {
   category: CommandCategory
   /** argument hint, mirrors the CLI's autocomplete hint */
   args?: string
+  /** extended "how it works" detail, shown under the entry */
+  details?: string
 }
 
 export const commandCategories: { id: CommandCategory; label: string; blurb: string }[] = [
@@ -65,11 +67,14 @@ export const commands: SlashCommand[] = [
   { name: 'rename', description: 'Rename the current conversation', category: 'session', args: '[name]' },
   { name: 'branch', description: 'Create a branch of the current conversation at this point', category: 'session', args: '[name]' },
   { name: 'rewind', description: 'Restore the code and/or conversation to a previous point', category: 'session' },
+  { name: 'teleport', description: 'Resume a GakrCLI session from gakrcli.ai', category: 'session' },
   { name: 'export', description: 'Export the current conversation to a file or clipboard', category: 'session', args: '[filename]' },
   { name: 'copy', description: "Copy the agent's last response to clipboard (or /copy N for the Nth-latest)", category: 'session', args: '[N]' },
   { name: 'btw', description: 'Ask a quick side question without interrupting the main conversation', category: 'session', args: '<question>' },
-  { name: 'goal', description: 'Set and manage a session completion goal', category: 'session', args: '[condition|status|pause|resume|clear]' },
-  { name: 'tasks', description: 'List and manage background tasks', category: 'session' },
+  { name: 'goal', description: 'Set and manage a session completion goal', category: 'session', args: '[condition|status|pause|resume|clear]', details: '/goal <condition> sets a completion condition (e.g. "/goal all tests pass on main"). Once set, an evaluator checks after every turn whether the condition is met; if not, the agent is automatically instructed to keep working toward it — up to 50 turns before pausing. /goal status shows the current state (status, turn count, elapsed time, last evaluator reason); /goal pause and /goal resume suspend or restart automatic continuation; /goal clear (aliases: stop, off, reset, none, cancel) removes the goal. Permission checks are never bypassed: if a turn needs your approval, the run waits for you.' },
+  { name: 'proactive', description: 'Toggle proactive (autonomous) mode — the agent keeps working between your inputs', category: 'session', details: 'When enabled, the agent receives periodic tick prompts and continues autonomously between user inputs instead of idling after each turn. SleepTool controls pacing between ticks. Combine with /goal so autonomy is steered toward a concrete completion condition.' },
+  { name: 'tasks', description: 'List and manage background tasks', category: 'session', details: 'Shows every background shell and delegated agent currently running, with their status and output. Use it to inspect, read output from, or stop work running in the background (alias: /bashes).' },
+  { name: 'daemon', description: 'Manage background sessions and the daemon', category: 'session', args: '[status|start|stop|bg|attach|logs|kill]', details: 'Runs and manages detached background sessions. /daemon status (default) shows the daemon and its sessions; start/stop control the daemon process itself; /daemon bg starts the current session as a background session; attach reconnects to one (run `gakrcli daemon attach` from the CLI — it is interactive); logs tails a background session’s log; kill terminates a session.' },
   { name: 'session', description: 'Show remote session URL and QR code', category: 'session' },
   { name: 'desktop', description: 'Continue the current session in Gakr Desktop', category: 'session' },
   { name: 'mobile', description: 'Show QR code to download the Gakr mobile app', category: 'session' },
@@ -80,8 +85,8 @@ export const commands: SlashCommand[] = [
   { name: 'files', description: 'List all files currently in context', category: 'context' },
   { name: 'add-dir', description: 'Add a new working directory', category: 'context', args: '<path>' },
   { name: 'init', description: 'Initialize a new project instruction file with codebase documentation', category: 'context' },
-  { name: 'memory', description: 'Edit persistent memory files', category: 'context' },
-  { name: 'dream', description: 'Run memory consolidation — synthesize recent sessions into durable memories', category: 'context' },
+  { name: 'memory', description: 'Edit persistent memory files', category: 'context', details: 'Opens the memory layer for editing: GAKRCLI.md project instructions plus the auto-memory files the agent writes as it learns about your project. Auto-memory is indexed into a local SQLite full-text index that powers recall and the memory_recall tool.' },
+  { name: 'dream', description: 'Run memory consolidation — synthesize recent sessions into durable memories', category: 'context', details: 'Reviews, organizes, and prunes your auto-memory files: merges duplicates, drops stale entries, and promotes durable facts. Runs on demand; background consolidation (auto-dream) can also fire automatically once enough new sessions have accumulated — tune it with the autoDreamEnabled setting.' },
   { name: 'wiki', description: 'Initialize and inspect the GakrCLI project wiki', category: 'context', args: '[init|status]' },
   { name: 'cost', description: 'Show the total cost and duration of the current session', category: 'context' },
   { name: 'request-size', description: 'Show estimated request context load and top contributors', category: 'context' },
@@ -99,6 +104,10 @@ export const commands: SlashCommand[] = [
 
   // ── code review & git ────────────────────────────────────────────────
   { name: 'diff', description: 'View uncommitted changes and per-turn diffs', category: 'workflow' },
+  { name: 'commit', description: 'Create a git commit', category: 'workflow', details: 'Has the agent write a commit message and create the commit for the current changes. Commit attribution (co-author line etc.) is configurable via /commit-message.' },
+  { name: 'commit-push-pr', description: 'Commit, push, and open a pull request', category: 'workflow' },
+  { name: 'autofix-pr', description: 'Auto-fix CI failures on a pull request', category: 'workflow' },
+  { name: 'bughunter', description: 'Systematic four-phase bug hunt — map, hunt, skeptic pass, fix proposal', category: 'workflow', details: 'Runs a structured hunt: map the code, hunt for bugs, adversarially re-verify each finding (skeptic pass), then propose fixes. Specialized variants exist for security (/bughunter-security) and performance (/bughunter-perf).' },
   { name: 'review', description: 'Review a pull request', category: 'workflow' },
   { name: 'security-review', description: 'Complete a security review of the pending changes on the current branch', category: 'workflow' },
   { name: 'pr-comments', description: 'Get comments from a GitHub pull request', category: 'workflow' },
@@ -114,7 +123,9 @@ export const commands: SlashCommand[] = [
   { name: 'plugin', description: 'Manage GakrCLI plugins', category: 'tools' },
   { name: 'reload-plugins', description: 'Activate pending plugin changes in the current session', category: 'tools' },
   { name: 'skills', description: 'List available skills', category: 'tools' },
-  { name: 'agents', description: 'Manage agent configurations', category: 'tools' },
+  { name: 'agents', description: 'Manage agent configurations', category: 'tools', details: 'Interactive manager for agent definitions: list built-in and custom agents, inspect their tools/model, and edit the markdown files under .gakrcli/agents/ or ~/.gakrcli/agents/. See the agents page.' },
+  { name: 'workflows', description: 'Manage workflow scripts', category: 'tools', details: 'Workflow scripts in .gakrcli/workflows/ (YAML/Markdown) give the agent deterministic multi-step orchestration — loops, conditionals, and fan-out across subagents with caching and resume support.' },
+  { name: 'web-tools', description: 'Configure web search and web fetch backends', category: 'tools' },
   { name: 'hooks', description: 'View hook configurations for tool events', category: 'tools' },
   { name: 'permissions', description: 'Manage allow & deny tool permission rules', category: 'tools' },
 
@@ -138,6 +149,8 @@ export const commands: SlashCommand[] = [
   { name: 'stats', description: 'Show your usage statistics and activity', category: 'diagnostics' },
   { name: 'insights', description: 'Generate a report analyzing your GakrCLI sessions', category: 'diagnostics' },
   { name: 'release-notes', description: 'View release notes', category: 'diagnostics' },
+  { name: 'update', description: 'Update GakrCLI to the latest version', category: 'diagnostics', args: '[latest|stable|<version>] [--force]', details: 'Downloads and installs a release channel or an explicit version. Auto-updates can be disabled with the allowAutoUpdates setting; the release channel defaults to latest and is configurable via autoUpdatesChannel.' },
+  { name: 'env', description: 'Show current environment, runtime, and feature flags', category: 'diagnostics' },
   { name: 'feedback', description: 'Submit feedback about GakrCLI', category: 'diagnostics', args: '[report]' },
 ]
 
