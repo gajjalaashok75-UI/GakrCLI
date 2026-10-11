@@ -71,6 +71,9 @@ export type PromptCommand = {
   // Glob patterns for file paths this skill applies to
   // When set, the skill is only visible after the model touches matching files
   paths?: string[]
+  // Keyword triggers (OpenHands extension). Auto-activates this skill when the
+  // user's message contains any of these as a whole token.
+  triggers?: string[]
   getPromptForCommand(
     args: string,
     context: ToolUseContext,
@@ -224,6 +227,9 @@ export type CommandBase = {
   whenToUse?: string // From the "Skill" spec. Detailed usage scenarios for when to use this command
   whenToUseLocalizationKey?: LocalizationKey
   version?: string // Version of the command/skill
+  // Keyword triggers (OpenHands extension). Auto-activates this skill when the
+  // user's message contains any of these as a whole token.
+  triggers?: string[]
   disableModelInvocation?: boolean // Whether to disable this command from being invoked by models
   userInvocable?: boolean // Whether users can invoke this skill by typing /skill-name
   loadedFrom?:

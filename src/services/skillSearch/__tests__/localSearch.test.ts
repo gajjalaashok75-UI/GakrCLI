@@ -16,6 +16,7 @@ function makeEntry(overrides: Partial<SkillIndexEntry>): SkillIndexEntry {
       overrides.normalizedName ?? name.toLowerCase().replace(/[-_]/g, ' '),
     description: overrides.description ?? '',
     whenToUse: overrides.whenToUse,
+    triggers: overrides.triggers ?? [],
     source: overrides.source ?? 'test',
     loadedFrom: overrides.loadedFrom,
     skillRoot: overrides.skillRoot,

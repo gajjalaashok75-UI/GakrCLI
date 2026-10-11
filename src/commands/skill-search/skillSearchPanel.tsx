@@ -3,7 +3,12 @@ import { Box, Text, useInput } from '../../ink.js';
 import { Dialog } from '../../ink.js';
 import { useRegisterOverlay } from '../../context/overlayContext.js';
 import type { LocalJSXCommandOnDone } from '../../types/command.js';
-import { isSkillSearchEnabled } from '../../services/skillSearch/featureCheck.js';
+import { logForDebugging } from '../../utils/debug.js';
+import {
+  getSkillSearchMode,
+  setSkillSearchMode,
+  type SkillSearchMode,
+} from '../../services/skillSearch/featureCheck.js';
 
 type SkillSearchAction = {
   label: string;
@@ -15,59 +20,81 @@ const ACTION_LABEL_COLUMN_WIDTH = 28;
 
 const ABOUT_TEXT = `# Skill Search (自动技能匹配)
 
-Skill Search 控制对话中的自动技能匹配功能。
-
-启用后，GakrCLI Code 会在每轮对话中自动搜索并加载与当前任务最相关的 skill 文件，
-无需手动指定。搜索基于 TF-IDF 向量余弦相似度，支持英文词干化和 CJK bi-gram 分词。
+Skill Search 使用确定性的关键字触发匹配（OpenHands 风格）在对话中查找相关 skill。
+每个 skill 通过其 frontmatter 的 triggers: 关键字（以及 skill 名称本身）被触发，
+匹配基于整个词（whole-token），大小写不敏感。
 
 ## 工作原理
-1. 对话开始时，自动索引 .gakrcli/skills/ 和 ~/.gakrcli/skills/ 下的 Markdown 文件
-2. 每轮对话根据上下文自动匹配最相关的 skill
-3. 匹配到的 skill 内容会作为上下文注入，指导 GakrCLI Code 的行为
+1. 对话开始时，索引 .gakrcli/skills/ 和 ~/.gakrcli/skills/ 下的 skill 文件
+2. 每轮对话根据用户输入，按触发关键字进行确定性匹配
+3. 匹配到的 skill 会作为建议展示；在 hybrid 模式下，其内容会自动注入上下文
+
+## 模式
+- normal — 匹配后仅展示相关 skill 建议，不自动注入内容
+- hybrid — 匹配后自动将 skill 指令注入上下文
+- off    — 关闭自动技能匹配
 
 ## 控制方式
-- /skill-search start  — 启用自动匹配
-- /skill-search stop   — 禁用自动匹配
+- /skill-search normal — 仅建议
+- /skill-search hybrid — 自动注入
+- /skill-search stop   — 关闭
 - /skill-search status — 查看当前状态
 
-当前状态: ${isSkillSearchEnabled() ? '已启用' : '未启用'}
+当前模式: ${getSkillSearchMode()}
 `;
 
 function getStatusText(): string {
+  const mode = getSkillSearchMode();
   return [
     'Skill Search (自动技能匹配)',
-    `Status: ${isSkillSearchEnabled() ? 'enabled' : 'disabled'}`,
+    `Mode: ${mode}`,
     '',
-    'When enabled, relevant skills are automatically matched and',
-    'injected into conversation context each turn.',
+    'Matching is deterministic keyword-trigger based (OpenHands style).',
+    'normal = suggest matches · hybrid = auto-inject matched skills · off = disabled',
   ].join('\n');
 }
 
-async function startSkillSearch(): Promise<string> {
-  if (isSkillSearchEnabled() && process.env.SKILL_SEARCH_ENABLED !== '0') {
-    return 'Skill Search: already enabled';
-  }
-
-  process.env.SKILL_SEARCH_ENABLED = '1';
-  const lines = ['Skill Search: enabled (SKILL_SEARCH_ENABLED=1)'];
-
+async function clearCacheAfterModeChange(): Promise<string> {
+  logForDebugging('[skill-search] mode change: clearing trigger index cache');
   try {
-    const { clearSkillIndexCache } = await import('../../services/skillSearch/localSearch.js');
-    clearSkillIndexCache();
-    lines.push('Skill index cache: cleared (will rebuild on next search)');
+    const { clearTriggerIndexCache } = await import('../../services/skillSearch/triggerMatch.js');
+    clearTriggerIndexCache();
+    return 'Skill index cache: cleared (will rebuild on next search)';
   } catch {
-    lines.push('Skill index cache: clear skipped');
+    return 'Skill index cache: clear skipped';
   }
+}
 
+async function startSkillSearch(): Promise<string> {
+  if (getSkillSearchMode() !== 'off') {
+    return `Skill Search: already enabled (mode=${getSkillSearchMode()})`;
+  }
+  const applied = setSkillSearchMode('normal');
+  const lines = [`Skill Search: enabled (mode=${applied})`];
+  lines.push(await clearCacheAfterModeChange());
+  logForDebugging(`[skill-search] command: start (mode=${applied})`);
   return lines.join('\n');
 }
 
 async function stopSkillSearch(): Promise<string> {
-  if (!isSkillSearchEnabled()) {
+  if (getSkillSearchMode() === 'off') {
     return 'Skill Search: already disabled';
   }
-  process.env.SKILL_SEARCH_ENABLED = '0';
+  setSkillSearchMode('off');
+  logForDebugging('[skill-search] command: stop (disabled)');
   return 'Skill Search: disabled (SKILL_SEARCH_ENABLED=0)';
+}
+
+async function setModeAndReport(mode: SkillSearchMode): Promise<string> {
+  const applied = setSkillSearchMode(mode);
+  logForDebugging(`[skill-search] command: set mode=${applied}`);
+  const headline =
+    applied === 'hybrid'
+      ? 'Skill Search: mode=hybrid (matched skills auto-injected)'
+      : applied === 'normal'
+        ? 'Skill Search: mode=normal (matched skills suggested only)'
+        : 'Skill Search: disabled';
+  return [headline, await clearCacheAfterModeChange()].join('\n');
 }
 
 function SkillSearchPanel({ onDone }: { onDone: LocalJSXCommandOnDone }): React.ReactNode {
@@ -78,13 +105,18 @@ function SkillSearchPanel({ onDone }: { onDone: LocalJSXCommandOnDone }): React.
     () => [
       {
         label: 'Status',
-        description: 'Show whether automatic skill matching is active',
+        description: 'Show the current skill-search mode',
         run: () => Promise.resolve(getStatusText()),
       },
       {
-        label: 'Start',
-        description: 'Enable automatic skill matching for this session',
-        run: startSkillSearch,
+        label: 'Normal',
+        description: 'Deterministic matching; suggest skills without injecting',
+        run: () => setModeAndReport('normal'),
+      },
+      {
+        label: 'Hybrid',
+        description: 'Deterministic matching; auto-inject matched skill content',
+        run: () => setModeAndReport('hybrid'),
       },
       {
         label: 'Stop',
@@ -146,10 +178,18 @@ function SkillSearchPanel({ onDone }: { onDone: LocalJSXCommandOnDone }): React.
 }
 
 export async function call(onDone: LocalJSXCommandOnDone, _context: unknown, args?: string): Promise<React.ReactNode> {
-  const trimmed = args?.trim() ?? '';
+  const trimmed = args?.trim().toLowerCase() ?? '';
 
   if (trimmed === 'start') {
     onDone(await startSkillSearch(), { display: 'system' });
+    return null;
+  }
+  if (trimmed === 'normal') {
+    onDone(await setModeAndReport('normal'), { display: 'system' });
+    return null;
+  }
+  if (trimmed === 'hybrid') {
+    onDone(await setModeAndReport('hybrid'), { display: 'system' });
     return null;
   }
   if (trimmed === 'stop') {

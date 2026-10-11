@@ -1,6 +1,7 @@
 ---
 name: typescript-expert
 description: TypeScript and JavaScript expert with deep knowledge of type-level programming, performance optimization, monorepo management, migration strategies, and modern tooling.
+triggers: typescript,ts,tsconfig
 ---
 
 # TypeScript Expert

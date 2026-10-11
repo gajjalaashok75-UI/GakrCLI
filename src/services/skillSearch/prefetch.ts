@@ -2,13 +2,12 @@ import type { Attachment } from '../../utils/attachments.js'
 import type { Message } from '../../types/message.js'
 import type { ToolUseContext } from '../../Tool.js'
 import type { DiscoverySignal } from './signals.js'
-import { isSkillSearchEnabled } from './featureCheck.js'
+import { getSkillSearchMode, isSkillSearchEnabled } from './featureCheck.js'
 import {
-  getSkillIndex,
-  searchSkills,
-  type SearchResult,
-} from './localSearch.js'
-import { normalizeQueryIntent } from './intentNormalize.js'
+  getSkillTriggerIndex,
+  matchSkillTriggers,
+  type TriggerMatchResult,
+} from './triggerMatch.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -43,10 +42,12 @@ function addBoundedSessionEntry(set: Set<string>, value: string): void {
   }
 }
 
-const AUTO_LOAD_MIN_SCORE = Number(
-  process.env.SKILL_SEARCH_AUTOLOAD_MIN_SCORE ?? '0.30',
-)
-const AUTO_LOAD_LIMIT = Number(process.env.SKILL_SEARCH_AUTOLOAD_LIMIT ?? '2')
+/**
+ * In `hybrid` mode at most this many matched skills are auto-injected, each
+ * truncated to {@link AUTO_LOAD_MAX_CHARS}. Bounded so a broadly-matching
+ * trigger cannot flood the context.
+ */
+const AUTO_LOAD_LIMIT = Number(process.env.SKILL_SEARCH_AUTOLOAD_LIMIT ?? '3')
 const AUTO_LOAD_MAX_CHARS = Number(
   process.env.SKILL_SEARCH_AUTOLOAD_MAX_CHARS ?? '12000',
 )
@@ -124,12 +125,23 @@ type SkillDiscoveryGap = {
   activePath?: string
 }
 
+/**
+ * Map trigger matches to discovery results. In `hybrid` mode the matched
+ * skill content is loaded and attached so the model receives the full
+ * instructions; in `normal` mode only the name/description suggestion is
+ * surfaced.
+ */
 async function enrichResultsForAutoLoad(
-  results: SearchResult[],
+  results: TriggerMatchResult[],
   context: ToolUseContext,
 ): Promise<SkillDiscoveryResult[]> {
+  const hybrid = getSkillSearchMode() === 'hybrid'
   let loadedCount = 0
   const enriched: SkillDiscoveryResult[] = []
+
+  logForDebugging(
+    `[skill-search] enriching ${results.length} match(es) in ${hybrid ? 'hybrid' : 'normal'} mode (auto-load limit=${AUTO_LOAD_LIMIT}, maxChars=${AUTO_LOAD_MAX_CHARS})`,
+  )
 
   for (const result of results) {
     const base: SkillDiscoveryResult = {
@@ -138,19 +150,32 @@ async function enrichResultsForAutoLoad(
       score: result.score,
     }
 
-    if (loadedCount >= AUTO_LOAD_LIMIT || result.score < AUTO_LOAD_MIN_SCORE) {
+    if (!hybrid) {
+      enriched.push(base)
+      continue
+    }
+    if (loadedCount >= AUTO_LOAD_LIMIT) {
+      logForDebugging(
+        `[skill-search] auto-load limit ${AUTO_LOAD_LIMIT} reached; suggesting (not injecting) ${result.name}`,
+      )
       enriched.push(base)
       continue
     }
 
     const loaded = await loadSkillContent(result)
     if (!loaded) {
+      logForDebugging(
+        `[skill-search] no SKILL.md content for ${result.name} (skillRoot=${result.skillRoot ?? 'none'}); suggesting only`,
+      )
       enriched.push(base)
       continue
     }
 
     loadedCount++
     await markAutoLoadedSkill(result.name, loaded.path, loaded.content, context)
+    logForDebugging(
+      `[skill-search] auto-loaded ${result.name} from ${loaded.path} (${loaded.content.length} chars)`,
+    )
     enriched.push({
       ...base,
       autoLoaded: true,
@@ -163,7 +188,7 @@ async function enrichResultsForAutoLoad(
 }
 
 async function loadSkillContent(
-  result: SearchResult,
+  result: TriggerMatchResult,
 ): Promise<{ path: string; content: string } | null> {
   if (!result.skillRoot) return null
 
@@ -202,7 +227,7 @@ async function markAutoLoadedSkill(
 
 async function maybeRecordSkillGap(
   queryText: string,
-  results: SearchResult[],
+  results: TriggerMatchResult[],
   context: ToolUseContext,
   trigger: DiscoverySignal['trigger'],
 ): Promise<SkillDiscoveryGap | undefined> {
@@ -251,21 +276,35 @@ export async function startSkillDiscoveryPrefetch(
   messages: Message[],
   toolUseContext: ToolUseContext,
 ): Promise<Attachment[]> {
-  if (!isSkillSearchEnabled()) return []
+  if (!isSkillSearchEnabled()) {
+    logForDebugging(
+      '[skill-search] prefetch skipped: skill search disabled (run /skill-search)',
+    )
+    return []
+  }
 
   const startedAt = Date.now()
   const queryText = extractQueryFromMessages(input, messages)
   if (!queryText.trim()) return []
 
+  logForDebugging(
+    `[skill-search] prefetch start (mode=${getSkillSearchMode()}) query="${queryText.slice(0, 120)}"`,
+  )
+
   try {
     const cwd =
       ((toolUseContext as Record<string, unknown>).cwd as string) ??
       process.cwd()
-    const index = await getSkillIndex(cwd)
-    const results = searchSkills(queryText, index)
+    const index = await getSkillTriggerIndex(cwd)
+    const results = matchSkillTriggers(queryText, index)
 
     const newResults = results.filter(r => !discoveredThisSession.has(r.name))
-    if (newResults.length === 0) return []
+    if (newResults.length === 0) {
+      logForDebugging(
+        `[skill-search] prefetch: no new skills (matched=${results.length}, all already surfaced this session)`,
+      )
+      return []
+    }
 
     for (const r of newResults)
       addBoundedSessionEntry(discoveredThisSession, r.name)
@@ -276,11 +315,11 @@ export async function startSkillDiscoveryPrefetch(
       startedAt,
       durationMs: Date.now() - startedAt,
       indexSize: index.length,
-      method: 'tfidf',
+      method: 'trigger',
     }
 
     logForDebugging(
-      `[skill-search] prefetch found ${newResults.length} skills in ${signal.durationMs}ms`,
+      `[skill-search] prefetch matched ${newResults.length} new skill(s) in ${signal.durationMs}ms: ${newResults.map(r => r.name).join(', ')}`,
     )
 
     return [
@@ -318,13 +357,14 @@ export async function getTurnZeroSkillDiscovery(
   try {
     const cwd =
       ((context as Record<string, unknown>).cwd as string) ?? process.cwd()
-    const index = await getSkillIndex(cwd)
-    // Intent normalization (feature-flagged, ASCII-only fast path, graceful
-    // fallback to original). Turn-zero is the one blocking entry — acceptable
-    // to add a Haiku call here since a bad match here pollutes the LLM's
-    // context for the entire session.
-    const searchQuery = await normalizeQueryIntent(input)
-    const results = searchSkills(searchQuery, index)
+    const index = await getSkillTriggerIndex(cwd)
+    // Deterministic trigger matching — no scoring/threshold, no LLM call. A
+    // skill fires when one of its `triggers:` (or its name) appears as a whole
+    // token in the user's message.
+    const results = matchSkillTriggers(input, index)
+    logForDebugging(
+      `[skill-search] turn-zero start (mode=${getSkillSearchMode()}) query="${input.slice(0, 120)}"`,
+    )
     const enriched = await enrichResultsForAutoLoad(results, context)
     const gap = enriched.some(result => result.autoLoaded)
       ? undefined
@@ -341,11 +381,12 @@ export async function getTurnZeroSkillDiscovery(
       startedAt,
       durationMs: Date.now() - startedAt,
       indexSize: index.length,
-      method: 'tfidf',
+      method: 'trigger',
     }
 
     logForDebugging(
-      `[skill-search] turn-zero found ${results.length} skills in ${signal.durationMs}ms`,
+      `[skill-search] turn-zero matched ${results.length} skills in ${signal.durationMs}ms` +
+        (gap ? ` (gap=${gap.status})` : ''),
     )
 
     return buildDiscoveryAttachment(enriched, signal, gap)
@@ -353,4 +394,10 @@ export async function getTurnZeroSkillDiscovery(
     logForDebugging(`[skill-search] turn-zero error: ${error}`)
     return null
   }
+}
+
+/** Reset session-scoped discovery/gap bookkeeping between tests. */
+export function __resetPrefetchSessionForTest(): void {
+  discoveredThisSession.clear()
+  recordedGapSignals.clear()
 }

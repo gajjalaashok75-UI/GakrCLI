@@ -1,6 +1,7 @@
 ---
 name: python-reviewer
 description: "Python code review specialist for correctness, typing, packaging, tests, data handling, performance, and production reliability. Use when reviewing Python scripts, services, APIs, notebooks, ML code, or data pipelines."
+triggers: python,py
 ---
 
 ## Use this skill when

@@ -1,6 +1,7 @@
 ---
 name: vercel-deployment
 description: "Expert knowledge for deploying to Vercel with Next.js Use when: vercel, deploy, deployment, hosting, production."
+triggers: vercel,deployment,deploy
 ---
 
 # Vercel Deployment

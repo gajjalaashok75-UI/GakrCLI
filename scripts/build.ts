@@ -136,7 +136,7 @@ const featureFlags: Record<string, boolean> = {
   HOOK_PROMPTS: true,                 // Allow tools to request interactive user prompts
   KAIROS_CHANNELS: true,               // Local MCP channel delivery without assistant-mode cloud pieces
   WORKFLOW_SCRIPTS: true,              // Workflow scripts (.gakrcli/workflows/ YAML/MD)
-  EXPERIMENTAL_SKILL_SEARCH: true,     // TF-IDF skill search (DiscoverSkillsTool)
+  EXPERIMENTAL_SKILL_SEARCH: true,     // Trigger-based skill search (DiscoverSkillsTool)
   GOAL: true,                          // Goal tracking tool & command
   POOR: true,                          // 穷鬼模式，跳过 extract_memories/prompt_suggestion 减少消耗
   ULTRAPLAN: true,                     // Ultraplan multi-phase planning system

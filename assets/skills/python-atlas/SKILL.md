@@ -1,6 +1,7 @@
 ---
 name: python-atlas
 description: Comprehensive Python development orchestrator. Covers Python patterns, FastAPI, testing, performance, packaging, and Python best practices. Use when building Python applications.
+triggers: python,py
 ---
 
 ## PRIMACY ZONE — Identity and Purpose

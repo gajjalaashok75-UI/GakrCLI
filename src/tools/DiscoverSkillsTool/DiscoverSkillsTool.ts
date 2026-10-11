@@ -2,6 +2,7 @@ import { z } from 'zod/v4'
 import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
 import { buildTool } from 'src/Tool.js'
 import { lazySchema } from 'src/utils/lazySchema.js'
+import { logForDebugging } from 'src/utils/debug.js'
 import {
   DISCOVER_SKILLS_TOOL_NAME,
   DESCRIPTION,
@@ -84,14 +85,29 @@ export const DiscoverSkillsTool = buildTool({
   },
 
   async call(input: DiscoverInput, context) {
-    const { getSkillIndex, searchSkills } = await import(
-      'src/services/skillSearch/localSearch.js'
+    const { getSkillTriggerIndex, matchSkillTriggers } = await import(
+      'src/services/skillSearch/triggerMatch.js'
     )
     const { getCwd } = await import('src/utils/cwd.js')
     const cwd = getCwd()
 
-    const index = await getSkillIndex(cwd)
-    const results = searchSkills(input.description, index, input.limit ?? 5)
+    logForDebugging(
+      `[skill-search] DiscoverSkills tool called: "${input.description.slice(0, 120)}" (limit=${input.limit ?? 5})`,
+    )
+
+    const index = await getSkillTriggerIndex(cwd)
+    const allMatches = matchSkillTriggers(input.description, index)
+    const results = allMatches.slice(0, input.limit ?? 5)
+
+    logForDebugging(
+      `[skill-search] DiscoverSkills returning ${results.length}/${allMatches.length} matches` +
+        (allMatches.length > results.length
+          ? ` (truncated by limit=${input.limit ?? 5})`
+          : '') +
+        (results.length > 0
+          ? `: ${results.map(r => r.name).join(', ')}`
+          : ': none'),
+    )
 
     return {
       data: {

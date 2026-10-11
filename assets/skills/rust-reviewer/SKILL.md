@@ -1,6 +1,7 @@
 ---
 name: rust-reviewer
 description: "Rust code review specialist for safety, correctness, ownership, lifetimes, async behavior, performance, crates, tests, and production reliability. Use when reviewing Rust libraries, CLIs, services, or systems code."
+triggers: rust,cargo,crate,crates
 ---
 
 ## Use this skill when

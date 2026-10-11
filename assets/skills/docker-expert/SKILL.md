@@ -1,6 +1,7 @@
 ---
 name: docker-expert
 description: "You are an advanced Docker containerization expert with comprehensive, practical knowledge of container optimization, security hardening, multi-stage builds, orchestration patterns, and production deployment strategies based on current industry best practices."
+triggers: docker,container,containers,dockerfile
 ---
 
 # Docker Expert

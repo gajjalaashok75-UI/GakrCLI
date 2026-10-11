@@ -5,6 +5,7 @@ description: 'Debugging specialist for errors, test failures, and unexpected
   behavior. Use proactively when encountering any issues.
 
   '
+triggers: debug,debugging,stack trace
 ---
 
 ## Use this skill when

@@ -1,10 +1,12 @@
 import { logForDebugging } from '../../utils/debug.js'
+import { clearTriggerIndexCache } from './triggerMatch.js'
 
 export interface SkillIndexEntry {
   name: string
   normalizedName: string
   description: string
   whenToUse: string | undefined
+  triggers: string[]
   source: string
   loadedFrom: string | undefined
   skillRoot: string | undefined
@@ -185,10 +187,20 @@ let cachedIndex: SkillIndexEntry[] | null = null
 let cachedIdf: Map<string, number> | null = null
 let cachedCwd: string | null = null
 
+/**
+ * Invalidate every skill-search index layer.
+ *
+ * Callers invalidate after the skill set changes (MCP `list_changed`, a
+ * learned skill being written, command caches being cleared) and expect the
+ * *next* discovery pass to rebuild. Discovery now reads the deterministic
+ * trigger index in triggerMatch.ts, so both layers must be dropped together —
+ * otherwise newly added skills stay invisible until the process restarts.
+ */
 export function clearSkillIndexCache(): void {
   cachedIndex = null
   cachedIdf = null
   cachedCwd = null
+  clearTriggerIndexCache()
   logForDebugging('[skill-search] index cache cleared')
 }
 
@@ -206,6 +218,10 @@ export async function getSkillIndex(cwd: string): Promise<SkillIndexEntry[]> {
     const name = cmd.name
     const description = cmd.description ?? ''
     const whenToUse = (cmd as Record<string, unknown>).whenToUse as string | undefined
+    const triggers =
+      ((cmd as Record<string, unknown>).triggers as string[] | undefined) ?? []
+    const source =
+      ((cmd as Record<string, unknown>).source as string) ?? 'unknown'
     const allowedTools =
       ((cmd as Record<string, unknown>).allowedTools as string[] | undefined)?.join(' ') ?? ''
 
@@ -241,7 +257,8 @@ export async function getSkillIndex(cwd: string): Promise<SkillIndexEntry[]> {
       normalizedName: normalizeSkillName(name),
       description,
       whenToUse,
-      source: ((cmd as Record<string, unknown>).source as string) ?? 'unknown',
+      triggers,
+      source,
       loadedFrom: (cmd as Record<string, unknown>).loadedFrom as string | undefined,
       skillRoot: (cmd as Record<string, unknown>).skillRoot as string | undefined,
       contentLength: (cmd as Record<string, unknown>).contentLength as number | undefined,

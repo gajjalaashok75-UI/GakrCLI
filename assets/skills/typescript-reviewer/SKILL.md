@@ -1,6 +1,7 @@
 ---
 name: typescript-reviewer
 description: "TypeScript code review specialist for type safety, frontend and backend correctness, React behavior, Node APIs, async flows, tests, and maintainability. Use when reviewing TypeScript, JavaScript with types, React, Next.js, or Node changes."
+triggers: typescript,ts
 ---
 
 ## Use this skill when

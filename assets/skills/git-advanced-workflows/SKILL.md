@@ -1,6 +1,7 @@
 ---
 name: git-advanced-workflows
 description: "Master advanced Git techniques to maintain clean history, collaborate effectively, and recover from any situation with confidence."
+triggers: git,rebase,cherry-pick
 ---
 
 # Git Advanced Workflows

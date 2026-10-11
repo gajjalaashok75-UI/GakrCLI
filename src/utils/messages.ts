@@ -4019,13 +4019,35 @@ Read the team config to discover your teammates' names. Check the task list peri
   if (feature('EXPERIMENTAL_SKILL_SEARCH')) {
     if (attachment.type === 'skill_discovery') {
       if (attachment.skills.length === 0) return []
-      const lines = attachment.skills.map(s => `- ${s.name}: ${s.description}`)
-      return wrapMessagesInSystemReminder([
-        createUserMessage({
-          content:
-            `Skills relevant to your task:\n\n${lines.join('\n')}\n\n` +
+      const suggested = attachment.skills.filter(s => !s.autoLoaded)
+      const injected = attachment.skills.filter(
+        s => s.autoLoaded && typeof s.content === 'string' && s.content.trim(),
+      )
+
+      const sections: string[] = []
+      logForDebugging(
+        `[skill-search] rendering discovery reminder: ${suggested.length} suggested, ${injected.length} auto-injected` +
+          (attachment.skills.length > 0
+            ? ` (${attachment.skills.map(s => s.name).join(', ')})`
+            : ''),
+      )
+      if (suggested.length > 0) {
+        const lines = suggested.map(s => `- ${s.name}: ${s.description}`)
+        sections.push(
+          `Skills relevant to your task:\n\n${lines.join('\n')}\n\n` +
             `These skills encode project-specific conventions. ` +
             `Invoke via Skill("<name>") for complete instructions.`,
+        )
+      }
+      for (const skill of injected) {
+        sections.push(
+          `### Skill: ${skill.name}\n\n${skill.content}`,
+        )
+      }
+      if (sections.length === 0) return []
+      return wrapMessagesInSystemReminder([
+        createUserMessage({
+          content: sections.join('\n\n---\n\n'),
           isMeta: true,
         }),
       ])

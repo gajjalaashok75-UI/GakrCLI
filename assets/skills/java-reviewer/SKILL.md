@@ -1,6 +1,7 @@
 ---
 name: java-reviewer
 description: "Java code review specialist for correctness, security, performance, concurrency, testing, and maintainability. Use when reviewing Java, JVM, Spring, Maven, Gradle, or enterprise backend changes."
+triggers: java,jvm
 ---
 
 ## Use this skill when

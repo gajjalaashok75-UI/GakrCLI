@@ -16,6 +16,11 @@ export type FrontmatterData = {
   type?: string | null
   'argument-hint'?: string | null
   when_to_use?: string | null
+  // Keyword triggers (OpenHands extension). Auto-activates the skill when the
+  // user's message contains any of these as a whole token. Accepts either a
+  // comma-separated string or a YAML list of strings. Empty/absent means the
+  // skill has no triggers (it can still be matched by its name).
+  triggers?: string | string[] | null
   version?: string | null
   // Only applicable to slash commands -- a string similar to a boolean env var
   // to determine whether to make them visible to the SlashCommand tool.
@@ -229,6 +234,39 @@ export function splitPathInFrontmatter(input: string | string[]): string[] {
   return parts
     .filter(p => p.length > 0)
     .flatMap(pattern => expandBraces(pattern))
+}
+
+/**
+ * Parse a `triggers:` frontmatter value into a list of keyword strings.
+ *
+ * Unlike `splitPathInFrontmatter`, this does NOT expand brace patterns or do
+ * any glob interpretation — triggers are plain keywords, so `{`/`}` are
+ * treated as literal characters. Accepts either a YAML list or a
+ * comma-separated string. Blank entries and surrounding whitespace are
+ * dropped; duplicates are removed while preserving first-seen order.
+ */
+export function parseTriggersFromFrontmatter(
+  input: string | string[] | null | undefined,
+): string[] {
+  if (input == null) return []
+  const raw = Array.isArray(input)
+    ? input.flatMap(v => (typeof v === 'string' ? v.split(',') : []))
+    : input.split(',')
+
+  const seen = new Set<string>()
+  const triggers: string[] = []
+  for (const part of raw) {
+    const trimmed = part.trim()
+    if (!trimmed || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    triggers.push(trimmed)
+  }
+  if (triggers.length > 0) {
+    logForDebugging(
+      `[skill-search] parsed ${triggers.length} trigger(s) from frontmatter: [${triggers.join(', ')}]`,
+    )
+  }
+  return triggers
 }
 
 /**

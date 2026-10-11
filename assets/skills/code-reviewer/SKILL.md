@@ -1,6 +1,7 @@
 ---
 name: code-reviewer
 description: "Elite code review expert specializing in modern AI-powered code"
+triggers: code review,review my code,code quality
 ---
 
 ## Use this skill when

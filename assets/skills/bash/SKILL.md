@@ -1,6 +1,7 @@
 ---
 name: bash
 description: "Comprehensive Bash scripting and Linux command orchestrator. Covers defensive patterns, Linux commands, professional scripting, and automation. Use when working with shell scripts or Linux/macOS commands."
+triggers: bash,shell,shell script
 ---
 
 ## PRIMACY ZONE — Identity and Purpose

@@ -44,6 +44,7 @@ import {
   parseBooleanFrontmatter,
   parseFrontmatter,
   parseShellFrontmatter,
+  parseTriggersFromFrontmatter,
   splitPathInFrontmatter,
 } from '../utils/frontmatterParser.js'
 import { getFsImplementation } from '../utils/fsOperations.js'
@@ -207,6 +208,7 @@ export function parseSkillFrontmatterFields(
   argumentHint: string | undefined
   argumentNames: string[]
   whenToUse: string | undefined
+  triggers: string[]
   version: string | undefined
   model: ReturnType<typeof parseUserSpecifiedModel> | undefined
   disableModelInvocation: boolean
@@ -262,6 +264,7 @@ export function parseSkillFrontmatterFields(
       frontmatter.arguments as string | string[] | undefined,
     ),
     whenToUse: frontmatter.when_to_use as string | undefined,
+    triggers: parseTriggersFromFrontmatter(frontmatter.triggers),
     version: frontmatter.version as string | undefined,
     model,
     disableModelInvocation: parseBooleanFrontmatter(
@@ -289,6 +292,7 @@ export function createSkillCommand({
   argumentHint,
   argumentNames,
   whenToUse,
+  triggers,
   version,
   model,
   disableModelInvocation,
@@ -312,6 +316,7 @@ export function createSkillCommand({
   argumentHint: string | undefined
   argumentNames: string[]
   whenToUse: string | undefined
+  triggers: string[]
   version: string | undefined
   model: string | undefined
   disableModelInvocation: boolean
@@ -326,6 +331,11 @@ export function createSkillCommand({
   effort: EffortValue | undefined
   shell: FrontmatterShell | undefined
 }): Command {
+  if (triggers.length > 0) {
+    logForDebugging(
+      `[skill-search] skill "${skillName}" declares triggers: [${triggers.join(', ')}]`,
+    )
+  }
   return {
     type: 'prompt',
     name: skillName,
@@ -335,6 +345,7 @@ export function createSkillCommand({
     argumentHint,
     argNames: argumentNames.length > 0 ? argumentNames : undefined,
     whenToUse,
+    triggers,
     version,
     model,
     disableModelInvocation,

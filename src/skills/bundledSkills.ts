@@ -21,6 +21,7 @@ export type BundledSkillDefinition = {
   whenToUse?: string
   whenToUseKey?: LocalizationKey
   argumentHint?: string
+  triggers?: string[]
   allowedTools?: string[]
   model?: string
   disableModelInvocation?: boolean
@@ -86,6 +87,7 @@ export function registerBundledSkill(definition: BundledSkillDefinition): void {
     hasUserSpecifiedDescription: true,
     allowedTools: definition.allowedTools ?? [],
     argumentHint: definition.argumentHint,
+    triggers: definition.triggers,
     get whenToUse() {
       if (definition.whenToUseKey) {
         return localize(definition.whenToUseKey, definition.whenToUse ?? '')

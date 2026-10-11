@@ -76,7 +76,7 @@ export const toolGroups: ToolGroup[] = [
     tools: [
       { name: 'memory_recall', description: 'On-demand search over the SQLite (FTS5/BM25) memory index — auto-memory markdown files plus every session summary. Returns provenance-tagged hits (path, heading, session, score, excerpt). Enabled when auto-memory is on.' },
       { name: 'Skill', description: 'Invoke a skill: a reusable, versionable prompt that teaches the agent a repeatable process (bundled or your own in ~/.gakrcli/skills/).' },
-      { name: 'DiscoverSkills', description: 'Search available skills by topic (TF-IDF) so the agent can find a relevant skill it was not explicitly told about.' },
+      { name: 'DiscoverSkills', description: 'Search available skills by keyword trigger so the agent can find a relevant skill it was not explicitly told about.' },
     ],
   },
   {

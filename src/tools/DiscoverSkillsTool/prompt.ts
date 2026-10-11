@@ -10,4 +10,6 @@ Use this when:
 - You're pivoting to a different kind of work mid-conversation
 - You want to find specialized skills for an unusual workflow
 
-The search uses TF-IDF keyword matching against all registered skills (bundled, user-defined, and MCP-provided). Results include skill name, description, and relevance score.`
+Matching is deterministic and keyword-trigger based: a skill matches when one
+of its \`triggers:\` keywords — or its name — appears in the description as a
+whole token. Matching skills are also surfaced automatically each turn.`
