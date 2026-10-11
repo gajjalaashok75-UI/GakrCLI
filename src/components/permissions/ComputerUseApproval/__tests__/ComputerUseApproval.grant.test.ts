@@ -12,8 +12,8 @@ const REQUEST: CuPermissionRequest = {
   requestId: 'test',
   reason: 'Testing computer use functionality',
   apps: [
-    { requestedName: 'notepad', resolved: NOTEPAD, alreadyGranted: false },
-    { requestedName: 'ghost app', resolved: undefined, alreadyGranted: false },
+    { requestedName: 'notepad', resolved: NOTEPAD, isSentinel: false, alreadyGranted: false, proposedTier: 'full' },
+    { requestedName: 'ghost app', resolved: undefined, isSentinel: false, alreadyGranted: false, proposedTier: 'full' },
   ],
   requestedFlags: {},
   screenshotFiltering: 'none',

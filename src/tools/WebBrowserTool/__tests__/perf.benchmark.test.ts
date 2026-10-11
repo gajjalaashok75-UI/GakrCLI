@@ -99,7 +99,7 @@ describe('Browser Module — Performance Benchmark (defensive path timing)', () 
     const t0 = performance.now();
     for (let i = 0; i < 200; i++) {
       const t = performance.now();
-      const r = await server.click(1, undefined);
+      const r = await server.click(1, false);
       samples.push(performance.now() - t);
       expect(typeof r).toBe('string');
     }

@@ -162,10 +162,7 @@ describe('Browser Module — Stress Tests (defensive code paths)', () => {
     for (let i = 0; i < 200; i++) {
       const { server } = await makeServerWithFakeCdp();
       const t = performance.now();
-      const r = await server.uploadFile({
-        path: path.join(tmp, `__missing_${i}.txt`),
-        // fakePage is about:blank — no file input
-      });
+      const r = await server.uploadFile(0, path.join(tmp, `__missing_${i}.txt`));
       samples.enoent.push(performance.now() - t);
       expect(typeof r).toBe('string');
     }
@@ -188,7 +185,7 @@ describe('Browser Module — Stress Tests (defensive code paths)', () => {
       const server = new BrowserServer();
       (server as any).page = fakePage;
       const t = performance.now();
-      const r = await server.uploadFile({ path: realFile });
+      const r = await server.uploadFile(0, realFile);
       samples.wrongClass.push(performance.now() - t);
       expect(typeof r).toBe('string');
     }
@@ -211,7 +208,7 @@ describe('Browser Module — Stress Tests (defensive code paths)', () => {
       const server = new BrowserServer();
       (server as any).page = fakePage;
       const t = performance.now();
-      const r = await server.uploadFile({ path: realFile });
+      const r = await server.uploadFile(0, realFile);
       samples.success.push(performance.now() - t);
       expect(typeof r).toBe('string');
     }

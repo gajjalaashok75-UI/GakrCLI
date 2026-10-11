@@ -97,7 +97,7 @@ describe('setStorage defends against non-iterable / malformed input', () => {
     const { server, addCookies, cdpSend } = await makeServerWithFakePage();
     // cookies is an object instead of an array — the original bug.
     const result = await server.setStorage({
-      // @ts-expect-error: deliberately malformed
+      // deliberately malformed
       cookies: { '0': { name: 'a', value: 'b' } },
       origins: [{ origin: 'https://example.com', localStorage: [{ name: 'k', value: 'v' }] }],
     });
@@ -112,7 +112,7 @@ describe('setStorage defends against non-iterable / malformed input', () => {
     const { server, addCookies, cdpSend } = await makeServerWithFakePage();
     const result = await server.setStorage({
       cookies: [{ name: 'a', value: 'b', domain: '.example.com', path: '/' }],
-      // @ts-expect-error: deliberately malformed
+      // deliberately malformed
       origins: 'not-an-array',
     });
     expect(result).toBe('Storage set successfully');
