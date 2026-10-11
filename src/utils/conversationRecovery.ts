@@ -777,3 +777,11 @@ export async function findResumeSessionIdByPrSelector(
   if (!log) return null
   return getSessionIdFromLog(log) ?? null
 }
+
+export async function loadConversationForResumeFromPr(
+  selector: true | string,
+): ReturnType<typeof loadConversationForResume> {
+  const log = findResumeLogByPrSelector(await loadMessageLogs(), selector)
+  if (!log) return null
+  return loadConversationForResume(log, undefined)
+}

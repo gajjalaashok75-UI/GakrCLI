@@ -53,7 +53,6 @@ describe('detectStaleProjectSettingsPaths', () => {
   test('does not warn when the matching canonical project settings file exists', async () => {
     const project = createProject()
     writeJson(join(project, '.gakrcli', 'settings.json'))
-    writeJson(join(project, '.opengakrcli', 'settings.json'))
 
     await expect(detectStaleProjectSettingsPaths(project)).resolves.toBeNull()
   })
@@ -66,8 +65,8 @@ describe('detectStaleProjectSettingsPaths', () => {
 
   test('does not warn when only canonical settings files exist', async () => {
     const project = createProject()
-    writeJson(join(project, '.opengakrcli', 'settings.json'))
-    writeJson(join(project, '.opengakrcli', 'settings.local.json'))
+    writeJson(join(project, '.gakrcli', 'settings.json'))
+    writeJson(join(project, '.gakrcli', 'settings.local.json'))
 
     await expect(detectStaleProjectSettingsPaths(project)).resolves.toBeNull()
   })

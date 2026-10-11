@@ -56,7 +56,7 @@ import { count, uniq } from './utils/array.js';
 import { getSubscriptionType, isGakrCLIAISubscriber, prefetchAwsCredentialsAndBedRockInfoIfSafe, prefetchGcpCredentialsIfSafe, validateForceLoginOrg } from './utils/auth.js';
 import { checkHasTrustDialogAccepted, getGlobalConfig, getRemoteControlAtStartup, isAutoUpdaterDisabled, saveGlobalConfig } from './utils/config.js';
 import { seedEarlyInput, stopCapturingEarlyInput } from './utils/earlyInput.js';
-import { getInitialEffortSetting, parseEffortValue } from './utils/effort.js';
+import { clampUltracodeEffort, getInitialEffortSetting, parseEffortValue } from './utils/effort.js';
 import {
   MAX_TURNS_CLI_DESCRIPTION,
   parseMaxTurnsCommanderArgument,
@@ -141,7 +141,7 @@ import type { LogOption } from './types/logs.js';
 import type { Message as MessageType } from './types/message.js';
 import { assertMinVersion } from './utils/autoUpdater.js';
 import { GAKR_IN_CHROME_SKILL_HINT, GAKR_IN_CHROME_SKILL_HINT_WITH_WEBBROWSER } from './utils/gakrcliInChrome/prompt.js';
-import { setupGakrCLIInChrome, shouldAutoEnableGakrCLIInChrome, shouldEnableGakrCLIInChrome } from './utils/gakrcliInChrome/setup.js';
+import { setupGakrCLIInChrome, shouldAutoEnableGakrCLIInChrome, shouldEnableGakrCLIInChrome, waitForGakrCLIInChromeSetup } from './utils/gakrcliInChrome/setup.js';
 import { mergeGakrCLIInChromeStartupConfig, resolveGakrCLIInChromeStartupMode } from './utils/gakrcliInChrome/startup.js';
 import { getContextWindowForModel } from './utils/context.js';
 import { loadConversationForResume } from './utils/conversationRecovery.js';
@@ -183,6 +183,8 @@ import { registerMcpXaaIdpCommand } from 'src/commands/mcp/xaaIdpCommand.js';
 import { fetchGakrCLIAIMcpConfigsIfEligible } from 'src/services/mcp/gakrcliai.js';
 import { clearServerCache } from 'src/services/mcp/client.js';
 import { areMcpConfigsAllowedWithEnterpriseMcpConfig, dedupGakrCLIAiMcpServers, doesEnterpriseMcpConfigExist, filterMcpServersByPolicy, getGakrCLICodeMcpConfigs, getMcpServerSignature, parseMcpConfig, parseMcpConfigFromFilePath } from 'src/services/mcp/config.js';
+import { getHeadlessMcpConfigWarnings } from 'src/services/mcp/headlessErrors.js';
+import type { PluginError } from 'src/types/plugin.js';
 import { excludeCommandsByServer, excludeResourcesByServer } from 'src/services/mcp/utils.js';
 import { isXaaEnabled } from 'src/services/mcp/xaaIdpLogin.js';
 import { getRelevantTips } from 'src/services/tips/tipRegistry.js';
@@ -200,6 +202,7 @@ import { gracefulShutdown, gracefulShutdownSync } from 'src/utils/gracefulShutdo
 import { setAllHookEventsEnabled } from 'src/utils/hooks/hookEvents.js';
 import { refreshModelCapabilities } from 'src/utils/model/modelCapabilities.js';
 import { peekForStdinData, writeToStderr } from 'src/utils/process.js';
+import { createHeadlessHeartbeat, parseHeadlessHeartbeatDuration, validateHeadlessHeartbeatPrintMode } from 'src/cli/headlessHeartbeat.js';
 import { setCwd } from 'src/utils/Shell.js';
 import { type ProcessedResume, processResumedConversation } from 'src/utils/sessionRestore.js';
 import { plural } from 'src/utils/stringUtils.js';
@@ -290,8 +293,7 @@ function isBeingDebugged() {
   // Check if inspector is available and active (indicates debugging)
   try {
     // Dynamic import would be better but is async - use global object instead
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const inspector = (global as any).require('inspector');
+    const inspector = (global as unknown as { require: (s: string) => { url: () => string } }).require('inspector');
     const hasInspectorUrl = !!inspector.url();
     return hasInspectorUrl || hasInspectArg || hasInspectEnv;
   } catch {
@@ -384,9 +386,9 @@ function runMigrations(): void {
   // Async migration - fire and forget since it's non-blocking
   migrateChangelogFromConfig().catch(error => {
     logError(
-      new Error('Changelog migration failed; will retry on next startup', {
-        cause: error,
-      }),
+      new Error(
+        `Changelog migration failed; will retry on next startup: ${errorMessage(error)}`,
+      ),
     )
   });
 }
@@ -480,12 +482,18 @@ export function startDeferredPrefetches(): void {
     cleanupCountFilesSignal,
   );
 
-  // Analytics and feature flag initialization
+  // Project convention scanner — reads config files and runs git (via project
+  // identity), then persists to the wiki. Gate on trust exactly like
+  // prefetchSystemContextIfSafe above: run when trust is implicit (--print) or
+  // the trust dialog has been accepted — never before trust is established in
+  // an interactive session. No-op if the wiki isn't initialized (~1 stat call).
   if (getIsNonInteractiveSession() || checkHasTrustDialogAccepted()) {
     void import('./services/wiki/conventions.js')
       .then(({ scanAndSaveConventions }) => scanAndSaveConventions(getCwd()))
       .catch(logError);
   }
+
+  // Analytics and feature flag initialization
   void initializeAnalyticsGates();
   void prefetchOfficialMcpUrls();
   void refreshModelCapabilities();
@@ -925,7 +933,13 @@ async function run(): Promise<CommanderCommand> {
     // If not provided but flag is present, value will be true
     // The actual filtering is handled in debug.ts by parsing process.argv
     return true;
-  }).addOption(new Option('-d2e, --debug-to-stderr', 'Enable debug mode (to stderr)').argParser(Boolean).hideHelp()).option('--debug-file <path>', 'Write debug logs to a specific file path (implicitly enables debug mode)', () => true).option('--verbose', 'Override verbose mode setting from config', () => true).option('-p, --print', 'Print response and exit (useful for pipes). Note: The workspace trust dialog is skipped when GakrCLI is run with the -p mode. Only use this flag in directories you trust.', () => true).option('--bare', 'Minimal mode: skip hooks, LSP, plugin sync, attribution, auto-memory, background prefetches, keychain reads, and GAKRCLI.md auto-discovery. Sets GAKR_CODE_SIMPLE=1. Anthropic auth is strictly ANTHROPIC_API_KEY or apiKeyHelper via --settings (OAuth and keychain are never read). 3P providers (Bedrock/Vertex/Foundry) use their own credentials. Skills still resolve via /skill-name. Explicitly provide context via: --system-prompt[-file], --append-system-prompt[-file], --add-dir (GAKRCLI.md dirs), --mcp-config, --settings, --agents, --plugin-dir.', () => true).addOption(new Option('--init', 'Run Setup hooks with init trigger, then continue').hideHelp()).addOption(new Option('--init-only', 'Run Setup and SessionStart:startup hooks, then exit').hideHelp()).addOption(new Option('--maintenance', 'Run Setup hooks with maintenance trigger, then continue').hideHelp()).addOption(new Option('--output-format <format>', 'Output format (only works with --print): "text" (default), "json" (single result), or "stream-json" (realtime streaming)').choices(['text', 'json', 'stream-json'])).addOption(new Option('--json-schema <schema>', 'JSON Schema for structured output validation. ' + 'Example: {"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}').argParser(String)).option('--include-hook-events', 'Include all hook lifecycle events in the output stream (only works with --output-format=stream-json)', () => true).option('--include-partial-messages', 'Include partial message chunks as they arrive (only works with --print and --output-format=stream-json)', () => true).addOption(new Option('--input-format <format>', 'Input format (only works with --print): "text" (default), or "stream-json" (realtime streaming input)').choices(['text', 'stream-json'])).option('--mcp-debug', '[DEPRECATED. Use --debug instead] Enable MCP debug mode (shows MCP server errors)', () => true).option('--yolo, --dangerously-skip-permissions', 'Bypass all permission checks (alias: --yolo). Recommended only for sandboxes with no internet access.', () => true).option('--allow-dangerously-skip-permissions', 'Enable bypassing all permission checks as an option, without it being enabled by default. Recommended only for sandboxes with no internet access.', () => true).addOption(new Option('--thinking <mode>', 'Thinking mode: enabled (equivalent to adaptive), disabled').choices(['enabled', 'adaptive', 'disabled']).hideHelp()).addOption(new Option('--max-thinking-tokens <tokens>', '[DEPRECATED. Use --thinking instead for newer models] Maximum number of thinking tokens (only works with --print)').argParser(Number).hideHelp()).addOption(new Option('--max-turns <turns>', MAX_TURNS_CLI_DESCRIPTION).argParser(value => {
+  }).addOption(new Option('-d2e, --debug-to-stderr', 'Enable debug mode (to stderr)').argParser(Boolean).hideHelp()).option('--debug-file <path>', 'Write debug logs to a specific file path (implicitly enables debug mode)', () => true).option('--verbose', 'Override verbose mode setting from config', () => true).option('-p, --print', 'Print response and exit (useful for pipes). Note: The workspace trust dialog is skipped when GakrCLI is run with the -p mode. Only use this flag in directories you trust.', () => true).addOption(new Option('--heartbeat <duration>', 'Emit a headless liveness heartbeat while output is quiet (only works with --print, e.g. 30s, 2m; pre-stream startup heartbeats use stderr)').argParser(value => {
+    try {
+      return parseHeadlessHeartbeatDuration(value);
+    } catch (error) {
+      throw new InvalidArgumentError(errorMessage(error));
+    }
+  })).option('--bare', 'Minimal mode: skip hooks, LSP, plugin sync, attribution, auto-memory, background prefetches, keychain reads, and GAKRCLI.md auto-discovery. Sets GAKR_CODE_SIMPLE=1. Anthropic auth is strictly ANTHROPIC_API_KEY or apiKeyHelper via --settings (OAuth and keychain are never read). 3P providers (Bedrock/Vertex/Foundry) use their own credentials. Skills still resolve via /skill-name. Explicitly provide context via: --system-prompt[-file], --append-system-prompt[-file], --add-dir (GAKRCLI.md dirs), --mcp-config, --settings, --agents, --plugin-dir.', () => true).addOption(new Option('--init', 'Run Setup hooks with init trigger, then continue').hideHelp()).addOption(new Option('--init-only', 'Run Setup and SessionStart:startup hooks, then exit').hideHelp()).addOption(new Option('--maintenance', 'Run Setup hooks with maintenance trigger, then continue').hideHelp()).addOption(new Option('--output-format <format>', 'Output format (only works with --print): "text" (default), "json" (single result), or "stream-json" (realtime streaming)').choices(['text', 'json', 'stream-json'])).addOption(new Option('--json-schema <schema>', 'JSON Schema for structured output validation. ' + 'Example: {"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}').argParser(String)).option('--include-hook-events', 'Include all hook lifecycle events in the output stream (only works with --output-format=stream-json)', () => true).option('--include-partial-messages', 'Include partial message chunks as they arrive (only works with --print and --output-format=stream-json)', () => true).addOption(new Option('--input-format <format>', 'Input format (only works with --print): "text" (default), or "stream-json" (realtime streaming input)').choices(['text', 'stream-json'])).option('--mcp-debug', '[DEPRECATED. Use --debug instead] Enable MCP debug mode (shows MCP server errors)', () => true).option('--yolo, --dangerously-skip-permissions', 'Bypass all permission checks (alias: --yolo). Recommended only for sandboxes with no internet access.', () => true).option('--allow-dangerously-skip-permissions', 'Enable bypassing all permission checks as an option, without it being enabled by default. Recommended only for sandboxes with no internet access.', () => true).addOption(new Option('--thinking <mode>', 'Thinking mode: enabled (equivalent to adaptive), disabled').choices(['enabled', 'adaptive', 'disabled']).hideHelp()).addOption(new Option('--max-thinking-tokens <tokens>', '[DEPRECATED. Use --thinking instead for newer models] Maximum number of thinking tokens (only works with --print)').argParser(Number).hideHelp()).addOption(new Option('--max-turns <turns>', MAX_TURNS_CLI_DESCRIPTION).argParser(value => {
     return parseMaxTurnsCommanderArgument(value);
   })).addOption(new Option('--max-budget-usd <amount>', 'Maximum dollar amount to spend on API calls (only works with --print)').argParser(value => {
     const amount = Number(value);
@@ -939,28 +953,32 @@ async function run(): Promise<CommanderCommand> {
       throw new Error('--task-budget must be a positive integer');
     }
     return tokens;
-  }).hideHelp()).option('--replay-user-messages', 'Re-emit user messages from stdin back on stdout for acknowledgment (only works with --input-format=stream-json and --output-format=stream-json)', () => true).addOption(new Option('--enable-auth-status', 'Enable auth status messages in SDK mode').default(false).hideHelp()).option('--allowedTools, --allowed-tools <tools...>', 'Comma or space-separated list of tool names to allow (e.g. "Bash(git:*) Edit")').option('--tools <tools...>', 'Specify the list of available tools from the built-in set. Use "" to disable all tools, "default" to use all tools, or specify tool names (e.g. "Bash,Edit,Read").').option('--disallowedTools, --disallowed-tools <tools...>', 'Comma or space-separated list of tool names to deny (e.g. "Bash(git:*) Edit")').option('--mcp-config <configs...>', 'Load MCP servers from JSON files or strings (space-separated)').addOption(new Option('--permission-prompt-tool <tool>', 'MCP tool to use for permission prompts (only works with --print)').argParser(String).hideHelp()).addOption(new Option('--system-prompt <prompt>', 'System prompt to use for the session').argParser(String)).addOption(new Option('--system-prompt-file <file>', 'Read system prompt from a file').argParser(String).hideHelp()).addOption(new Option('--append-system-prompt <prompt>', 'Append a system prompt to the default system prompt').argParser(String)).addOption(new Option('--append-system-prompt-file <file>', 'Read system prompt from a file and append to the default system prompt').argParser(String).hideHelp()).addOption(new Option('--permission-mode <mode>', 'Permission mode to use for the session').argParser(String).choices(PERMISSION_MODES)).option('-c, --continue', 'Continue the most recent conversation in the current directory', () => true).option('-r, --resume [value]', 'Resume a conversation by session ID, or open interactive picker with optional search term', value => value || true).option('--fork-session', 'When resuming, create a new session ID instead of reusing the original (use with --resume or --continue)', () => true).addOption(new Option('--prefill <text>', 'Pre-fill the prompt input with text without submitting it').hideHelp()).addOption(new Option('--deep-link-origin', 'Signal that this session was launched from a deep link').hideHelp()).addOption(new Option('--deep-link-repo <slug>', 'Repo slug the deep link ?repo= parameter resolved to the current cwd').hideHelp()).addOption(new Option('--deep-link-last-fetch <ms>', 'FETCH_HEAD mtime in epoch ms, precomputed by the deep link trampoline').argParser(v => {
+  }).hideHelp()).option('--replay-user-messages', 'Re-emit user messages from stdin back on stdout for acknowledgment (only works with --input-format=stream-json and --output-format=stream-json)', () => true).addOption(new Option('--enable-auth-status', 'Enable auth status messages in SDK mode').default(false).hideHelp()).option('--allowedTools, --allowed-tools <tools...>', 'Comma or space-separated list of tool names to allow (e.g. "Bash(git:*) Edit")').option('--tools <tools...>', 'Specify the list of available tools from the built-in set. Use "" to disable all tools, "default" to use all tools, or specify tool names (e.g. "Bash,Edit,Read").').option('--disallowedTools, --disallowed-tools <tools...>', 'Comma or space-separated list of tool names to deny (e.g. "Bash(git:*) Edit")').option('--mcp-config <configs...>', 'Load MCP servers from JSON files or strings (space-separated)').addOption(new Option('--permission-prompt-tool <tool>', 'MCP tool to use for permission prompts (only works with --print)').argParser(String).hideHelp()).addOption(new Option('--system-prompt <prompt>', 'System prompt to use for the session').argParser(String)).addOption(new Option('--system-prompt-file <file>', 'Read system prompt from a file').argParser(String).hideHelp()).addOption(new Option('--append-system-prompt <prompt>', 'Append a system prompt to the default system prompt').argParser(String)).addOption(new Option('--append-system-prompt-file <file>', 'Read system prompt from a file and append to the default system prompt').argParser(String).hideHelp()).addOption(new Option('--permission-mode <mode>', 'Permission mode to use for the session').argParser(String).choices(PERMISSION_MODES))
+  .option('-c, --continue', 'Continue the most recent conversation in the current directory', () => true)
+  .option('-r, --resume [value]', 'Resume a conversation by session ID, or open interactive picker with optional search term', value => value || true)
+  .option('--fork-session', 'When resuming, branch the conversation into a new session ID; does not create filesystem or worktree isolation (use with --resume or --continue)', () => true)
+  .addOption(new Option('--prefill <text>', 'Pre-fill the prompt input with text without submitting it').hideHelp()).addOption(new Option('--deep-link-origin', 'Signal that this session was launched from a deep link').hideHelp()).addOption(new Option('--deep-link-repo <slug>', 'Repo slug the deep link ?repo= parameter resolved to the current cwd').hideHelp()).addOption(new Option('--deep-link-last-fetch <ms>', 'FETCH_HEAD mtime in epoch ms, precomputed by the deep link trampoline').argParser(v => {
     const n = Number(v);
     return Number.isFinite(n) ? n : undefined;
   }).hideHelp()).option('--from-pr [value]', 'Resume a session linked to a PR by PR number/URL, or open interactive picker with optional search term', value => value || true).option('--no-session-persistence', 'Disable session persistence - sessions will not be saved to disk and cannot be resumed (only works with --print)').addOption(new Option('--resume-session-at <message id>', 'When resuming, only messages up to and including the assistant message with <message.id> (use with --resume in print mode)').argParser(String).hideHelp()).addOption(new Option('--rewind-files <user-message-id>', 'Restore files to state at the specified user message and exit (requires --resume)').hideHelp())
   // @[MODEL LAUNCH]: Update the example model ID in the --model help text.
-  .option('--model <model>', `Model for the current session. Provide an alias for the latest model (e.g. 'sonnet' or 'opus') or a model's full name (e.g. 'claude-sonnet-4-6').`).option('--provider <provider>', `AI provider to use (anthropic, openai, gemini, github, bedrock, vertex, ollama). Reads API keys from environment variables.`).addOption(new Option('--effort <level>', `Effort level for the current session (low, medium, high, xhigh, max)`).argParser((rawValue: string) => {
+  .option('--model <model>', `Model for the current session. Provide an alias for the latest model (e.g. 'sonnet' or 'opus') or a model's full name (e.g. 'gakrcli-sonnet-4-6').`).option('--provider <provider>', `AI provider to use (anthropic, openai, gemini, github, bedrock, vertex, ollama). Reads API keys from environment variables.`).addOption(new Option('--effort <level>', `Effort level for the current session (low, medium, high, xhigh, max, ultracode)`).argParser((rawValue: string) => {
     const value = rawValue.toLowerCase();
-    const allowed = ['low', 'medium', 'high', 'xhigh', 'max'];
+    const allowed = ['low', 'medium', 'high', 'xhigh', 'max', 'ultracode'];
     if (!allowed.includes(value)) {
       throw new InvalidArgumentError(`It must be one of: ${allowed.join(', ')}`);
     }
     return value;
   })).option('--agent <agent>', `Agent for the current session. Overrides the 'agent' setting.`).option('--betas <betas...>', 'Beta headers to include in API requests (API key users only)').option('--fallback-model <model>', 'Enable automatic fallback to specified model when default model is overloaded').addOption(new Option('--workload <tag>', 'Workload tag for billing-header attribution (cc_workload). Process-scoped; set by SDK daemon callers that spawn subprocesses for cron work. (only works with --print)').hideHelp()).option('--settings <file-or-json>', 'Path to a settings JSON file or a JSON string to load additional settings from').option('--add-dir <directories...>', 'Additional directories to allow tool access to').option('--ide', 'Automatically connect to IDE on startup if exactly one valid IDE is available', () => true).option('--strict-mcp-config', 'Only use MCP servers from --mcp-config, ignoring all other MCP configurations', () => true).option('--session-id <uuid>', 'Use a specific session ID for the conversation (must be a valid UUID)').option('-n, --name <name>', 'Set a display name for this session (shown in /resume and terminal title)').option('--agents <json>', 'JSON object defining custom agents (e.g. \'{"reviewer": {"description": "Reviews code", "prompt": "You are a code reviewer"}}\')').option('--setting-sources <sources>', 'Comma-separated list of setting sources to load (user, project, local).')
-  // cli.tsx consumes --provider-env-file before provider resolution; this registration
-  // keeps Commander help and unknown-option handling aligned with that bootstrap path.
-  .option('--provider-env-file <path>', 'Load provider environment variables from a file before validation (repeatable; existing values win)', (val: string, prev: string[]) => [...prev, val], [] as string[])
   // gh-33508: <paths...> (variadic) consumed everything until the next
   // --flag. `gakrcli --plugin-dir /path mcp add --transport http` swallowed
   // `mcp` and `add` as paths, then choked on --transport as an unknown
   // top-level option. Single-value + collect accumulator means each
   // --plugin-dir takes exactly one arg; repeat the flag for multiple dirs.
-  .option('--plugin-dir <path>', 'Load plugins from a directory for this session only (repeatable: --plugin-dir A --plugin-dir B)', (val: string, prev: string[]) => [...prev, val], [] as string[]).option('--disable-slash-commands', 'Disable all skills', () => true).option('--chrome', 'Enable GakrCLI in Chrome integration').option('--no-chrome', 'Disable GakrCLI in Chrome integration').option('--file <specs...>', 'File resources to download at startup. Format: file_id:relative_path (e.g., --file file_abc:doc.txt file_def:img.png)').action(async (prompt, options) => {
+  .option('--plugin-dir <path>', 'Load plugins from a directory for this session only (repeatable: --plugin-dir A --plugin-dir B)', (val: string, prev: string[]) => [...prev, val], [] as string[]).option('--disable-slash-commands', 'Disable all skills', () => true).option('--chrome', 'Enable GakrCLI in Chrome integration').option('--no-chrome', 'Disable GakrCLI in Chrome integration').option('--file <specs...>', 'File resources to download at startup. Format: file_id:relative_path (e.g., --file file_abc:doc.txt file_def:img.png)')
+  // cli.tsx consumes --provider-env-file before provider resolution; this registration
+  // keeps Commander help and unknown-option handling aligned with that bootstrap path.
+  .option('--provider-env-file <path>', 'Load provider environment variables from a file before validation (repeatable; existing values win)', (val: string, prev: string[]) => [...prev, val], [] as string[]).action(async (prompt, options) => {
     profileCheckpoint('action_handler_start');
 
     // --bare = one-switch minimal mode. Sets SIMPLE so all the existing
@@ -1280,6 +1298,10 @@ async function run(): Promise<CommanderCommand> {
 
     // Get isNonInteractiveSession from state (was set before init())
     const isNonInteractiveSession = getIsNonInteractiveSession();
+    const heartbeatIntervalMs = (options as {
+      heartbeat?: number;
+    }).heartbeat;
+    const heartbeatHasPrintFlag = Boolean(print);
 
     // Validate that fallback model is different from main model
     if (fallbackModel && options.model && fallbackModel === options.model) {
@@ -1434,7 +1456,7 @@ async function run(): Promise<CommanderCommand> {
         }
         if (reservedNameError) {
           // stderr+exit(1) — a throw here becomes a silent unhandled
-          // rejection in stream-json mode (void main() in cli.tsx).
+          // rejection in stream-json mode (await main() in cli.tsx).
           process.stderr.write(`Error: ${reservedNameError}\n`);
           process.exit(1);
         }
@@ -1500,7 +1522,7 @@ async function run(): Promise<CommanderCommand> {
           setupResult: setupGakrCLIInChrome(),
           dynamicMcpConfig,
           appendSystemPrompt,
-          hasWebBrowserTool,
+          hasWebBrowserTool
         });
         dynamicMcpConfig = startupConfig.dynamicMcpConfig;
         allowedTools.push(...startupConfig.allowedTools);
@@ -1528,7 +1550,7 @@ async function run(): Promise<CommanderCommand> {
           setupResult: setupGakrCLIInChrome(),
           dynamicMcpConfig,
           appendSystemPrompt,
-          hasWebBrowserTool,
+          hasWebBrowserTool
         });
         dynamicMcpConfig = startupConfig.dynamicMcpConfig;
         appendSystemPrompt = startupConfig.appendSystemPrompt;
@@ -1769,7 +1791,8 @@ async function run(): Promise<CommanderCommand> {
     // only explicit --mcp-config works. dynamicMcpConfig is spread onto
     // allMcpConfigs downstream so it survives this skip.
     const mcpConfigPromise = (strictMcpConfig || isBareMode() ? Promise.resolve({
-      servers: {} as Record<string, ScopedMcpServerConfig>
+      servers: {} as Record<string, ScopedMcpServerConfig>,
+      errors: [] as PluginError[]
     }) : getGakrCLICodeMcpConfigs(dynamicMcpConfig)).then(result => {
       mcpConfigResolvedMs = Date.now() - mcpConfigStart;
       return result;
@@ -1812,6 +1835,13 @@ async function run(): Promise<CommanderCommand> {
         writeToStderr(`Error: --include-partial-messages requires --print and --output-format=stream-json.`);
         process.exit(1);
       }
+    }
+
+    try {
+      validateHeadlessHeartbeatPrintMode(heartbeatIntervalMs, heartbeatHasPrintFlag);
+    } catch (error) {
+      writeToStderr(`Error: ${errorMessage(error)}\n`);
+      process.exit(1);
     }
 
     // Validate --no-session-persistence is only used with print mode
@@ -2319,8 +2349,16 @@ async function run(): Promise<CommanderCommand> {
     }
 
     const {
-      servers: existingMcpConfigs
+      servers: existingMcpConfigs,
+      errors: mcpConfigErrors = []
     } = await mcpConfigPromise;
+    // Headless (-p) has no MCP-error UI, so a fatal managed-mcp.json fail-closes
+    // every file-based source with no diagnostic — indistinguishable from an
+    // intentionally empty config. Surface those errors on stderr so scripted
+    // users see why nothing loaded. Interactive surfaces them via the MCP UI.
+    for (const line of getHeadlessMcpConfigWarnings(isNonInteractiveSession, mcpConfigErrors)) {
+      process.stderr.write(`${line}\n`);
+    }
     // CLI flag (--mcp-config) should override file-based configs, matching settings precedence
     const allMcpConfigs = {
       ...existingMcpConfigs,
@@ -2373,7 +2411,7 @@ async function run(): Promise<CommanderCommand> {
     // (handled via setupTrigger), and resume/continue (conversationRecovery.ts
     // fires 'resume' instead — without this guard, hooks fire TWICE on /resume
     // and the second systemMessage clobbers the first. gh-30825)
-    const hooksPromise = initOnly || init || maintenance || isNonInteractiveSession || options.continue || options.resume ? null : processSessionStartHooks('startup', {
+    const hooksPromise = initOnly || init || maintenance || isNonInteractiveSession || options.continue || options.resume || options.fromPr ? null : processSessionStartHooks('startup', {
       agentType: mainThreadAgentDefinition?.agentType,
       model: resolvedInitialModel
     });
@@ -2515,6 +2553,7 @@ async function run(): Promise<CommanderCommand> {
       await processSessionStartHooks('startup', {
         forceSyncExecution: true
       });
+      await waitForGakrCLIInChromeSetup();
       gracefulShutdownSync(0);
       return;
     }
@@ -2542,7 +2581,7 @@ async function run(): Promise<CommanderCommand> {
       // undefined and the ?? fallback runs). Also skip when setupTrigger is
       // set — those paths run setup hooks first (print.ts:544), and session
       // start hooks must wait until setup completes.
-      const sessionStartHooksPromise = options.continue || options.resume || teleport || setupTrigger ? undefined : processSessionStartHooks('startup');
+      const sessionStartHooksPromise = options.continue || options.resume || options.fromPr || teleport || setupTrigger ? undefined : processSessionStartHooks('startup');
       // Suppress transient unhandledRejection if this rejects before
       // loadInitialMessages awaits it. Downstream await still observes the
       // rejection — this just prevents the spurious global handler fire.
@@ -2568,7 +2607,7 @@ async function run(): Promise<CommanderCommand> {
           tools: mcpTools
         },
         toolPermissionContext,
-        effortValue: parseEffortValue(options.effort) ?? getInitialEffortSetting(),
+        effortValue: clampUltracodeEffort(parseEffortValue(options.effort) ?? getInitialEffortSetting(), effectiveModel ?? resolvedInitialModel),
         ...(isFastModeEnabled() && {
           fastMode: getInitialFastModeSetting(effectiveModel ?? null)
         }),
@@ -2667,88 +2706,103 @@ async function run(): Promise<CommanderCommand> {
       // (processBatched with Promise.all). gakrcli.ai is awaited too — its
       // fetch was kicked off early (line ~2558) so only residual time blocks
       // here. --bare skips gakrcli.ai entirely for perf-sensitive scripts.
-      profileCheckpoint('before_connectMcp');
-      await connectMcpBatch(regularMcpConfigs, 'regular');
-      profileCheckpoint('after_connectMcp');
-      // Dedup: suppress plugin MCP servers that duplicate a gakrcli.ai
-      // connector (connector wins), then connect gakrcli.ai servers.
-      // Bounded wait — #23725 made this blocking so single-turn -p sees
-      // connectors, but with 40+ slow connectors tengu_startup_perf p99
-      // climbed to 76s. If fetch+connect doesn't finish in time, proceed;
-      // the promise keeps running and updates headlessStore in the
-      // background so turn 2+ still sees connectors.
-      const GAKR_AI_MCP_TIMEOUT_MS = 5_000;
-      const gakrcliaiConnect = gakrcliaiConfigPromise.then(gakrcliaiConfigs => {
-        if (Object.keys(gakrcliaiConfigs).length > 0) {
-          const gakrcliaiSigs = new Set<string>();
-          for (const config of Object.values(gakrcliaiConfigs)) {
-            const sig = getMcpServerSignature(config);
-            if (sig) gakrcliaiSigs.add(sig);
-          }
-          const suppressed = new Set<string>();
-          for (const [name, config] of Object.entries(regularMcpConfigs)) {
-            if (!name.startsWith('plugin:')) continue;
-            const sig = getMcpServerSignature(config);
-            if (sig && gakrcliaiSigs.has(sig)) suppressed.add(name);
-          }
-          if (suppressed.size > 0) {
-            logForDebugging(`[MCP] Lazy dedup: suppressing ${suppressed.size} plugin server(s) that duplicate gakrcli.ai connectors: ${[...suppressed].join(', ')}`);
-            // Disconnect before filtering from state. Only connected
-            // servers need cleanup — clearServerCache on a never-connected
-            // server triggers a real connect just to kill it (memoize
-            // cache-miss path, see useManageMCPConnections.ts:870).
-            for (const c of headlessStore.getState().mcp.clients) {
-              if (!suppressed.has(c.name) || c.type !== 'connected') continue;
-              c.client.onclose = undefined;
-              void clearServerCache(c.name, c.config).catch(() => {});
+      // The structured stream is initialized inside runHeadless after MCP
+      // connection. Keep this pre-stream startup heartbeat on stderr even when
+      // the final output format is stream-json.
+      const startupHeartbeat = heartbeatIntervalMs ? createHeadlessHeartbeat({
+        intervalMs: heartbeatIntervalMs,
+        outputFormat: 'text',
+        getState: () => 'starting',
+        initialPhase: 'connecting_mcp',
+        getSessionId
+      }) : undefined;
+      startupHeartbeat?.start();
+      try {
+        profileCheckpoint('before_connectMcp');
+        await connectMcpBatch(regularMcpConfigs, 'regular');
+        profileCheckpoint('after_connectMcp');
+        // Dedup: suppress plugin MCP servers that duplicate a gakrcli.ai
+        // connector (connector wins), then connect gakrcli.ai servers.
+        // Bounded wait — #23725 made this blocking so single-turn -p sees
+        // connectors, but with 40+ slow connectors tengu_startup_perf p99
+        // climbed to 76s. If fetch+connect doesn't finish in time, proceed;
+        // the promise keeps running and updates headlessStore in the
+        // background so turn 2+ still sees connectors.
+        const GAKR_AI_MCP_TIMEOUT_MS = 5_000;
+        const gakrcliaiConnect = gakrcliaiConfigPromise.then(gakrcliaiConfigs => {
+          if (Object.keys(gakrcliaiConfigs).length > 0) {
+            const gakrcliaiSigs = new Set<string>();
+            for (const config of Object.values(gakrcliaiConfigs)) {
+              const sig = getMcpServerSignature(config);
+              if (sig) gakrcliaiSigs.add(sig);
             }
-            headlessStore.setState(prev => {
-              let {
-                clients,
-                tools,
-                commands,
-                resources
-              } = prev.mcp;
-              clients = clients.filter(c => !suppressed.has(c.name));
-              tools = tools.filter(t => !t.mcpInfo || !suppressed.has(t.mcpInfo.serverName));
-              for (const name of suppressed) {
-                commands = excludeCommandsByServer(commands, name);
-                resources = excludeResourcesByServer(resources, name);
+            const suppressed = new Set<string>();
+            for (const [name, config] of Object.entries(regularMcpConfigs)) {
+              if (!name.startsWith('plugin:')) continue;
+              const sig = getMcpServerSignature(config);
+              if (sig && gakrcliaiSigs.has(sig)) suppressed.add(name);
+            }
+            if (suppressed.size > 0) {
+              logForDebugging(`[MCP] Lazy dedup: suppressing ${suppressed.size} plugin server(s) that duplicate gakrcli.ai connectors: ${[...suppressed].join(', ')}`);
+              // Disconnect before filtering from state. Only connected
+              // servers need cleanup — clearServerCache on a never-connected
+              // server triggers a real connect just to kill it (memoize
+              // cache-miss path, see useManageMCPConnections.ts:870).
+              for (const c of headlessStore.getState().mcp.clients) {
+                if (!suppressed.has(c.name) || c.type !== 'connected') continue;
+                c.client.onclose = undefined;
+                void clearServerCache(c.name, c.config).catch(() => {});
               }
-              return {
-                ...prev,
-                mcp: {
-                  ...prev.mcp,
+              headlessStore.setState(prev => {
+                let {
                   clients,
                   tools,
                   commands,
                   resources
+                } = prev.mcp;
+                clients = clients.filter(c => !suppressed.has(c.name));
+                tools = tools.filter(t => !t.mcpInfo || !suppressed.has(t.mcpInfo.serverName));
+                for (const name of suppressed) {
+                  commands = excludeCommandsByServer(commands, name);
+                  resources = excludeResourcesByServer(resources, name);
                 }
-              };
-            });
+                return {
+                  ...prev,
+                  mcp: {
+                    ...prev.mcp,
+                    clients,
+                    tools,
+                    commands,
+                    resources
+                  }
+                };
+              });
+            }
           }
+          // Suppress gakrcli.ai connectors that duplicate an enabled
+          // manual server (URL-signature match). Plugin dedup above only
+          // handles `plugin:*` keys; this catches manual `.mcp.json` entries.
+          // plugin:* must be excluded here — step 1 already suppressed
+          // those (gakrcli.ai wins); leaving them in suppresses the
+          // connector too, and neither survives (gh-39974).
+          const nonPluginConfigs = pickBy(regularMcpConfigs, (_, n) => !n.startsWith('plugin:'));
+          const {
+            servers: dedupedGakrCLIAi
+          } = dedupGakrCLIAiMcpServers(gakrcliaiConfigs, nonPluginConfigs);
+          return connectMcpBatch(dedupedGakrCLIAi, 'gakrcliai');
+        });
+        let gakrcliaiTimer: ReturnType<typeof setTimeout> | undefined;
+        const gakrcliaiTimedOut = await Promise.race([gakrcliaiConnect.then(() => false), new Promise<boolean>(resolve => {
+          gakrcliaiTimer = setTimeout(r => r(true), GAKR_AI_MCP_TIMEOUT_MS, resolve);
+        })]);
+        if (gakrcliaiTimer) clearTimeout(gakrcliaiTimer);
+        if (gakrcliaiTimedOut) {
+          logForDebugging(`[MCP] gakrcli.ai connectors not ready after ${GAKR_AI_MCP_TIMEOUT_MS}ms — proceeding; background connection continues`);
         }
-        // Suppress gakrcli.ai connectors that duplicate an enabled
-        // manual server (URL-signature match). Plugin dedup above only
-        // handles `plugin:*` keys; this catches manual `.mcp.json` entries.
-        // plugin:* must be excluded here — step 1 already suppressed
-        // those (gakrcli.ai wins); leaving them in suppresses the
-        // connector too, and neither survives (gh-39974).
-        const nonPluginConfigs = pickBy(regularMcpConfigs, (_, n) => !n.startsWith('plugin:'));
-        const {
-          servers: dedupedGakrCLIAi
-        } = dedupGakrCLIAiMcpServers(gakrcliaiConfigs, nonPluginConfigs);
-        return connectMcpBatch(dedupedGakrCLIAi, 'gakrcliai');
-      });
-      let gakrcliaiTimer: ReturnType<typeof setTimeout> | undefined;
-      const gakrcliaiTimedOut = await Promise.race([gakrcliaiConnect.then(() => false), new Promise<boolean>(resolve => {
-        gakrcliaiTimer = setTimeout(r => r(true), GAKR_AI_MCP_TIMEOUT_MS, resolve);
-      })]);
-      if (gakrcliaiTimer) clearTimeout(gakrcliaiTimer);
-      if (gakrcliaiTimedOut) {
-        logForDebugging(`[MCP] gakrcli.ai connectors not ready after ${GAKR_AI_MCP_TIMEOUT_MS}ms — proceeding; background connection continues`);
+        profileCheckpoint('after_connectMcp_gakrcliai');
+      } finally {
+        startupHeartbeat?.stop();
       }
-      profileCheckpoint('after_connectMcp_gakrcliai');
 
       // In headless mode, start deferred prefetches immediately (no user typing delay)
       // --bare / SIMPLE: startDeferredPrefetches early-returns internally.
@@ -2769,6 +2823,7 @@ async function run(): Promise<CommanderCommand> {
       void runHeadless(inputPrompt, () => headlessStore.getState(), headlessStore.setState, commandsHeadless, tools, sdkMcpConfigs, agentDefinitions.activeAgents, {
         continue: options.continue,
         resume: options.resume,
+        fromPr: options.fromPr,
         verbose: verbose,
         outputFormat: outputFormat,
         jsonSchema,
@@ -2794,6 +2849,7 @@ async function run(): Promise<CommanderCommand> {
         enableAuthStatus: options.enableAuthStatus,
         agent: agentCli,
         workload: options.workload,
+        heartbeatIntervalMs,
         setupTrigger: setupTrigger ?? undefined,
         sessionStartHooksPromise
       });
@@ -2965,7 +3021,7 @@ async function run(): Promise<CommanderCommand> {
           content: String(inputPrompt)
         })
       } : null,
-      effortValue: parseEffortValue(options.effort) ?? getInitialEffortSetting(),
+      effortValue: clampUltracodeEffort(parseEffortValue(options.effort) ?? getInitialEffortSetting(), effectiveModel ?? resolvedInitialModel),
       activeOverlays: new Set<string>(),
       fastMode: getInitialFastModeSetting(resolvedInitialModel),
       ...(isAdvisorEnabled() && advisorModel && {
@@ -3019,7 +3075,7 @@ async function run(): Promise<CommanderCommand> {
       appendSystemPrompt,
       thinkingConfig,
       // Interactive REPL default is 50 via resolveReplMaxTurns; CLI wins over env.
-      maxTurns: options.maxTurns
+      maxTurns: options.maxTurns,
     };
 
     // Shared context for processResumedConversation calls
@@ -3122,7 +3178,7 @@ async function run(): Promise<CommanderCommand> {
         disableSlashCommands,
         directConnectConfig,
         thinkingConfig,
-        maxTurns: options.maxTurns
+        maxTurns: options.maxTurns,
       }, renderAndRun);
       return;
     } else if (feature('SSH_REMOTE') && _pendingSSH?.host) {
@@ -3189,7 +3245,7 @@ async function run(): Promise<CommanderCommand> {
         disableSlashCommands,
         sshSession,
         thinkingConfig,
-        maxTurns: options.maxTurns
+        maxTurns: options.maxTurns,
       }, renderAndRun);
       return;
     } else if (feature('KAIROS') && _pendingAssistantChat && (_pendingAssistantChat.sessionId || _pendingAssistantChat.discover)) {
@@ -3286,7 +3342,7 @@ async function run(): Promise<CommanderCommand> {
         disableSlashCommands,
         remoteSessionConfig,
         thinkingConfig,
-        maxTurns: options.maxTurns
+        maxTurns: options.maxTurns,
       }, renderAndRun);
       return;
     } else if (options.resume || options.fromPr || teleport || remote !== null) {
@@ -3436,7 +3492,7 @@ async function run(): Promise<CommanderCommand> {
           disableSlashCommands,
           remoteSessionConfig,
           thinkingConfig,
-          maxTurns: options.maxTurns
+          maxTurns: options.maxTurns,
         }, renderAndRun);
         return;
       } else if (teleport) {
@@ -3785,7 +3841,7 @@ async function run(): Promise<CommanderCommand> {
     } = await import('./cli/handlers/mcp.js');
     await mcpAddJsonHandler(name, json, options);
   });
-  mcp.command('add-from-gakrcli-desktop').description('Import MCP servers from GakrCLI Desktop (Mac and WSL only)').option('-s, --scope <scope>', 'Configuration scope (local, user, or project)', 'local').action(async (options: {
+  mcp.command('add-from-gakrcli-desktop').description('Import MCP servers from GakrCLI Desktop (macOS, Windows, and WSL)').option('-s, --scope <scope>', 'Configuration scope (local, user, or project)', 'local').action(async (options: {
     scope?: string;
   }) => {
     const {
@@ -4175,7 +4231,6 @@ async function run(): Promise<CommanderCommand> {
   }) => {
     await runSkillsCommanderAction(({ skillsRemoveHandler }) => skillsRemoveHandler(name, options));
   });
-
   if (feature('TRANSCRIPT_CLASSIFIER')) {
     // Skip when tengu_auto_mode_config.enabled === 'disabled' (circuit breaker).
     // Reads from disk cache — GrowthBook isn't initialized at registration time.
@@ -4236,12 +4291,45 @@ async function run(): Promise<CommanderCommand> {
     });
   }
 
-
-  // Report command - generate deterministic JSON task report
   registerTaskReportCommand(program);
 
   // Doctor command - check installation health
-  program.command('doctor').description('Check the health of your GakrCLI auto-updater. Note: The workspace trust dialog is skipped and stdio servers from .mcp.json are spawned for health checks. Only use this command in directories you trust.').action(async () => {
+  const doctorCommand = program
+    .command('doctor')
+    .description('Check the health of your GakrCLI auto-updater. Note: The workspace trust dialog is skipped and stdio servers from .mcp.json are spawned for health checks. Only use this command in directories you trust.');
+  doctorCommand
+    .command('report')
+    .description('Print a redacted diagnostic report for GitHub issues')
+    .addOption(new Option('--json', 'Print JSON output').conflicts('markdown'))
+    .addOption(new Option('--markdown', 'Print Markdown output').conflicts('json'))
+    .option('--out <file>', 'Write the report to a file')
+    .addOption(new Option('--redacted', 'Keep redaction enabled (default)').default(true).hideHelp())
+    .option('--include-debug', 'Include redacted recent error summaries')
+    .action(async (options: {
+      json?: boolean;
+      markdown?: boolean;
+      out?: string;
+      redacted?: boolean;
+      includeDebug?: boolean;
+    }) => {
+      const {
+        doctorReportHandler,
+        printDoctorReportError,
+      } = await import('./cli/handlers/doctorReport.js');
+      try {
+        await doctorReportHandler({
+          format: options.json ? 'json' : 'markdown',
+          outFile: options.out ?? null,
+          includeDebug: options.includeDebug === true,
+          redacted: options.redacted !== false,
+        });
+        process.exit(0);
+      } catch (error) {
+        printDoctorReportError(error);
+        process.exit(1);
+      }
+    });
+  doctorCommand.action(async () => {
     const [{
       doctorHandler
     }, {

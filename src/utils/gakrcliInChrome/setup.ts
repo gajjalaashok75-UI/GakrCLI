@@ -28,6 +28,10 @@ import {
   getAllWindowsRegistryKeys,
   openInChrome,
 } from './common.js'
+import {
+  createWrapperScript,
+  resolveGakrCLIInChromeLaunches,
+} from './launch.js'
 import { getChromeSystemPrompt } from './prompt.js'
 import { isChromeExtensionInstalledPortable } from './setupPortable.js'
 
@@ -68,6 +72,7 @@ export function shouldEnableGakrCLIInChrome(chromeFlag?: boolean): boolean {
 }
 
 let shouldAutoEnable: boolean | undefined = undefined
+let pendingGakrCLIInChromeSetup: Promise<void> | null = null
 
 export function shouldAutoEnableGakrCLIInChrome(): boolean {
   if (shouldAutoEnable !== undefined) {
@@ -82,6 +87,10 @@ export function shouldAutoEnableGakrCLIInChrome(): boolean {
   return shouldAutoEnable
 }
 
+export function waitForGakrCLIInChromeSetup(): Promise<void> {
+  return pendingGakrCLIInChromeSetup ?? Promise.resolve()
+}
+
 /**
  * Setup GakrCLI in Chrome MCP server and tools
  *
@@ -93,6 +102,7 @@ export function setupGakrCLIInChrome(): {
   systemPrompt: string
 } {
   const isNativeBuild = isInBundledMode()
+  const launches = resolveGakrCLIInChromeLaunches({ isNativeBuild })
   const allowedTools = BROWSER_TOOLS.map(
     tool => `mcp__gakrcli-in-chrome__${tool.name}`,
   )
@@ -103,67 +113,42 @@ export function setupGakrCLIInChrome(): {
   }
   const hasEnv = Object.keys(env).length > 0
 
-  if (isNativeBuild) {
-    // Create a wrapper script that calls the same binary with --chrome-native-host. This
-    // is needed because the native host manifest "path" field cannot contain arguments.
-    const execCommand = `"${process.execPath}" --chrome-native-host`
-
-    // Run asynchronously without blocking; best-effort so swallow errors
-    void createWrapperScript(execCommand)
-      .then(manifestBinaryPath =>
-        installChromeNativeHostManifest(manifestBinaryPath),
+  // The manifest path cannot contain arguments, so both runtime modes need a
+  // wrapper. Launch selection above keeps the native mode flag-only and gives
+  // non-native mode the validated current CLI entrypoint.
+  pendingGakrCLIInChromeSetup = createWrapperScript(launches.nativeHost)
+    .then(manifestBinaryPath => {
+      logForDebugging(
+        `[GakrCLI in Chrome] Setup launch configuration: ${jsonStringify(launches)}`,
       )
-      .catch(e =>
-        logForDebugging(
-          `[GakrCLI in Chrome] Failed to install native host: ${e}`,
-          { level: 'error' },
-        ),
-      )
-
-    return {
-      mcpConfig: {
-        [GAKR_IN_CHROME_MCP_SERVER_NAME]: {
-          type: 'stdio' as const,
-          command: process.execPath,
-          args: ['--gakrcli-in-chrome-mcp'],
-          scope: 'dynamic' as const,
-          ...(hasEnv && { env }),
-        },
-      },
-      allowedTools,
-      systemPrompt: getChromeSystemPrompt(),
-    }
-  } else {
-    const cliPath = join(distRoot, 'cli.mjs')
-
-    void createWrapperScript(
-      `"${process.execPath}" "${cliPath}" --chrome-native-host`,
+      if (
+        isEnvTruthy(
+          process.env.GAKR_SKIP_CHROME_NATIVE_HOST_REGISTRATION,
+        )
+      ) {
+        return
+      }
+      return installChromeNativeHostManifest(manifestBinaryPath)
+    })
+    .catch(e =>
+      logForDebugging(
+        `[GakrCLI in Chrome] Failed to install native host: ${e}`,
+        { level: 'error' },
+      ),
     )
-      .then(manifestBinaryPath =>
-        installChromeNativeHostManifest(manifestBinaryPath),
-      )
-      .catch(e =>
-        logForDebugging(
-          `[GakrCLI in Chrome] Failed to install native host: ${e}`,
-          { level: 'error' },
-        ),
-      )
 
-    const mcpConfig = {
+  return {
+    mcpConfig: {
       [GAKR_IN_CHROME_MCP_SERVER_NAME]: {
         type: 'stdio' as const,
-        command: process.execPath,
-        args: [`${cliPath}`, '--gakrcli-in-chrome-mcp'],
+        command: launches.mcpServer.command,
+        args: launches.mcpServer.args,
         scope: 'dynamic' as const,
         ...(hasEnv && { env }),
       },
-    }
-
-    return {
-      mcpConfig,
-      allowedTools,
-      systemPrompt: getChromeSystemPrompt(),
-    }
+    },
+    allowedTools,
+    systemPrompt: getChromeSystemPrompt(),
   }
 }
 
@@ -294,53 +279,6 @@ function registerWindowsNativeHosts(manifestPath: string): void {
       }
     })
   }
-}
-
-/**
- * Create a wrapper script in ~/.gakrcli/chrome/ that invokes the given command. This is
- * necessary because Chrome's native host manifest "path" field cannot contain arguments.
- *
- * @param command - The full command to execute (e.g., "/path/to/gakrcli --chrome-native-host")
- * @returns The path to the wrapper script
- */
-async function createWrapperScript(command: string): Promise<string> {
-  const platform = getPlatform()
-  const chromeDir = join(getGakrCLIConfigHomeDir(), 'chrome')
-  const wrapperPath =
-    platform === 'windows'
-      ? join(chromeDir, 'chrome-native-host.bat')
-      : join(chromeDir, 'chrome-native-host')
-
-  const scriptContent =
-    platform === 'windows'
-      ? `@echo off
-REM Chrome native host wrapper script
-REM Generated by GakrCLI Code - do not edit manually
-${command}
-`
-      : `#!/bin/sh
-# Chrome native host wrapper script
-# Generated by GakrCLI Code - do not edit manually
-exec ${command}
-`
-
-  // Check if content matches to avoid unnecessary writes
-  const existingContent = await readFile(wrapperPath, 'utf-8').catch(() => null)
-  if (existingContent === scriptContent) {
-    return wrapperPath
-  }
-
-  await mkdir(chromeDir, { recursive: true })
-  await writeFile(wrapperPath, scriptContent)
-
-  if (platform !== 'windows') {
-    await chmod(wrapperPath, 0o755)
-  }
-
-  logForDebugging(
-    `[GakrCLI in Chrome] Created Chrome native host wrapper script: ${wrapperPath}`,
-  )
-  return wrapperPath
 }
 
 /**
