@@ -34,7 +34,7 @@ import type {
   ResolvePrepareCaptureResult,
   RunningApp,
   ScreenshotResult,
-} from '@ant/computer-use-mcp'
+} from '@gakr/computer-use-mcp'
 
 import { logForDebugging } from '../debug.js'
 import { sleep } from '../sleep.js'

@@ -13,7 +13,7 @@ import { COMPUTER_USE_MCP_SERVER_NAME } from './common.js'
  * server in-process. The config just needs to exist as `type: 'stdio'` to hit
  * that branch and to render in `/mcp`.
  *
- * Kept free of `@ant/computer-use-mcp` imports so `services/mcp/config.ts` can
+ * Kept free of `@gakr/computer-use-mcp` imports so `services/mcp/config.ts` can
  * register the built-in without pulling the vendored package into its eager
  * module graph.
  */

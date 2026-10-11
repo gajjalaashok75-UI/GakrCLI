@@ -38,9 +38,9 @@ for (const pkg of [
 // 2. package.json declares them as file: deps so a clean clone installs them.
 const pkg = await Bun.file(path.join(root, 'package.json')).json()
 for (const name of [
-  '@ant/computer-use-mcp',
-  '@ant/computer-use-swift',
-  '@ant/computer-use-input',
+  '@gakr/computer-use-mcp',
+  '@gakr/computer-use-swift',
+  '@gakr/computer-use-input',
 ]) {
   const spec = pkg.dependencies?.[name]
   check(`${name} is a file: dependency`, typeof spec === 'string' && spec.startsWith('file:vendor/'), String(spec))
@@ -48,9 +48,9 @@ for (const name of [
 
 // 3. They resolve from node_modules after install.
 for (const name of [
-  '@ant/computer-use-mcp',
-  '@ant/computer-use-swift',
-  '@ant/computer-use-input',
+  '@gakr/computer-use-mcp',
+  '@gakr/computer-use-swift',
+  '@gakr/computer-use-input',
 ]) {
   let resolved: string | null = null
   try {

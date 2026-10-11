@@ -237,7 +237,7 @@ declare module '@gakr-gakr/gakrcli-for-chrome-mcp' {
   }
 }
 
-declare module '@ant/computer-use-mcp/types' {
+declare module '@gakr/computer-use-mcp/types' {
   export type CoordinateMode = 'pixels' | 'normalized'
 
   export type CuSubGates = {
@@ -528,7 +528,7 @@ declare module '@ant/computer-use-mcp/types' {
   }
 }
 
-declare module '@ant/computer-use-mcp' {
+declare module '@gakr/computer-use-mcp' {
   import type {
     AppGrant,
     ComputerExecutor,
@@ -543,7 +543,7 @@ declare module '@ant/computer-use-mcp' {
     ResolvePrepareCaptureResult,
     RunningApp,
     ScreenshotResult,
-  } from '@ant/computer-use-mcp/types'
+  } from '@gakr/computer-use-mcp/types'
 
   export type {
     AppGrant,
@@ -640,11 +640,11 @@ declare module '@ant/computer-use-mcp' {
   ): (name: string, args: unknown) => Promise<CuCallToolResult>
 }
 
-declare module '@ant/computer-use-mcp/sentinelApps' {
+declare module '@gakr/computer-use-mcp/sentinelApps' {
   export function getSentinelCategory(bundleId: string): string | undefined
 }
 
-declare module '@ant/computer-use-input' {
+declare module '@gakr/computer-use-input' {
   export type ComputerUseInputAPI = {
     moveMouse(x: number, y: number, animated?: boolean): Promise<void>
     key(name: string, action: 'press' | 'release'): Promise<void>
@@ -665,7 +665,7 @@ declare module '@ant/computer-use-input' {
     | { isSupported: false }
 }
 
-declare module '@ant/computer-use-swift' {
+declare module '@gakr/computer-use-swift' {
   export type DisplayGeometry = {
     width: number
     height: number

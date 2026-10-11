@@ -84,9 +84,9 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^1.1.0",
-    "@ant/computer-use-input": "file:vendor/computer-use-input",
-    "@ant/computer-use-mcp": "file:vendor/computer-use-mcp",
-    "@ant/computer-use-swift": "file:vendor/computer-use-swift",
+    "@gakr/computer-use-input": "file:vendor/computer-use-input",
+    "@gakr/computer-use-mcp": "file:vendor/computer-use-mcp",
+    "@gakr/computer-use-swift": "file:vendor/computer-use-swift",
     "@alcalzone/ansi-tokenize": "0.3.0",
     "@anthropic-ai/bedrock-sdk": "0.29.1",
     "@anthropic-ai/foundry-sdk": "0.2.3",

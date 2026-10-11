@@ -1,5 +1,5 @@
 /**
- * @ant/computer-use-input — macOS keyboard & mouse simulation (enigo)
+ * @gakr/computer-use-input — macOS keyboard & mouse simulation (enigo)
  *
  * This package wraps the macOS-only native enigo .node module.
  * For Windows/Linux, use src/utils/computerUse/platforms/ instead.

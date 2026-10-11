@@ -9,7 +9,7 @@ import { registerBuiltinMcpServer } from '../builtinMcpServers.js'
  * Registers the Computer Use MCP server as a built-in.
  *
  * Gated on CHICAGO_MCP, matching the config-layer gate that keeps the vendored
- * `@ant/computer-use-mcp` package out of the eager module graph. When the flag
+ * `@gakr/computer-use-mcp` package out of the eager module graph. When the flag
  * is off nothing is registered, so the name is not reserved and no config is
  * enumerated — the same behaviour as before this registry existed.
  *

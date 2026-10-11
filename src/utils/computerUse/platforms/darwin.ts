@@ -1,8 +1,8 @@
 /**
  * macOS platform backend for Computer Use.
  *
- * Delegates to @ant/computer-use-input (enigo keyboard/mouse) and
- * @ant/computer-use-swift (screenshots, display, apps).
+ * Delegates to @gakr/computer-use-input (enigo keyboard/mouse) and
+ * @gakr/computer-use-swift (screenshots, display, apps).
  *
  * No window-bound input (sendChar/sendKey/sendClick/sendText) — macOS
  * uses global input via CoreGraphics events.
@@ -21,7 +21,7 @@ import { requireComputerUseInput } from '../inputLoader.js'
 import { requireComputerUseSwift } from '../swiftLoader.js'
 
 // ---------------------------------------------------------------------------
-// Input — delegate to @ant/computer-use-input darwin backend
+// Input — delegate to @gakr/computer-use-input darwin backend
 // ---------------------------------------------------------------------------
 
 const input: InputPlatform = {
@@ -65,7 +65,7 @@ const input: InputPlatform = {
 }
 
 // ---------------------------------------------------------------------------
-// Screenshot — delegate to @ant/computer-use-swift
+// Screenshot — delegate to @gakr/computer-use-swift
 // ---------------------------------------------------------------------------
 
 const screenshot: ScreenshotPlatform = {
@@ -91,7 +91,7 @@ const screenshot: ScreenshotPlatform = {
 }
 
 // ---------------------------------------------------------------------------
-// Display — delegate to @ant/computer-use-swift
+// Display — delegate to @gakr/computer-use-swift
 // ---------------------------------------------------------------------------
 
 const display: DisplayPlatform = {
@@ -107,7 +107,7 @@ const display: DisplayPlatform = {
 }
 
 // ---------------------------------------------------------------------------
-// Apps — delegate to @ant/computer-use-swift
+// Apps — delegate to @gakr/computer-use-swift
 // ---------------------------------------------------------------------------
 
 const apps: AppsPlatform = {

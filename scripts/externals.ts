@@ -157,9 +157,9 @@ export const INTENTIONALLY_BUNDLED: string[] = [
   // Computer-use packages are vendored under vendor/ and bundled into the CLI
   // bundle (pure TS, no native modules). Not external — the CLI must run from
   // a single dist/cli.mjs without a node_modules tree.
-  '@ant/computer-use-input',
-  '@ant/computer-use-mcp',
-  '@ant/computer-use-swift',
+  '@gakr/computer-use-input',
+  '@gakr/computer-use-mcp',
+  '@gakr/computer-use-swift',
   // CLI / TUI utilities
   '@alcalzone/ansi-tokenize',
   '@commander-js/extra-typings',

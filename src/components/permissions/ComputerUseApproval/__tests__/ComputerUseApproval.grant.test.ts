@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { CuPermissionRequest, InstalledApp } from '@ant/computer-use-mcp/types';
+import type { CuPermissionRequest, InstalledApp } from '@gakr/computer-use-mcp/types';
 import { buildAllowResponse, buildDenyResponse, toGrant } from '../ComputerUseApproval.js';
 
 const NOTEPAD: InstalledApp = {

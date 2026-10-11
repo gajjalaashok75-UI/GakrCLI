@@ -1,5 +1,5 @@
 {
-  "name": "@ant/computer-use-input",
+  "name": "@gakr/computer-use-input",
   "version": "1.0.0",
   "private": true,
   "main": "./src/index.ts",

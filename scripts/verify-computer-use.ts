@@ -14,11 +14,11 @@ import {
   DEFAULT_GRANT_FLAGS,
   _keyBlocklistTest,
   _toolCallsTest,
-} from '@ant/computer-use-mcp'
+} from '@gakr/computer-use-mcp'
 import type {
   ComputerUseHostAdapter,
   ComputerUseOverrides,
-} from '@ant/computer-use-mcp'
+} from '@gakr/computer-use-mcp'
 
 import { setupComputerUseMCP } from '../src/utils/computerUse/setup.js'
 import { CLI_CU_CAPABILITIES, CLI_HOST_BUNDLE_ID } from '../src/utils/computerUse/common.js'
@@ -236,7 +236,7 @@ for (const [combo, platform] of allowed) {
 // ── Allowlist enforcement (real gate) ─────────────────────────────────────
 console.log('\n── Phase 2: allowlist enforcement ───────────────────────────')
 
-const { handleToolCall } = await import('@ant/computer-use-mcp')
+const { handleToolCall } = await import('@gakr/computer-use-mcp')
 
 function makeAdapter(): ComputerUseHostAdapter {
   const calls: string[] = []

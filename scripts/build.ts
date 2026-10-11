@@ -267,7 +267,7 @@ for (const [specifier, resolvedPath] of productionReactModules) {
 /**
  * Resolve bare `src/...` specifiers to the repo's own `src/` tree.
  *
- * Vendored packages under `node_modules/@ant/*` are copies of a monorepo where
+ * Vendored packages under `node_modules/@gakr/*` are copies of a monorepo where
  * `src/*` was a tsconfig `paths` alias. Bun applies the root tsconfig to project
  * sources but NOT to files under `node_modules`, so those specifiers fail to
  * resolve unless the importer happens to sit at the right relative depth. The

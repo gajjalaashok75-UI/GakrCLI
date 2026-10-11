@@ -7,9 +7,6 @@
       "dependencies": {
         "@agentclientprotocol/sdk": "^1.1.0",
         "@alcalzone/ansi-tokenize": "0.3.0",
-        "@ant/computer-use-input": "file:vendor/computer-use-input",
-        "@ant/computer-use-mcp": "file:vendor/computer-use-mcp",
-        "@ant/computer-use-swift": "file:vendor/computer-use-swift",
         "@anthropic-ai/bedrock-sdk": "0.29.1",
         "@anthropic-ai/foundry-sdk": "0.2.3",
         "@anthropic-ai/mcpb": "^2.1.2",
@@ -21,6 +18,9 @@
         "@azure/identity": "^4.13.1",
         "@commander-js/extra-typings": "12.1.0",
         "@gakr-gakr/gakrcli-for-chrome-mcp": "^0.1.0",
+        "@gakr/computer-use-input": "file:vendor/computer-use-input",
+        "@gakr/computer-use-mcp": "file:vendor/computer-use-mcp",
+        "@gakr/computer-use-swift": "file:vendor/computer-use-swift",
         "@growthbook/growthbook": "^1.6.5",
         "@grpc/grpc-js": "^1.14.3",
         "@grpc/proto-loader": "^0.8.0",
@@ -158,12 +158,6 @@
     "@agentclientprotocol/sdk": ["@agentclientprotocol/sdk@1.1.0", "", { "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-NT2KqphUJ3w6EksUL51ZhJgIYgq/ZLGcBPkyMKgRSO5PMVwe9DnKKX+Htnvk6KHh6dUuh34UHK4gKp+4te1Mdg=="],
 
     "@alcalzone/ansi-tokenize": ["@alcalzone/ansi-tokenize@0.3.0", "", { "dependencies": { "ansi-styles": "^6.2.1", "is-fullwidth-code-point": "^5.0.0" } }, "sha512-p+CMKJ93HFmLkjXKlXiVGlMQEuRb6H0MokBSwUsX+S6BRX8eV5naFZpQJFfJHjRZY0Hmnqy1/r6UWl3x+19zYA=="],
-
-    "@ant/computer-use-input": ["@ant/computer-use-input@file:vendor/computer-use-input", {}],
-
-    "@ant/computer-use-mcp": ["@ant/computer-use-mcp@file:vendor/computer-use-mcp", {}],
-
-    "@ant/computer-use-swift": ["@ant/computer-use-swift@file:vendor/computer-use-swift", {}],
 
     "@antfu/install-pkg": ["@antfu/install-pkg@1.1.0", "", { "dependencies": { "package-manager-detector": "^1.3.0", "tinyexec": "^1.0.1" } }, "sha512-MGQsmw10ZyI+EJo45CdSER4zEb+p31LpDAFp2Z3gkSd1yqVZGi0Ebx++YTEMonJy4oChEMLsxZ64j8FH6sSqtQ=="],
 
@@ -330,6 +324,12 @@
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.28.1", "", { "os": "win32", "cpu": "x64" }, "sha512-bm4Mowrv+GXMlpWX++EcXw/iLyd1o3+bJkC2DkWXYVvgZCqD/bSj9ctZeAMC3cIxgjRVR2Dufaiu4YPxr5gW1A=="],
 
     "@gakr-gakr/gakrcli-for-chrome-mcp": ["@gakr-gakr/gakrcli-for-chrome-mcp@0.1.0", "", { "dependencies": { "ws": "^8.0.0" }, "peerDependencies": { "@modelcontextprotocol/sdk": ">=1.0.0" } }, "sha512-NnSGuF9W5GSD/z3rrj6ZYOUoJrfgcTxuKXll3geCajXmVcXt+vRYg/0R3fap0+OKCLrzKLKIbZLgR1+IVVDxFw=="],
+
+    "@gakr/computer-use-input": ["@gakr/computer-use-input@file:vendor/computer-use-input", {}],
+
+    "@gakr/computer-use-mcp": ["@gakr/computer-use-mcp@file:vendor/computer-use-mcp", {}],
+
+    "@gakr/computer-use-swift": ["@gakr/computer-use-swift@file:vendor/computer-use-swift", {}],
 
     "@growthbook/growthbook": ["@growthbook/growthbook@1.6.5", "", { "dependencies": { "dom-mutator": "^0.6.0" } }, "sha512-mUaMsgeUTpRIUOTn33EUXHRK6j7pxBjwqH4WpQyq+pukjd1AIzWlEa6w7i6bInJUcweGgP2beXZmaP6b6UPn7A=="],
 

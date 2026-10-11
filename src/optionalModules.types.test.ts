@@ -3,11 +3,11 @@
 import type {
   ComputerExecutor,
   ComputerUseHostAdapter,
-} from '@ant/computer-use-mcp/types'
+} from '@gakr/computer-use-mcp/types'
 import type {
   ComputerExecutor as ReExportedComputerExecutor,
   ComputerUseHostAdapter as ReExportedComputerUseHostAdapter,
-} from '@ant/computer-use-mcp'
+} from '@gakr/computer-use-mcp'
 
 type Assert<T extends true> = T
 type IsEqual<A, B> = (<T>() => T extends A ? 1 : 2) extends <

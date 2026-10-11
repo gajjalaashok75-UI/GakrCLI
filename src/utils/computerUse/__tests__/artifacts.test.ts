@@ -4,7 +4,7 @@ import { afterAll, describe, expect, it } from 'bun:test'
 import {
   COMPUTER_USE_OUTPUT_DIR,
   saveScreenshotArtifact,
-} from '@ant/computer-use-mcp/artifacts';
+} from '@gakr/computer-use-mcp/artifacts';
 
 // 1x1 transparent PNG.
 const PNG_B64 =

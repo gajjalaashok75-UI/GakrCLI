@@ -241,7 +241,7 @@ const gakrcliInChromeToolRendering =
   (): typeof import('../../utils/gakrcliInChrome/toolRendering.js') =>
     require('../../utils/gakrcliInChrome/toolRendering.js')
 // Lazy: wrapper.tsx → hostAdapter.ts → executor.ts pulls both native modules
-// (@ant/computer-use-input + @ant/computer-use-swift). Runtime-gated by
+// (@gakr/computer-use-input + @gakr/computer-use-swift). Runtime-gated by
 // GrowthBook tengu_malort_pedway (see gates.ts).
 const computerUseWrapper = feature('CHICAGO_MCP')
   ? (): typeof import('../../utils/computerUse/wrapper.js') =>

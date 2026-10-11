@@ -13,8 +13,8 @@
  */
 import { describe, expect, test } from 'bun:test'
 
-import * as computerUseMcp from '@ant/computer-use-mcp'
-import type { InstalledApp } from '@ant/computer-use-mcp/types'
+import * as computerUseMcp from '@gakr/computer-use-mcp'
+import type { InstalledApp } from '@gakr/computer-use-mcp/types'
 import {
   bunEmbeddedFiles,
   bunFile,

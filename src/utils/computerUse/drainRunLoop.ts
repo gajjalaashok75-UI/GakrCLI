@@ -5,7 +5,7 @@ import { requireComputerUseSwift } from './swiftLoader.js'
 /**
  * Shared CFRunLoop pump. Swift's four `@MainActor` async methods
  * (captureExcluding, captureRegion, apps.listInstalled, resolvePrepareCapture)
- * and `@ant/computer-use-input`'s key()/keys() all dispatch to
+ * and `@gakr/computer-use-input`'s key()/keys() all dispatch to
  * DispatchQueue.main. Under libuv (Node/bun) that queue never drains — the
  * promises hang. Electron drains it via CFRunLoop so Cowork doesn't need this.
  *
