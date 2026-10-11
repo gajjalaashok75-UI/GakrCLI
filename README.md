@@ -1,70 +1,73 @@
 <div align="center">
 
-<img src="assets/gakrcli-logo.png" alt="GakrCLI" width="400" height="400">
-
 # GakrCLI
 
-**Version 0.6.0**
+**Version 0.6.1**
 
 Any model. Every tool. One terminal-first coding agent.
 
 </div>
 
-GakrCLI is an AI coding agent for the command line and for embedded hosts such as the GakrCLI VS Code extension. It can inspect a workspace, edit files, run shell commands with permissions, manage multi-turn sessions, use MCP tools, route work to specialized agents, and stream results from many model providers.
+## What is GakrCLI
 
-The published npm package is `@gakr-gakr/gakrcli`. The executable command is `gakrcli`.
+GakrCLI is an AI coding agent that runs in your terminal. Point it at a workspace and it reads files, edits them, runs shell commands with your permission, searches code, drives a browser, and streams answers from whichever model you choose. The same engine runs headless for embedded hosts like the GakrCLI VS Code extension.
 
-## Why GakrCLI
+It is not tied to one vendor. You install one CLI, bring your own API key or local model, and switch between them whenever you want. The npm package is `@gakr-gakr/gakrcli` and the command is `gakrcli`.
 
-- Use one CLI across cloud APIs and local model backends
-- Save provider profiles inside the app with `/provider`
-- Run with OpenAI-compatible services, Gemini, GitHub Models, Codex OAuth, Codex, Ollama, Atomic Chat, and other supported providers
-- Keep coding-agent workflows in one place: bash, file tools, grep, glob, agents, tasks, MCP, and web tools
-- Use the bundled VS Code extension for launch integration and theme support
+## Main features
 
-## Quick Start
+- **Any model**: OpenAI-compatible APIs, Gemini, GitHub Models, Codex, Ollama, Atomic Chat, Bedrock, Vertex, and many more routes.
+- **Full coding tools**: bash, file read/write/edit, grep, glob, sub-agents, tasks, MCP servers, and web tools.
+- **Built-in browser**: a Playwright Chromium the agent can navigate, click, and type in, with screenshots and PDF export.
+- **Streaming output**: tokens and tool progress show up as they happen.
+- **Memory**: durable project memory with a full-text index and per-session rolling summaries.
+- **Repo map**: a git-aware, PageRank-ranked map of tracked files, so context respects `.gitignore`.
+- **Vision input**: URL and base64 images on vision-capable models.
+- **Flexible model picker**: `/model` merges every configured provider's catalog and lets you type in an unlisted model.
+- **Background sessions**: kick off a long task and keep working, then check logs or stop it later.
+- **Headless gRPC**: drive the engine from other apps and CI over a stream.
+- **VS Code extension**: chat panel, native diff viewer, `@`-mentions, and session history in the editor.
 
-### Install
+## Why use it
+
+- One agent across cloud APIs and local backends, so moving from OpenAI to Ollama does not mean learning a second tool.
+- Providers and models are managed inside the app with `/provider` and `/model`, so profiles persist instead of living in copy-pasted shell scripts.
+- The whole coding loop is in one place: tools, sub-agents, MCP servers, permissions, and sessions.
+- The same engine runs in the terminal, as a headless gRPC service, or inside the VS Code extension.
+
+## Quick start
+
+### Install from npm
 
 ```bash
 npm install -g @gakr-gakr/gakrcli@latest
 gakrcli
 ```
 
-If you're on Arch Linux, you can install GakrCLI from the community-maintained [AUR package](https://aur.archlinux.org/packages/gakrcli):
-```bash
-paru -S gakrcli
-```
+Requires Node.js 22 or newer.
 
-If the install later reports `ripgrep not found`, install ripgrep system-wide and confirm `rg --version` works in the same terminal before starting GakrCLI.
-
-**Verify / troubleshoot installed version:**
+### Install from the repo
 
 ```bash
-gakrcli --version
-npm view @gakr-gakr/gakrcli dist-tags
-npm install -g @gakr-gakr/gakrcli@latest
+git clone https://github.com/gajjalaashok75-UI/GakrCLI.git
+cd GakrCLI
+bun install
+bun run build
+node dist/cli.mjs
 ```
 
-### Start
+To get the `gakrcli` command from a local checkout, run `npm link` in the repo root after building.
 
-```bash
-gakrcli
-```
+### Start and connect a model
 
-Inside GakrCLI:
+Run `gakrcli` inside your project. On first run, `/provider` walks you through a provider and stores a profile you can reuse.
 
-- run `/provider` for guided provider setup and saved profiles
-
-### Fastest OpenAI setup
-
-macOS / Linux:
+Fastest OpenAI setup on macOS / Linux:
 
 ```bash
 export GAKR_CODE_USE_OPENAI=1
-export OPENAI_API_KEY=sk-your-key-here
+export OPENAI_API_KEY=sk-your-key
 export OPENAI_MODEL=gpt-4o
-
 gakrcli
 ```
 
@@ -72,160 +75,100 @@ Windows PowerShell:
 
 ```powershell
 $env:GAKR_CODE_USE_OPENAI="1"
-$env:OPENAI_API_KEY="sk-your-key-here"
+$env:OPENAI_API_KEY="sk-your-key"
 $env:OPENAI_MODEL="gpt-4o"
-
 gakrcli
 ```
 
-### Fastest local Ollama setup
-
-macOS / Linux:
+Fastest local setup with Ollama:
 
 ```bash
 export GAKR_CODE_USE_OPENAI=1
 export OPENAI_BASE_URL=http://localhost:11434/v1
 export OPENAI_MODEL=qwen2.5-coder:7b
-
 gakrcli
 ```
 
-Windows PowerShell:
+### One-shot prompts
 
-```powershell
-$env:GAKR_CODE_USE_OPENAI="1"
-$env:OPENAI_BASE_URL="http://localhost:11434/v1"
-$env:OPENAI_MODEL="qwen2.5-coder:7b"
+You do not have to open the interactive session. Pass a prompt directly:
 
-gakrcli
+```bash
+gakrcli "hello are you there"
+gakrcli -p "summarize this repo" > summary.txt
 ```
 
-## Setup Guides
+A bare prompt opens the session already seeded with it. With `-p` (or `--print`), GakrCLI answers once and exits, which is what you want in scripts and pipes. Add `--output-format json` or `stream-json` when another program reads the output.
 
-Beginner-friendly guides:
+More guides:
 
-- [Non-Technical Setup](docs/non-technical-setup.md)
-- [Windows Quick Start](docs/quick-start-windows.md)
-- [macOS / Linux Quick Start](docs/quick-start-mac-linux.md)
+- [Non-technical setup](docs/non-technical-setup.md)
+- [Windows quick start](docs/quick-start-windows.md)
+- [macOS / Linux quick start](docs/quick-start-mac-linux.md)
+- [Advanced setup and source builds](docs/advanced-setup.md)
 
-Advanced and source-build guides:
+## How to use it
 
-- [Advanced Setup](docs/advanced-setup.md)
-- [Android Install](ANDROID_INSTALL.md)
+Start `gakrcli` in your project folder and type a request in plain language. The agent decides which tools to call. Anything sensitive, like writing files or running shell commands, asks for permission first.
 
-## Supported Providers
-
-| Provider | Setup Path | Notes |
-| --- | --- | --- |
-| OpenAI-compatible | `/provider` or env vars | Works with OpenAI, OpenRouter, DeepSeek, Groq, Mistral, LM Studio, and other compatible `/v1` servers |
-| Hicap | `/provider` or OpenAI-compatible env vars | Uses `api-key` auth, discovers models from unauthenticated `/models`, and supports Responses mode for `gpt-` models |
-| Fireworks AI | `/provider` or env vars | First-class provider with 276 curated models (DeepSeek, Qwen, Llama, Gemma, and more); uses `FIREWORKS_API_KEY` |
-| Gemini | `/provider` or env vars | Supports API key only |
-| GitHub Models | `/onboard-github` | Interactive onboarding with saved credentials |
-| Codex OAuth | `/provider` | Opens ChatGPT sign-in in your browser and stores Codex credentials securely |
-| Codex | `/provider` | Uses existing Codex CLI auth, GakrCLI secure storage, or env credentials |
-| gakr-gakr Opengateway | Startup default, `/provider`, or env vars | Smart gateway at `https://opengateway.gakr-gakr.com/v1`; requires an API key from https://gakr-gakr.com/opengateway/keys and routes Xiaomi MiMo and GMI Cloud partner models by `OPENAI_MODEL` |
-| OpenCode Zen | `/provider` or env vars | Pay-as-you-go AI gateway (43 models); uses `OPENCODE_API_KEY` via `https://opencode.ai/zen/v1`; shared key with OpenCode Go |
-| OpenCode Go | `/provider` or env vars | $10/mo subscription for open models (13 models); uses `OPENCODE_API_KEY` via `https://opencode.ai/zen/go/v1`; shared key with OpenCode Zen |
-| Xiaomi MiMo | `/provider` or env vars | OpenAI-compatible API at `https://mimo.mi.com`; uses `MIMO_API_KEY` and defaults to `mimo-v2.5-pro` |
-| NEAR AI | `/provider` or env vars | Unified gateway (GakrCLI, GPT, Gemini + TEE open models); uses `NEARAI_API_KEY` at `https://cloud-api.near.ai/v1` |
-| xAI | `/provider` or env vars | Direct Grok route at `https://api.x.ai/v1`; uses `XAI_API_KEY` and filters non-chat catalog entries out of discovery |
-| ApiSmart | `/provider` or env vars | OpenAI-compatible gateway at `https://gw.apismart.ai/v1`; uses `APISMART_API_KEY` with a curated multi-vendor catalog (DeepSeek, Kimi, GLM, Qwen) |
-| Concentrate | `/provider` or env vars | OpenAI-compatible gateway at `https://api.concentrate.ai/v1`; uses `CONCENTRATE_API_KEY`, override the endpoint with `CONCENTRATE_BASE_URL` |
-| Gitlawb Opengateway | `/provider` or env vars | Smart gateway at `https://opengateway.gitlawb.com/v1`; mint a free key at https://gitlawb.com/opengateway/keys and set `OPENGATEWAY_API_KEY` |
-| Ollama | `/provider` or env vars | Local inference with no API key |
-| Atomic Chat | `/provider`, env vars, or `bun run dev:atomic-chat` | Local Model Provider; auto-detects loaded models |
-| Bedrock / Vertex / Foundry | env vars | Anthropic-family cloud routes; Vertex is for GakrCLI on Vertex AI, not arbitrary Model Garden models |
-
-Ling (`inclusionai/ling-3.0-*`) and Macaron (`mindai/macaron-v1-*`) ship as brand and model descriptors rather than standalone routes, so their models show up in provider discovery and the `/model` picker on any OpenAI-compatible gateway that serves them.
-
-## What Works
-
-- **Tool-driven coding workflows**: Bash, file read/write/edit, grep, glob, agents, tasks, MCP, and slash commands
-- **Streaming responses**: Real-time token output and tool progress
-- **Tool calling**: Multi-step tool loops with model calls, tool execution, and follow-up responses
-- **Images**: URL and base64 image inputs for providers that support vision
-- **Provider profiles**: Guided setup plus saved user-level provider profile support
-- **Local and remote model backends**: Cloud APIs, local servers, and Apple Silicon local inference
-- **Browser automation**: The built-in `WebBrowser` tool drives a Chromium session for navigation, interaction, and recording, with a live in-REPL panel and a `browser (<host>)` footer pill
-- **Dynamic model discovery**: 31 provider routes enumerate their catalog from `GET /models` at runtime, with a static fallback when a provider is unreachable
-- **Model picker**: `/model` de-duplicates the merged provider catalog, shows the discovery status line, refreshes on `r`, and ends with an `Enter model name…` row so an unlisted model can be switched to by typing its name
-- **Custom model pricing**: Declare per-token rates in settings for a model the built-in catalog does not know, so cost display and budget checks report real numbers on custom and self-hosted routes
-- **Repo map**: A git-aware, PageRank-ranked map of the workspace built from tracked files, so context selection respects `.gitignore`
-- **Session memory**: Automatic fact extraction with a searchable vector index and a knowledge graph over recalled facts
-- **Daemon mode**: Run the CLI as a long-lived process via `/daemon` for embedded and automation hosts
-
-## Provider Notes
-
-GakrCLI supports multiple providers, but behavior is not identical across all of them.
-
-- Anthropic-specific features may not exist on other providers
-- Tool quality depends heavily on the selected model
-- Smaller local models can struggle with long multi-step tool flows
-- Some providers impose lower output caps than the CLI defaults, and GakrCLI adapts where possible
-- gakr-gakr Opengateway is the fresh-install startup default and requires an API key from https://gakr-gakr.com/opengateway/keys. It uses one OpenAI-compatible base URL; switch between `mimo-*` and `google/gemini-3.1-flash-lite-preview` with `/model`, and do not pin the base URL to `/v1/xiaomi-mimo`.
-- Xiaomi MiMo uses `api-key` header auth on the direct OpenAI-compatible route and currently does not support `/usage` reporting in GakrCLI
-- Bedrock ships `@aws-sdk/client-bedrock` and `@aws-sdk/client-sts` as `optionalDependencies`. A normal install includes them; if you installed with `--no-optional`, GakrCLI reports the missing package and the install command instead of a bare module-resolution error
-
-### GitHub Copilot sub-agent optimization
-
-When GAKR_CODE_USE_GITHUB=1, GakrCLI serializes sub-agent execution to reduce GitHub Copilot Premium Request consumption. Default behavior is GITHUB_COPILOT_MAX_SUBAGENTS=1 (synchronous, one sub-agent at a time). Tuning vars (all optional):
-
-| Var | Effect |
-|---|---|
-| GITHUB_COPILOT_MAX_SUBAGENTS=0 | Suppress sub-agents entirely (sub-agents throw an error). |
-| GITHUB_COPILOT_MAX_SUBAGENTS=1 | Force synchronous execution. **Default.** |
-| GITHUB_COPILOT_MAX_SUBAGENTS=2..10 | Parsed/clamped but not enforced differently from =1 (any positive cap = synchronous). |
-| GITHUB_COPILOT_ALLOW_SUBAGENTS=1 | Re-enable parallel/background sub-agents, overriding the cap. |
-| GITHUB_COPILOT_FORCE_SYNC_SUBAGENTS=1 | Force synchronous execution regardless of cap. |
-| GITHUB_COPILOT_OPTIMIZATION_DISABLED=1 | Disable all of the above; sub-agents run as before this feature. |
-
-The `is_async` field reported in the `tengu_agent_tool_selected` event and the agent metadata now reflects the final execution mode (i.e., `false` when synchronous is forced). See `.env.example` for the full descriptions.
-
-For best results, use models with strong tool/function calling support.
-
-## Agent Routing
-
-GakrCLI can route different agents to different models through settings-based routing. This is useful for cost optimization or splitting work by model strength.
-
-Add to `~/.gakrcli.json`:
-
-```json
-{
-  "agentModels": {
-    "deepseek-v4-flash": {
-      "base_url": "https://api.deepseek.com/v1",
-      "api_key": "sk-your-key"
-    },
-    "zai-default": {
-      "model": "glm-5.1",
-      "base_url": "https://api.z.ai/api/coding/paas/v4",
-      "api_key": "sk-your-key"
-    },
-    "gpt-4o": {
-      "base_url": "https://api.openai.com/v1",
-      "api_key": "sk-your-key"
-    }
-  },
-  "agentRouting": {
-    "Explore": "deepseek-v4-flash",
-    "Plan": "gpt-4o",
-    "general-purpose": "gpt-4o",
-    "frontend-dev": "zai-default",
-    "default": "gpt-4o"
-  }
-}
+```
+explain what this repo does
+add tests for the parser in src/parser.ts
+find every place we call the old auth API
+commit these changes
 ```
 
-When no routing match is found, the global provider remains the fallback.
+Commands worth knowing inside the app:
 
-`agentRouting` values and explicit Agent tool `model` overrides match keys in `agentModels`. By default, that key is also the model string sent to the provider. Set `agentModels.<key>.model` when you want a local route key such as `zai-default` to call a different provider model name such as `glm-5.1`.
+| Command | What it does |
+| --- | --- |
+| `/provider` | Guided provider setup and saved profiles |
+| `/model` | Pick or type a model; press `r` to refresh discovery |
+| `/help` | List every slash command |
+| `/compact` | Shrink the conversation context |
+| `/resume` | Reopen a past session |
+| `/daemon` | Manage background sessions and the daemon |
 
-> **Note:** `/provider` changes the global/parent provider for your current session. `agentModels` and `agentRouting` are specifically for configuring per-agent provider overrides while keeping the parent session unchanged.
+Permission modes control how much the agent can do without asking: Default, Accept Edits, Plan, Bypass, and Full Access.
 
-> **Note:** `api_key` values in `settings.json` are stored in plaintext. Keep this file private and do not commit it to version control.
+## Tools, skills, and slash commands
 
-**Model-only routes (same provider):** Omit `base_url` and `api_key` to run an agent on a different model using your *current* provider's endpoint and key — no credential duplication:
+Three building blocks do most of the work:
+
+- **Tools** are what the agent acts with: bash, file read/write/edit, grep, glob, web search and fetch, the browser, MCP servers, and sub-agents. The model chooses them, and you approve the risky ones.
+- **Slash commands** are how you steer. Type `/` or `/help` in the REPL for the full list. Along with the session commands above, there are commands for agents (`/agents`), skills (`/skills`), memory (`/memory`), MCP (`/mcp`), plugins (`/plugin`), settings (`/config`), cost (`/cost`, `/usage`), and diagnostics (`/doctor`, `/status`).
+- **Skills** are small instruction packs for a recurring task. List them with `/skills` and run one by name, for example `/verify`, `/simplify`, or `/remember`. Use `/skill-search` to find community skills and `/skill-learning` to turn a session into a new one.
+
+## Sub-agents
+
+A sub-agent is a separate agent the main one spawns for a focused job, then reports back. It keeps your main context small and lets work run in parallel.
+
+- Built-in agents cover common jobs: `Explore` for searching a codebase, `Plan` for outlining an approach, `general-purpose` for multi-step work, and a read-only `verification` agent that audits a change before it is called done.
+- Each sub-agent gets its own context and transcript, so a long search does not crowd your session.
+- They can run in the background, and can work in a git worktree so parallel edits do not collide.
+- Point different agents at different models to control cost. See the agent routing section below.
+- Configure which agents exist with `/agents`.
+
+## Memory
+
+GakrCLI remembers useful things across sessions so you do not repeat yourself.
+
+- Project memory lives in `memory/**` with a `MEMORY.md` index, and a SQLite full-text index (`memory.db`) makes it searchable by relevance.
+- Each session also keeps a rolling summary, and both are searched to surface context for a new prompt.
+- Extraction and consolidation run in the background after turns, so memory improves without you managing it.
+- Edit or review it with `/memory`, and force a fresh summary with `/summary`.
+
+## Providers and models
+
+GakrCLI ships with a long list of provider presets and manages them the same way everywhere. Configure one with `/provider` or with environment variables.
+
+Supported options include OpenAI-compatible servers (OpenAI, OpenRouter, DeepSeek, Groq, Mistral, LM Studio, and others), Gemini, GitHub Models, Codex and Codex OAuth, Ollama, Atomic Chat, Fireworks AI, xAI, Xiaomi MiMo, NEAR AI, Bedrock, Vertex, and more. The full list with credentials and endpoints is in [docs/PROVIDERS.md](docs/PROVIDERS.md).
+
+Switch models with `/model`. The picker de-duplicates the merged catalog, shows the discovery status line, and ends with an `Enter model name…` row so you can use a model the catalog does not know. For those custom or self-hosted models, you can declare per-token prices in settings so cost and budget checks stay accurate.
+
+### Route agents to different models
+
+You can send specific agents to specific models, which is useful for cutting cost or splitting work by model strength. Add this to `~/.gakrcli.json`:
 
 ```json
 {
@@ -233,72 +176,78 @@ When no routing match is found, the global provider remains the fallback.
     "mini": { "model": "gpt-5-mini" }
   },
   "agentRouting": {
-    "verification": "mini"
+    "verification": "mini",
+    "Plan": "gpt-4o"
   }
 }
 ```
 
-**Built-in agents are routable by their type name.** Useful keys: `verification` (the read-only auditor that runs before completion), `Explore`, and `Plan`. For example, `"agentRouting": { "verification": "mini" }` runs the verifier on `gpt-5-mini` while your main session stays on its model. Absent any entry, the verifier inherits the main-loop model.
+`agentRouting` keys match entries in `agentModels`. Omit `base_url` and `api_key` to reuse the current provider's endpoint and key with a different model. When nothing matches, the global provider stays the fallback. Built-in agents such as `verification`, `Explore`, and `Plan` are routable by name, so `"agentRouting": { "verification": "mini" }` runs the read-only verifier on a cheaper model while the main session keeps its own.
 
-## Web Search and Fetch
+> **Note:** `api_key` values in settings are stored in plaintext. Keep that file private and out of version control.
 
-By default, `WebSearch` works on non-Anthropic models using DuckDuckGo. This gives GPT-4o, DeepSeek, Gemini, Ollama, and other OpenAI-compatible providers a free web search path out of the box.
+### Provider caveats
 
-> **Note:** DuckDuckGo fallback works by scraping search results and may be rate-limited, blocked, or subject to DuckDuckGo's Terms of Service. If you want a more reliable supported option, configure Firecrawl.
+- Anthropic-specific features may not exist on other providers.
+- Tool quality depends on the model. Smaller local models struggle with long multi-step tool flows.
+- Some providers cap output lower than the CLI defaults; GakrCLI adapts where it can.
+- When `GAKR_CODE_USE_GITHUB=1`, GakrCLI serializes sub-agent execution by default to limit Copilot Premium Request usage. Tuning is done through the `GITHUB_COPILOT_*` variables, documented in `.env.example`.
 
-For Anthropic-native backends and Codex responses, GakrCLI keeps the native provider web search behavior.
+## Built-in browser
 
-`WebFetch` works, but its basic HTTP plus HTML-to-markdown path can still fail on JavaScript-rendered sites or sites that block plain HTTP requests.
+GakrCLI ships a browser tool that drives a real Chromium session through Playwright. The agent can navigate, click, type, fill forms, scroll to text, take screenshots, save a page as PDF, and read console and network logs. It runs headless by default. Set `webBrowser.headless` to `false` in settings to watch a real window, which needs a display server.
 
-Set a [Firecrawl](https://firecrawl.dev) API key if you want Firecrawl-powered search/fetch behavior:
+While the browser is active, a live panel shows the current page and a `browser (<host>)` pill appears in the REPL footer. Recordings are saved under `.agent_tmp/browser_observations`. Each action has a 300 second timeout that drops to 30 seconds on the last retry before the session resets.
 
-```bash
-export FIRECRAWL_API_KEY=your-key-here
-```
+For automating your own Chrome, see [docs/gakrcli-in-chrome](docs/gakrcli-in-chrome).
 
-With Firecrawl enabled:
+## Background sessions and daemon
 
-- `WebSearch` can use Firecrawl's search API while DuckDuckGo remains the default free path for non-GakrCLI models
-- `WebFetch` uses Firecrawl's scrape endpoint instead of raw HTTP, handling JS-rendered pages correctly
-
-Free tier at [firecrawl.dev](https://firecrawl.dev) includes 500 credits. The key is optional.
-
----
-
-## Headless gRPC Server
-
-GakrCLI can be run as a headless gRPC service, allowing you to integrate its agentic capabilities (tools, bash, file editing) into other applications, CI/CD pipelines, or custom user interfaces. The server uses bidirectional streaming to send real-time text chunks, tool calls, and request permissions for sensitive commands.
-
-### 1. Start the gRPC Server
-
-Start the core engine as a gRPC service on `localhost:50051`:
+Long tasks do not have to block your terminal. Start a session in the background, follow its logs, and stop it when you are done:
 
 ```bash
-npm run dev:grpc
+gakrcli --bg --name "fix-tests" "run the test suite and fix the failures"
+gakrcli logs fix-tests -f
+gakrcli kill fix-tests
 ```
 
-#### Configuration
+Inside the REPL, `/daemon` manages the same thing with `status`, `start`, `stop`, `bg`, `attach`, `logs`, and `kill` subcommands.
+
+## Web search and fetch
+
+On non-Anthropic models, `WebSearch` uses DuckDuckGo by default, so GPT-4o, DeepSeek, Gemini, and Ollama get free web search out of the box. DuckDuckGo works by scraping, so it can be rate-limited or blocked.
+
+For something more reliable, set a Firecrawl key:
+
+```bash
+export FIRECRAWL_API_KEY=your-key
+```
+
+With Firecrawl enabled, `WebSearch` uses its search API and `WebFetch` uses its scrape endpoint, which handles JavaScript-rendered pages correctly. The free tier includes 500 credits, and the key is optional.
+
+## Headless gRPC server
+
+You can run GakrCLI as a headless gRPC service and drive it from other apps, CI pipelines, or your own UI. Real-time text, tool calls, and permission prompts stream over a bidirectional connection.
+
+```bash
+npm run dev:grpc      # start on localhost:50051
+npm run dev:grpc:cli  # test client, in a second terminal
+```
 
 | Variable | Default | Description |
-|-----------|-------------|------------------------------------------------|
-| `GRPC_PORT` | `50051` | Port the gRPC server listens on |
-| `GRPC_HOST` | `localhost` | Bind address. Use `0.0.0.0` to expose on all interfaces (not recommended without authentication) |
+| --- | --- | --- |
+| `GRPC_PORT` | `50051` | Port to listen on |
+| `GRPC_HOST` | `localhost` | Bind address; `0.0.0.0` exposes all interfaces |
 
-### 2. Run the Test CLI Client
+The proto file lives at `src/proto/gakrcli.proto`, so you can generate a client in Python, Go, Rust, or any other language. See [docs/grpc-server.md](docs/grpc-server.md).
 
-We provide a lightweight CLI client that communicates exclusively over gRPC. It acts just like the main interactive CLI, rendering colors, streaming tokens, and prompting you for tool permissions (y/n) via the gRPC `action_required` event.
+## VS Code extension
 
-In a separate terminal, run:
+The repo includes an extension in [`vscode-extension/gakrcli-vscode`](vscode-extension/gakrcli-vscode) that turns the CLI into an editor experience: a streaming chat panel, a native diff viewer with Accept/Reject, `@`-mentions, session history, git worktree sessions, and a provider-aware control center. It also supports Microsoft Foundry / Azure OpenAI configuration through VS Code Secret Storage.
 
-```bash
-npm run dev:grpc:cli
-```
+The extension is a UI wrapper. Providers, tools, MCP, and slash commands all live in the CLI, so upgrading the brain is just `gakrcli@latest` with no extension reinstall. See the [extension README](vscode-extension/gakrcli-vscode/README.md).
 
-*Note: The gRPC definitions are located in `src/proto/gakrcli.proto`. You can use this file to generate clients in Python, Go, Rust, or any other language.*
-
----
-
-## Source Build And Local Development
+## Build and test
 
 ```bash
 bun install
@@ -306,103 +255,46 @@ bun run build
 node dist/cli.mjs
 ```
 
-Helpful commands:
+Handy scripts: `bun run dev`, `bun test`, `bun run test:coverage`, `bun run smoke`, `bun run doctor:runtime`, `bun run verify:privacy`, and `bun run benchmark:startup`.
 
-- `bun run dev`
-- `bun test`
-- `bun run test:coverage`
-- `bun run test:conversation-arc`
-- `bun run security:pr-scan -- --base origin/main`
-- `bun run smoke`
-- `bun run doctor:runtime`
-- `bun run verify:privacy`
-- `bun run install:verify`
-- `bun run benchmark:startup`
-- focused `bun test ...` runs for the areas you touch
+## Repository layout
 
-## Testing And Coverage
-
-GakrCLI uses Bun's built-in test runner for unit tests.
-
-Run the full unit suite:
-
-```bash
-bun test
-```
-
-Generate unit test coverage:
-
-```bash
-bun run test:coverage
-```
-
-Open the visual coverage report:
-
-```bash
-open coverage/index.html
-```
-
-If you already have `coverage/lcov.info` and only want to rebuild the UI:
-
-```bash
-bun run test:coverage:ui
-```
-
-Use focused test runs when you only touch one area:
-
-- `bun run test:provider`
-- `bun run test:provider-recommendation`
-- `bun test path/to/file.test.ts`
-
-Recommended contributor validation before opening a PR:
-
-- `bun run build`
-- `bun run smoke`
-- `bun run test:coverage` for broader unit coverage when your change affects shared runtime or provider logic
-- focused `bun test ...` runs for the files and flows you changed
-
-Coverage output is written to `coverage/lcov.info`, and GakrCLI also generates a git-activity-style heatmap at `coverage/index.html`.
-## Repository Structure
-
-- `src/` - core CLI/runtime
-- `scripts/` - build, verification, and maintenance scripts
-- `docs/` - setup, contributor, and project documentation
-- `python/` - standalone Python helpers and their tests
+- `src/` - core CLI and runtime
+- `scripts/` - build, verification, and maintenance
+- `docs/` - setup, architecture, and contributor docs
 - `vscode-extension/gakrcli-vscode/` - VS Code extension
-- `.github/` - repo automation, templates, and CI configuration
+- `python/` - standalone Python helpers and tests
 - `bin/` - CLI launcher entrypoints
 
-## VS Code Extension
+## Community and contributing
 
-The repo includes a VS Code extension in [`vscode-extension/gakrcli-vscode`](vscode-extension/gakrcli-vscode) for GakrCLI launch integration, provider-aware Control Center, in-editor chat, theme support, and optional **Microsoft Foundry / Azure OpenAI** configuration (endpoint, API version, deployment, API key via Secret Storage) injected into launched terminals. See that folder’s [README](vscode-extension/gakrcli-vscode/README.md).
+- [GitHub Discussions](https://github.com/gajjalaashok75-UI/gakrcli/discussions) for Q&A and ideas
+- [GitHub Issues](https://github.com/gajjalaashok75-UI/gakrcli/issues) for bugs and feature requests
+- [SECURITY.md](SECURITY.md) to report a security issue
 
-## Security
+Contributions are welcome. For larger changes, open an issue first so the scope is clear. Before a PR, run `bun run build`, `bun run smoke`, and focused `bun test ...` runs for what you touched.
 
-If you believe you found a security issue, see [SECURITY.md](SECURITY.md).
+## Debug mode
 
-## Community
+When a local install or a source build misbehaves, start with the health checks:
 
-- Use [GitHub Discussions](https://github.com/gajjalaashok75-UI/gakrcli/discussions) for Q&A, ideas, and community conversation
-- Use [GitHub Issues](https://github.com/gajjalaashok75-UI/gakrcli/issues) for confirmed bugs and actionable feature work
+```bash
+gakrcli doctor          # check auto-updater health
+bun run doctor:runtime  # full runtime check from a source checkout
+```
 
-## Contributing
+Then turn on debug logging:
 
-Contributions are welcome.
+```bash
+gakrcli --debug                    # debug to the console
+gakrcli --debug "api,hooks"        # filter by category
+gakrcli --debug-to-stderr          # keep stdout clean for pipes
+gakrcli --debug-file ./debug.log   # write to a specific file
+gakrcli --verbose                  # more detail from config
+```
 
-For larger changes, open an issue first so the scope is clear before implementation. Helpful validation commands include:
-
-- `bun run build`
-- `bun run test:coverage`
-- `bun run smoke`
-- focused `bun test ...` runs for files and flows you changed
-
-
-## Disclaimer
-
-GakrCLI is an independent community project and is not affiliated with, endorsed by, or sponsored by Anthropic.
-
-GakrCLI originated from the GakrCLI Code codebase and has since been substantially modified to support multiple providers and open use. "GakrCLI" and "GakrCLI Code" are trademarks of Anthropic PBC. See [LICENSE](LICENSE) for details.
+Logs go to `~/.gakrcli/debug/<sessionId>.txt` (or `$GAKR_CONFIG_DIR/debug/`), with a `latest` symlink pointing at the current one. Inside the REPL, `/doctor` runs the same runtime check.
 
 ## License
 
-See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

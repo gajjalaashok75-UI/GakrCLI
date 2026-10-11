@@ -104,3 +104,6 @@ auth.json
 # Scratch files
 .tmp
 .tmp-*
+
+# Local issue notes (not committed)
+ISSUES.md
