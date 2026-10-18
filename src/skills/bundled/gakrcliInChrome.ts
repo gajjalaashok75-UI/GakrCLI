@@ -1,17 +1,17 @@
-import { BROWSER_TOOLS } from '@gakr-gakr/gakrcli-for-chrome-mcp'
+import { TOOL_SCHEMAS } from '@gakr-gakr/mcp-chrome-shared'
 import { BASE_CHROME_PROMPT } from '../../utils/gakrcliInChrome/prompt.js'
 import { registerBundledSkill } from '../bundledSkills.js'
 import { shouldEnableGakrCLIInChromeSkill } from './gakrcliInChromeAccess.js'
 
 
-const GAKR_IN_CHROME_MCP_TOOLS = BROWSER_TOOLS.map(
+const GAKR_IN_CHROME_MCP_TOOLS = TOOL_SCHEMAS.map(
   tool => `mcp__gakrcli-in-chrome__${tool.name}`,
 )
 
 const SKILL_ACTIVATION_MESSAGE = `
 Now that this skill is invoked, you have access to Chrome browser automation tools. You can now use the mcp__gakrcli-in-chrome__* tools to interact with web pages.
 
-IMPORTANT: Start by calling mcp__gakrcli-in-chrome__tabs_context_mcp to get information about the user's current browser tabs.
+IMPORTANT: Start by calling mcp__gakrcli-in-chrome__get_windows_and_tabs to get information about the user's current browser tabs.
 `
 
 export function registerGakrCLIInChromeSkill(): void {

@@ -1,7 +1,7 @@
+import { TOOL_NAMES } from '@gakr-gakr/mcp-chrome-shared';
 import * as React from 'react';
 import { MessageResponse } from '../../components/MessageResponse.js';
-import { supportsHyperlinks } from '../../ink/supports-hyperlinks.js';
-import { Link, Text } from '../../ink.js';
+import { Text } from '../../ink.js';
 import { renderToolResultMessage as renderDefaultMCPToolResultMessage } from '../../tools/MCPTool/UI.js';
 import type { MCPToolResult } from '../../utils/mcpValidation.js';
 import { truncateToWidth } from '../format.js';
@@ -9,11 +9,10 @@ import { trackGakrCLIInChromeTabId } from './common.js';
 export type { Tool } from '@modelcontextprotocol/sdk/types.js';
 
 /**
- * All tool names from BROWSER_TOOLS in @gakr-gakr/gakrcli-for-chrome-mcp.
- * Keep in sync with the package's BROWSER_TOOLS array.
+ * All tool names the Chrome extension implements, derived from the shared
+ * registry the extension names its own tools from so this cannot drift.
  */
-export type ChromeToolName = 'javascript_tool' | 'read_page' | 'find' | 'form_input' | 'computer' | 'navigate' | 'resize_window' | 'gif_creator' | 'upload_image' | 'get_page_text' | 'tabs_context_mcp' | 'tabs_create_mcp' | 'update_plan' | 'read_console_messages' | 'read_network_requests' | 'shortcuts_list' | 'shortcuts_execute';
-const CHROME_EXTENSION_FOCUS_TAB_URL_BASE = 'https://clau.de/chrome/tab/';
+export type ChromeToolName = (typeof TOOL_NAMES)['BROWSER'][keyof (typeof TOOL_NAMES)['BROWSER']];
 function renderChromeToolUseMessage(input: Record<string, unknown>, toolName: ChromeToolName, verbose: boolean): React.ReactNode {
   const tabId = input.tabId;
   if (typeof tabId === 'number') {
@@ -23,7 +22,7 @@ function renderChromeToolUseMessage(input: Record<string, unknown>, toolName: Ch
   // Build secondary info based on tool type and input
   const secondaryInfo: string[] = [];
   switch (toolName) {
-    case 'navigate':
+    case 'chrome_navigate':
       if (typeof input.url === 'string') {
         try {
           const url = new URL(input.url);
@@ -33,12 +32,7 @@ function renderChromeToolUseMessage(input: Record<string, unknown>, toolName: Ch
         }
       }
       break;
-    case 'find':
-      if (typeof input.query === 'string') {
-        secondaryInfo.push(`pattern: ${truncateToWidth(input.query, 30)}`);
-      }
-      break;
-    case 'computer':
+    case 'chrome_computer':
       if (typeof input.action === 'string') {
         const action = input.action;
         if (action === 'left_click' || action === 'right_click' || action === 'double_click' || action === 'middle_click') {
@@ -64,81 +58,60 @@ function renderChromeToolUseMessage(input: Record<string, unknown>, toolName: Ch
         }
       }
       break;
-    case 'gif_creator':
+    case 'chrome_gif_recorder':
       if (typeof input.action === 'string') {
         secondaryInfo.push(`${input.action}`);
       }
       break;
-    case 'resize_window':
-      if (typeof input.width === 'number' && typeof input.height === 'number') {
-        secondaryInfo.push(`${input.width}x${input.height}`);
+    case 'chrome_console':
+      if (typeof input.mode === 'string') {
+        secondaryInfo.push(`mode: ${input.mode}`);
+      }
+      if (typeof input.maxMessages === 'number') {
+        secondaryInfo.push(`max: ${input.maxMessages}`);
       }
       break;
-    case 'read_console_messages':
-      if (typeof input.pattern === 'string') {
-        secondaryInfo.push(`pattern: ${truncateToWidth(input.pattern, 20)}`);
+    case 'chrome_network_request':
+      if (typeof input.url === 'string') {
+        secondaryInfo.push(`url: ${truncateToWidth(input.url, 20)}`);
       }
-      if (input.onlyErrors === true) {
-        secondaryInfo.push('errors only');
-      }
-      break;
-    case 'read_network_requests':
-      if (typeof input.urlPattern === 'string') {
-        secondaryInfo.push(`pattern: ${truncateToWidth(input.urlPattern, 20)}`);
+      if (typeof input.method === 'string') {
+        secondaryInfo.push(input.method);
       }
       break;
-    case 'shortcuts_execute':
-      if (typeof input.shortcutId === 'string') {
-        secondaryInfo.push(`shortcut_id: ${input.shortcutId}`);
-      }
-      break;
-    case 'javascript_tool':
+    case 'chrome_javascript':
       // In verbose mode, show the full code
-      if (verbose && typeof input.text === 'string') {
-        return input.text;
+      if (verbose && typeof input.code === 'string') {
+        return input.code;
       }
       // In non-verbose mode, return empty string to preserve View Tab layout
       return '';
-    case 'tabs_create_mcp':
-    case 'tabs_context_mcp':
-    case 'form_input':
-    case 'shortcuts_list':
-    case 'read_page':
-    case 'upload_image':
-    case 'get_page_text':
-    case 'update_plan':
+    case 'get_windows_and_tabs':
+    case 'chrome_read_page':
+    case 'chrome_screenshot':
+    case 'chrome_close_tabs':
+    case 'chrome_switch_tab':
+    case 'chrome_get_web_content':
+    case 'chrome_network_capture':
+    case 'chrome_handle_download':
+    case 'chrome_history':
+    case 'chrome_bookmark_search':
+    case 'chrome_bookmark_add':
+    case 'chrome_bookmark_delete':
+    case 'chrome_click_element':
+    case 'chrome_fill_or_select':
+    case 'chrome_request_element_selection':
+    case 'chrome_keyboard':
+    case 'chrome_upload_file':
+    case 'chrome_handle_dialog':
+    case 'performance_start_trace':
+    case 'performance_stop_trace':
+    case 'performance_analyze_insight':
       // These tools don't have meaningful secondary info to show inline.
       // Return empty string (not null) to ensure tool header still renders.
       return '';
   }
   return secondaryInfo.join(', ') || null;
-}
-
-/**
- * Renders a clickable "View Tab" link for GakrCLI in Chrome MCP tools.
- * Returns null if:
- * - The tool is not a GakrCLI in Chrome MCP tool
- * - The input doesn't have a valid tabId
- * - Hyperlinks are not supported
- */
-function renderChromeViewTabLink(input: unknown): React.ReactNode {
-  if (!supportsHyperlinks()) {
-    return null;
-  }
-  if (typeof input !== 'object' || input === null || !('tabId' in input)) {
-    return null;
-  }
-  const tabId = typeof input.tabId === 'number' ? input.tabId : typeof input.tabId === 'string' ? parseInt(input.tabId, 10) : NaN;
-  if (isNaN(tabId)) {
-    return null;
-  }
-  const linkUrl = `${CHROME_EXTENSION_FOCUS_TAB_URL_BASE}${tabId}`;
-  return <Text>
-      {' '}
-      <Link url={linkUrl}>
-        <Text color="subtle">[View Tab]</Text>
-      </Link>
-    </Text>;
 }
 
 /**
@@ -154,56 +127,53 @@ export function renderChromeToolResultMessage(output: MCPToolResult, toolName: C
   }
   let summary: string | null = null;
   switch (toolName) {
-    case 'navigate':
+    case 'chrome_navigate':
       summary = 'Navigation completed';
       break;
-    case 'tabs_create_mcp':
-      summary = 'Tab created';
-      break;
-    case 'tabs_context_mcp':
+    case 'get_windows_and_tabs':
       summary = 'Tabs read';
       break;
-    case 'form_input':
+    case 'chrome_fill_or_select':
       summary = 'Input completed';
       break;
-    case 'computer':
+    case 'chrome_computer':
       summary = 'Action completed';
       break;
-    case 'resize_window':
-      summary = 'Window resized';
-      break;
-    case 'find':
-      summary = 'Search completed';
-      break;
-    case 'gif_creator':
+    case 'chrome_gif_recorder':
       summary = 'GIF action completed';
       break;
-    case 'read_console_messages':
+    case 'chrome_console':
       summary = 'Console messages retrieved';
       break;
-    case 'read_network_requests':
-      summary = 'Network requests retrieved';
+    case 'chrome_network_request':
+      summary = 'Network request completed';
       break;
-    case 'shortcuts_list':
-      summary = 'Shortcuts retrieved';
+    case 'chrome_network_capture':
+      summary = 'Network capture completed';
       break;
-    case 'shortcuts_execute':
-      summary = 'Shortcut executed';
-      break;
-    case 'javascript_tool':
+    case 'chrome_javascript':
       summary = 'Script executed';
       break;
-    case 'read_page':
+    case 'chrome_read_page':
       summary = 'Page read';
       break;
-    case 'upload_image':
-      summary = 'Image uploaded';
+    case 'chrome_screenshot':
+      summary = 'Screenshot captured';
       break;
-    case 'get_page_text':
-      summary = 'Page text retrieved';
+    case 'chrome_get_web_content':
+      summary = 'Page content retrieved';
       break;
-    case 'update_plan':
-      summary = 'Plan updated';
+    case 'chrome_click_element':
+      summary = 'Click performed';
+      break;
+    case 'chrome_upload_file':
+      summary = 'File uploaded';
+      break;
+    case 'chrome_history':
+      summary = 'History retrieved';
+      break;
+    case 'chrome_bookmark_search':
+      summary = 'Bookmarks searched';
       break;
   }
   if (summary) {
@@ -241,8 +211,11 @@ export function getGakrCLIInChromeMCPToolOverrides(toolName: string): {
     }): React.ReactNode {
       return renderChromeToolUseMessage(input, toolName as ChromeToolName, verbose);
     },
-    renderToolUseTag(input: Partial<Record<string, unknown>>): React.ReactNode {
-      return renderChromeViewTabLink(input);
+    renderToolUseTag(_input: Partial<Record<string, unknown>>): React.ReactNode {
+      // The old "[View Tab]" tag was a deep link into the upstream extension's
+      // web app (clau.de). This extension registers no such URL handler, so the
+      // link did nothing and is not rendered.
+      return null;
     },
     renderToolResultMessage(output: string | MCPToolResult, _progressMessagesForMessage: unknown[], {
       verbose

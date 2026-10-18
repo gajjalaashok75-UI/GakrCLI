@@ -600,6 +600,10 @@ export async function main(
   if (process.argv[2] === '--gakrcli-in-chrome-mcp') {
     profileCheckpoint('cli_gakrcli_in_chrome_mcp_path');
     const {
+      logGakrCLIInChromePreflight
+    } = await import('../utils/gakrcliInChrome/preflight.js');
+    await logGakrCLIInChromePreflight('mcp-server');
+    const {
       runGakrCLIInChromeMcpServer
     } = await import('../utils/gakrcliInChrome/mcpServer.js');
     await runGakrCLIInChromeMcpServer();
@@ -607,12 +611,26 @@ export async function main(
   } else if (process.argv[2] === '--chrome-extension') {
     profileCheckpoint('cli_chrome_extension_agent_server_path');
     const {
+      logGakrCLIInChromePreflight
+    } = await import('../utils/gakrcliInChrome/preflight.js');
+    // Foreground server: print the summary even when nothing is wrong, so the
+    // side panel's "Service Not Started" state can be traced to a cause.
+    await logGakrCLIInChromePreflight('side-panel', {
+      verbose: true
+    });
+    const {
       runChromeAgentServer
     } = await import('../utils/gakrcliInChrome/agentServer/index.js');
     await runChromeAgentServer();
     return;
   } else if (process.argv[2] === '--chrome-native-host') {
     profileCheckpoint('cli_chrome_native_host_path');
+    // Chrome spawns this one with its own pipes for the messaging protocol;
+    // the preflight only writes to the debug log for this surface.
+    const {
+      logGakrCLIInChromeSyncPreflight
+    } = await import('../utils/gakrcliInChrome/preflight.js');
+    logGakrCLIInChromeSyncPreflight('native-host');
     const {
       runChromeNativeHost
     } = await import('../utils/gakrcliInChrome/chromeNativeHost.js');
@@ -780,6 +798,20 @@ export async function main(
   }
 
   // --bare already set GAKR_CODE_SIMPLE above the skills fast path.
+
+  // Preflight for `--chrome` (which loads the full CLI rather than returning
+  // here). Runs before Ink takes over the screen so the status line and any
+  // extension-id / native-host problems are actually visible; --init-only is
+  // machine-read by verify-clean-install, so it only gets the warnings.
+  if (args.includes('--chrome')) {
+    profileCheckpoint('cli_chrome_preflight');
+    const {
+      logGakrCLIInChromePreflight
+    } = await import('../utils/gakrcliInChrome/preflight.js');
+    await logGakrCLIInChromePreflight('terminal', {
+      verbose: !args.includes('--init-only')
+    });
+  }
 
   // No special flags detected, load and run the full CLI
   if (process.env.GAKR_DISABLE_EARLY_INPUT !== '1') {

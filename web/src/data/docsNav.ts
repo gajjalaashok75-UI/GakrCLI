@@ -28,6 +28,7 @@ export const docsNav: DocsNavGroup[] = [
       { title: 'Configuration', href: '/docs/configuration/' },
       { title: 'Keybindings', href: '/docs/keybindings/' },
       { title: 'Skills', href: '/docs/skills/' },
+      { title: 'gakrcli in chrome', href: '/docs/gakrcli-in-chrome/' },
     ],
   },
 ]

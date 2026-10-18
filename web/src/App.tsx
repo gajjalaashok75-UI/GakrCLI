@@ -13,6 +13,7 @@ import CliReference from './pages/docs/CliReference'
 import Configuration from './pages/docs/Configuration'
 import Keybindings from './pages/docs/Keybindings'
 import Skills from './pages/docs/Skills'
+import GakrCLIInChrome from './pages/docs/GakrCLIInChrome'
 
 export default function App() {
   return (
@@ -30,6 +31,7 @@ export default function App() {
         <Route path="/docs/configuration/" element={<Configuration />} />
         <Route path="/docs/keybindings/" element={<Keybindings />} />
         <Route path="/docs/skills/" element={<Skills />} />
+        <Route path="/docs/gakrcli-in-chrome/" element={<GakrCLIInChrome />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

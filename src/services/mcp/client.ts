@@ -1003,17 +1003,13 @@ export const connectToServer = memoize(
         isGakrCLIInChromeMCPServer(name)
       ) {
         // Run the Chrome MCP server in-process to avoid spawning a ~325 MB subprocess
-        const { createChromeContext } = await import(
+        const { createChromeMcpServer } = await import(
           '../../utils/gakrcliInChrome/mcpServer.js'
-        )
-        const { createGakrCLIForChromeMcpServer } = await import(
-          '@gakr-gakr/gakrcli-for-chrome-mcp'
         )
         const { createLinkedTransportPair } = await import(
           './InProcessTransport.js'
         )
-        const context = createChromeContext(serverRef.env)
-        inProcessServer = createGakrCLIForChromeMcpServer(context)
+        inProcessServer = createChromeMcpServer()
         const [clientTransport, serverTransport] = createLinkedTransportPair()
         await inProcessServer.connect(serverTransport)
         transport = clientTransport

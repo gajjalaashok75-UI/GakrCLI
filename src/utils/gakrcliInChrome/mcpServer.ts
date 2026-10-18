@@ -1,266 +1,117 @@
-import {
-  type GakrCLIForChromeContext,
-  createGakrCLIForChromeMcpServer,
-  type Logger,
-  type PermissionMode,
-} from '@gakr-gakr/gakrcli-for-chrome-mcp'
+/**
+ * The GakrCLI-in-Chrome MCP server.
+ *
+ * Advertises exactly the tools the Chrome extension implements — `TOOL_SCHEMAS`
+ * from `mcp-chrome-shared`, the same module the extension takes its tool names
+ * from — and executes them over the native-host socket using the
+ * `call_tool` + `requestId` protocol in `chromeNativeHostClient.ts`.
+ *
+ * Two entry points share this one server, so all three GakrCLI-in-Chrome
+ * surfaces offer the same tools:
+ *   - `gakrcli --gakrcli-in-chrome-mcp` — stdio, for external MCP clients.
+ *   - `gakrcli --chrome` — in-process, connected by services/mcp/client.ts.
+ *   - `gakrcli --chrome-extension` — the side-panel agent server, which builds
+ *     its tool definitions from the same schemas (agentServer/chromeTools.ts).
+ *
+ * The previous implementation wrapped `@gakr-gakr/gakrcli-for-chrome-mcp`,
+ * which advertises an 18-name surface (`tabs_context_mcp`, `read_page`, …) that
+ * this extension does not implement, and speaks a legacy `execute_tool` socket
+ * dialect the native host and extension do not answer.
+ */
+
+import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { format } from 'util'
-import { shutdownDatadog } from '../../services/analytics/datadog.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
 import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from '../../services/analytics/index.js'
-import { initializeAnalyticsSink } from '../../services/analytics/sink.js'
-import { getGakrCLIAIOAuthTokens } from '../auth.js'
-import { enableConfigs, getGlobalConfig, saveGlobalConfig } from '../config.js'
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js'
+import { TOOL_SCHEMAS } from '@gakr-gakr/mcp-chrome-shared'
 import { logForDebugging } from '../debug.js'
-import { isEnvTruthy } from '../envUtils.js'
-import { sideQuery } from '../sideQuery.js'
-import { getAllSocketPaths, getSecureSocketPath } from './common.js'
+import { callExtensionTool } from './chromeNativeHostClient.js'
 
-const EXTENSION_DOWNLOAD_URL = 'https://gakrcli.ai/chrome'
-const BUG_REPORT_URL =
-  'https://github.com/anthropics/gakrcli-code/issues/new?labels=bug,gakrcli-in-chrome'
+const SERVER_NAME = 'gakrcli-in-chrome'
+const SERVER_VERSION = '1.0.0'
 
-// String metadata keys safe to forward to analytics. Keys like error_message
-// are excluded because they could contain page content or user data.
-const SAFE_BRIDGE_STRING_KEYS = new Set([
-  'bridge_status',
-  'error_type',
-  'tool_name',
-])
+/** Cap on any single result, so a full-page dump cannot blow up the context. */
+const MAX_RESULT_CHARS = 100_000
 
-const PERMISSION_MODES: readonly PermissionMode[] = [
-  'ask',
-  'skip_all_permission_checks',
-  'follow_a_plan',
-]
+type TextContent = { type: 'text'; text: string }
+type ToolResult = { content: TextContent[]; isError?: boolean }
 
-function isPermissionMode(raw: string): raw is PermissionMode {
-  return PERMISSION_MODES.some(m => m === raw)
-}
+/** Executes one browser tool in the extension by its `chrome_*` name. */
+export type ChromeToolExecutor = (
+  name: string,
+  args: Record<string, unknown>,
+) => Promise<unknown>
 
-/**
- * Resolves the Chrome bridge URL based on environment and feature flag.
- * Bridge is used when the feature flag is enabled; ant users always get
- * bridge. API key / 3P users fall back to native messaging.
- */
-function getChromeBridgeUrl(): string | undefined {
-  const bridgeEnabled =
-    process.env.USER_TYPE === 'ant' ||
-    getFeatureValue_CACHED_MAY_BE_STALE('tengu_copper_bridge', false)
-
-  if (!bridgeEnabled) {
-    return undefined
-  }
-
-  if (
-    isEnvTruthy(process.env.USE_LOCAL_OAUTH) ||
-    isEnvTruthy(process.env.LOCAL_BRIDGE)
-  ) {
-    return 'ws://localhost:8765'
-  }
-
-  if (isEnvTruthy(process.env.USE_STAGING_OAUTH)) {
-    return 'wss://bridge-staging.gakrcliusercontent.com'
-  }
-
-  return 'wss://bridge.gakrcliusercontent.com'
-}
-
-function isLocalBridge(): boolean {
-  return (
-    isEnvTruthy(process.env.USE_LOCAL_OAUTH) ||
-    isEnvTruthy(process.env.LOCAL_BRIDGE)
-  )
-}
-
-/**
- * Build the GakrCLIForChromeContext used by both the subprocess MCP server
- * and the in-process path in the MCP client.
- */
-export function createChromeContext(
-  env?: Record<string, string>,
-): GakrCLIForChromeContext {
-  const logger = new DebugLogger()
-  const chromeBridgeUrl = getChromeBridgeUrl()
-  logger.info(`Bridge URL: ${chromeBridgeUrl ?? 'none (using native socket)'}`)
-  const rawPermissionMode =
-    env?.GAKR_CHROME_PERMISSION_MODE ??
-    process.env.GAKR_CHROME_PERMISSION_MODE
-  let initialPermissionMode: PermissionMode | undefined
-  if (rawPermissionMode) {
-    if (isPermissionMode(rawPermissionMode)) {
-      initialPermissionMode = rawPermissionMode
-    } else {
-      logger.warn(
-        `Invalid GAKR_CHROME_PERMISSION_MODE "${rawPermissionMode}". Valid values: ${PERMISSION_MODES.join(', ')}`,
-      )
+function toTextResult(value: unknown, isError = false): ToolResult {
+  let text: string
+  if (typeof value === 'string') {
+    text = value
+  } else {
+    try {
+      text = JSON.stringify(value, null, 2) ?? String(value)
+    } catch {
+      text = String(value)
     }
   }
-  return {
-    serverName: 'GakrCLI in Chrome',
-    logger,
-    socketPath: getSecureSocketPath(),
-    getSocketPaths: getAllSocketPaths,
-    clientTypeId: 'gakrcli-code',
-    onAuthenticationError: () => {
-      logger.warn(
-        'Authentication error occurred. Please ensure you are logged into the GakrCLI browser extension with the same gakrcli.ai account as GakrCLI.',
-      )
-    },
-    onToolCallDisconnected: () => {
-      return `Browser extension is not connected. Please ensure the GakrCLI browser extension is installed and running (${EXTENSION_DOWNLOAD_URL}), and that you are logged into gakrcli.ai with the same account as GakrCLI Code. If this is your first time connecting to Chrome, you may need to restart Chrome for the installation to take effect. If you continue to experience issues, please report a bug: ${BUG_REPORT_URL}`
-    },
-    onExtensionPaired: (deviceId: string, name: string) => {
-      saveGlobalConfig(config => {
-        if (
-          config.chromeExtension?.pairedDeviceId === deviceId &&
-          config.chromeExtension?.pairedDeviceName === name
-        ) {
-          return config
-        }
-        return {
-          ...config,
-          chromeExtension: {
-            pairedDeviceId: deviceId,
-            pairedDeviceName: name,
-          },
-        }
-      })
-      logger.info(`Paired with "${name}" (${deviceId.slice(0, 8)})`)
-    },
-    getPersistedDeviceId: () => {
-      return getGlobalConfig().chromeExtension?.pairedDeviceId
-    },
-    ...(chromeBridgeUrl && {
-      bridgeConfig: {
-        url: chromeBridgeUrl,
-        getUserId: async () => {
-          return getGlobalConfig().oauthAccount?.accountUuid
-        },
-        getOAuthToken: async () => {
-          return getGakrCLIAIOAuthTokens()?.accessToken ?? ''
-        },
-        ...(isLocalBridge() && { devUserId: 'dev_user_local' }),
-      },
-    }),
-    ...(initialPermissionMode && { initialPermissionMode }),
-    // Wire inference for the browser_task tool — the chrome-mcp server runs
-    // a lightning-mode agent loop in Node and calls the extension's
-    // lightning_turn tool once per iteration for execution.
-    //
-    // Ant-only: the extension's lightning_turn is build-time-gated via
-    // import.meta.env.ANT_ONLY_BUILD — the whole lightning/ module graph is
-    // tree-shaken from the public extension build (build:prod greps for a
-    // marker to verify). Without this injection, the Node MCP server's
-    // ListTools also filters browser_task + lightning_turn out, so external
-    // users never see the tools advertised. Three independent gates.
-    //
-    // Types inlined: AnthropicMessagesRequest/Response live in
-    // @gakr-gakr/gakrcli-for-chrome-mcp@0.4.0 which isn't published yet. CI installs
-    // 0.3.0. The callAnthropicMessages field is also 0.4.0-only, but spreading
-    // an extra property into GakrCLIForChromeContext is fine against either
-    // version — 0.3.0 sees an unknown field (allowed in spread), 0.4.0 sees a
-    // structurally-matching one. Once 0.4.0 is published, this can switch to
-    // the package's exported types and the dep can be bumped.
-    ...(process.env.USER_TYPE === 'ant' && {
-      // Cast below: the 0.3.0 stub types this field as
-      // (request: unknown) => Promise<unknown>; the inlined 0.4.0
-      // request/response shapes are intentionally narrower (see above).
-      callAnthropicMessages: (async (req: {
-        model: string
-        max_tokens: number
-        system: string
-        messages: Parameters<typeof sideQuery>[0]['messages']
-        stop_sequences?: string[]
-        signal?: AbortSignal
-      }): Promise<{
-        content: Array<{ type: 'text'; text: string }>
-        stop_reason: string | null
-        usage?: { input_tokens: number; output_tokens: number }
-      }> => {
-        // sideQuery handles OAuth attribution fingerprint, proxy, model betas.
-        // tools: [] is load-bearing — without it Sonnet emits
-        // <function_calls> XML before the text commands. Original
-        // lightning-harness.js (apps repo) does the same.
-        const response = await sideQuery({
-          model: req.model,
-          system: req.system,
-          messages: req.messages,
-          max_tokens: req.max_tokens,
-          stop_sequences: req.stop_sequences,
-          signal: req.signal,
-          tools: [],
-          querySource: 'chrome_mcp',
-        })
-        // BetaContentBlock is TextBlock | ThinkingBlock | ToolUseBlock | ...
-        // Only text blocks carry the model's command output.
-        const textBlocks: Array<{ type: 'text'; text: string }> = []
-        for (const b of response.content) {
-          if (b.type === 'text') {
-            textBlocks.push({ type: 'text', text: b.text })
-          }
-        }
-        return {
-          content: textBlocks,
-          stop_reason: response.stop_reason,
-          usage: {
-            input_tokens: response.usage.input_tokens,
-            output_tokens: response.usage.output_tokens,
-          },
-        }
-      }) as GakrCLIForChromeContext['callAnthropicMessages'],
-    }),
-    trackEvent: (eventName, metadata) => {
-      const safeMetadata: {
-        [key: string]:
-          | boolean
-          | number
-          | AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-          | undefined
-      } = {}
-      if (metadata) {
-        for (const [key, value] of Object.entries(metadata)) {
-          // Rename 'status' to 'bridge_status' to avoid Datadog's reserved field
-          const safeKey = key === 'status' ? 'bridge_status' : key
-          if (typeof value === 'boolean' || typeof value === 'number') {
-            safeMetadata[safeKey] = value
-          } else if (
-            typeof value === 'string' &&
-            SAFE_BRIDGE_STRING_KEYS.has(safeKey)
-          ) {
-            // Only forward allowlisted string keys — fields like error_message
-            // could contain page content or user data
-            safeMetadata[safeKey] =
-              value as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-          }
-        }
-      }
-      logEvent(eventName, safeMetadata)
-    },
+  if (text.length > MAX_RESULT_CHARS) {
+    text = `${text.slice(0, MAX_RESULT_CHARS)}\n…[truncated]`
   }
+  return { content: [{ type: 'text', text }], isError }
 }
 
-export async function runGakrCLIInChromeMcpServer(): Promise<void> {
-  enableConfigs()
-  initializeAnalyticsSink()
-  const context = createChromeContext()
+/**
+ * Build the MCP server. `execute` is injectable so tests can drive the tool
+ * surface without a browser; it defaults to the native-host socket client.
+ */
+export function createChromeMcpServer({
+  execute = callExtensionTool,
+}: {
+  execute?: ChromeToolExecutor
+} = {}): Server {
+  const server = new Server(
+    { name: SERVER_NAME, version: SERVER_VERSION },
+    { capabilities: { tools: {} } },
+  )
 
-  const server = createGakrCLIForChromeMcpServer(context)
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: TOOL_SCHEMAS,
+  }))
+
+  server.setRequestHandler(CallToolRequestSchema, async request => {
+    const { name } = request.params
+    const args = (request.params.arguments ?? {}) as Record<string, unknown>
+    try {
+      return toTextResult(await execute(name, args))
+    } catch (error) {
+      return toTextResult(
+        `chrome tool ${name} failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        true,
+      )
+    }
+  })
+
+  return server
+}
+
+/**
+ * Run the server over stdio for the `--gakrcli-in-chrome-mcp` entry point,
+ * which external MCP clients spawn directly.
+ */
+export async function runGakrCLIInChromeMcpServer(): Promise<void> {
+  const server = createChromeMcpServer()
   const transport = new StdioServerTransport()
 
-  // Exit when parent process dies (stdin pipe closes).
-  // Flush analytics before exiting so final-batch events (e.g. disconnect) aren't lost.
+  // Exit when the parent process dies (stdin pipe closes).
   let exiting = false
   const shutdownAndExit = async (): Promise<void> => {
     if (exiting) {
       return
     }
     exiting = true
-    await shutdownDatadog()
     // eslint-disable-next-line custom-rules/no-process-exit
     process.exit(0)
   }
@@ -270,22 +121,4 @@ export async function runGakrCLIInChromeMcpServer(): Promise<void> {
   logForDebugging('[GakrCLI in Chrome] Starting MCP server')
   await server.connect(transport)
   logForDebugging('[GakrCLI in Chrome] MCP server started')
-}
-
-class DebugLogger implements Logger {
-  silly(message: string, ...args: unknown[]): void {
-    logForDebugging(format(message, ...args), { level: 'debug' })
-  }
-  debug(message: string, ...args: unknown[]): void {
-    logForDebugging(format(message, ...args), { level: 'debug' })
-  }
-  info(message: string, ...args: unknown[]): void {
-    logForDebugging(format(message, ...args), { level: 'info' })
-  }
-  warn(message: string, ...args: unknown[]): void {
-    logForDebugging(format(message, ...args), { level: 'warn' })
-  }
-  error(message: string, ...args: unknown[]): void {
-    logForDebugging(format(message, ...args), { level: 'error' })
-  }
 }

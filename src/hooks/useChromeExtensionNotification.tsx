@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { Text } from '../ink.js';
 import { isGakrCLIAISubscriber } from '../utils/auth.js';
+import { GAKR_IN_CHROME_DOCS_URL } from '../utils/gakrcliInChrome/extensionId.js';
 import { isChromeExtensionInstalled, shouldEnableGakrCLIInChrome } from '../utils/gakrcliInChrome/setup.js';
 import { isRunningOnHomespace } from '../utils/envUtils.js';
 import { useStartupNotification } from './notifs/useStartupNotification.js';
@@ -33,7 +34,7 @@ async function _temp() {
   if (!installed && !isRunningOnHomespace()) {
     return {
       key: "chrome-extension-not-detected",
-      jsx: <Text color="warning">Chrome extension not detected · https://gakrcli.ai/chrome to install</Text>,
+      jsx: <Text color="warning">Chrome extension not detected · {GAKR_IN_CHROME_DOCS_URL} to install</Text>,
       priority: "immediate" as const,
       timeoutMs: 3000
     };

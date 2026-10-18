@@ -4,7 +4,7 @@ You have access to browser automation tools (mcp__gakrcli-in-chrome__*) for inte
 
 ## GIF recording
 
-When performing multi-step browser interactions that the user may want to review or share, use mcp__gakrcli-in-chrome__gif_creator to record them.
+When performing multi-step browser interactions that the user may want to review or share, use mcp__gakrcli-in-chrome__chrome_gif_recorder to record them.
 
 You must ALWAYS:
 * Capture extra frames before and after taking actions to ensure smooth playback
@@ -12,14 +12,14 @@ You must ALWAYS:
 
 ## Console log debugging
 
-You can use mcp__gakrcli-in-chrome__read_console_messages to read console output. Console output may be verbose. If you are looking for specific log entries, use the 'pattern' parameter with a regex-compatible pattern. This filters results efficiently and avoids overwhelming output. For example, use pattern: "[MyApp]" to filter for application-specific logs rather than reading all console output.
+You can use mcp__gakrcli-in-chrome__chrome_console to read console output. Console output is verbose, so bound it: pass maxMessages to limit a snapshot, or use mode: "buffer" to read a persistent per-tab buffer instantly instead of waiting for the default ~2s snapshot.
 
 ## Alerts and dialogs
 
-IMPORTANT: Do not trigger JavaScript alerts, confirms, prompts, or browser modal dialogs through your actions. These browser dialogs block all further browser events and will prevent the extension from receiving any subsequent commands. Instead, when possible, use console.log for debugging and then use the mcp__gakrcli-in-chrome__read_console_messages tool to read those log messages. If a page has dialog-triggering elements:
+IMPORTANT: Do not trigger JavaScript alerts, confirms, prompts, or browser modal dialogs through your actions. These browser dialogs block all further browser events and will prevent the extension from receiving any subsequent commands. Instead, when possible, use console.log for debugging and then use the mcp__gakrcli-in-chrome__chrome_console tool to read those log messages. If a page has dialog-triggering elements:
 1. Avoid clicking buttons or links that may trigger alerts (e.g., "Delete" buttons with confirmation dialogs)
 2. If you must interact with such elements, warn the user first that this may interrupt the session
-3. Use mcp__gakrcli-in-chrome__javascript_tool to check for and dismiss any existing dialogs before proceeding
+3. Use mcp__gakrcli-in-chrome__chrome_javascript to check for and dismiss any existing dialogs before proceeding
 
 If you accidentally trigger a dialog and lose responsiveness, inform the user they need to manually dismiss it in the browser.
 
@@ -37,13 +37,13 @@ Explain what you attempted, what went wrong, and ask how the user would like to 
 
 ## Tab context and session startup
 
-IMPORTANT: At the start of each browser automation session, call mcp__gakrcli-in-chrome__tabs_context_mcp first to get information about the user's current browser tabs. Use this context to understand what the user might want to work with before creating new tabs.
+IMPORTANT: At the start of each browser automation session, call mcp__gakrcli-in-chrome__get_windows_and_tabs first to get information about the user's current browser tabs. Use this context to understand what the user might want to work with before navigating anywhere.
 
 Never reuse tab IDs from a previous/other session. Follow these guidelines:
 1. Only reuse an existing tab if the user explicitly asks to work with it
-2. Otherwise, create a new tab with mcp__gakrcli-in-chrome__tabs_create_mcp
-3. If a tool returns an error indicating the tab doesn't exist or is invalid, call tabs_context_mcp to get fresh tab IDs
-4. When a tab is closed by the user or a navigation error occurs, call tabs_context_mcp to see what tabs are available`
+2. Otherwise, open the page with mcp__gakrcli-in-chrome__chrome_navigate (pass newWindow: true to open it in a separate window)
+3. If a tool returns an error indicating the tab doesn't exist or is invalid, call mcp__gakrcli-in-chrome__get_windows_and_tabs to get fresh tab IDs
+4. When a tab is closed by the user or a navigation error occurs, call mcp__gakrcli-in-chrome__get_windows_and_tabs to see what tabs are available`
 
 /**
  * Additional instructions for chrome tools when tool search is enabled.
@@ -57,8 +57,8 @@ Chrome browser tools are MCP tools that require loading before use. Before calli
 2. Then call the tool
 
 For example, to get tab context:
-1. First: ToolSearch with query "select:mcp__gakrcli-in-chrome__tabs_context_mcp"
-2. Then: Call mcp__gakrcli-in-chrome__tabs_context_mcp`
+1. First: ToolSearch with query "select:mcp__gakrcli-in-chrome__get_windows_and_tabs"
+2. Then: Call mcp__gakrcli-in-chrome__get_windows_and_tabs`
 
 /**
  * Get the base chrome system prompt (without tool search instructions).

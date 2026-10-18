@@ -580,6 +580,7 @@ export type GlobalConfig = {
   hasCompletedGakrCLIInChromeOnboarding?: boolean // Whether GakrCLI in Chrome onboarding has been shown
   gakrcliInChromeDefaultEnabled?: boolean // Whether GakrCLI in Chrome is enabled by default (undefined means platform default)
   cachedChromeExtensionInstalled?: boolean // Cached result of whether Chrome extension is installed
+  chromeExtensionId?: string // Id of the side-loaded GakrCLI in Chrome extension (dev/unpacked installs have a per-machine id)
 
   // Chrome extension pairing state (persisted across sessions)
   chromeExtension?: {
@@ -776,6 +777,7 @@ export const GLOBAL_CONFIG_KEYS = [
   'agentPushNotifEnabled',
   'respectGitignore',
   'gakrcliInChromeDefaultEnabled',
+  'chromeExtensionId',
   'hasCompletedGakrCLIInChromeOnboarding',
   'lspRecommendationDisabled',
   'lspRecommendationNeverPlugins',

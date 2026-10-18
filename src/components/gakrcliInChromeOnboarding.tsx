@@ -5,9 +5,10 @@ import { logEvent } from 'src/services/analytics/index.js';
 import { Box, Link, Newline, Text, useInput } from '../ink.js';
 import { isChromeExtensionInstalled } from '../utils/gakrcliInChrome/setup.js';
 import { saveGlobalConfig } from '../utils/config.js';
+import { GAKR_IN_CHROME_DOCS_URL } from '../utils/gakrcliInChrome/extensionId.js';
 import { Dialog } from './design-system/Dialog.js';
-const CHROME_EXTENSION_URL = 'https://gakrcli.ai/chrome';
-const CHROME_PERMISSIONS_URL = 'https://clau.de/chrome/permissions';
+const CHROME_EXTENSION_URL = GAKR_IN_CHROME_DOCS_URL;
+const CHROME_PERMISSIONS_URL = GAKR_IN_CHROME_DOCS_URL;
 type Props = {
   onDone(): void;
 };
@@ -87,7 +88,7 @@ export function GakrCLIInChromeOnboarding(t0) {
   }
   let t9;
   if ($[13] === Symbol.for("react.memo_cache_sentinel")) {
-    t9 = <Text dimColor={true}>For more info, use{" "}{t8}{" "}or visit <Link url="https://code.gakrcli.com/docs/en/chrome" /></Text>;
+    t9 = <Text dimColor={true}>For more info, use{" "}{t8}{" "}or visit <Link url={GAKR_IN_CHROME_DOCS_URL} /></Text>;
     $[13] = t9;
   } else {
     t9 = $[13];

@@ -10,4 +10,5 @@
   <url><loc>https://gakrcli.netlify.app/docs/configuration/</loc><priority>0.7</priority></url>
   <url><loc>https://gakrcli.netlify.app/docs/keybindings/</loc><priority>0.6</priority></url>
   <url><loc>https://gakrcli.netlify.app/docs/skills/</loc><priority>0.6</priority></url>
+  <url><loc>https://gakrcli.netlify.app/docs/gakrcli-in-chrome/</loc><priority>0.8</priority></url>
 </urlset>

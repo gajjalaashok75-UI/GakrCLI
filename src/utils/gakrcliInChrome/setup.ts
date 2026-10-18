@@ -1,9 +1,8 @@
-import { BROWSER_TOOLS } from '@gakr-gakr/gakrcli-for-chrome-mcp'
+import { TOOL_SCHEMAS } from '@gakr-gakr/mcp-chrome-shared'
 import { chmod, mkdir, readFile, writeFile } from 'fs/promises'
 import { homedir } from 'os'
 import { join } from 'path'
 import {
-  getSessionDangerousPermissionMode,
   getIsInteractive,
   getIsNonInteractiveSession,
 } from '../../bootstrap/state.js'
@@ -32,13 +31,104 @@ import {
   createWrapperScript,
   resolveGakrCLIInChromeLaunches,
 } from './launch.js'
+import {
+  DEFAULT_CHROME_EXTENSION_IDS,
+  GAKR_IN_CHROME_DOCS_URL,
+  INTERNAL_CHROME_EXTENSION_IDS,
+  getChromeExtensionIdFromEnv,
+  parseChromeExtensionId,
+} from './extensionId.js'
 import { getChromeSystemPrompt } from './prompt.js'
 import { isChromeExtensionInstalledPortable } from './setupPortable.js'
 
-const CHROME_EXTENSION_RECONNECT_URL = 'https://clau.de/chrome/reconnect'
+const CHROME_EXTENSION_RECONNECT_URL = GAKR_IN_CHROME_DOCS_URL
 
-const NATIVE_HOST_IDENTIFIER = 'com.gakr.chrome.bridge'
-const NATIVE_HOST_MANIFEST_NAME = `${NATIVE_HOST_IDENTIFIER}.json`
+export const NATIVE_HOST_IDENTIFIER = 'com.gakr.chrome.bridge'
+export const NATIVE_HOST_MANIFEST_NAME = `${NATIVE_HOST_IDENTIFIER}.json`
+
+export type ChromeExtensionIdSource = 'env' | 'config' | null
+
+/**
+ * The extension id to configure everything against.
+ *
+ * A side-loaded (developer-mode) extension is identified by a per-machine id,
+ * so the user tells us which id their copy has; `GAKR_CHROME_EXTENSION_ID`
+ * overrides the stored value for scripts and CI. `null` means the user has not
+ * said which id to use — the built-in ids are still tried, but a packaged
+ * build loaded from a folder will not match any of them.
+ */
+export function getConfiguredChromeExtensionId(): {
+  id: string | null
+  source: ChromeExtensionIdSource
+} {
+  const fromEnv = getChromeExtensionIdFromEnv()
+  if (fromEnv) {
+    return { id: fromEnv, source: 'env' }
+  }
+
+  const stored = getGlobalConfig().chromeExtensionId
+  if (typeof stored === 'string') {
+    const parsed = parseChromeExtensionId(stored)
+    if (parsed) {
+      return { id: parsed, source: 'config' }
+    }
+  }
+
+  return { id: null, source: null }
+}
+
+/** Every id to look for: the configured one first, then the built-in ones. */
+export function getAllChromeExtensionIds(): string[] {
+  const ids: string[] = []
+  const configured = getConfiguredChromeExtensionId().id
+  if (configured) {
+    ids.push(configured)
+  }
+  ids.push(...DEFAULT_CHROME_EXTENSION_IDS)
+  if (process.env.USER_TYPE === 'ant') {
+    ids.push(...INTERNAL_CHROME_EXTENSION_IDS)
+  }
+  return [...new Set(ids)]
+}
+
+/** Which extension ids the native-messaging manifest accepts connections from. */
+export function buildNativeHostAllowedOrigins(
+  ids: readonly string[] = getAllChromeExtensionIds(),
+): string[] {
+  return ids.map(id => `chrome-extension://${id}/`)
+}
+
+/**
+ * Validate what the user typed on `/chrome`. Accepts a bare id or a pasted
+ * `chrome-extension://<id>/...` URL.
+ */
+export function resolveChromeExtensionIdInput(
+  raw: string,
+): { ok: true; id: string } | { ok: false; error: string } {
+  if (raw.trim().length === 0) {
+    return {
+      ok: false,
+      error: 'Enter the extension id shown on the chrome://extensions card.',
+    }
+  }
+  const id = parseChromeExtensionId(raw)
+  if (!id) {
+    return {
+      ok: false,
+      error:
+        'Not a Chrome extension id. It is 32 characters from a-p, for example galhhbpfeohnjpakdahodhcpnohddjob.',
+    }
+  }
+  return { ok: true, id }
+}
+
+/** Persist the id; `null` clears it and falls back to the built-in ids. */
+export function saveChromeExtensionId(id: string | null): void {
+  saveGlobalConfig(current => ({
+    ...current,
+    chromeExtensionId: id ?? undefined,
+  }))
+}
 
 export function shouldEnableGakrCLIInChrome(chromeFlag?: boolean): boolean {
   // Disable by default in non-interactive sessions (e.g., SDK, CI)
@@ -103,15 +193,11 @@ export function setupGakrCLIInChrome(): {
 } {
   const isNativeBuild = isInBundledMode()
   const launches = resolveGakrCLIInChromeLaunches({ isNativeBuild })
-  const allowedTools = BROWSER_TOOLS.map(
+  // The extension's own tools (`TOOL_SCHEMAS` from mcp-chrome-shared), not the
+  // npm package's 18-name surface — see mcpServer.ts.
+  const allowedTools = TOOL_SCHEMAS.map(
     tool => `mcp__gakrcli-in-chrome__${tool.name}`,
   )
-
-  const env: Record<string, string> = {}
-  if (getSessionDangerousPermissionMode() === 'fullAccess') {
-    env.GAKR_CHROME_PERMISSION_MODE = 'skip_all_permission_checks'
-  }
-  const hasEnv = Object.keys(env).length > 0
 
   // The manifest path cannot contain arguments, so both runtime modes need a
   // wrapper. Launch selection above keeps the native mode flag-only and gives
@@ -144,7 +230,6 @@ export function setupGakrCLIInChrome(): {
         command: launches.mcpServer.command,
         args: launches.mcpServer.args,
         scope: 'dynamic' as const,
-        ...(hasEnv && { env }),
       },
     },
     allowedTools,
@@ -156,7 +241,7 @@ export function setupGakrCLIInChrome(): {
  * Get native messaging hosts directories for all supported browsers
  * Returns an array of directories where the native host manifest should be installed
  */
-function getNativeMessagingHostsDirs(): string[] {
+export function getNativeMessagingHostsDirs(): string[] {
   const platform = getPlatform()
 
   if (platform === 'windows') {
@@ -183,16 +268,9 @@ export async function installChromeNativeHostManifest(
     description: 'GakrCLI Code Browser Extension Native Host',
     path: manifestBinaryPath,
     type: 'stdio',
-    allowed_origins: [
-      `chrome-extension://galhhbpfeohnjpakdahodhcpnohddjob/`, // LOCAL_EXTENSION_ID
-      `chrome-extension://fcoeoabgfenejglbffodgkkbkcdhcgfn/`, // PROD_EXTENSION_ID
-      ...(process.env.USER_TYPE === 'ant'
-        ? [
-            'chrome-extension://dihbgbndebgnbjfmelmegjepbnkhlgni/', // DEV_EXTENSION_ID
-            'chrome-extension://dngcpimnedloihjnnfngkgjoidhnaolf/', // ANT_EXTENSION_ID
-          ]
-        : []),
-    ],
+    // The user's side-loaded id must be here or Chrome refuses to start the
+    // host for their extension (see getConfiguredChromeExtensionId).
+    allowed_origins: buildNativeHostAllowedOrigins(),
   }
 
   const manifestContent = jsonStringify(manifest, null, 2)
@@ -332,5 +410,30 @@ export async function isChromeExtensionInstalled(): Promise<boolean> {
     )
     return false
   }
-  return isChromeExtensionInstalledPortable(browserPaths, logForDebugging)
+  return isChromeExtensionInstalledPortable(
+    browserPaths,
+    logForDebugging,
+    getAllChromeExtensionIds(),
+  )
+}
+
+/** Paths the native-messaging manifest is written to on this platform. */
+export function getNativeHostManifestPaths(): string[] {
+  return getNativeMessagingHostsDirs().map(dir =>
+    join(dir, NATIVE_HOST_MANIFEST_NAME),
+  )
+}
+
+/**
+ * Rewrite the wrapper script and native-messaging manifest for the current
+ * extension id. Called after the id changes on `/chrome`: the manifest's
+ * `allowed_origins` is what lets the new id start the native host at all.
+ */
+export async function refreshChromeNativeHostManifest(): Promise<string> {
+  const launches = resolveGakrCLIInChromeLaunches({
+    isNativeBuild: isInBundledMode(),
+  })
+  const manifestBinaryPath = await createWrapperScript(launches.nativeHost)
+  await installChromeNativeHostManifest(manifestBinaryPath)
+  return manifestBinaryPath
 }

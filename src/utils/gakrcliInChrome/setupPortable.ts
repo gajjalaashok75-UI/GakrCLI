@@ -1,23 +1,15 @@
 import type { Dirent } from 'fs'
-import { readdir } from 'fs/promises'
+import { readFile, readdir } from 'fs/promises'
 import { homedir } from 'os'
 import { join } from 'path'
 import { isFsInaccessible } from '../errors.js'
+import {
+  DEFAULT_CHROME_EXTENSION_IDS,
+  GAKR_IN_CHROME_DOCS_URL,
+} from './extensionId.js'
 
-export const CHROME_EXTENSION_URL = 'https://claude.ai/chrome'
-
-const LOCAL_EXTENSION_ID = 'galhhbpfeohnjpakdahodhcpnohddjob'
-// Production extension ID
-const PROD_EXTENSION_ID = 'fcoeoabgfenejglbffodgkkbkcdhcgfn'
-// Dev extension IDs (for internal use)
-const DEV_EXTENSION_ID = 'dihbgbndebgnbjfmelmegjepbnkhlgni'
-const ANT_EXTENSION_ID = 'dngcpimnedloihjnnfngkgjoidhnaolf'
-
-function getExtensionIds(): string[] {
-  return process.env.USER_TYPE === 'ant'
-    ? [PROD_EXTENSION_ID, DEV_EXTENSION_ID, ANT_EXTENSION_ID,LOCAL_EXTENSION_ID]
-    : [PROD_EXTENSION_ID,LOCAL_EXTENSION_ID]
-}
+/** Setup guide; the extension is side-loaded from here, not the Web Store. */
+export const CHROME_EXTENSION_URL = GAKR_IN_CHROME_DOCS_URL
 
 // Must match ChromiumBrowser from common.ts
 export type ChromiumBrowser =
@@ -144,11 +136,15 @@ export function getAllBrowserDataPathsPortable(): BrowserPath[] {
  *
  * @param browserPaths - Array of browser data paths to check (from getAllBrowserDataPaths)
  * @param log - Optional logging callback for debug messages
+ * @param extensionIds - Ids to look for; defaults to the built-in ones. Callers
+ *   pass the configured id first, because a side-loaded extension's id differs
+ *   per machine and none of the built-in ids would match.
  * @returns Object with isInstalled boolean and the browser where the extension was found
  */
 export async function detectExtensionInstallationPortable(
   browserPaths: BrowserPath[],
   log?: Logger,
+  extensionIds: readonly string[] = DEFAULT_CHROME_EXTENSION_IDS,
 ): Promise<{
   isInstalled: boolean
   browser: ChromiumBrowser | null
@@ -157,8 +153,6 @@ export async function detectExtensionInstallationPortable(
     log?.(`[GakrCLI in Chrome] No browser paths to check`)
     return { isInstalled: false, browser: null }
   }
-
-  const extensionIds = getExtensionIds()
 
   // Check each browser for the extension
   for (const { browser, path: browserBasePath } of browserPaths) {
@@ -204,7 +198,27 @@ export async function detectExtensionInstallationPortable(
           )
           return { isInstalled: true, browser }
         } catch {
-          // Extension not found in this profile, continue checking
+          // Not installed from the store in this profile; the settings
+          // fallback below covers developer-mode loads.
+        }
+      }
+
+      // Chrome never unpacks a developer-mode extension into
+      // `<profile>/Extensions/<id>`; it records it only in the profile's
+      // extension settings. Without this check a side-loaded extension reads
+      // as "not installed", disabling auto-enable and the reconnect prompt.
+      for (const extensionId of extensionIds) {
+        if (
+          await profileExtensionSettingsContain(
+            browserBasePath,
+            profile,
+            extensionId,
+          )
+        ) {
+          log?.(
+            `[GakrCLI in Chrome] Extension ${extensionId} found in ${browser} ${profile} extension settings (unpacked)`,
+          )
+          return { isInstalled: true, browser }
         }
       }
     }
@@ -214,14 +228,52 @@ export async function detectExtensionInstallationPortable(
   return { isInstalled: false, browser: null }
 }
 
+/** Profile files that hold the `extensions.settings` map. */
+const EXTENSION_SETTINGS_FILES = ['Secure Preferences', 'Preferences']
+
+/**
+ * True when the profile's extension settings contain an entry for this id.
+ *
+ * The id is the JSON key its settings entry is filed under, so a quoted-id
+ * substring match avoids parsing multi-megabyte preference files.
+ */
+async function profileExtensionSettingsContain(
+  browserBasePath: string,
+  profile: string,
+  extensionId: string,
+): Promise<boolean> {
+  const needle = `"${extensionId}"`
+  for (const fileName of EXTENSION_SETTINGS_FILES) {
+    try {
+      const raw = await readFile(
+        join(browserBasePath, profile, fileName),
+        'utf8',
+      )
+      if (raw.includes(needle)) {
+        return true
+      }
+    } catch (e) {
+      if (!isFsInaccessible(e)) {
+        throw e
+      }
+    }
+  }
+  return false
+}
+
 /**
  * Simple wrapper that returns just the boolean result
  */
 export async function isChromeExtensionInstalledPortable(
   browserPaths: BrowserPath[],
   log?: Logger,
+  extensionIds?: readonly string[],
 ): Promise<boolean> {
-  const result = await detectExtensionInstallationPortable(browserPaths, log)
+  const result = await detectExtensionInstallationPortable(
+    browserPaths,
+    log,
+    extensionIds,
+  )
   return result.isInstalled
 }
 
