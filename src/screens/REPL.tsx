@@ -1044,8 +1044,7 @@ export function REPL({
   // is declared) to avoid temporal dead zone issues.
 
   // Allow GakrCLI in Chrome MCP to send prompts through MCP notifications
-  // and sync permission mode changes to the Chrome extension
-  usePromptsFromGakrCLIInChrome(isRemoteSession ? EMPTY_MCP_CLIENTS : mcpClients, toolPermissionContext.mode);
+  usePromptsFromGakrCLIInChrome(isRemoteSession ? EMPTY_MCP_CLIENTS : mcpClients);
 
   // Initialize swarm features: teammate hooks and context
   // Handles both fresh spawns and resumed teammate sessions

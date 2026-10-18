@@ -64,6 +64,20 @@ describe('buildChromeToolDefinitions', () => {
     expect(text).toContain('example.com')
   })
 
+  it('forwards the extension envelope as-is, including its isError flag', async () => {
+    const tools = buildChromeToolDefinitions(async () => ({
+      content: [{ type: 'text', text: 'Tool nope not found' }],
+      isError: true,
+    }))
+    const tabs = tools.find(t => t.name === 'get_windows_and_tabs')!
+    const result = await tabs.handler({}, {})
+
+    expect(result.isError).toBe(true)
+    expect((result.content as Array<{ text: string }>)[0].text).toBe(
+      'Tool nope not found',
+    )
+  })
+
   it('returns an error result instead of throwing when the extension is down', async () => {
     const tools = buildChromeToolDefinitions(async () => {
       throw new Error('Native host connection closed')

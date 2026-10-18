@@ -28,38 +28,16 @@ import {
 import { TOOL_SCHEMAS } from '@gakr-gakr/mcp-chrome-shared'
 import { logForDebugging } from '../debug.js'
 import { callExtensionTool } from './chromeNativeHostClient.js'
+import { toToolResult } from './toolResult.js'
 
 const SERVER_NAME = 'gakrcli-in-chrome'
 const SERVER_VERSION = '1.0.0'
-
-/** Cap on any single result, so a full-page dump cannot blow up the context. */
-const MAX_RESULT_CHARS = 100_000
-
-type TextContent = { type: 'text'; text: string }
-type ToolResult = { content: TextContent[]; isError?: boolean }
 
 /** Executes one browser tool in the extension by its `chrome_*` name. */
 export type ChromeToolExecutor = (
   name: string,
   args: Record<string, unknown>,
 ) => Promise<unknown>
-
-function toTextResult(value: unknown, isError = false): ToolResult {
-  let text: string
-  if (typeof value === 'string') {
-    text = value
-  } else {
-    try {
-      text = JSON.stringify(value, null, 2) ?? String(value)
-    } catch {
-      text = String(value)
-    }
-  }
-  if (text.length > MAX_RESULT_CHARS) {
-    text = `${text.slice(0, MAX_RESULT_CHARS)}\n…[truncated]`
-  }
-  return { content: [{ type: 'text', text }], isError }
-}
 
 /**
  * Build the MCP server. `execute` is injectable so tests can drive the tool
@@ -83,9 +61,9 @@ export function createChromeMcpServer({
     const { name } = request.params
     const args = (request.params.arguments ?? {}) as Record<string, unknown>
     try {
-      return toTextResult(await execute(name, args))
+      return toToolResult(await execute(name, args))
     } catch (error) {
-      return toTextResult(
+      return toToolResult(
         `chrome tool ${name} failed: ${
           error instanceof Error ? error.message : String(error)
         }`,

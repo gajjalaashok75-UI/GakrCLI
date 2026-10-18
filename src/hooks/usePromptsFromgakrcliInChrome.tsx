@@ -2,9 +2,7 @@ import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs
 import { useEffect, useRef } from 'react';
 import { logError } from '../utils/log.js';
 import { z } from 'zod/v4';
-import { callIdeRpc } from '../services/mcp/client.js';
 import type { ConnectedMCPServer, MCPServerConnection } from '../services/mcp/types.js';
-import type { PermissionMode } from '../types/permissions.js';
 import { GAKR_IN_CHROME_MCP_SERVER_NAME, isTrackedGakrCLIInChromeTabId } from '../utils/gakrcliInChrome/common.js';
 import { lazySchema } from '../utils/lazySchema.js';
 import { enqueuePendingNotification } from '../utils/messageQueueManager.js';
@@ -23,19 +21,8 @@ const GakrCLIInChromePromptNotificationSchema = lazySchema(() => z.object({
   })
 }));
 
-export function getGakrCLIInChromePermissionMode(toolPermissionMode: PermissionMode): 'ask' | 'skip_all_permission_checks' {
-  return toolPermissionMode === 'fullAccess'
-    ? 'skip_all_permission_checks'
-    : 'ask';
-}
-
-/**
- * A hook that listens for prompt notifications from the GakrCLI for Chrome extension,
- * enqueues them as user prompts, and syncs permission mode changes to the extension.
- */
 export function usePromptsFromGakrCLIInChrome(
   mcpClients: MCPServerConnection[],
-  toolPermissionMode: PermissionMode,
 ): void {
   const mcpClientRef = useRef<ConnectedMCPServer | undefined>(undefined);
 
@@ -80,15 +67,6 @@ export function usePromptsFromGakrCLIInChrome(
       });
     }
   }, [mcpClients]);
-
-  // Sync permission mode with Chrome extension whenever it changes
-  useEffect(() => {
-    const chromeClient = findChromeClient(mcpClients);
-    if (!chromeClient) return;
-
-    const chromeMode = getGakrCLIInChromePermissionMode(toolPermissionMode);
-    void callIdeRpc('set_permission_mode', { mode: chromeMode }, chromeClient);
-  }, [mcpClients, toolPermissionMode]);
 }
 
 function findChromeClient(clients: MCPServerConnection[]): ConnectedMCPServer | undefined {

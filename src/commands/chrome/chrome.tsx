@@ -148,11 +148,13 @@ function GakrCLIInChromeMenu({
     }
   }
 
-  // Enter opens the guide from the install view. Inactive while the id field is
-  // focused so the input keeps its own Enter handling.
-  useInput(() => {
-    openUrl(GAKR_IN_CHROME_DOCS_URL);
-    onDone();
+  // Enter closes the install view; the guide was opened when the item was
+  // selected. Inactive while the id field is focused so the input keeps its own
+  // Enter handling, and Escape is left to Dialog's onCancel.
+  useInput((_input, key) => {
+    if (key.return) {
+      onDone();
+    }
   }, { isActive: view === 'install' });
 
   const options: OptionWithDescription<MenuAction>[] = [];

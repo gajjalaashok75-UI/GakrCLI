@@ -31,8 +31,6 @@ async function runSetupFixture(mode: 'existing' | 'missing'): Promise<void> {
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 
-mock.module('@gakr/gakrcli-for-chrome-mcp', () => ({ BROWSER_TOOLS: [] }))
-
 const envUtilsUrl = process.env.TEST_ENV_UTILS_URL
 const setupUrl = process.env.TEST_SETUP_MODULE_URL
 if (!envUtilsUrl || !setupUrl) throw new Error('Missing fixture module URL')
@@ -144,7 +142,7 @@ const setupResult = {
       scope: 'dynamic' as const,
     },
   },
-  allowedTools: ['mcp__gakrcli-in-chrome__tabs_context_mcp'],
+  allowedTools: ['mcp__gakrcli-in-chrome__get_windows_and_tabs'],
   systemPrompt: 'chrome system prompt',
 }
 

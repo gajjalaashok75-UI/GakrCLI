@@ -111,6 +111,7 @@ describe('createChromeMcpServer', () => {
     // here would replace that message with a less specific one.
     const execute = mock(async () => ({
       content: [{ type: 'text', text: 'Tool nope not found' }],
+      isError: true,
     }))
     const client = await connectWith(execute)
 
@@ -120,7 +121,40 @@ describe('createChromeMcpServer', () => {
     })) as CallToolResult
 
     expect(execute).toHaveBeenCalledWith('nope', {})
-    expect(textOf(result)).toContain('Tool nope not found')
+    expect(textOf(result)).toBe('Tool nope not found')
+    expect(result.isError).toBe(true)
+  })
+
+  test('forwards a successful extension envelope without re-wrapping it', async () => {
+    // The extension answers in MCP shape; stringifying that envelope made the
+    // client parse `{"content":[{"type":"text","text":"…"}]}` as the result.
+    const client = await connectWith(async () => ({
+      content: [{ type: 'text', text: 'Window count: 0' }],
+      isError: false,
+    }))
+
+    const result = (await client.callTool({
+      name: 'get_windows_and_tabs',
+      arguments: {},
+    })) as CallToolResult
+
+    expect(textOf(result)).toBe('Window count: 0')
+    expect(result.isError).toBeFalsy()
+  })
+
+  test('preserves an error the extension reported inside the envelope', async () => {
+    const client = await connectWith(async () => ({
+      content: [{ type: 'text', text: 'Tab 7 does not exist' }],
+      isError: true,
+    }))
+
+    const result = (await client.callTool({
+      name: 'chrome_read_page',
+      arguments: { tabId: 7 },
+    })) as CallToolResult
+
+    expect(textOf(result)).toBe('Tab 7 does not exist')
+    expect(result.isError).toBe(true)
   })
 
   test('bounds oversized results', async () => {

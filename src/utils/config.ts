@@ -582,12 +582,6 @@ export type GlobalConfig = {
   cachedChromeExtensionInstalled?: boolean // Cached result of whether Chrome extension is installed
   chromeExtensionId?: string // Id of the side-loaded GakrCLI in Chrome extension (dev/unpacked installs have a per-machine id)
 
-  // Chrome extension pairing state (persisted across sessions)
-  chromeExtension?: {
-    pairedDeviceId?: string
-    pairedDeviceName?: string
-  }
-
   // LSP plugin recommendation preferences
   lspRecommendationDisabled?: boolean // Disable all LSP plugin recommendations
   lspRecommendationNeverPlugins?: string[] // Plugin IDs to never suggest

@@ -43,8 +43,8 @@ import { isChromeExtensionInstalledPortable } from './setupPortable.js'
 
 const CHROME_EXTENSION_RECONNECT_URL = GAKR_IN_CHROME_DOCS_URL
 
-export const NATIVE_HOST_IDENTIFIER = 'com.gakr.chrome.bridge'
-export const NATIVE_HOST_MANIFEST_NAME = `${NATIVE_HOST_IDENTIFIER}.json`
+const NATIVE_HOST_IDENTIFIER = 'com.gakr.chrome.bridge'
+const NATIVE_HOST_MANIFEST_NAME = `${NATIVE_HOST_IDENTIFIER}.json`
 
 export type ChromeExtensionIdSource = 'env' | 'config' | null
 

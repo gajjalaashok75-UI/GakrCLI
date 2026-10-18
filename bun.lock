@@ -17,7 +17,6 @@
         "@aws-sdk/credential-providers": "^3.1037.0",
         "@azure/identity": "^4.13.1",
         "@commander-js/extra-typings": "12.1.0",
-        "@gakr-gakr/gakrcli-for-chrome-mcp": "^0.1.0",
         "@gakr/computer-use-input": "file:vendor/computer-use-input",
         "@gakr/computer-use-mcp": "file:vendor/computer-use-mcp",
         "@gakr/computer-use-swift": "file:vendor/computer-use-swift",
@@ -322,8 +321,6 @@
     "@esbuild/win32-ia32": ["@esbuild/win32-ia32@0.28.1", "", { "os": "win32", "cpu": "ia32" }, "sha512-zvb/mB2bSCoJOpoCBgYKKpX6YM6mJBlBUVUtVj41DlZJVEB6/0CKlRYxP5wWl1C1ILiCoAU5wZZ4q1P3qeS6Eg=="],
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.28.1", "", { "os": "win32", "cpu": "x64" }, "sha512-bm4Mowrv+GXMlpWX++EcXw/iLyd1o3+bJkC2DkWXYVvgZCqD/bSj9ctZeAMC3cIxgjRVR2Dufaiu4YPxr5gW1A=="],
-
-    "@gakr-gakr/gakrcli-for-chrome-mcp": ["@gakr-gakr/gakrcli-for-chrome-mcp@0.1.0", "", { "dependencies": { "ws": "^8.0.0" }, "peerDependencies": { "@modelcontextprotocol/sdk": ">=1.0.0" } }, "sha512-NnSGuF9W5GSD/z3rrj6ZYOUoJrfgcTxuKXll3geCajXmVcXt+vRYg/0R3fap0+OKCLrzKLKIbZLgR1+IVVDxFw=="],
 
     "@gakr/computer-use-input": ["@gakr/computer-use-input@file:vendor/computer-use-input", {}],
 

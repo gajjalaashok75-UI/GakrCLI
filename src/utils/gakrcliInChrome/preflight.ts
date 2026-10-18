@@ -68,6 +68,16 @@ export function getGakrCLIInChromeSyncWarnings(
   const stored = getGlobalConfig().chromeExtensionId
   const manifestPaths = getNativeHostManifestPaths()
   const existing = manifestPaths.filter(path => existsSync(path))
+  // `--chrome` writes the manifest during setup, which runs after this
+  // preflight, so a missing or stale manifest on the terminal surface is
+  // expected on a first run and must not read as a failure the user cannot
+  // fix by doing what they already did.
+  const manifestLevel: Warning['level'] =
+    surface === 'terminal' ? 'warning' : 'error'
+  const manifestFix =
+    surface === 'terminal'
+      ? 'Setup writes it on this run; if the warning persists, run /chrome → "Re-register native host".'
+      : 'Run /chrome → "Re-register native host", or gakrcli --chrome once so setup can write it.'
 
   if (stored && !configured.id) {
     warnings.push({
@@ -79,19 +89,19 @@ export function getGakrCLIInChromeSyncWarnings(
 
   if (existing.length === 0) {
     warnings.push({
-      level: 'error',
+      level: manifestLevel,
       message:
         '[gakrcli-in-chrome] the native-messaging manifest is not installed; Chrome cannot start the native host',
-      fix: 'Run /chrome → "Re-register native host", or gakrcli --chrome once so setup can write it.',
+      fix: manifestFix,
     })
   } else if (configured.id) {
     const manifest = readNativeHostManifest(existing[0]!)
     const allowed = manifest?.allowed_origins ?? []
     if (!allowed.includes(`chrome-extension://${configured.id}/`)) {
       warnings.push({
-        level: 'error',
+        level: manifestLevel,
         message: `[gakrcli-in-chrome] the native-messaging manifest does not allow extension ${configured.id}`,
-        fix: 'Run /chrome → "Re-register native host" to rewrite allowed_origins for this id.',
+        fix: manifestFix,
       })
     }
   }
@@ -232,6 +242,24 @@ export function formatGakrCLIInChromeWarnings(warnings: Warning[]): string[] {
   ])
 }
 
+/**
+ * A preflight that fails must say so where the user can see it: the debug log
+ * alone is invisible unless `--debug` is on, which is exactly when a silent
+ * `null` is hardest to explain.
+ */
+function reportPreflightFailure(
+  error: unknown,
+  surface: GakrCLIInChromeSurface,
+): void {
+  const message = `[gakrcli-in-chrome] preflight failed: ${
+    error instanceof Error ? error.message : String(error)
+  }`
+  logForDebugging(message)
+  if (surface !== 'native-host') {
+    writeLines([message], surface)
+  }
+}
+
 function writeLines(lines: string[], surface: GakrCLIInChromeSurface): void {
   if (lines.length === 0) {
     return
@@ -260,7 +288,7 @@ export function logGakrCLIInChromeSyncPreflight(
       surface,
     )
   } catch (error) {
-    logForDebugging(`[GakrCLI in Chrome] Preflight failed: ${error}`)
+    reportPreflightFailure(error, surface)
   }
 }
 
@@ -280,7 +308,7 @@ export async function logGakrCLIInChromePreflight(
     }
     return status
   } catch (error) {
-    logForDebugging(`[GakrCLI in Chrome] Preflight failed: ${error}`)
+    reportPreflightFailure(error, surface)
     return null
   }
 }

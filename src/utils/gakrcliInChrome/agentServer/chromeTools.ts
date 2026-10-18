@@ -14,30 +14,8 @@
 
 import { TOOL_SCHEMAS } from '@gakr-gakr/mcp-chrome-shared'
 import type { SdkMcpToolDefinition } from '../../../entrypoints/sdk/v2.js'
+import { toToolResult, type ToolResult } from '../toolResult.js'
 import type { ToolExecutor } from './runner.js'
-
-type TextContent = { type: 'text'; text: string }
-type ToolResult = { content: TextContent[]; isError?: boolean }
-
-/** Cap on any single tool result, so a full-page dump cannot blow up context. */
-const MAX_RESULT_CHARS = 100_000
-
-function toTextResult(value: unknown, isError = false): ToolResult {
-  let text: string
-  if (typeof value === 'string') {
-    text = value
-  } else {
-    try {
-      text = JSON.stringify(value, null, 2) ?? String(value)
-    } catch {
-      text = String(value)
-    }
-  }
-  if (text.length > MAX_RESULT_CHARS) {
-    text = `${text.slice(0, MAX_RESULT_CHARS)}\n…[truncated]`
-  }
-  return { content: [{ type: 'text', text }], isError }
-}
 
 /**
  * Build the agent-facing tool definitions.
@@ -61,9 +39,9 @@ export function buildChromeToolDefinitions(
           schema.name,
           (args ?? {}) as Record<string, unknown>,
         )
-        return toTextResult(result)
+        return toToolResult(result)
       } catch (error) {
-        return toTextResult(
+        return toToolResult(
           `chrome tool ${schema.name} failed: ${
             error instanceof Error ? error.message : String(error)
           }`,
