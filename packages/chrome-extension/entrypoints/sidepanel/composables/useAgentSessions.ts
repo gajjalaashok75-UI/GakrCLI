@@ -346,7 +346,7 @@ export function useAgentSessions(options: UseAgentSessionsOptions) {
   // Create a default session for a project if none exist
   async function ensureDefaultSession(
     projectId: string,
-    engineName: AgentCliPreference = 'claude',
+    engineName: AgentCliPreference = 'gakrcli',
   ): Promise<AgentSession | null> {
     await fetchSessions(projectId);
 

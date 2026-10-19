@@ -44,20 +44,7 @@
           {{ m.name }}
         </option>
       </select>
-      <!-- CCR option (Claude Code Router) - only shown when Claude CLI is selected -->
-      <label
-        v-if="showCcrOption"
-        class="flex items-center gap-1 whitespace-nowrap cursor-pointer"
-        title="Use Claude Code Router for API routing"
-      >
-        <input
-          type="checkbox"
-          :checked="useCcr"
-          class="w-3 h-3 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-          @change="$emit('update:use-ccr', ($event.target as HTMLInputElement).checked)"
-        />
-        <span class="text-[11px] text-slate-600">CCR</span>
-      </label>
+      // GakrCLI is the only engine; CCR option not applicable
       <button
         class="btn-secondary !px-2 !py-1 text-[11px]"
         type="button"
@@ -104,11 +91,7 @@ const availableModels = computed<ModelDefinition[]>(() => {
   return getModelsForCli(props.selectedCli);
 });
 
-// Show CCR option only when Claude CLI is selected
-const showCcrOption = computed(() => {
-  return props.selectedCli === 'claude';
-});
-
+// GakrCLI is the only engine; CCR option not applicable
 // Handle CLI change - auto-select default model for the CLI
 function handleCliChange(event: Event): void {
   const cli = (event.target as HTMLSelectElement).value;
@@ -120,11 +103,6 @@ function handleCliChange(event: Event): void {
     emit('update:model', defaultModel);
   } else {
     emit('update:model', '');
-  }
-
-  // Reset CCR when switching away from Claude
-  if (cli !== 'claude') {
-    emit('update:use-ccr', false);
   }
 }
 </script>

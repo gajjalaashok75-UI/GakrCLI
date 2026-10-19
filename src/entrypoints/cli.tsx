@@ -610,6 +610,9 @@ export async function main(
     return;
   } else if (process.argv[2] === '--chrome-extension') {
     profileCheckpoint('cli_chrome_extension_agent_server_path');
+    // Captured before anything else can change it: this is the directory the
+    // user launched the command from, and every side-panel session runs here.
+    const launchDir = process.cwd();
     const {
       logGakrCLIInChromePreflight
     } = await import('../utils/gakrcliInChrome/preflight.js');
@@ -621,7 +624,7 @@ export async function main(
     const {
       runChromeAgentServer
     } = await import('../utils/gakrcliInChrome/agentServer/index.js');
-    await runChromeAgentServer();
+    await runChromeAgentServer(launchDir);
     return;
   } else if (process.argv[2] === '--chrome-native-host') {
     profileCheckpoint('cli_chrome_native_host_path');

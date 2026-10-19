@@ -413,23 +413,11 @@ const localAppendToPrompt = ref(false);
 const localPromptAppend = ref('');
 
 // Computed
-const isClaudeEngine = computed(() => props.session?.engineName === 'claude');
-const isCodexEngine = computed(() => props.session?.engineName === 'codex');
+// GakrCLI is the only engine, always use 'medium' reasoning effort
+const availableReasoningEfforts = computed<readonly CodexReasoningEffort[]>([]);
 
-// Get available reasoning efforts based on selected model
-const availableReasoningEfforts = computed<readonly CodexReasoningEffort[]>(() => {
-  if (!isCodexEngine.value) return [];
-  const effectiveModel = localModel.value || getDefaultModelForCli('codex');
-  return getCodexReasoningEfforts(effectiveModel);
-});
-
-// Normalize reasoning effort when model changes
-const normalizedReasoningEffort = computed(() => {
-  const supported = availableReasoningEfforts.value;
-  if (supported.length === 0) return localReasoningEffort.value;
-  if (supported.includes(localReasoningEffort.value)) return localReasoningEffort.value;
-  return supported[supported.length - 1]; // fallback to highest supported
-});
+// GakrCLI always uses 'medium' reasoning effort
+const normalizedReasoningEffort = computed(() => localReasoningEffort.value || 'medium');
 
 const availableModels = computed(() => {
   if (!props.session?.engineName) return [];
@@ -443,11 +431,8 @@ watch(
     if (session) {
       localModel.value = session.model || '';
       localPermissionMode.value = session.permissionMode || '';
-
-      // Initialize reasoning effort from session's codex config
-      const codexConfig = session.optionsConfig?.codexConfig;
-      if (codexConfig?.reasoningEffort) {
-        localReasoningEffort.value = codexConfig.reasoningEffort;
+      // Reset reasoning effort to default for gakrcli
+      localReasoningEffort.value = 'medium';
       } else {
         localReasoningEffort.value = 'medium';
       }

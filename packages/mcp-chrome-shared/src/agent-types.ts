@@ -80,7 +80,11 @@ export interface AgentAttachment {
   dataBase64: string;
 }
 
-export type AgentCliPreference = 'claude' | 'codex' | 'cursor' | 'qwen' | 'glm';
+/**
+ * The engine that runs a session. Only GakrCLI is implemented: no adapter exists
+ * for any other CLI, so offering one would be a selection that does nothing.
+ */
+export type AgentCliPreference = 'gakrcli';
 
 export interface AgentActRequest {
   instruction: string;

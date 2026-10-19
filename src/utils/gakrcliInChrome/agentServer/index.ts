@@ -22,9 +22,15 @@ import { clearPublishedPort, publishPort } from './portFile.js'
  * profile or a stale listener should degrade to "still works on another port"
  * rather than refusing to start. The extension is told the real port via
  * `SERVER_STARTED` either way, so it does not need to be 12306.
+ *
+ * `cwd` is the directory this command was launched from and becomes the working
+ * directory of every side-panel session.
  */
-export async function runChromeAgentServer(): Promise<void> {
-  const server = new AgentServer((name, args) => callExtensionTool(name, args))
+export async function runChromeAgentServer(cwd: string): Promise<void> {
+  const server = new AgentServer(
+    (name, args) => callExtensionTool(name, args),
+    cwd,
+  )
 
   let port: number
   try {
@@ -42,6 +48,8 @@ export async function runChromeAgentServer(): Promise<void> {
   console.log(
     `GakrCLI in Chrome agent server listening on http://127.0.0.1:${port}`,
   )
+  // biome-ignore lint/suspicious/noConsole: this is a foreground CLI process
+  console.log(`Side-panel sessions run in ${cwd}`)
 
   await new Promise<void>(resolvePromise => {
     const shutdown = (): void => {

@@ -29,6 +29,7 @@ export type {
   AgentUsageStats,
   AttachmentCleanupRequest,
   AttachmentCleanupResponse,
+  AttachmentMetadata,
   AttachmentProjectStats,
   AttachmentStatsResponse,
   CleanupProjectResult,

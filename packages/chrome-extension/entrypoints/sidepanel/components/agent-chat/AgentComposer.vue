@@ -423,10 +423,10 @@ const props = defineProps<{
   engineName?: string;
   selectedModel: string;
   availableModels: ModelDefinition[];
-  // Codex reasoning effort props
+  // Reasoning effort props (GakrCLI only supports 'medium')
   reasoningEffort?: CodexReasoningEffort;
-  availableReasoningEfforts?: readonly CodexReasoningEffort[];
-  // Fake caret feature flag
+  // availableReasoningEfforts is not needed as GakrCLI only supports 'medium'
+  // enableFakeCaret feature flag
   enableFakeCaret?: boolean;
 }>();
 
@@ -442,13 +442,10 @@ const isRequestActive = computed(() => {
   );
 });
 
-const isCodexEngine = computed(() => props.engineName === 'codex');
-
-// Image upload is supported for Claude and Codex engines
-const supportsImages = computed(() => {
-  const engine = props.engineName;
-  return engine === 'claude' || engine === 'codex';
-});
+// Attachments are always offered: GakrCLI is the only engine the extension
+// talks to, and the agent server forwards attached images to the model as
+// image content blocks (and saves other files for it to read).
+const supportsImages = computed(() => true);
 
 // Model selector auto-width
 const modelWidthRef = ref<HTMLSpanElement | null>(null);

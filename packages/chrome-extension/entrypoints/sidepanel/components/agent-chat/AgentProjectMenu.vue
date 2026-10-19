@@ -279,37 +279,21 @@ const isModelDisabled = computed(() => {
   return !props.selectedCli || availableModels.value.length === 0;
 });
 
-// Show reasoning effort option only when Codex CLI is selected
-const showReasoningEffortOption = computed(() => {
-  return props.selectedCli === 'codex';
-});
+// Attachments are always offered: GakrCLI is the only engine the extension
+// talks to, and the agent server forwards attached images to the model as
+// image content blocks (and saves other files for it to read).
 
-// Get available reasoning efforts based on selected model
-const availableReasoningEfforts = computed<readonly CodexReasoningEffort[]>(() => {
-  if (!showReasoningEffortOption.value) return [];
-  const effectiveModel = normalizedModel.value || getDefaultModelForCli('codex');
-  return getCodexReasoningEfforts(effectiveModel);
-});
+// Always show reasoning effort option since gakrcli always uses 'medium'
+const showReasoningEffortOption = computed(() => true);
 
-// Normalize reasoning effort value - fallback to highest supported
-const normalizedReasoningEffort = computed(() => {
-  const supported = availableReasoningEfforts.value;
-  if (supported.length === 0) return props.reasoningEffort;
-  if (supported.includes(props.reasoningEffort)) return props.reasoningEffort;
-  // Fallback to highest supported effort (last in the sorted array)
-  return supported[supported.length - 1];
-});
+// GakrCLI always uses 'medium' reasoning effort
+const availableReasoningEfforts = computed<readonly CodexReasoningEffort[]>(() => []);
 
-// Show CCR option only when Claude CLI is selected
-const showCcrOption = computed(() => {
-  return props.selectedCli === 'claude';
-});
+// GakrCLI always uses 'medium' reasoning effort, no normalization needed
+const normalizedReasoningEffort = computed(() => props.reasoningEffort);
 
-// Show Chrome MCP option when Claude, Codex, or Auto (empty) CLI is selected
-// Auto typically defaults to Claude, and users should be able to manage this project-level setting
-const showChromeMcpOption = computed(() => {
-  return !props.selectedCli || props.selectedCli === 'claude' || props.selectedCli === 'codex';
-});
+// Chrome MCP option is always shown since gakrcli is the only engine
+const showChromeMcpOption = computed(() => true);
 
 // Handle CLI change - auto-select default model for the CLI
 function handleCliChange(event: Event): void {
@@ -327,8 +311,9 @@ function handleCliChange(event: Event): void {
     emit('model:update', '');
   }
 
-  // Reset CCR when switching away from Claude
-  if (cli !== 'claude') {
+  // When switching away from the default CLI, reset reasoning effort and CCR
+  if (cli !== 'gakrcli') {
+    emit('reasoning-effort:update', 'medium');
     emit('ccr:update', false);
   }
 }
@@ -344,15 +329,6 @@ function handleChromeMcpChange(event: Event): void {
 function handleModelChange(event: Event): void {
   const newModel = (event.target as HTMLSelectElement).value;
   emit('model:update', newModel);
-
-  // When model changes for Codex, validate reasoning effort
-  if (props.selectedCli === 'codex') {
-    const supported = getCodexReasoningEfforts(newModel || getDefaultModelForCli('codex'));
-    if (!supported.includes(props.reasoningEffort)) {
-      // Auto-downgrade to highest supported effort
-      emit('reasoning-effort:update', supported[supported.length - 1]);
-    }
-  }
 }
 
 function handleReasoningEffortChange(event: Event): void {

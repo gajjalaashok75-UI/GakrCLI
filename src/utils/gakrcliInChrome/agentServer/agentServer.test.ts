@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { mkdtemp, rm } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
+import { prepareAttachments } from './attachments.js'
 import { AgentServer } from './httpServer.js'
 import { getAgentServerStateDir } from './store.js'
 
@@ -26,7 +27,9 @@ function useScratchStateDir(): void {
 beforeEach(async () => {
   tmpRoot = await mkdtemp(join(tmpdir(), 'chrome-agent-server-test-'))
   useScratchStateDir()
-  server = new AgentServer(async () => ({ ok: true }))
+  // The server's cwd is the directory the CLI was launched from; every session
+  // it runs uses exactly this path and nothing else.
+  server = new AgentServer(async () => ({ ok: true }), tmpRoot)
   const port = await server.listen(0)
   baseUrl = `http://127.0.0.1:${port}`
 })
@@ -290,6 +293,40 @@ describe('attachments', () => {
     const body = (await res.json()) as { success: boolean; rootDir: string }
     expect(body.success).toBe(true)
     expect(typeof body.rootDir).toBe('string')
+  })
+
+  it('serves a saved attachment at the urlPath the panel is given', async () => {
+    const prepared = await prepareAttachments(
+      [
+        {
+          type: 'image',
+          name: 'shot.png',
+          mimeType: 'image/png',
+          dataBase64: Buffer.from('png-bytes').toString('base64'),
+        },
+      ],
+      'project-1',
+      'message-1',
+    )
+    const { urlPath } = prepared.metadata[0]
+
+    const res = await fetch(`${baseUrl}${urlPath}`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('image/png')
+    expect(Buffer.from(await res.arrayBuffer()).toString()).toBe('png-bytes')
+  })
+
+  it('404s an attachment that was never saved', async () => {
+    const res = await fetch(
+      `${baseUrl}/agent/attachments/project-1/missing.png`,
+    )
+    expect(res.status).toBe(404)
+  })
+
+  it('refuses an attachment path that escapes the project directory', async () => {
+    const url = `${baseUrl}/agent/attachments/project-1/${encodeURIComponent('../state.json')}`
+    const res = await fetch(url)
+    expect(res.status).toBe(400)
   })
 })
 

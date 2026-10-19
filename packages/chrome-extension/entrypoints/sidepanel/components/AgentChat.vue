@@ -167,7 +167,12 @@
 
 <script lang="ts" setup>
 import { ref, computed, onMounted, onUnmounted, watch, provide } from 'vue';
-import type { AgentStoredMessage, AgentMessage, CodexReasoningEffort } from '@gakr-gakr/mcp-chrome-shared';
+import type {
+  AgentCliPreference,
+  AgentStoredMessage,
+  AgentMessage,
+  CodexReasoningEffort,
+} from '@gakr-gakr/mcp-chrome-shared';
 
 // Composables
 import {
@@ -213,6 +218,12 @@ import {
 } from '@/common/agent-models';
 import { BACKGROUND_MESSAGE_TYPES } from '@/common/message-types';
 
+/**
+ * The only engine the agent server implements. Sessions are always created with
+ * it; there is no other CLI adapter that could run instead.
+ */
+const ENGINE_NAME: AgentCliPreference = 'gakrcli';
+
 // Local UI state
 const selectedCli = ref('');
 const model = ref('');
@@ -236,19 +247,6 @@ function getNormalizedModel(): string {
   if (models.length === 0) return ''; // Unknown CLI
   const isValid = models.some((m) => m.id === trimmedModel);
   return isValid ? trimmedModel : '';
-}
-
-/**
- * Get normalized reasoning effort that is valid for the current model.
- * Used when creating/updating codex sessions.
- */
-function getNormalizedReasoningEffort(): CodexReasoningEffort {
-  if (selectedCli.value !== 'codex') return 'medium';
-  const effectiveModel = getNormalizedModel() || getDefaultModelForCli('codex');
-  const supported = getCodexReasoningEfforts(effectiveModel);
-  return supported.includes(reasoningEffort.value)
-    ? reasoningEffort.value
-    : (supported[supported.length - 1] as CodexReasoningEffort);
 }
 
 const isPickingDirectory = ref(false);
@@ -388,24 +386,9 @@ const connectionState = computed(() => {
 // Computed values for AgentComposer
 const currentEngineName = computed(() => sessions.selectedSession.value?.engineName ?? '');
 
-// Engine display name for brand/footer
-const engineDisplayName = computed(() => {
-  const name = currentEngineName.value;
-  switch (name) {
-    case 'claude':
-      return 'Claude Code';
-    case 'codex':
-      return 'Codex';
-    case 'cursor':
-      return 'Cursor';
-    case 'qwen':
-      return 'Qwen';
-    case 'glm':
-      return 'GLM';
-    default:
-      return 'Agent';
-  }
-});
+// Engine display name for brand/footer. GakrCLI is the only engine the agent
+// server implements, so there is nothing to switch on.
+const engineDisplayName = computed(() => 'GakrCLI');
 
 const currentSessionModel = computed(() => {
   const session = sessions.selectedSession.value;
@@ -420,18 +403,9 @@ const currentAvailableModels = computed(() => {
   return getModelsForCli(session.engineName);
 });
 
-const currentReasoningEffort = computed(() => {
-  const session = sessions.selectedSession.value;
-  if (!session || session.engineName !== 'codex') return 'medium' as CodexReasoningEffort;
-  return session.optionsConfig?.codexConfig?.reasoningEffort ?? 'medium';
-});
+const currentReasoningEffort = computed(() => 'medium' as CodexReasoningEffort);
 
-const currentAvailableReasoningEfforts = computed(() => {
-  const session = sessions.selectedSession.value;
-  if (!session || session.engineName !== 'codex') return [] as readonly CodexReasoningEffort[];
-  const effectiveModel = currentSessionModel.value || getDefaultModelForCli('codex');
-  return getCodexReasoningEfforts(effectiveModel);
-});
+const currentAvailableReasoningEfforts = computed(() => [] as readonly CodexReasoningEffort[]);
 
 // Track pending history load with nonce to prevent A→B→A race conditions
 let historyLoadNonce = 0;
@@ -659,23 +633,9 @@ async function handleNewSession(): Promise<void> {
   // Clear previous request state (in chat view, creating new session should reset state)
   clearRequestState();
 
-  const engineName =
-    (selectedCli.value as 'claude' | 'codex' | 'cursor' | 'qwen' | 'glm') || 'claude';
-
-  // Include codex config if using codex engine
-  const optionsConfig =
-    engineName === 'codex'
-      ? {
-          codexConfig: {
-            reasoningEffort: getNormalizedReasoningEffort(),
-          },
-        }
-      : undefined;
-
   const session = await sessions.createSession(projectId, {
-    engineName,
+    engineName: ENGINE_NAME,
     name: `Session ${sessions.sessions.value.length + 1}`,
-    optionsConfig,
   });
 
   // Guard: only clear messages if the new session is still selected
@@ -719,14 +679,12 @@ async function handleOpenSessionSettings(sessionId: string): Promise<void> {
   currentManagementInfo.value = null;
 
   try {
-    // Fetch Claude SDK management info if this is a Claude session
-    const session = sessions.sessions.value.find((s) => s.id === sessionId);
-    if (session?.engineName === 'claude') {
-      const info = await sessions.fetchClaudeInfo(sessionId);
-      if (info) {
-        currentManagementInfo.value = info.managementInfo;
-      }
-    }
+    // GakrCLI does not have separate management info - use default
+    // Fetch management info if needed (currently gakrcli doesn't support it)
+    // const info = await sessions.fetchClaudeInfo(sessionId);
+    // if (info) {
+    //   currentManagementInfo.value = info.managementInfo;
+    // }
   } finally {
     sessionSettingsLoading.value = false;
   }
@@ -831,10 +789,7 @@ async function handleProjectSelect(projectId: string): Promise<void> {
     enableChromeMcp.value = project.enableChromeMcp !== false;
   }
   // Load sessions for the new project
-  await sessions.ensureDefaultSession(
-    projectId,
-    (selectedCli.value as 'claude' | 'codex' | 'cursor' | 'qwen' | 'glm') || 'claude',
-  );
+  await sessions.ensureDefaultSession(projectId, ENGINE_NAME);
 
   // Guard again after ensureDefaultSession
   if (projects.selectedProjectId.value !== projectId) {
@@ -865,9 +820,7 @@ async function handleNewProject(): Promise<void> {
         enableChromeMcp.value = project.enableChromeMcp !== false;
 
         // Ensure a default session exists for the new project
-        const engineName =
-          (selectedCli.value as 'claude' | 'codex' | 'cursor' | 'qwen' | 'glm') || 'claude';
-        await sessions.ensureDefaultSession(project.id, engineName);
+        await sessions.ensureDefaultSession(project.id, ENGINE_NAME);
 
         // Reconnect SSE and load session history
         if (sessions.selectedSessionId.value) {
@@ -893,10 +846,10 @@ async function handleSaveSettings(): Promise<void> {
   try {
     // Use normalized model to ensure valid value is saved
     const normalizedModel = getNormalizedModel();
-    // Only save CCR if Claude CLI is selected
-    const normalizedCcr = selectedCli.value === 'claude' ? useCcr.value : false;
+    // GakrCLI is the only engine; CCR is not applicable
+    const normalizedCcr = false;
     await projects.saveProjectPreference(
-      selectedCli.value,
+      'gakrcli',
       normalizedModel,
       normalizedCcr,
       enableChromeMcp.value,
@@ -905,25 +858,12 @@ async function handleSaveSettings(): Promise<void> {
     model.value = normalizedModel;
     useCcr.value = normalizedCcr;
 
-    // If CLI changed, create a new empty session with the new CLI
-    const cliChanged = previousCli !== selectedCli.value;
+    // If CLI changed, create a new empty session with gakrcli
+    const cliChanged = previousCli !== 'gakrcli';
     if (cliChanged && selectedCli.value) {
-      const engineName = selectedCli.value as 'claude' | 'codex' | 'cursor' | 'qwen' | 'glm';
-
-      // Include codex config if using codex engine
-      const optionsConfig =
-        engineName === 'codex'
-          ? {
-              codexConfig: {
-                reasoningEffort: getNormalizedReasoningEffort(),
-              },
-            }
-          : undefined;
-
       const session = await sessions.createSession(project.id, {
-        engineName,
+        engineName: ENGINE_NAME,
         name: `Session ${sessions.sessions.value.length + 1}`,
-        optionsConfig,
       });
 
       // Guard: only clear messages if the new session is still selected
@@ -1019,21 +959,9 @@ async function handleNewSessionAndNavigate(): Promise<void> {
   // Clear previous state before creating new session
   clearRequestState();
 
-  const engineName =
-    (selectedCli.value as 'claude' | 'codex' | 'cursor' | 'qwen' | 'glm') || 'claude';
-  const optionsConfig =
-    engineName === 'codex'
-      ? {
-          codexConfig: {
-            reasoningEffort: getNormalizedReasoningEffort(),
-          },
-        }
-      : undefined;
-
   const session = await sessions.createSession(projects.selectedProjectId.value, {
-    engineName,
+    engineName: ENGINE_NAME,
     name: `Session ${sessions.sessions.value.length + 1}`,
-    optionsConfig,
   });
 
   // Guard against stale navigation if user switched during createSession await
@@ -1174,6 +1102,24 @@ async function handleSend(): Promise<void> {
   // Use getAttachments() to strip previewUrl and avoid payload bloat
   chat.attachments.value = attachments.getAttachments() ?? [];
 
+  // Tell the agent server which tab this side panel is attached to.
+  // Use chrome.tabs.query to get the side panel's own tab ID rather than
+  // the web editor's tab ID, which prevents showing the wrong browser state
+  // when multiple Chrome windows are open.
+  let panelTabId: number | undefined;
+  if (typeof chrome !== 'undefined' && chrome.tabs?.query) {
+    try {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      panelTabId = tabs?.[0]?.id;
+    } catch {
+      // Best-effort: if we can't read the tab, don't set panelTabId
+    }
+  }
+  const clientMeta = {
+    ...selectionClientMeta,
+    ...(typeof panelTabId === 'number' ? { panelTabId } : {}),
+  };
+
   // Session-level config is now used by backend; no need to pass cliPreference/model
   // For selection context messages, use the user's input as displayText
   // so the chip shows meaningful content instead of a generic label
@@ -1185,7 +1131,7 @@ async function handleSend(): Promise<void> {
     // Attach metadata only when selection context exists
     // Use user's original message as displayText for better UX
     displayText: selection ? messageText : undefined,
-    clientMeta: selectionClientMeta,
+    clientMeta: Object.keys(clientMeta).length > 0 ? clientMeta : undefined,
   });
 
   // Clear web editor selection after successful send
@@ -1349,7 +1295,7 @@ onMounted(async () => {
       // Note: This won't fetch sessions again since we already did above
       await sessions.ensureDefaultSession(
         projects.selectedProjectId.value,
-        (selectedCli.value as 'claude' | 'codex' | 'cursor' | 'qwen' | 'glm') || 'claude',
+        ENGINE_NAME,
       );
 
       // Only open SSE and load history if we're in chat view with a valid session

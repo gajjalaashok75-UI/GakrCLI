@@ -11,10 +11,14 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'http'
-import { mkdir, stat } from 'fs/promises'
+import { mkdir, readFile, stat } from 'fs/promises'
 import { join, resolve } from 'path'
 import type { AddressInfo } from 'net'
 import { getProjectsDir } from '../../envUtils.js'
+import {
+  contentTypeFor,
+  resolveAttachmentPath,
+} from './attachments.js'
 import type { AgentActRequest, RealtimeEvent } from './contract.js'
 import { AgentServerStore } from './store.js'
 import { SessionRuntime, type ToolExecutor } from './runner.js'
@@ -36,7 +40,14 @@ export class AgentServer {
   private heartbeat: ReturnType<typeof setInterval> | null = null
   private boundPort: number | null = null
 
-  constructor(private readonly runTool: RunTool) {}
+  /**
+   * `cwd` is the directory `gakrcli --chrome-extension` was launched from, and
+   * is the working directory for every session this server runs.
+   */
+  constructor(
+    private readonly runTool: RunTool,
+    private readonly cwd: string,
+  ) {}
 
   /** Start listening. Returns the port actually bound. */
   async listen(preferredPort: number): Promise<number> {
@@ -102,7 +113,12 @@ export class AgentServer {
     if (!session) {
       return undefined
     }
-    const runtime = new SessionRuntime(session, this.store, this.runTool)
+    const runtime = new SessionRuntime(
+      session,
+      this.store,
+      this.runTool,
+      this.cwd,
+    )
     this.runtimes.set(sessionId, runtime)
     return runtime
   }
@@ -449,6 +465,30 @@ export class AgentServer {
     if (method === 'GET' && path === '/agent/attachments/stats') {
       const stats = await this.store.collectAttachmentStats()
       json(res, 200, { success: true, ...stats })
+      return
+    }
+
+    match = path.match(/^\/agent\/attachments\/([^/]+)\/([^/]+)$/)
+    if (method === 'GET' && match) {
+      const filePath = resolveAttachmentPath(
+        decodeURIComponent(match[1]),
+        decodeURIComponent(match[2]),
+      )
+      if (!filePath) {
+        json(res, 400, { error: 'Invalid attachment path' })
+        return
+      }
+      try {
+        const body = await readFile(filePath)
+        res.writeHead(200, {
+          'Content-Type': contentTypeFor(filePath),
+          'Content-Length': body.byteLength,
+          'Cache-Control': 'no-store',
+        })
+        res.end(body)
+      } catch {
+        json(res, 404, { error: 'Attachment not found' })
+      }
       return
     }
 
