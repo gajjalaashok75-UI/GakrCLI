@@ -34,7 +34,7 @@ export default function GakrCLIInChrome() {
         <li><strong>gakrcli 0.6.1+</strong> — installed with <code>{GAKR_IN_CHROME.installCommand}</code>.</li>
         <li><strong>Chrome or a Chromium-based browser</strong> — Chrome, Brave, Arc, Edge, Chromium, Vivaldi, or Opera. WSL is not supported.</li>
         <li>
-          <strong>A gakrcli.ai subscription</strong> — the <code>gakrcli --chrome</code> integration and the{' '}
+          <strong>A gakrcli.ai subscription</strong> — the <code>gakrcli --chrome</code> integration and the
           <code>gakrcli-in-chrome</code> skill are gated on it in the CLI. The side-panel server and the stdio MCP server
           do not check it.
         </li>
