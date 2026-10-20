@@ -103,78 +103,7 @@
       </select>
     </div>
 
-    <!-- Model Selection -->
-    <div class="px-3 py-2 flex items-center gap-2">
-      <span class="text-xs w-12" :style="{ color: 'var(--ac-text-muted, #6e6e6e)' }"> Model </span>
-      <select
-        :value="normalizedModel"
-        class="flex-1 px-2 py-1 text-xs rounded"
-        :style="{
-          backgroundColor: 'var(--ac-surface-muted, #f2f0eb)',
-          border: 'var(--ac-border-width, 1px) solid var(--ac-border, #e5e5e5)',
-          color: 'var(--ac-text, #1a1a1a)',
-          borderRadius: 'var(--ac-radius-button, 8px)',
-        }"
-        :disabled="isModelDisabled"
-        @change="handleModelChange"
-      >
-        <option value="">Default</option>
-        <option v-for="m in availableModels" :key="m.id" :value="m.id">
-          {{ m.name }}
-        </option>
-      </select>
-    </div>
-
-    <!-- Reasoning Effort (Codex only) -->
-    <div v-if="showReasoningEffortOption" class="px-3 py-2">
-      <div class="flex items-center gap-2">
-        <span class="text-xs w-12" :style="{ color: 'var(--ac-text-muted, #6e6e6e)' }">
-          Effort
-        </span>
-        <select
-          :value="normalizedReasoningEffort"
-          class="flex-1 px-2 py-1 text-xs rounded"
-          :style="{
-            backgroundColor: 'var(--ac-surface-muted, #f2f0eb)',
-            border: 'var(--ac-border-width, 1px) solid var(--ac-border, #e5e5e5)',
-            color: 'var(--ac-text, #1a1a1a)',
-            borderRadius: 'var(--ac-radius-button, 8px)',
-          }"
-          @change="handleReasoningEffortChange"
-        >
-          <option v-for="effort in availableReasoningEfforts" :key="effort" :value="effort">
-            {{ effort }}
-          </option>
-        </select>
-      </div>
-      <p class="text-[10px] mt-1 ml-14" :style="{ color: 'var(--ac-text-subtle, #a8a29e)' }">
-        Applies to new sessions. Edit existing session in Session Settings.
-      </p>
-    </div>
-
-    <!-- CCR Option (Claude Code Router) - only shown when Claude CLI is selected -->
-    <div v-if="showCcrOption" class="px-3 py-2 flex items-center gap-2">
-      <span class="text-xs w-12" :style="{ color: 'var(--ac-text-muted, #6e6e6e)' }"> CCR </span>
-      <label
-        class="flex items-center gap-2 cursor-pointer"
-        title="Use Claude Code Router for API routing"
-      >
-        <input
-          type="checkbox"
-          :checked="useCcr"
-          class="w-4 h-4 rounded"
-          :style="{
-            accentColor: 'var(--ac-accent, #c87941)',
-          }"
-          @change="handleCcrChange"
-        />
-        <span class="text-xs" :style="{ color: 'var(--ac-text, #1a1a1a)' }">
-          Use Claude Code Router
-        </span>
-      </label>
-    </div>
-
-    <!-- Chrome MCP Option - only shown when Claude or Codex CLI is selected -->
+    <!-- Chrome MCP Option -->
     <div v-if="showChromeMcpOption" class="px-3 py-2 flex items-center gap-2">
       <span class="text-xs w-12" :style="{ color: 'var(--ac-text-muted, #6e6e6e)' }"> MCP </span>
       <label
@@ -221,22 +150,13 @@
 
 <script lang="ts" setup>
 import { computed } from 'vue';
-import type { AgentProject, AgentEngineInfo, CodexReasoningEffort } from '@gakr-gakr/mcp-chrome-shared';
-import {
-  getModelsForCli,
-  getDefaultModelForCli,
-  getCodexReasoningEfforts,
-  type ModelDefinition,
-} from '@/common/agent-models';
+import type { AgentProject, AgentEngineInfo } from '@gakr-gakr/mcp-chrome-shared';
 
 const props = defineProps<{
   open: boolean;
   projects: AgentProject[];
   selectedProjectId: string;
   selectedCli: string;
-  model: string;
-  reasoningEffort: CodexReasoningEffort;
-  useCcr: boolean;
   enableChromeMcp: boolean;
   engines: AgentEngineInfo[];
   isPicking: boolean;
@@ -248,94 +168,19 @@ const emit = defineEmits<{
   'project:select': [projectId: string];
   'project:new': [];
   'cli:update': [cli: string];
-  'model:update': [model: string];
-  'reasoning-effort:update': [effort: CodexReasoningEffort];
-  'ccr:update': [useCcr: boolean];
   'chrome-mcp:update': [enableChromeMcp: boolean];
   save: [];
 }>();
 
-// Get available models based on selected CLI
-const availableModels = computed<ModelDefinition[]>(() => {
-  return getModelsForCli(props.selectedCli);
-});
-
-// Normalize model value: ensure it exists in available models or fallback to empty
-const normalizedModel = computed(() => {
-  const trimmedModel = props.model.trim();
-  if (!trimmedModel) return '';
-  // No CLI selected = model disabled, show empty (server will use default)
-  if (!props.selectedCli) return '';
-  const models = availableModels.value;
-  // If CLI selected but no models defined, fallback to empty
-  if (models.length === 0) return '';
-  // Check if current model is valid for selected CLI
-  const isValid = models.some((m) => m.id === trimmedModel);
-  return isValid ? trimmedModel : '';
-});
-
-// Check if Model select should be disabled
-const isModelDisabled = computed(() => {
-  return !props.selectedCli || availableModels.value.length === 0;
-});
-
-// Attachments are always offered: GakrCLI is the only engine the extension
-// talks to, and the agent server forwards attached images to the model as
-// image content blocks (and saves other files for it to read).
-
-// Always show reasoning effort option since gakrcli always uses 'medium'
-const showReasoningEffortOption = computed(() => true);
-
-// GakrCLI always uses 'medium' reasoning effort
-const availableReasoningEfforts = computed<readonly CodexReasoningEffort[]>(() => []);
-
-// GakrCLI always uses 'medium' reasoning effort, no normalization needed
-const normalizedReasoningEffort = computed(() => props.reasoningEffort);
-
 // Chrome MCP option is always shown since gakrcli is the only engine
 const showChromeMcpOption = computed(() => true);
 
-// Handle CLI change - auto-select default model for the CLI
 function handleCliChange(event: Event): void {
-  const cli = (event.target as HTMLSelectElement).value;
-  emit('cli:update', cli);
-
-  // Auto-select default model when CLI changes
-  if (cli) {
-    const defaultModel = getDefaultModelForCli(cli);
-    // Validate default model exists in available models
-    const models = getModelsForCli(cli);
-    const isValidDefault = models.some((m) => m.id === defaultModel);
-    emit('model:update', isValidDefault ? defaultModel : (models[0]?.id ?? ''));
-  } else {
-    emit('model:update', '');
-  }
-
-  // When switching away from the default CLI, reset reasoning effort and CCR
-  if (cli !== 'gakrcli') {
-    emit('reasoning-effort:update', 'medium');
-    emit('ccr:update', false);
-  }
-}
-
-function handleCcrChange(event: Event): void {
-  emit('ccr:update', (event.target as HTMLInputElement).checked);
+  emit('cli:update', (event.target as HTMLSelectElement).value);
 }
 
 function handleChromeMcpChange(event: Event): void {
   emit('chrome-mcp:update', (event.target as HTMLInputElement).checked);
-}
-
-function handleModelChange(event: Event): void {
-  const newModel = (event.target as HTMLSelectElement).value;
-  emit('model:update', newModel);
-}
-
-function handleReasoningEffortChange(event: Event): void {
-  emit(
-    'reasoning-effort:update',
-    (event.target as HTMLSelectElement).value as CodexReasoningEffort,
-  );
 }
 
 function handleSave(): void {

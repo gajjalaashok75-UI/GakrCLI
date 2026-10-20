@@ -227,26 +227,13 @@ const displayName = computed(() => {
 });
 
 const engineAbbrev = computed(() => {
-  const name = props.session.engineName;
-  switch (name) {
-    case 'claude':
-      return 'CL';
-    case 'codex':
-      return 'CX';
-    case 'cursor':
-      return 'CR';
-    case 'qwen':
-      return 'QW';
-    case 'glm':
-      return 'GL';
-    default:
-      // Fallback for any unknown engine name
-      return (
-        String(name || '')
-          .slice(0, 2)
-          .toUpperCase() || 'AI'
-      );
-  }
+  // GakrCLI is the only engine; the badge still derives from the name so the
+  // list keeps working if the contract ever grows another engine.
+  return (
+    String(props.session.engineName || '')
+      .slice(0, 2)
+      .toUpperCase() || 'GK'
+  );
 });
 
 const formattedDate = computed(() => {
@@ -316,20 +303,11 @@ const containerStyle = computed(() => ({
   borderBottom: 'var(--ac-border-width) solid var(--ac-border)',
 }));
 
-const engineBadgeStyle = computed(() => {
-  const colors: Record<string, string> = {
-    claude: '#c87941',
-    codex: '#10a37f',
-    cursor: '#8b5cf6',
-    qwen: '#6366f1',
-    glm: '#ef4444',
-  };
-  const bg = colors[props.session.engineName] || '#6b7280';
-  return {
-    backgroundColor: bg,
-    color: '#ffffff',
-  };
-});
+const engineBadgeStyle = computed(() => ({
+  // GakrCLI branding (the app accent) for the engine badge
+  backgroundColor: 'var(--ac-accent, #c87941)',
+  color: '#ffffff',
+}));
 
 const titleStyle = computed(() => ({
   color: props.selected ? 'var(--ac-accent)' : 'var(--ac-text)',

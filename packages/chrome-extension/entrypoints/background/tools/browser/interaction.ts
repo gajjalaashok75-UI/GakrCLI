@@ -12,7 +12,7 @@ interface Coordinates {
 interface ClickToolParams {
   selector?: string; // CSS selector or XPath for the element to click
   selectorType?: 'css' | 'xpath'; // Type of selector (default: 'css')
-  ref?: string; // Element ref from accessibility tree (window.__claudeElementMap)
+  ref?: string; // Element ref from accessibility tree (window.__gakrElementMap)
   coordinates?: Coordinates; // Coordinates to click at (x, y relative to viewport)
   waitForNavigation?: boolean; // Whether to wait for navigation to complete after click
   timeout?: number; // Timeout in milliseconds for waiting for the element or navigation

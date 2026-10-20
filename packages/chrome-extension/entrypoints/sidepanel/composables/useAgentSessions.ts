@@ -10,7 +10,6 @@ import type {
   CreateAgentSessionInput,
   UpdateAgentSessionInput,
   AgentStoredMessage,
-  AgentManagementInfo,
 } from '@gakr-gakr/mcp-chrome-shared';
 
 const STORAGE_KEY_SELECTED_SESSION = 'agent-selected-session-id';
@@ -421,36 +420,6 @@ export function useAgentSessions(options: UseAgentSessionsOptions) {
     }
   }
 
-  // Fetch Claude SDK management info for a session
-  async function fetchClaudeInfo(sessionId: string): Promise<{
-    managementInfo: AgentManagementInfo | null;
-    sessionId: string;
-    engineName: string;
-  } | null> {
-    const serverPort = options.getServerPort();
-    if (!serverPort || !sessionId) return null;
-
-    try {
-      const url = `http://127.0.0.1:${serverPort}/agent/sessions/${encodeURIComponent(sessionId)}/claude-info`;
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        const text = await response.text().catch(() => '');
-        throw new Error(text || `HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
-      return {
-        managementInfo: data.managementInfo ?? null,
-        sessionId: data.sessionId ?? sessionId,
-        engineName: data.engineName ?? '',
-      };
-    } catch (error) {
-      console.error('Failed to fetch Claude info:', error);
-      return null;
-    }
-  }
-
   // Clear sessions when project changes
   function clearSessions(): void {
     sessions.value = [];
@@ -530,7 +499,6 @@ export function useAgentSessions(options: UseAgentSessionsOptions) {
     ensureDefaultSession,
     renameSession,
     resetConversation,
-    fetchClaudeInfo,
     clearSessions,
     updateSessionPreview,
   };

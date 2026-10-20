@@ -20,12 +20,12 @@
       </button>
     </div>
 
-    <!-- CLI & Model selection -->
+    <!-- CLI selection (GakrCLI is the only engine) -->
     <div class="flex items-center gap-2">
       <span class="whitespace-nowrap">CLI</span>
       <select
         :value="selectedCli"
-        class="border border-slate-200 rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-slate-400"
+        class="flex-1 border border-slate-200 rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-slate-400"
         @change="handleCliChange"
       >
         <option value="">Auto (per project / server default)</option>
@@ -33,18 +33,6 @@
           {{ e.name }}
         </option>
       </select>
-      <span class="whitespace-nowrap">Model</span>
-      <select
-        :value="model"
-        class="flex-1 border border-slate-200 rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-slate-400"
-        @change="$emit('update:model', ($event.target as HTMLSelectElement).value)"
-      >
-        <option value="">Default</option>
-        <option v-for="m in availableModels" :key="m.id" :value="m.id">
-          {{ m.name }}
-        </option>
-      </select>
-      // GakrCLI is the only engine; CCR option not applicable
       <button
         class="btn-secondary !px-2 !py-1 text-[11px]"
         type="button"
@@ -58,19 +46,11 @@
 </template>
 
 <script lang="ts" setup>
-import { computed } from 'vue';
 import type { AgentProject, AgentEngineInfo } from '@gakr-gakr/mcp-chrome-shared';
-import {
-  getModelsForCli,
-  getDefaultModelForCli,
-  type ModelDefinition,
-} from '@/common/agent-models';
 
-const props = defineProps<{
+defineProps<{
   projectRoot: string;
   selectedCli: string;
-  model: string;
-  useCcr: boolean;
   engines: AgentEngineInfo[];
   selectedProject: AgentProject | null;
   isSavingRoot: boolean;
@@ -80,29 +60,11 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:project-root': [value: string];
   'update:selected-cli': [value: string];
-  'update:model': [value: string];
-  'update:use-ccr': [value: boolean];
   'save-root': [];
   'save-preference': [];
 }>();
 
-// Get available models based on selected CLI
-const availableModels = computed<ModelDefinition[]>(() => {
-  return getModelsForCli(props.selectedCli);
-});
-
-// GakrCLI is the only engine; CCR option not applicable
-// Handle CLI change - auto-select default model for the CLI
 function handleCliChange(event: Event): void {
-  const cli = (event.target as HTMLSelectElement).value;
-  emit('update:selected-cli', cli);
-
-  // Auto-select default model when CLI changes
-  if (cli) {
-    const defaultModel = getDefaultModelForCli(cli);
-    emit('update:model', defaultModel);
-  } else {
-    emit('update:model', '');
-  }
+  emit('update:selected-cli', (event.target as HTMLSelectElement).value);
 }
 </script>

@@ -34,7 +34,7 @@ if (window.__CLICK_HELPER_INITIALIZED__) {
         // Resolve element from weak map
         let target = null;
         try {
-          const map = window.__claudeElementMap;
+          const map = window.__gakrElementMap;
           const weak = map && map[ref];
           target = weak && typeof weak.deref === 'function' ? weak.deref() : null;
         } catch (e) {

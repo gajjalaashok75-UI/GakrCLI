@@ -68,7 +68,7 @@
                 <span
                   class="px-1.5 py-0.5 text-[10px]"
                   :style="{
-                    backgroundColor: getEngineColor(session?.engineName || ''),
+                    backgroundColor: ENGINE_BADGE_COLOR,
                     color: '#ffffff',
                     borderRadius: 'var(--ac-radius-button, 8px)',
                   }"
@@ -89,63 +89,8 @@
             </div>
           </div>
 
-          <!-- Model Selection -->
-          <div class="space-y-2">
-            <label
-              class="text-[10px] font-bold uppercase tracking-wider"
-              :style="{ color: 'var(--ac-text-subtle, #a8a29e)' }"
-            >
-              Model
-            </label>
-            <select
-              v-model="localModel"
-              class="w-full px-2 py-1.5 text-xs"
-              :style="{
-                backgroundColor: 'var(--ac-surface, #ffffff)',
-                border: 'var(--ac-border-width, 1px) solid var(--ac-border, #e5e5e5)',
-                borderRadius: 'var(--ac-radius-button, 8px)',
-                color: 'var(--ac-text, #1a1a1a)',
-              }"
-            >
-              <option value="">Default (server setting)</option>
-              <option v-for="m in availableModels" :key="m.id" :value="m.id">
-                {{ m.name }}
-              </option>
-            </select>
-          </div>
-
-          <!-- Reasoning Effort (Codex only) -->
-          <div v-if="isCodexEngine" class="space-y-2">
-            <label
-              class="text-[10px] font-bold uppercase tracking-wider"
-              :style="{ color: 'var(--ac-text-subtle, #a8a29e)' }"
-            >
-              Reasoning Effort
-            </label>
-            <select
-              v-model="localReasoningEffort"
-              class="w-full px-2 py-1.5 text-xs"
-              :style="{
-                backgroundColor: 'var(--ac-surface, #ffffff)',
-                border: 'var(--ac-border-width, 1px) solid var(--ac-border, #e5e5e5)',
-                borderRadius: 'var(--ac-radius-button, 8px)',
-                color: 'var(--ac-text, #1a1a1a)',
-              }"
-            >
-              <option v-for="effort in availableReasoningEfforts" :key="effort" :value="effort">
-                {{ effort }}
-              </option>
-            </select>
-            <p class="text-[10px]" :style="{ color: 'var(--ac-text-subtle, #a8a29e)' }">
-              Controls the reasoning depth. Higher effort = better quality but slower.
-              <span v-if="!availableReasoningEfforts.includes('xhigh')" class="block mt-1">
-                Note: xhigh is only available for gpt-5.2 and gpt-5.1-codex-max models.
-              </span>
-            </p>
-          </div>
-
-          <!-- Permission Mode (Claude only) -->
-          <div v-if="isClaudeEngine" class="space-y-2">
+          <!-- Permission Mode (GakrCLI) -->
+          <div v-if="isGakrcliEngine" class="space-y-2">
             <label
               class="text-[10px] font-bold uppercase tracking-wider"
               :style="{ color: 'var(--ac-text-subtle, #a8a29e)' }"
@@ -167,15 +112,14 @@
               <option value="acceptEdits">acceptEdits - Auto-accept file edits</option>
               <option value="bypassPermissions">bypassPermissions - Auto-accept all</option>
               <option value="plan">plan - Plan mode only</option>
-              <option value="dontAsk">dontAsk - No confirmation</option>
             </select>
             <p class="text-[10px]" :style="{ color: 'var(--ac-text-subtle, #a8a29e)' }">
-              Controls how the Claude SDK handles tool approval requests.
+              Controls how GakrCLI handles tool approval requests.
             </p>
           </div>
 
-          <!-- System Prompt Config (Claude only) -->
-          <div v-if="isClaudeEngine" class="space-y-2">
+          <!-- System Prompt Config (GakrCLI) -->
+          <div v-if="isGakrcliEngine" class="space-y-2">
             <label
               class="text-[10px] font-bold uppercase tracking-wider"
               :style="{ color: 'var(--ac-text-subtle, #a8a29e)' }"
@@ -189,7 +133,7 @@
                   :checked="!localUseCustomPrompt"
                   @change="localUseCustomPrompt = false"
                 />
-                <span :style="{ color: 'var(--ac-text, #1a1a1a)' }">Use preset (claude_code)</span>
+                <span :style="{ color: 'var(--ac-text, #1a1a1a)' }">Use preset (GakrCLI)</span>
               </label>
               <div v-if="!localUseCustomPrompt" class="pl-5">
                 <label class="flex items-center gap-2 text-[10px]">
@@ -238,8 +182,8 @@
             </div>
           </div>
 
-          <!-- Management Info (Claude only, read-only) -->
-          <div v-if="isClaudeEngine && managementInfo" class="space-y-2">
+          <!-- Management Info (GakrCLI, read-only) -->
+          <div v-if="isGakrcliEngine && managementInfo" class="space-y-2">
             <label
               class="text-[10px] font-bold uppercase tracking-wider"
               :style="{ color: 'var(--ac-text-subtle, #a8a29e)' }"
@@ -260,7 +204,7 @@
                 }}</span>
               </div>
               <div v-if="managementInfo.claudeCodeVersion" class="flex justify-between">
-                <span :style="{ color: 'var(--ac-text-muted, #6e6e6e)' }">Claude Code</span>
+                <span :style="{ color: 'var(--ac-text-muted, #6e6e6e)' }">GakrCLI Version</span>
                 <span class="font-mono" :style="{ color: 'var(--ac-text-muted, #6e6e6e)' }">{{
                   managementInfo.claudeCodeVersion
                 }}</span>
@@ -374,14 +318,7 @@ import type {
   AgentSession,
   AgentManagementInfo,
   AgentSystemPromptConfig,
-  CodexReasoningEffort,
-  AgentSessionOptionsConfig,
 } from '@gakr-gakr/mcp-chrome-shared';
-import {
-  getModelsForCli,
-  getCodexReasoningEfforts,
-  getDefaultModelForCli,
-} from '@/common/agent-models';
 
 const props = defineProps<{
   open: boolean;
@@ -400,29 +337,28 @@ export interface SessionSettings {
   model: string;
   permissionMode: string;
   systemPromptConfig: AgentSystemPromptConfig | null;
-  optionsConfig?: AgentSessionOptionsConfig;
 }
+
+/** GakrCLI is the only engine; its badge uses the GakrCLI brand accent. */
+const ENGINE_BADGE_COLOR = 'var(--ac-accent, #c87941)';
+
+/**
+ * Preset id required by `AgentSystemPromptConfig` in @gakr-gakr/mcp-chrome-shared.
+ * Kept in one place so the rest of this panel never has to spell out an
+ * engine name that is not GakrCLI.
+ */
+const DEFAULT_PROMPT_PRESET = 'claude_code' as const;
 
 // Local state
 const localModel = ref('');
 const localPermissionMode = ref('');
-const localReasoningEffort = ref<CodexReasoningEffort>('medium');
 const localUseCustomPrompt = ref(false);
 const localCustomPrompt = ref('');
 const localAppendToPrompt = ref(false);
 const localPromptAppend = ref('');
 
 // Computed
-// GakrCLI is the only engine, always use 'medium' reasoning effort
-const availableReasoningEfforts = computed<readonly CodexReasoningEffort[]>([]);
-
-// GakrCLI always uses 'medium' reasoning effort
-const normalizedReasoningEffort = computed(() => localReasoningEffort.value || 'medium');
-
-const availableModels = computed(() => {
-  if (!props.session?.engineName) return [];
-  return getModelsForCli(props.session.engineName);
-});
+const isGakrcliEngine = computed(() => String(props.session?.engineName ?? '') === 'gakrcli');
 
 // Initialize local state when session changes
 watch(
@@ -431,11 +367,6 @@ watch(
     if (session) {
       localModel.value = session.model || '';
       localPermissionMode.value = session.permissionMode || '';
-      // Reset reasoning effort to default for gakrcli
-      localReasoningEffort.value = 'medium';
-      } else {
-        localReasoningEffort.value = 'medium';
-      }
 
       // Parse system prompt config based on type
       const config = session.systemPromptConfig;
@@ -462,24 +393,6 @@ watch(
   { immediate: true },
 );
 
-// Auto-adjust reasoning effort when model changes
-watch(localModel, () => {
-  if (isCodexEngine.value) {
-    localReasoningEffort.value = normalizedReasoningEffort.value;
-  }
-});
-
-function getEngineColor(engineName: string): string {
-  const colors: Record<string, string> = {
-    claude: '#c87941',
-    codex: '#10a37f',
-    cursor: '#8b5cf6',
-    qwen: '#6366f1',
-    glm: '#ef4444',
-  };
-  return colors[engineName] || '#6b7280';
-}
-
 function handleClose(): void {
   emit('close');
 }
@@ -496,28 +409,14 @@ function handleSave(): void {
   } else if (localAppendToPrompt.value && localPromptAppend.value.trim()) {
     systemPromptConfig = {
       type: 'preset',
-      preset: 'claude_code',
+      preset: DEFAULT_PROMPT_PRESET,
       append: localPromptAppend.value.trim(),
     };
   } else {
-    // Use default preset without append
+    // Use the default GakrCLI preset without append
     systemPromptConfig = {
       type: 'preset',
-      preset: 'claude_code',
-    };
-  }
-
-  // Build optionsConfig for Codex engine
-  let optionsConfig: AgentSessionOptionsConfig | undefined;
-  if (isCodexEngine.value) {
-    const existingOptions = props.session?.optionsConfig ?? {};
-    const existingCodexConfig = existingOptions.codexConfig ?? {};
-    optionsConfig = {
-      ...existingOptions,
-      codexConfig: {
-        ...existingCodexConfig,
-        reasoningEffort: normalizedReasoningEffort.value,
-      },
+      preset: DEFAULT_PROMPT_PRESET,
     };
   }
 
@@ -525,7 +424,6 @@ function handleSave(): void {
     model: localModel.value.trim(),
     permissionMode: localPermissionMode.value,
     systemPromptConfig,
-    optionsConfig,
   };
   emit('save', settings);
 }

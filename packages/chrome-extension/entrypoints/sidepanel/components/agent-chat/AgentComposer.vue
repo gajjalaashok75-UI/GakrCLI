@@ -171,68 +171,6 @@
             </svg>
           </button>
 
-          <!-- Model Selector (auto-width) -->
-          <div v-if="availableModels.length > 0" class="relative" data-tooltip="Switch model">
-            <!-- Hidden span to measure text width -->
-            <span
-              ref="modelWidthRef"
-              class="invisible absolute whitespace-nowrap px-1.5 text-[10px]"
-              :style="{ fontFamily: 'var(--ac-font-mono)' }"
-            >
-              {{ selectedModelName }}
-            </span>
-            <select
-              :value="selectedModel"
-              class="py-0.5 text-[10px] border-none bg-transparent cursor-pointer appearance-none pr-4 pl-1.5"
-              :style="{
-                color: 'var(--ac-text-muted)',
-                fontFamily: 'var(--ac-font-mono)',
-                width: modelSelectWidth,
-                borderRadius: 'var(--ac-radius-button)',
-              }"
-              @change="handleModelChange"
-            >
-              <option v-for="m in availableModels" :key="m.id" :value="m.id">
-                {{ m.name }}
-              </option>
-            </select>
-            <!-- Dropdown arrow -->
-            <svg
-              class="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none"
-              :style="{ color: 'var(--ac-text-subtle)' }"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M19 9l-7 7-7-7"
-              />
-            </svg>
-          </div>
-
-          <!-- Reasoning Effort (Codex only) -->
-          <select
-            v-if="
-              isCodexEngine && availableReasoningEfforts && availableReasoningEfforts.length > 0
-            "
-            :value="reasoningEffort"
-            class="px-1.5 py-0.5 text-[10px] border-none bg-transparent cursor-pointer"
-            :style="{
-              color: 'var(--ac-text-muted)',
-              fontFamily: 'var(--ac-font-mono)',
-              borderRadius: 'var(--ac-radius-button)',
-            }"
-            data-tooltip="Reasoning effort"
-            @change="handleReasoningEffortChange"
-          >
-            <option v-for="effort in availableReasoningEfforts" :key="effort" :value="effort">
-              {{ effort }}
-            </option>
-          </select>
-
           <!-- Reset Button -->
           <button
             class="p-1 ac-btn"
@@ -348,38 +286,6 @@
             </svg>
           </button>
 
-          <!-- Model Selector -->
-          <div v-if="availableModels.length > 0" class="relative" data-tooltip="Switch model">
-            <select
-              :value="selectedModel"
-              class="py-0.5 text-[10px] border-none bg-transparent cursor-pointer appearance-none pr-4 pl-1.5"
-              :style="{
-                color: 'var(--ac-text-muted)',
-                fontFamily: 'var(--ac-font-mono)',
-                borderRadius: 'var(--ac-radius-button)',
-              }"
-              @change="handleModelChange"
-            >
-              <option v-for="m in availableModels" :key="m.id" :value="m.id">
-                {{ m.name }}
-              </option>
-            </select>
-            <svg
-              class="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none"
-              :style="{ color: 'var(--ac-text-subtle)' }"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M19 9l-7 7-7-7"
-              />
-            </svg>
-          </div>
-
           <!-- Status Text -->
           <div class="text-[11px] ml-1 flex items-center gap-1" :style="{ color: statusColor }">
             <span
@@ -396,9 +302,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, computed, watch, nextTick, toRef } from 'vue';
-import type { CodexReasoningEffort } from '@gakr-gakr/mcp-chrome-shared';
-import type { ModelDefinition } from '@/common/agent-models';
+import { ref, computed, nextTick, toRef } from 'vue';
 import type { AttachmentWithPreview } from '../../composables/useAttachments';
 import type { RequestState } from '../../composables/useAgentChat';
 import { useTextareaAutoResize } from '../../composables/useTextareaAutoResize';
@@ -419,13 +323,6 @@ const props = defineProps<{
   canCancel: boolean;
   canSend: boolean;
   placeholder?: string;
-  // Model selection props
-  engineName?: string;
-  selectedModel: string;
-  availableModels: ModelDefinition[];
-  // Reasoning effort props (GakrCLI only supports 'medium')
-  reasoningEffort?: CodexReasoningEffort;
-  // availableReasoningEfforts is not needed as GakrCLI only supports 'medium'
   // enableFakeCaret feature flag
   enableFakeCaret?: boolean;
 }>();
@@ -447,28 +344,6 @@ const isRequestActive = computed(() => {
 // image content blocks (and saves other files for it to read).
 const supportsImages = computed(() => true);
 
-// Model selector auto-width
-const modelWidthRef = ref<HTMLSpanElement | null>(null);
-const modelSelectWidth = ref('auto');
-
-const selectedModelName = computed(() => {
-  const model = props.availableModels.find((m) => m.id === props.selectedModel);
-  return model?.name || props.selectedModel || '';
-});
-
-// Update width when model changes
-watch(
-  [selectedModelName, () => props.availableModels],
-  async () => {
-    await nextTick();
-    if (modelWidthRef.value) {
-      const width = modelWidthRef.value.offsetWidth;
-      // Add extra space for dropdown arrow (16px)
-      modelSelectWidth.value = `${width + 16}px`;
-    }
-  },
-  { immediate: true },
-);
 
 const statusText = computed(() => {
   if (props.sending) return 'Sending...';
@@ -550,8 +425,6 @@ const emit = defineEmits<{
   'attachment:paste': [event: ClipboardEvent];
   'attachment:dragover': [event: DragEvent];
   'attachment:dragleave': [event: DragEvent];
-  'model:change': [modelId: string];
-  'reasoning-effort:change': [effort: CodexReasoningEffort];
   'session:settings': [];
   'session:reset': [];
 }>();
@@ -636,16 +509,6 @@ function handlePrimaryAction(): void {
   } else {
     handleSubmit();
   }
-}
-
-function handleModelChange(event: Event): void {
-  const modelId = (event.target as HTMLSelectElement).value;
-  emit('model:change', modelId);
-}
-
-function handleReasoningEffortChange(event: Event): void {
-  const effort = (event.target as HTMLSelectElement).value as CodexReasoningEffort;
-  emit('reasoning-effort:change', effort);
 }
 
 function handleReset(): void {

@@ -18,7 +18,7 @@ if (window.__FILL_HELPER_INITIALIZED__) {
       let element = null;
       if (ref && typeof ref === 'string') {
         try {
-          const map = window.__claudeElementMap;
+          const map = window.__gakrElementMap;
           const weak = map && map[ref];
           element = weak && typeof weak.deref === 'function' ? weak.deref() : null;
         } catch (e) {

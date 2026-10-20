@@ -111,7 +111,7 @@ import type { AgentUsageStats } from '@gakr-gakr/mcp-chrome-shared';
 defineProps<{
   errorMessage?: string | null;
   usage?: AgentUsageStats | null;
-  /** Footer label to display (e.g., "Claude Code Preview", "Codex Preview") */
+  /** Footer label to display (e.g., "GakrCLI Preview") */
   footerLabel?: string;
 }>();
 

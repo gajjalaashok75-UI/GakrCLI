@@ -33,20 +33,16 @@
       </span>
     </div>
 
-    <!-- CLI & Model selection -->
+    <!-- CLI selection -->
     <CliSettings
       :project-root="projectRoot"
       :selected-cli="selectedCli"
-      :model="model"
-      :use-ccr="useCcr"
       :engines="engines"
       :selected-project="selectedProject"
       :is-saving-root="isSavingProjectRoot"
       :is-saving-preference="isSavingPreference"
       @update:project-root="$emit('update:projectRoot', $event)"
       @update:selected-cli="$emit('update:selectedCli', $event)"
-      @update:model="$emit('update:model', $event)"
-      @update:use-ccr="$emit('update:useCcr', $event)"
       @save-root="$emit('save-root')"
       @save-preference="$emit('save-preference')"
     />
@@ -70,8 +66,6 @@ defineProps<{
   error: string | null;
   projectRoot: string;
   selectedCli: string;
-  model: string;
-  useCcr: boolean;
   engines: AgentEngineInfo[];
   isSavingProjectRoot: boolean;
   isSavingPreference: boolean;
@@ -83,8 +77,6 @@ const emit = defineEmits<{
   'new-project': [];
   'update:projectRoot': [value: string];
   'update:selectedCli': [value: string];
-  'update:model': [value: string];
-  'update:useCcr': [value: boolean];
   'save-root': [];
   'save-preference': [];
 }>();

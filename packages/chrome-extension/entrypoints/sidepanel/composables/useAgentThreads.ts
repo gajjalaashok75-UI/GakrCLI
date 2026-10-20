@@ -299,7 +299,7 @@ function presentTool(msg: AgentMessage): ToolPresentation {
     };
   }
 
-  // Rule 4: File summary (Codex file_change -> metadata.files)
+  // Rule 4: File summary (file_change events -> metadata.files)
   const files = Array.isArray(meta.files)
     ? (meta.files as string[]).filter((x) => typeof x === 'string')
     : [];

@@ -203,15 +203,12 @@ const editingSessionId = ref<string | null>(null);
 const editingName = ref('');
 const renameInputRef = ref<HTMLInputElement | null>(null);
 
-function getEngineColor(engineName: string): string {
-  const colors: Record<string, string> = {
-    claude: '#c87941',
-    codex: '#10a37f',
-    cursor: '#8b5cf6',
-    qwen: '#6366f1',
-    glm: '#ef4444',
-  };
-  return colors[engineName] || '#6b7280';
+/**
+ * Badge color for a session's engine. GakrCLI is the only engine the agent
+ * server implements, so every session uses the GakrCLI brand accent.
+ */
+function getEngineColor(_engineName: string): string {
+  return 'var(--ac-accent, #c87941)';
 }
 
 /**

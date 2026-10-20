@@ -63,12 +63,7 @@
             :cancelling="chat.cancelling.value"
             :can-cancel="!!chat.currentRequestId.value"
             :can-send="chat.canSend.value"
-            placeholder="Ask Claude to write code..."
-            :engine-name="currentEngineName"
-            :selected-model="currentSessionModel"
-            :available-models="currentAvailableModels"
-            :reasoning-effort="currentReasoningEffort"
-            :available-reasoning-efforts="currentAvailableReasoningEfforts"
+            placeholder="Ask GakrCLI to write code..."
             :enable-fake-caret="inputPreferences.fakeCaretEnabled.value"
             @update:model-value="chat.input.value = $event"
             @submit="handleSend"
@@ -79,8 +74,6 @@
             @attachment:paste="attachments.handlePaste"
             @attachment:dragover="attachments.handleDragOver"
             @attachment:dragleave="attachments.handleDragLeave"
-            @model:change="handleComposerModelChange"
-            @reasoning-effort:change="handleComposerReasoningEffortChange"
             @session:settings="handleComposerOpenSettings"
             @session:reset="handleComposerReset"
           />
@@ -102,8 +95,6 @@
       :selected-project-id="projects.selectedProjectId.value"
       :selected-cli="selectedCli"
       :model="model"
-      :reasoning-effort="reasoningEffort"
-      :use-ccr="useCcr"
       :enable-chrome-mcp="enableChromeMcp"
       :engines="server.engines.value"
       :is-picking="isPickingDirectory"
@@ -113,8 +104,6 @@
       @project:new="handleNewProject"
       @cli:update="selectedCli = $event"
       @model:update="model = $event"
-      @reasoning-effort:update="reasoningEffort = $event"
-      @ccr:update="useCcr = $event"
       @chrome-mcp:update="enableChromeMcp = $event"
       @save="handleSaveSettings"
     />
@@ -171,7 +160,6 @@ import type {
   AgentCliPreference,
   AgentStoredMessage,
   AgentMessage,
-  CodexReasoningEffort,
 } from '@gakr-gakr/mcp-chrome-shared';
 
 // Composables
@@ -210,12 +198,6 @@ import {
 import type { SessionSettings } from './agent-chat/AgentSessionSettingsPanel.vue';
 import AttachmentCachePanel from './agent-chat/AttachmentCachePanel.vue';
 
-// Model utilities
-import {
-  getModelsForCli,
-  getCodexReasoningEfforts,
-  getDefaultModelForCli,
-} from '@/common/agent-models';
 import { BACKGROUND_MESSAGE_TYPES } from '@/common/message-types';
 
 /**
@@ -227,27 +209,8 @@ const ENGINE_NAME: AgentCliPreference = 'gakrcli';
 // Local UI state
 const selectedCli = ref('');
 const model = ref('');
-const reasoningEffort = ref<CodexReasoningEffort>('medium');
-const useCcr = ref(false);
 const enableChromeMcp = ref(true);
 const isSavingPreference = ref(false);
-
-/**
- * Get normalized model value that is valid for the current CLI.
- * Returns empty string if:
- * - No CLI selected (use server default)
- * - Model is invalid for selected CLI
- */
-function getNormalizedModel(): string {
-  const trimmedModel = model.value.trim();
-  if (!trimmedModel) return '';
-  // No CLI selected = don't override model, let server use default
-  if (!selectedCli.value) return '';
-  const models = getModelsForCli(selectedCli.value);
-  if (models.length === 0) return ''; // Unknown CLI
-  const isValid = models.some((m) => m.id === trimmedModel);
-  return isValid ? trimmedModel : '';
-}
 
 const isPickingDirectory = ref(false);
 const projectMenuOpen = ref(false);
@@ -383,29 +346,11 @@ const connectionState = computed(() => {
   return 'disconnected';
 });
 
-// Computed values for AgentComposer
-const currentEngineName = computed(() => sessions.selectedSession.value?.engineName ?? '');
+// Computed values for AgentChatShell
 
 // Engine display name for brand/footer. GakrCLI is the only engine the agent
 // server implements, so there is nothing to switch on.
 const engineDisplayName = computed(() => 'GakrCLI');
-
-const currentSessionModel = computed(() => {
-  const session = sessions.selectedSession.value;
-  if (!session) return '';
-  // Use session model if set, otherwise use default for the engine
-  return session.model || getDefaultModelForCli(session.engineName);
-});
-
-const currentAvailableModels = computed(() => {
-  const session = sessions.selectedSession.value;
-  if (!session) return [];
-  return getModelsForCli(session.engineName);
-});
-
-const currentReasoningEffort = computed(() => 'medium' as CodexReasoningEffort);
-
-const currentAvailableReasoningEfforts = computed(() => [] as readonly CodexReasoningEffort[]);
 
 // Track pending history load with nonce to prevent A→B→A race conditions
 let historyLoadNonce = 0;
@@ -672,22 +617,11 @@ async function handleRenameSession(sessionId: string, name: string): Promise<voi
   await sessions.renameSession(sessionId, name);
 }
 
-async function handleOpenSessionSettings(sessionId: string): Promise<void> {
+async function handleOpenSessionSettings(_sessionId: string): Promise<void> {
   closeMenus();
   sessionSettingsOpen.value = true;
-  sessionSettingsLoading.value = true;
+  sessionSettingsLoading.value = false;
   currentManagementInfo.value = null;
-
-  try {
-    // GakrCLI does not have separate management info - use default
-    // Fetch management info if needed (currently gakrcli doesn't support it)
-    // const info = await sessions.fetchClaudeInfo(sessionId);
-    // if (info) {
-    //   currentManagementInfo.value = info.managementInfo;
-    // }
-  } finally {
-    sessionSettingsLoading.value = false;
-  }
 }
 
 async function handleResetSession(sessionId: string): Promise<void> {
@@ -698,32 +632,6 @@ async function handleResetSession(sessionId: string): Promise<void> {
   if (result && sessions.selectedSessionId.value === sessionId) {
     chat.setMessages([]);
   }
-}
-
-// Composer direct model/reasoning effort change handlers
-async function handleComposerModelChange(modelId: string): Promise<void> {
-  const sessionId = sessions.selectedSessionId.value;
-  if (!sessionId) return;
-
-  await sessions.updateSession(sessionId, { model: modelId || null });
-}
-
-async function handleComposerReasoningEffortChange(effort: CodexReasoningEffort): Promise<void> {
-  const sessionId = sessions.selectedSessionId.value;
-  const session = sessions.selectedSession.value;
-  if (!sessionId || !session) return;
-
-  const existingOptions = session.optionsConfig ?? {};
-  const existingCodexConfig = existingOptions.codexConfig ?? {};
-  await sessions.updateSession(sessionId, {
-    optionsConfig: {
-      ...existingOptions,
-      codexConfig: {
-        ...existingCodexConfig,
-        reasoningEffort: effort,
-      },
-    },
-  });
 }
 
 // Composer session settings/reset handlers (without sessionId parameter)
@@ -756,7 +664,6 @@ async function handleSaveSessionSettings(settings: SessionSettings): Promise<voi
       model: settings.model || null,
       permissionMode: settings.permissionMode || null,
       systemPromptConfig: settings.systemPromptConfig,
-      optionsConfig: settings.optionsConfig,
     });
     sessionSettingsOpen.value = false;
     currentManagementInfo.value = null;
@@ -785,7 +692,6 @@ async function handleProjectSelect(projectId: string): Promise<void> {
   if (project) {
     selectedCli.value = project.preferredCli ?? '';
     model.value = project.selectedModel ?? '';
-    useCcr.value = project.useCcr ?? false;
     enableChromeMcp.value = project.enableChromeMcp !== false;
   }
   // Load sessions for the new project
@@ -816,7 +722,6 @@ async function handleNewProject(): Promise<void> {
       if (project) {
         selectedCli.value = project.preferredCli ?? '';
         model.value = project.selectedModel ?? '';
-        useCcr.value = project.useCcr ?? false;
         enableChromeMcp.value = project.enableChromeMcp !== false;
 
         // Ensure a default session exists for the new project
@@ -844,19 +749,10 @@ async function handleSaveSettings(): Promise<void> {
 
   isSavingPreference.value = true;
   try {
-    // Use normalized model to ensure valid value is saved
-    const normalizedModel = getNormalizedModel();
-    // GakrCLI is the only engine; CCR is not applicable
-    const normalizedCcr = false;
-    await projects.saveProjectPreference(
-      'gakrcli',
-      normalizedModel,
-      normalizedCcr,
-      enableChromeMcp.value,
-    );
+    const normalizedModel = model.value.trim();
+    await projects.saveProjectPreference('gakrcli', normalizedModel, enableChromeMcp.value);
     // Sync local state with normalized values
     model.value = normalizedModel;
-    useCcr.value = normalizedCcr;
 
     // If CLI changed, create a new empty session with gakrcli
     const cliChanged = previousCli !== 'gakrcli';
@@ -923,8 +819,7 @@ async function handleSessionSelectAndNavigate(sessionId: string): Promise<void> 
     if (project) {
       selectedCli.value = project.preferredCli ?? '';
       model.value = project.selectedModel ?? '';
-      useCcr.value = project.useCcr ?? false;
-      enableChromeMcp.value = project.enableChromeMcp !== false;
+        enableChromeMcp.value = project.enableChromeMcp !== false;
     }
 
     // Fetch sessions for the new project
@@ -1263,7 +1158,6 @@ onMounted(async () => {
       if (project) {
         selectedCli.value = project.preferredCli ?? '';
         model.value = project.selectedModel ?? '';
-        useCcr.value = project.useCcr ?? false;
         enableChromeMcp.value = project.enableChromeMcp !== false;
       }
 

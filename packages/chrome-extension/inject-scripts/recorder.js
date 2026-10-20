@@ -159,14 +159,14 @@
   // Extend SelectorEngine with a shared ref helper (attached after declaration)
   SelectorEngine._ensureGlobalRef = function (el) {
     try {
-      if (!window.__claudeElementMap) window.__claudeElementMap = {};
-      if (!window.__claudeRefCounter) window.__claudeRefCounter = 0;
-      for (const k in window.__claudeElementMap) {
-        const w = window.__claudeElementMap[k];
+      if (!window.__gakrElementMap) window.__gakrElementMap = {};
+      if (!window.__gakrRefCounter) window.__gakrRefCounter = 0;
+      for (const k in window.__gakrElementMap) {
+        const w = window.__gakrElementMap[k];
         if (w && typeof w.deref === 'function' && w.deref() === el) return k;
       }
-      const id = `ref_${++window.__claudeRefCounter}`;
-      window.__claudeElementMap[id] = new WeakRef(el);
+      const id = `ref_${++window.__gakrRefCounter}`;
+      window.__gakrElementMap[id] = new WeakRef(el);
       return id;
     } catch {
       return null;

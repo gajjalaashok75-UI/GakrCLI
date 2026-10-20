@@ -168,7 +168,7 @@ const props = defineProps<{
   connectionState: ConnectionState;
   /** Whether to show back button (for returning to sessions list) */
   showBackButton?: boolean;
-  /** Brand label to display (e.g., "Claude Code", "Codex") */
+  /** Brand label to display (e.g., "GakrCLI") */
   brandLabel?: string;
 }>();
 

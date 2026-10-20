@@ -14,8 +14,8 @@
   const REF_MAP_LIMIT = 1000; // limit size of the ref map to keep payload small
 
   // Keep a weak map from ref id to elements
-  if (!window.__claudeElementMap) window.__claudeElementMap = {};
-  if (!window.__claudeRefCounter) window.__claudeRefCounter = 0;
+  if (!window.__gakrElementMap) window.__gakrElementMap = {};
+  if (!window.__gakrRefCounter) window.__gakrRefCounter = 0;
 
   /**
    * Infer ARIA-like role from element
@@ -537,15 +537,15 @@
       const role = inferRole(el);
       let label = inferLabel(el);
       let refId = null;
-      for (const k in window.__claudeElementMap) {
-        if (window.__claudeElementMap[k].deref && window.__claudeElementMap[k].deref() === el) {
+      for (const k in window.__gakrElementMap) {
+        if (window.__gakrElementMap[k].deref && window.__gakrElementMap[k].deref() === el) {
           refId = k;
           break;
         }
       }
       if (!refId) {
-        refId = `ref_${++window.__claudeRefCounter}`;
-        window.__claudeElementMap[refId] = new WeakRef(el);
+        refId = `ref_${++window.__gakrRefCounter}`;
+        window.__gakrElementMap[refId] = new WeakRef(el);
       }
       const rect = /** @type {HTMLElement} */ (el).getBoundingClientRect();
       const cx = Math.round(rect.left + rect.width / 2);
@@ -650,9 +650,9 @@
       }
 
       if (root) traverse(root, 0, cfg, out, refMap, state);
-      for (const k in window.__claudeElementMap) {
-        if (!window.__claudeElementMap[k].deref || !window.__claudeElementMap[k].deref())
-          delete window.__claudeElementMap[k];
+      for (const k in window.__gakrElementMap) {
+        if (!window.__gakrElementMap[k].deref || !window.__gakrElementMap[k].deref())
+          delete window.__gakrElementMap[k];
       }
       const pageContent = out
         .filter((line) => !/^\s*- generic \[ref=ref_\d+\]$/.test(line))
@@ -699,7 +699,7 @@
   }
 
   function resolveRef(ref) {
-    const map = window.__claudeElementMap || {};
+    const map = window.__gakrElementMap || {};
     const weak = map[ref];
     return weak && typeof weak.deref === 'function' ? weak.deref() : null;
   }
@@ -981,23 +981,23 @@
             }
             // create ref
             try {
-              if (!window.__claudeElementMap) window.__claudeElementMap = {};
-              if (!window.__claudeRefCounter) window.__claudeRefCounter = 0;
+              if (!window.__gakrElementMap) window.__gakrElementMap = {};
+              if (!window.__gakrRefCounter) window.__gakrRefCounter = 0;
             } catch {}
             let refId = null;
             try {
-              for (const k in window.__claudeElementMap) {
+              for (const k in window.__gakrElementMap) {
                 if (
-                  window.__claudeElementMap[k].deref &&
-                  window.__claudeElementMap[k].deref() === el
+                  window.__gakrElementMap[k].deref &&
+                  window.__gakrElementMap[k].deref() === el
                 ) {
                   refId = k;
                   break;
                 }
               }
               if (!refId) {
-                refId = `ref_${++window.__claudeRefCounter}`;
-                window.__claudeElementMap[refId] = new WeakRef(el);
+                refId = `ref_${++window.__gakrRefCounter}`;
+                window.__gakrElementMap[refId] = new WeakRef(el);
               }
             } catch {}
             const cands = computeCandidates(el);
@@ -1297,15 +1297,15 @@
             return true;
           }
           let refId = null;
-          for (const k in window.__claudeElementMap) {
-            if (window.__claudeElementMap[k].deref && window.__claudeElementMap[k].deref() === el) {
+          for (const k in window.__gakrElementMap) {
+            if (window.__gakrElementMap[k].deref && window.__gakrElementMap[k].deref() === el) {
               refId = k;
               break;
             }
           }
           if (!refId) {
-            refId = `ref_${++window.__claudeRefCounter}`;
-            window.__claudeElementMap[refId] = new WeakRef(el);
+            refId = `ref_${++window.__gakrRefCounter}`;
+            window.__gakrElementMap[refId] = new WeakRef(el);
           }
           const rect = /** @type {HTMLElement} */ (el).getBoundingClientRect();
           sendResponse({
@@ -1502,7 +1502,7 @@
       if (request && request.action === 'resolveRef') {
         const ref = request.ref;
         try {
-          const map = window.__claudeElementMap;
+          const map = window.__gakrElementMap;
           const weak = map && map[ref];
           const el = weak && typeof weak.deref === 'function' ? weak.deref() : null;
           if (!el || !(el instanceof Element)) {
@@ -1593,7 +1593,7 @@
             sendResponse({ success: false, error: 'ref and fingerprint are required' });
             return true;
           }
-          const map = window.__claudeElementMap;
+          const map = window.__gakrElementMap;
           const weak = map && map[ref];
           const el = weak && typeof weak.deref === 'function' ? weak.deref() : null;
           if (!el || !(el instanceof Element)) {
@@ -1629,7 +1629,7 @@
       if (request && request.action === 'focusByRef') {
         try {
           const ref = String(request.ref || '');
-          const map = window.__claudeElementMap || {};
+          const map = window.__gakrElementMap || {};
           const weak = map[ref];
           const el = weak && typeof weak.deref === 'function' ? weak.deref() : null;
           if (!el || !(el instanceof Element)) {
@@ -1820,19 +1820,19 @@
               respond({ success: false, error: 'Element not found in child frame' });
               return;
             }
-            if (!window.__claudeElementMap) window.__claudeElementMap = {};
-            if (!window.__claudeRefCounter) window.__claudeRefCounter = 0;
+            if (!window.__gakrElementMap) window.__gakrElementMap = {};
+            if (!window.__gakrRefCounter) window.__gakrRefCounter = 0;
             let refId = null;
-            for (const k in window.__claudeElementMap) {
-              const w = window.__claudeElementMap[k];
+            for (const k in window.__gakrElementMap) {
+              const w = window.__gakrElementMap[k];
               if (w && typeof w.deref === 'function' && w.deref && w.deref() === el) {
                 refId = k;
                 break;
               }
             }
             if (!refId) {
-              refId = `ref_${++window.__claudeRefCounter}`;
-              window.__claudeElementMap[refId] = new WeakRef(el);
+              refId = `ref_${++window.__gakrRefCounter}`;
+              window.__gakrElementMap[refId] = new WeakRef(el);
             }
             const rect = el.getBoundingClientRect();
             respond({

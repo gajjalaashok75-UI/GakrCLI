@@ -496,11 +496,10 @@ export function useAgentProjects(options: UseAgentProjectsOptions) {
     }
   }
 
-  // Save project preference (CLI, model, useCcr, enableChromeMcp)
+  // Save project preference (CLI, model, enableChromeMcp)
   async function saveProjectPreference(
     cli?: string,
     model?: string,
-    useCcr?: boolean,
     enableChromeMcp?: boolean,
   ): Promise<void> {
     const project = selectedProject.value;
@@ -519,7 +518,6 @@ export function useAgentProjects(options: UseAgentProjectsOptions) {
           // Normalize and allow empty string (means "Auto/Default")
           preferredCli: cli?.trim() ?? project.preferredCli,
           selectedModel: model?.trim() ?? project.selectedModel,
-          useCcr: useCcr ?? project.useCcr,
           enableChromeMcp: enableChromeMcp ?? project.enableChromeMcp,
         }),
       });
