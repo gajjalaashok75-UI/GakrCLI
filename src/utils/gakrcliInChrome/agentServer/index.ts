@@ -10,6 +10,7 @@
  * extension. Neither starts the other.
  */
 
+import { setChromeSurfaceActive } from '../../../bootstrap/state.js'
 import { DEFAULT_SERVER_PORT } from './contract.js'
 import { AgentServer } from './httpServer.js'
 import { callExtensionTool } from '../chromeNativeHostClient.js'
@@ -27,6 +28,10 @@ import { clearPublishedPort, publishPort } from './portFile.js'
  * directory of every side-panel session.
  */
 export async function runChromeAgentServer(cwd: string): Promise<void> {
+  // The side panel drives the user's own Chrome, so the built-in WebBrowser
+  // tool (a separate Playwright Chromium) stands down here as well.
+  setChromeSurfaceActive(true)
+
   const server = new AgentServer(
     (name, args) => callExtensionTool(name, args),
     cwd,

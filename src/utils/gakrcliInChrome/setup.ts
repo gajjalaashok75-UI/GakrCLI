@@ -43,6 +43,15 @@ import { isChromeExtensionInstalledPortable } from './setupPortable.js'
 
 const CHROME_EXTENSION_RECONNECT_URL = GAKR_IN_CHROME_DOCS_URL
 
+/**
+ * How often the background extension scan may run. The scan walks every
+ * browser profile directory on disk, and `shouldAutoEnableGakrCLIInChrome` is
+ * called on every prompt, so an unthrottled scan would hammer the filesystem.
+ */
+const EXTENSION_SCAN_INTERVAL_MS = 60_000
+
+let lastExtensionScanAt = 0
+
 const NATIVE_HOST_IDENTIFIER = 'com.gakr.chrome.bridge'
 const NATIVE_HOST_MANIFEST_NAME = `${NATIVE_HOST_IDENTIFIER}.json`
 
@@ -161,20 +170,33 @@ export function shouldEnableGakrCLIInChrome(chromeFlag?: boolean): boolean {
   return false
 }
 
-let shouldAutoEnable: boolean | undefined = undefined
+let autoEnableMemo:
+  | { extensionInstalled: boolean; value: boolean }
+  | undefined = undefined
 let pendingGakrCLIInChromeSetup: Promise<void> | null = null
 
+/**
+ * Whether GakrCLI in Chrome should turn itself on for this session.
+ *
+ * The answer is memoized on the extension-installed flag, but the memo is
+ * invalidated when that flag changes. The extension scan runs in the
+ * background, so the cached flag can flip from `false` to `true` after the
+ * first call — a memo that never re-checked would freeze the pre-scan
+ * answer and the skill would never appear for the rest of the session.
+ */
 export function shouldAutoEnableGakrCLIInChrome(): boolean {
-  if (shouldAutoEnable !== undefined) {
-    return shouldAutoEnable
+  const extensionInstalled = isChromeExtensionInstalled_CACHED_MAY_BE_STALE()
+  if (autoEnableMemo?.extensionInstalled !== extensionInstalled) {
+    autoEnableMemo = {
+      extensionInstalled,
+      value:
+        getIsInteractive() &&
+        extensionInstalled &&
+        getFeatureValue_CACHED_MAY_BE_STALE('tengu_chrome_auto_enable', false),
+    }
   }
 
-  shouldAutoEnable =
-    getIsInteractive() &&
-    isChromeExtensionInstalled_CACHED_MAY_BE_STALE() &&
-    getFeatureValue_CACHED_MAY_BE_STALE('tengu_chrome_auto_enable', false)
-
-  return shouldAutoEnable
+  return autoEnableMemo.value
 }
 
 export function waitForGakrCLIInChromeSetup(): Promise<void> {
@@ -374,22 +396,28 @@ function registerWindowsNativeHosts(manifestPath: string): void {
  * auto-enable for every session on every machine that reads that config.
  */
 function isChromeExtensionInstalled_CACHED_MAY_BE_STALE(): boolean {
-  // Update cache in background without blocking
-  void isChromeExtensionInstalled().then(isInstalled => {
-    // Only persist positive detections — see docstring. The cost of a stale
-    // `true` is one silent MCP connection attempt per session; the cost of a
-    // stale `false` is auto-enable never working again without manual repair.
-    if (!isInstalled) {
-      return
-    }
-    const config = getGlobalConfig()
-    if (config.cachedChromeExtensionInstalled !== isInstalled) {
-      saveGlobalConfig(prev => ({
-        ...prev,
-        cachedChromeExtensionInstalled: isInstalled,
-      }))
-    }
-  })
+  // Update cache in background without blocking. The scan walks every
+  // browser profile directory, so it is throttled: this function is called
+  // on every auto-enable check, not once per session.
+  const now = Date.now()
+  if (now - lastExtensionScanAt > EXTENSION_SCAN_INTERVAL_MS) {
+    lastExtensionScanAt = now
+    void isChromeExtensionInstalled().then(isInstalled => {
+      // Only persist positive detections — see docstring. The cost of a stale
+      // `true` is one silent MCP connection attempt per session; the cost of a
+      // stale `false` is auto-enable never working again without manual repair.
+      if (!isInstalled) {
+        return
+      }
+      const config = getGlobalConfig()
+      if (config.cachedChromeExtensionInstalled !== isInstalled) {
+        saveGlobalConfig(prev => ({
+          ...prev,
+          cachedChromeExtensionInstalled: isInstalled,
+        }))
+      }
+    })
+  }
 
   // Return cached value immediately from disk
   const cached = getGlobalConfig().cachedChromeExtensionInstalled

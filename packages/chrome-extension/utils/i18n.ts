@@ -179,7 +179,7 @@ const fallbackMessages: Record<string, string> = {
   clearAllData: 'Clear All Data',
   copyConfig: 'Copy Configuration',
   serviceRunning: 'Service Running (Port: {0})',
-  connectedServiceNotStarted: 'Connected, Service Not Started',
+  connectedServiceNotStarted: 'Connected, Service Not Started. Run `gakrcli --chrome-extension` to start the side panel.',
   serviceNotConnected: 'Service Not Connected',
   detecting: 'Detecting...',
   lightweightModel: 'Lightweight Multilingual Model',

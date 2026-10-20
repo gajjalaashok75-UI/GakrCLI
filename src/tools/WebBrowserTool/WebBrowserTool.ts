@@ -38,6 +38,7 @@
  */
 
 import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs';
+import { getChromeSurfaceActive } from 'src/bootstrap/state.js';
 import type { CanUseToolFn } from 'src/hooks/useCanUseTool.js';
 import type {
   ToolCallProgress,
@@ -440,6 +441,16 @@ export const WebBrowserTool = buildTool({
     // The browser is a single stateful session; concurrent calls could race
     // on navigation/tab state, so this mirrors browser_use's single-executor model.
     return false;
+  },
+
+  isEnabled() {
+    // This tool drives its own Playwright Chromium (no profile, no logged-in
+    // session). When GakrCLI in Chrome owns the browser (`gakrcli --chrome`
+    // or the `--chrome-extension` side panel), the model would otherwise have
+    // two unrelated browsers to pick between, and the wrong one gets picked.
+    // The Chrome surface's own tools cover the same ground in the user's
+    // real browser, so this one stands down.
+    return !getChromeSurfaceActive();
   },
 
   isReadOnly(input: WebBrowserInput) {

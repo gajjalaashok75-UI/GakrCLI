@@ -206,7 +206,7 @@ import { createHeadlessHeartbeat, parseHeadlessHeartbeatDuration, validateHeadle
 import { setCwd } from 'src/utils/Shell.js';
 import { type ProcessedResume, processResumedConversation } from 'src/utils/sessionRestore.js';
 import { plural } from 'src/utils/stringUtils.js';
-import { type ChannelEntry, getInitialMainLoopModel, getIsNonInteractiveSession, getSdkBetas, getSessionId, getUserMsgOptIn, setAllowedChannels, setChromeFlagOverride, setClientType, setCwdState, setDirectConnectServerUrl, setInitialMainLoopModel, setInlinePlugins, setIsInteractive, setKairosActive, setOriginalCwd, setQuestionPreviewFormat, setSdkBetas, setSessionBypassPermissionsMode, setSessionDangerousPermissionMode, setSessionPersistenceDisabled, setSessionSource, setUserMsgOptIn, switchSession } from './bootstrap/state.js';
+import { type ChannelEntry, getChromeSurfaceActive, getInitialMainLoopModel, getIsNonInteractiveSession, getSdkBetas, getSessionId, getUserMsgOptIn, setAllowedChannels, setChromeFlagOverride, setChromeSurfaceActive, setClientType, setCwdState, setDirectConnectServerUrl, setInitialMainLoopModel, setInlinePlugins, setIsInteractive, setKairosActive, setOriginalCwd, setQuestionPreviewFormat, setSdkBetas, setSessionBypassPermissionsMode, setSessionDangerousPermissionMode, setSessionPersistenceDisabled, setSessionSource, setUserMsgOptIn, switchSession } from './bootstrap/state.js';
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER') ? require('./utils/permissions/autoModeState.js') as typeof import('./utils/permissions/autoModeState.js') : null;
@@ -1508,12 +1508,12 @@ async function run(): Promise<CommanderCommand> {
     if (gakrcliInChromeStartupMode === 'explicit') {
       const platform = getPlatform();
       try {
-        let hasWebBrowserTool: boolean
-        if (feature('WEB_BROWSER_TOOL')) {
-          hasWebBrowserTool = typeof Bun !== 'undefined' && 'WebView' in Bun
-        } else {
-          hasWebBrowserTool = false
-        }
+        // The Chrome surface owns the browser from here on: the built-in
+        // WebBrowser tool launches its own Playwright Chromium, so it stands
+        // down rather than offering the model a second, unrelated browser
+        // (see WebBrowserTool.isEnabled).
+        setChromeSurfaceActive(true)
+        const hasWebBrowserTool = feature('WEB_BROWSER_TOOL') && !getChromeSurfaceActive()
         logEvent('tengu_gakrcli_in_chrome_setup', {
           platform: platform as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
         });
@@ -1539,12 +1539,10 @@ async function run(): Promise<CommanderCommand> {
       }
     } else if (gakrcliInChromeStartupMode === 'auto') {
       try {
-        let hasWebBrowserTool: boolean
-        if (feature('WEB_BROWSER_TOOL')) {
-          hasWebBrowserTool = typeof Bun !== 'undefined' && 'WebView' in Bun
-        } else {
-          hasWebBrowserTool = false
-        }
+        // Auto mode leaves the built-in browser tool alone: the Chrome
+        // surface is a bonus here, not a replacement, and the hint tells the
+        // model which to use for what.
+        const hasWebBrowserTool = feature('WEB_BROWSER_TOOL') && !getChromeSurfaceActive()
         const startupConfig = mergeGakrCLIInChromeStartupConfig({
           mode: gakrcliInChromeStartupMode,
           setupResult: setupGakrCLIInChrome(),

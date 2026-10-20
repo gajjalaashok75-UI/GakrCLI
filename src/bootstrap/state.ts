@@ -118,6 +118,11 @@ type State = {
   inlinePlugins: Array<string>
   // Explicit --chrome / --no-chrome flag value (undefined = not set on CLI)
   chromeFlagOverride: boolean | undefined
+  // True while a GakrCLI-in-Chrome surface owns the browser: `--chrome` in
+  // the CLI, or the `--chrome-extension` side-panel agent server. The
+  // built-in WebBrowser tool drives a separate Playwright Chromium, so it
+  // stands down while this is set — one browser, not two.
+  chromeSurfaceActive: boolean
   // Use cowork_plugins directory instead of plugins (--cowork flag or env var)
   useCoworkPlugins: boolean
   // Session-only bypass permissions mode flag (not persisted)
@@ -339,6 +344,8 @@ function getInitialState(): State {
     inlinePlugins: [],
     // Explicit --chrome / --no-chrome flag value (undefined = not set on CLI)
     chromeFlagOverride: undefined,
+    // No GakrCLI-in-Chrome surface owns the browser yet
+    chromeSurfaceActive: false,
     // Use cowork_plugins directory instead of plugins
     useCoworkPlugins: false,
     // Session-only bypass permissions mode flag (not persisted)
@@ -1286,6 +1293,23 @@ export function setChromeFlagOverride(value: boolean | undefined): void {
 
 export function getChromeFlagOverride(): boolean | undefined {
   return STATE.chromeFlagOverride
+}
+
+/**
+ * True when a GakrCLI-in-Chrome surface owns the browser for this process:
+ * `gakrcli --chrome` (MCP tools against the user's Chrome) or
+ * `gakrcli --chrome-extension` (the side-panel agent server).
+ *
+ * The built-in WebBrowser tool launches its own Playwright Chromium with no
+ * profile, so while a Chrome surface is active the model would have two
+ * unrelated browsers to choose between. WebBrowser stands down instead.
+ */
+export function setChromeSurfaceActive(value: boolean): void {
+  STATE.chromeSurfaceActive = value
+}
+
+export function getChromeSurfaceActive(): boolean {
+  return STATE.chromeSurfaceActive
 }
 
 export function setUseCoworkPlugins(value: boolean): void {

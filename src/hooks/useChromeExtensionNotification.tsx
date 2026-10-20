@@ -22,7 +22,7 @@ async function _temp() {
   if (!shouldEnableGakrCLIInChrome(chromeFlag)) {
     return null;
   }
-  if (true && !isGakrCLIAISubscriber()) {
+  if (!isGakrCLIAISubscriber()) {
     return {
       key: "chrome-requires-subscription",
       jsx: <Text color="error">GakrCLI in Chrome requires a gakrcli.ai subscription</Text>,
