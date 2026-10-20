@@ -210,16 +210,6 @@ export default function GakrCLIInChrome() {
           </tbody>
         </table>
       </div>
-      <p>
-        <strong>Key parameters for <code>chrome_read_page</code>:</strong><br/>
-        <code>depth</code> (integer, 0-30): Maximum DOM depth to traverse. Lower values reduce output size and improve performance. Default: full traversal (30).<br/>
-        <code>filter</code> ('all' | 'interactive'): Filter to only interactive elements (buttons, links, inputs) or all visible elements.<br/>
-        <code>refId</code>: Focus on the subtree rooted at this element refId from a recent read_page response.<br/>
-        <code>tabId / windowId</code>: Target a specific tab or window.<br/>
-        <br/>
-        <strong>Performance tip:</strong> Start with <code>depth: 5</code> + <code>filter: 'interactive'</code> for fastest relevant results on large pages.
-      </p>
-
       <h2 id="how-it-works">how the connection works</h2>
       <ol>
         <li>The extension asks Chrome to start the native host (<code>com.gakr.chrome.bridge</code>), which must list your extension id in <code>allowed_origins</code>.</li>
