@@ -133,6 +133,92 @@ export default function GakrCLIInChrome() {
         side panel and over MCP too. The <code>/chrome</code> dialog also shows the live state: extension id, whether the
         extension was detected, whether the native host is connected, and whether the side-panel server is running.
       </p>
+      <h2 id="chrome-tools">chrome browser tools</h2>
+      <p>
+        The <code>gakrcli --chrome</code> integration exposes the following tools to the agent. Each tool can be called via the
+        MCP convention <code>mcp__gakrcli-in-chrome__<tool_name></code>.
+      </p>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">tool</th>
+              <th scope="col">purpose</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>get_windows_and_tabs</code></td>
+              <td>Get all currently open browser windows and tabs</td>
+            </tr>
+            <tr>
+              <td><code>chrome_navigate</code></td>
+              <td>Navigate to a URL, refresh, or browse history (back/forward)</td>
+            </tr>
+            <tr>
+              <td><code>chrome_read_page</code></td>
+              <td>Get an accessibility tree of visible page elements. Use <code>depth</code> to limit traversal (0-30) and <code>filter: 'interactive'</code> for faster results on large pages</td>
+            </tr>
+            <tr>
+              <td><code>chrome_keyboard</code></td>
+              <td>Simulate keyboard input (single keys, combinations, or text)</td>
+            </tr>
+            <tr>
+              <td><code>chrome_click_element</code></td>
+              <td>Click on an element using ref from read_page, selector, or coordinates</td>
+            </tr>
+            <tr>
+              <td><code>chrome_fill_or_select</code></td>
+              <td>Fill form elements (input, textarea, select, checkbox, radio)</td>
+            </tr>
+            <tr>
+              <td><code>chrome_screenshot</code></td>
+              <td>Take screenshot of page or specific element</td>
+            </tr>
+            <tr>
+              <td><code>chrome_get_web_content</code></td>
+              <td>Fetch content from a web page or current tab</td>
+            </tr>
+            <tr>
+              <td><code>chrome_history</code></td>
+              <td>Retrieve and search browsing history</td>
+            </tr>
+            <tr>
+              <td><code>chrome_bookmark_search/add/delete</code></td>
+              <td>Manage Chrome bookmarks</td>
+            </tr>
+            <tr>
+              <td><code>chrome_computer</code></td>
+              <td>Comprehensive mouse/keyboard actions (click, type, scroll, resize, screenshot)</td>
+            </tr>
+            <tr>
+              <td><code>performance_start_trace/stop_trace/analyze_insight</code></td>
+              <td>Start/stop/analyze performance trace recording</td>
+            </tr>
+            <tr>
+              <td><code>chrome_gif_recorder</code></td>
+              <td>Record browser session as animated GIF</td>
+            </tr>
+            <tr>
+              <td><code>chrome_handle_dialog</code></td>
+              <td>Handle JavaScript dialogs (alert/confirm/prompt)</td>
+            </tr>
+            <tr>
+              <td><code>chrome_network_request</code></td>
+              <td>Send network request from browser with cookies</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <strong>Key parameters for <code>chrome_read_page</code>:</strong><br/>
+        <code>depth</code> (integer, 0-30): Maximum DOM depth to traverse. Lower values reduce output size and improve performance. Default: full traversal (30).<br/>
+        <code>filter</code> ('all' | 'interactive'): Filter to only interactive elements (buttons, links, inputs) or all visible elements.<br/>
+        <code>refId</code>: Focus on the subtree rooted at this element refId from a recent read_page response.<br/>
+        <code>tabId / windowId</code>: Target a specific tab or window.<br/>
+        <br/>
+        <strong>Performance tip:</strong> Start with <code>depth: 5</code> + <code>filter: 'interactive'</code> for fastest relevant results on large pages.
+      </p>
 
       <h2 id="how-it-works">how the connection works</h2>
       <ol>
@@ -170,7 +256,11 @@ export default function GakrCLIInChrome() {
             </tr>
             <tr>
               <td>A tool call times out after 30s</td>
-              <td>The extension did not answer — usually a page-level modal dialog blocking the browser, or the tab was closed. Dismiss the dialog or re-read the tabs.</td>
+              <td>
+                The extension did not answer — usually a page-level modal dialog blocking the browser, or the tab was closed. Dismiss the dialog or re-read the tabs.<br/><br/>
+                <strong>Tip:</strong> Use the <code>depth</code> parameter with <code>chrome_read_page</code> to limit DOM traversal and improve performance on large pages. Start with <code>depth: 5</code> + <code>filter: 'interactive'</code> for fastest relevant results.<br/><br/>
+                Available depth range: <code>0</code> (root only) to <code>30</code> (full DOM). Lower values reduce output size and can improve performance on complex pages.
+              </td>
             </tr>
           </tbody>
         </table>

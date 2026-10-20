@@ -461,7 +461,7 @@
    * @param {Element} el
    * @param {{filter?: 'all'|'interactive'}} cfg
    */
-  function shouldInclude(el, cfg) {
+  function shouldInclude(el, cfg, depth) {
     const tag = el.tagName.toLowerCase();
     if (['script', 'style', 'meta', 'link', 'title', 'noscript'].includes(tag)) return false;
     if (el.getAttribute('aria-hidden') === 'true') return false;
@@ -474,8 +474,13 @@
         return false;
     }
     if (cfg.filter === 'interactive') return isInteractive(el);
+    // Depth-aware: only include structural elements at shallow depths (<= 5)
+    // This prevents including deep structural hierarchies in large DOMs
+    const maxStructuralDepth = 5;
+    if (isStructural(el)) {
+      return depth <= maxStructuralDepth;
+    }
     if (isInteractive(el)) return true;
-    if (isStructural(el)) return true;
     if (inferLabel(el).length > 0) return true;
     return isFormishContainer(el);
   }
@@ -526,7 +531,7 @@
    * @param {string[]} out
    * @param {Array<{ref:string, selector:string, rect:{x:number,y:number,width:number,height:number}}>} refMap
    */
-  function traverse(el, depth, cfg, out, refMap, state) {
+  function traverse(el, depth, cfg, out, refMap, state, qualityThreshold) {
     const maxDepth = cfg && typeof cfg.maxDepth === 'number' ? cfg.maxDepth : MAX_DEPTH;
     if (depth > maxDepth || !el || !el.tagName) return;
     if (state.processed >= MAX_NODES) return;
@@ -575,6 +580,16 @@
       out.push(line);
       state.included++;
       state.processed++;
+      // Track quality: interactive or structural at shallow depth counts more
+      const elTag = el.tagName.toLowerCase();
+      const isQualityElement = isInteractive(el) || (isStructural(el) && depth <= 5);
+      if (isQualityElement) {
+        state.quality++;
+        if (state.quality >= qualityThreshold) {
+          // Early termination: we have enough high-quality elements
+          state.processed = MAX_NODES; // trigger the MAX_NODES check below
+        }
+      }
 
       // Only collect ref mapping for interactive elements to limit cost
       if (isInteractive(el) && refMap.length < REF_MAP_LIMIT) {
@@ -591,12 +606,28 @@
       }
     }
     if (state.processed >= MAX_NODES) return;
-    // Traverse light DOM children
+    // Traverse light DOM children - interactive first for better coverage
     if (/** @type {HTMLElement} */ (el).children && depth < maxDepth) {
       const children = /** @type {HTMLElement} */ (el).children;
+      // Prioritize interactive children first, then structural, then others
+      const interactiveChildren = [];
+      const structuralChildren = [];
+      const otherChildren = [];
       for (let i = 0; i < children.length; i++) {
+        const child = children[i];
+        if (isInteractive(child)) {
+          interactiveChildren.push(child);
+        } else if (isStructural(child) && depth < 5) {
+          structuralChildren.push(child);
+        } else {
+          otherChildren.push(child);
+        }
+      }
+      // Visit: interactive first, then structural (shallow), then others
+      const allChildren = [...interactiveChildren, ...structuralChildren, ...otherChildren];
+      for (let i = 0; i < allChildren.length; i++) {
         if (state.processed >= MAX_NODES) break;
-        traverse(children[i], include ? depth + 1 : depth, cfg, out, refMap, state);
+        traverse(allChildren[i], include ? depth + 1 : depth, cfg, out, refMap, state, qualityThreshold);
       }
     }
     // Traverse shadow DOM roots (limited by maxDepth and MAX_NODES)
@@ -606,7 +637,7 @@
         const srChildren = anyEl.shadowRoot.children || [];
         for (let i = 0; i < srChildren.length; i++) {
           if (state.processed >= MAX_NODES) break;
-          traverse(srChildren[i], include ? depth + 1 : depth, cfg, out, refMap, state);
+          traverse(srChildren[i], include ? depth + 1 : depth, cfg, out, refMap, state, qualityThreshold);
         }
       }
     } catch (_) {
@@ -632,7 +663,7 @@
       }
 
       const refMap = [];
-      const state = { processed: 0, included: 0, visited: new WeakSet() };
+      const state = { processed: 0, included: 0, visited: new WeakSet(), quality: 0 };
 
       // Determine root element (body or refId-specified element)
       let focus = null;
@@ -649,7 +680,11 @@
         }
       }
 
-      if (root) traverse(root, 0, cfg, out, refMap, state);
+      // Quality threshold: stop when we have enough high-quality elements
+      // High-quality = interactive, or structural at shallow depth
+      const qualityThreshold = 200;
+
+      if (root) traverse(root, 0, cfg, out, refMap, state, qualityThreshold);
       for (const k in window.__gakrElementMap) {
         if (!window.__gakrElementMap[k].deref || !window.__gakrElementMap[k].deref())
           delete window.__gakrElementMap[k];
