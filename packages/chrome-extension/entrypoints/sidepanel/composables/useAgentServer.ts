@@ -120,8 +120,9 @@ export function useAgentServer(options: UseAgentServerOptions = {}) {
       // Step 1: Check native host connection
       let connected = await checkNativeHost();
       if (!connected) {
-        // Try to start native host
-        connected = await startNativeHost(forceConnect);
+        // Try to start native host. Force connect so the native host handshake
+        // proceeds regardless of the auto-connect setting (which defaults to off).
+        connected = await startNativeHost(true);
         if (!connected) {
           console.error('Failed to connect to native host');
           return false;

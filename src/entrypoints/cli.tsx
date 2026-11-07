@@ -614,17 +614,15 @@ export async function main(
     // user launched the command from, and every side-panel session runs here.
     const launchDir = process.cwd();
     const {
-      logGakrCLIInChromePreflight
-    } = await import('../utils/gakrcliInChrome/preflight.js');
-    // Foreground server: print the summary even when nothing is wrong, so the
-    // side panel's "Service Not Started" state can be traced to a cause.
-    await logGakrCLIInChromePreflight('side-panel', {
-      verbose: true
-    });
-    const {
       runChromeAgentServer
     } = await import('../utils/gakrcliInChrome/agentServer/index.js');
     await runChromeAgentServer(launchDir);
+    const {
+      logGakrCLIInChromePreflight
+    } = await import('../utils/gakrcliInChrome/preflight.js');
+    await logGakrCLIInChromePreflight('side-panel', {
+      verbose: true
+    });
     return;
   } else if (process.argv[2] === '--chrome-native-host') {
     profileCheckpoint('cli_chrome_native_host_path');
