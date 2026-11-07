@@ -100,6 +100,39 @@
         >
           Start New Session
         </button>
+
+        <!-- Instructions shown only when there are no sessions -->
+        <div
+          v-if="!searchQuery"
+          class="mt-6 text-xs text-center leading-relaxed"
+          :style="{ color: 'var(--ac-text-muted)' }"
+        >
+          <div class="inline-block text-left space-y-2">
+            <p class="font-medium mb-1">Note:</p>
+            <p class="mb-1">
+              The side panel needs the GakrCLI host running before it works.
+              In your terminal, start it with:
+            </p>
+            <p class="font-mono text-sm mb-1">gakrcli --chrome-extension</p>
+            <p class="mb-1">
+              Then use Chrome from the terminal (without the side panel) with:
+            </p>
+            <p class="font-mono text-sm mb-1">gakrcli --chrome</p>
+            <p class="mb-1">
+              The "Start New Session" button works only after the host is running.
+              Full setup guide:
+            </p>
+            <a
+              href="https://gakrcli.netlify.app/docs/gakrcli-in-chrome/"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-sm font-medium underline underline-offset-2 hover:text-ac-brand transition-colors"
+              :style="{ color: 'var(--ac-brand)' }"
+            >
+              gakrcli.netlify.app/docs/gakrcli-in-chrome/
+            </a>
+          </div>
+        </div>
       </div>
 
       <!-- Session Items -->
