@@ -24,19 +24,23 @@ import { jsonParse, jsonStringify } from '../slowOperations.js'
 import { getSecureSocketPath, getSocketDir } from './common.js'
 
 /**
- * Look up the port published by a running agent server.
+ * Look up the port published by a running terminal backend.
  *
- * Imported lazily to keep the host's module graph free of the server, which in
- * turn pulls in the SDK.
+ * The side panel discovers the backend over loopback HTTP and does not need
+ * this; the native host reports it only for diagnostics and for the extension's
+ * legacy `start` handshake.
+ *
+ * Imported lazily to keep the host's module graph free of the backend, which in
+ * turn pulls in node-pty and the WebSocket server.
  */
-async function readPublishedAgentServerPort(): Promise<number | null> {
+async function readPublishedTerminalBackendPort(): Promise<number | null> {
   try {
-    const { readPublishedPort } = await import(
-      './agentServer/portFile.js'
+    const { readDiscoveryPort } = await import(
+      './terminalBackend/discovery.js'
     )
-    return await readPublishedPort()
+    return readDiscoveryPort()
   } catch (e) {
-    log('Failed to read published agent server port:', e)
+    log('Failed to read published terminal backend port:', e)
     return null
   }
 }
@@ -337,15 +341,15 @@ class ChromeNativeHost {
         )
         break
 
-      // The side panel's agent server runs in the CLI process, not here. It
-      // publishes its port to a file; this host is the only component that
-      // talks to both, so it performs the handshake on the extension's behalf.
+      // The terminal backend runs in the CLI process, not here. It publishes
+      // its port to a file; this host is the only component that talks to both,
+      // so it performs the handshake on the extension's behalf.
       case 'start': {
         const requested = (message as { payload?: { port?: unknown } }).payload
           ?.port
-        const port = await readPublishedAgentServerPort()
+        const port = await readPublishedTerminalBackendPort()
         if (port) {
-          log(`Reporting agent server on port ${port}`)
+          log(`Reporting terminal backend on port ${port}`)
           sendChromeMessage(
             jsonStringify({
               type: 'server_started',
@@ -353,13 +357,15 @@ class ChromeNativeHost {
             }),
           )
         } else {
-          log('No agent server is running (start gakrcli --chrome-extension)')
+          log(
+            'No terminal backend is running (start gakrcli --chrome-extension)',
+          )
           sendChromeMessage(
             jsonStringify({
               type: 'error_from_native_host',
               payload: {
                 message:
-                  'No GakrCLI agent server is running. Start one with: gakrcli --chrome-extension',
+                  'No GakrCLI terminal backend is running. Start one with: gakrcli --chrome-extension',
               },
             }),
           )
@@ -368,7 +374,7 @@ class ChromeNativeHost {
       }
 
       case 'stop':
-        log('Reporting agent server stopped')
+        log('Reporting terminal backend stopped')
         sendChromeMessage(
           jsonStringify({
             type: 'server_stopped',

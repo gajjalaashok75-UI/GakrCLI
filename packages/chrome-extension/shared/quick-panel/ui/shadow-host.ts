@@ -14,7 +14,7 @@
  * - Theme is synced from chrome.storage.local['agentTheme']
  */
 
-import { Disposer } from '@/entrypoints/web-editor-v2/utils/disposables';
+import { Disposer } from '@/utils/disposables';
 import { QUICK_PANEL_STYLES } from './styles';
 
 // ============================================================
@@ -214,11 +214,7 @@ function applyThemeId(root: HTMLElement, themeId: string): void {
  * const elements = shadowHost.getElements();
  *
  * if (elements) {
- *   // Mount UI into elements.root
- *   mountQuickPanelAiChatPanel({
- *     mount: elements.root,
- *     agentBridge,
- *   });
+ *   // Mount your panel UI into elements.root
  * }
  *
  * // Cleanup when done

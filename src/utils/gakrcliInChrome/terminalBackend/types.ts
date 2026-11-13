@@ -10,7 +10,8 @@ export interface ClientEntry {
 }
 
 export interface PtySessionEntry {
-  pty: IPty;
+  /** Null until `initializeSessionPty` spawns the process. */
+  pty: IPty | null;
   clients: Map<WebSocket, ClientEntry>;
   buffer: string[];
   timeoutId: NodeJS.Timeout | null;
@@ -51,6 +52,7 @@ export type WsIncomingMessage =
 export type WsOutgoingMessage =
   | { type: 'output'; data: string }
   | { type: 'attached'; role: ClientRole; sessionId: string }
+  | { type: 'role_changed'; role: ClientRole }
   | { type: 'exit'; code: number | null; signal: string | null }
   | { type: 'history'; chunks: HistoryChunk[] }
   | { type: 'error'; message: string }

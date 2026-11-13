@@ -6,30 +6,25 @@ import type {
   WsIncomingMessage,
   WsOutgoingMessage,
   TerminalBackendConfig,
-  HistoryChunk,
 } from './types.js';
 import {
   getOrCreateSession,
+  getSession,
+  hasPty,
   initializeSessionPty,
   attachClient,
   detachClient,
-  getSessionRole,
   canWrite,
   canResize,
   writeInput,
   resizeSession,
   appendToBuffer,
   getBuffer,
-  clearBuffer,
   replayHistory,
   persistChunk,
   startHistorySession,
   deleteSession,
 } from './sessionManager.js';
-
-export interface WsServerDependencies {
-  config: TerminalBackendConfig;
-}
 
 function sendToClient(ws: WebSocket, payload: WsOutgoingMessage): void {
   if (ws.readyState === WebSocket.OPEN) {
@@ -38,17 +33,17 @@ function sendToClient(ws: WebSocket, payload: WsOutgoingMessage): void {
 }
 
 function validateAuthToken(config: TerminalBackendConfig, token: string | null): boolean {
-  return token === config.authToken;
+  return token !== null && token === config.authToken;
 }
 
+/**
+ * The upgrade must prove it is the configured extension origin. There is no
+ * permissive fallback: without a configured extension id the backend refuses
+ * every connection, exactly like the discovery endpoint, so an unconfigured
+ * backend never becomes an unauthenticated terminal.
+ */
 function validateOrigin(config: TerminalBackendConfig, origin: string | undefined): boolean {
   if (!config.allowedOrigin) {
-    // No origin restriction configured - allow but warn
-    console.warn('[TerminalBackend] No allowedOrigin configured, accepting all origins');
-    return true;
-  }
-  if (!origin) {
-    console.warn('[TerminalBackend] Connection rejected: missing Origin header');
     return false;
   }
   return origin === config.allowedOrigin;
@@ -65,6 +60,12 @@ function parseWsMessage(rawMessage: RawData): WsIncomingMessage | null {
   } catch {
     return null;
   }
+}
+
+function readDimension(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : fallback;
 }
 
 export function createWsServer(
@@ -87,7 +88,7 @@ export function createWsServer(
     const url = new URL(req.url || '', `http://${config.host}:${config.port}`);
     const token = url.searchParams.get('token');
     const origin = req.headers.origin;
-    
+
     if (!validateAuthToken(config, token)) {
       ws.close(4001, 'Unauthorized: Invalid or missing authentication token');
       return;
@@ -101,9 +102,19 @@ export function createWsServer(
     console.log('[TerminalBackend] Client connected');
 
     let currentSessionId: string | null = null;
-    let currentWs: WebSocket | null = ws;
 
-    ws.on('message', async (rawMessage: RawData) => {
+    const broadcast = (payload: WsOutgoingMessage): void => {
+      if (currentSessionId === null) {
+        return;
+      }
+      const session = getSession(currentSessionId);
+      if (!session) {
+        return;
+      }
+      session.clients.forEach((_client, socket) => sendToClient(socket, payload));
+    };
+
+    ws.on('message', (rawMessage: RawData) => {
       try {
         const message = parseWsMessage(rawMessage);
         if (!message) {
@@ -112,16 +123,30 @@ export function createWsServer(
         }
 
         if (message.type === 'init') {
-          const cols = typeof message.cols === 'number' && message.cols > 0 ? message.cols : 120;
-          const rows = typeof message.rows === 'number' && message.rows > 0 ? message.rows : 35;
-          const requestedSessionId = typeof message.sessionId === 'string' && message.sessionId.length > 0 ? message.sessionId : null;
+          const cols = readDimension(message.cols, 120);
+          const rows = readDimension(message.rows, 35);
+          const requestedSessionId =
+            typeof message.sessionId === 'string' && message.sessionId.length > 0
+              ? message.sessionId
+              : null;
 
-          const { session, isNew } = getOrCreateSession(requestedSessionId, config.launchDir, cols, rows);
+          const { session } = getOrCreateSession(requestedSessionId, config.launchDir, cols, rows);
+
+          // Re-init to a different session: detach this socket from the old
+          // entry so it stops counting toward that PTY's occupancy.
+          if (currentSessionId !== null && currentSessionId !== session.sessionId) {
+            const previous = getSession(currentSessionId);
+            if (previous) {
+              const { changes } = detachClient(previous, ws, currentSessionId);
+              changes.forEach((change) =>
+                sendToClient(change.ws, { type: 'role_changed', role: change.role }),
+              );
+            }
+          }
           currentSessionId = session.sessionId;
 
-          if (isNew) {
+          if (!hasPty(session)) {
             startHistorySession(session.sessionId);
-            
             initializeSessionPty(
               session,
               config.launchDir,
@@ -130,79 +155,59 @@ export function createWsServer(
               (chunk: string) => {
                 appendToBuffer(session, chunk);
                 persistChunk(session.sessionId, chunk);
-                
-                const outputMsg: WsOutgoingMessage = { type: 'output', data: chunk };
-                session.clients.forEach((_client, socket) => {
-                  sendToClient(socket, outputMsg);
-                });
+                broadcast({ type: 'output', data: chunk });
               },
               (exitCode) => {
-                const exitMsg: WsOutgoingMessage = { 
-                  type: 'exit', 
-                  code: exitCode.exitCode, 
-                  signal: exitCode.signal 
-                };
-                session.clients.forEach((_client, socket) => {
-                  sendToClient(socket, exitMsg);
-                });
-                
-                if (session.timeoutId) {
-                  clearTimeout(session.timeoutId);
-                }
+                broadcast({ type: 'exit', code: exitCode.exitCode, signal: exitCode.signal });
                 deleteSession(session.sessionId);
-              }
+              },
             );
-
-            const historyReplay = replayHistory(session.sessionId);
-            if (historyReplay.hadContent) {
-              const historyMsg: WsOutgoingMessage = { 
-                type: 'history', 
-                chunks: historyReplay.chunks 
-              };
-              sendToClient(ws, historyMsg);
-            }
-
-            const role = attachClient(session, ws);
-            sendToClient(ws, { type: 'attached', role, sessionId: session.sessionId });
-            
-            const welcomeMsg = `\x1b[36m[Terminal backend started - session: ${session.sessionId}]\x1b[0m\r\n`;
-            sendToClient(ws, { type: 'output', data: welcomeMsg });
-          } else {
-            const historyReplay = replayHistory(session.sessionId);
-            if (historyReplay.hadContent) {
-              const historyMsg: WsOutgoingMessage = { 
-                type: 'history', 
-                chunks: historyReplay.chunks 
-              };
-              sendToClient(ws, historyMsg);
-            }
-
-            const role = attachClient(session, ws);
-            sendToClient(ws, { type: 'attached', role, sessionId: session.sessionId });
-            
-            const reconnectMsg = `\x1b[36m[Reconnected to session: ${session.sessionId}]\x1b[0m\r\n`;
-            sendToClient(ws, { type: 'output', data: reconnectMsg });
-            
-            // The persisted history already contains every chunk that is in
-            // the in-memory buffer, so replaying both would duplicate output.
-            if (!historyReplay.hadContent) {
-              getBuffer(session).forEach((chunk) => {
-                sendToClient(ws, { type: 'output', data: chunk });
-              });
-            }
+          } else if (session.timeoutId) {
+            // A reattach cancels the idle reap that a full detach armed.
+            clearTimeout(session.timeoutId);
+            session.timeoutId = null;
           }
+
+          const { role, changes } = attachClient(session, ws);
+          sendToClient(ws, { type: 'attached', role, sessionId: session.sessionId });
+          changes.forEach((change) =>
+            sendToClient(change.ws, { type: 'role_changed', role: change.role }),
+          );
+
+          const historyReplay = replayHistory(session.sessionId);
+          if (historyReplay.hadContent) {
+            sendToClient(ws, { type: 'history', chunks: historyReplay.chunks });
+          } else {
+            // No persisted history for this session yet: replay whatever the
+            // in-memory buffer holds so a mid-session reconnect is not blank.
+            getBuffer(session).forEach((chunk) =>
+              sendToClient(ws, { type: 'output', data: chunk }),
+            );
+          }
+
+          const note = historyReplay.hadContent
+            ? `\x1b[36m[Reattached to session: ${session.sessionId}]\x1b[0m\r\n`
+            : `\x1b[36m[Terminal session: ${session.sessionId}]\x1b[0m\r\n`;
+          sendToClient(ws, { type: 'output', data: note });
           return;
         }
 
-        if (!currentSessionId) {
+        if (currentSessionId === null) {
           sendToClient(ws, { type: 'error', message: 'Session not initialized. Send init first.' });
           return;
         }
 
-        const session = getOrCreateSession(currentSessionId, config.launchDir, 120, 35).session;
+        // A non-init frame is only valid for the session this socket attached
+        // to. Never create a session here: an input/resize/close for an
+        // unknown id must not resurrect a PTY with default dimensions.
+        const session = getSession(currentSessionId);
+        if (!session) {
+          sendToClient(ws, { type: 'error', message: 'Session is no longer active.' });
+          return;
+        }
 
         if (message.type === 'input') {
-          if (canWrite(session, ws)) {
+          if (canWrite(session, ws) && typeof message.data === 'string') {
             writeInput(session, message.data);
           }
           return;
@@ -210,7 +215,11 @@ export function createWsServer(
 
         if (message.type === 'resize') {
           if (canResize(session, ws)) {
-            resizeSession(session, message.cols, message.rows);
+            resizeSession(
+              session,
+              readDimension(message.cols, 80),
+              readDimension(message.rows, 24),
+            );
           }
           return;
         }
@@ -222,16 +231,19 @@ export function createWsServer(
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         console.error('[TerminalBackend] WebSocket error:', errorMsg);
-        if (ws.readyState === WebSocket.OPEN) {
-          sendToClient(ws, { type: 'error', message: errorMsg });
-        }
+        sendToClient(ws, { type: 'error', message: errorMsg });
       }
     });
 
     ws.on('close', () => {
-      if (currentSessionId) {
-        const session = getOrCreateSession(currentSessionId, config.launchDir, 120, 35).session;
-        detachClient(session, ws, currentSessionId);
+      if (currentSessionId !== null) {
+        const session = getSession(currentSessionId);
+        if (session) {
+          const { changes } = detachClient(session, ws, currentSessionId);
+          changes.forEach((change) =>
+            sendToClient(change.ws, { type: 'role_changed', role: change.role }),
+          );
+        }
       }
       console.log('[TerminalBackend] Client disconnected');
     });

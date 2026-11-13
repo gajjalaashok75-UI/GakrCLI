@@ -49,3 +49,29 @@ export function readDiscovery(): DiscoveryInfo | null {
 export function getDiscoveryDirPath(): string {
   return getDiscoveryDir();
 }
+
+/**
+ * Read the port of a live terminal backend.
+ *
+ * Returns null when there is no backend, or when the file is stale — a port
+ * file left behind by a crashed process must not make callers believe a backend
+ * is listening. Liveness is checked with signal 0, which probes without
+ * delivering anything.
+ */
+export function readDiscoveryPort(): number | null {
+  const info = readDiscovery();
+  if (!info) {
+    return null;
+  }
+  if (!Number.isInteger(info.port) || info.port <= 0) {
+    return null;
+  }
+  if (Number.isInteger(info.pid) && info.pid > 0) {
+    try {
+      process.kill(info.pid, 0);
+    } catch {
+      return null;
+    }
+  }
+  return info.port;
+}

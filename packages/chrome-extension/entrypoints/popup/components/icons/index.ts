@@ -9,5 +9,3 @@ export { default as RecordIcon } from './RecordIcon.vue';
 export { default as StopIcon } from './StopIcon.vue';
 export { default as WorkflowIcon } from './WorkflowIcon.vue';
 export { default as RefreshIcon } from './RefreshIcon.vue';
-export { default as EditIcon } from './EditIcon.vue';
-export { default as MarkerIcon } from './MarkerIcon.vue';

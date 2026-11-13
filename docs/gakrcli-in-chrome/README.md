@@ -17,7 +17,7 @@ The user-facing guide (install steps, screenshots, troubleshooting) lives at
 | Native host | `gakrcli --chrome-native-host` (`src/entrypoints/cli.tsx`) |
 | MCP server | `src/utils/gakrcliInChrome/mcpServer.ts` |
 | Host socket client | `src/utils/gakrcliInChrome/chromeNativeHostClient.ts` |
-| Side-panel agent server | `src/utils/gakrcliInChrome/agentServer/` |
+| Side-panel terminal backend | `src/utils/gakrcliInChrome/terminalBackend/` |
 | Bundle served by the docs site | `web/public/docs/gakrcli-in-chrome/gakrcli-in-chrome.zip` |
 
 The extension owns the tool implementations. The CLI advertises exactly
@@ -30,11 +30,11 @@ The extension owns the tool implementations. The CLI advertises exactly
 |---|---|
 | `gakrcli --chrome` | In-process MCP server, connected by `services/mcp/client.ts` |
 | `gakrcli --gakrcli-in-chrome-mcp` | The same server over stdio, for external MCP clients |
-| `gakrcli --chrome-extension` | Agent server the Chrome side panel talks to |
+| `gakrcli --chrome-extension` | Terminal backend the Chrome side panel talks to |
 | `/chrome` | Status, install steps, and extension-id settings |
 
 `--chrome` and the bundled skill are gated on a gakrcli.ai subscription; the
-stdio and side-panel servers are not. WSL is not supported.
+stdio and terminal-backend servers are not. WSL is not supported.
 
 ## Extension id
 
@@ -54,9 +54,12 @@ with `/chrome` → **Set Chrome extension ID**, `chromeExtensionId` in
 3. `toToolResult()` forwards that envelope, so an extension-reported error keeps
    its `isError: true` and the payload is not re-encoded as a JSON string.
 
-For the side panel the direction reverses: `gakrcli --chrome-extension`
-publishes a port, the native host hands it to the extension, and the panel talks
-HTTP to `127.0.0.1`.
+For the side panel the direction reverses: `gakrcli --chrome-extension` runs a
+long-lived terminal backend that binds a loopback HTTP/WebSocket server. The
+panel discovers it over HTTP (`GET /discover` on `127.0.0.1:64201-64210`,
+origin-gated), then opens an authenticated WebSocket (`/terminal`) and streams
+PTY input/output. The backend spawns a real `gakrcli --chrome` under `node-pty`,
+so the panel is a terminal, not a chat UI.
 
 ## Rebuilding the bundle
 

@@ -103,6 +103,49 @@ Project config lives in `~/.gakrcli.json` under `projects[<abs path>]`, not at
 the top level. `setMcpServerEnabled` writes there and survives process restarts.
 `
 
+## GakrCLI-in-Chrome: terminal vs legacy agent server
+
+The Chrome side panel is a **terminal**, not a chat UI. The data path is:
+
+```
+side panel (xterm.js) ──HTTP discovery + WebSocket──> gakrcli --chrome-extension
+        (terminalBackend: PTY mgmt, ws, sessions)  ──node-pty──> gakrcli --chrome
+```
+
+- `gakrcli --chrome-extension` → `runTerminalBackend` (`src/utils/gakrcliInChrome/terminalBackend/`).
+  Discovery on `127.0.0.1:64201-64210` (`GET /discover`, origin-gated), WebSocket on `/terminal`,
+  token-authenticated. Port file: `~/.gakrcli/chrome/terminal-backend/port.json` (informational only;
+  the extension discovers over HTTP, it cannot read files).
+- `gakrcli --chrome` is the real Ink TUI the PTY spawns; it wires the in-process Chrome MCP server
+  (`createChromeMcpServer()` in `src/services/mcp/client.ts`).
+- Browser tool calls: extension background `handleCallTool` ← native host socket
+  (`chromeNativeHost.ts`) ← `chromeNativeHostClient.callExtensionTool` ← `mcpServer.ts`.
+  This is the **protected** MCP/native-host path; do not break it.
+
+The **legacy agent server** (`src/utils/gakrcliInChrome/agentServer/*`, `panelAgent/*`) and the
+extension's `AgentChat` UI and floating Quick Panel AI chat were the pre-terminal chat
+architecture. They have been removed: `--chrome-extension` runs `runTerminalBackend`, and
+`chromeNativeHost.ts` + `preflight.ts` read the terminal backend's discovery file
+(`readDiscoveryPort`) instead of the old agent-server port file.
+
+The **Web Editor** (in-page visual editing: `entrypoints/web-editor-v2*`, `inject-scripts/web-editor.js`,
+`inject-scripts/props-agent.js`, `common/web-editor-types.ts`, `entrypoints/background/web-editor/*`)
+and the **element-marker management** feature (`entrypoints/background/element-marker/index.ts`,
+`inject-scripts/element-marker.js`, `ElementMarkerManagement.vue`, the `ELEMENT_MARKER_*` message
+types, the `toggle_web_editor` command) have been removed. See
+`docs/gakrcli-in-chrome/delete.md`.
+
+Two couplings to **kept** features remain and are **protected**:
+
+- `chrome_request_element_selection` (MCP tool) renders in the Quick Panel shadow host
+  (`shared/quick-panel/ui`) and its panel controller (`shared/element-picker/`); both import the
+  shared `Disposer` from `utils/disposables`.
+- `chrome_read_page` (MCP tool) reads user markers via the retained read-only path
+  `entrypoints/background/element-marker/element-marker-storage` (`listMarkersForUrl`).
+
+Do not delete `shared/quick-panel/ui`, `shared/element-picker`, `utils/disposables`, or the
+element-marker read path without replacing those couplings first.
+
 ## Built-in registries
 
 Adding a feature follows a `register*` + Map pattern, one registry per surface:

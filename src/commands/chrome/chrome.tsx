@@ -235,8 +235,8 @@ function GakrCLIInChromeMenu({
                     <Text color="warning">Not connected — is Chrome open?</Text>
                   )}
                 </StatusLine>
-                <StatusLine label="Side panel server">
-                  {status.agentServerRunning ? (
+                <StatusLine label="Terminal backend">
+                  {status.terminalBackendRunning ? (
                     <Text color="success">Running</Text>
                   ) : (
                     <Text color="inactive">Stopped (gakrcli --chrome-extension)</Text>

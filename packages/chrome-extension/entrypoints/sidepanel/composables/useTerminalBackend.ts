@@ -3,8 +3,7 @@
  *
  * Flow: probe the loopback HTTP discovery endpoint, take the authenticated
  * WebSocket it returns, and stream terminal I/O to the real `gakrcli --chrome`
- * PTY. Deliberately independent of `useAgentServer` (HTTP + SSE) so the agent
- * server path keeps working unchanged during this migration.
+ * PTY.
  */
 import { onUnmounted, ref } from 'vue';
 
@@ -62,6 +61,7 @@ interface DiscoveryResult {
 type BackendMessage =
   | { type: 'output'; data: string }
   | { type: 'attached'; role: TerminalBackendRole; sessionId: string }
+  | { type: 'role_changed'; role: TerminalBackendRole }
   | { type: 'exit'; code: number | null; signal: string | null }
   | { type: 'history'; chunks: TerminalHistoryChunk[] }
   | { type: 'error'; message: string }
@@ -238,6 +238,9 @@ export function useTerminalBackend(handlers: UseTerminalBackendHandlers) {
         errorMessage.value = null;
         state.value = 'connected';
         startHeartbeat();
+        break;
+      case 'role_changed':
+        role.value = message.role;
         break;
       case 'output':
         handlers.onOutput(message.data);

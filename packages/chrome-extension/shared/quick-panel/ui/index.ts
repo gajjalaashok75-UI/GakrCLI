@@ -1,19 +1,9 @@
 /**
- * Quick Panel UI Module Index
+ * Quick Panel UI primitives.
  *
- * Exports all UI components for the Quick Panel feature.
+ * Provides the shadow-DOM host, panel shell, AI chat panel, message renderer,
+ * search input, quick entries, and stylesheet.
  */
-
-// ============================================================
-// Shell (unified container for search + chat views)
-// ============================================================
-
-export {
-  mountQuickPanelShell,
-  type QuickPanelShellElements,
-  type QuickPanelShellManager,
-  type QuickPanelShellOptions,
-} from './panel-shell';
 
 // ============================================================
 // Shadow DOM host
@@ -27,7 +17,35 @@ export {
 } from './shadow-host';
 
 // ============================================================
-// Search UI Components
+// Panel shell (unified container)
+// ============================================================
+
+export {
+  mountQuickPanelShell,
+  type QuickPanelShellElements,
+  type QuickPanelShellManager,
+  type QuickPanelShellOptions,
+} from './panel-shell';
+
+// ============================================================
+// AI Chat
+// ============================================================
+
+export {
+  mountQuickPanelAiChatPanel,
+  type QuickPanelAiChatPanelManager,
+  type QuickPanelAiChatPanelOptions,
+  type QuickPanelAiChatPanelState,
+} from './ai-chat-panel';
+
+export { createQuickPanelMessageRenderer } from './message-renderer';
+export type {
+  QuickPanelMessageRenderer,
+  QuickPanelMessageRendererOptions,
+} from './message-renderer';
+
+// ============================================================
+// Search UI
 // ============================================================
 
 export {
@@ -37,30 +55,8 @@ export {
   type SearchInputState,
 } from './search-input';
 
-export {
-  createQuickEntries,
-  type QuickEntriesManager,
-  type QuickEntriesOptions,
-} from './quick-entries';
-
-// ============================================================
-// AI Chat Components
-// ============================================================
-
-export {
-  createQuickPanelMessageRenderer,
-  type QuickPanelMessageRenderer,
-  type QuickPanelMessageRendererOptions,
-} from './message-renderer';
-
-export { createMarkdownRenderer, type MarkdownRendererInstance } from './markdown-renderer';
-
-export {
-  mountQuickPanelAiChatPanel,
-  type QuickPanelAiChatPanelManager,
-  type QuickPanelAiChatPanelOptions,
-  type QuickPanelAiChatPanelState,
-} from './ai-chat-panel';
+export { createQuickEntries } from './quick-entries';
+export type { QuickEntriesManager, QuickEntriesOptions } from './quick-entries';
 
 // ============================================================
 // Styles

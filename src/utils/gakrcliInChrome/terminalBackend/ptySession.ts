@@ -74,15 +74,16 @@ export function destroyPtySession(session: PtySessionEntry): void {
     session.timeoutId = null;
   }
   try {
-    session.pty.kill();
+    session.pty?.kill();
   } catch {
     // Ignore kill errors
   }
+  session.pty = null;
 }
 
 export function resizePtySession(session: PtySessionEntry, cols: number, rows: number): void {
   try {
-    session.pty.resize(cols, rows);
+    session.pty?.resize(cols, rows);
   } catch (error) {
     console.warn('[PtySession] Resize failed', error);
   }
@@ -90,7 +91,7 @@ export function resizePtySession(session: PtySessionEntry, cols: number, rows: n
 
 export function writeToPtySession(session: PtySessionEntry, data: string): void {
   try {
-    session.pty.write(data);
+    session.pty?.write(data);
   } catch (error) {
     console.warn('[PtySession] Write failed', error);
   }

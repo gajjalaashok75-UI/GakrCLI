@@ -4,7 +4,7 @@
  * The extension is side-loaded, so a working setup depends on runtime state
  * that can silently be wrong: an id that the native-messaging manifest does not
  * list, a manifest that was never written, Chrome not running, or the
- * side-panel agent server not started. Each entry point checks that state,
+ * terminal backend not started. Each entry point checks that state,
  * reports what is actually wrong, and then starts anyway — a hard failure here
  * would be worse than a degraded session, since the tool-call path already
  * reports its own errors.
@@ -16,7 +16,7 @@ import { GAKR_IN_CHROME_DOCS_URL } from './extensionId.js'
 import { logForDebugging } from '../debug.js'
 import { getGlobalConfig } from '../config.js'
 import { getAllSocketPaths } from './common.js'
-import { readPublishedPort } from './agentServer/portFile.js'
+import { readDiscoveryPort } from './terminalBackend/discovery.js'
 import {
   getConfiguredChromeExtensionId,
   getNativeHostManifestPaths,
@@ -43,7 +43,7 @@ export type GakrCLIInChromeStatus = {
   nativeHostManifestAllowsId: boolean
   /** null when the surface does not need the native-host socket. */
   nativeHostReachable: boolean | null
-  agentServerRunning: boolean
+  terminalBackendRunning: boolean
   warnings: Warning[]
   ready: boolean
 }
@@ -202,7 +202,7 @@ export async function getGakrCLIInChromeStatus(
     needsNativeHostSocket(surface)
       ? probeNativeHostSocket()
       : Promise.resolve<boolean | null>(null),
-    readPublishedPort().catch(() => null),
+    readDiscoveryPort(),
   ])
 
   const warnings = deriveGakrCLIInChromeWarnings({
@@ -229,7 +229,7 @@ export async function getGakrCLIInChromeStatus(
     nativeHostManifestAllowsId:
       configured.id !== null && allowed.includes(`chrome-extension://${configured.id}/`),
     nativeHostReachable: reachable,
-    agentServerRunning: port !== null,
+    terminalBackendRunning: port !== null,
     warnings,
     ready: !warnings.some(w => w.level === 'error'),
   }
@@ -329,7 +329,7 @@ function summarize(status: GakrCLIInChromeStatus): string {
           ? 'connected'
           : 'not connected'
     }`,
-    `agent server: ${status.agentServerRunning ? 'running' : 'stopped'}`,
+    `terminal backend: ${status.terminalBackendRunning ? 'running' : 'stopped'}`,
   ]
   return `[gakrcli-in-chrome] ${parts.join(' · ')}`
 }

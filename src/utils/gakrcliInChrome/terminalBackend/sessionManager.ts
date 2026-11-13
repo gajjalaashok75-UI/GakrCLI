@@ -39,7 +39,7 @@ export function getOrCreateSession(
   const newSessionId = sessionId || generateSessionId();
   
   const newSession: PtySessionEntry = {
-    pty: null as any,
+    pty: null,
     clients: new Map(),
     buffer: [],
     timeoutId: null,
@@ -48,6 +48,10 @@ export function getOrCreateSession(
 
   sessionManagerMap.set(newSessionId, newSession);
   return { session: newSession, isNew: true };
+}
+
+export function hasPty(session: PtySessionEntry): boolean {
+  return session.pty !== null;
 }
 
 export function initializeSessionPty(
@@ -80,47 +84,77 @@ export function initializeSessionPty(
   });
 }
 
+/**
+ * Recomputes which attached socket owns the PTY: the newest connected client
+ * wins. Every side-panel connection is the same "user", so a reconnect (a new
+ * socket) must take ownership from the socket it replaces rather than attach
+ * as a read-only observer. Returns the sockets whose role changed so the
+ * caller can announce them with `role_changed`.
+ */
+function recomputeOwner(session: PtySessionEntry): { ws: WebSocket; role: ClientRole }[] {
+  let ownerSocket: WebSocket | null = null;
+  let newest = -1;
+  for (const [socket, client] of session.clients) {
+    if (socket.readyState !== WebSocket.OPEN) {
+      continue;
+    }
+    if (client.attachedAt > newest) {
+      newest = client.attachedAt;
+      ownerSocket = socket;
+    }
+  }
+
+  const changed: { ws: WebSocket; role: ClientRole }[] = [];
+  for (const [socket, client] of session.clients) {
+    const nextRole: ClientRole = socket === ownerSocket ? 'owner' : 'observer';
+    if (client.role !== nextRole) {
+      client.role = nextRole;
+      // The first settling is silent: the caller's `attached` frame carries it.
+      if (client.roleAnnounced) {
+        changed.push({ ws: socket, role: nextRole });
+      }
+    }
+    client.roleAnnounced = true;
+  }
+  return changed;
+}
+
 export function attachClient(
   session: PtySessionEntry,
   ws: WebSocket
-): ClientRole {
+): { role: ClientRole; changes: { ws: WebSocket; role: ClientRole }[] } {
   const attachedAt = ++sessionAttachCounter;
-  const entry: ClientEntry = {
-    role: 'observer',
-    roleAnnounced: false,
-    attachedAt,
-  };
-  // Drop sockets that already closed but whose close handler has not run yet.
-  // Without this, a reconnect that wins the race against the previous socket's
-  // close event would attach as an observer with no owner, so input would be
-  // silently dropped.
+  // Drop sockets that already closed but whose close handler has not run yet,
+  // so a reconnect that wins the race against the previous socket's close
+  // event is not held back by a dead client.
   for (const socket of session.clients.keys()) {
     if (socket.readyState !== WebSocket.OPEN) {
       session.clients.delete(socket);
     }
   }
 
-  session.clients.set(ws, entry);
+  session.clients.set(ws, {
+    role: 'observer',
+    roleAnnounced: false,
+    attachedAt,
+  });
 
-  if (session.clients.size === 1) {
-    entry.role = 'owner';
-  }
-
-  return entry.role;
+  const changes = recomputeOwner(session);
+  return { role: session.clients.get(ws)?.role ?? 'observer', changes };
 }
 
 export function detachClient(
   session: PtySessionEntry,
   ws: WebSocket,
   sessionId: string
-): void {
-  const client = session.clients.get(ws);
-  if (!client) {
-    return;
+): { changes: { ws: WebSocket; role: ClientRole }[] } {
+  if (!session.clients.has(ws)) {
+    return { changes: [] };
   }
   session.clients.delete(ws);
+  const changes = recomputeOwner(session);
 
-  if (session.clients.size === 0) {
+  if (session.clients.size === 0 && session.timeoutId === null) {
     session.timeoutId = setTimeout(() => {
       const currentSession = sessionManagerMap.get(sessionId);
       if (currentSession !== session || currentSession.clients.size > 0) {
@@ -132,6 +166,7 @@ export function detachClient(
       sessionManagerMap.delete(sessionId);
     }, PTY_SESSION_TIMEOUT);
   }
+  return { changes };
 }
 
 export function getSessionRole(session: PtySessionEntry, ws: WebSocket): ClientRole {

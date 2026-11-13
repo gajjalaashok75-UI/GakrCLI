@@ -1,4 +1,5 @@
-// Element marker types shared across background, content scripts, and popup
+// Element marker record shape. The marker management UI has been removed;
+// this type remains because chrome_read_page reads saved markers.
 
 export type UrlMatchType = 'exact' | 'prefix' | 'host';
 
@@ -20,64 +21,4 @@ export interface ElementMarker {
 
   createdAt: number;
   updatedAt: number;
-}
-
-export interface UpsertMarkerRequest {
-  id?: string;
-  url: string;
-  name: string;
-  selector: string;
-  selectorType?: 'css' | 'xpath';
-  listMode?: boolean;
-  matchType?: UrlMatchType;
-  action?: 'click' | 'fill' | 'custom';
-}
-
-// Validation actions for MCP-integrated verification
-export enum MarkerValidationAction {
-  Hover = 'hover',
-  LeftClick = 'left_click',
-  RightClick = 'right_click',
-  DoubleClick = 'double_click',
-  TypeText = 'type_text',
-  PressKeys = 'press_keys',
-  Scroll = 'scroll',
-}
-
-export interface MarkerValidationRequest {
-  selector: string;
-  selectorType?: 'css' | 'xpath';
-  action: MarkerValidationAction;
-  // Optional payload for certain actions
-  text?: string; // for type_text
-  keys?: string; // for press_keys
-  // Event options for click-like actions
-  button?: 'left' | 'right' | 'middle';
-  bubbles?: boolean;
-  cancelable?: boolean;
-  modifiers?: { altKey?: boolean; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean };
-  // Targeting options
-  coordinates?: { x: number; y: number }; // absolute viewport coords
-  offsetX?: number; // relative to element center if relativeTo = 'element'
-  offsetY?: number;
-  relativeTo?: 'element' | 'viewport';
-  // Navigation options for click-like actions
-  waitForNavigation?: boolean;
-  timeoutMs?: number;
-  // Scroll options
-  scrollDirection?: 'up' | 'down' | 'left' | 'right';
-  scrollAmount?: number; // pixels per tick
-}
-
-export interface MarkerValidationResponse {
-  success: boolean;
-  resolved?: boolean;
-  ref?: string;
-  center?: { x: number; y: number };
-  tool?: { name: string; ok: boolean; error?: string };
-  error?: string;
-}
-
-export interface MarkerQuery {
-  url?: string; // If present, query by URL match; otherwise list all
 }

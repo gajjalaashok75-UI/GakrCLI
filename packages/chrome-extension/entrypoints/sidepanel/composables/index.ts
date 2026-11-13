@@ -1,19 +1,11 @@
 /**
- * Agent Chat Composables
- * Export all composables for agent chat functionality.
+ * Side panel composables.
+ *
+ * The side panel is a terminal: it streams I/O to a real `gakrcli --chrome`
+ * PTY through the `gakrcli --chrome-extension` backend. The only composables
+ * left are the terminal client and the shared theme.
  */
-export { useAgentServer } from './useAgentServer';
 export { useTerminalBackend } from './useTerminalBackend';
-export { useAgentChat } from './useAgentChat';
-export { useAgentProjects } from './useAgentProjects';
-export { useAgentSessions } from './useAgentSessions';
-export { useAttachments, type AttachmentWithPreview } from './useAttachments';
-export { useAgentTheme, preloadAgentTheme, THEME_LABELS } from './useAgentTheme';
-export { useAgentThreads, AGENT_SERVER_PORT_KEY } from './useAgentThreads';
-export { useWebEditorTxState, WEB_EDITOR_TX_STATE_INJECTION_KEY } from './useWebEditorTxState';
-export { useAgentChatViewRoute } from './useAgentChatViewRoute';
-
-export type { UseAgentServerOptions } from './useAgentServer';
 export type {
   UseTerminalBackend,
   UseTerminalBackendHandlers,
@@ -21,47 +13,6 @@ export type {
   TerminalConnectionState,
   TerminalHistoryChunk,
 } from './useTerminalBackend';
-export type { UseAgentChatOptions } from './useAgentChat';
-export type { UseAgentProjectsOptions } from './useAgentProjects';
-export type { UseAgentSessionsOptions } from './useAgentSessions';
+
+export { useAgentTheme, preloadAgentTheme, THEME_LABELS } from './useAgentTheme';
 export type { AgentThemeId, UseAgentTheme } from './useAgentTheme';
-export type {
-  AgentThread,
-  TimelineItem,
-  ToolPresentation,
-  ToolKind,
-  ToolSeverity,
-  AgentThreadState,
-  UseAgentThreadsOptions,
-  ThreadHeader,
-  WebEditorApplyMeta,
-} from './useAgentThreads';
-export type { UseWebEditorTxStateOptions, WebEditorTxStateReturn } from './useWebEditorTxState';
-export type {
-  AgentChatView,
-  AgentChatRouteState,
-  UseAgentChatViewRouteOptions,
-  UseAgentChatViewRoute,
-} from './useAgentChatViewRoute';
-
-// Textarea Auto-Resize
-export { useTextareaAutoResize } from './useTextareaAutoResize';
-export type {
-  UseTextareaAutoResizeOptions,
-  UseTextareaAutoResizeReturn,
-} from './useTextareaAutoResize';
-
-// Fake Caret (comet tail animation)
-export { useFakeCaret } from './useFakeCaret';
-export type { UseFakeCaretOptions, UseFakeCaretReturn, FakeCaretTrailPoint } from './useFakeCaret';
-
-// Open Project Preference
-export { useOpenProjectPreference } from './useOpenProjectPreference';
-export type {
-  UseOpenProjectPreferenceOptions,
-  UseOpenProjectPreference,
-} from './useOpenProjectPreference';
-
-// Agent Input Preferences (fake caret, etc.)
-export { useAgentInputPreferences } from './useAgentInputPreferences';
-export type { UseAgentInputPreferences } from './useAgentInputPreferences';
