@@ -55,8 +55,13 @@ export default defineConfig({
       'alarms',
       // Allow programmatic control of Chrome Side Panel
       'sidePanel',
+      // Terminal clipboard buttons and xterm.js clipboard addon
+      'clipboardRead',
+      'clipboardWrite',
     ],
-    host_permissions: ['<all_urls>'],
+    // The loopback entry is what lets the side panel reach the GakrCLI terminal
+    // backend's discovery endpoint + WebSocket (any port on 127.0.0.1).
+    host_permissions: ['<all_urls>', 'http://127.0.0.1/*'],
     options_ui: {
       page: 'options.html',
       open_in_tab: true,
@@ -115,7 +120,7 @@ export default defineConfig({
           content_security_policy: {
             // Allow inline styles injected by Vite (compiled CSS) and data images used in UI thumbnails
             extension_pages:
-              "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:;",
+              "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*;",
           },
         }),
   },

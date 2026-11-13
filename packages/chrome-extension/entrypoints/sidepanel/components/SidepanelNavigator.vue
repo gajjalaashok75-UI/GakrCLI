@@ -49,6 +49,41 @@
           <div class="navigator-items">
             <button
               class="navigator-item"
+              :class="{ 'navigator-item-active': activeTab === 'terminal' }"
+              @click="selectTab('terminal')"
+            >
+              <div class="navigator-item-icon">
+                <svg
+                  viewBox="0 0 24 24"
+                  width="20"
+                  height="20"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 17l6-5-6-5" />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 19h8" />
+                </svg>
+              </div>
+              <div class="navigator-item-content">
+                <span class="navigator-item-title">GakrCLI Terminal</span>
+                <span class="navigator-item-desc">Real gakrcli --chrome terminal</span>
+              </div>
+              <div v-if="activeTab === 'terminal'" class="navigator-item-check">
+                <svg
+                  viewBox="0 0 24 24"
+                  width="16"
+                  height="16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+            </button>
+            <button
+              class="navigator-item"
               :class="{ 'navigator-item-active': activeTab === 'agent-chat' }"
               @click="selectTab('agent-chat')"
             >
@@ -134,7 +169,7 @@
 import { ref, computed } from 'vue';
 import { useFloatingDrag } from '../composables/useFloatingDrag';
 
-type TabType = 'element-markers' | 'agent-chat';
+type TabType = 'element-markers' | 'agent-chat' | 'terminal';
 
 const BUTTON_SIZE = 36;
 const CLAMP_MARGIN = 12;

@@ -3,6 +3,7 @@
  * Export all composables for agent chat functionality.
  */
 export { useAgentServer } from './useAgentServer';
+export { useTerminalBackend } from './useTerminalBackend';
 export { useAgentChat } from './useAgentChat';
 export { useAgentProjects } from './useAgentProjects';
 export { useAgentSessions } from './useAgentSessions';
@@ -13,6 +14,13 @@ export { useWebEditorTxState, WEB_EDITOR_TX_STATE_INJECTION_KEY } from './useWeb
 export { useAgentChatViewRoute } from './useAgentChatViewRoute';
 
 export type { UseAgentServerOptions } from './useAgentServer';
+export type {
+  UseTerminalBackend,
+  UseTerminalBackendHandlers,
+  TerminalBackendRole,
+  TerminalConnectionState,
+  TerminalHistoryChunk,
+} from './useTerminalBackend';
 export type { UseAgentChatOptions } from './useAgentChat';
 export type { UseAgentProjectsOptions } from './useAgentProjects';
 export type { UseAgentSessionsOptions } from './useAgentSessions';

@@ -7,6 +7,11 @@
       @change="handleTabChange"
     />
 
+    <!-- Terminal Tab (real gakrcli --chrome via the terminal backend) -->
+    <div v-show="activeTab === 'terminal'" class="h-full">
+      <TerminalShell />
+    </div>
+
     <!-- Agent Chat Tab -->
     <div v-show="activeTab === 'agent-chat'" class="h-full">
       <AgentChat />
@@ -270,16 +275,19 @@ import { BACKGROUND_MESSAGE_TYPES } from '@/common/message-types';
 import type { ElementMarker, UpsertMarkerRequest } from '@/common/element-marker-types';
 import AgentChat from './components/AgentChat.vue';
 import SidepanelNavigator from './components/SidepanelNavigator.vue';
+import TerminalShell from './components/TerminalShell.vue';
 import { useAgentTheme } from './composables/useAgentTheme';
 
 // Agent theme for consistent styling
 const { theme: currentTheme, initTheme } = useAgentTheme();
 
-// Tab state - default to AgentChat
-const activeTab = ref<'element-markers' | 'agent-chat'>('agent-chat');
+type SidepanelTab = 'element-markers' | 'agent-chat' | 'terminal';
+
+// Tab state - default to the GakrCLI terminal
+const activeTab = ref<SidepanelTab>('terminal');
 
 // Handle tab change and update URL for deep linking
-function handleTabChange(tab: 'element-markers' | 'agent-chat') {
+function handleTabChange(tab: SidepanelTab) {
   activeTab.value = tab;
   // Update URL params for deep link
   const url = new URL(window.location.href);
@@ -595,6 +603,8 @@ onMounted(async () => {
     await loadMarkers();
   } else if (tabParam === 'agent-chat') {
     activeTab.value = 'agent-chat';
+  } else if (tabParam === 'terminal') {
+    activeTab.value = 'terminal';
   }
 });
 

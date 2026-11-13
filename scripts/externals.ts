@@ -11,6 +11,8 @@
 export const COMMON_EXTERNALS: string[] = [
   // Native image processing
   'sharp',
+  // Native PTY handling
+  'node-pty',
   // Agent Client Protocol SDK
   '@agentclientprotocol/sdk',
   // MCP bridge
