@@ -1,10 +1,17 @@
 import reject from 'lodash-es/reject.js'
+import { resolve } from 'node:path'
 import { z } from 'zod/v4'
-import { performMCPOAuthFlow } from '../../services/mcp/auth.js'
+import { getServerKey, performMCPOAuthFlow } from '../../services/mcp/auth.js'
 import {
   clearMcpAuthCache,
+  connectToServer,
+  getServerCacheKey,
   reconnectMcpServerImpl,
 } from '../../services/mcp/client.js'
+import {
+  type CredentialScope,
+  resumeIn,
+} from '../../services/mcp/credentialScope.js'
 import {
   buildMcpToolName,
   getMcpPrefix,
@@ -17,11 +24,21 @@ import type {
 import type { Tool } from '../../Tool.js'
 import { errorMessage } from '../../utils/errors.js'
 import { lazySchema } from '../../utils/lazySchema.js'
+import {
+  CREDENTIALS_SERVICE_SUFFIX,
+  getSecureStorageServiceName,
+  getUsername,
+} from '../../utils/secureStorage/macOsKeychainHelpers.js'
 import { logMCPDebug, logMCPError } from '../../utils/log.js'
+import { getGakrCLIConfigHomeDir } from '../../utils/envUtils.js'
 import type { PermissionDecision } from '../../utils/permissions/PermissionResult.js'
 
 const inputSchema = lazySchema(() => z.object({}))
 type InputSchema = ReturnType<typeof inputSchema>
+
+// SDK tools are rebuilt per session, but registrations share a credential
+// entry. Keep only active attempts; abort and settlement both release them.
+const pendingSdkSignIns = new Map<string, AbortController>()
 
 export type McpAuthOutput = {
   status: 'auth_url' | 'unsupported' | 'error'
@@ -45,19 +62,122 @@ function getConfigUrl(config: ScopedMcpServerConfig): string | undefined {
  * are swapped into appState.mcp.tools via the existing prefix-based
  * replacement (useManageMCPConnections.updateServer wipes anything matching
  * mcp__<server>__*, so this pseudo-tool is removed automatically).
+ *
+ * That last step only happens where appState feeds the tool pool — the CLI.
+ * A v2 SDK session connects its MCP servers once and does not re-read the
+ * pool after a reconnect, so `realToolsInCurrentContext` lets that caller
+ * tell the model the truth instead of promising tools the session cannot
+ * offer. See issue #2294.
  */
+export type McpAuthToolOptions = {
+  /**
+   * Whether the host exposes the server's real tools in the current context
+   * once authorization completes. Defaults to `true` (the CLI behavior).
+   * Pass `false` from an embedder whose session will not pick them up, so the
+   * model is told to start a new session rather than promised automatic
+   * availability. The flow then also belongs to the calling context: its
+   * abort signal (the embedder's close/interrupt) releases the pending
+   * callback listener, a newer call replaces an attempt still pending, and
+   * completion stores the tokens — and drops the connector's memoized
+   * needs-auth result, so the next session's connection tries them — without
+   * opening a client the session would never use or clean up.
+   */
+  realToolsInCurrentContext?: boolean
+  /**
+   * Captures the environment a call runs in, for the part of the
+   * sign-in that runs after the call has returned: the user's return from the
+   * browser, the token exchange, the stored tokens and the dropped needs-auth
+   * cache entry. An embedder's session applies its `env` for the turn and
+   * restores the process's own afterwards, while the credential store is
+   * chosen from the environment at each read and write; without this a
+   * sign-in started in one session's store would finish in another's. The
+   * scope re-applies the turn's environment under the env mutex the turns
+   * hold, so a sign-in finishing during another session's turn waits for it.
+   * The CLI's environment does not change, so it passes none.
+   */
+  captureCredentialScope?: () => CredentialScope
+  /** SDK root owner, distinct from an executor's per-tool cancellation. */
+  sessionSignal?: AbortSignal
+}
+
 export function createMcpAuthTool(
   serverName: string,
   config: ScopedMcpServerConfig,
+  options: McpAuthToolOptions = {},
 ): Tool<InputSchema, McpAuthOutput> {
   const url = getConfigUrl(config)
   const transport = config.type ?? 'stdio'
   const location = url ? `${transport} at ${url}` : transport
+  const realToolsInCurrentContext = options.realToolsInCurrentContext ?? true
+
+  const afterAuth = realToolsInCurrentContext
+    ? `Once the user completes authorization in their browser, the server's real tools will become available automatically.`
+    : `Once the user completes authorization in their browser, start a new session to use the server's real tools — this one connects its MCP servers once and will not pick them up.`
 
   const description =
     `The \`${serverName}\` MCP server (${location}) is installed but requires authentication. ` +
     `Call this tool to start the OAuth flow — you'll receive an authorization URL to share with the user. ` +
-    `Once the user completes authorization in their browser, the server's real tools will become available automatically.`
+    afterAuth
+
+  // Also retain session-local replacement if its credential namespace changes.
+  let pendingSignIn: AbortController | undefined
+
+  /**
+   * Starts an embedder's attempt, owned by the session's controller. Every
+   * attempt clears the server's stored entry and registers its own client
+   * there, so an older attempt left running would exchange its code with the
+   * newer one's client and fail after the user had signed in. Stop it, as
+   * cli/print.ts does for mcp_authenticate.
+   */
+  function beginSessionSignIn(
+    toolSignal: AbortSignal,
+    serverConfig: McpSSEServerConfig | McpHTTPServerConfig,
+    resultSignal?: AbortSignal,
+  ) {
+    const sessionSignal = options.sessionSignal ?? toolSignal
+    const aborted = [sessionSignal, toolSignal, resultSignal].find(signal => signal?.aborted)
+    if (aborted) {
+      return {
+        signal: aborted,
+        release: () => {}, returnedUrl: () => {},
+      }
+    }
+    const serverKey = getServerKey(serverName, serverConfig)
+    // Default storage can read/write either the native entry or its plaintext
+    // fallback. USER and OAuth namespace partition only the native entry;
+    // even a working vault may fall back on a later write. Own both aliases.
+    const entryKeys = [
+      JSON.stringify(['native', getSecureStorageServiceName(CREDENTIALS_SERVICE_SUFFIX), getUsername(), serverKey]),
+      JSON.stringify(['plaintext', resolve(getGakrCLIConfigHomeDir()), serverKey]),
+    ]
+    pendingSignIn?.abort()
+    for (const key of entryKeys) pendingSdkSignIns.get(key)?.abort()
+    const attempt = new AbortController()
+    pendingSignIn = attempt
+    for (const key of entryKeys) pendingSdkSignIns.set(key, attempt)
+    const stop = () => attempt.abort()
+    const separateToolSignal = toolSignal !== sessionSignal && toolSignal !== resultSignal
+    // A completed tool hands background ownership to the session/result.
+    const returnedUrl = () => {
+      if (separateToolSignal) toolSignal.removeEventListener('abort', stop)
+    }
+    const release = () => {
+      sessionSignal.removeEventListener('abort', stop)
+      resultSignal?.removeEventListener('abort', stop)
+      returnedUrl()
+      attempt.signal.removeEventListener('abort', release)
+      if (pendingSignIn === attempt) pendingSignIn = undefined
+      for (const key of entryKeys) {
+        if (pendingSdkSignIns.get(key) === attempt) pendingSdkSignIns.delete(key)
+      }
+    }
+    attempt.signal.addEventListener('abort', release, { once: true })
+    sessionSignal.addEventListener('abort', stop, { once: true })
+    resultSignal?.addEventListener('abort', stop, { once: true })
+    if (separateToolSignal) toolSignal.addEventListener('abort', stop, { once: true })
+    if (sessionSignal.aborted || toolSignal.aborted || resultSignal?.aborted) stop()
+    return { signal: attempt.signal, release, returnedUrl }
+  }
 
   return {
     name: buildMcpToolName(serverName, 'authenticate'),
@@ -120,15 +240,25 @@ export function createMcpAuthTool(
         resolveAuthUrl = resolve
       })
 
-      const controller = new AbortController()
+      // The CLI's flow outlives the turn that started it, so nothing aborts it
+      // but its own timeout. The SDK supplies its root owner so a completed
+      // tool's callback survives sibling failures, while close/interrupt and
+      // intentional discard still shut it down.
+      const signIn = realToolsInCurrentContext
+        ? { signal: new AbortController().signal, release: () => {}, returnedUrl: () => {} }
+        : beginSessionSignIn(context.abortController.signal, sseOrHttpConfig, context.toolResultAbortSignal)
       const { setAppState } = context
+      // Captured now, inside the call: the flow's reads and writes after the
+      // user's browser comes back belong here, however the environment has
+      // changed by then.
+      const credentialScope = options.captureCredentialScope?.()
 
       const oauthPromise = performMCPOAuthFlow(
         serverName,
         sseOrHttpConfig,
         u => resolveAuthUrl?.(u),
-        controller.signal,
-        { skipBrowserOpen: true },
+        signIn.signal,
+        { skipBrowserOpen: true, credentialScope },
       )
 
       // Background continuation: once OAuth completes, reconnect and swap
@@ -136,7 +266,31 @@ export function createMcpAuthTool(
       // pseudo-tool since it shares the mcp__<server>__ prefix.
       void oauthPromise
         .then(async () => {
-          clearMcpAuthCache()
+          // Drop the needs-auth cache either way, so the next connection —
+          // here or in a new session — tries the stored tokens. The cache
+          // file lives in the config home the flow began in.
+          await resumeIn(credentialScope, async () => clearMcpAuthCache())
+          if (!realToolsInCurrentContext) {
+            // Nothing here would use a reconnected client, and the session's
+            // cleanup would never close it. A new session connects instead —
+            // through the connector, which memoizes what it found by server
+            // name and config and would hand the new session this needs-auth
+            // result back, stored tokens or not. Retry disconnected results,
+            // including a failed attempt made while auth was pending, but
+            // preserve another session's connected replacement. These results
+            // fetched no tools and need no client/fetch-cache cleanup.
+            const key = getServerCacheKey(serverName, config)
+            const cached = connectToServer.cache.get(key)
+            if (
+              cached &&
+              (await cached).type !== 'connected' &&
+              connectToServer.cache.get(key) === cached
+            ) {
+              connectToServer.cache.delete(key)
+            }
+            logMCPDebug(serverName, `OAuth complete; tools available in a new session`)
+            return
+          }
           const result = await reconnectMcpServerImpl(serverName, config)
           const prefix = getMcpPrefix(serverName)
           setAppState(prev => ({
@@ -170,6 +324,7 @@ export function createMcpAuthTool(
             `OAuth flow failed after tool-triggered start: ${errorMessage(err)}`,
           )
         })
+        .finally(signIn.release)
 
       try {
         // Race: get the URL, or the flow completes without needing one
@@ -180,11 +335,16 @@ export function createMcpAuthTool(
         ])
 
         if (authUrl) {
+          signIn.returnedUrl()
           return {
             data: {
               status: 'auth_url' as const,
               authUrl,
-              message: `Ask the user to open this URL in their browser to authorize the ${serverName} MCP server:\n\n${authUrl}\n\nOnce they complete the flow, the server's tools will become available automatically.`,
+              message:
+                `Ask the user to open this URL in their browser to authorize the ${serverName} MCP server:\n\n${authUrl}\n\n` +
+                (realToolsInCurrentContext
+                  ? `Once they complete the flow, the server's tools will become available automatically.`
+                  : `Once they complete the flow, start a new session to use the server's tools.`),
             },
           }
         }
@@ -192,7 +352,9 @@ export function createMcpAuthTool(
         return {
           data: {
             status: 'auth_url' as const,
-            message: `Authentication completed silently for ${serverName}. The server's tools should now be available.`,
+            message: realToolsInCurrentContext
+              ? `Authentication completed silently for ${serverName}. The server's tools should now be available.`
+              : `Authentication completed silently for ${serverName}. Start a new session to use the server's tools.`,
           },
         }
       } catch (err) {
