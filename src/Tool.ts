@@ -200,6 +200,8 @@ export type ToolUseContext = {
      */
     allowBackgroundForkedSlashCommands?: boolean
   }
+  /** Cancels work attached to discarded tool results, independently of sibling failures. */
+  toolResultAbortSignal?: AbortSignal
   abortController: AbortController
   readFileState: FileStateCache
   getAppState(): AppState
