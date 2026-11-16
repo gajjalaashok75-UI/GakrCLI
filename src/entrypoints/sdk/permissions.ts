@@ -19,14 +19,20 @@ import {
   type ToolPermissionContext,
   type Tool,
 } from '../../Tool.js'
+import { createMcpAuthTool } from '../../tools/McpAuthTool/McpAuthTool.js'
 import { MCPTool } from '../../tools/MCPTool/MCPTool.js'
 import type { MCPServerConnection, ScopedMcpServerConfig } from '../../services/mcp/types.js'
-import { connectToServer, fetchToolsForClient } from '../../services/mcp/client.js'
-import type {
-  QueryPermissionMode,
-  CanUseToolCallback,
-  SDKPermissionRequestMessage,
-  SDKPermissionTimeoutMessage,
+import { connectToServer, fetchToolsForClient, getServerCacheKey } from '../../services/mcp/client.js'
+import { GakrCLIAuthProvider } from '../../services/mcp/auth.js'
+import type { ActiveCredentialScope, CredentialScope } from '../../services/mcp/credentialScope.js'
+import { clearKeychainCache } from '../../utils/secureStorage/macOsKeychainHelpers.js'
+import {
+  acquireEnvMutex,
+  releaseEnvMutex,
+  type QueryPermissionMode,
+  type CanUseToolCallback,
+  type SDKPermissionRequestMessage,
+  type SDKPermissionTimeoutMessage,
 } from './shared.js'
 
 // ============================================================================
@@ -206,7 +212,7 @@ export function buildPermissionContext(options: PermissionContextOptions): ToolP
   }
 
   // Map SDK permission mode to internal PermissionMode
-  let internalMode: string = 'default'
+  let internalMode: string
   switch (mode) {
     case 'plan':
       internalMode = 'plan'
@@ -477,6 +483,69 @@ export function createExternalCanUseTool(
 // ============================================================================
 
 /**
+ * The environment of the turn a sign-in starts in, for the part of the
+ * sign-in that runs after the user's browser has come back. By then the turn
+ * may have put the process's own environment back (v2.ts `applySessionEnv`,
+ * query.ts), or another session's turn may have applied its own, and the
+ * credential store is chosen from the environment at each read and write: the
+ * config home (`GAKR_CONFIG_DIR`, or the home directory), and the
+ * native vault entry, whose service name also carries the OAuth namespace
+ * and whose account is `USER`. So the whole of the turn's environment is put
+ * back for the duration — what it had set and what it had removed — under
+ * the env mutex the turns themselves hold. An originating streaming query
+ * can lend its still-active environment; a different owner finishes first.
+ * Every variable this changed is restored afterwards.
+ *
+ * The native stores keep one read cache for the process, not one per
+ * namespace, so it is dropped on the way in and out, as a reconnect drops it
+ * before reading fresh credentials.
+ */
+function captureCredentialScope(runInOriginEnv?: ActiveCredentialScope): CredentialScope {
+  // Captured inside the turn's tool call, where its variables are applied.
+  const turnEnv = new Map(Object.entries(process.env))
+  // Initial discovery/registration writes happen before any continuation.
+  clearKeychainCache()
+  const set = (key: string, value: string | undefined) => {
+    if (value === undefined) {
+      delete process.env[key]
+    } else {
+      process.env[key] = value
+    }
+  }
+  return async work => {
+    // The query keeps this environment until the borrowed work settles.
+    // Do not queue behind the same query's still-open input stream.
+    const owned = runInOriginEnv?.(async () => {
+      clearKeychainCache()
+      try { return await work() }
+      finally { clearKeychainCache() }
+    })
+    if (owned) return owned
+    await acquireEnvMutex()
+    // What each changed variable was, to put back; recorded before it changes.
+    const displaced = new Map<string, string | undefined>()
+    try {
+      for (const key of new Set([...Object.keys(process.env), ...turnEnv.keys()])) {
+        const value = turnEnv.get(key)
+        if (process.env[key] === value) continue
+        displaced.set(key, process.env[key])
+        set(key, value)
+      }
+      // The environment may already be restored while the process-wide
+      // native cache still belongs to the query that just finished.
+      clearKeychainCache()
+      return await work()
+    } finally {
+      // Undone newest first, so a variable reached under two spellings — one
+      // variable on Windows — ends as it began.
+      for (const [key, value] of [...displaced].reverse()) set(key, value)
+      clearKeychainCache()
+      releaseEnvMutex()
+    }
+  }
+}
+
+/**
  * Connects to MCP servers from SDK options.
  * Takes the mcpServers config and connects to each server,
  * returning connected clients and their tools.
@@ -486,6 +555,8 @@ export function createExternalCanUseTool(
  */
 export async function connectSdkMcpServers(
   mcpServers: Record<string, unknown> | undefined,
+  runInOriginEnv?: ActiveCredentialScope,
+  sessionSignal?: AbortSignal,
 ): Promise<{ clients: MCPServerConnection[]; tools: Tool[] }> {
   if (!mcpServers || Object.keys(mcpServers).length === 0) {
     return { clients: [], tools: [] }
@@ -572,6 +643,23 @@ export async function connectSdkMcpServers(
       }
 
       try {
+        // Equivalent configs can have different memo keys while sharing
+        // credentials. Retry disconnected results when this environment has
+        // tokens, without changing the global key or touching connected clients.
+        const serverConfig = scopedConfig as unknown as ScopedMcpServerConfig
+        if (serverConfig.type === 'http' || serverConfig.type === 'sse') {
+          const key = getServerCacheKey(name, serverConfig)
+          const cached = connectToServer.cache.get(key)
+          if (cached && (await cached).type !== 'connected') {
+            clearKeychainCache()
+            if (
+              await new GakrCLIAuthProvider(name, serverConfig).tokens() &&
+              connectToServer.cache.get(key) === cached
+            ) {
+              connectToServer.cache.delete(key)
+            }
+          }
+        }
         // Connect to the server
         // Note: SDK 'session' scope is not part of internal ConfigScope,
         // but connectToServer accepts any object with scope field
@@ -588,6 +676,30 @@ export async function connectSdkMcpServers(
         if (client.type === 'connected') {
           const serverTools = await fetchToolsForClient(client)
           return { client, tools: serverTools }
+        }
+
+        // A server that answered 401 is not broken — it is waiting to be
+        // signed into, and the model is the only one here who can ask. The
+        // CLI path already surfaces the pseudo-tool for exactly this case
+        // (client.ts, getMcpToolsCommandsAndResources); without it an
+        // embedder is told the server needs auth and handed no way to act on
+        // that, since `system:init` reports the status and nothing else can.
+        if (client.type === 'needs-auth') {
+          // The embedder's session connects its MCP servers once and does not
+          // re-read the tool pool after a reconnect (v2.ts, self.mcpConnected),
+          // so tell the model a new session is needed rather than promising
+          // tools this one will not offer. Reconnecting in place is proposal 2
+          // in #2294.
+          return {
+            client,
+            tools: [
+              createMcpAuthTool(name, scopedConfig as unknown as ScopedMcpServerConfig, {
+                realToolsInCurrentContext: false,
+                captureCredentialScope: () => captureCredentialScope(runInOriginEnv),
+                sessionSignal,
+              }),
+            ],
+          }
         }
 
         // Return failed/pending client with no tools
