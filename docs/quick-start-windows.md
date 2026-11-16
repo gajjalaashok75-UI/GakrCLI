@@ -21,6 +21,19 @@ npm --version
 npm install -g @gakr-gakr/gakrcli@latest
 ```
 
+### Git Bash for shell commands
+
+Install [Git for Windows](https://git-scm.com/downloads/win) for Bash commands
+and Bash hooks. GakrCLI checks the default Git installation locations, then
+looks for Git on `PATH`. For a custom installation, set
+`GAKR_CODE_GIT_BASH_PATH` in the same PowerShell session before launching
+GakrCLI. Use the path to `bin\bash.exe`, not the `git-bash.exe` terminal
+launcher. An explicit override takes precedence over automatic discovery.
+
+If GakrCLI reports that the configured path cannot be found, check that it
+points to an existing file. Path validation uses the filesystem directly and
+does not require a working `dir` command or command interpreter.
+
 ## 3. Pick One Provider
 
 ### Option A: OpenAI

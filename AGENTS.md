@@ -101,7 +101,22 @@ Note: a dev-time `onLoad` hook must return `{ contents, loader }`, not `null`.
 
 Project config lives in `~/.gakrcli.json` under `projects[<abs path>]`, not at
 the top level. `setMcpServerEnabled` writes there and survives process restarts.
-`
+
+### Porting from the openclaude reference
+
+`references/openclaude` is a gitignored clone of upstream (Twigpine/openclaude).
+GakrCLI forked from an older revision, so shared files drift for two reasons:
+
+- **Branding** — `GAKR_*`/`gakrcli` vs `CLAUDE_*`/`openclaude`/`claude`. Ignore
+  these when comparing; they are intentional.
+- **Features upstream added after the fork** — the interesting work.
+
+To find real gaps, diff a file against its upstream twin and filter out
+env-var/name renames, e.g. `diff <f> references/openclaude/<f>`. A handful of
+files differ by hundreds of lines for branding alone (`utils/messages.ts`,
+`cli/bgRegistry.ts`, provider/profile UIs) — read those diffs rather than
+counting lines. Note upstream keeps GakrCLI-only behavior out of shared files,
+so "only in GakrCLI" code is expected and must be preserved when porting.
 
 ## GakrCLI-in-Chrome: terminal vs legacy agent server
 
@@ -169,3 +184,71 @@ standalone MCP mode, sub-agent runs) read the MCP config layer without running s
 Note: `normalizeNameForMCP` replaces invalid characters with underscores but does NOT lowercase —
 built-in name matching is case-sensitive.
 
+## Test isolation (bun `mock.module`)
+
+`bun test` shares one process across files, so `mock.module(path, factory)` leaks into every
+test that runs afterwards unless the factory spreads the real module. Two rules:
+
+- Never return a partial stub from `mock.module` for a module other tests import transitively.
+  Capture the real exports at file top with a cache-busting import and spread them:
+  `const realFoo = { ...await import('../foo.js?real=' + nonce) }`, then
+  `mock.module('../foo.js', () => ({ ...realFoo, onlyThingToOverride: ... }))`.
+  Static `import * as realFoo` is NOT enough — it resolves to the same (already mocked) module
+  instance, so `afterEach` restore re-installs the stub.
+- `mock.restore()` alone does not undo a `mock.module` for a file that has since been imported
+  by a later test.
+
+Known pollution sources (fixed): `src/commands/init.test.ts` (stubbed `projectOnboardingState.js`
+without `getSteps`, breaking `AutofixProgress` and others), and
+`src/commands/replay/replay.test.tsx` (leaked a `sessionStorage.js` stub that broke `/sessions`
+in bulk runs). Use `bun test <fileA> <fileB>` to reproduce cross-file pollution; a suite that
+passes alone but fails in `bun test src/commands/` is almost always this.
+
+
+## Upstream reference repo (openclaude)
+
+The upstream project this repo ports from is cloned at `references/openclaude`
+(`https://github.com/Twigpine/openclaude`, branch `main`). It is excluded from
+tests and typecheck via `--path-ignore-patterns="references/**"`.
+
+The two repos share **no git history** (different roots), so do not use
+`git log`/`git diff` across them. Port by comparing files directly after
+normalizing branding:
+
+```sh
+norm() { sed -e 's/GakrCLI/Claude/g; s/gakrcli/claude/g; s/GAKR_/CLAUDE_/g; \
+  s/OpenClaude/Claude/g; s/openclaude/claude/g; s/OPENCLAUDE_/CLAUDE_/g' "$1"; }
+diff <(norm src/path/file.ts) <(norm references/openclaude/src/path/file.ts)
+```
+
+`OPENCLAUDE_*` is the upstream branding for what this repo calls `GAKR_*`
+(e.g. `OPENCLAUDE_CONFIG_DIR` → `GAKR_CONFIG_DIR`); both must be in the
+normalization or the diff will show false positives.
+
+### Porting rule: preserve GakrCLI-only features
+
+This repo has intentional divergences that MUST survive any port. Before
+"fixing" a diff, confirm the differing lines are not one of these:
+
+- Reasoning **effort** support: `effort`/`setEffort`/`EffortValue` on
+  `SDKQueryOptions`/`SDKSessionOptions`, the `effortValue` app-state slice, and
+  the `ultracode` exclusion (it is a meta-mode, not an effort level). Present in
+  `src/entrypoints/sdk/{query,v2}.ts`, `src/utils/effort.ts`, `src/entrypoints/sdk.d.ts`.
+- `runWithSdkContext` / `mapMessageToSDK` SDK-context helpers and the
+  `runOutsideSdkContext(() => init())` wrapper form.
+- `Tool.test.ts` / `src/__tests__/*` extras, `src/modes`, `src/moreright`,
+  `src/assets` directories.
+- Branding everywhere (`CLAUDE_*` → `GAKR_*`, `claude` → `gakrcli`,
+  `getClaudeConfigHomeDir` → `getGakrCLIConfigHomeDir`).
+
+Hard constraint: openclaude does **not** unify `/usage`, `/cost`, `/stats`.
+Keep them separate in this repo too; do not merge their implementations.
+
+### Porting rule: verify with the real test script
+
+`bun test` without `--path-ignore-patterns="references/**"` will also run the
+reference repo's tests (it has no root ignore), producing confusing
+cross-repo failures. Always mirror the `test` script's ignore flags, or pass
+the flags explicitly. Also note `tests/sdk/package-consumer-types.test.ts` and
+`stub-leak-detect.test.ts` require a build artifact and fail on a clean
+checkout — that is pre-existing, not a regression.
