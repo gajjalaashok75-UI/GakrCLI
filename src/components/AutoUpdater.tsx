@@ -92,82 +92,90 @@ export function AutoUpdater({
     ) {
       const startTime = Date.now();
       onChangeIsUpdating(true);
-
-      // Remove native installer symlink since we're using JS-based updates
-      // But only if user hasn't migrated to native installation
-      const config = getGlobalConfig();
-      if (config.installMethod !== 'native') {
-        await removeInstalledSymlink();
-      }
-
-      // Detect actual running installation type
-      const installationType = await getCurrentInstallationType();
-      logForDebugging(`AutoUpdater: Detected installation type: ${installationType}`);
-
-      // Skip update for development builds
-      if (installationType === 'development') {
-        logForDebugging('AutoUpdater: Cannot auto-update development build');
-        onChangeIsUpdating(false);
-        return;
-      }
-
-      // Choose the appropriate update method based on what's actually running
-      let installStatus: InstallStatus;
-      let updateMethod: 'local' | 'global';
-
-      if (installationType === 'npm-local') {
-        // Use local update for local installations
-        logForDebugging('AutoUpdater: Using local update method');
-        updateMethod = 'local';
-        installStatus = await installOrUpdateGakrCLIPackage(channel);
-      } else if (installationType === 'npm-global') {
-        // Use global update for global installations
-        logForDebugging('AutoUpdater: Using global update method');
-        updateMethod = 'global';
-        installStatus = await installGlobalPackage();
-      } else if (installationType === 'native') {
-        // This shouldn't happen - native should use NativeAutoUpdater
-        logForDebugging('AutoUpdater: Unexpected native installation in non-native updater');
-        onChangeIsUpdating(false);
-        return;
-      } else {
-        // Fallback to config-based detection for unknown types
-        logForDebugging(`AutoUpdater: Unknown installation type, falling back to config`);
-        const isMigrated = config.installMethod === 'local';
-        updateMethod = isMigrated ? 'local' : 'global';
-
-        if (isMigrated) {
-          installStatus = await installOrUpdateGakrCLIPackage(channel);
-        } else {
-          installStatus = await installGlobalPackage();
+      try {
+        // Remove native installer symlink since we're using JS-based updates
+        // But only if user hasn't migrated to native installation
+        const config = getGlobalConfig();
+        if (config.installMethod !== 'native') {
+          await removeInstalledSymlink();
         }
-      }
 
-      onChangeIsUpdating(false);
+        // Detect actual running installation type
+        const installationType = await getCurrentInstallationType();
+        logForDebugging(`AutoUpdater: Detected installation type: ${installationType}`);
 
-      if (installStatus === 'success') {
-        logEvent('tengu_auto_updater_success', {
-          fromVersion: currentVersion as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          toVersion: latestVersion as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          durationMs: Date.now() - startTime,
-          wasMigrated: updateMethod === 'local',
-          installationType: installationType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+        // Skip update for development builds
+        if (installationType === 'development') {
+          logForDebugging('AutoUpdater: Cannot auto-update development build');
+          onChangeIsUpdating(false);
+          return;
+        }
+
+        // Choose the appropriate update method based on what's actually running
+        let installStatus: InstallStatus;
+        let updateMethod: 'local' | 'global';
+
+        if (installationType === 'npm-local') {
+          // Use local update for local installations
+          logForDebugging('AutoUpdater: Using local update method');
+          updateMethod = 'local';
+          installStatus = await installOrUpdateGakrCLIPackage(channel);
+        } else if (installationType === 'npm-global') {
+          // Use global update for global installations
+          logForDebugging('AutoUpdater: Using global update method');
+          updateMethod = 'global';
+          installStatus = await installGlobalPackage(latestVersion);
+        } else if (installationType === 'native') {
+          // This shouldn't happen - native should use NativeAutoUpdater
+          logForDebugging('AutoUpdater: Unexpected native installation in non-native updater');
+          onChangeIsUpdating(false);
+          return;
+        } else {
+          // Fallback to config-based detection for unknown types
+          logForDebugging(`AutoUpdater: Unknown installation type, falling back to config`);
+          const isMigrated = config.installMethod === 'local';
+          updateMethod = isMigrated ? 'local' : 'global';
+
+          if (isMigrated) {
+            installStatus = await installOrUpdateGakrCLIPackage(channel);
+          } else {
+            installStatus = await installGlobalPackage(latestVersion);
+          }
+        }
+
+        onChangeIsUpdating(false);
+
+        if (installStatus === 'success') {
+          logEvent('tengu_auto_updater_success', {
+            fromVersion: currentVersion as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+            toVersion: latestVersion as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+            durationMs: Date.now() - startTime,
+            wasMigrated: updateMethod === 'local',
+            installationType: installationType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+          });
+        } else {
+          logEvent('tengu_auto_updater_fail', {
+            fromVersion: currentVersion as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+            attemptedVersion: latestVersion as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+            status: installStatus as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+            durationMs: Date.now() - startTime,
+            wasMigrated: updateMethod === 'local',
+            installationType: installationType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+          });
+        }
+
+        onAutoUpdaterResult({
+          version: latestVersion,
+          status: installStatus,
         });
-      } else {
-        logEvent('tengu_auto_updater_fail', {
-          fromVersion: currentVersion as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          attemptedVersion: latestVersion as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          status: installStatus as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          durationMs: Date.now() - startTime,
-          wasMigrated: updateMethod === 'local',
-          installationType: installationType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+      } catch (error) {
+        logForDebugging(`AutoUpdater: Update failed unexpectedly: ${String(error)}`);
+        onChangeIsUpdating(false);
+        onAutoUpdaterResult({
+          version: latestVersion,
+          status: 'install_failed',
         });
       }
-
-      onAutoUpdaterResult({
-        version: latestVersion,
-        status: installStatus,
-      });
     }
     // isUpdating intentionally omitted from deps; we read isUpdatingRef
     // instead so the guard is always current without changing callback
