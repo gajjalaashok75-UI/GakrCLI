@@ -2,26 +2,46 @@
  * Package consumer validation test.
  *
  * Ensures the packed SDK types compile correctly for a real TypeScript consumer.
- * Reproduces: npm pack → install into temp project → tsc with skipLibCheck:false.
+ * Reproduces: npm pack file list → install into temp project → tsc with skipLibCheck:false.
  *
  * This catches issues like:
  * - Constructor parameter properties in .d.ts (not allowed)
  * - Missing local imports for re-exported types
  * - Self-referential type wrappers
+ * - Declaration files or exports targets missing from the published `files`
  */
 import { afterAll, describe, expect, test } from 'bun:test'
 import { execFileSync, execSync } from 'child_process'
 import { existsSync, mkdirSync, rmSync, writeFileSync, cpSync, readFileSync } from 'fs'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { randomUUID } from 'crypto'
 
 const ROOT = join(import.meta.dir, '..', '..')
-const SDK_DTS = join(ROOT, 'src', 'entrypoints', 'sdk.d.ts')
-const CORE_TYPES_TS = join(ROOT, 'src', 'entrypoints', 'sdk', 'coreTypes.generated.ts')
 const TSC_BIN = join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc')
 
 /** All temp dirs created during tests — cleaned up in afterAll */
 const tempDirs: string[] = []
+
+let packedFiles: string[] | undefined
+
+/** Files npm would publish, resolved from the real package.json `files` rules. */
+function getPackedFiles(): string[] {
+  packedFiles ??= (() => {
+    const parsed = JSON.parse(
+      execSync('npm pack --dry-run --json --ignore-scripts', {
+        cwd: ROOT,
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }),
+    ) as
+      | Array<{ files: Array<{ path: string }> }>
+      // npm >= 11 returns an object keyed by package name
+      | Record<string, { files: Array<{ path: string }> }>
+    const entries = Array.isArray(parsed) ? parsed : Object.values(parsed)
+    return entries.flatMap(entry => entry.files.map(file => file.path))
+  })()
+  return packedFiles
+}
 
 /**
  * Set up a minimal TypeScript consumer project that imports from the SDK.
@@ -53,39 +73,25 @@ function setupConsumerProject(name: string): string {
     ),
   )
 
-  // Simulate node_modules/@gakr-gakr/gakrcli structure
-  const pkgDir = join(tmpDir, 'node_modules', '@gakr-gakr', 'gakrcli')
-  mkdirSync(pkgDir, { recursive: true })
-  mkdirSync(join(pkgDir, 'src', 'entrypoints', 'sdk'), { recursive: true })
-  mkdirSync(join(pkgDir, 'dist'), { recursive: true })
-
-  // Package.json with "exports" mapping (matches real package)
+  // The consumer's own package.json stops TypeScript from self-resolving
+  // @gakr-gakr/gakrcli through the repository root package.json.
   writeFileSync(
-    join(pkgDir, 'package.json'),
-    JSON.stringify(
-      {
-        name: '@gakr-gakr/gakrcli',
-        version: '0.0.0-test',
-        type: 'module',
-        exports: {
-          './package.json': './package.json',
-          './dist/cli.mjs': './dist/cli.mjs',
-          './sdk': {
-            types: './src/entrypoints/sdk.d.ts',
-            import: './dist/sdk.mjs',
-          },
-        },
-      },
-      null,
-      2,
-    ),
+    join(tmpDir, 'package.json'),
+    JSON.stringify({ name: `sdk-consumer-${name}`, private: true, type: 'module' }, null, 2),
   )
 
-  // Copy type files
-  cpSync(SDK_DTS, join(pkgDir, 'src', 'entrypoints', 'sdk.d.ts'))
-  cpSync(CORE_TYPES_TS, join(pkgDir, 'src', 'entrypoints', 'sdk', 'coreTypes.generated.ts'))
+  // Install the packed package contents, including its real package.json, so
+  // `files` and `exports` mistakes fail here as they would for npm consumers.
+  const pkgDir = join(tmpDir, 'node_modules', '@gakr-gakr', 'gakrcli')
+  for (const file of getPackedFiles()) {
+    // Build output is not needed for type resolution and may be absent before a build
+    if (file.startsWith('dist/')) continue
+    mkdirSync(dirname(join(pkgDir, file)), { recursive: true })
+    cpSync(join(ROOT, file), join(pkgDir, file))
+  }
 
   // Dummy dist file so module resolution doesn't fail
+  mkdirSync(join(pkgDir, 'dist'), { recursive: true })
   writeFileSync(join(pkgDir, 'dist', 'sdk.mjs'), 'export {}')
 
   return tmpDir
@@ -101,16 +107,18 @@ function tsc(tmpDir: string): string {
   }).trim()
 }
 
+let artifactsBuilt = false
+
+/** Build current sources once before validating package exports and runtime behavior. */
 function ensureBuildArtifacts(): void {
-  const distCli = join(ROOT, 'dist', 'cli.mjs')
-  const distSdk = join(ROOT, 'dist', 'sdk.mjs')
-  if (existsSync(distCli) && existsSync(distSdk)) return
+  if (artifactsBuilt) return
 
   execSync('bun run build', {
     cwd: ROOT,
     stdio: ['ignore', 'pipe', 'pipe'],
     timeout: 180000,
   })
+  artifactsBuilt = true
 }
 
 afterAll(() => {
@@ -121,9 +129,9 @@ afterAll(() => {
       // Windows EBUSY — ignore, will be cleaned on next run or reboot
     }
   }
-})
+}, 60_000)
 
-// tsc compilation can be slow under CPU contention — 30s timeout per test
+// tsc compilation can be slow under CPU contention — 60s timeout per test
 describe('package consumer types', () => {
   test('SDK types compile for external consumer with skipLibCheck:false', () => {
     const tmpDir = setupConsumerProject('basic')
@@ -157,7 +165,7 @@ describe('package consumer types', () => {
     )
 
     expect(tsc(tmpDir)).toBe('')
-  }, 30_000)
+  }, 60_000)
 
   test('SDKMessage/SDKUserMessage/SDKResultMessage are re-exported correctly', () => {
     const tmpDir = setupConsumerProject('reexports')
@@ -182,7 +190,7 @@ describe('package consumer types', () => {
     )
 
     expect(tsc(tmpDir)).toBe('')
-  }, 30_000)
+  }, 60_000)
 
   test('result usage standard counters are required numbers', () => {
     const tmpDir = setupConsumerProject('usage-counters')
@@ -216,7 +224,7 @@ describe('package consumer types', () => {
     )
 
     expect(tsc(tmpDir)).toBe('')
-  }, 30_000)
+  }, 60_000)
 
   test('SDKRateLimitError has resetsAt and rateLimitType as class properties', () => {
     const tmpDir = setupConsumerProject('ratelimit')
@@ -238,7 +246,7 @@ describe('package consumer types', () => {
     )
 
     expect(tsc(tmpDir)).toBe('')
-  }, 30_000)
+  }, 60_000)
 
   test('control initialize response accepts generated model and account values', () => {
     const tmpDir = setupConsumerProject('control-init')
@@ -271,7 +279,7 @@ describe('package consumer types', () => {
     )
 
     expect(tsc(tmpDir)).toBe('')
-  }, 30_000)
+  }, 60_000)
 })
 
 describe('package exports resolution', () => {
@@ -302,5 +310,26 @@ describe('package exports resolution', () => {
     expect(existsSync(join(ROOT, 'dist', 'cli.mjs'))).toBe(true)
     expect(existsSync(join(ROOT, 'dist', 'sdk.mjs'))).toBe(true)
     expect(existsSync(join(ROOT, 'src', 'entrypoints', 'sdk.d.ts'))).toBe(true)
-  })
+  }, 180_000)
 })
+
+test('built Node SDK preserves absence of inherited environment names', () => {
+  ensureBuildArtifacts()
+  const sdkUrl = new URL('../../dist/sdk.mjs', import.meta.url).href
+  const result = execFileSync('node', ['--input-type=module', '-e', `
+    import { unstable_v2_createSession } from ${JSON.stringify(sdkUrl)};
+    const keys = ['__proto__', 'constructor', 'toString'];
+    for (const key of keys) delete process.env[key];
+    const session = unstable_v2_createSession({
+      cwd: process.cwd(), env: Object.fromEntries(keys.map(key => [key, 'during'])),
+    });
+    const snapshot = await session.applySessionEnv();
+    session.restoreSessionEnv(snapshot);
+    session.close();
+    if (keys.some(key => Object.hasOwn(process.env, key))) {
+      throw new Error('restoration created an originally absent environment entry');
+    }
+    console.log('restored absence');
+  `], { cwd: ROOT, encoding: 'utf8', timeout: 20_000 })
+  expect(result.trim()).toBe('restored absence')
+}, 180_000)
