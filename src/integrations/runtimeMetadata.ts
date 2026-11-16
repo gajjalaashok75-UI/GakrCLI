@@ -49,7 +49,7 @@ function normalizeModelApiName(
   return baseModel ? baseModel.toLowerCase() : null
 }
 
-function getBaseModelApiName(value: string | undefined): string | null {
+export function getBaseModelApiName(value: string | undefined): string | null {
   const trimmed = value?.trim()
   if (!trimmed) {
     return null
@@ -226,6 +226,18 @@ function inferRemoteModelOpenAIShimConfig(
     }
   }
 
+  // Anthropic never accepts the OpenAI-only `store` field, so strip it for
+  // Claude models on any OpenAI-compatible route (LiteLLM and similar proxies
+  // forward it and get a 400) instead of matching proxy hosts one by one
+  // (#2242). Bare family aliases such as `sonnet-4-6` are common proxy names,
+  // and Bedrock cross-region IDs carry a region prefix (`us.anthropic.claude-...`).
+  const hasAnthropicModel = segments.some(s =>
+    /^(?:[a-z]{2,4}\.)?(?:claude|anthropic)|^(?:sonnet|opus|haiku)-\d/.test(s),
+  )
+  if (hasAnthropicModel) {
+    return { removeBodyFields: ['store'] }
+  }
+
   // Only infer the Z.AI GLM shim for routes without a catalog entry
   // (direct/aggregator aliases like `glm-5.2` or `openrouter/zhipu/glm-5.2`).
   // Catalog-backed GLM routes declare their own contract via
@@ -260,6 +272,14 @@ export type ModelRuntimeLimits = {
   contextWindow?: number
   maxOutputTokens?: number
 }
+
+export type ModelContextWindowSource =
+  | 'env-exact'
+  | 'route-catalog'
+  | 'env-prefix'
+  | 'model-limits'
+  | 'discovery'
+  | 'model-descriptor'
 
 export function resolveOpenAIShimRuntimeContext(options?: {
   processEnv?: NodeJS.ProcessEnv
@@ -479,17 +499,36 @@ export function resolveModelRuntimeLimits(options: {
   processEnv?: NodeJS.ProcessEnv
   baseUrl?: string
   activeProfileProvider?: string
+  resolvedRouteId?: string | null
 }): ModelRuntimeLimits {
+  const { contextWindow, maxOutputTokens } =
+    resolveModelRuntimeLimitsWithSource(options)
+  return { contextWindow, maxOutputTokens }
+}
+
+/**
+ * Same resolution as resolveModelRuntimeLimits, also reporting which candidate
+ * supplied the context window (for diagnostics such as /ctx).
+ */
+export function resolveModelRuntimeLimitsWithSource(options: {
+  model: string
+  processEnv?: NodeJS.ProcessEnv
+  baseUrl?: string
+  activeProfileProvider?: string
+  resolvedRouteId?: string | null
+}): ModelRuntimeLimits & { contextWindowSource?: ModelContextWindowSource } {
   const processEnv = options.processEnv ?? process.env
   const runtimeEnv: NodeJS.ProcessEnv = { ...processEnv }
   if (options.baseUrl !== undefined) {
     runtimeEnv.OPENAI_BASE_URL = options.baseUrl
   }
 
-  const routeId = resolveActiveRouteIdFromEnv(runtimeEnv, {
-    activeProfileProvider: options?.activeProfileProvider,
-    activeProfileBaseUrl: options?.baseUrl,
-  })
+  const routeId = options.resolvedRouteId !== undefined
+    ? options.resolvedRouteId
+    : resolveActiveRouteIdFromEnv(runtimeEnv, {
+      activeProfileProvider: options?.activeProfileProvider,
+      activeProfileBaseUrl: options?.baseUrl,
+    })
   const modelApiName = getBaseModelApiName(options.model) ?? options.model
   const catalogEntry = findCatalogEntryForApiName(routeId, modelApiName)
   const cachedCatalogEntry = findCachedCatalogEntryForApiName(
@@ -516,28 +555,47 @@ export function resolveModelRuntimeLimits(options: {
     runtimeEnv,
   )
 
-  // Precedence: an exact env override wins outright; then the built-in
-  // catalog / discovery-cache value (a `:cloud` variant must take its known
-  // catalog limit rather than inherit a broad base-model env *prefix*); then a
-  // broad env *prefix* override; then the settings.json `modelLimits` override;
-  // then the descriptor default. The key fix for the env/settings drift is
-  // keeping `settings` strictly below `prefix` so a broad env-prefix override is
+  // Precedence (high → low):
+  // 1. exact env override
+  // 2. built-in route catalog (so `:cloud` variants keep their catalog cap over
+  //    a broad base-model env *prefix*)
+  // 3. env *prefix* override
+  // 4. settings.json `modelLimits` (explicit user pin)
+  // 5. discovery cache
+  // 6. model descriptor default
+  // Discovery stays authoritative over the descriptor: a gateway's advertised
+  // `context_length` is the endpoint's real cap (it may legitimately be a
+  // smaller deployment/tenant limit for a globally larger model), and the
+  // OpenAI-compatible response carries no signal that would let us tell a
+  // synthetic gateway default apart from a real cap. Users whose gateway
+  // advertises a wrong window pin it via an exact env override, `modelLimits`
+  // for an uncatalogued model, or `/set-context-window`; each applicable
+  // override sits above discovery here.
+  // Keep `settings` strictly below `prefix` so a broad env-prefix override is
   // never silently overtaken by a settings entry — matching the scalar
   // getOpenAIContextWindow, where env (exact or prefix) beats settings.
+  const contextWindowCandidates: Array<
+    [ModelContextWindowSource, number | null | undefined]
+  > = [
+    ['env-exact', externalContextWindow.exact],
+    ['route-catalog', catalogEntry?.contextWindow],
+    ['env-prefix', externalContextWindow.prefix],
+    ['model-limits', externalContextWindow.settings],
+    ['discovery', cachedCatalogEntry?.contextWindow],
+    ['model-descriptor', modelDescriptor?.contextWindow],
+  ]
+  const contextWindowMatch = contextWindowCandidates.find(
+    ([, value]) => value !== undefined && value !== null,
+  )
   return {
-    contextWindow:
-      externalContextWindow.exact ??
-      catalogEntry?.contextWindow ??
-      cachedCatalogEntry?.contextWindow ??
-      externalContextWindow.prefix ??
-      externalContextWindow.settings ??
-      modelDescriptor?.contextWindow,
+    contextWindow: contextWindowMatch?.[1] ?? undefined,
+    contextWindowSource: contextWindowMatch?.[0],
     maxOutputTokens:
       externalMaxOutputTokens.exact ??
       catalogEntry?.maxOutputTokens ??
-      cachedCatalogEntry?.maxOutputTokens ??
       externalMaxOutputTokens.prefix ??
       externalMaxOutputTokens.settings ??
+      cachedCatalogEntry?.maxOutputTokens ??
       modelDescriptor?.maxOutputTokens,
   }
 }

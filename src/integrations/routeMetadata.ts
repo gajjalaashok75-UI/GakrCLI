@@ -248,6 +248,23 @@ function hasNonEmptyEnvValue(value: string | undefined): boolean {
   return Boolean(trimmed && trimmed !== 'undefined' && trimmed !== 'null')
 }
 
+export function getMiniMaxBaseUrlValidationError(
+  baseUrl: string | undefined,
+): string | null {
+  if (!baseUrl) return null
+  try {
+    const url = new URL(baseUrl)
+    // A terminal DNS root dot names the same host. Normalize only for the
+    // transport check; keep provider selection and the configured URL intact.
+    url.hostname = url.hostname.replace(/\.$/, '')
+    return isMiniMaxBaseUrl(url.href) && url.protocol !== 'https:'
+      ? 'MiniMax base URL must use HTTPS'
+      : null
+  } catch {
+    return null
+  }
+}
+
 export function isMiniMaxBaseUrl(value: string | undefined): boolean {
   const trimmed = value?.trim()
   if (!trimmed) {
