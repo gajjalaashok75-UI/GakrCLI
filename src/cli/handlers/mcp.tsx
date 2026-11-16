@@ -190,7 +190,7 @@ export async function mcpRemoveHandler(name: string, options: { scope?: string }
       await removeMcpConfig(name, scope);
       cleanupSecureStorage();
       process.stdout.write(`Removed MCP server ${name} from ${scope} config\n`);
-      cliOk(`File modified: ${describeMcpConfigFilePath(scope)}`);
+      return cliOk(`File modified: ${describeMcpConfigFilePath(scope)}`);
     }
 
     // If no scope specified, check where the server exists

@@ -15,6 +15,7 @@ import {
   getBackgroundSessionLogPaths,
   listBackgroundSessions,
   markBackgroundSessionKilled,
+  refreshBackgroundSessionStatus,
   refreshBackgroundSessionStatuses,
   resolveBackgroundSession,
   getBackgroundSessionProcessLiveness,
@@ -115,11 +116,25 @@ type FollowLogOptions = StreamLogOptions & {
   pollIntervalMs?: number
   setInterval?: (callback: () => void, ms: number) => LogFollowTimer
   clearInterval?: (timer: LogFollowTimer) => void
+  /**
+   * Cancellation-aware stop probe, called after each log snapshot. The file
+   * streamer stays registry-free: callers inject the session-state check. A
+   * `true` result latches terminal state and runs one final drain; `false` or a
+   * thrown error means keep following. The probe receives the follower's abort
+   * signal and must settle promptly when it fires.
+   */
+  shouldStop?: (signal: AbortSignal) => Promise<boolean>
 }
 
 type StreamLogResult = {
   position: number
   outputOpen: boolean
+  /**
+   * False when the snapshot hit a retryable file error that was swallowed in
+   * follow mode, or when the read was cut short by abort or output closure. A
+   * final drain only counts as clean completion when this is true.
+   */
+  complete: boolean
 }
 
 // This must stay in sync with value-consuming CLI flags in main.tsx and related
@@ -593,6 +608,30 @@ async function writeLogBuffer(
   return await waitForDrain(output, signal)
 }
 
+/**
+ * Awaits `promise` but resolves null when `signal` fires first: a stalled
+ * filesystem operation cannot wedge a log dump that is already shutting down.
+ */
+async function settleOnAbort<T>(
+  promise: Promise<T>,
+  signal: AbortSignal | undefined,
+): Promise<T | null> {
+  if (!signal) return await promise
+  if (signal.aborted) return null
+  let onAbort: (() => void) | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<null>(resolve => {
+        onAbort = () => resolve(null)
+        signal.addEventListener('abort', onAbort, { once: true })
+      }),
+    ])
+  } finally {
+    if (onAbort) signal.removeEventListener('abort', onAbort)
+  }
+}
+
 async function streamLogRange(
   handle: LogFileHandle,
   start: number,
@@ -605,7 +644,9 @@ async function streamLogRange(
   let position = start
 
   while (position < endExclusive) {
-    if (options.signal?.aborted) return { position, outputOpen: false }
+    if (options.signal?.aborted) {
+      return { position, outputOpen: false, complete: false }
+    }
     const bytesToRead = Math.min(chunkSize, endExclusive - position)
     const buffer = createBuffer(bytesToRead)
     if (buffer.length < bytesToRead) {
@@ -614,24 +655,34 @@ async function streamLogRange(
 
     let bytesRead: number
     try {
-      const readResult = await handle.read(buffer, 0, bytesToRead, position)
+      const readResult = await settleOnAbort(
+        handle.read(buffer, 0, bytesToRead, position),
+        options.signal,
+      )
+      if (!readResult) {
+        // Aborted while reading: report incomplete. FileHandle.close() waits
+        // for the pending read, so the caller must not await it on abort.
+        return { position, outputOpen: false, complete: false }
+      }
       bytesRead = readResult.bytesRead
     } catch (error) {
       if (!options.continueOnFileError) throw error
-      return { position, outputOpen: true }
+      return { position, outputOpen: true, complete: false }
     }
     if (bytesRead <= 0) break
-    if (options.signal?.aborted) return { position, outputOpen: false }
+    if (options.signal?.aborted) {
+      return { position, outputOpen: false, complete: false }
+    }
 
     const chunk =
       bytesRead === buffer.length ? buffer : buffer.subarray(0, bytesRead)
     if (!(await writeLogBuffer(output, chunk, options.signal))) {
-      return { position, outputOpen: false }
+      return { position, outputOpen: false, complete: false }
     }
     position += bytesRead
   }
 
-  return { position, outputOpen: true }
+  return { position, outputOpen: true, complete: position >= endExclusive }
 }
 
 async function streamLogSnapshot(
@@ -641,28 +692,56 @@ async function streamLogSnapshot(
 ): Promise<StreamLogResult> {
   let handle: LogFileHandle
   try {
-    handle = await (options.openFile ?? open)(path, 'r')
+    const openPromise = (options.openFile ?? open)(path, 'r')
+    const opened = await settleOnAbort(openPromise, options.signal)
+    if (!opened) {
+      // Aborted while opening: the open may still complete later, so close the
+      // handle then instead of leaking the descriptor.
+      void openPromise.then(
+        lateHandle => lateHandle.close().catch(() => {}),
+        () => {},
+      )
+      return { position: offset, outputOpen: false, complete: false }
+    }
+    handle = opened
   } catch (error) {
     if (!options.continueOnFileError) throw error
     // Keep following; the child may create or rotate the file later.
-    return { position: offset, outputOpen: true }
+    return { position: offset, outputOpen: true, complete: false }
   }
 
-  let result: StreamLogResult = { position: offset, outputOpen: true }
+  let result: StreamLogResult = {
+    position: offset,
+    outputOpen: true,
+    complete: false,
+  }
   try {
-    const { size } = await handle.stat()
+    const stat = await settleOnAbort(handle.stat(), options.signal)
+    if (!stat) {
+      // Aborted while stating: the finally below closes the handle.
+      return { position: offset, outputOpen: false, complete: false }
+    }
+    const { size } = stat
     const start = size < offset ? 0 : offset
     result =
       size <= start
-        ? { position: start, outputOpen: true }
+        ? { position: start, outputOpen: true, complete: true }
         : await streamLogRange(handle, start, size, options)
     return result
   } catch (error) {
     if (!options.continueOnFileError) throw error
+    result = { ...result, complete: false }
     return result
   } finally {
-    if (options.continueOnFileError) {
-      await handle.close().catch(() => undefined)
+    if (options.signal?.aborted) {
+      // Aborted while a read is pending: FileHandle.close() waits for the
+      // pending read, so awaiting it would leave the dump pending after
+      // cancellation. Let the close finish in the background.
+      void handle.close().catch(() => {})
+    } else if (options.continueOnFileError) {
+      await handle.close().catch(() => {
+        result = { ...result, complete: false }
+      })
     } else {
       await handle.close()
     }
@@ -687,6 +766,7 @@ export async function followLogFile(
   let position = offset
   let reading = false
   let stopped = false
+  let terminalLatched = false
   let timer: LogFollowTimer | undefined
   let activePoll: Promise<void> | undefined
 
@@ -719,7 +799,46 @@ export async function followLogFile(
             continueOnFileError: true,
           })
           position = result.position
-          if (!result.outputOpen) cleanup()
+          if (!result.outputOpen) {
+            cleanup()
+            return
+          }
+          if (stopped) return
+          if (isOutputClosed(output)) {
+            cleanup()
+            return
+          }
+          if (!options.shouldStop) return
+
+          if (!terminalLatched) {
+            try {
+              terminalLatched = await options.shouldStop(
+                cleanupController.signal,
+              )
+            } catch {
+              // A failed probe is unknown state, never terminal success.
+              if (stopped) return
+              terminalLatched = false
+            }
+          }
+          if (stopped || !terminalLatched) return
+
+          // Terminal state latched: drain once more from the current offset. A
+          // retryable drain error keeps following so the next tick retries the
+          // drain from the same offset instead of declaring completion on an
+          // unread log.
+          const drain = await streamLogSnapshot(path, position, {
+            ...options,
+            output,
+            signal: cleanupController.signal,
+            continueOnFileError: true,
+          })
+          position = drain.position
+          if (!drain.outputOpen) {
+            cleanup()
+            return
+          }
+          if (drain.complete) cleanup()
         } finally {
           reading = false
         }
@@ -732,7 +851,8 @@ export async function followLogFile(
 
     process.once('SIGINT', cleanup)
     process.once('SIGTERM', cleanup)
-    if (options.signal?.aborted) {
+    output.once('close', cleanup)
+    if (options.signal?.aborted || isOutputClosed(output)) {
       cleanup()
       return
     }
@@ -1001,6 +1121,7 @@ export async function psHandler(_args: string[]): Promise<void> {
 
 export async function logsHandler(
   args: string[] | string | undefined,
+  options?: { signal?: AbortSignal },
 ): Promise<void> {
   const parsed = parseLogsInvocation(normalizeArgs(args))
   if (!parsed.target) fail('Usage: gakrcli logs <id-or-name> [-f]')
@@ -1018,13 +1139,32 @@ export async function logsHandler(
   try {
     offset = await printExistingLog(logPath, {
       continueOnFileError: parsed.follow,
+      // In follow mode, aborting must also release a drain wait stuck in the
+      // initial dump; otherwise the handler could print more bytes after
+      // cancellation once stdout drains.
+      signal: parsed.follow ? options?.signal : undefined,
     })
   } catch (error) {
     fail(`Failed to read log file: ${errorMessage(error)}`)
   }
   if (parsed.follow) {
-    await followLogFile(logPath, offset)
+    // The session id and log path are pinned here: the stop probe refreshes
+    // only this exact session, even if the name is later reused.
+    await followLogFile(logPath, offset, {
+      signal: options?.signal,
+      shouldStop: async signal => {
+        const refreshed = await refreshBackgroundSessionStatus(
+          session.id,
+          { signal },
+        )
+        return refreshed !== null && isTerminalBackgroundSession(refreshed)
+      },
+    })
   }
+}
+
+export async function listLiveSessions(): Promise<BackgroundSession[]> {
+  return refreshBackgroundSessionStatuses()
 }
 
 export async function attachHandler(
@@ -1180,8 +1320,4 @@ export async function handleBgFlag(args: string[]): Promise<void> {
       ], processMarker),
     )}`,
   )
-}
-
-export async function listLiveSessions(): Promise<BackgroundSession[]> {
-  return refreshBackgroundSessionStatuses()
 }

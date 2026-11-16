@@ -1171,6 +1171,86 @@ export async function backgroundSessionLogExists(path: string): Promise<boolean>
   }
 }
 
+/**
+ * Awaits `promise` but resolves null when `signal` fires first. Callers use it
+ * so a stalled filesystem read cannot wedge a caller that is shutting down; the
+ * raced promise keeps its handlers attached, so a late rejection is observed.
+ */
+async function settleOnAbort<T>(
+  promise: Promise<T>,
+  signal: AbortSignal | undefined,
+): Promise<T | null> {
+  if (!signal) return await promise
+  if (signal.aborted) return null
+  let onAbort: (() => void) | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<null>(resolve => {
+        onAbort = () => resolve(null)
+        signal.addEventListener('abort', onAbort, { once: true })
+      }),
+    ])
+  } finally {
+    if (onAbort) signal.removeEventListener('abort', onAbort)
+  }
+}
+
+export type RefreshBackgroundSessionStatusOptions =
+  BackgroundSessionProcessIdentityOptions & {
+    now?: Date
+    signal?: AbortSignal
+  }
+
+/**
+ * Refreshes one background session's status against its live process and any
+ * terminal fact, returning the effective session or null when the read was
+ * aborted or the metadata is missing. This is the single-session counterpart of
+ * {@link refreshBackgroundSessionStatuses}, so a log follower can re-check only
+ * the session it pinned instead of the whole registry.
+ */
+export async function refreshBackgroundSessionStatus(
+  id: string,
+  options: RefreshBackgroundSessionStatusOptions = {},
+): Promise<BackgroundSession | null> {
+  assertSafeId(id)
+  const session = await settleOnAbort(
+    readSessionFile(metadataPathForId(id)),
+    options.signal,
+  )
+  if (!session) return null
+
+  const effective = await settleOnAbort(
+    applyAuthoritativeTerminalFacts(session),
+    options.signal,
+  )
+  if (!effective) return null
+  if (effective.status !== 'running' && effective.status !== 'unknown') {
+    return effective
+  }
+
+  const identity = await settleOnAbort(
+    Promise.resolve(verifyBackgroundSessionProcessIdentity(effective, options)),
+    options.signal,
+  )
+  if (!identity) return null
+  const nextStatus: BackgroundSessionStatus =
+    identity.state === 'matches'
+      ? 'running'
+      : identity.state === 'unreadable'
+        ? 'unknown'
+        : 'stale'
+
+  if (effective.status === nextStatus) return effective
+  const updated: BackgroundSession = {
+    ...effective,
+    status: nextStatus,
+    updatedAt: iso(options.now),
+  }
+  await settleOnAbort(writeSession(updated), options.signal)
+  return updated
+}
+
 export function isTerminalBackgroundSession(
   session: BackgroundSession,
 ): boolean {
