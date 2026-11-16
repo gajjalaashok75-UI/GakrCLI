@@ -7,11 +7,11 @@ import type { AppState } from '../../state/AppStateStore.js'
 import type { ToolUseContext } from '../../Tool.js'
 import type { Tools } from '../../Tool.js'
 import type { AgentDefinitionsResult } from '../../tools/AgentTool/loadAgentsDir.js'
-import type { Message } from '../../types/message.js'
+import type { CompactMetadata, Message } from '../../types/message.js'
 import { analyzeContextUsage, type ContextData } from '../../utils/analyzeContext.js'
 import { getContextWindowForModel, getModelMaxOutputTokens } from '../../utils/context.js'
 import { formatNumber, formatDuration } from '../../utils/format.js'
-import { getMessagesAfterCompactBoundary } from '../../utils/messages.js'
+import { getMessagesAfterCompactBoundary, isCompactBoundaryMessage } from '../../utils/messages.js'
 import { getCanonicalName } from '../../utils/model/model.js'
 import {
   getSdkBetas,
@@ -58,6 +58,7 @@ export async function collectCtxData(context: CtxDataInput): Promise<{
   maxOutput: { default: number; upperLimit: number }
   canonicalName: string
   autoCompactEnabled: boolean
+  lastCompaction: Pick<CompactMetadata, 'trigger' | 'autoCompactReason'> | null
   sessionInput: number
   sessionOutput: number
   sessionCacheRead: number
@@ -92,6 +93,23 @@ export async function collectCtxData(context: CtxDataInput): Promise<{
   )
 
   const model = mainLoopModel
+  let lastBoundary: Extract<Message, { subtype: 'compact_boundary' }> | undefined
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i]!
+    if (!isCompactBoundaryMessage(message)) continue
+    lastBoundary = message
+    // Partial "from" compaction puts its kept prefix after the new boundary,
+    // including older boundaries. Resume restores that same segment order.
+    // Skip the preserved prefix when identifying operations, without changing
+    // the model-facing history. Fullscreen may also have these UUIDs earlier.
+    const segment = message.compactMetadata.preservedSegment
+    if (segment?.anchorUuid === message.uuid) {
+      const tailIndex = messages.findIndex(
+        (candidate, index) => index > i && candidate.uuid === segment.tailUuid,
+      )
+      if (tailIndex > i) i = tailIndex
+    }
+  }
 
   return {
     contextData,
@@ -101,6 +119,12 @@ export async function collectCtxData(context: CtxDataInput): Promise<{
     maxOutput: getModelMaxOutputTokens(model),
     canonicalName: getCanonicalName(model),
     autoCompactEnabled: isAutoCompactEnabled(),
+    lastCompaction: lastBoundary
+      ? {
+          trigger: lastBoundary.compactMetadata.trigger,
+          autoCompactReason: lastBoundary.compactMetadata.autoCompactReason,
+        }
+      : null,
     sessionInput: getTotalInputTokens(),
     sessionOutput: getTotalOutputTokens(),
     sessionCacheRead: getTotalCacheReadInputTokens(),
@@ -116,6 +140,21 @@ export async function collectCtxData(context: CtxDataInput): Promise<{
 
 /** Shape returned by collectCtxData, accepted by renderCtxReport. */
 export type RenderInput = Awaited<ReturnType<typeof collectCtxData>>
+
+const AUTO_COMPACT_REASON_LABELS: Record<NonNullable<CompactMetadata['autoCompactReason']>, string> = {
+  'token-threshold': 'token threshold',
+  'message-count': 'message count',
+  'memory-pressure': 'memory pressure',
+  'context-overflow': 'context-overflow recovery',
+}
+
+function formatLastCompaction(last: RenderInput['lastCompaction']): string {
+  if (!last) return 'none'
+  if (last.trigger === 'manual') return 'manual'
+  // Boundaries from older sessions carry no reason; do not guess one.
+  const reason = last.autoCompactReason ? AUTO_COMPACT_REASON_LABELS[last.autoCompactReason] : undefined
+  return `automatic (${reason ?? 'reason not recorded'})`
+}
 
 function themeColorToChalk(themeColor: string): (text: string) => string {
   if (themeColor === 'error') return chalk.red
@@ -164,6 +203,7 @@ export function renderCtxReport(d: RenderInput): string {
   if (d.autoCompactEnabled) {
     lines.push(`    ${figures.bullet} Auto-compact at:    ${chalk.bold(formatNumber(d.autoCompactThreshold))} tokens`)
   }
+  lines.push(`    ${figures.bullet} Last compaction:    ${formatLastCompaction(d.lastCompaction)}`)
   lines.push('')
 
   lines.push(chalk.bold('  Current Context (what the model sees)'))

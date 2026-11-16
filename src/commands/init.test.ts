@@ -31,7 +31,9 @@ afterEach(() => {
 test('NEW_INIT prompt preserves existing root GAKRCLI.md by default', async () => {
   process.env.GAKR_CODE_NEW_INIT = '1'
 
+  const realOnboarding = await import('../projectOnboardingState.js')
   mock.module('../projectOnboardingState.js', () => ({
+    ...realOnboarding,
     maybeMarkProjectOnboardingComplete: () => {},
   }))
   mock.module('./initMode.js', () => ({

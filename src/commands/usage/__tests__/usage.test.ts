@@ -1,10 +1,13 @@
 /**
- * Regression tests for /usage command — v2.1.118 upstream alignment.
+ * Regression tests for /usage, /cost, and /stats command metadata.
+ *
+ * These are three separate commands in upstream (openclaude) and stay that way
+ * in GakrCLI — /cost and /stats are NOT folded into /usage as aliases.
  * Verifies:
- *   - /usage is primary command with aliases ["cost", "stats"]
- *   - description covers cost + stats
- *   - availability restriction removed (not gakrcli-ai only)
- *   - cost/stats index files emit commands with matching name
+ *   - /usage has no aliases and describes usage + plan limits
+ *   - /cost is its own command with the session cost description
+ *   - /stats is its own command with the usage statistics description
+ *   - none of the three is restricted exclusively to gakrcli-ai subscribers
  */
 
 import { mock, describe, test, expect } from 'bun:test'
@@ -45,6 +48,21 @@ async function loadUsageCommand(): Promise<Command> {
   return mod.default
 }
 
+async function loadCostCommand(): Promise<Command> {
+  const mod = await import('../../cost/index.js')
+  return mod.default
+}
+
+async function loadStatsCommand(): Promise<Command> {
+  const mod = await import('../../stats/index.js')
+  return mod.default
+}
+
+function isExclusivelyGakrCLIAi(cmd: Command): boolean {
+  const avail = (cmd as { availability?: string[] }).availability
+  return Array.isArray(avail) && avail.length === 1 && avail[0] === 'gakrcli-ai'
+}
+
 // ── tests ─────────────────────────────────────────────────────────────────────
 
 describe('usage command — metadata', () => {
@@ -53,42 +71,9 @@ describe('usage command — metadata', () => {
     expect(cmd.name).toBe('usage')
   })
 
-  test('has aliases containing "cost"', async () => {
+  test('has no aliases (cost/stats stay separate commands)', async () => {
     const cmd = await loadUsageCommand()
-    expect(cmd.aliases?.includes('cost')).toBe(true)
-  })
-
-  test('has aliases containing "stats"', async () => {
-    const cmd = await loadUsageCommand()
-    expect(cmd.aliases?.includes('stats')).toBe(true)
-  })
-
-  test('has exactly two aliases', async () => {
-    const cmd = await loadUsageCommand()
-    expect(cmd.aliases?.length).toBe(2)
-  })
-
-  test('aliases are ["cost", "stats"] in that order', async () => {
-    const cmd = await loadUsageCommand()
-    expect(cmd.aliases).toEqual(['cost', 'stats'])
-  })
-
-  test('description mentions cost', async () => {
-    const cmd = await loadUsageCommand()
-    expect(cmd.description.toLowerCase()).toContain('cost')
-  })
-
-  test('description mentions stat', async () => {
-    const cmd = await loadUsageCommand()
-    expect(cmd.description.toLowerCase()).toContain('stat')
-  })
-
-  test('is NOT restricted exclusively to gakrcli-ai subscribers', async () => {
-    const cmd = await loadUsageCommand()
-    const avail = (cmd as { availability?: string[] }).availability
-    const isExclusivelyGakrCLIAi =
-      Array.isArray(avail) && avail.length === 1 && avail[0] === 'gakrcli-ai'
-    expect(isExclusivelyGakrCLIAi).toBe(false)
+    expect(cmd.aliases ?? []).toEqual([])
   })
 
   test('description mentions usage or plan', async () => {
@@ -96,26 +81,53 @@ describe('usage command — metadata', () => {
     const desc = cmd.description.toLowerCase()
     expect(desc.includes('usage') || desc.includes('plan')).toBe(true)
   })
-})
 
-describe('usage command — cost index is no longer standalone', () => {
-  test('cost/index default name is "usage" (delegated) OR it has aliases', async () => {
-    const mod = await import('../../cost/index.js')
-    const cmd = mod.default as Command
-    // After the fix: cost/index either exports name='usage' with aliases,
-    // or the cost command has aliases set (it's been demoted to alias)
-    const isUnifiedOrAliased =
-      cmd.name === 'usage' || (cmd.aliases?.includes('cost') ?? false)
-    expect(isUnifiedOrAliased).toBe(true)
+  test('is NOT restricted exclusively to gakrcli-ai subscribers', async () => {
+    const cmd = await loadUsageCommand()
+    expect(isExclusivelyGakrCLIAi(cmd)).toBe(false)
   })
 })
 
-describe('usage command — stats index is no longer standalone', () => {
-  test('stats/index default name is "usage" (delegated) OR it has aliases', async () => {
-    const mod = await import('../../stats/index.js')
-    const cmd = mod.default as Command
-    const isUnifiedOrAliased =
-      cmd.name === 'usage' || (cmd.aliases?.includes('stats') ?? false)
-    expect(isUnifiedOrAliased).toBe(true)
+describe('cost command — standalone', () => {
+  test('name is "cost"', async () => {
+    const cmd = await loadCostCommand()
+    expect(cmd.name).toBe('cost')
+  })
+
+  test('has no aliases', async () => {
+    const cmd = await loadCostCommand()
+    expect(cmd.aliases ?? []).toEqual([])
+  })
+
+  test('description mentions cost', async () => {
+    const cmd = await loadCostCommand()
+    expect(cmd.description.toLowerCase()).toContain('cost')
+  })
+
+  test('is NOT restricted exclusively to gakrcli-ai subscribers', async () => {
+    const cmd = await loadCostCommand()
+    expect(isExclusivelyGakrCLIAi(cmd)).toBe(false)
+  })
+})
+
+describe('stats command — standalone', () => {
+  test('name is "stats"', async () => {
+    const cmd = await loadStatsCommand()
+    expect(cmd.name).toBe('stats')
+  })
+
+  test('has no aliases', async () => {
+    const cmd = await loadStatsCommand()
+    expect(cmd.aliases ?? []).toEqual([])
+  })
+
+  test('description mentions stat', async () => {
+    const cmd = await loadStatsCommand()
+    expect(cmd.description.toLowerCase()).toContain('stat')
+  })
+
+  test('is NOT restricted exclusively to gakrcli-ai subscribers', async () => {
+    const cmd = await loadStatsCommand()
+    expect(isExclusivelyGakrCLIAi(cmd)).toBe(false)
   })
 })

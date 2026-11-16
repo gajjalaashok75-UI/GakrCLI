@@ -57,6 +57,7 @@ import {
 import resume, { continueCommand } from './commands/resume/index.js'
 import review, { ultrareview } from './commands/review.js'
 import session from './commands/session/index.js'
+import sessions from './commands/sessions/index.js'
 import share from './commands/share/index.js'
 import skills from './commands/skills/index.js'
 import smartroute from './commands/smartroute/index.js'
@@ -409,6 +410,7 @@ const COMMANDS = memoize((): Command[] => [
   requestSizeNonInteractive,
   resume,
   session,
+  sessions,
   setContextWindow,
   skills,
   smartroute,

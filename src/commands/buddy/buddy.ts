@@ -1,22 +1,82 @@
+import { stripVTControlCharacters } from 'node:util'
 import React from 'react'
 import {
+  generateSeed,
   getCompanion,
   rollWithSeed,
-  generateSeed,
 } from '../../buddy/companion.js'
-import { type StoredCompanion, RARITY_STARS } from '../../buddy/types.js'
-import { renderSprite } from '../../buddy/sprites.js'
 import { CompanionCard } from '../../buddy/CompanionCard.js'
-import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js'
-import { COMMON_HELP_ARGS, COMMON_INFO_ARGS } from '../../constants/xml.js'
 import { triggerCompanionReaction } from '../../buddy/companionReact.js'
+import { renderSprite } from '../../buddy/sprites.js'
+import {
+  corsair,
+  ember,
+  type Form,
+  FORM_NAMES,
+  FORMS,
+  kage,
+  kaio,
+  merlin,
+  parseForm,
+  RARITY_STARS,
+  robinhood,
+  strawhat,
+  type StoredCompanion,
+  twig,
+} from '../../buddy/types.js'
+import { COMMON_HELP_ARGS, COMMON_INFO_ARGS } from '../../constants/xml.js'
+import { stringWidth } from '../../ink/stringWidth.js'
 import type { ToolUseContext } from '../../Tool.js'
 import type {
   LocalJSXCommandContext,
   LocalJSXCommandOnDone,
 } from '../../types/command.js'
+import {
+  type GlobalConfig,
+  getGlobalConfig,
+  saveGlobalConfig,
+} from '../../utils/config.js'
 
-// Species → default name fragments for hatch (no API needed)
+// Flavor for /buddy set confirmations. A full Record so adding a hero
+// without flavor text is a compile error.
+const FORM_FLAVOR: Record<Form, { don: string; hint: string }> = {
+  [robinhood]: {
+    don: 'dons the green hood',
+    hint: 'Submit any message to see the arrow fly.',
+  },
+  [kaio]: {
+    don: 'seals the helmet and powers up the visor',
+    hint: 'Submit any message to fire the energy wave.',
+  },
+  [strawhat]: {
+    don: 'wiggles all five tentacles',
+    hint: 'Submit any message to throw the long-reach punch.',
+  },
+  [merlin]: {
+    don: 'raises the star-tipped staff',
+    hint: 'Submit any message to cast the sparkle stream.',
+  },
+  [kage]: {
+    don: 'melts into the shadows',
+    hint: 'Submit any message to throw the shuriken.',
+  },
+  [ember]: {
+    don: 'puffs a proud little smoke ring',
+    hint: 'Submit any message to breathe fire.',
+  },
+  [corsair]: {
+    don: 'tips the tricorn',
+    hint: 'Submit any message to fire the cannon.',
+  },
+  [twig]: {
+    don: 'curls up its tail and grins',
+    hint: 'Submit any message to lob an acorn.',
+  },
+}
+
+const FORM_LIST = FORMS.map(form => FORM_NAMES[form].toLowerCase()).join(', ')
+
+// Species → default name fragments for hatch (no API needed).
 const SPECIES_NAMES: Record<string, string> = {
   duck: 'Waddles',
   goose: 'Goosberry',
@@ -64,34 +124,104 @@ const SPECIES_PERSONALITY: Record<string, string> = {
     'Big, warm, and takes up the whole couch. Prioritizes comfort over elegance.',
 }
 
-function speciesLabel(species: string): string {
-  return species.charAt(0).toUpperCase() + species.slice(1)
+function titleCase(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
+function formName(form: Form): string {
+  return FORM_NAMES[form]
+}
+
+function setCompanionReaction(
+  context: LocalJSXCommandContext,
+  reaction: string | undefined,
+  pet = false,
+): void {
+  context.setAppState(prev => ({
+    ...prev,
+    companionReaction: reaction,
+    companionPetAt: pet ? Date.now() : prev.companionPetAt,
+  }))
+}
+
+// The sprite reads the companion config non-reactively, and its clock is
+// paused under reduced motion. Every config change therefore also bumps an
+// AppState version the sprite subscribes to, so it redraws (or hides) at once.
+function saveCompanionConfig(
+  context: LocalJSXCommandContext,
+  update: (current: GlobalConfig) => GlobalConfig,
+): void {
+  saveGlobalConfig(update)
+  context.setAppState(prev => ({
+    ...prev,
+    companionConfigVersion: (prev.companionConfigVersion ?? 0) + 1,
+  }))
+}
+
+function showHelp(onDone: LocalJSXCommandOnDone): void {
+  onDone(
+    `Usage: /buddy [status|off|on|mute|unmute|pet|dance|set <form|random>|name <new name>|help]\n\nForms: ${FORM_LIST}\n\nRun /buddy with no args to hatch your companion the first time, then pet it on later runs. /buddy set picks a hero form with its own Enter animation; /buddy set random restores the rolled one; /buddy dance starts a short dance; /buddy name renames your companion.`,
+    { display: 'system' },
+  )
 }
 
 export async function call(
   onDone: LocalJSXCommandOnDone,
   context: ToolUseContext & LocalJSXCommandContext,
-  args: string,
+  args?: string,
 ): Promise<React.ReactNode> {
-  const sub = args?.trim().toLowerCase() ?? ''
-  const setState = context.setAppState
+  const arg = args?.trim().toLowerCase() ?? ''
 
-  // ── /buddy off — mute companion ──
-  if (sub === 'off') {
-    saveGlobalConfig(cfg => ({ ...cfg, companionMuted: true }))
+  if (COMMON_HELP_ARGS.includes(arg)) {
+    showHelp(onDone)
+    return null
+  }
+
+  if (COMMON_INFO_ARGS.includes(arg) || arg === 'status') {
+    const companion = getCompanion()
+    if (!companion) {
+      onDone('No companion hatched yet. Run /buddy to hatch one.', {
+        display: 'system',
+      })
+      return null
+    }
+    const chosenForm = getGlobalConfig().companion?.speciesOverride
+      ? ' (chosen form — /buddy set random to revert)'
+      : ''
+    onDone(
+      `${companion.name} is your ${titleCase(companion.rarity)} ${formName(companion.species)}${chosenForm}. ${companion.personality}`,
+      { display: 'system' },
+    )
+    return null
+  }
+
+  // ── /buddy off|mute — mute companion ──
+  if (arg === 'off' || arg === 'mute') {
+    saveCompanionConfig(context, current => ({
+      ...current,
+      companionMuted: true,
+    }))
+    setCompanionReaction(context, undefined)
     onDone('companion muted', { display: 'system' })
     return null
   }
 
-  // ── /buddy on — unmute companion ──
-  if (sub === 'on') {
-    saveGlobalConfig(cfg => ({ ...cfg, companionMuted: false }))
+  // ── /buddy on|unmute — unmute companion ──
+  if (arg === 'on' || arg === 'unmute') {
+    saveCompanionConfig(context, current => ({
+      ...current,
+      companionMuted: false,
+    }))
+    const companion = getCompanion()
+    if (companion) {
+      setCompanionReaction(context, `${companion.name} is back.`)
+    }
     onDone('companion unmuted', { display: 'system' })
     return null
   }
 
   // ── /buddy pet — trigger heart animation + auto unmute ──
-  if (sub === 'pet') {
+  if (arg === 'pet') {
     const companion = getCompanion()
     if (!companion) {
       onDone('no companion yet \u00b7 run /buddy first', { display: 'system' })
@@ -99,12 +229,15 @@ export async function call(
     }
 
     // Auto-unmute on pet + trigger heart animation
-    saveGlobalConfig(cfg => ({ ...cfg, companionMuted: false }))
-    setState?.(prev => ({ ...prev, companionPetAt: Date.now() }))
+    saveCompanionConfig(context, current => ({
+      ...current,
+      companionMuted: false,
+    }))
+    context.setAppState(prev => ({ ...prev, companionPetAt: Date.now() }))
 
     // Trigger a post-pet reaction
     triggerCompanionReaction(context.messages ?? [], reaction =>
-      setState?.(prev =>
+      context.setAppState(prev =>
         prev.companionReaction === reaction
           ? prev
           : { ...prev, companionReaction: reaction },
@@ -115,46 +248,145 @@ export async function call(
     return null
   }
 
-  // ── /buddy help — usage info ──
-  if (COMMON_HELP_ARGS.includes(sub)) {
-    onDone(
-      [
-        'Usage: /buddy [on|off|pet|status|help]',
-        '',
-        '  (no args)  Hatch your companion or view the companion card',
-        '  on         Unmute companion reactions',
-        '  off        Mute companion reactions',
-        '  pet        Pet your companion for a reaction',
-        '  status     Show current companion info',
-        '  help       Show this help message',
-      ].join('\n'),
-      { display: 'system' },
-    )
-    return null
-  }
+  const [sub, ...rest] = arg.split(/\s+/)
 
-  // ── /buddy status — companion info ──
-  if (COMMON_INFO_ARGS.includes(sub) || sub === 'status') {
+  // ── /buddy dance ──
+  if (sub === 'dance' && rest.length === 0) {
     const companion = getCompanion()
     if (!companion) {
-      onDone('No companion hatched yet. Run /buddy to hatch one.', {
+      onDone('No companion hatched yet. Run /buddy to hatch one first.', {
         display: 'system',
       })
       return null
     }
+    if (getGlobalConfig().companionMuted) {
+      onDone(
+        `${companion.name} is hidden (buddy is muted). Run /buddy unmute to show them.`,
+        { display: 'system' },
+      )
+      return null
+    }
+    // The sprite's clock is frozen under reduced motion, so it skips the
+    // dance; say so rather than leave the command looking broken.
+    if (context.getAppState?.().settings?.prefersReducedMotion === true) {
+      onDone(
+        `${companion.name} sits this one out: dancing is off while reduced motion is on.`,
+        { display: 'system' },
+      )
+      return null
+    }
+    context.setAppState(prev => ({ ...prev, companionDanceAt: Date.now() }))
+    onDone(undefined, { display: 'skip' })
+    return null
+  }
+
+  // ── /buddy name <new name> ──
+  if (sub === 'name') {
+    if (!getGlobalConfig().companion) {
+      onDone('No companion hatched yet. Run /buddy to hatch one first.', {
+        display: 'system',
+      })
+      return null
+    }
+    // Parse from the raw args (not `arg`) so capitalization is preserved.
+    // Sanitize: the name renders verbatim in the sprite column, so ANSI
+    // escapes / control / zero-width characters would corrupt the TUI line
+    // until the next rename. Cap by DISPLAY width, not UTF-16 length.
+    const newName = stripVTControlCharacters(
+      (args ?? '').trim().split(/\s+/).slice(1).join(' '),
+    )
+      .replace(/[\p{Cc}\p{Cf}]/gu, '')
+      .trim()
+    if (!newName) {
+      onDone('Usage: /buddy name <new name>', { display: 'system' })
+      return null
+    }
+    if (stringWidth(newName) > 20) {
+      onDone('Buddy names are capped at 20 columns.', { display: 'system' })
+      return null
+    }
+    const previous = getCompanion()!.name
+    saveCompanionConfig(context, current => ({
+      ...current,
+      companion: current.companion
+        ? { ...current.companion, name: newName }
+        : current.companion,
+    }))
+    if (!getGlobalConfig().companionMuted) {
+      setCompanionReaction(context, `${newName} answers to their new name.`)
+    }
+    onDone(`${previous} is now called ${newName}.`, { display: 'system' })
+    return null
+  }
+
+  // ── /buddy set <form|random> ──
+  if (sub === 'set') {
+    if (!getGlobalConfig().companion) {
+      onDone('No companion hatched yet. Run /buddy to hatch one first.', {
+        display: 'system',
+      })
+      return null
+    }
+    const target = rest[0]
+    if (target === 'random') {
+      saveCompanionConfig(context, current => ({
+        ...current,
+        companion: current.companion
+          ? { ...current.companion, speciesOverride: undefined }
+          : current.companion,
+      }))
+      const companion = getCompanion()!
+      setCompanionReaction(
+        context,
+        `${companion.name} is back to being ${formName(companion.species)}.`,
+      )
+      onDone(
+        `${companion.name} is back to their rolled form: ${titleCase(companion.rarity)} ${formName(companion.species)}.`,
+        { display: 'system' },
+      )
+      return null
+    }
+    const form = target === undefined ? undefined : parseForm(target)
+    if (form !== undefined) {
+      saveCompanionConfig(context, current => ({
+        ...current,
+        companion: current.companion
+          ? { ...current.companion, speciesOverride: form }
+          : current.companion,
+      }))
+      const companion = getCompanion()!
+      const flavor = FORM_FLAVOR[form]
+      setCompanionReaction(context, `${companion.name} ${flavor.don}.`)
+      const mutedHint = getGlobalConfig().companionMuted
+        ? ' Note: your buddy is muted and hidden — run /buddy unmute to see them.'
+        : ''
+      onDone(
+        `${companion.name} is now ${formName(form)}. ${flavor.hint} /buddy set random reverts.${mutedHint}`,
+        { display: 'system' },
+      )
+      return null
+    }
     onDone(
-      `${companion.name} is your ${speciesLabel(companion.rarity)} ${companion.species}. ${companion.personality}`,
+      `Unknown form '${rest[0] ?? ''}'. Available: ${FORM_LIST}, random.`,
       { display: 'system' },
     )
     return null
   }
 
-  // ── /buddy (no args) — show existing or hatch ──
+  if (arg !== '') {
+    showHelp(onDone)
+    return null
+  }
+
+  // ── /buddy (no args) — show existing card or hatch ──
   const companion = getCompanion()
 
   // Auto-unmute when viewing
   if (companion && getGlobalConfig().companionMuted) {
-    saveGlobalConfig(cfg => ({ ...cfg, companionMuted: false }))
+    saveCompanionConfig(context, current => ({
+      ...current,
+      companionMuted: false,
+    }))
   }
 
   if (companion) {
@@ -183,7 +415,21 @@ export async function call(
     hatchedAt: Date.now(),
   }
 
-  saveGlobalConfig(cfg => ({ ...cfg, companion: stored }))
+  saveCompanionConfig(context, current => ({
+    ...current,
+    companion: stored,
+    companionMuted: false,
+  }))
+
+  // Greet on hatch (saveCompanionConfig already redraws).
+  const hatched = getCompanion()
+  if (hatched) {
+    setCompanionReaction(
+      context,
+      `${hatched.name} the ${formName(hatched.species)} has hatched.`,
+      true,
+    )
+  }
 
   const stars = RARITY_STARS[r.bones.rarity]
   const sprite = renderSprite(r.bones, 0)
@@ -194,7 +440,7 @@ export async function call(
     '',
     ...sprite,
     '',
-    `${name} the ${speciesLabel(r.bones.species)}${shiny}`,
+    `${name} the ${titleCase(r.bones.species)}${shiny}`,
     `Rarity: ${stars} (${r.bones.rarity})`,
     `"${personality}"`,
     '',
