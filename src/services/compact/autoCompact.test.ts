@@ -13,6 +13,7 @@ import {
 } from '../../test/sharedMutationLock.js'
 import type { Message } from '../../types/message.js'
 import * as realConfig from '../../utils/config.js'
+import { createCompactBoundaryMessage } from '../../utils/messages/systemFactories.js'
 
 const USER_ABORT_MESSAGE = 'API Error: Request was aborted.'
 
@@ -145,6 +146,7 @@ function cacheSafeParams(messages: Message[]) {
 
 function compactResult() {
   return {
+    boundaryMarker: createCompactBoundaryMessage('auto', 10_000),
     summaryMessages: [userMessage('summary')],
     attachments: [],
     hookResults: [],
