@@ -439,6 +439,7 @@ type SdkContext = {
   cwd: string
   originalCwd: string
   parentSessionId?: SessionId
+  registeredHooks?: Partial<Record<HookEvent, RegisteredHookMatcher[]>>
 }
 
 import { AsyncLocalStorage } from 'async_hooks'
@@ -1509,7 +1510,14 @@ export function registerHookCallbacks(
 export function getRegisteredHooks(): Partial<
   Record<HookEvent, RegisteredHookMatcher[]>
 > | null {
-  return STATE.registeredHooks
+  const queryHooks = getSdkContext()?.registeredHooks
+  if (!queryHooks || Object.keys(queryHooks).length === 0) return STATE.registeredHooks
+  const hooks = { ...STATE.registeredHooks }
+  for (const [event, matchers] of Object.entries(queryHooks)) {
+    const key = event as HookEvent
+    hooks[key] = [...(hooks[key] ?? []), ...matchers]
+  }
+  return hooks
 }
 
 export function clearRegisteredHooks(): void {
