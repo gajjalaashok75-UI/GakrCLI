@@ -6,6 +6,9 @@ import { resolveOpenAIShimRuntimeContext } from '../integrations/runtimeMetadata
 import {
   getContextWindowForModel,
   getModelMaxOutputTokens,
+  resolveContextWindowForModel,
+  setSessionContextWindowOverride,
+  clearSessionContextWindowOverride,
 } from './context.ts'
 
 const originalEnv = {
@@ -25,6 +28,7 @@ const originalEnv = {
 
 beforeEach(async () => {
   await acquireSharedMutationLock('context.test.ts')
+  clearSessionContextWindowOverride()
   delete process.env.GAKR_CODE_USE_OPENAI
   delete process.env.GAKR_CODE_MAX_OUTPUT_TOKENS
   delete process.env.GAKR_CODE_OPENAI_CONTEXT_WINDOWS
@@ -417,7 +421,7 @@ test('env-only xAI key uses provider-specific context and output caps before cli
     upperLimit: 32_768,
   })
   expect(getMaxOutputTokensForModel('grok-4.3')).toBe(32_768)
-  expect(getContextWindowForModel('grok-4')).toBe(2_000_000)
+  expect(getContextWindowForModel('grok-4')).toBe(1_000_000)
   expect(getModelMaxOutputTokens('grok-4')).toEqual({
     default: 32_768,
     upperLimit: 32_768,
@@ -765,4 +769,28 @@ test('DashScope models clamp oversized max output overrides to the provider limi
   expect(getMaxOutputTokensForModel('kimi-k2.5')).toBe(32_768)
   expect(getMaxOutputTokensForModel('glm-5')).toBe(16_384)
   expect(getMaxOutputTokensForModel('glm-5.1')).toBe(16_384)
+})
+
+test('resolveContextWindowForModel reports the precedence step that won', () => {
+  process.env.GAKR_CODE_USE_OPENAI = '1'
+
+  expect(resolveContextWindowForModel('some-unknown-3p-model')).toEqual({
+    contextWindow: 128_000,
+    source: 'fallback',
+  })
+
+  // An explicit 128k limit is the same number but not the fallback.
+  process.env.GAKR_CODE_OPENAI_CONTEXT_WINDOWS = JSON.stringify({
+    'some-unknown-3p-model': 128_000,
+  })
+  expect(resolveContextWindowForModel('some-unknown-3p-model')).toEqual({
+    contextWindow: 128_000,
+    source: 'env-exact',
+  })
+
+  setSessionContextWindowOverride('some-unknown-3p-model', 64_000)
+  expect(resolveContextWindowForModel('some-unknown-3p-model')).toEqual({
+    contextWindow: 64_000,
+    source: 'session-override',
+  })
 })
