@@ -1,5 +1,8 @@
-import type { ClientOptions } from '@anthropic-ai/sdk'
+import { APIConnectionError, APIConnectionTimeoutError, APIError, APIUserAbortError, type ClientOptions } from '@anthropic-ai/sdk'
 import type { MessageCreateParamsBase } from '@anthropic-ai/sdk/resources/messages/messages'
+import { raceAbort, throwIfAborted } from '../../utils/boundedAsync.js'
+import { createCombinedAbortSignal } from '../../utils/combinedAbortSignal.js'
+import { getGeminiVertexEndpointError } from '../../utils/geminiAuth.js'
 
 type AccessTokenProvider = () => Promise<string>
 
@@ -23,6 +26,7 @@ type GeminiVertexFunctionResponsePart = {
 }
 type GeminiVertexPart =
   | { text: string }
+  | { inlineData: { mimeType: string; data: string } }
   | GeminiVertexFunctionCallPart
   | GeminiVertexFunctionResponsePart
 type GeminiVertexContent = { role: 'user' | 'model'; parts: GeminiVertexPart[] }
@@ -80,6 +84,7 @@ type GeminiVertexResponse = {
     candidatesTokenCount?: number
     totalTokenCount?: number
     thoughtsTokenCount?: number
+    cachedContentTokenCount?: number
   }
 }
 
@@ -166,7 +171,7 @@ type GeminiVertexToolUseBlock = {
   input: Record<string, unknown>
 }
 type GeminiVertexContentBlock = GeminiVertexTextBlock | GeminiVertexToolUseBlock
-type GeminiVertexStopReason = 'end_turn' | 'tool_use'
+type GeminiVertexStopReason = 'end_turn' | 'tool_use' | 'max_tokens'
 
 type GeminiVertexMessage = {
   id: string
@@ -175,7 +180,11 @@ type GeminiVertexMessage = {
   model: string
   stop_reason: GeminiVertexStopReason
   stop_sequence: null
-  usage: { input_tokens: number; output_tokens: number }
+  usage: {
+    input_tokens: number
+    output_tokens: number
+    cache_read_input_tokens: number
+  }
   content: GeminiVertexContentBlock[]
 }
 
@@ -198,7 +207,7 @@ export type GeminiVertexStreamEvent =
   | {
       type: 'message_delta'
       delta: { stop_reason: GeminiVertexStopReason; stop_sequence: null }
-      usage: { output_tokens: number }
+      usage: GeminiVertexMessage['usage']
     }
   | { type: 'message_stop' }
 
@@ -356,11 +365,34 @@ function safeJsonParse(value: unknown): Record<string, unknown> {
   return {}
 }
 
-function stringifyToolResultContent(content: unknown): string {
+function toGeminiMediaPart(block: unknown): GeminiVertexPart | undefined {
+  if (!block || typeof block !== 'object') return undefined
+  const { type, source } = block as {
+    type?: string
+    source?: { type?: string; media_type?: string; data?: string }
+  }
+  if (type !== 'image' && type !== 'document') return undefined
+  if (
+    source?.type !== 'base64' || !source.data ||
+    !(type === 'image' ? source.media_type?.startsWith('image/') : source.media_type === 'application/pdf')
+  ) {
+    // Never return a successful answer to an attachment the model did not see.
+    // Do not fetch arbitrary URLs or include their potentially secret text.
+    throw new Error('Gemini Vertex requires base64 images or PDF documents; attach the file as base64 instead of an unsupported media source.')
+  }
+  return { inlineData: { mimeType: source.media_type!, data: source.data } }
+}
+
+function stringifyToolResultContent(content: unknown, mediaParts: GeminiVertexPart[]): string {
   if (typeof content === 'string') return content
   if (Array.isArray(content)) {
     return content
       .map(block => {
+        const media = toGeminiMediaPart(block)
+        if (media) {
+          mediaParts.push(media)
+          return ''
+        }
         if (block && typeof block === 'object' && 'text' in block) {
           return String((block as { text?: unknown }).text ?? '')
         }
@@ -389,8 +421,8 @@ function stringifyToolResultContent(content: unknown): string {
 //     so the subsequent tool_result can be wired back to the right function)
 //   - user tool_result blocks → user functionResponse parts, looking up the
 //     function name from the most recent tool_use with the same id
-// Drops blocks we can't translate (e.g. images) instead of failing the whole
-// request — Vertex will respond from whatever it received.
+//   - direct and nested tool-result images/PDFs → inlineData parts
+// Unsupported media sources fail before sending, rather than losing content.
 function toGeminiContents(
   messages: MessageCreateParamsBase['messages'],
 ): GeminiVertexContent[] {
@@ -414,6 +446,7 @@ function toGeminiContents(
       if (message.content) otherParts.push({ text: message.content })
     } else {
       for (const block of message.content) {
+        const media = toGeminiMediaPart(block)
         const b = block as {
           type?: string
           text?: string
@@ -423,7 +456,9 @@ function toGeminiContents(
           tool_use_id?: string
           content?: unknown
         }
-        if (b.type === 'text' && typeof b.text === 'string' && b.text) {
+        if (media) {
+          otherParts.push(media)
+        } else if (b.type === 'text' && typeof b.text === 'string' && b.text) {
           otherParts.push({ text: b.text })
         } else if (b.type === 'tool_use' && b.name && b.id) {
           toolUseIdToName.set(b.id, b.name)
@@ -443,7 +478,7 @@ function toGeminiContents(
           responseParts.push({
             functionResponse: {
               name,
-              response: { result: stringifyToolResultContent(b.content) },
+              response: { result: stringifyToolResultContent(b.content, otherParts) },
             },
           })
         }
@@ -600,19 +635,30 @@ async function* toAnthropicStream(
   yield {
     type: 'message_delta',
     delta: { stop_reason: message.stop_reason, stop_sequence: null },
-    usage: { output_tokens: message.usage.output_tokens },
+    usage: { ...message.usage },
   }
   yield { type: 'message_stop' }
 }
 
 export function createGeminiVertexClient(options: GeminiVertexClientOptions) {
+  const endpointError = getGeminiVertexEndpointError(options)
+  if (endpointError) throw new Error(endpointError)
   const fetchImpl = options.fetch ?? fetch
 
-  const create = (params: MessageCreateParamsBase & { stream?: boolean }): GeminiVertexPromise => {
+  const create = (
+    params: MessageCreateParamsBase & { stream?: boolean },
+    requestOptions: { signal?: AbortSignal | null; timeout?: number } = {},
+  ): GeminiVertexPromise => {
     let capturedResponse: Response | undefined
-    const promise = (async (): Promise<GeminiVertexMessage> => {
+    const { signal, cleanup } = createCombinedAbortSignal(requestOptions.signal ?? undefined, {
+      timeoutMs: requestOptions.timeout,
+      trace: { subsystem: 'gemini_vertex', controllerRole: 'request' },
+    })
+    const promise = raceAbort((async (): Promise<GeminiVertexMessage> => {
+      throwIfAborted(signal)
       const model = options.model
       const token = await options.getAccessToken()
+      throwIfAborted(signal)
       const host = options.location === 'global'
         ? 'aiplatform.googleapis.com'
         : `${options.location}-aiplatform.googleapis.com`
@@ -647,6 +693,7 @@ export function createGeminiVertexClient(options: GeminiVertexClientOptions) {
 
       const response = await fetchImpl(url, {
         method: 'POST',
+        signal,
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -671,20 +718,31 @@ export function createGeminiVertexClient(options: GeminiVertexClientOptions) {
               : {}),
           },
         }),
+      }).catch(error => {
+        // Only transport failures become connection errors. Schema/content
+        // errors below retain their existing fatal classification.
+        throw new APIConnectionError({ cause: error instanceof Error ? error : undefined })
       })
       capturedResponse = response
 
+      const body = await response.text().catch(error => {
+        throw new APIConnectionError({ cause: error instanceof Error ? error : undefined })
+      })
       if (!response.ok) {
-        const body = await response.text()
-        throw new Error(`Gemini Vertex request failed: ${response.status} ${body}`)
+        throw APIError.generate(
+          response.status, undefined,
+          `Gemini Vertex request failed: ${response.status} ${body}`,
+          response.headers,
+        )
       }
 
-      const json = (await response.json()) as GeminiVertexResponse
+      const json = JSON.parse(body) as GeminiVertexResponse
       const contentBlocks = extractContentBlocks(json)
       const text = extractText(json)
       const candidate = json.candidates?.[0]
       const finishReason = candidate?.finishReason
       const thoughtsTokenCount = json.usageMetadata?.thoughtsTokenCount ?? 0
+      const cachedTokens = json.usageMetadata?.cachedContentTokenCount ?? 0
       const hasToolCall = contentBlocks.some(b => b.type === 'tool_use')
 
       // Surface every silent-empty-response path explicitly. We treat the
@@ -770,15 +828,30 @@ export function createGeminiVertexClient(options: GeminiVertexClientOptions) {
         type: 'message',
         role: 'assistant',
         model,
-        stop_reason: hasToolCall ? 'tool_use' : 'end_turn',
+        stop_reason: hasToolCall ? 'tool_use' : candidate?.finishReason === 'MAX_TOKENS' ? 'max_tokens' : 'end_turn',
         stop_sequence: null,
         usage: {
-          input_tokens: json.usageMetadata?.promptTokenCount ?? 0,
-          output_tokens: json.usageMetadata?.candidatesTokenCount ?? 0,
+          // promptTokenCount includes cached tokens; report them as cache
+          // reads and keep input_tokens to the uncached remainder.
+          input_tokens: Math.max(
+            0,
+            (json.usageMetadata?.promptTokenCount ?? 0) - cachedTokens,
+          ),
+          cache_read_input_tokens: cachedTokens,
+          output_tokens: (json.usageMetadata?.candidatesTokenCount ?? 0) +
+            (json.usageMetadata?.thoughtsTokenCount ?? 0),
         },
         content: finalBlocks,
       }
-    })()
+    })(), signal).catch(error => {
+      if (signal.aborted) {
+        if (requestOptions.signal?.aborted && signal.reason === requestOptions.signal.reason) {
+          throw new APIUserAbortError()
+        }
+        throw new APIConnectionTimeoutError()
+      }
+      throw error
+    }).finally(cleanup)
 
     const typed = promise as GeminiVertexPromise
     typed.withResponse = async () => {

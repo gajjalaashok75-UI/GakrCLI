@@ -158,6 +158,47 @@ test('classifies tool_stream rejection as tool_stream_unsupported (#1950)', () =
   expect(failure.retryable).toBe(false)
 })
 
+test.each([
+  'Unsupported parameter: stream_options',
+  'Unrecognized request argument supplied: stream_options',
+  'Parameter stream_options is not supported',
+  'stream_options is not supported by this API',
+  '{"error":{"message":"Unknown parameter","param":"stream_options"}}',
+  '{"error":{"message":"Unknown parameter","param":"`stream_options`"}}',
+  '{"error":{"message":"Invalid parameter: stream_options","type":"invalid_request_error","param":"stream_options"}}',
+  '{"detail":[{"type":"extra_forbidden","loc":["body","stream_options"],"msg":"Extra inputs are not permitted"}]}',
+  '{"detail":[{"type":"extra_forbidden","loc":["stream_options"],"msg":"Extra inputs are not permitted"}]}',
+])('classifies top-level stream_options rejections: %s', body => {
+  const failure = classifyOpenAIHttpFailure({ status: 400, body })
+
+  expect(failure.category).toBe('stream_options_unsupported')
+  expect(failure.retryable).toBe(false)
+})
+
+test('classifies a FastAPI stream_options rejection at status 422', () => {
+  const failure = classifyOpenAIHttpFailure({
+    status: 422,
+    body: '{"detail":[{"type":"value_error.extra","loc":["body","stream_options"],"msg":"extra fields not permitted"}]}',
+  })
+
+  expect(failure.category).toBe('stream_options_unsupported')
+})
+
+test.each([
+  'Invalid request for model local-model; received stream_options in the request body',
+  'Unsupported parameter: stream_options.include_usage',
+  'Unknown parameter: stream_options[include_usage]',
+  'Invalid parameter: stream_options/include_usage must be a boolean',
+  '{"error":{"message":"Invalid parameter: stream_options.include_usage must be a boolean","param":"stream_options.include_usage"}}',
+  '{"error":{"message":"stream_options.include_usage must be a boolean","param":"stream_options.include_usage"}}',
+  '{"detail":[{"type":"bool_type","loc":["body","stream_options","include_usage"],"msg":"Input should be a valid boolean"}]}',
+  '{"detail":[{"type":"dict_type","loc":["body","stream_options"],"msg":"Input should be an object"},{"type":"bool_type","loc":["body","stream_options","include_usage"],"msg":"Input should be a valid boolean"}]}',
+])('does not classify unrelated or nested stream_options validation failures: %s', body => {
+  const failure = classifyOpenAIHttpFailure({ status: 400, body })
+
+  expect(failure.category).not.toBe('stream_options_unsupported')
+})
+
 test('prioritizes tool_stream rejection over accompanying tool-call wording', () => {
   const failure = classifyOpenAIHttpFailure({
     status: 400,
@@ -532,4 +573,107 @@ test('does not classify generic billing 400 errors as quota_exhausted', () => {
 
   expect(failure.category).toBe('malformed_provider_response')
   expect(failure.retryable).toBe(false)
+})
+
+
+test.each([
+  'Too many requests, try again in 30s',
+  'Rate limit exceeded',
+  'Rate limit exceeded for this API key',
+  'Rate limit exceeded for this OAuth token',
+  'Rate limit exceeded for this account',
+  'Rate limit exceeded for this API key; streaming is disabled',
+  'Rate limit exceeded for this API key, streaming is disabled',
+  'Rate limit exceeded for this API key, currently streaming is disabled',
+  'Bad gateway: rate limit exceeded for this API key',
+  'Too many requests; no tokens remaining in the rate limit bucket',
+  'Too many requests; empty token bucket',
+  'Too many requests; no tokens found in the rate limit bucket',
+  'Rate limit exceeded for this API key: bad gateway',
+  'Rate limit exceeded for this API key: upstream response is empty',
+  'Rate limit exceeded for this API key, bad gateway',
+  'Rate limit exceeded for this API key, empty response received',
+  'Too many requests for api_key',
+  'Request rate-limited',
+  'Requests are being throttled',
+  '{"error":{"code":"rate_limit_exceeded","message":"Please retry later"}}',
+])('classifies explicit throttle-403 as retryable: %s', body => {
+  expect(classifyOpenAIHttpFailure({ status: 403, body })).toMatchObject({
+    category: 'rate_limited',
+    retryable: true,
+  })
+  expect(classifyOpenAIHttpFailure({ status: 401, body })).toMatchObject({
+    category: 'auth_invalid',
+    retryable: false,
+  })
+})
+
+test.each([
+  '',
+  '   \n\t',
+  'Try again later',
+  'Server busy; slow down',
+  'Capacity exceeded',
+  'See the rate limit documentation',
+  'Forbidden: too many requests',
+  'Unauthorized: rate limit exceeded',
+  'Invalid API key; too many requests',
+  'Missing API key; too many requests',
+  'No API key was provided; too many requests',
+  'No valid API key found; too many requests',
+  'No API key found; too many requests',
+  'No token provided; rate limit exceeded',
+  'API key is empty; too many requests',
+  '{"error":{"code":"bad_api_key","message":"Too many requests"}}',
+  'Too many requests; your API key is no longer valid',
+  'Too many requests; your API key does not exist',
+  'Too many requests; API key, which is no longer valid',
+  'API key, now empty; too many requests',
+  'Invalid\nAPI key; too many requests',
+  'Rate limit exceeded; API key is invalid',
+  'Rate limit exceeded; API key is required',
+  'Rate limit exceeded; API key is disabled',
+  'Rate limit exceeded; API key is not valid',
+  '{"error":{"code":"api_key_missing","message":"Too many requests"}}',
+  'Invalid credentials; too many requests',
+  'Account suspended; rate limit exceeded',
+  'Account disabled; too many requests',
+  'Account disabled, too many requests',
+  'API key is disabled, too many requests',
+  'API key, supplied here, is invalid; too many requests',
+  'API key, which is invalid; too many requests',
+  'API key, which you disabled; too many requests',
+  'API key, now disabled; too many requests',
+  'Account deactivated; rate limit exceeded',
+  'Deactivated account; too many requests',
+  '{"error":{"code":"account_disabled","message":"Too many requests"}}',
+  'Key is invalid; too many requests',
+  'Your key has been disabled; rate limit exceeded',
+  'API key has been permanently disabled; too many requests',
+  'Token has been permanently disabled; too many requests',
+  'Disabled for this organization: API key; too many requests',
+  'Invalid API keys; too many requests',
+  'Invalid tokens; too many requests',
+  '{"error":{"code":"api_key_invalid_format","message":"Too many requests"}}',
+  'Insufficient funds; requests throttled',
+  'Invalid token; requests throttled',
+  'Token is invalid; too many requests',
+  'Token\nis invalid; too many requests',
+  'Invalid\ntoken; too many requests',
+  'Authentication failed; too many requests',
+  'Not authenticated; too many requests',
+  'Token expired; too many requests',
+  'Token revoked; rate limit exceeded',
+  'Access denied; too many requests',
+  'Permission denied; request throttled',
+  'Organization not allowed; rate limit exceeded',
+  'Quota exceeded; too many requests',
+  'Billing limit reached; too many requests',
+  'Credit balance depleted; rate limit exceeded',
+  '{"error":{"code":"insufficient_quota","message":"Too many requests"}}',
+  '{"error":{"type":"authentication_error","message":"Rate limit exceeded"}}',
+])('keeps ambiguous or denied throttle-403 terminal: %s', body => {
+  const failure = classifyOpenAIHttpFailure({ status: 403, body })
+  expect(failure.retryable).toBe(false)
+  expect(failure.category).not.toBe('rate_limited')
 })

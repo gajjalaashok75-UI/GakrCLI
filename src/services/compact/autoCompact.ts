@@ -5,7 +5,10 @@ import type { QuerySource } from '../../constants/querySource.js'
 import type { ToolUseContext } from '../../Tool.js'
 import type { Message } from '../../types/message.js'
 import { getGlobalConfig } from '../../utils/config.js'
-import { getContextWindowForModel } from '../../utils/context.js'
+import {
+  getContextWindowForModel,
+  getSessionContextWindowOverride,
+} from '../../utils/context.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
 import { hasExactErrorMessage } from '../../utils/errors.js'
@@ -45,8 +48,21 @@ export function getEffectiveContextWindowSize(
     contextWindow = Math.min(contextWindow, runtimeLimits.contextWindow)
   }
 
+  // An explicit per-model session setting is more specific than the legacy
+  // auto-compact cap. Otherwise that cap can silently keep a newly configured
+  // large context window stuck at (for example) 100k for compaction decisions.
+  const internalContextWindowOverride =
+    process.env.USER_TYPE === 'ant'
+      ? parseInt(process.env.GAKR_CODE_MAX_CONTEXT_TOKENS ?? '', 10)
+      : NaN
+  const internalOverrideTakesPrecedence =
+    Number.isFinite(internalContextWindowOverride) &&
+    internalContextWindowOverride > 0
+  const hasSessionOverride =
+    getSessionContextWindowOverride(model) !== undefined &&
+    !internalOverrideTakesPrecedence
   const autoCompactWindow = process.env.GAKR_CODE_AUTO_COMPACT_WINDOW
-  if (autoCompactWindow) {
+  if (autoCompactWindow && !hasSessionOverride) {
     const parsed = parseInt(autoCompactWindow, 10)
     if (!isNaN(parsed) && parsed > 0) {
       contextWindow = Math.min(contextWindow, parsed)
@@ -470,7 +486,11 @@ export async function autoCompactIfNeeded(
     toolUseContext.agentId,
     recompactionInfo.autoCompactThreshold,
   )
+  // Not forced means shouldAutoCompact passed the token-threshold check.
+  const autoCompactReason = forcedBy ?? 'token-threshold'
   if (sessionMemoryResult) {
+    sessionMemoryResult.boundaryMarker.compactMetadata.autoCompactReason =
+      autoCompactReason
     // Reset lastSummarizedMessageId since session memory compaction prunes messages
     // and the old message UUID will no longer exist after the REPL replaces messages
     setLastSummarizedMessageId(undefined)
@@ -500,6 +520,8 @@ export async function autoCompactIfNeeded(
       true, // isAutoCompact
       recompactionInfo,
     )
+    compactionResult.boundaryMarker.compactMetadata.autoCompactReason =
+      autoCompactReason
 
     // Reset lastSummarizedMessageId since legacy compaction replaces all messages
     // and the old message UUID will no longer exist in the new messages array

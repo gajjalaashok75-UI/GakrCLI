@@ -31,6 +31,7 @@ import { jsonParse } from '../../utils/slowOperations.js'
 import {
   validateXaaIdpCallbackParams,
 } from './xaaIdpCallback.js'
+import { type CredentialScope, resumeIn } from './credentialScope.js'
 import { buildRedirectUri, findAvailablePort } from './oauthPort.js'
 
 export function isXaaEnabled(): boolean {
@@ -77,6 +78,12 @@ export type IdpLoginOptions = {
   /** If true, don't auto-open the browser — just call onAuthorizationUrl */
   skipBrowserOpen?: boolean
   abortSignal?: AbortSignal
+  /**
+   * Where the login finishes once the user is back from the IdP, for a
+   * caller whose environment will not be the same by then. See
+   * `CredentialScope`.
+   */
+  credentialScope?: CredentialScope
 }
 
 /**
@@ -435,7 +442,7 @@ export async function acquireIdpIdToken(
 
   logMCPDebug('xaa', `No cached id_token for ${idpIssuer}; starting OIDC login`)
 
-  const metadata = await discoverOidc(idpIssuer)
+  const metadata = await discoverOidc(idpIssuer, opts.abortSignal)
   const port = opts.callbackPort ?? (await findAvailablePort())
   const redirectUri = buildRedirectUri(port)
   const state = randomBytes(32).toString('base64url')
@@ -480,18 +487,25 @@ export async function acquireIdpIdToken(
     authorizationCode,
     codeVerifier,
     redirectUri,
-    fetchFn: (url, init) => {
+    // The login's signal and the timeout cover the whole exchange, body
+    // included: it is read before cleanup and handed back buffered.
+    fetchFn: async (url, init) => {
       const { signal, cleanup } = createCombinedAbortSignal(init?.signal ?? undefined, {
+        signalB: opts.abortSignal,
         timeoutMs: IDP_REQUEST_TIMEOUT_MS,
       })
-      // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
-      return fetch(url, {
-        ...init,
-        signal,
-      }).finally(cleanup)
+      try {
+        // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
+        const response = await fetch(url, { ...init, signal })
+        // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
+        return new Response(response.body && (await response.arrayBuffer()), response)
+      } finally {
+        cleanup()
+      }
     },
   })
-  if (!tokens.id_token) {
+  const idToken = tokens.id_token
+  if (!idToken) {
     throw new Error(
       'XAA IdP: token response missing id_token (check scope=openid)',
     )
@@ -500,16 +514,31 @@ export async function acquireIdpIdToken(
   // Prefer the id_token's own exp claim; fall back to expires_in.
   // expires_in is for the access_token and may differ from the id_token
   // lifetime. If neither is present, default to 1h.
-  const expFromJwt = jwtExp(tokens.id_token)
+  const expFromJwt = jwtExp(idToken)
   const expiresAt = expFromJwt
     ? expFromJwt * 1000
     : Date.now() + (tokens.expires_in ?? 3600) * 1000
 
-  saveIdpIdToken(idpIssuer, tokens.id_token, expiresAt)
+  // A login cancelled once the exchange has answered still gets here. Caching
+  // its id_token would replace whatever a newer login has cached for this
+  // issuer.
+  if (opts.abortSignal?.aborted) {
+    throw new Error('XAA IdP: login cancelled')
+  }
+  // The user has been to the IdP, and the turn that started the login may
+  // have ended while they were there: the id_token is cached where the login
+  // began (see CredentialScope).
+  await resumeIn(opts.credentialScope, async () => {
+    // Cancellation can also arrive while the scope waits for another turn.
+    if (opts.abortSignal?.aborted) {
+      throw new Error('XAA IdP: login cancelled')
+    }
+    saveIdpIdToken(idpIssuer, idToken, expiresAt)
+  })
   logMCPDebug(
     'xaa',
     `Cached id_token for ${idpIssuer} (expires ${new Date(expiresAt).toISOString()})`,
   )
 
-  return tokens.id_token
+  return idToken
 }

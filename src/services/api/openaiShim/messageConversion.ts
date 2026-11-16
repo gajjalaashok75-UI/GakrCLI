@@ -1,4 +1,7 @@
 import { stripEchoedToolResultsMarker } from './markerEchoGuard.js'
+import { sanitizeToolUseIdForWire } from '../../../utils/toolUseIds.js'
+
+const CHAT_TOOL_CALL_ID_MAX_LENGTH = 40
 
 export type OpenAIContentPart =
   | { type: 'text'; text: string }
@@ -163,7 +166,7 @@ export function convertMessages(
     const content = (msg.message ?? msg).content
     if (!Array.isArray(content)) continue
     for (const block of content) {
-      if (block?.type === 'tool_result' && block.tool_use_id) toolResultIds.add(block.tool_use_id)
+      if (block?.type === 'tool_result' && block.tool_use_id) toolResultIds.add(sanitizeToolUseIdForWire(block.tool_use_id, CHAT_TOOL_CALL_ID_MAX_LENGTH))
     }
   }
 
@@ -188,7 +191,7 @@ export function convertMessages(
           otherContent.push(block)
           continue
         }
-        const id = block.tool_use_id ?? 'unknown'
+        const id = sanitizeToolUseIdForWire(block.tool_use_id ?? 'unknown', CHAT_TOOL_CALL_ID_MAX_LENGTH)
         if (knownToolCallIds.has(id)) {
           result.push({
             role: 'tool',
@@ -235,11 +238,10 @@ export function convertMessages(
     if (options.preserveReasoningContent) {
       const thinking = thinkingBlock?.type === 'redacted_thinking' ? thinkingBlock.data : thinkingBlock?.thinking
       if (typeof thinking === 'string' && thinking.trim()) assistantMsg.reasoning_content = thinking
-      else if (toolUses.length && options.reasoningContentFallback === '') assistantMsg.reasoning_content = ''
     }
     const mappedToolCalls: NonNullable<ConvertedOpenAIMessage['tool_calls']> = []
     for (const toolUse of toolUses) {
-      const id = toolUse.id ?? `call_${crypto.randomUUID().replace(/-/g, '')}`
+      const id = toolUse.id ? sanitizeToolUseIdForWire(toolUse.id, CHAT_TOOL_CALL_ID_MAX_LENGTH) : `call_${crypto.randomUUID().replace(/-/g, '')}`
       if (!toolResultIds.has(id) && !isLastInHistory) continue
       knownToolCallIds.add(id)
       const toolCall: NonNullable<ConvertedOpenAIMessage['tool_calls']>[number] = {
@@ -285,6 +287,18 @@ export function convertMessages(
       last.content = [...asParts(previous), ...asParts(current)]
     }
     if (msg.tool_calls?.length) last.tool_calls = [...(last.tool_calls ?? []), ...msg.tool_calls]
+    if (msg.reasoning_content) {
+      last.reasoning_content = last.reasoning_content
+        ? `${last.reasoning_content}\n${msg.reasoning_content}`
+        : msg.reasoning_content
+    }
+  }
+  // Apply the provider's fallback to every emitted assistant message, including
+  // plain text and interrupted-turn history, after preserving real reasoning.
+  if (options.preserveReasoningContent && options.reasoningContentFallback === '') {
+    for (const message of coalesced) {
+      if (message.role === 'assistant') message.reasoning_content ??= ''
+    }
   }
   return coalesced
 }

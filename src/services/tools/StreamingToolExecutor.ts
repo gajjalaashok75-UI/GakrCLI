@@ -60,6 +60,9 @@ export class StreamingToolExecutor {
   // so sibling subprocesses die immediately instead of running to completion.
   // Aborting this does NOT abort the parent — query.ts won't end the turn.
   private siblingAbortController: AbortController
+  // A sibling error can precede discard. Keep result ownership separate so
+  // background work can still observe discard after that first abort.
+  private toolResultAbortController: AbortController
   private discarded = false
   // Signal to wake up getRemainingResults when progress is available
   private progressAvailableResolve?: () => void
@@ -79,6 +82,7 @@ export class StreamingToolExecutor {
         controllerRole: 'sibling-tools',
       },
     )
+    this.toolResultAbortController = createChildAbortController(toolUseContext.abortController)
   }
 
 /**
@@ -97,6 +101,11 @@ discard(): void {
   this.discarded = true
 
   // Abort all running tool executions.
+  requestAbort(this.toolResultAbortController, 'streaming_fallback', {
+    source: 'streaming_fallback',
+    subsystem: 'streaming_tool_executor',
+    controllerRole: 'tool-results',
+  })
   requestAbort(this.siblingAbortController, 'streaming_fallback', {
     source: 'streaming_fallback',
     subsystem: 'streaming_tool_executor',
@@ -451,7 +460,11 @@ discard(): void {
         tool.block,
         tool.assistantMessage,
         this.canUseTool,
-        { ...this.toolUseContext, abortController: toolAbortController },
+        {
+          ...this.toolUseContext,
+          abortController: toolAbortController,
+          toolResultAbortSignal: this.toolResultAbortController.signal,
+        },
       )
 
       // Track if this specific tool has produced an error result.

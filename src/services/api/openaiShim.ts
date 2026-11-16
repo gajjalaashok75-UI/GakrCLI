@@ -94,6 +94,7 @@ import {
   resolveProviderRequest,
   shouldAttemptLocalToollessRetry,
 } from './providerConfig.js'
+import { getMiniMaxBaseUrlValidationError } from '../../integrations/routeMetadata.js'
 import {
   buildOpenAICompatibilityErrorMessage,
   classifyOpenAIHttpFailure,
@@ -449,6 +450,9 @@ class OpenAIShimMessages {
     options?: { signal?: AbortSignal; headers?: Record<string, string> },
     requestProcessEnv: NodeJS.ProcessEnv = process.env,
   ): Promise<Response> {
+    const validationError = getMiniMaxBaseUrlValidationError(request.baseUrl)
+    if (validationError) throw new Error(validationError)
+
     const codexResponse = await dispatchCodexRequest({
       request,
       params,

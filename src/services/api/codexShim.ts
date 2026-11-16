@@ -2,6 +2,10 @@ import { APIError } from '@anthropic-ai/sdk'
 import { buildAnthropicUsageFromRawUsage } from './cacheMetrics.js'
 import { fetchWithProxyRetry } from './fetchWithProxyRetry.js'
 import { stableStringifyJson } from '../../utils/stableStringify.js'
+import {
+  MAX_WIRE_TOOL_ID_LENGTH,
+  sanitizeToolUseIdForWire,
+} from '../../utils/toolUseIds.js'
 import type {
   ResolvedCodexCredentials,
   ResolvedProviderRequest,
@@ -108,13 +112,18 @@ function normalizeToolUseId(toolUseId: string | undefined): {
   id: string
   callId: string
 } {
-  const value = (toolUseId || '').trim()
-  if (!value) {
+  const rawValue = (toolUseId || '').trim()
+  if (!rawValue) {
     return {
       id: 'fc_unknown',
       callId: 'call_unknown',
     }
   }
+  // `fc_` / `call_` prefixes added below must stay within the wire limit too.
+  const value = sanitizeToolUseIdForWire(
+    rawValue,
+    MAX_WIRE_TOOL_ID_LENGTH - 'call_'.length,
+  )
   if (value.startsWith('call_')) {
     return {
       id: `fc_${value.slice('call_'.length)}`,

@@ -290,7 +290,10 @@ test('emits usage supplied by a final empty-choices chunk', async () => {
       createStreamDependencies(),
     ),
   )
-  expect(events).toContainEqual({
+  const usageEvents = events.filter(
+    event => event.type === 'message_delta' && event.usage !== undefined,
+  )
+  expect(usageEvents).toEqual([{
     type: 'message_delta',
     delta: { stop_reason: 'end_turn', stop_sequence: null },
     usage: {
@@ -299,7 +302,118 @@ test('emits usage supplied by a final empty-choices chunk', async () => {
       cache_creation_input_tokens: 0,
       cache_read_input_tokens: 0,
     },
+  }])
+
+  const textIndex = events.findIndex(
+    event =>
+      event.type === 'content_block_delta' &&
+      (event.delta as { type?: string; text?: string } | undefined)?.type ===
+        'text_delta' &&
+      (event.delta as { text?: string } | undefined)?.text === 'done',
+  )
+  const firstStopIndex = events.findIndex(
+    event =>
+      event.type === 'message_delta' &&
+      (event.delta as { stop_reason?: string } | undefined)?.stop_reason ===
+        'end_turn',
+  )
+  const usageIndex = events.indexOf(usageEvents[0]!)
+  const messageStopIndex = events.findIndex(event => event.type === 'message_stop')
+  expect(textIndex).toBeLessThan(firstStopIndex)
+  expect(firstStopIndex).toBeLessThan(usageIndex)
+  expect(usageIndex).toBeLessThan(messageStopIndex)
+})
+
+test('emits terminal usage when the provider repeats finish_reason', async () => {
+  // Some providers end a stream twice: one chunk carrying the finish_reason,
+  // then a second, identical but for the usage, with choices still populated.
+  // The loop ignores a repeated finish_reason, so that usage was dropped and
+  // every assistant message stored zeros — which is what anything reading the
+  // size or the cost of a conversation reads.
+  const events = await collect(
+    openaiStreamToAnthropic(
+      makeSseResponse([
+        makeOpenAIChunk({ content: 'done' }),
+        makeOpenAIChunk({}, 'stop'),
+        makeOpenAIChunk({ content: '' }, 'stop', {
+          prompt_tokens: 84,
+          completion_tokens: 1,
+        }),
+      ]),
+      'test-model',
+      undefined,
+      false,
+      undefined,
+      createStreamDependencies(),
+    ),
+  )
+
+  expect(events).toContainEqual({
+    type: 'message_delta',
+    delta: { stop_reason: 'end_turn', stop_sequence: null },
+    usage: {
+      input_tokens: 84,
+      output_tokens: 1,
+      cache_creation_input_tokens: 0,
+      cache_read_input_tokens: 0,
+    },
   })
+  expect(
+    events.filter(
+      event => event.type === 'message_delta' && event.usage !== undefined,
+    ),
+  ).toHaveLength(1)
+})
+
+test('emits terminal usage once when both terminal chunks report it', async () => {
+  const usage = { prompt_tokens: 10, completion_tokens: 2 }
+  const events = await collect(
+    openaiStreamToAnthropic(
+      makeSseResponse([
+        makeOpenAIChunk({ content: 'done' }),
+        makeOpenAIChunk({}, 'stop', usage),
+        { choices: [], usage },
+      ]),
+      'test-model',
+      undefined,
+      false,
+      undefined,
+      createStreamDependencies(),
+    ),
+  )
+
+  expect(
+    events.filter(
+      event => event.type === 'message_delta' && event.usage !== undefined,
+    ),
+  ).toHaveLength(1)
+})
+
+test('completes normally when a stream does not report usage', async () => {
+  const events = await collect(
+    openaiStreamToAnthropic(
+      makeSseResponse([
+        makeOpenAIChunk({ content: 'done' }),
+        makeOpenAIChunk({}, 'stop'),
+      ]),
+      'test-model',
+      undefined,
+      false,
+      undefined,
+      createStreamDependencies(),
+    ),
+  )
+
+  expect(
+    events.filter(
+      event => event.type === 'message_delta' && event.usage !== undefined,
+    ),
+  ).toHaveLength(0)
+  expect(events).toContainEqual({
+    type: 'message_delta',
+    delta: { stop_reason: 'end_turn', stop_sequence: null },
+  })
+  expect(events.at(-1)).toEqual({ type: 'message_stop' })
 })
 
 test('strips think tags split across content chunks without phrase heuristics', async () => {
@@ -385,6 +499,15 @@ test('routes provider JSON stream fallback through non-streaming conversion', as
     index: 0,
     delta: { type: 'text_delta', text: 'fallback' },
   })
+  expect(
+    events.filter(
+      event => event.type === 'message_delta' && event.usage !== undefined,
+    ),
+  ).toEqual([{
+    type: 'message_delta',
+    delta: { stop_reason: 'end_turn', stop_sequence: null },
+    usage: { input_tokens: 2, output_tokens: 3 },
+  }])
   expect(events.at(-1)).toEqual({ type: 'message_stop' })
 })
 

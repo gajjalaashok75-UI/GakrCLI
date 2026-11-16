@@ -12,6 +12,7 @@ export type OpenAICompatibilityFailureCategory =
   | 'context_overflow'
   | 'tool_call_incompatible'
   | 'tool_stream_unsupported'
+  | 'stream_options_unsupported'
   | 'malformed_provider_response'
   | 'provider_unavailable'
   | 'unknown'
@@ -68,6 +69,7 @@ const OPENAI_COMPATIBILITY_FAILURE_CATEGORIES: ReadonlySet<OpenAICompatibilityFa
     'context_overflow',
     'tool_call_incompatible',
     'tool_stream_unsupported',
+    'stream_options_unsupported',
     'malformed_provider_response',
     'provider_unavailable',
     'unknown',
@@ -252,6 +254,92 @@ function isToolStreamUnsupportedMessage(body: string): boolean {
   )
 }
 
+function getStructuredStreamOptionsValidationError(
+  body: string,
+): boolean | undefined {
+  try {
+    const parsed = JSON.parse(body) as {
+      detail?: unknown
+      error?: unknown
+    }
+    if (Array.isArray(parsed.detail)) {
+      let referencesRootStreamOptions = false
+      let referencesNestedStreamOptions = false
+      for (const entry of parsed.detail) {
+        if (!entry || typeof entry !== 'object') continue
+        const detail = entry as { loc?: unknown; type?: unknown; msg?: unknown }
+        if (!Array.isArray(detail.loc) || !detail.loc.includes('stream_options')) {
+          continue
+        }
+        const isRootField =
+          (detail.loc.length === 1 && detail.loc[0] === 'stream_options') ||
+          (detail.loc.length === 2 &&
+            detail.loc[0] === 'body' &&
+            detail.loc[1] === 'stream_options')
+        if (!isRootField) {
+          referencesNestedStreamOptions = true
+          continue
+        }
+        referencesRootStreamOptions = true
+        const message = typeof detail.msg === 'string' ? detail.msg : ''
+        if (
+          detail.type === 'extra_forbidden' ||
+          detail.type === 'value_error.extra' ||
+          /(?:unsupported|not supported|unknown|unrecognized|unexpected|not permitted|extra (?:inputs|fields))/i.test(message)
+        ) {
+          return true
+        }
+      }
+      if (referencesNestedStreamOptions) return false
+      if (referencesRootStreamOptions) return undefined
+    }
+
+    if (parsed.error && typeof parsed.error === 'object') {
+      const error = parsed.error as {
+        param?: unknown
+        message?: unknown
+        type?: unknown
+        code?: unknown
+      }
+      const parameter = typeof error.param === 'string'
+        ? error.param.toLowerCase().replace(/['"`]/g, '')
+        : undefined
+      if (parameter === 'stream_options') {
+        const signal = [error.message, error.code]
+          .filter((value): value is string => typeof value === 'string')
+          .join(' ')
+        if (
+          /(?:unsupported|not supported|unknown|unrecognized|unexpected|not permitted|extra[_ -]?forbidden|invalid (?:request )?(?:argument|parameter|field|property))/i.test(signal)
+        ) {
+          return true
+        }
+        return undefined
+      }
+      if (parameter && /^stream_options(?:\.|\[|\/)/.test(parameter)) {
+        return false
+      }
+    }
+    return undefined
+  } catch {
+    return undefined
+  }
+}
+
+function isStreamOptionsUnsupportedMessage(body: string): boolean {
+  const structuredValidation = getStructuredStreamOptionsValidationError(body)
+  if (structuredValidation !== undefined) return structuredValidation
+
+  const normalized = body.toLowerCase().replace(/['"`]/g, '')
+  return (
+    /(?:^|[\s:{,(])stream_options\b(?![.\[/])\s+(?:is\s+)?(?:an?\s+)?(?:unsupported|not\s+supported|unknown|unrecognized|not\s+permitted)\b/.test(normalized) ||
+    /(?:unsupported|unknown|unrecognized|invalid)\s+(?:request\s+argument(?:\s+supplied)?|parameter(?:s|\(s\))?|field|property)(?:\s*[:=])?\s*(?:[\[(<]\s*)?stream_options\b(?![.\[/])/.test(normalized) ||
+    /(?:request\s+argument(?:\s+supplied)?|parameter(?:s|\(s\))?|field|property)\s+(?:[\[(<]\s*)?stream_options\b(?![.\[/])(?:\s*[\])>])?\s+(?:is\s+)?(?:unsupported|not\s+supported|unknown|unrecognized|invalid|not\s+permitted)\b/.test(normalized) ||
+    /\bstream_options\b(?![.\[/])\s+(?:is\s+)?(?:an?\s+)?(?:unsupported|not\s+supported|unknown|unrecognized|invalid)\s+(?:request\s+argument|parameter|field|property)\b/.test(normalized) ||
+    /(?:additional properties? (?:are )?not allowed|extra inputs are not permitted|extra fields? (?:are )?not permitted|unexpected (?:field|property|parameter)).{0,80}\bstream_options\b(?![.\[/])/.test(normalized) ||
+    /\bstream_options\b(?![.\[/]).{0,80}(?:additional properties? (?:are )?not allowed|extra inputs are not permitted|extra fields? (?:are )?not permitted|was unexpected)\b/.test(normalized)
+  )
+}
+
 function isMalformedProviderResponse(body: string): boolean {
   const lower = body.toLowerCase()
   return (
@@ -323,6 +411,38 @@ function isQuotaExhaustedMessage(body: string): boolean {
     lower.includes('billing quota') ||
     lower.includes('billing credits')
   )
+}
+
+function isExplicitThrottleMessage(body: string): boolean {
+  // A 403 is normally an authorization failure. Require positive throttling
+  // evidence, with auth/quota signals taking precedence even in mixed bodies.
+  // Empty bodies and generic "try again" / "busy" responses are ambiguous.
+  // A comma may continue the credential's predicate ("key, now disabled" or
+  // "key, supplied here, is invalid"). Keep that evidence together, without
+  // joining a separate subject such as "key, streaming is disabled".
+  const credentialFaultBody = body.replace(
+    /,\s*(?:[^,.;!?]*,\s*)?(?=(?:(?:which|that)\b[^,.;!?]*|(?:(?:is|are|was|were|has|have|had|been|being|now|still|already|[a-z]+ly)\s+)*)(?:invalid|missing|incorrect|disabled|deactivated|unusable|required|not[ _-](?:valid|found|provided|configured|set))\b)/gi,
+    continuation => continuation.replace(/,/g, ' '),
+  )
+  if (
+    /unauthori[sz]ed|unauthenticated|not[ _-]auth|forbidden|access[ _-]denied|permission|credential|denied|suspended|blocked|banned|insufficient[ _-]funds|revoked|expired|not[ _-]allowed|quota|billing|credit|payment|allotment/i.test(body) ||
+    /auth(?:entication|ori[sz]ation)?[\s\S]{0,20}(?:error|fail|invalid|required|missing)|(?:invalid|failed|missing|required)[\s\S]{0,20}auth/i.test(body) ||
+    // New absence/state forms must describe the credential directly. Do not
+    // scan across an unrelated subject such as a bad gateway or empty response.
+    /(?:\b|_)(?:no(?:[\s_-]+valid)?|bad|empty)[\s_-]+(?:accounts?|(?:api[\s_-]*)?keys?|tokens?)(?:\b|_)(?:[\s_-]+(?:(?:is|are|was|were|has|have|had|been|being)[\s_-]+)*(?:provided|configured|set)(?:\b|_)|(?=\s*(?:$|[,.;!?:'"}\]])))/i.test(body) ||
+    // A key/account lookup failure is explicit absence; unqualified tokens
+    // can instead describe a rate-limit bucket, so require credential validity.
+    /(?:\b|_)no[\s_-]+(?:(?:valid[\s_-]+)?(?:accounts?|(?:api[\s_-]*)?keys?)|valid[\s_-]+tokens?)[\s_-]+(?:(?:is|are|was|were|has|have|had|been|being)[\s_-]+)*found(?:\b|_)/i.test(body) ||
+    /(?:\b|_)(?:accounts?|(?:api[ _-]?)?keys?|tokens?)(?:,\s*[^,.;!?]*,)?(?:[\s_-]+|,\s*)(?:(?:which|that)[\s_-]+)?(?:(?:is|are|was|were|has|have|had|been|being|now|still|already|[a-z]+ly)[\s_-]+)+empty(?:\b|_)/i.test(body) ||
+    /(?:\b|_)(?:accounts?|(?:api[ _-]?)?keys?|tokens?)(?:,\s*[^,.;!?]*,)?(?:[\s_-]+|,\s*)(?:(?:which|that)[\s_-]+)?(?:(?:is|are|was|were|has|have|had|been|being|now|still|already|[a-z]+ly)[\s_-]+)*(?:no[\s_-]longer[\s_-]valid|does[\s_-]not[\s_-]exist)(?:\b|_)/i.test(body) ||
+    // Rate limits can name valid accounts, keys or OAuth tokens. Match faults
+    // in either word order within a clause, including line wraps and codes;
+    // an arbitrary character limit can miss "has been permanently disabled".
+    /(?:\b|_)(?:invalid|missing|incorrect|disabled|deactivated|unusable)[^,.;!?]*(?:accounts?|(?:api[ _-]?)?keys?|tokens?)(?:\b|_)|(?:\b|_)(?:accounts?|(?:api[ _-]?)?keys?|tokens?)[^,.;!?]*(?:invalid|missing|incorrect|disabled|deactivated|unusable|required|not[ _-](?:valid|found|provided|configured|set))(?:\b|_)/i.test(credentialFaultBody)
+  ) {
+    return false
+  }
+  return /\brate[ _-]limit(?:ed|ing|[ _-](?:exceeded|reached))\b|\btoo[ _-]many[ _-]requests\b|\bthrottl(?:ed|ing)\b/i.test(body)
 }
 
 export function formatOpenAICategoryMarker(
@@ -457,6 +577,17 @@ export function classifyOpenAIHttpFailure(options: {
     }
   }
 
+  if (options.status === 403 && isExplicitThrottleMessage(body)) {
+    return {
+      source: 'http',
+      category: 'rate_limited',
+      retryable: true,
+      status: options.status,
+      message: body,
+      hint: 'Provider rate-limited the request. Retry after backoff.',
+    }
+  }
+
   if (options.status === 401 || options.status === 403) {
     // OAuth-issued tokens (GitHub Models via /onboard-github, Codex) expire
     // and surface as 401 with a "token expired" body. The generic API-key
@@ -560,6 +691,22 @@ export function classifyOpenAIHttpFailure(options: {
       status: options.status,
       message: body,
       hint: 'Prompt context exceeded model/server limits. Reduce context or increase provider context length.',
+    }
+  }
+
+  // Keep this classification narrower than a generic invalid-request match.
+  // The executor uses it to authorize one replay without `stream_options`.
+  if (
+    (options.status === 400 || options.status === 422) &&
+    isStreamOptionsUnsupportedMessage(body)
+  ) {
+    return {
+      source: 'http',
+      category: 'stream_options_unsupported',
+      retryable: false,
+      status: options.status,
+      message: body,
+      hint: 'Provider rejected the `stream_options` parameter; streaming usage is unavailable on this route.',
     }
   }
 

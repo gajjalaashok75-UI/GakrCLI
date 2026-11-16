@@ -46,7 +46,19 @@ let initializationPromise: Promise<void> | undefined
  * tests on the same shard.
  */
 export function _resetLspManagerForTesting(): void {
+  lspManagerInstance = undefined
   initializationState = 'not-started'
+  initializationError = undefined
+  initializationPromise = undefined
+  initializationGeneration++
+}
+
+/** Install a complete manager double without mutating the module graph. */
+export function _setLspManagerForTesting(
+  manager: LSPServerManager | undefined,
+): void {
+  lspManagerInstance = manager
+  initializationState = manager ? 'success' : 'not-started'
   initializationError = undefined
   initializationPromise = undefined
   initializationGeneration++
@@ -94,17 +106,15 @@ export function getInitializationStatus():
 }
 
 /**
- * Check whether at least one language server is connected and healthy.
- * Backs LSPTool.isEnabled().
+ * Check whether at least one language server is configured and can be started
+ * or restarted lazily. Backs LSPTool.isEnabled().
  */
 export function isLspConnected(): boolean {
   if (initializationState === 'failed') return false
   const manager = getLspServerManager()
   if (!manager) return false
-  const servers = manager.getAllServers()
-  if (servers.size === 0) return false
-  for (const server of servers.values()) {
-    if (server.state !== 'error') return true
+  for (const server of manager.getAllServers().values()) {
+    if (!server.isCrashRecoveryExhausted) return true
   }
   return false
 }
@@ -212,7 +222,7 @@ export function initializeLspServerManager(): void {
  * successful init. Called from refreshActivePlugins() after plugin caches
  * are cleared, so newly-loaded plugin LSP servers are picked up.
  *
- * Fixes https://github.com/anthropics/gakrcli-code/issues/15521:
+ * Fixes https://github.com/anthropics/claude-code/issues/15521:
  * loadAllPlugins() is memoized and can be called very early in startup
  * (via getCommands prefetch in setup.ts) before marketplaces are reconciled,
  * caching an empty plugin list. initializeLspServerManager() then reads that

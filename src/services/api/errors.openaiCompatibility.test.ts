@@ -1,7 +1,7 @@
 import { APIError } from '@anthropic-ai/sdk'
 import { expect, test } from 'bun:test'
 
-import { getAssistantMessageFromError } from './errors.js'
+import { categorizeRetryableAPIError, getAssistantMessageFromError } from './errors.js'
 
 function getFirstText(message: ReturnType<typeof getAssistantMessageFromError>): string {
   const first = message.message.content[0]
@@ -145,4 +145,30 @@ test('maps tool_stream_unsupported without promising a retry after failure', () 
   expect(text).toContain('switch models')
   expect(text).toMatch(/(\/model|--model)/)
   expect(text).not.toContain('Retrying')
+})
+
+test.each([401, 403])('keeps native authentication retry categories for HTTP %i', status => {
+  const error = APIError.generate(
+    status,
+    undefined,
+    'Infrastructure auth unavailable',
+    new Headers(),
+  )
+
+  expect(categorizeRetryableAPIError(error)).toBe('authentication_failed')
+})
+
+test('maps stream_options_unsupported after the bounded fallback is exhausted', () => {
+  const error = APIError.generate(
+    400,
+    undefined,
+    'OpenAI API error 400: stream_options is unsupported [openai_category=stream_options_unsupported]',
+    new Headers(),
+  )
+
+  const message = getAssistantMessageFromError(error, 'local-model')
+  const text = getFirstText(message)
+
+  expect(text).toContain('rejected the `stream_options` parameter')
+  expect(text).toContain('without usage reporting')
 })

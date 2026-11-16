@@ -25,6 +25,10 @@ import {
   isFirstPartyAnthropicBaseUrl,
   isGithubNativeAnthropicMode,
 } from 'src/utils/model/providers.js'
+import {
+  prepareImagesForAnthropicRequest,
+  usesAnthropicImageLimits,
+} from '../../utils/requestImageValidation.js'
 import type { LangfuseSpan } from 'src/services/langfuse/index.js'
 import {
   getAttributionHeader,
@@ -1875,6 +1879,10 @@ async function* queryModel(
   let partialMessage: BetaMessage | undefined = undefined
   const contentBlocks: (BetaContentBlock | ConnectorTextBlock)[] = []
   let usage: NonNullableUsage = EMPTY_USAGE
+  // One key per stream attempt, set when the attempt starts: a stream can
+  // report usage in several message_delta events, which the local usage
+  // ledger merges into one.
+  let usageLedgerKey: string | undefined
   let costUSD = 0
   let stopReason: BetaStopReason | null = null
   let didFallBackToNonStreaming = false
@@ -1886,6 +1894,20 @@ async function* queryModel(
   let isAdvisorInProgress = false
 
   try {
+    const apiProvider = getAPIProvider()
+    if (
+      usesAnthropicImageLimits({
+        apiProvider,
+        isFirstPartyBaseUrl: isFirstPartyAnthropicBaseUrl(),
+        isGithubNativeAnthropic: isGithubNativeAnthropicMode(options.model),
+        hasProviderOverride: Boolean(options.providerOverride),
+      })
+    ) {
+      messagesForAPI = await prepareImagesForAnthropicRequest(messagesForAPI, {
+        // These partners count document blocks toward the many-image threshold.
+        countDocuments: apiProvider === 'bedrock' || apiProvider === 'vertex',
+      })
+    }
     queryCheckpoint('query_client_creation_start')
     const generator = withRetry(
       () =>
@@ -1992,6 +2014,7 @@ async function* queryModel(
     partialMessage = undefined
     contentBlocks.length = 0
     usage = EMPTY_USAGE
+    usageLedgerKey = randomUUID()
     stopReason = null
     isAdvisorInProgress = false
 
@@ -2540,6 +2563,12 @@ async function* queryModel(
               costUSDForPart,
               usage,
               options.model,
+              {
+                querySource: options.querySource,
+                agentId: options.agentId,
+                providerOverride: options.providerOverride,
+                requestKey: usageLedgerKey,
+              },
             )
 
             const refusalMessage = getErrorMessageIfRefusal(
@@ -3243,6 +3272,11 @@ async function* queryModel(
         fallbackCost,
         fallbackUsage,
         options.model,
+        {
+          querySource: options.querySource,
+          agentId: options.agentId,
+          providerOverride: options.providerOverride,
+        },
       )
     }
   }

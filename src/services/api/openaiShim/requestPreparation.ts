@@ -2,6 +2,7 @@ import {
   resolveModelReasoningControl,
   resolveOpenAIShimReasoningRequestPlan,
 } from '../../../utils/effort.js'
+import { isVeniceBaseUrl } from '../../../integrations/routeMetadata.js'
 import {
   resolveModelRuntimeLimits,
   resolveOpenAIShimRuntimeContext,
@@ -144,7 +145,7 @@ export function prepareOpenAIRequest({
     model: runtimeModel,
     baseUrl: request.baseUrl,
     processEnv: requestProcessEnv,
-    activeProfileProvider: runtimeShimContext.routeId ?? undefined,
+    resolvedRouteId: runtimeShimContext.routeId,
   })
   const shimConfig = runtimeShimContext.openaiShimConfig
   const effectiveTransport = shimConfig.endpointPath === '/responses'
@@ -250,7 +251,7 @@ export function prepareOpenAIRequest({
   else if (maxCompletionTokensValue !== undefined) {
     body.max_completion_tokens = maxCompletionTokensValue
   }
-  if (params.stream && !isLocalProviderUrl(request.baseUrl)) {
+  if (params.stream) {
     body.stream_options = { include_usage: true }
   }
 
@@ -312,6 +313,14 @@ export function prepareOpenAIRequest({
       reasoningRequestPlan,
     )
   }
+  // Venice rejects DeepSeek's top-level thinking field. Its equivalent toggle
+  // is reasoning.enabled; reasoning_effort is already OpenAI-compatible.
+  if (isVeniceBaseUrl(request.baseUrl) && reasoningRequestPlan.thinkingType) {
+    const enabled = reasoningRequestPlan.thinkingType === 'enabled'
+    delete body.thinking
+    body.reasoning = { enabled }
+    if (!enabled) delete body.reasoning_effort
+  }
   for (const field of shimConfig.removeBodyFields ?? []) delete body[field]
 
   if (
@@ -353,8 +362,9 @@ export function prepareOpenAIRequest({
     responsesMessages ??= effectiveTransport === 'chat_completions'
       ? fastPath.skipToolHistoryCompression || skipCompressionForPrefixCache
         ? rawMessages
-        : compressToolHistory(rawMessages, request.resolvedModel, {
+        : compressToolHistory(rawMessages, runtimeModel, {
           textBlockSeparator: '\n',
+          runtimeLimits,
         })
       : compressedMessages
     responsesInput ??= convertAnthropicMessagesToResponsesInput(
