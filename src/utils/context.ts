@@ -3,14 +3,18 @@ import { CONTEXT_1M_BETA_HEADER } from '../constants/betas.js'
 import { getGlobalConfig } from './config.js'
 import { logForDebugging } from './debug.js'
 import { isEnvTruthy } from './envUtils.js'
-import { resolveModelRuntimeLimits } from '../integrations/runtimeMetadata.js'
+import {
+  type ModelContextWindowSource,
+  resolveModelRuntimeLimits,
+  resolveModelRuntimeLimitsWithSource,
+} from '../integrations/runtimeMetadata.js'
 import {
   getTransportKindForRoute,
   resolveActiveRouteIdFromEnv,
 } from '../integrations/routeMetadata.js'
 import { getCanonicalName } from './model/model.js'
-import { getModelCapability } from './model/modelCapabilities.js'
 import { resolveAntModel } from './model/antModels.js'
+import { getActiveProviderProfile } from './providerProfiles.js'
 
 // Model context window size (200k tokens for all models right now)
 export const MODEL_CONTEXT_WINDOW_DEFAULT = 200_000
@@ -150,14 +154,37 @@ export function modelSupports1M(model: string): boolean {
   return (
     canonical.includes('claude-sonnet-4') ||
     canonical.includes('opus-4-6') ||
-    canonical.includes('opus-4-7')
+    canonical.includes('opus-4-7') ||
+    canonical.includes('opus-4-8')
   )
+}
+
+function getAppliedActiveProfileProvider(
+  processEnv: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  if (processEnv[PROFILE_ENV_APPLIED_FLAG] !== '1') {
+    return undefined
+  }
+
+  const activeProfile = getActiveProviderProfile()
+  if (!activeProfile) {
+    return undefined
+  }
+
+  const appliedId = processEnv[PROFILE_ENV_APPLIED_ID]?.trim()
+  if (appliedId && appliedId !== activeProfile.id) {
+    return undefined
+  }
+
+  return activeProfile.provider
 }
 
 export function shouldUseIntegrationRuntimeLimits(
   processEnv: NodeJS.ProcessEnv = process.env,
 ): boolean {
-  const routeId = resolveActiveRouteIdFromEnv(processEnv)
+  const routeId = resolveActiveRouteIdFromEnv(processEnv, {
+    activeProfileProvider: getAppliedActiveProfileProvider(processEnv),
+  })
   const transportKind = routeId ? getTransportKindForRoute(routeId) : null
 
   return (
@@ -176,7 +203,10 @@ export function shouldUseIntegrationRuntimeLimits(
  * the Ink runtime treats console errors as application errors.
  */
 function warnUnknownIntegrationRuntimeLimits(model: string): void {
-  const routeId = resolveActiveRouteIdFromEnv(process.env) ?? 'unknown-route'
+  const routeId =
+    resolveActiveRouteIdFromEnv(process.env, {
+      activeProfileProvider: getAppliedActiveProfileProvider(process.env),
+    }) ?? 'unknown-route'
   const warningKey = `${routeId}:${model}`
   if (warnedUnknownIntegrationRuntimeLimitKeys.has(warningKey)) return
 
@@ -189,10 +219,56 @@ function warnUnknownIntegrationRuntimeLimits(model: string): void {
   )
 }
 
+export type ContextWindowSource =
+  | 'internal-env-override'
+  | 'session-override'
+  | '1m-suffix'
+  | ModelContextWindowSource
+  | 'runtime-limits'
+  | 'fallback'
+  | '1m-beta'
+  | '1m-experiment'
+  | 'internal-model-config'
+  | 'default'
+
+export const CONTEXT_WINDOW_SOURCE_LABELS: Record<ContextWindowSource, string> = {
+  'internal-env-override': 'GAKR_CODE_MAX_CONTEXT_TOKENS',
+  'session-override': 'session override (/set-context-window)',
+  '1m-suffix': '[1m] model suffix',
+  'env-exact': 'GAKR_CODE_OPENAI_CONTEXT_WINDOWS (exact match)',
+  'route-catalog': 'provider route catalog',
+  'env-prefix': 'GAKR_CODE_OPENAI_CONTEXT_WINDOWS (prefix match)',
+  'model-limits': 'modelLimits in settings',
+  discovery: 'provider model discovery',
+  'model-descriptor': 'built-in model metadata',
+  'runtime-limits': 'provider runtime limits',
+  fallback: 'fallback for unknown model',
+  '1m-beta': '1M context beta',
+  '1m-experiment': '1M context experiment',
+  'internal-model-config': 'internal model config',
+  default: 'default',
+}
+
 export function getContextWindowForModel(
   model: string,
   betas?: string[],
+  runtimeLimits?: { contextWindow?: number },
 ): number {
+  return resolveContextWindowForModel(model, betas, runtimeLimits).contextWindow
+}
+
+/**
+ * Resolve the context window together with the precedence step that supplied
+ * it, so diagnostics can report the real source instead of inferring it from
+ * the value. `ignoreSessionOverride` skips the session override; the result
+ * still uses this process's environment and settings.
+ */
+export function resolveContextWindowForModel(
+  model: string,
+  betas?: string[],
+  runtimeLimits?: { contextWindow?: number },
+  options?: { ignoreSessionOverride?: boolean },
+): { contextWindow: number; source: ContextWindowSource } {
   // Allow override via environment variable (internal-only)
   // This takes precedence over all other context window resolution, including 1M detection,
   // so users can cap the effective context window for local decisions (auto-compact, etc.)
@@ -203,59 +279,64 @@ export function getContextWindowForModel(
   ) {
     const override = parseInt(process.env.GAKR_CODE_MAX_CONTEXT_TOKENS, 10)
     if (!isNaN(override) && override > 0) {
-      return override
+      return { contextWindow: override, source: 'internal-env-override' }
     }
   }
 
-  // Session-scoped override — set via /set-context-window command.
+  // Session-scoped override — set via /set_context_window command.
   // Takes precedence over all resolution except the internal env var above.
-  const sessionOverride = getSessionContextWindowOverride(model)
+  const sessionOverride = options?.ignoreSessionOverride
+    ? undefined
+    : getSessionContextWindowOverride(model)
   if (sessionOverride !== undefined) {
-    return sessionOverride
+    return { contextWindow: sessionOverride, source: 'session-override' }
   }
 
   // [1m] suffix — explicit client-side opt-in, respected over all detection
   if (has1mContext(model)) {
-    return 1_000_000
+    return { contextWindow: 1_000_000, source: '1m-suffix' }
   }
 
   // OpenAI-compatible provider — use known context windows for the model.
   // Unknown models get a conservative 128k default. This was previously 8k,
   // but that caused auto-compact to fire on every turn because the effective
   // context (8k minus output reservation) became negative (issue #635).
-  if (shouldUseIntegrationRuntimeLimits()) {
-    const runtimeLimits = resolveModelRuntimeLimits({ model })
-    if (runtimeLimits.contextWindow !== undefined) {
-      return runtimeLimits.contextWindow
+  if (
+    runtimeLimits?.contextWindow !== undefined ||
+    shouldUseIntegrationRuntimeLimits()
+  ) {
+    const resolvedRuntimeLimits = runtimeLimits
+      ? { ...runtimeLimits, contextWindowSource: 'runtime-limits' as const }
+      : resolveModelRuntimeLimitsWithSource({
+          model,
+          activeProfileProvider: getAppliedActiveProfileProvider(),
+        })
+    if (resolvedRuntimeLimits.contextWindow !== undefined) {
+      return {
+        contextWindow: resolvedRuntimeLimits.contextWindow,
+        source: resolvedRuntimeLimits.contextWindowSource ?? 'runtime-limits',
+      }
     }
     warnUnknownIntegrationRuntimeLimits(model)
-    return OPENAI_FALLBACK_CONTEXT_WINDOW
-  }
-
-  const cap = getModelCapability(model)
-  if (cap?.max_input_tokens && cap.max_input_tokens >= 100_000) {
-    if (
-      cap.max_input_tokens > MODEL_CONTEXT_WINDOW_DEFAULT &&
-      is1mContextDisabled()
-    ) {
-      return MODEL_CONTEXT_WINDOW_DEFAULT
-    }
-    return cap.max_input_tokens
+    return { contextWindow: OPENAI_FALLBACK_CONTEXT_WINDOW, source: 'fallback' }
   }
 
   if (betas?.includes(CONTEXT_1M_BETA_HEADER) && modelSupports1M(model)) {
-    return 1_000_000
+    return { contextWindow: 1_000_000, source: '1m-beta' }
   }
   if (getSonnet1mExpTreatmentEnabled(model)) {
-    return 1_000_000
+    return { contextWindow: 1_000_000, source: '1m-experiment' }
   }
   if (process.env.USER_TYPE === 'ant') {
     const antModel = resolveAntModel(model)
     if (antModel?.contextWindow) {
-      return antModel.contextWindow
+      return {
+        contextWindow: antModel.contextWindow,
+        source: 'internal-model-config',
+      }
     }
   }
-  return MODEL_CONTEXT_WINDOW_DEFAULT
+  return { contextWindow: MODEL_CONTEXT_WINDOW_DEFAULT, source: 'default' }
 }
 
 export function getSonnet1mExpTreatmentEnabled(model: string): boolean {
@@ -325,7 +406,10 @@ export function getModelMaxOutputTokens(model: string): {
 
   // OpenAI-compatible provider — use known output limits to avoid 400 errors
   if (shouldUseIntegrationRuntimeLimits()) {
-    const runtimeLimits = resolveModelRuntimeLimits({ model })
+    const runtimeLimits = resolveModelRuntimeLimits({
+      model,
+      activeProfileProvider: getAppliedActiveProfileProvider(),
+    })
     if (runtimeLimits.maxOutputTokens !== undefined) {
       return {
         default: runtimeLimits.maxOutputTokens,
@@ -346,7 +430,11 @@ export function getModelMaxOutputTokens(model: string): {
 
   const m = getCanonicalName(model)
 
-  if (m.includes('opus-4-6')) {
+  if (
+    m.includes('opus-4-8') ||
+    m.includes('opus-4-7') ||
+    m.includes('opus-4-6')
+  ) {
     defaultTokens = 64_000
     upperLimit = 128_000
   } else if (m.includes('sonnet-4-6')) {
@@ -380,12 +468,6 @@ export function getModelMaxOutputTokens(model: string): {
   } else {
     defaultTokens = MAX_OUTPUT_TOKENS_DEFAULT
     upperLimit = MAX_OUTPUT_TOKENS_UPPER_LIMIT
-  }
-
-  const cap = getModelCapability(model)
-  if (cap?.max_tokens && cap.max_tokens >= 4_096) {
-    upperLimit = cap.max_tokens
-    defaultTokens = Math.min(defaultTokens, upperLimit)
   }
 
   return { default: defaultTokens, upperLimit }

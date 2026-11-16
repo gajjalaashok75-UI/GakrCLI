@@ -14,6 +14,7 @@ import { logEvent } from '../services/analytics/index.js'
 import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../services/analytics/metadata.js'
 import { getAPIMetadata } from '../services/api/gakrcli.js'
 import { getAnthropicClient } from '../services/api/client.js'
+import { recordUsageEvent } from '../services/usage/ledger.js'
 import { getModelBetas, modelSupportsStructuredOutputs } from './betas.js'
 import { computeFingerprint } from './fingerprint.js'
 import { normalizeModelStringForAPI } from './model/model.js'
@@ -217,6 +218,12 @@ export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
       lastCompletion !== null ? now - lastCompletion : undefined,
   })
   setLastApiCompletionTimestamp(now)
+  // Side queries bypass the session cost tracker; still count them locally.
+  recordUsageEvent({
+    usage: response.usage,
+    model,
+    querySource: opts.querySource,
+  })
 
   return response
 }
